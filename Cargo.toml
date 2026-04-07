@@ -1,0 +1,65 @@
+[workspace]
+
+[package]
+name = "identity"
+version = "0.1.0"
+edition = "2024"
+publish = false
+default-run = "identity-cli"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+serde_yaml = { version = "0.9" }
+tokio = { version = "1.45", default-features = false, features = [
+  "rt-multi-thread",
+  "macros",
+  "signal",
+  "net",
+  "sync",
+  "time",
+] }
+async-trait = { version = "0.1" }
+axum = { version = "0.8", features = ["macros"] }
+tower-http = { version = "0.6", features = ["fs"] }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+regex = { version = "1.11" }
+migration = { path = "migration" }
+sea-orm = { version = "2.0.0-rc.37", features = [
+  "sqlx-postgres",
+  "runtime-tokio-rustls",
+  "macros",
+] }
+chrono = { version = "0.4" }
+validator = { version = "0.20" }
+uuid = { version = "1.6", features = ["v4"] }
+argon2 = { version = "0.5", features = ["std"] }
+password-hash = { version = "0.5" }
+thiserror = { version = "1" }
+rand = { version = "0.8" }
+hex = { version = "0.4" }
+include_dir = { version = "0.7" }
+# view engine i18n
+fluent-templates = { version = "0.13", features = ["tera"] }
+unic-langid = { version = "0.9" }
+tera = { version = "1.20" }
+# /view engine
+woothee = { version = "0.13" }
+totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
+urlencoding = { version = "2.1" }
+josekit = { version = "0.10.3" }
+openssl = { version = "0.10" }
+url = { version = "2" }
+
+[[bin]]
+name = "identity-cli"
+path = "src/main.rs"
+required-features = []
+
+[dev-dependencies]
+serial_test = { version = "3.1.1" }
+rstest = { version = "0.25" }
+insta = { version = "1.34", features = ["redactions", "yaml", "filters"] }

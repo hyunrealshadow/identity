@@ -1,0 +1,83 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}{{ t(key="page-enter-otp") }}{% endblock %}
+
+{% block head_resources %}
+  <%= htmlPlugin.tags.headTags %>
+{% endblock %}
+
+{% block header %}
+<div class="text-center">
+  <h1 class="text-2xl font-bold tracking-tight text-gray-900">{{ t(key="page-enter-otp") }}</h1>
+  <p class="mt-2 text-sm text-gray-500">{{ t(key="otp-hint") }}</p>
+</div>
+{% endblock %}
+
+{% block content %}
+{# User identity display (Clerk style) #}
+{% if user_name %}
+<div class="flex items-center gap-3 mb-8 p-1.5 pr-4 rounded-full border border-gray-100 bg-gray-50/50">
+  <div class="account-avatar w-8 h-8 text-xs">{{ user_name | truncate(length=1, end="") }}</div>
+  <div class="flex flex-col min-w-0 flex-1">
+    <div class="account-info-name truncate text-[13px]">{{ user_name }}</div>
+    <div class="account-info-email truncate text-[11px] text-gray-400">{{ masked_email }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if error %}
+<div id="otp-error" class="error-box visible" role="alert">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+  <span id="otp-error-text">{{ error }}</span>
+</div>
+{% else %}
+<div id="otp-error" class="error-box" role="alert">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+  <span id="otp-error-text"></span>
+</div>
+{% endif %}
+
+<form id="otp-form" action="/login/otp" method="POST" novalidate>
+  <input type="hidden" name="login_id" value="{{ login_id }}" />
+  <input type="hidden" name="identifier" value="{{ identifier }}" />
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+  <div class="space-y-6">
+    <div>
+      <label for="otp-input" class="block text-[13px] font-semibold text-gray-700 mb-2 text-center">
+        {{ t(key="label-otp-code") }}
+      </label>
+      <input
+        id="otp-input"
+        name="credential"
+        type="text"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        maxlength="6"
+        autofocus
+        class="input-ms tracking-[0.75em] text-center text-2xl font-bold h-14 bg-gray-50/50 border-gray-200 focus:bg-white transition-all{% if error %} error{% endif %}"
+        placeholder="000000"
+        data-error-required="{{ t(key='errors-required-field') }}"
+        required
+      />
+    </div>
+
+    <button type="submit" class="btn-primary-ms h-12" id="submit-btn">
+      <span id="submit-btn-text">{{ t(key="btn-verify") }}</span>
+    </button>
+  </div>
+</form>
+
+<div class="mt-8 text-center">
+  <a href="/login" class="text-[13px] font-medium text-gray-500 hover:text-black transition-colors flex items-center justify-center gap-1">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+    </svg>
+    {{ t(key="btn-back") }}
+  </a>
+</div>
+{% endblock %}

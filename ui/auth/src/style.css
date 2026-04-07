@@ -1,0 +1,224 @@
+@import "tailwindcss" source(none);
+@plugin "daisyui";
+
+@source "./views";
+
+@theme {
+  --color-primary: #000000;
+  --color-primary-hover: #262626;
+  --radius-auth: 0.75rem;
+}
+
+body {
+  background-color: #fafafa;
+  color: #1a1a1a;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-auth);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  transition: transform 0.2s ease;
+}
+
+.auth-header-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: -0.02em;
+}
+
+/* Primary Button - Clerk/Auth0 Style */
+.btn-primary-ms {
+  background-color: #000;
+  color: #fff;
+  border: 1px solid #000;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  height: 2.75rem;
+  padding: 0 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+}
+
+.btn-primary-ms:hover {
+  background-color: #262626;
+  border-color: #262626;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary-ms:active {
+  transform: scale(0.98);
+}
+
+.btn-primary-ms:focus {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+.btn-primary-ms:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Input Fields */
+.input-ms {
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  height: 2.75rem;
+  font-size: 0.875rem;
+  padding: 0 0.875rem;
+  width: 100%;
+  background: #fff;
+  transition: all 0.2s;
+  color: #1a1a1a;
+}
+
+.input-ms::placeholder {
+  color: #9ca3af;
+}
+
+.input-ms:hover {
+  border-color: #9ca3af;
+}
+
+.input-ms:focus {
+  outline: none;
+  border-color: #000;
+  box-shadow: 0 0 0 1px #000;
+}
+
+.input-ms.error {
+  border-color: #ef4444;
+  animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+.input-ms.error-static {
+  border-color: #ef4444;
+}
+
+@keyframes shake {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+.input-ms.error:focus {
+  box-shadow: 0 0 0 1px #ef4444;
+}
+
+.input-ms.error-static:focus {
+  box-shadow: 0 0 0 1px #ef4444;
+}
+
+/* Error Message Box */
+.error-box {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 0.5rem;
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  padding: 0.75rem;
+  margin-bottom: 1.25rem;
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.error-box.visible {
+  display: flex;
+}
+
+/* Account Tiles (Clerk-like) */
+.account-tile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  background: transparent;
+}
+
+.account-tile:hover {
+  background: #f9fafb;
+  border-color: #f3f4f6;
+}
+
+.account-tile:focus {
+  outline: 2px solid #000;
+  outline-offset: -2px;
+}
+
+.account-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: #1a1a1a;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.account-info-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  color: #111827;
+}
+
+.account-info-email {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Divider */
+.divider-ms {
+  border: none;
+  border-top: 1px solid #f3f4f6;
+  margin: 0.25rem 0;
+}
+
+/* Links */
+.link-ms {
+  color: #1a1a1a;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.link-ms:hover {
+  color: #4b5563;
+  text-decoration: underline;
+}
+
+/* DaisyUI Overrides or Helper styles if needed */
+.loading-spinner {
+  color: currentColor;
+}

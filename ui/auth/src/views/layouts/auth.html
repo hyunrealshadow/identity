@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="{{ lang | default(value='en') }}" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ t(key="page-sign-in") }}{% endblock %} - {{ t(key="app-name") }}</title>
+  {% block head_resources %}{% endblock %}
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50" data-error-required="{{ t(key='error-required-field') }}">
+  {# Background pattern/gradient - subtle Clerk-like feel #}
+  <div class="fixed inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]"></div>
+
+  <div class="auth-card bg-white px-8 py-10 mb-6 border border-gray-200">
+    <header class="mb-6">
+      {% block header %}{% endblock %}
+    </header>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <footer class="mt-4">
+    <p class="text-[13px] text-gray-500 flex items-center gap-3">
+      <a href="#" class="hover:text-black transition-colors">{{ t(key="link-terms") }}</a>
+      <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+      <a href="#" class="hover:text-black transition-colors">{{ t(key="link-privacy") }}</a>
+    </p>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

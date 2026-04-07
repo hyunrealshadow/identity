@@ -1,0 +1,112 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}{{ t(key="page-sign-in") }}{% endblock %}
+
+{% block head_resources %}
+  <%= htmlPlugin.tags.headTags %>
+{% endblock %}
+
+{% block header %}
+<div class="text-center">
+  <h1 class="text-2xl font-bold tracking-tight text-gray-900">{{ t(key="page-sign-in") }}</h1>
+  <p class="mt-2 text-sm text-gray-500">{{ t(key="sign-in-identifier-hint") }}</p>
+</div>
+{% endblock %}
+
+{% block content %}
+{# ── Account picker (shown when active sessions exist) ── #}
+{% if accounts %}
+  <div id="account-list" class="space-y-1 mb-6">
+    <p class="text-[13px] font-medium text-gray-500 px-2 mb-2">{{ t(key="sign-in-pick-account") }}</p>
+
+    {% for account in accounts %}
+    <form action="/login/select" method="POST" class="block">
+      <input type="hidden" name="session_id" value="{{ account.id }}" />
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <button type="submit" class="account-tile w-full text-left group">
+        <div class="account-avatar group-hover:bg-black transition-colors">{{ account.name | truncate(length=1, end="") }}</div>
+        <div class="flex flex-col min-w-0">
+          <div class="account-info-name truncate">{{ account.name }}</div>
+          <div class="account-info-email truncate">{{ account.email }}</div>
+        </div>
+        <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </button>
+    </form>
+    {% endfor %}
+
+    <div class="pt-2">
+      <button type="button" class="w-full text-center py-2 px-4 text-[13px] font-medium text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg transition-all" onclick="window.Auth && Auth.showIdentifierForm()">
+        {{ t(key="sign-in-use-another-account") }}
+      </button>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="mb-4 text-center">
+      <a href="/login?no_accounts=1" class="link-ms">
+        {{ t(key="sign-in-use-another-account") }}
+      </a>
+    </div>
+  </noscript>
+
+  {# Error box for account-select errors #}
+  <div id="select-error" class="error-box" role="alert"></div>
+{% endif %}
+
+{# ── Identifier form (always present, hidden when accounts shown via JS) ── #}
+<div id="identifier-section" {% if accounts %} style="display:none" {% endif %}>
+  {% if error %}
+  <div id="identifier-error" class="error-box visible" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span id="identifier-error-text">{{ error }}</span>
+  </div>
+  {% else %}
+  <div id="identifier-error" class="error-box" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span id="identifier-error-text"></span>
+  </div>
+  {% endif %}
+
+  <form id="identifier-form" action="/login" method="POST" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="space-y-4">
+      <div>
+        <label for="identifier-input" class="block text-[13px] font-semibold text-gray-700 mb-1.5 px-0.5">
+          {{ t(key="label-email-or-username") }}
+        </label>
+        <input
+          id="identifier-input"
+          name="identifier"
+          type="text"
+          autocomplete="username"
+          autofocus
+          class="input-ms{% if error %} error-static{% endif %}"
+          placeholder="{{ t(key='placeholder-email-or-username') }}"
+          value="{{ identifier | default(value='') }}"
+          data-error-required="{{ t(key='errors-required-field') }}"
+          required
+        />
+      </div>
+
+      <button type="submit" id="submit-btn" class="btn-primary-ms mt-2">
+        <span id="submit-btn-text">{{ t(key="btn-next") }}</span>
+      </button>
+    </div>
+  </form>
+
+  <div class="mt-8 text-center">
+    <p class="text-[13px] text-gray-500">
+      {{ t(key="sign-in-no-account") }}
+      <a href="/register" class="font-semibold text-black hover:underline ml-1">{{ t(key="btn-sign-up") }}</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

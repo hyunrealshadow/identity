@@ -1,0 +1,143 @@
+use crate::m20260306_031058_create_client::Client;
+use sea_orm_migration::{prelude::*, schema::*};
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[derive(DeriveIden)]
+pub enum ClientOpenIdConnect {
+    Table,
+    Id,
+    ClientId,
+    RedirectUris,
+    PostLogoutRedirectUris,
+    ResponseTypes,
+    GrantTypes,
+    ApplicationType,
+    Contacts,
+    LogoUri,
+    ClientUri,
+    PolicyUri,
+    TosUri,
+    SectorIdentifierUri,
+    SubjectType,
+    IdTokenSignedResponseAlg,
+    IdTokenEncryptedResponseAlg,
+    IdTokenEncryptedResponseEnc,
+    UserinfoSignedResponseAlg,
+    UserinfoEncryptedResponseAlg,
+    UserinfoEncryptedResponseEnc,
+    RequestObjectSigningAlg,
+    RequestObjectEncryptionAlg,
+    RequestObjectEncryptionEnc,
+    TokenEndpointAuthMethod,
+    TokenEndpointAuthSigningAlg,
+    DefaultMaxAge,
+    RequireAuthTime,
+    DefaultAcrValues,
+    InitiateLoginUri,
+    RequestUris,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(ClientOpenIdConnect::Table)
+                    .if_not_exists()
+                    .col(pk_auto(ClientOpenIdConnect::Id).big_integer())
+                    .col(big_integer(ClientOpenIdConnect::ClientId))
+                    .col(json_binary_null(ClientOpenIdConnect::RedirectUris))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::PostLogoutRedirectUris,
+                    ))
+                    .col(json_binary_null(ClientOpenIdConnect::ResponseTypes))
+                    .col(json_binary_null(ClientOpenIdConnect::GrantTypes))
+                    .col(string_null(ClientOpenIdConnect::ApplicationType))
+                    .col(json_binary_null(ClientOpenIdConnect::Contacts))
+                    .col(string_null(ClientOpenIdConnect::LogoUri))
+                    .col(string_null(ClientOpenIdConnect::ClientUri))
+                    .col(string_null(ClientOpenIdConnect::PolicyUri))
+                    .col(string_null(ClientOpenIdConnect::TosUri))
+                    .col(string_null(ClientOpenIdConnect::SectorIdentifierUri))
+                    .col(string_null(ClientOpenIdConnect::SubjectType))
+                    .col(string_null(ClientOpenIdConnect::IdTokenSignedResponseAlg))
+                    .col(string_null(
+                        ClientOpenIdConnect::IdTokenEncryptedResponseAlg,
+                    ))
+                    .col(string_null(
+                        ClientOpenIdConnect::IdTokenEncryptedResponseEnc,
+                    ))
+                    .col(string_null(ClientOpenIdConnect::UserinfoSignedResponseAlg))
+                    .col(string_null(
+                        ClientOpenIdConnect::UserinfoEncryptedResponseAlg,
+                    ))
+                    .col(string_null(
+                        ClientOpenIdConnect::UserinfoEncryptedResponseEnc,
+                    ))
+                    .col(string_null(ClientOpenIdConnect::RequestObjectSigningAlg))
+                    .col(string_null(ClientOpenIdConnect::RequestObjectEncryptionAlg))
+                    .col(string_null(ClientOpenIdConnect::RequestObjectEncryptionEnc))
+                    .col(string_null(ClientOpenIdConnect::TokenEndpointAuthMethod))
+                    .col(string_null(
+                        ClientOpenIdConnect::TokenEndpointAuthSigningAlg,
+                    ))
+                    .col(integer_null(ClientOpenIdConnect::DefaultMaxAge))
+                    .col(
+                        ColumnDef::new(ClientOpenIdConnect::RequireAuthTime)
+                            .boolean()
+                            .null(),
+                    )
+                    .col(json_binary_null(ClientOpenIdConnect::DefaultAcrValues))
+                    .col(string_null(ClientOpenIdConnect::InitiateLoginUri))
+                    .col(json_binary_null(ClientOpenIdConnect::RequestUris))
+                    .col(
+                        timestamp_with_time_zone(ClientOpenIdConnect::CreatedAt)
+                            .default(Expr::current_timestamp()),
+                    )
+                    .col(timestamp_with_time_zone_null(
+                        ClientOpenIdConnect::UpdatedAt,
+                    ))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_client_open_id_connect_client_id")
+                            .from(ClientOpenIdConnect::Table, ClientOpenIdConnect::ClientId)
+                            .to(Client::Table, Client::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .table(ClientOpenIdConnect::Table)
+                    .name("idx_client_open_id_connect_client_id")
+                    .col(ClientOpenIdConnect::ClientId)
+                    .unique()
+                    .to_owned(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .table(ClientOpenIdConnect::Table)
+                    .name("idx_client_open_id_connect_client_id")
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .drop_table(Table::drop().table(ClientOpenIdConnect::Table).to_owned())
+            .await?;
+        Ok(())
+    }
+}
