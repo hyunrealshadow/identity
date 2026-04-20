@@ -102,7 +102,7 @@ pub fn is_secure_cookie(ctx: &AppState) -> bool {
 pub fn build_csrf_cookie(token: &str, secure: bool) -> String {
     let max_age = SESSION_EXPIRY.as_secs();
     let secure_flag = if secure { "; Secure" } else { "" };
-    format!("{CSRF_COOKIE_NAME}={token};{secure_flag} SameSite=Lax; Path=/; Max-Age={max_age}")
+    format!("{CSRF_COOKIE_NAME}={token};{secure_flag}; SameSite=Lax; Path=/; Max-Age={max_age}")
 }
 
 pub fn ensure_csrf_token(headers: &HeaderMap, secure: bool) -> (String, Option<String>) {

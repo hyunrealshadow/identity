@@ -54,7 +54,7 @@ impl MigrationTrait for Migration {
                             .name("fk_login_client_id")
                             .from(Login::Table, Login::ClientId)
                             .to(Client::Table, Client::Id)
-                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
@@ -62,7 +62,7 @@ impl MigrationTrait for Migration {
                             .name("fk_login_client_request_id")
                             .from(Login::Table, Login::ClientRequestId)
                             .to(ClientRequest::Table, ClientRequest::Id)
-                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(

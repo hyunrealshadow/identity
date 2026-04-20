@@ -3,14 +3,13 @@ use std::error::Error as StdError;
 use axum::extract::{FromRequest, rejection::JsonRejection};
 use axum::{
     Json,
-    http::HeaderMap,
     response::{IntoResponse, Response},
 };
 use unic_langid::LanguageIdentifier;
 
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
+    infrastructure::i18n::{I18n, error_i18n, request_locale},
     web::views::auth::BusinessErrorResponse,
 };
 
@@ -49,11 +48,6 @@ pub fn error_response(i18n: &I18n, locale: &LanguageIdentifier, error: AppError)
     (status, Json(body)).into_response()
 }
 
-pub fn error_response_from_headers(i18n: &I18n, headers: &HeaderMap, error: AppError) -> Response {
-    let locale = resolve_locale_from_headers(headers);
-    error_response(i18n, &locale, error)
-}
-
 #[derive(FromRequest)]
 #[from_request(via(axum::Json), rejection(AppError))]
 pub struct AppJson<T>(pub T);
@@ -70,7 +64,8 @@ where
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         if let Some(i18n) = error_i18n() {
-            return error_response(i18n, i18n.fallback_locale(), self);
+            let locale = request_locale();
+            return error_response(i18n, &locale, self);
         }
 
         let status = self.kind().http_status();

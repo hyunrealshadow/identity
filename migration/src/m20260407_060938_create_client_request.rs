@@ -12,10 +12,10 @@ pub enum ClientRequest {
     ClientId,
     Type,
     Data,
-    CreatedAt,
-    UpdatedAt,
     ExpiresAt,
     RevokedAt,
+    CreatedAt,
+    UpdatedAt,
 }
 
 #[async_trait::async_trait]
@@ -31,13 +31,13 @@ impl MigrationTrait for Migration {
                     .col(big_integer(ClientRequest::ClientId))
                     .col(string(ClientRequest::Type))
                     .col(json_binary(ClientRequest::Data))
+                    .col(timestamp_with_time_zone(ClientRequest::ExpiresAt))
+                    .col(timestamp_with_time_zone_null(ClientRequest::RevokedAt))
                     .col(
                         timestamp_with_time_zone(ClientRequest::CreatedAt)
                             .default(Expr::current_timestamp()),
                     )
                     .col(timestamp_with_time_zone_null(ClientRequest::UpdatedAt))
-                    .col(timestamp_with_time_zone_null(ClientRequest::ExpiresAt))
-                    .col(timestamp_with_time_zone_null(ClientRequest::RevokedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_client_request_client_id")
@@ -55,7 +55,6 @@ impl MigrationTrait for Migration {
                     .table(ClientRequest::Table)
                     .name("idx_client_request_client_id")
                     .col(ClientRequest::ClientId)
-                    .unique()
                     .to_owned(),
             )
             .await?;
@@ -65,7 +64,6 @@ impl MigrationTrait for Migration {
                     .table(ClientRequest::Table)
                     .name("idx_client_request_type")
                     .col(ClientRequest::Type)
-                    .unique()
                     .to_owned(),
             )
             .await?;
@@ -78,10 +76,23 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
+        // Expression index on JSON token field for refresh token lookup.
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"CREATE INDEX IF NOT EXISTS "idx_client_request_data_token"
+                   ON "client_request" (("data"->>'token'))
+                   WHERE "type" = 'refresh_token'"#,
+            )
+            .await?;
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .get_connection()
+            .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_request_data_token""#)
+            .await?;
         manager
             .drop_index(
                 Index::drop()
