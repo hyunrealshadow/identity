@@ -1,7 +1,7 @@
 use std::{env, fs};
 
 use serde::Deserialize;
-use tera::{Function, Tera, Value, from_value, to_value};
+use tera::Tera;
 
 pub type ConfigResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
@@ -25,49 +25,16 @@ impl AppConfig {
         let path = format!("config/{}.yaml", environment.as_str());
         let raw = fs::read_to_string(&path)?;
         let rendered = render_config_template(&raw)?;
-        let config: Self = serde_yaml::from_str(&rendered)?;
+        let config: Self = serde_yml::from_str(&rendered)?;
 
         Ok((config, environment))
     }
 }
 
-struct GetEnvFn;
-
-impl Function for GetEnvFn {
-    fn call(&self, args: &std::collections::HashMap<String, Value>) -> tera::Result<Value> {
-        let name = args
-            .get("name")
-            .ok_or_else(|| tera::Error::msg("get_env(): missing required argument `name`"))
-            .and_then(|value| {
-                from_value::<String>(value.clone())
-                    .map_err(|_| tera::Error::msg("get_env(): `name` must be a string"))
-            })?;
-
-        let default = args
-            .get("default")
-            .map(|value| {
-                from_value::<String>(value.clone())
-                    .map_err(|_| tera::Error::msg("get_env(): `default` must be a string"))
-            })
-            .transpose()?;
-
-        let value = match env::var(&name) {
-            Ok(value) => value,
-            Err(_) => default.ok_or_else(|| {
-                tera::Error::msg(format!(
-                    "get_env(): environment variable `{name}` is not set"
-                ))
-            })?,
-        };
-
-        to_value(value).map_err(|e| tera::Error::msg(e.to_string()))
-    }
-}
-
 fn render_config_template(raw: &str) -> ConfigResult<String> {
     let mut tera = Tera::default();
-    tera.register_function("get_env", GetEnvFn);
-    Ok(Tera::one_off(raw, &tera::Context::new(), false)?)
+    tera.add_raw_template("config", raw)?;
+    Ok(tera.render("config", &tera::Context::new())?)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -214,6 +181,8 @@ impl Default for DatabaseConfig {
 pub enum AppEnvironment {
     Development,
     Test,
+    #[cfg(feature = "oidc-conformance")]
+    Conformance,
     Production,
     Custom(String),
 }
@@ -228,6 +197,8 @@ impl AppEnvironment {
         match raw.to_lowercase().as_str() {
             "development" | "dev" => Self::Development,
             "test" => Self::Test,
+            #[cfg(feature = "oidc-conformance")]
+            "conformance" => Self::Conformance,
             "production" | "prod" => Self::Production,
             other => Self::Custom(other.to_owned()),
         }
@@ -238,6 +209,8 @@ impl AppEnvironment {
         match self {
             Self::Development => "development",
             Self::Test => "test",
+            #[cfg(feature = "oidc-conformance")]
+            Self::Conformance => "conformance",
             Self::Production => "production",
             Self::Custom(value) => value.as_str(),
         }
@@ -246,6 +219,12 @@ impl AppEnvironment {
     #[must_use]
     pub fn is_production(&self) -> bool {
         matches!(self, Self::Production)
+    }
+
+    #[must_use]
+    #[cfg(feature = "oidc-conformance")]
+    pub fn is_conformance(&self) -> bool {
+        matches!(self, Self::Conformance)
     }
 }
 
@@ -290,7 +269,7 @@ fn default_min_connections() -> u32 {
 }
 
 fn default_max_connections() -> u32 {
-    1
+    10
 }
 
 fn default_settings_refresh_interval_secs() -> u64 {
@@ -299,7 +278,7 @@ fn default_settings_refresh_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnvironment, render_config_template};
+    use super::{render_config_template, AppConfig, AppEnvironment};
     use serial_test::serial;
 
     fn set_env(key: &str, value: &str) {
@@ -308,6 +287,22 @@ mod tests {
 
     fn remove_env(key: &str) {
         unsafe { std::env::remove_var(key) };
+    }
+
+    #[test]
+    #[serial]
+    #[cfg(feature = "oidc-conformance")]
+    fn detect_conformance_environment() {
+        set_env("APP_ENV", "conformance");
+
+        let environment = AppEnvironment::detect();
+
+        remove_env("APP_ENV");
+
+        assert!(matches!(environment, AppEnvironment::Conformance));
+        assert!(environment.is_conformance());
+        assert!(!environment.is_production());
+        assert_eq!(environment.as_str(), "conformance");
     }
 
     #[test]
@@ -362,7 +357,7 @@ mod tests {
 
     #[test]
     fn deserialization_applies_config_defaults() {
-        let config: AppConfig = serde_yaml::from_str(
+        let config: AppConfig = serde_yml::from_str(
             r#"
 database:
   uri: postgres://localhost/identity

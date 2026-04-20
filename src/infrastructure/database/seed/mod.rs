@@ -8,6 +8,9 @@ use crate::{
     infrastructure::{config::AppConfig, database},
 };
 
+#[cfg(feature = "oidc-conformance")]
+pub mod conformance;
+
 type SeedResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
 #[async_trait]
@@ -18,7 +21,11 @@ pub trait Seed: Send + Sync {
 }
 
 pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
-    let seeds: Vec<Box<dyn Seed>> = Vec::new();
+    #[cfg_attr(not(feature = "oidc-conformance"), allow(unused_mut))]
+    let mut seeds: Vec<Box<dyn Seed>> = Vec::new();
+
+    #[cfg(feature = "oidc-conformance")]
+    seeds.push(Box::new(conformance::ConformanceSeed));
 
     for seed in seeds {
         seed.run(db).await?;

@@ -68,9 +68,9 @@ async fn check_database(state: &AppState) -> HealthCheckResult {
             status: "ok",
             detail: None,
         },
-        Err(error) => HealthCheckResult {
+        Err(_) => HealthCheckResult {
             status: "error",
-            detail: Some(error.to_string()),
+            detail: None,
         },
     }
 }

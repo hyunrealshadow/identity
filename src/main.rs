@@ -5,11 +5,16 @@ use identity::{
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    let (state, config) = AppBuilder::from_config()?
+    let builder = AppBuilder::from_config()?
         .init_tracing()
         .connect_database()
         .await?
-        .init_i18n_and_templates()?
+        .init_i18n_and_templates()?;
+
+    #[cfg(feature = "oidc-conformance")]
+    let builder = builder.conformance_autosetup().await?;
+
+    let (state, config) = builder
         .load_runtime_settings()
         .await?
         .build_services()
