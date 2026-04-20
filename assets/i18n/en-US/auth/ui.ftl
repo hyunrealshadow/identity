@@ -20,3 +20,7 @@ link-forgot-password = Forgot?
 
 # OTP hint
 otp-hint = Open your authenticator app and enter the 6-digit code.
+
+# OAuth2 authorize error page
+authorize-error-title = Authorization request is invalid
+authorize-error-message = Review the request parameters and try again.

@@ -26,6 +26,8 @@ pub struct IdentifierPageData {
     pub accounts: Vec<AccountData>,
     /// Pre-fill the identifier input (e.g. on validation error redirect).
     pub identifier: Option<String>,
+    /// Encrypted login.oid that this page should advance.
+    pub login_id: Option<String>,
     /// Localised error message to show in the error box.
     pub error: Option<String>,
     /// CSRF token echoed into hidden form fields.
@@ -35,8 +37,8 @@ pub struct IdentifierPageData {
 /// Context for `auth/password.html`.
 #[derive(Debug, Serialize)]
 pub struct PasswordPageData {
-    /// login.oid — carried in the hidden form field.
-    pub login_id: Uuid,
+    /// Encrypted login.oid — carried in the hidden form field.
+    pub login_id: String,
     /// Original identifier (email/username) — carried in the hidden form field.
     pub identifier: String,
     /// Display name shown in the user info tile.
@@ -52,8 +54,8 @@ pub struct PasswordPageData {
 /// Context for `auth/otp.html`.
 #[derive(Debug, Serialize)]
 pub struct OtpPageData {
-    /// login.oid — carried in the hidden form field.
-    pub login_id: Uuid,
+    /// Encrypted login.oid — carried in the hidden form field.
+    pub login_id: String,
     /// Original identifier — carried in the hidden form field.
     pub identifier: String,
     /// Display name shown in the user info tile.

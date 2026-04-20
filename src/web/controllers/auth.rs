@@ -8,11 +8,13 @@
 
 use axum::{
     Router,
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+
+use crate::application::error::AppError;
 
 use super::{
     response::AppJson,
@@ -23,16 +25,19 @@ use super::{
 };
 use crate::web::views::auth::{
     AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse, IdentifierRequest,
-    IdentifierResponse, SelectAccountRequest, SelectAccountResponse, SessionInfo, UserDisplayInfo,
-    mask_email,
+    IdentifierResponse, LoginStatusResponse, SelectAccountRequest, SelectAccountResponse,
+    SessionInfo, UserDisplayInfo, mask_email,
 };
-use crate::{application::auth::login::ChallengeOutcome, boot::AppState};
+use crate::{
+    application::auth::login::ChallengeOutcome, boot::AppState, domain::user::model::UserOid,
+};
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/auth/sessions/active", get(active_sessions))
+        .route("/api/auth/login/{id}", get(login_status))
         .route("/api/auth/login/select", post(select_account))
         .route("/api/auth/login/identifier", post(identifier))
         .route("/api/auth/login/challenge", post(challenge))
@@ -44,17 +49,11 @@ pub fn routes() -> Router<AppState> {
 ///
 /// Read the `sessions` cookie and return the list of active accounts.
 #[axum::debug_handler]
-async fn active_sessions(State(ctx): State<AppState>, headers: HeaderMap) -> Response {
-    let accounts = match load_active_sessions(&ctx, &headers).await {
-        Ok(accounts) => accounts,
-        Err(error) => {
-            return super::response::error_response_from_headers(
-                ctx.resources().i18n(),
-                &headers,
-                error,
-            );
-        }
-    };
+async fn active_sessions(
+    State(ctx): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    let accounts = load_active_sessions(&ctx, &headers).await?;
     let items: Vec<AccountItem> = accounts
         .into_iter()
         .map(|a| AccountItem {
@@ -71,42 +70,56 @@ async fn active_sessions(State(ctx): State<AppState>, headers: HeaderMap) -> Res
         append_set_cookie(&mut response, &cookie);
     }
 
-    response
+    Ok(response)
 }
 
-/// `POST /api/auth/login/select`
-///
-/// Select an existing session by its OID, reorder the cookie so it becomes
-/// the active (first) session, and touch `last_active_at`.
+#[axum::debug_handler]
+async fn login_status(
+    State(ctx): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&id)
+        .await?;
+    let login = ctx.services().login().get(login_oid).await?;
+
+    let user = match login.user_oid {
+        Some(user_oid) => ctx
+            .services()
+            .login()
+            .get_user(UserOid::from(user_oid))
+            .await
+            .map(|user| UserDisplayInfo {
+                email: mask_email(&user.email),
+                name: user.name,
+            }),
+        None => None,
+    };
+
+    Ok(AppJson(LoginStatusResponse {
+        id,
+        status: login.status,
+        user,
+    })
+    .into_response())
+}
+
 #[axum::debug_handler]
 async fn select_account(
     State(ctx): State<AppState>,
     headers: HeaderMap,
     AppJson(body): AppJson<SelectAccountRequest>,
-) -> Response {
-    if let Err(error) = validate_csrf(
+) -> Result<Response, AppError> {
+    validate_csrf(
         &headers,
         headers
             .get(CSRF_HEADER_NAME)
             .and_then(|value| value.to_str().ok()),
-    ) {
-        return super::response::error_response_from_headers(
-            ctx.resources().i18n(),
-            &headers,
-            error,
-        );
-    }
+    )?;
 
-    let session = match ctx.services().session().select_session(body.id).await {
-        Ok(session) => session,
-        Err(error) => {
-            return super::response::error_response_from_headers(
-                ctx.resources().i18n(),
-                &headers,
-                error,
-            );
-        }
-    };
+    let session = ctx.services().session().select_session(body.id).await?;
     let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
 
     let resp = SelectAccountResponse {
@@ -117,44 +130,40 @@ async fn select_account(
         },
     };
 
-    ([(header::SET_COOKIE, cookie)], AppJson(resp)).into_response()
+    Ok(([(header::SET_COOKIE, cookie)], AppJson(resp)).into_response())
 }
 
-/// `POST /api/auth/login/identifier`
-///
-/// Validate the user identifier (email or username), create a login record,
-/// and return credential types + masked user info.
 #[axum::debug_handler]
 async fn identifier(
     State(ctx): State<AppState>,
     headers: HeaderMap,
     AppJson(body): AppJson<IdentifierRequest>,
-) -> Response {
-    if let Err(error) = validate_csrf(
+) -> Result<Response, AppError> {
+    validate_csrf(
         &headers,
         headers
             .get(CSRF_HEADER_NAME)
             .and_then(|value| value.to_str().ok()),
-    ) {
-        return super::response::error_response_from_headers(
-            ctx.resources().i18n(),
-            &headers,
-            error,
-        );
-    }
+    )?;
 
-    let result = match ctx.services().login().identify(&body.identifier).await {
-        Ok(result) => result,
-        Err(error) => {
-            return super::response::error_response_from_headers(
-                ctx.resources().i18n(),
-                &headers,
-                error,
-            );
-        }
-    };
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let result = ctx
+        .services()
+        .login()
+        .identify(login_oid, &body.identifier)
+        .await?;
+    let protected_id = ctx
+        .services()
+        .oidc_authorize()
+        .encrypt_login_id(result.login.oid)
+        .await?;
+
     let resp = IdentifierResponse {
-        id: result.login.oid,
+        id: protected_id,
         status: "identifier_verified",
         credential_types: result.credential_types,
         user: UserDisplayInfo {
@@ -163,86 +172,65 @@ async fn identifier(
         },
     };
 
-    AppJson(resp).into_response()
+    Ok(AppJson(resp).into_response())
 }
 
-/// `POST /api/auth/login/challenge`
-///
-/// Verify the credential (password), create a session, and set the session
-/// cookie.
 #[axum::debug_handler]
 async fn challenge(
     State(ctx): State<AppState>,
     headers: HeaderMap,
     AppJson(body): AppJson<ChallengeRequest>,
-) -> Response {
-    if let Err(error) = validate_csrf(
+) -> Result<Response, AppError> {
+    validate_csrf(
         &headers,
         headers
             .get(CSRF_HEADER_NAME)
             .and_then(|value| value.to_str().ok()),
-    ) {
-        return super::response::error_response_from_headers(
-            ctx.resources().i18n(),
-            &headers,
-            error,
-        );
-    }
+    )?;
 
     let session_ctx = build_session_context(&headers);
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
 
-    let outcome = match ctx
+    let outcome = ctx
         .services()
         .login()
         .challenge(
-            body.id,
+            login_oid,
             &body.credential_type,
             &body.credential,
             session_ctx,
         )
-        .await
-    {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            return super::response::error_response_from_headers(
-                ctx.resources().i18n(),
-                &headers,
-                error,
-            );
-        }
-    };
+        .await?;
 
     match outcome {
-        ChallengeOutcome::MfaRequired { .. } => {
-            // No session yet — return 200 so the client knows to call again
-            // with credential_type = "otp".
-            let resp = ChallengeResponse {
-                status: "mfa_required",
-                session: None,
-                acr: None,
-            };
-            AppJson(resp).into_response()
-        }
+        ChallengeOutcome::MfaRequired { .. } => Ok(AppJson(ChallengeResponse {
+            status: "mfa_required",
+            session: None,
+            acr: None,
+        })
+        .into_response()),
         ChallengeOutcome::Authenticated { session, .. } => {
             let cookie =
                 build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-
             let acr = session.acr.clone();
-            let resp = ChallengeResponse {
-                status: "authenticated",
-                session: Some(SessionInfo {
-                    id: session.oid,
-                    expires_at: session.expires_at,
-                }),
-                acr,
-            };
 
-            (
+            Ok((
                 StatusCode::CREATED,
                 [(header::SET_COOKIE, cookie)],
-                AppJson(resp),
+                AppJson(ChallengeResponse {
+                    status: "authenticated",
+                    session: Some(SessionInfo {
+                        id: session.oid,
+                        expires_at: session.expires_at,
+                    }),
+                    acr,
+                }),
             )
-                .into_response()
+                .into_response())
         }
     }
 }

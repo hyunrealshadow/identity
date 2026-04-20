@@ -1,13 +1,12 @@
 //! Authentication API request and response DTOs.
 //!
-//! All external `id` fields are [`Uuid`] values sourced from the
-//! corresponding entity's `oid` column.
+//! All external `id` fields are encrypted login.oid values.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::user::model::CredentialType;
+use crate::domain::user::CredentialType;
 
 // ─── Common Error Response ───────────────────────────────────────────────────
 
@@ -79,6 +78,8 @@ pub struct SelectAccountResponse {
 /// `POST /api/auth/login/identifier` request.
 #[derive(Debug, Deserialize)]
 pub struct IdentifierRequest {
+    /// Encrypted login.oid to advance.
+    pub id: String,
     /// Email or username.
     pub identifier: String,
 }
@@ -86,14 +87,23 @@ pub struct IdentifierRequest {
 /// `POST /api/auth/login/identifier` response (success).
 #[derive(Debug, Serialize)]
 pub struct IdentifierResponse {
-    /// login.oid — must be carried to subsequent steps.
-    pub id: Uuid,
+    /// Encrypted login.oid — must be carried to subsequent steps.
+    pub id: String,
     /// Current login flow status.
     pub status: &'static str,
     /// Credential types available for this user, e.g. `["password"]`.
     pub credential_types: Vec<CredentialType>,
     /// Masked user display info.
     pub user: UserDisplayInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoginStatusResponse {
+    /// Encrypted login.oid.
+    pub id: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<UserDisplayInfo>,
 }
 
 /// Masked user info (prevents information leakage).
@@ -110,8 +120,8 @@ pub struct UserDisplayInfo {
 /// `POST /api/auth/login/challenge` request.
 #[derive(Debug, Deserialize)]
 pub struct ChallengeRequest {
-    /// login.oid from the identifier step.
-    pub id: Uuid,
+    /// Encrypted login.oid from the identifier step.
+    pub id: String,
     /// Credential type, e.g. `"password"`.
     pub credential_type: String,
     /// Credential value (plaintext password, etc.).

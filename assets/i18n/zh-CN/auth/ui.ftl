@@ -20,3 +20,7 @@ link-forgot-password = 忘记了？
 
 # OTP 提示
 otp-hint = 打开您的身份验证器应用，输入 6 位数字验证码。
+
+# OAuth2 授权错误页面
+authorize-error-title = 授权请求无效
+authorize-error-message = 请检查请求参数并重试。
