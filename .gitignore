@@ -21,6 +21,7 @@ target/
 
 .opencode
 .idea
+.worktrees
 node_modules
 
 assets/static/css
@@ -28,4 +29,9 @@ assets/static/js
 assets/views
 **/dist/**
 
-IdentityServer4-archive
+ref
+docs/superpowers
+.trellis
+
+# Conformance suite GitLab clone (built inside Docker image)
+conformance/suite/
