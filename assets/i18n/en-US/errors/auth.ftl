@@ -16,3 +16,4 @@ E2008 = Too many failed attempts. Please try again later.
 E2009 = The session { $session_id } does not exist.
 E2010 = Your session has expired. Please sign in again.
 E2011 = Your session has been revoked. Please sign in again.
+E2012 = The identifier (email or username) is required.

@@ -14,6 +14,7 @@ pub enum AuthErrorCode {
     SessionNotFound,
     SessionExpired,
     SessionRevoked,
+    IdentifierRequired,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -31,6 +32,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::SessionNotFound => ErrorKind::NotFound,
             AuthErrorCode::SessionExpired => ErrorKind::Unauthorized,
             AuthErrorCode::SessionRevoked => ErrorKind::Unauthorized,
+            AuthErrorCode::IdentifierRequired => ErrorKind::Validation,
         }
     }
 
@@ -48,6 +50,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::SessionNotFound => 2009,
             AuthErrorCode::SessionExpired => 2010,
             AuthErrorCode::SessionRevoked => 2011,
+            AuthErrorCode::IdentifierRequired => 2012,
         }
     }
 }

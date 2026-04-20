@@ -4,11 +4,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::application::{
-    error::{
-        AppError,
-        code::AppErrorCode,
-        codes::{auth::AuthErrorCode, common::CommonErrorCode},
-    },
+    error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
     setting::runtime::SettingProvider,
 };
 use crate::domain::{
@@ -60,22 +56,48 @@ pub enum ChallengeOutcome {
 // ─── LoginService ────────────────────────────────────────────────────────────
 
 pub struct LoginService {
-    pub user_repo: Arc<dyn UserRepository>,
-    pub credential_repo: Arc<dyn UserCredentialRepository>,
-    pub session_repo: Arc<dyn SessionRepository>,
-    pub login_repo: Arc<dyn LoginRepository>,
-    pub password_hasher: Arc<dyn PasswordHasher>,
-    pub totp_verifier: Arc<dyn TotpVerifier>,
-    pub hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
+    pub(crate) user_repo: Arc<dyn UserRepository>,
+    pub(crate) credential_repo: Arc<dyn UserCredentialRepository>,
+    pub(crate) session_repo: Arc<dyn SessionRepository>,
+    pub(crate) login_repo: Arc<dyn LoginRepository>,
+    pub(crate) password_hasher: Arc<dyn PasswordHasher>,
+    pub(crate) totp_verifier: Arc<dyn TotpVerifier>,
+    pub(crate) hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
 }
 
 impl LoginService {
-    /// Step 1: Verify the identifier (email or username) and create a login
-    /// record linked to the resolved user.
-    pub async fn identify(&self, identifier: &str) -> Result<IdentifierResult, AppError> {
+    pub async fn get(&self, login_oid: Uuid) -> Result<Login, AppError> {
+        self.login_repo
+            .find_by_oid(login_oid)
+            .await?
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
+    }
+
+    /// Fetch the user associated with a login by their OID.
+    pub async fn get_user(&self, user_oid: crate::domain::user::UserOid) -> Option<User> {
+        self.user_repo.find_by_oid(user_oid).await.ok().flatten()
+    }
+
+    /// Step 1: Verify the identifier (email or username) and bind the
+    /// resolved user onto an existing login flow.
+    pub async fn identify(
+        &self,
+        login_oid: Uuid,
+        identifier: &str,
+    ) -> Result<IdentifierResult, AppError> {
         let identifier = identifier.trim();
         if identifier.is_empty() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+            return Err(AppError::from_code(AuthErrorCode::IdentifierRequired));
+        }
+
+        let login_state = self
+            .login_repo
+            .find_by_oid(login_oid)
+            .await?
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?;
+
+        if login_state.status != LoginStatus::CREATED {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
 
         // Look up user by normalized email or username.
@@ -87,11 +109,16 @@ impl LoginService {
                 if Utc::now() < until {
                     return Err(AppError::from_code(AuthErrorCode::UserLocked));
                 }
-                // Lock has expired — reset it.
-                self.user_repo.reset_failed_attempts(user.oid).await?;
+                self.user_repo
+                    .reset_failed_attempts(user.oid.into())
+                    .await?;
             } else {
                 return Err(AppError::from_code(AuthErrorCode::UserLocked));
             }
+        }
+
+        if !user.enabled {
+            return Err(AppError::from_code(AuthErrorCode::UserLocked));
         }
 
         // Probe each supported credential type for this user.
@@ -103,17 +130,17 @@ impl LoginService {
         ] {
             let credentials = self
                 .credential_repo
-                .find_by_user_oid_and_type(user.oid, ct.clone())
+                .find_by_user_oid_and_type(user.oid.into(), ct.clone())
                 .await?;
             if !credentials.is_empty() {
                 credential_types.push(ct);
             }
         }
 
-        // Create a login record linked to the resolved user.
+        // Bind the resolved user onto the existing login record.
         let login = self
             .login_repo
-            .create(user.oid, LoginStatus::IDENTIFIER_VERIFIED, None)
+            .bind_user(login_oid, user.oid.into(), LoginStatus::IDENTIFIER_VERIFIED)
             .await?;
 
         Ok(IdentifierResult {
@@ -152,14 +179,21 @@ impl LoginService {
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?;
 
+        if login.user_oid.is_none() {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        }
+
         // Check login expiry for all credential types.
         let expiry_duration = chrono::Duration::from_std(LOGIN_EXPIRY)
             .unwrap_or_else(|_| chrono::Duration::seconds(300));
         if Utc::now().signed_duration_since(login.created_at) > expiry_duration {
-            let _ = self
+            if let Err(e) = self
                 .login_repo
                 .update_status(login.oid, LoginStatus::FAILED, None, None)
-                .await;
+                .await
+            {
+                tracing::error!(error = %e, "failed to update login status on expiry");
+            }
             return Err(AppError::from_code(AuthErrorCode::LoginExpired));
         }
 
@@ -198,7 +232,12 @@ impl LoginService {
         // string needed from the client.
         let user = self
             .user_repo
-            .find_by_oid(login.user_oid)
+            .find_by_oid(
+                login
+                    .user_oid
+                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+                    .into(),
+            )
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
 
@@ -208,13 +247,22 @@ impl LoginService {
                 if Utc::now() < until {
                     return Err(AppError::from_code(AuthErrorCode::UserLocked));
                 }
+                if let Err(e) = self.user_repo.reset_failed_attempts(user.oid.into()).await {
+                    tracing::error!(error = %e, "failed to reset expired lock");
+                }
+            } else {
+                return Err(AppError::from_code(AuthErrorCode::UserLocked));
             }
+        }
+
+        if !user.enabled {
+            return Err(AppError::from_code(AuthErrorCode::UserLocked));
         }
 
         // Load the password credential.
         let credentials = self
             .credential_repo
-            .find_by_user_oid_and_type(user.oid, CredentialType::Password)
+            .find_by_user_oid_and_type(user.oid.into(), CredentialType::Password)
             .await?;
 
         let password_cred = credentials
@@ -238,13 +286,16 @@ impl LoginService {
 
         match verify_result {
             VerifyResult::Failure => {
-                let _ = self
+                if let Err(e) = self
                     .login_repo
                     .increment_failed_attempts(
                         login.oid,
                         Some(&AuthErrorCode::InvalidCredential.code().to_string()),
                     )
-                    .await;
+                    .await
+                {
+                    tracing::error!(error = %e, "failed to increment login failed attempts");
+                }
 
                 let new_attempts = user.failed_attempts + 1;
                 let lock_until = if new_attempts >= MAX_FAILED_ATTEMPTS {
@@ -256,10 +307,13 @@ impl LoginService {
                 } else {
                     None
                 };
-                let _ = self
+                if let Err(e) = self
                     .user_repo
-                    .increment_failed_attempts(user.oid, lock_until)
-                    .await;
+                    .increment_failed_attempts(user.oid.into(), lock_until)
+                    .await
+                {
+                    tracing::error!(error = %e, "failed to increment user failed attempts");
+                }
 
                 if new_attempts >= MAX_FAILED_ATTEMPTS {
                     return Err(AppError::from_code(AuthErrorCode::UserLocked));
@@ -270,29 +324,34 @@ impl LoginService {
                 // Transparently rehash if needed.
                 if verify_result == VerifyResult::NeedsRehash {
                     if let Ok(new_password) = self.password_hasher.hash(credential, hash_options) {
-                        let _ = self
+                        if let Err(e) = self
                             .credential_repo
-                            .update_password_by_oid(password_cred.oid, &new_password)
-                            .await;
+                            .update_password_by_oid(password_cred.oid.into(), &new_password)
+                            .await
+                        {
+                            tracing::error!(error = %e, "failed to rehash password");
+                        }
                     }
                 }
 
                 // Reset failed attempts on the user.
-                let _ = self.user_repo.reset_failed_attempts(user.oid).await;
+                if let Err(e) = self.user_repo.reset_failed_attempts(user.oid.into()).await {
+                    tracing::error!(error = %e, "failed to reset user failed attempts");
+                }
 
                 // Check if the user has an OTP credential.
                 let otp_credentials = self
                     .credential_repo
-                    .find_by_user_oid_and_type(user.oid, CredentialType::Otp)
+                    .find_by_user_oid_and_type(user.oid.into(), CredentialType::Otp)
                     .await?;
 
                 if otp_credentials.is_empty() {
                     // No MFA — create session immediately with password ACR.
                     let session = self
-                        .create_session(user.oid, ctx, ACR_PASSWORD, false)
+                        .create_session(user.oid.into(), ctx, ACR_PASSWORD, false)
                         .await?;
 
-                    let _ = self
+                    if let Err(e) = self
                         .login_repo
                         .update_status(
                             login.oid,
@@ -300,15 +359,21 @@ impl LoginService {
                             Some(session.oid),
                             Some(ACR_PASSWORD),
                         )
-                        .await;
+                        .await
+                    {
+                        tracing::error!(error = %e, "failed to update login status to authenticated");
+                    }
 
                     Ok(ChallengeOutcome::Authenticated { login, session })
                 } else {
                     // MFA required — do NOT create a session yet.
-                    let _ = self
+                    if let Err(e) = self
                         .login_repo
                         .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
-                        .await;
+                        .await
+                    {
+                        tracing::error!(error = %e, "failed to update login status to mfa_required");
+                    }
 
                     Ok(ChallengeOutcome::MfaRequired { login })
                 }
@@ -330,14 +395,19 @@ impl LoginService {
         // Resolve user from the login record — no identifier string needed.
         let user = self
             .user_repo
-            .find_by_oid(login.user_oid)
+            .find_by_oid(
+                login
+                    .user_oid
+                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+                    .into(),
+            )
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
 
         // Load the OTP credential.
         let otp_credentials = self
             .credential_repo
-            .find_by_user_oid_and_type(user.oid, CredentialType::Otp)
+            .find_by_user_oid_and_type(user.oid.into(), CredentialType::Otp)
             .await?;
 
         let otp_cred = otp_credentials
@@ -358,20 +428,25 @@ impl LoginService {
         let valid = self.totp_verifier.verify(&otp_data, code)?;
 
         if !valid {
-            let _ = self
+            if let Err(e) = self
                 .login_repo
                 .increment_failed_attempts(
                     login.oid,
                     Some(&AuthErrorCode::InvalidOtp.code().to_string()),
                 )
-                .await;
+                .await
+            {
+                tracing::error!(error = %e, "failed to increment login failed attempts");
+            }
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         }
 
         // Create session with MFA ACR + expiry.
-        let session = self.create_session(user.oid, ctx, ACR_MFA, true).await?;
+        let session = self
+            .create_session(user.oid.into(), ctx, ACR_MFA, true)
+            .await?;
 
-        let _ = self
+        if let Err(e) = self
             .login_repo
             .update_status(
                 login.oid,
@@ -379,7 +454,10 @@ impl LoginService {
                 Some(session.oid),
                 Some(ACR_MFA),
             )
-            .await;
+            .await
+        {
+            tracing::error!(error = %e, "failed to update login status to authenticated");
+        }
 
         Ok(ChallengeOutcome::Authenticated { login, session })
     }

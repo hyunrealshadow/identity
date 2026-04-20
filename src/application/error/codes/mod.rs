@@ -1,3 +1,10 @@
 pub mod auth;
+pub mod authorize;
+pub mod authorize_http;
 pub mod common;
+pub mod data_protection;
+pub mod install;
 pub mod key;
+pub mod openid_connect;
+pub mod provider;
+pub mod token;
