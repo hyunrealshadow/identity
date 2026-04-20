@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
+use super::shared::{decode_optional_expiry, encode_optional_expiry};
 use crate::domain::auth::{
     SessionStatus,
     model::{ActiveSession, Session},
@@ -25,12 +26,12 @@ fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
         browser_version: m.browser_version,
         user_agent: m.user_agent,
         ip_address: m.ip_address,
-        last_active_at: m.last_active_at.map(|v| DateTime::<Utc>::from(v)),
-        expires_at: m.expires_at.map(|v| DateTime::<Utc>::from(v)),
-        revoked_at: m.revoked_at.map(|v| DateTime::<Utc>::from(v)),
-        created_at: DateTime::<Utc>::from(m.created_at),
+        last_active_at: Some(m.last_active_at.with_timezone(&Utc)),
+        expires_at: decode_optional_expiry(m.expires_at),
+        revoked_at: m.revoked_at.map(|value| value.with_timezone(&Utc)),
+        created_at: m.created_at.with_timezone(&Utc),
         acr: m.acr,
-        acr_expires_at: m.acr_expires_at.map(|v| DateTime::<Utc>::from(v)),
+        acr_expires_at: m.acr_expires_at.map(|value| value.with_timezone(&Utc)),
     }
 }
 
@@ -85,8 +86,9 @@ impl SessionRepository for SessionRepositoryImpl {
                     user_oid: u.oid,
                     user_name: u.name,
                     user_email: u.email,
-                    last_active_at: s.last_active_at.map(|v| DateTime::<Utc>::from(v)),
-                    expires_at: s.expires_at.map(|v| DateTime::<Utc>::from(v)),
+                    last_active_at: Some(s.last_active_at.with_timezone(&Utc)),
+                    expires_at: decode_optional_expiry(s.expires_at),
+                    created_at: s.created_at.with_timezone(&Utc),
                 })
             })
             .collect())
@@ -127,8 +129,8 @@ impl SessionRepository for SessionRepositoryImpl {
             browser_version: Set(browser_version),
             user_agent: Set(user_agent),
             ip_address: Set(ip_address),
-            last_active_at: Set(Some(now.into())),
-            expires_at: Set(expires_at.map(Into::into)),
+            last_active_at: Set(now.into()),
+            expires_at: Set(encode_optional_expiry(expires_at)),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
             acr: Set(acr),
@@ -151,7 +153,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .ok_or(SessionRepositoryError::SessionNotFound)?;
 
         let mut active: session::ActiveModel = model.into();
-        active.last_active_at = Set(Some(Utc::now().into()));
+        active.last_active_at = Set(Utc::now().into());
         active
             .update(&self.db)
             .await
@@ -182,5 +184,54 @@ impl SessionRepository for SessionRepositoryImpl {
             .await
             .map_err(SessionRepositoryError::RevokeFailed)?;
         Ok(Some(session_to_domain(model, u_model.oid)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::session_to_domain;
+    use chrono::{DateTime, Utc};
+    use uuid::Uuid;
+
+    use crate::domain::auth::SessionStatus;
+    use crate::infrastructure::database::entity::session;
+
+    #[test]
+    fn session_to_domain_wraps_required_timestamps_in_some() {
+        let last_active_at = DateTime::parse_from_rfc3339("2026-01-01T01:00:00+00:00").unwrap();
+        let expires_at = DateTime::parse_from_rfc3339("2026-01-08T01:00:00+00:00").unwrap();
+        let created_at = DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap();
+        let model = session::Model {
+            id: 1,
+            oid: Uuid::new_v4(),
+            user_id: 42,
+            status: SessionStatus::ACTIVE.to_owned(),
+            acr: None,
+            acr_expires_at: None,
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            country: None,
+            city: None,
+            last_active_at,
+            expires_at,
+            revoked_at: None,
+            created_at,
+            updated_at: None,
+        };
+
+        let session = session_to_domain(model, Uuid::new_v4());
+
+        assert_eq!(
+            session.last_active_at,
+            Some(last_active_at.with_timezone(&Utc))
+        );
+        assert_eq!(session.expires_at, Some(expires_at.with_timezone(&Utc)));
+        assert_eq!(session.created_at, created_at.with_timezone(&Utc));
     }
 }

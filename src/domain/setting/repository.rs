@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::setting::model::{SettingDefinition, SettingEntry};
+use crate::domain::setting::{SettingDefinition, SettingEntry};
 
 #[derive(Debug, Error)]
 pub enum SettingRepositoryError {

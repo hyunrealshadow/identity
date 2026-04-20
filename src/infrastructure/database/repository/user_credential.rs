@@ -1,20 +1,15 @@
-use async_trait::async_trait;
-use chrono::Utc;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
-};
-use uuid::Uuid;
-
 use crate::domain::user::{
-    model::{
-        CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
-        UserCredential,
-    },
+    CredentialData, CredentialType, Password, UserCredential, UserCredentialOid, UserOid,
     repository::{UserCredentialRepository, UserCredentialRepositoryError},
 };
 use crate::infrastructure::database::entity::{
     user, user::Entity as UserEntity, user_credential,
     user_credential::Entity as UserCredentialEntity,
+};
+use async_trait::async_trait;
+use chrono::Utc;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
 };
 
 pub struct UserCredentialRepositoryImpl {
@@ -31,7 +26,7 @@ impl UserCredentialRepositoryImpl {
 impl UserCredentialRepository for UserCredentialRepositoryImpl {
     async fn find_by_user_oid_and_type(
         &self,
-        user_oid: Uuid,
+        user_oid: UserOid,
         credential_type: CredentialType,
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError> {
         let credential_type_str = match credential_type {
@@ -41,7 +36,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         };
 
         let rows = UserEntity::find()
-            .filter(user::Column::Oid.eq(user_oid))
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
             .inner_join(UserCredentialEntity)
             .filter(user_credential::Column::Type.eq(credential_type_str))
             .select_only()
@@ -64,22 +59,50 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .into_iter()
             .filter_map(|m| {
                 let data = match m.r#type.as_str() {
-                    "password" => {
-                        let p: Password = serde_json::from_value(m.data).ok()?;
-                        CredentialData::Password(p)
+                    "password" => match serde_json::from_value(m.data) {
+                        Ok(p) => CredentialData::Password(p),
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                credential_oid = %m.oid,
+                                "failed to deserialize password credential; skipping"
+                            );
+                            return None;
+                        }
+                    },
+                    "otp" => match serde_json::from_value(m.data) {
+                        Ok(o) => CredentialData::Otp(o),
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                credential_oid = %m.oid,
+                                "failed to deserialize otp credential; skipping"
+                            );
+                            return None;
+                        }
+                    },
+                    "recovery_code" => match serde_json::from_value(m.data) {
+                        Ok(r) => CredentialData::RecoveryCode(r),
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                credential_oid = %m.oid,
+                                "failed to deserialize recovery_code credential; skipping"
+                            );
+                            return None;
+                        }
+                    },
+                    other => {
+                        tracing::warn!(
+                            credential_oid = %m.oid,
+                            r#type = other,
+                            "unknown credential type; skipping"
+                        );
+                        return None;
                     }
-                    "otp" => {
-                        let o: OtpCredentialData = serde_json::from_value(m.data).ok()?;
-                        CredentialData::Otp(o)
-                    }
-                    "recovery_code" => {
-                        let r: RecoveryCodeCredentialData = serde_json::from_value(m.data).ok()?;
-                        CredentialData::RecoveryCode(r)
-                    }
-                    _ => return None,
                 };
                 Some(UserCredential {
-                    oid: m.oid,
+                    oid: m.oid.into(),
                     r#type: credential_type.clone(),
                     data,
                 })
@@ -91,11 +114,11 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
 
     async fn update_password_by_oid(
         &self,
-        credential_oid: Uuid,
+        credential_oid: UserCredentialOid,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError> {
         let cred = UserCredentialEntity::find()
-            .filter(user_credential::Column::Oid.eq(credential_oid))
+            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
             .one(&self.db)
             .await
             .map_err(UserCredentialRepositoryError::QueryFailed)?

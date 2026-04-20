@@ -12,6 +12,7 @@ pub enum UserCredential {
     UserId,
     Type,
     Data,
+    ExpiresAt,
     CreatedAt,
     UpdatedAt,
 }
@@ -29,6 +30,7 @@ impl MigrationTrait for Migration {
                     .col(big_integer(UserCredential::UserId))
                     .col(string(UserCredential::Type))
                     .col(json_binary(UserCredential::Data))
+                    .col(timestamp_with_time_zone_null(UserCredential::ExpiresAt))
                     .col(
                         timestamp_with_time_zone(UserCredential::CreatedAt)
                             .default(Expr::current_timestamp()),

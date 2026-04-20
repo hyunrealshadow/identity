@@ -8,7 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     #[sea_orm(unique)]
-    pub o_id: Uuid,
+    pub oid: Uuid,
     pub protocol: String,
     pub name: String,
     #[sea_orm(column_type = "JsonBinary", nullable)]
@@ -22,7 +22,7 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_one = "super::client_open_id_connect::Entity")]
     ClientOpenIdConnect,
-    #[sea_orm(has_one = "super::client_open_id_connect_credential::Entity")]
+    #[sea_orm(has_many = "super::client_open_id_connect_credential::Entity")]
     ClientOpenIdConnectCredential,
     #[sea_orm(has_one = "super::client_request::Entity")]
     ClientRequest,

@@ -54,8 +54,8 @@ impl MigrationTrait for Migration {
                     .col(string_null(Session::IpAddress))
                     .col(string_null(Session::Country))
                     .col(string_null(Session::City))
-                    .col(timestamp_with_time_zone_null(Session::LastActiveAt))
-                    .col(timestamp_with_time_zone_null(Session::ExpiresAt))
+                    .col(timestamp_with_time_zone(Session::LastActiveAt))
+                    .col(timestamp_with_time_zone(Session::ExpiresAt))
                     .col(timestamp_with_time_zone_null(Session::RevokedAt))
                     .col(
                         timestamp_with_time_zone(Session::CreatedAt)

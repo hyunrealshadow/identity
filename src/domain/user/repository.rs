@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use uuid::Uuid;
 
-use crate::domain::user::model::{CredentialType, Password, User, UserCredential};
+use crate::domain::user::{
+    CredentialType, Password, User, UserCredential, UserCredentialOid, UserOid,
+};
 
 #[derive(Debug, Error)]
 pub enum UserRepositoryError {
@@ -43,17 +44,17 @@ pub trait UserRepository: Send + Sync {
     async fn find_by_identifier(&self, identifier: &str) -> Result<User, UserRepositoryError>;
 
     /// Find a user by external OID.
-    async fn find_by_oid(&self, oid: Uuid) -> Result<Option<User>, UserRepositoryError>;
+    async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError>;
 
     /// Increment `failed_attempts` by 1 and optionally lock the account.
     async fn increment_failed_attempts(
         &self,
-        user_oid: Uuid,
+        user_oid: UserOid,
         lock_until: Option<DateTime<Utc>>,
     ) -> Result<(), UserRepositoryError>;
 
     /// Reset `failed_attempts` to 0 and clear the lock.
-    async fn reset_failed_attempts(&self, user_oid: Uuid) -> Result<(), UserRepositoryError>;
+    async fn reset_failed_attempts(&self, user_oid: UserOid) -> Result<(), UserRepositoryError>;
 }
 
 // ─── UserCredentialRepository ─────────────────────────────────────────────────
@@ -66,7 +67,7 @@ pub trait UserCredentialRepository: Send + Sync {
     /// [`CredentialData`] variant are silently skipped.
     async fn find_by_user_oid_and_type(
         &self,
-        user_oid: Uuid,
+        user_oid: UserOid,
         credential_type: CredentialType,
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError>;
 
@@ -77,7 +78,7 @@ pub trait UserCredentialRepository: Send + Sync {
     /// arbitrary data.
     async fn update_password_by_oid(
         &self,
-        credential_oid: Uuid,
+        credential_oid: UserCredentialOid,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError>;
 }

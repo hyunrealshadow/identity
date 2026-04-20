@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::setting::model::{SettingDefinition, SettingValidationError};
+use crate::domain::setting::{SettingDefinition, SettingValidationError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct InstallationState {

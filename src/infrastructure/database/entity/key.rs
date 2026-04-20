@@ -12,7 +12,7 @@ pub struct Model {
     pub r#type: String,
     #[sea_orm(column_type = "JsonBinary")]
     pub data: Json,
-    pub expires_at: Option<DateTimeWithTimeZone>,
+    pub expires_at: DateTimeWithTimeZone,
     pub revoked_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTime,
     pub updated_at: Option<DateTime>,

@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use uuid::Uuid;
 
-use crate::domain::key::model::{Key, KeyData, KeyType};
+use crate::domain::key::{Key, KeyData, KeyOid, KeyType};
 
 #[derive(Debug, Error)]
 pub enum KeyRepositoryError {
@@ -34,9 +33,11 @@ pub enum KeyRepositoryError {
 
 #[async_trait]
 pub trait KeyRepository: Send + Sync {
-    async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Key>, KeyRepositoryError>;
+    async fn find_by_oid(&self, oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError>;
 
     async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
+
+    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
 
     async fn create(
         &self,
@@ -47,13 +48,13 @@ pub trait KeyRepository: Send + Sync {
 
     async fn update_certificate_by_oid(
         &self,
-        oid: Uuid,
+        oid: KeyOid,
         certificate_pem: &str,
     ) -> Result<Option<Key>, KeyRepositoryError>;
 
     async fn revoke_by_oid(
         &self,
-        oid: Uuid,
+        oid: KeyOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Key>, KeyRepositoryError>;
 }

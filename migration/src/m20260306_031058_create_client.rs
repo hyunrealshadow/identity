@@ -7,7 +7,7 @@ pub struct Migration;
 pub enum Client {
     Table,
     Id,
-    OId,
+    Oid,
     Protocol,
     Name,
     Names,
@@ -25,7 +25,7 @@ impl MigrationTrait for Migration {
                     .table(Client::Table)
                     .if_not_exists()
                     .col(pk_auto(Client::Id).big_integer())
-                    .col(uuid_uniq(Client::OId).default(Expr::cust("gen_random_uuid()")))
+                    .col(uuid_uniq(Client::Oid).default(Expr::cust("gen_random_uuid()")))
                     .col(string(Client::Protocol))
                     .col(string(Client::Name))
                     .col(json_binary_null(Client::Names))

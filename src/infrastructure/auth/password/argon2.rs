@@ -78,7 +78,7 @@ pub(super) fn verify(
         .ok_or_else(|| PasswordHashError::HashFailed("missing hash output".to_owned()))?
         .to_string();
 
-    if actual_hash != stored.hash {
+    if !constant_time_compare(actual_hash.as_bytes(), stored.hash.as_bytes()) {
         return Ok(VerifyResult::Failure);
     }
 
@@ -87,6 +87,17 @@ pub(super) fn verify(
     } else {
         Ok(VerifyResult::NeedsRehash)
     }
+}
+
+fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        result |= x ^ y;
+    }
+    result == 0
 }
 
 #[cfg(test)]

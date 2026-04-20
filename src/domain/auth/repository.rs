@@ -103,11 +103,19 @@ pub trait LoginRepository: Send + Sync {
     async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Login>, LoginRepositoryError>;
 
     /// Create a new login record linked to the identified user, and return it.
-    async fn create(
+    async fn create_pending(
         &self,
+        client_oid: Uuid,
+        client_request_oid: Uuid,
+        requested_acr: Option<&str>,
+    ) -> Result<Login, LoginRepositoryError>;
+
+    /// Bind a resolved user to an existing login and move it forward.
+    async fn bind_user(
+        &self,
+        login_oid: Uuid,
         user_oid: Uuid,
         status: &str,
-        requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError>;
 
     /// Update login status (and optionally link a session by session OID).

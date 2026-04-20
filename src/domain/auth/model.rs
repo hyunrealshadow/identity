@@ -34,15 +34,18 @@ pub struct ActiveSession {
     pub user_email: String,
     pub last_active_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Login {
     pub oid: Uuid,
+    pub client_oid: Uuid,
+    pub client_request_oid: Uuid,
     /// The user this login attempt belongs to.  Set at creation (identifier
     /// step) so that subsequent challenge steps do not need to re-resolve the
     /// identifier string into a user.
-    pub user_oid: Uuid,
+    pub user_oid: Option<Uuid>,
     pub status: String,
     pub failed_attempts: i32,
     pub created_at: DateTime<Utc>,

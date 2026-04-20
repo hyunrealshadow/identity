@@ -5,7 +5,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::setting::{
-    model::{SettingDefinition, SettingEntry},
+    SettingDefinition, SettingEntry,
     repository::{SettingRepository, SettingRepositoryError},
 };
 use crate::infrastructure::database::entity::{setting, setting::Entity as SettingEntity};
@@ -41,7 +41,7 @@ where
     } = model;
 
     Ok(SettingEntry {
-        oid,
+        oid: oid.into(),
         key,
         value: serde_json::from_value(value).map_err(SettingRepositoryError::Deserialize)?,
         created_at: DateTime::from_naive_utc_and_offset(created_at, Utc),
