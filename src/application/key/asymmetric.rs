@@ -4,10 +4,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
-    application::error::{
-        AppError,
-        codes::{common::CommonErrorCode, key::KeyErrorCode},
-    },
+    application::error::{AppError, codes::key::KeyErrorCode},
     domain::key::{
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
         model::{AsymmetricKeyAlgorithm, Key, KeyData, KeyType},
@@ -23,8 +20,8 @@ pub struct GenerateAsymmetricKeyInput {
 }
 
 pub struct AsymmetricKeyService {
-    pub repo: Arc<dyn KeyRepository>,
-    pub generator: Arc<dyn AsymmetricKeyGenerator>,
+    pub(crate) repo: Arc<dyn KeyRepository>,
+    pub(crate) generator: Arc<dyn AsymmetricKeyGenerator>,
 }
 
 impl AsymmetricKeyService {
@@ -39,7 +36,7 @@ impl AsymmetricKeyService {
         input
             .algorithm
             .validate()
-            .map_err(|_| AppError::from_code(CommonErrorCode::InvalidRequest))?;
+            .map_err(|_| AppError::from_code(KeyErrorCode::AlgorithmInvalid))?;
 
         let spec = AsymmetricKeySpec {
             algorithm: input.algorithm,
@@ -65,7 +62,7 @@ impl AsymmetricKeyService {
     pub async fn get_by_oid(&self, oid: Uuid) -> Result<Key, AppError> {
         let key = self
             .repo
-            .find_by_oid(oid)
+            .find_by_oid(oid.into())
             .await?
             .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
 
@@ -85,7 +82,7 @@ impl AsymmetricKeyService {
 
         let key = self
             .repo
-            .update_certificate_by_oid(oid, certificate_pem)
+            .update_certificate_by_oid(oid.into(), certificate_pem)
             .await?
             .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
 
@@ -98,7 +95,7 @@ impl AsymmetricKeyService {
 
     pub async fn revoke(&self, oid: Uuid) -> Result<Key, AppError> {
         self.repo
-            .revoke_by_oid(oid, Utc::now())
+            .revoke_by_oid(oid.into(), Utc::now())
             .await?
             .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))
     }
@@ -112,5 +109,5 @@ fn validate_certificate_pem(certificate_pem: &str) -> Result<(), AppError> {
         return Ok(());
     }
 
-    Err(AppError::from_code(CommonErrorCode::InvalidRequest))
+    Err(AppError::from_code(KeyErrorCode::InvalidCertificatePem))
 }
