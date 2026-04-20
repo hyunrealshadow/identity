@@ -12,6 +12,7 @@ export default defineConfig({
   source: {
     entry: {
       'views/auth/login':    r('src/pages/login.ts'),
+      'views/install/index': r('src/pages/install.ts'),
       'views/auth/otp':      r('src/pages/otp.ts'),
       'views/auth/password': r('src/pages/password.ts'),
     },
@@ -26,6 +27,7 @@ export default defineConfig({
     template({ entryName }) {
       const templates: Record<string, string> = {
         'views/auth/login':    r('src/views/auth/login.html'),
+        'views/install/index': r('src/views/install/index.html'),
         'views/auth/otp':      r('src/views/auth/otp.html'),
         'views/auth/password': r('src/views/auth/password.html'),
       };

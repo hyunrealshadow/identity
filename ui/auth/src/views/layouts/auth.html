@@ -6,11 +6,11 @@
   <title>{% block title %}{{ t(key="page-sign-in") }}{% endblock %} - {{ t(key="app-name") }}</title>
   {% block head_resources %}{% endblock %}
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50" data-error-required="{{ t(key='error-required-field') }}">
+<body class="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50 {% block body_class %}{% endblock %}">
   {# Background pattern/gradient - subtle Clerk-like feel #}
   <div class="fixed inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]"></div>
 
-  <div class="auth-card bg-white px-8 py-10 mb-6 border border-gray-200">
+  <div class="auth-card bg-white px-8 py-10 mb-6 border border-gray-200 {% block card_class %}{% endblock %}">
     <header class="mb-6">
       {% block header %}{% endblock %}
     </header>

@@ -1,3 +1,5 @@
+use std::error::Error as _;
+
 use axum::{
     Router,
     extract::{Form, State},
@@ -14,7 +16,7 @@ use crate::{
         setting::runtime::SettingProvider,
     },
     boot::AppState,
-    domain::key::model::AsymmetricKeyAlgorithm,
+    domain::key::AsymmetricKeyAlgorithm,
     infrastructure::{i18n::resolve_locale_from_headers, web},
     web::views::install::{InstallAlgorithmOption, InstallPageData},
 };
@@ -31,6 +33,56 @@ struct InstallForm {
     domain: String,
     key_algorithm: String,
     csrf_token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InstallFailureLogContext {
+    username: String,
+    email: String,
+    domain: String,
+    key_algorithm: String,
+}
+
+impl InstallFailureLogContext {
+    fn from_form(form: &InstallForm) -> Self {
+        Self {
+            username: form.username.clone(),
+            email: form.email.clone(),
+            domain: form.domain.clone(),
+            key_algorithm: form.key_algorithm.clone(),
+        }
+    }
+}
+
+fn should_log_install_failure_as_error(error: &crate::application::error::AppError) -> bool {
+    error.kind().http_status().is_server_error()
+}
+
+fn log_install_failure(error: &crate::application::error::AppError, form: &InstallForm) {
+    let context = InstallFailureLogContext::from_form(form);
+
+    if should_log_install_failure_as_error(error) {
+        tracing::error!(
+            error = %error,
+            source = ?error.source(),
+            code = error.code(),
+            username = %context.username,
+            email = %context.email,
+            domain = %context.domain,
+            key_algorithm = %context.key_algorithm,
+            "install submission failed"
+        );
+    } else {
+        tracing::warn!(
+            error = %error,
+            code = error.code(),
+            username = %context.username,
+            email = %context.email,
+            domain = %context.domain,
+            key_algorithm = %context.key_algorithm,
+            "install submission rejected"
+        );
+    }
 }
 
 fn render_install_page(
@@ -52,7 +104,7 @@ fn render_install_page(
         algorithms: install_algorithms(selected_algorithm),
     };
 
-    let mut response = web::render_view(ctx, headers, "install/index.html", data);
+    let mut response = web::tera::render_view(ctx, headers, "install/index.html", data);
     if let Some(cookie) = csrf_cookie {
         append_set_cookie(&mut response, &cookie);
     }
@@ -116,7 +168,7 @@ async fn install_submit(
     let input = InstallInput {
         username: form.username.clone(),
         email: form.email.clone(),
-        password: form.password,
+        password: form.password.clone(),
         domain: form.domain.clone(),
         key_algorithm: algorithm,
     };
@@ -126,19 +178,22 @@ async fn install_submit(
             ctx.lifecycle().request_shutdown();
             Redirect::to("/login").into_response()
         }
-        Err(error) => render_install_page(
-            &ctx,
-            &headers,
-            form.username,
-            form.email,
-            form.domain,
-            &form.key_algorithm,
-            Some(super::response::error_message(
-                ctx.resources().i18n(),
-                &resolve_locale_from_headers(&headers),
-                &error,
-            )),
-        ),
+        Err(error) => {
+            log_install_failure(&error, &form);
+            render_install_page(
+                &ctx,
+                &headers,
+                form.username,
+                form.email,
+                form.domain,
+                &form.key_algorithm,
+                Some(super::response::error_message(
+                    ctx.resources().i18n(),
+                    &resolve_locale_from_headers(&headers),
+                    &error,
+                )),
+            )
+        }
     }
 }
 
@@ -183,5 +238,33 @@ fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, String> {
         "rsa-3072" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
         "rsa-4096" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
         _ => Err("unsupported key algorithm".to_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::application::error::{AppError, codes::common::CommonErrorCode};
+
+    use super::{InstallFailureLogContext, InstallForm, should_log_install_failure_as_error};
+
+    #[test]
+    fn internal_install_errors_are_logged_with_sanitized_context() {
+        let form = InstallForm {
+            username: "admin".to_owned(),
+            email: "admin@example.com".to_owned(),
+            password: "super-secret-password".to_owned(),
+            domain: "identity.example.com".to_owned(),
+            key_algorithm: "ed25519".to_owned(),
+            csrf_token: "csrf-token".to_owned(),
+        };
+        let error = AppError::from_code(CommonErrorCode::InternalError);
+
+        let context = InstallFailureLogContext::from_form(&form);
+
+        assert!(should_log_install_failure_as_error(&error));
+        assert_eq!(context.username, "admin");
+        assert_eq!(context.email, "admin@example.com");
+        assert_eq!(context.domain, "identity.example.com");
+        assert_eq!(context.key_algorithm, "ed25519");
     }
 }

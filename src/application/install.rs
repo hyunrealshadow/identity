@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
+use base64::Engine as _;
 use chrono::Utc;
+use rand::RngCore;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
     TransactionTrait,
@@ -10,12 +12,21 @@ use uuid::Uuid;
 
 use crate::{
     application::{
-        error::{AppError, codes::common::CommonErrorCode},
+        error::{
+            AppError,
+            codes::{common::CommonErrorCode, install::InstallErrorCode},
+        },
         setting::runtime::{RefreshableSettingProvider, SettingProvider},
     },
     domain::{
         auth::password::{PasswordHashSetting, PasswordHasher},
-        key::{generator::AsymmetricKeyGenerator, model::AsymmetricKeyAlgorithm},
+        key::{
+            AsymmetricKeyAlgorithm,
+            KeyData,
+            SymmetricKeyAlgorithm,
+            SymmetricKeyData,
+            generator::AsymmetricKeyGenerator,
+        },
         setting::{
             installation::{InstallationSetting, InstallationState},
             model::SettingDefinition,
@@ -27,6 +38,11 @@ use crate::{
         database::entity::{setting, user, user_credential},
     },
 };
+
+fn non_expiring_timestamp() -> chrono::DateTime<chrono::FixedOffset> {
+    chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
+        .expect("non-expiring timestamp literal should be valid")
+}
 
 #[derive(Debug, Clone)]
 pub struct InstallInput {
@@ -52,8 +68,7 @@ impl InstallService {
 
     pub async fn install(&self, input: InstallInput) -> Result<InstallationState, AppError> {
         if self.is_initialized() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-                .with_param("message", "system already initialized"));
+            return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
 
         let username = normalize_required(&input.username, "username")?;
@@ -61,9 +76,10 @@ impl InstallService {
         let password = normalize_required(&input.password, "password")?;
         let domain = normalize_domain(&input.domain)?;
 
-        input.key_algorithm.validate().map_err(|error| {
-            AppError::from_code(CommonErrorCode::InvalidRequest).with_param("message", error)
-        })?;
+        input
+            .key_algorithm
+            .validate()
+            .map_err(|_| AppError::from_code(InstallErrorCode::AlgorithmInvalid))?;
 
         let hash_options = self.password_hash_options.current_value();
         let password = self
@@ -92,7 +108,7 @@ impl InstallService {
         email: String,
         password: Password,
         domain: String,
-        key_data: crate::domain::key::model::AsymmetricKeyData,
+        key_data: crate::domain::key::AsymmetricKeyData,
     ) -> Result<InstallationState, AppError> {
         let now = Utc::now();
         let user_oid = Uuid::new_v4();
@@ -102,11 +118,10 @@ impl InstallService {
         let password_json = serde_json::to_value(&password).map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
-        let key_json =
-            serde_json::to_value(crate::domain::key::model::KeyData::Asymmetric(key_data))
-                .map_err(|error| {
-                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-                })?;
+        let key_json = serde_json::to_value(crate::domain::key::KeyData::Asymmetric(key_data))
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
 
         let installation_state = InstallationState {
             initialized: true,
@@ -125,8 +140,7 @@ impl InstallService {
         })?;
 
         if installation_state_exists(&txn).await? {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-                .with_param("message", "system already initialized"));
+            return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
 
         if user::Entity::find()
@@ -138,8 +152,7 @@ impl InstallService {
             })?
             .is_some()
         {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-                .with_param("message", "username already exists"));
+            return Err(AppError::from_code(InstallErrorCode::UsernameExists));
         }
 
         if user::Entity::find()
@@ -151,8 +164,7 @@ impl InstallService {
             })?
             .is_some()
         {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-                .with_param("message", "email already exists"));
+            return Err(AppError::from_code(InstallErrorCode::EmailExists));
         }
 
         let created_user = user::ActiveModel {
@@ -189,9 +201,32 @@ impl InstallService {
 
         crate::infrastructure::database::entity::key::ActiveModel {
             oid: Set(key_oid),
-            r#type: Set(crate::domain::key::model::KeyType::Asymmetric.to_string()),
+            r#type: Set(crate::domain::key::KeyType::Asymmetric.to_string()),
             data: Set(key_json),
-            expires_at: Set(None),
+            expires_at: Set(non_expiring_timestamp()),
+            revoked_at: Set(None),
+            created_at: Set(now.naive_utc()),
+            updated_at: Set(Some(now.naive_utc())),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+        // Create an initial symmetric key for data protection (encrypting login IDs etc.)
+        let mut sym_key_bytes = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut sym_key_bytes);
+        let sym_key_b64 = base64::engine::general_purpose::STANDARD.encode(sym_key_bytes);
+        let sym_key_json = serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
+            key: sym_key_b64,
+            algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
+        }))
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        crate::infrastructure::database::entity::key::ActiveModel {
+            oid: Set(Uuid::new_v4()),
+            r#type: Set(crate::domain::key::KeyType::Symmetric.to_string()),
+            data: Set(sym_key_json),
+            expires_at: Set(non_expiring_timestamp()),
             revoked_at: Set(None),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),
@@ -267,8 +302,14 @@ where
 fn normalize_required(value: &str, field: &'static str) -> Result<String, AppError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-            .with_param("message", format!("{field} is required")));
+        let code = match field {
+            "username" => InstallErrorCode::UsernameRequired,
+            "email" => InstallErrorCode::EmailRequired,
+            "password" => InstallErrorCode::PasswordRequired,
+            "domain" => InstallErrorCode::DomainRequired,
+            _ => InstallErrorCode::UsernameRequired,
+        };
+        return Err(AppError::from_code(code));
     }
 
     Ok(value.to_owned())
@@ -276,9 +317,11 @@ fn normalize_required(value: &str, field: &'static str) -> Result<String, AppErr
 
 fn normalize_domain(domain: &str) -> Result<String, AppError> {
     let domain = normalize_required(domain, "domain")?.to_lowercase();
-    if domain.contains(' ') || !domain.contains('.') {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-            .with_param("message", "domain is invalid"));
+    // If the domain contains a scheme (e.g. "https://localhost:5150"), skip
+    // the dot-presence check since it is a full URL rather than a bare hostname.
+    let is_url = domain.contains("://");
+    if domain.contains(' ') || (!is_url && !domain.contains('.')) {
+        return Err(AppError::from_code(InstallErrorCode::DomainInvalid));
     }
 
     Ok(domain)
@@ -290,8 +333,7 @@ fn normalize_email(email: &str) -> Result<String, AppError> {
     let local = parts.next().unwrap_or_default();
     let domain = parts.next().unwrap_or_default();
     if local.is_empty() || domain.is_empty() || parts.next().is_some() || !domain.contains('.') {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest)
-            .with_param("message", "email is invalid"));
+        return Err(AppError::from_code(InstallErrorCode::EmailInvalid));
     }
 
     Ok(email)

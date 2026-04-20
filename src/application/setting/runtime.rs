@@ -283,7 +283,7 @@ mod tests {
                 serde_json::from_value(value).map_err(SettingRepositoryError::Deserialize)?;
 
             Ok(Some(SettingEntry {
-                oid: Uuid::new_v4(),
+                oid: Uuid::new_v4().into(),
                 key: S::KEY.to_owned(),
                 value: parsed,
                 created_at: Utc::now(),
@@ -304,7 +304,7 @@ mod tests {
             *self.value.write().unwrap() = Some(serialized);
 
             Ok(SettingEntry {
-                oid: Uuid::new_v4(),
+                oid: Uuid::new_v4().into(),
                 key: S::KEY.to_owned(),
                 value: value.clone(),
                 created_at: Utc::now(),

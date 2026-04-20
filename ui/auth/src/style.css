@@ -222,3 +222,154 @@ body {
 .loading-spinner {
   color: currentColor;
 }
+
+.install-body {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.install-card {
+  max-width: 920px;
+}
+
+.install-shell-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.install-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.install-title {
+  font-size: 1.875rem;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #111827;
+}
+
+.install-subtitle {
+  max-width: 56ch;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+.install-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.install-step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.875rem;
+  background: #f8fafc;
+  color: #374151;
+}
+
+.install-step span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.install-section {
+  margin-bottom: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  background: #ffffff;
+  padding: 1.25rem;
+}
+
+.install-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.install-section-index {
+  margin: 0;
+  min-width: 2.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.install-section-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.install-section-copy {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+.install-grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.install-select-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.875rem;
+  background: #f9fafb;
+  padding: 1rem;
+}
+
+.install-finish-section {
+  background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+}
+
+@media (max-width: 768px) {
+  .install-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .install-grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .install-title {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .install-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .install-section {
+    padding: 1rem;
+  }
+
+  .install-step {
+    padding: 0.75rem 0.875rem;
+  }
+}
