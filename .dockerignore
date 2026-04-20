@@ -1,0 +1,41 @@
+# Rust build artifacts — largest offender, can be several GB
+target/
+debug/
+**/*.rs.bk
+*.pdb
+
+# Local / secret configs never belong in the image
+**/config/local.yaml
+**/config/*.local.yaml
+**/config/production.yaml
+
+# SQLite dev databases
+*.sqlite
+*.sqlite-*
+
+# Frontend build artifacts (copied into assets/ during dev, not needed for build)
+assets/static/css
+assets/static/js
+# Note: assets/views contains Tera templates needed at runtime - do NOT ignore
+**/dist/**
+
+# Editor / IDE / tooling
+.idea/
+.opencode/
+.worktrees/
+.trellis/
+
+# Node
+node_modules/
+
+# Git internals (large history is irrelevant inside the builder)
+.git/
+.gitignore
+
+# Conformance test tooling — not part of the app
+conformance/
+
+# Docs & misc
+ref/
+docs/
+*.md

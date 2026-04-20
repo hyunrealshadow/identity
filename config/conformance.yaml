@@ -1,0 +1,33 @@
+logger:
+  enable: true
+  pretty_backtrace: true
+  level: info
+  format: compact
+
+server:
+  port: {{ get_env(name="PORT", default="5150") }}
+  binding: 0.0.0.0
+  host: {{ get_env(name="HOST", default="http://localhost:5150") }}
+
+database:
+  uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}
+  enable_logging: false
+  connect_timeout: 500
+  idle_timeout: 500
+  min_connections: 1
+  max_connections: 5
+  auto_migrate: true
+  dangerously_truncate: false
+  dangerously_recreate: false
+
+health:
+  enable: true
+  route: /health
+  server:
+    binding: {{ get_env(name="HEALTH_HOST", default="0.0.0.0") }}
+    port: {{ get_env(name="HEALTH_PORT", default="8081") }}
+  checks:
+    database: true
+
+settings:
+  refresh_interval_secs: {{ get_env(name="SETTINGS_REFRESH_INTERVAL_SECS", default="30") }}

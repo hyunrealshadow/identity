@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity
+      POSTGRES_DB: identity_conformance
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d identity_conformance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  identity:
+    build:
+      context: ..
+      dockerfile: conformance/Dockerfile
+    environment:
+      APP_ENV: conformance
+      DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
+      HOST: http://identity:5150
+      PORT: "5150"
+    ports:
+      - "5150:5150"
+      - "8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  mongodb:
+    image: mongo:6.0.13
+  server:
+    build:
+      context: ./conformance-server
+    command: >
+      java
+      -jar /app/fapi-test-suite.jar
+      -Djdk.tls.maxHandshakeMessageSize=65536
+      --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
+      --fintechlabs.devmode=true
+      --fintechlabs.startredir=true
+    links:
+      - mongodb:mongodb
+    depends_on:
+      - mongodb
+    logging:
+      # limit logs retained on host
+      driver: "json-file"
+      options:
+        max-size: "500k"
+        max-file: "5"
+  nginx:
+    build:
+      context: ./nginx
+    ports:
+      - "8443:8443"
+    depends_on:
+      - server
