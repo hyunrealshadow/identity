@@ -12,6 +12,9 @@ pub enum ClientOpenIdConnectCredential {
     ClientId,
     Type,
     Data,
+    Hint,
+    ExpiresAt,
+    RevokedAt,
     CreatedAt,
     UpdatedAt,
 }
@@ -32,6 +35,13 @@ impl MigrationTrait for Migration {
                     .col(big_integer(ClientOpenIdConnectCredential::ClientId))
                     .col(string(ClientOpenIdConnectCredential::Type))
                     .col(json_binary(ClientOpenIdConnectCredential::Data))
+                    .col(string(ClientOpenIdConnectCredential::Hint))
+                    .col(timestamp_with_time_zone(
+                        ClientOpenIdConnectCredential::ExpiresAt,
+                    ))
+                    .col(timestamp_with_time_zone_null(
+                        ClientOpenIdConnectCredential::RevokedAt,
+                    ))
                     .col(
                         timestamp_with_time_zone(ClientOpenIdConnectCredential::CreatedAt)
                             .default(Expr::current_timestamp()),
@@ -57,19 +67,9 @@ impl MigrationTrait for Migration {
             .create_index(
                 Index::create()
                     .table(ClientOpenIdConnectCredential::Table)
-                    .name("idx_client_open_id_connect_credential_client_id")
+                    .name("idx_client_open_id_connect_credential_client_id_type")
                     .col(ClientOpenIdConnectCredential::ClientId)
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .table(ClientOpenIdConnectCredential::Table)
-                    .name("idx_client_open_id_connect_credential_type")
                     .col(ClientOpenIdConnectCredential::Type)
-                    .unique()
                     .to_owned(),
             )
             .await?;
@@ -81,15 +81,7 @@ impl MigrationTrait for Migration {
             .drop_index(
                 Index::drop()
                     .table(ClientOpenIdConnectCredential::Table)
-                    .name("idx_client_open_id_connect_credential_type")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .drop_index(
-                Index::drop()
-                    .table(ClientOpenIdConnectCredential::Table)
-                    .name("idx_client_open_id_connect_credential_client_id")
+                    .name("idx_client_open_id_connect_credential_client_id_type")
                     .to_owned(),
             )
             .await?;

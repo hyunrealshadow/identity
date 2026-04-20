@@ -1,6 +1,10 @@
+pub mod client_request;
 pub mod key;
 pub mod login;
+pub mod openid_connect;
+pub mod openid_connect_credential;
 pub mod session;
 pub mod setting;
+pub(super) mod shared;
 pub mod user;
 pub mod user_credential;

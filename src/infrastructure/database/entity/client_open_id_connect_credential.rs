@@ -9,12 +9,13 @@ pub struct Model {
     pub id: i64,
     #[sea_orm(unique)]
     pub oid: Uuid,
-    #[sea_orm(unique)]
     pub client_id: i64,
-    #[sea_orm(unique)]
     pub r#type: String,
     #[sea_orm(column_type = "JsonBinary")]
     pub data: Json,
+    pub hint: String,
+    pub expires_at: DateTimeWithTimeZone,
+    pub revoked_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
 }
