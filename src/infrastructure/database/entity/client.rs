@@ -24,7 +24,7 @@ pub enum Relation {
     ClientOpenIdConnect,
     #[sea_orm(has_many = "super::client_open_id_connect_credential::Entity")]
     ClientOpenIdConnectCredential,
-    #[sea_orm(has_one = "super::client_request::Entity")]
+    #[sea_orm(has_many = "super::client_request::Entity")]
     ClientRequest,
     #[sea_orm(has_many = "super::login::Entity")]
     Login,

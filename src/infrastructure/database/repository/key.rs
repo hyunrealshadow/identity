@@ -4,7 +4,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::shared::{decode_optional_expiry, encode_optional_expiry};
+use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
 use crate::domain::key::{
     Key, KeyData, KeyOid, KeyType, ParseKeyTypeError,
     repository::{KeyRepository, KeyRepositoryError},
@@ -47,7 +47,7 @@ pub fn to_domain(model: key::Model) -> Result<Key, KeyRepositoryError> {
             KeyRepositoryError::InvalidKeyType(error.to_string())
         })?,
         data: deserialize_key_data(&model.data)?,
-        expires_at: decode_optional_expiry(model.expires_at),
+        expires_at: decode_nonnullable_expiry(model.expires_at),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
         created_at: DateTime::from_naive_utc_and_offset(model.created_at, Utc),
         updated_at: model
@@ -100,7 +100,7 @@ impl KeyRepository for KeyRepositoryImpl {
             oid: Set(Uuid::new_v4()),
             r#type: Set(key_type.to_string()),
             data: Set(serialize_key_data(data)?),
-            expires_at: Set(encode_optional_expiry(expires_at)),
+            expires_at: Set(encode_nonnullable_expiry(expires_at)),
             revoked_at: Set(None),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),

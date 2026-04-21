@@ -32,7 +32,7 @@ pub struct OpenIdConnectClientMetadata {
     pub default_acr_values: Option<Vec<String>>,
     pub initiate_login_uri: Option<Url>,
     pub request_uris: Option<Vec<Url>>,
-    pub skip_consent: Option<bool>,
+    pub skip_consent: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -113,7 +113,7 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: None,
+            skip_consent: false,
         };
 
         assert_eq!(
@@ -163,7 +163,7 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: None,
+            skip_consent: false,
         };
 
         let oidc_client = OpenIdConnectClient::new(client, metadata).unwrap();
@@ -215,7 +215,7 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: None,
+            skip_consent: false,
         };
 
         assert!(OpenIdConnectClient::new(client, metadata).is_err());
@@ -252,9 +252,9 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: Some(true),
+            skip_consent: true,
         };
 
-        assert_eq!(metadata.skip_consent, Some(true));
+        assert_eq!(metadata.skip_consent, true);
     }
 }

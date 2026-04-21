@@ -28,7 +28,7 @@ impl MigrationTrait for Migration {
                     .col(uuid_uniq(Key::Oid))
                     .col(string(Key::Type))
                     .col(json_binary(Key::Data))
-                    .col(timestamp_with_time_zone_null(Key::ExpiresAt))
+                    .col(timestamp_with_time_zone(Key::ExpiresAt))
                     .col(timestamp_with_time_zone_null(Key::RevokedAt))
                     .col(timestamp(Key::CreatedAt))
                     .col(timestamp_null(Key::UpdatedAt))

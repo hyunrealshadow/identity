@@ -32,14 +32,12 @@ use crate::{
     },
     infrastructure::{
         crypto::certificate::generate_self_signed_certificate,
-        database::entity::{setting, user, user_credential},
+        database::{
+            entity::{setting, user, user_credential},
+            repository::shared::encode_nonnullable_expiry,
+        },
     },
 };
-
-fn non_expiring_timestamp() -> chrono::DateTime<chrono::FixedOffset> {
-    chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
-        .expect("non-expiring timestamp literal should be valid")
-}
 
 #[derive(Debug, Clone)]
 pub struct InstallInput {
@@ -200,7 +198,7 @@ impl InstallService {
             oid: Set(key_oid),
             r#type: Set(crate::domain::key::KeyType::Asymmetric.to_string()),
             data: Set(key_json),
-            expires_at: Set(non_expiring_timestamp()),
+            expires_at: Set(encode_nonnullable_expiry(None)),
             revoked_at: Set(None),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),
@@ -223,7 +221,7 @@ impl InstallService {
             oid: Set(Uuid::new_v4()),
             r#type: Set(crate::domain::key::KeyType::Symmetric.to_string()),
             data: Set(sym_key_json),
-            expires_at: Set(non_expiring_timestamp()),
+            expires_at: Set(encode_nonnullable_expiry(None)),
             revoked_at: Set(None),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),

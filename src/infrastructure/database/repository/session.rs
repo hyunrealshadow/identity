@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
-use super::shared::{decode_optional_expiry, encode_optional_expiry};
+use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
 use crate::domain::auth::{
     SessionStatus,
     model::{ActiveSession, Session},
@@ -27,7 +27,7 @@ fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
         user_agent: m.user_agent,
         ip_address: m.ip_address,
         last_active_at: Some(m.last_active_at.with_timezone(&Utc)),
-        expires_at: decode_optional_expiry(m.expires_at),
+        expires_at: decode_nonnullable_expiry(m.expires_at),
         revoked_at: m.revoked_at.map(|value| value.with_timezone(&Utc)),
         created_at: m.created_at.with_timezone(&Utc),
         acr: m.acr,
@@ -87,7 +87,7 @@ impl SessionRepository for SessionRepositoryImpl {
                     user_name: u.name,
                     user_email: u.email,
                     last_active_at: Some(s.last_active_at.with_timezone(&Utc)),
-                    expires_at: decode_optional_expiry(s.expires_at),
+                    expires_at: decode_nonnullable_expiry(s.expires_at),
                     created_at: s.created_at.with_timezone(&Utc),
                 })
             })
@@ -130,7 +130,7 @@ impl SessionRepository for SessionRepositoryImpl {
             user_agent: Set(user_agent),
             ip_address: Set(ip_address),
             last_active_at: Set(now.into()),
-            expires_at: Set(encode_optional_expiry(expires_at)),
+            expires_at: Set(encode_nonnullable_expiry(expires_at)),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
             acr: Set(acr),

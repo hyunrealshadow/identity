@@ -29,7 +29,7 @@ pub enum Relation {
         from = "Column::ClientId",
         to = "super::client::Column::Id",
         on_update = "Cascade",
-        on_delete = "SetNull"
+        on_delete = "Cascade"
     )]
     Client,
     #[sea_orm(
@@ -37,7 +37,7 @@ pub enum Relation {
         from = "Column::ClientRequestId",
         to = "super::client_request::Column::Id",
         on_update = "Cascade",
-        on_delete = "SetNull"
+        on_delete = "Cascade"
     )]
     ClientRequest,
     #[sea_orm(

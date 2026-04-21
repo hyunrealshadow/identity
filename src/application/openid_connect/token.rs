@@ -150,7 +150,7 @@ mod tests {
                         default_acr_values: None,
                         initiate_login_uri: None,
                         request_uris: None,
-                        skip_consent: None,
+                        skip_consent: false,
                     },
                 )
                 .unwrap(),

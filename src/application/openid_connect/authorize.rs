@@ -330,7 +330,7 @@ impl AuthorizeService {
     }
 
     pub fn should_skip_consent(&self, client: &OpenIdConnectClient) -> bool {
-        client.metadata().skip_consent.unwrap_or(false)
+        client.metadata().skip_consent
     }
 
     fn validate_request_uri(
@@ -1444,7 +1444,7 @@ mod tests {
                         default_acr_values: None,
                         initiate_login_uri: None,
                         request_uris: None,
-                        skip_consent: Some(false),
+                        skip_consent: false,
                     },
                 )
                 .unwrap(),
@@ -1500,7 +1500,7 @@ mod tests {
                         default_acr_values: None,
                         initiate_login_uri: None,
                         request_uris: Some(self.request_uris.clone()),
-                        skip_consent: Some(false),
+                        skip_consent: false,
                     },
                 )
                 .unwrap(),
