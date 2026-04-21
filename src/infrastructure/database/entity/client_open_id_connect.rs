@@ -44,6 +44,7 @@ pub struct Model {
     pub initiate_login_uri: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub request_uris: Option<Json>,
+    pub skip_consent: Option<bool>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
 }

@@ -329,10 +329,6 @@ impl AuthorizeService {
         Ok(())
     }
 
-    pub fn is_internal_client(&self, client: &OpenIdConnectClient) -> bool {
-        client.metadata().internal_client.unwrap_or(false)
-    }
-
     pub fn should_skip_consent(&self, client: &OpenIdConnectClient) -> bool {
         client.metadata().skip_consent.unwrap_or(false)
     }
@@ -1100,8 +1096,13 @@ impl AuthorizeService {
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
-        self.approve_authorization_request(login.client_request_oid, session_oid, user_oid, auth_time)
-            .await
+        self.approve_authorization_request(
+            login.client_request_oid,
+            session_oid,
+            user_oid,
+            auth_time,
+        )
+        .await
     }
 
     pub async fn deny_authorization_request(
@@ -1443,8 +1444,7 @@ mod tests {
                         default_acr_values: None,
                         initiate_login_uri: None,
                         request_uris: None,
-                        skip_consent: Some(true),
-                        internal_client: Some(false),
+                        skip_consent: Some(false),
                     },
                 )
                 .unwrap(),
@@ -1500,8 +1500,7 @@ mod tests {
                         default_acr_values: None,
                         initiate_login_uri: None,
                         request_uris: Some(self.request_uris.clone()),
-                        skip_consent: Some(true),
-                        internal_client: Some(false),
+                        skip_consent: Some(false),
                     },
                 )
                 .unwrap(),

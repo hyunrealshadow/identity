@@ -37,6 +37,7 @@ pub enum ClientOpenIdConnect {
     DefaultAcrValues,
     InitiateLoginUri,
     RequestUris,
+    SkipConsent,
     CreatedAt,
     UpdatedAt,
 }
@@ -87,14 +88,11 @@ impl MigrationTrait for Migration {
                         ClientOpenIdConnect::TokenEndpointAuthSigningAlg,
                     ))
                     .col(integer_null(ClientOpenIdConnect::DefaultMaxAge))
-                    .col(
-                        ColumnDef::new(ClientOpenIdConnect::RequireAuthTime)
-                            .boolean()
-                            .null(),
-                    )
+                    .col(boolean_null(ClientOpenIdConnect::RequireAuthTime))
                     .col(json_binary_null(ClientOpenIdConnect::DefaultAcrValues))
                     .col(string_null(ClientOpenIdConnect::InitiateLoginUri))
                     .col(json_binary_null(ClientOpenIdConnect::RequestUris))
+                    .col(boolean(ClientOpenIdConnect::SkipConsent).default(false))
                     .col(
                         timestamp_with_time_zone(ClientOpenIdConnect::CreatedAt)
                             .default(Expr::current_timestamp()),

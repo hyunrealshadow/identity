@@ -94,8 +94,7 @@ fn to_metadata(
         default_acr_values: deserialize_optional_string_vec(model.default_acr_values.as_ref())?,
         initiate_login_uri: parse_optional_url(model.initiate_login_uri.as_deref())?,
         request_uris: parse_optional_urls(model.request_uris.as_ref())?,
-        skip_consent: None,
-        internal_client: None,
+        skip_consent: model.skip_consent,
     })
 }
 

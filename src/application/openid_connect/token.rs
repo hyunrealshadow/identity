@@ -151,7 +151,6 @@ mod tests {
                         initiate_login_uri: None,
                         request_uris: None,
                         skip_consent: None,
-                        internal_client: None,
                     },
                 )
                 .unwrap(),
@@ -1412,10 +1411,18 @@ impl TokenService {
             if let KeyData::Asymmetric(data) = key.data {
                 let pem = data.private_key.as_bytes();
                 if RS256.signer_from_pem(pem).is_ok() {
-                    return Ok((Uuid::from(key.oid).to_string(), data.private_key, "RS256".to_string()));
+                    return Ok((
+                        Uuid::from(key.oid).to_string(),
+                        data.private_key,
+                        "RS256".to_string(),
+                    ));
                 }
                 if ES256.signer_from_pem(pem).is_ok() {
-                    return Ok((Uuid::from(key.oid).to_string(), data.private_key, "ES256".to_string()));
+                    return Ok((
+                        Uuid::from(key.oid).to_string(),
+                        data.private_key,
+                        "ES256".to_string(),
+                    ));
                 }
             }
         }
@@ -1697,12 +1704,19 @@ impl TokenService {
             })?;
 
         let signer: Box<dyn josekit::jws::JwsSigner> = match alg {
-            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?),
-            _ => Box::new(ES256.signer_from_pem(private_key_pem.as_bytes()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?),
+            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(
+                |error| {
+                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+                },
+            )?),
+            _ => Box::new(
+                ES256
+                    .signer_from_pem(private_key_pem.as_bytes())
+                    .map_err(|error| {
+                        AppError::from_code(TokenErrorCode::SignAccessTokenFailed)
+                            .with_source(error)
+                    })?,
+            ),
         };
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
@@ -1771,12 +1785,16 @@ impl TokenService {
         }
 
         let signer: Box<dyn josekit::jws::JwsSigner> = match alg {
-            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })?),
-            _ => Box::new(ES256.signer_from_pem(private_key_pem.as_bytes()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })?),
+            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(
+                |error| AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error),
+            )?),
+            _ => Box::new(
+                ES256
+                    .signer_from_pem(private_key_pem.as_bytes())
+                    .map_err(|error| {
+                        AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+                    })?,
+            ),
         };
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
@@ -1813,12 +1831,19 @@ impl TokenService {
             })?;
 
         let signer: Box<dyn josekit::jws::JwsSigner> = match alg {
-            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-            })?),
-            _ => Box::new(ES256.signer_from_pem(private_key_pem.as_bytes()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-            })?),
+            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(
+                |error| {
+                    AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
+                },
+            )?),
+            _ => Box::new(
+                ES256
+                    .signer_from_pem(private_key_pem.as_bytes())
+                    .map_err(|error| {
+                        AppError::from_code(TokenErrorCode::SignRefreshTokenFailed)
+                            .with_source(error)
+                    })?,
+            ),
         };
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
