@@ -21,10 +21,7 @@ use crate::{
     domain::{
         auth::password::{PasswordHashSetting, PasswordHasher},
         key::{
-            AsymmetricKeyAlgorithm,
-            KeyData,
-            SymmetricKeyAlgorithm,
-            SymmetricKeyData,
+            AsymmetricKeyAlgorithm, KeyData, SymmetricKeyAlgorithm, SymmetricKeyData,
             generator::AsymmetricKeyGenerator,
         },
         setting::{

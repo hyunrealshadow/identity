@@ -18,7 +18,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     application::auth::login::ChallengeOutcome,
     boot::AppState,
-    web::controllers::shared::{build_selected_session_cookie, build_session_context, is_secure_cookie},
+    web::controllers::shared::{
+        build_selected_session_cookie, build_session_context, is_secure_cookie,
+    },
 };
 
 use super::response::AppJson;
@@ -165,8 +167,8 @@ mod tests {
 
     #[tokio::test]
     async fn auto_login_returns_bad_request_for_invalid_login_id() {
-        let app = super::routes()
-            .with_state(crate::boot::test_app_state_with_mock_settings().await);
+        let app =
+            super::routes().with_state(crate::boot::test_app_state_with_mock_settings().await);
 
         let request = Request::builder()
             .method(Method::POST)

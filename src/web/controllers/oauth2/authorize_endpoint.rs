@@ -49,8 +49,7 @@ fn render_error(
                 } else {
                     error_response
                 };
-                let error_response = error_response
-                    .to_redirect_url(&uri);
+                let error_response = error_response.to_redirect_url(&uri);
                 return AuthorizeError::RenderPage(
                     Redirect::to(error_response.as_str()).into_response(),
                 );

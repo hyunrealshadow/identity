@@ -6,7 +6,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
-fn serialize_datetime_as_unix<S>(dt: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_datetime_as_unix<S>(
+    dt: &Option<DateTime<Utc>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -38,7 +41,10 @@ pub struct UserInfoClaims {
     pub email_verified: Option<bool>,
 
     /// Time the end-user's information was last updated.
-    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "serialize_datetime_as_unix")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_datetime_as_unix"
+    )]
     pub updated_at: Option<DateTime<Utc>>,
 }
 

@@ -60,14 +60,19 @@ pub const CONFORMANCE_CLIENT_SECRET: &str = "conformance-secret";
 
 /// Run the conformance seed.  Safe to call multiple times.
 pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
-    let txn = db.begin().await.map_err(|e| {
-        AppError::from_code(CommonErrorCode::InternalError).with_source(e)
-    })?;
+    let txn = db
+        .begin()
+        .await
+        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
     let user_oid: Uuid = USER_OID.parse().expect("USER_OID literal is valid");
-    let user_cred_oid: Uuid = USER_CRED_OID.parse().expect("USER_CRED_OID literal is valid");
+    let user_cred_oid: Uuid = USER_CRED_OID
+        .parse()
+        .expect("USER_CRED_OID literal is valid");
     let client_oid: Uuid = CLIENT_OID.parse().expect("CLIENT_OID literal is valid");
-    let client_cred_oid: Uuid = CLIENT_CRED_OID.parse().expect("CLIENT_CRED_OID literal is valid");
+    let client_cred_oid: Uuid = CLIENT_CRED_OID
+        .parse()
+        .expect("CLIENT_CRED_OID literal is valid");
 
     let now = Utc::now();
 
@@ -148,9 +153,8 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
-        let redirect_uris = serde_json::json!([
-            "https://localhost.emobix.co.uk:8443/test/a/identity/callback"
-        ]);
+        let redirect_uris =
+            serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"]);
         let grant_types = serde_json::json!(["authorization_code"]);
         let response_types = serde_json::json!(["code"]);
 
@@ -191,9 +195,9 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         tracing::info!("conformance seed: created OIDC client");
     }
 
-    txn.commit().await.map_err(|e| {
-        AppError::from_code(CommonErrorCode::InternalError).with_source(e)
-    })?;
+    txn.commit()
+        .await
+        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
     Ok(())
 }
@@ -201,12 +205,12 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
 /// Hash `CONFORMANCE_PASSWORD` with the same Argon2id defaults the app uses,
 /// and return the serialised `Password` JSON value ready for the DB.
 fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
+    use crate::domain::user::password::{
+        Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
+    };
     use argon2::{
         Argon2, PasswordHasher,
         password_hash::{SaltString, rand_core::OsRng},
-    };
-    use crate::domain::user::password::{
-        Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
     };
 
     let salt = SaltString::generate(&mut OsRng);
@@ -245,7 +249,6 @@ fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
         },
     });
 
-    serde_json::to_value(&password).map_err(|e| {
-        AppError::from_code(CommonErrorCode::InternalError).with_source(e)
-    })
+    serde_json::to_value(&password)
+        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))
 }

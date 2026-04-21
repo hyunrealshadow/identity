@@ -151,8 +151,8 @@ impl UserInfoService {
                     .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
             });
 
-        let (payload, header) = result
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let (payload, header) =
+            result.ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         Ok((payload, header))
     }

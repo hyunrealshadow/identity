@@ -278,7 +278,7 @@ fn default_settings_refresh_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{render_config_template, AppConfig, AppEnvironment};
+    use super::{AppConfig, AppEnvironment, render_config_template};
     use serial_test::serial;
 
     fn set_env(key: &str, value: &str) {

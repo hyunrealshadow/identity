@@ -198,9 +198,7 @@ impl AppBuilder {
 /// completed.  Used during conformance autosetup, before runtime settings are
 /// loaded.
 #[cfg(feature = "oidc-conformance")]
-async fn conformance_installation_initialized(
-    db: &sea_orm::DatabaseConnection,
-) -> AppResult<bool> {
+async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     use crate::{
