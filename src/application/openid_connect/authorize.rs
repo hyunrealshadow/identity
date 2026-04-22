@@ -1082,7 +1082,7 @@ impl AuthorizeService {
                     code_challenge_method: request.code_challenge_method.clone(),
                     user_oid: user_oid.to_string(),
                     session_oid: session_oid.to_string(),
-                    acr: None,
+                    acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
                     redirect_uri: request.redirect_uri.clone(),
                     auth_time,
                 })

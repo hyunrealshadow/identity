@@ -190,6 +190,7 @@ pub struct AuthorizationRequestData {
     pub login_hint: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
+    pub acr_values: Option<Vec<String>>,
 }
 
 impl From<&AuthorizationRequest> for AuthorizationRequestData {
@@ -204,6 +205,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             login_hint: value.login_hint.clone(),
             code_challenge: value.code_challenge.clone(),
             code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),
+            acr_values: value.acr_values.clone(),
         }
     }
 }

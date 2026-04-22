@@ -1205,6 +1205,7 @@ impl TokenService {
                 &user,
                 data.nonce.as_deref(),
                 data.auth_time,
+                data.acr.as_deref(),
                 &data.scope,
             )?)
         } else {
@@ -1358,6 +1359,7 @@ impl TokenService {
             &issuer,
             client_id,
             &user,
+            None,
             None,
             None,
             &scope,
@@ -1733,6 +1735,7 @@ impl TokenService {
         user: &crate::domain::user::User,
         nonce: Option<&str>,
         auth_time: Option<i64>,
+        acr: Option<&str>,
         scope: &str,
     ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
@@ -1779,6 +1782,13 @@ impl TokenService {
         if let Some(auth_time) = auth_time {
             payload
                 .set_claim(JwtClaimNames::AUTH_TIME, Some(serde_json::json!(auth_time)))
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+                })?;
+        }
+        if let Some(acr) = acr {
+            payload
+                .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
                 })?;
