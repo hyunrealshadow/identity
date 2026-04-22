@@ -151,7 +151,7 @@ impl FromStr for CodeChallengeMethod {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClaimsRequest {
     pub id_token: Option<serde_json::Map<String, serde_json::Value>>,
     pub userinfo: Option<serde_json::Map<String, serde_json::Value>>,
@@ -191,6 +191,7 @@ pub struct AuthorizationRequestData {
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
     pub acr_values: Option<Vec<String>>,
+    pub claims: Option<String>,
 }
 
 impl From<&AuthorizationRequest> for AuthorizationRequestData {
@@ -206,6 +207,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             code_challenge: value.code_challenge.clone(),
             code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),
             acr_values: value.acr_values.clone(),
+            claims: value.claims.as_ref().and_then(|c| serde_json::to_string(c).ok()),
         }
     }
 }

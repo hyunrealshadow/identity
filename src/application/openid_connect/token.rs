@@ -749,6 +749,7 @@ mod tests {
                     acr: None,
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
+                    claims: None,
                 })
                 .unwrap(),
                 Utc::now() + chrono::Duration::minutes(10),
@@ -814,6 +815,7 @@ mod tests {
                     acr: None,
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
+                    claims: None,
                 })
                 .unwrap(),
                 Utc::now() + chrono::Duration::minutes(10),
@@ -858,6 +860,7 @@ mod tests {
                     acr: None,
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
+                    claims: None,
                 })
                 .unwrap(),
                 Utc::now() + chrono::Duration::minutes(10),
@@ -916,6 +919,7 @@ mod tests {
                     acr: None,
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
+                    claims: None,
                 })
                 .unwrap(),
                 Utc::now() + chrono::Duration::minutes(10),
@@ -965,6 +969,7 @@ mod tests {
                     acr: None,
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
+                    claims: None,
                 })
                 .unwrap(),
                 Utc::now() + chrono::Duration::minutes(10),
@@ -1194,6 +1199,7 @@ impl TokenService {
             &user_oid,
             &data.session_oid,
             &data.scope,
+            data.claims.as_ref(),
         )?;
         let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
             Some(self.sign_id_token(
@@ -1351,6 +1357,7 @@ impl TokenService {
             &user_oid,
             &refresh_data.session_oid,
             &scope,
+            None,
         )?;
         let id_token = Some(self.sign_id_token(
             &signing_key_id,
@@ -1668,6 +1675,7 @@ impl TokenService {
         user_oid: &Uuid,
         session_oid: &str,
         scope: &str,
+        claims: Option<&serde_json::Value>,
     ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
         header.set_token_type(JwtTokenType::ACCESS_TOKEN);
@@ -1704,6 +1712,13 @@ impl TokenService {
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
+        if let Some(claims_value) = claims {
+            payload
+                .set_claim("claims", Some(claims_value.clone()))
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+                })?;
+        }
 
         let signer: Box<dyn josekit::jws::JwsSigner> = match alg {
             "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(

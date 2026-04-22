@@ -80,16 +80,48 @@ impl UserInfoClaims {
         self
     }
 
-    pub fn apply_scope_filter(&mut self, scope: &crate::domain::openid_connect::ScopeSet) {
-        if !scope.profile {
+    pub fn apply_scope_filter(
+        &mut self,
+        scope: &crate::domain::openid_connect::ScopeSet,
+        claims_request: Option<&serde_json::Value>,
+    ) {
+        let essential_claims = Self::extract_essential_claims(claims_request);
+
+        if !scope.profile && !essential_claims.contains(&"name") {
             self.name = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"updated_at") {
             self.updated_at = None;
         }
 
-        if !scope.email {
+        if !scope.email && !essential_claims.contains(&"email") {
             self.email = None;
             self.email_verified = None;
         }
+    }
+
+    fn extract_essential_claims(claims_request: Option<&serde_json::Value>) -> Vec<&'static str> {
+        let mut essential = Vec::new();
+        if let Some(cr) = claims_request {
+            if let Some(userinfo) = cr.get("userinfo") {
+                if let Some(obj) = userinfo.as_object() {
+                    for (claim_name, claim_spec) in obj {
+                        if let Some(spec_obj) = claim_spec.as_object() {
+                            if spec_obj.get("essential").and_then(|v| v.as_bool()) == Some(true) {
+                                if claim_name == "name" {
+                                    essential.push("name");
+                                } else if claim_name == "email" {
+                                    essential.push("email");
+                                } else if claim_name == "updated_at" {
+                                    essential.push("updated_at");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        essential
     }
 }
 
@@ -181,7 +213,7 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid email").unwrap();
-        filtered.apply_scope_filter(&scope);
+        filtered.apply_scope_filter(&scope, None);
 
         assert_eq!(filtered.sub, "user-123");
         assert_eq!(filtered.name, None);
@@ -196,7 +228,7 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid profile email").unwrap();
-        filtered.apply_scope_filter(&scope);
+        filtered.apply_scope_filter(&scope, None);
 
         assert_eq!(filtered.name, Some("John Doe".to_string()));
         assert_eq!(filtered.email, Some("john@example.com".to_string()));
@@ -210,9 +242,47 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid profile").unwrap();
-        filtered.apply_scope_filter(&scope);
+        filtered.apply_scope_filter(&scope, None);
 
         assert_eq!(filtered.name, Some("John Doe".to_string()));
+        assert_eq!(filtered.email, None);
+    }
+
+    #[test]
+    fn apply_scope_filter_keeps_essential_claim_without_scope() {
+        let claims = UserInfoClaims::new("user-123".to_string())
+            .with_name("John Doe".to_string())
+            .with_email("john@example.com".to_string(), true);
+
+        let mut filtered = claims;
+        let scope = ScopeSet::parse("openid").unwrap();
+        let claims_request = serde_json::json!({
+            "userinfo": {
+                "name": {"essential": true}
+            }
+        });
+        filtered.apply_scope_filter(&scope, Some(&claims_request));
+
+        assert_eq!(filtered.name, Some("John Doe".to_string()));
+        assert_eq!(filtered.email, None);
+    }
+
+    #[test]
+    fn apply_scope_filter_removes_non_essential_claim_without_scope() {
+        let claims = UserInfoClaims::new("user-123".to_string())
+            .with_name("John Doe".to_string())
+            .with_email("john@example.com".to_string(), true);
+
+        let mut filtered = claims;
+        let scope = ScopeSet::parse("openid").unwrap();
+        let claims_request = serde_json::json!({
+            "userinfo": {
+                "name": {"essential": false}
+            }
+        });
+        filtered.apply_scope_filter(&scope, Some(&claims_request));
+
+        assert_eq!(filtered.name, None);
         assert_eq!(filtered.email, None);
     }
 }

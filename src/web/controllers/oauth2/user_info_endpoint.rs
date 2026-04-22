@@ -82,7 +82,11 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
     };
 
     let user_claims = match service
-        .get_user_info(token_claims.user_oid, &token_claims.scope)
+        .get_user_info(
+            token_claims.user_oid,
+            &token_claims.scope,
+            token_claims.claims.as_ref(),
+        )
         .await
     {
         Ok(claims) => claims,

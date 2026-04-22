@@ -33,6 +33,7 @@ pub struct UserInfoService {
 pub struct TokenClaims {
     pub user_oid: UserOid,
     pub scope: ScopeSet,
+    pub claims: Option<serde_json::Value>,
 }
 
 impl UserInfoService {
@@ -52,6 +53,7 @@ impl UserInfoService {
         &self,
         user_oid: UserOid,
         scope: &ScopeSet,
+        claims_request: Option<&serde_json::Value>,
     ) -> Result<UserInfoClaims, AppError> {
         let user = self
             .user_repo
@@ -60,8 +62,7 @@ impl UserInfoService {
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::UserNotFound))?;
 
         let mut claims = UserInfoClaims::from_user(&user);
-        claims.apply_scope_filter(scope);
-
+        claims.apply_scope_filter(scope, claims_request);
         Ok(claims)
     }
 
@@ -124,9 +125,12 @@ impl UserInfoService {
             ));
         }
 
+        let claims = payload.claim("claims").cloned();
+
         Ok(TokenClaims {
             user_oid: UserOid::from(user_oid),
             scope,
+            claims,
         })
     }
 

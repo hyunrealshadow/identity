@@ -1085,6 +1085,7 @@ impl AuthorizeService {
                     acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
                     redirect_uri: request.redirect_uri.clone(),
                     auth_time,
+                    claims: request.claims.as_ref().and_then(|c| serde_json::from_str(c).ok()),
                 })
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)

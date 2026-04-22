@@ -60,6 +60,7 @@ pub struct AuthorizationCodeData {
     pub acr: Option<String>,
     pub redirect_uri: String,
     pub auth_time: Option<i64>,
+    pub claims: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,6 +113,7 @@ mod tests {
             acr: Some("urn:mfa".to_string()),
             redirect_uri: "https://client.example.com/callback".to_string(),
             auth_time: Some(1234567890),
+            claims: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();
