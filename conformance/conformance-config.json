@@ -1,64 +1,19 @@
 {
-    "description": "identity OIDC conformance run",
-    "alias": "identity",
-    "server": {
-        "discoveryUrl": "http://identity:5150/.well-known/openid-configuration"
-    },
-    "client": {
-        "client_id": "00000001-0000-0000-0000-000000000001",
-        "client_secret": "conformance-secret"
-    },
-    "browser": [
-        {
-            "match": "http://localhost:5150/login*",
-            "tasks": [
-                {
-                    "task": "Enter identifier",
-                    "match": "http://localhost:5150/login",
-                    "commands": [
-                        [
-                            "text",
-                            "name",
-                            "identifier",
-                            "conformance-test@example.com"
-                        ],
-                        [
-                            "click",
-                            "id",
-                            "submit-btn"
-                        ]
-                    ]
-                },
-                {
-                    "task": "Enter password",
-                    "match": "https://localhost.emobix.co.uk/login/password*",
-                    "commands": [
-                        [
-                            "text",
-                            "name",
-                            "credential",
-                            "ConformanceTest1!"
-                        ],
-                        [
-                            "click",
-                            "id",
-                            "submit-btn"
-                        ]
-                    ]
-                },
-                {
-                    "task": "Verify Complete",
-                    "match": "*/test/*/callback*",
-                    "commands": [
-                        [
-                            "wait",
-                            "id",
-                            "submission_complete",
-                            10
-                        ]
-                    ]
-                }
-            ]
-        }
-    ]
+  "alias": "identity",
+  "description": "Identity server Basic OP conformance",
+  "server": {
+    "discoveryUrl": "http://identity:5150/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "00000001-0000-0000-0000-000000000001",
+    "client_secret": "conformance-secret"
+  },
+  "client2": {
+    "client_id": "00000002-0000-0000-0000-000000000001",
+    "client_secret": "conformance-secret-2"
+  },
+  "client_secret_post": {
+    "client_id": "00000002-0000-0000-0000-000000000001",
+    "client_secret": "conformance-secret-2"
+  }
 }

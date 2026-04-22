@@ -33,6 +33,7 @@ fn render_error(
     raw: &super::authorize_extractor::RawAuthorizeRequest,
     error: AppError,
 ) -> AuthorizeError {
+    tracing::warn!(error_code = error.code(), error = %error, "authorize validation error");
     // Non-redirectable error codes (client/redirect_uri issues)
     const NON_REDIRECTABLE: &[u32] = &[6000, 6001, 6002, 6004, 6014];
 

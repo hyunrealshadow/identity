@@ -6,69 +6,89 @@ the identity server locally using Docker Compose.
 ## Prerequisites
 
 - Docker + Docker Compose
-- `curl` and `jq` installed locally (for `run-tests.sh`)
+- Python 3.10+ with `requests` library
 - The identity server built (`cargo build --release`)
 
 ## Quick Start
 
 ```bash
 cd conformance
-./run-tests.sh
+pip install requests
+python run.py
 ```
 
-Exits 0 if no tests FAILED, exits 1 if any FAILED. WARNING results are printed
-but do not affect the exit code.
+Exits 0 if no tests fail (PASSED, WARNING, SKIPPED, REVIEW are acceptable).
+Use `--exit-on-failure` to exit 1 on any non-passing results.
 
-## What It Does
+## Scripts
 
-1. Starts Postgres, identity (`APP_ENV=conformance`), and the Conformance Suite via Docker Compose
-2. Waits for both services to be healthy
-3. Creates a test plan using `conformance-config.json`
-4. Runs all test modules automatically — login is handled by `POST /conformance/auto-login`
-5. Reports PASSED / WARNING / FAILED per module
-6. Tears down the stack and exits
+| Script | Description |
+|--------|-------------|
+| `run.py` | Main entry point - runs full test suite |
+| `check_status.py` | Check status of an existing plan |
+| `run_single.py` | Run a single test module |
 
-## First-Time Setup: Seed Data
+## Usage
 
-After migrations run automatically on startup, apply the seed data:
+### Run Full Suite
 
 ```bash
-# 1. Generate password hash for "ConformanceTest1!"
-# (replace the hash values in the SQL before running)
-#
-# From the repo root:
-cargo run --bin tool -- hash-password ConformanceTest1!
-# Output looks like: $argon2id$v=19$m=65536,t=3,p=1$<SALT_BASE64>$<HASH>
+python run.py                           # Start Docker, run all tests
+python run.py --no-docker               # Services already running
+python run.py --plan-id <ID>            # Run on existing plan
+python run.py --timeout 30              # 30s timeout per test
+python run.py --exit-on-failure         # Exit 1 on failures
+```
 
-# 2. Edit conformance/seed/conformance-seed.sql:
-#    - Replace <PHC_HASH>    with the full "$argon2id$..." string
-#    - Replace <SALT_BASE64> with the base64 salt (between last two "$" of PHC string)
+### Check Plan Status
 
-# 3. Apply the seed (while the stack is running):
-docker compose -f conformance/docker-compose.yml up -d db
-psql postgres://identity:identity@localhost:5432/identity_conformance \
-  -f conformance/seed/conformance-seed.sql
+```bash
+python check_status.py <plan-id>
+python check_status.py <plan-id> --logs  # Show failure logs
+```
+
+### Run Single Test
+
+```bash
+python run_single.py --plan-id <ID> --test oidcc-server
 ```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SUITE_URL` | `https://localhost:8443` | Conformance Suite base URL |
-| `IDENTITY_HEALTH` | `http://localhost:5150/health` | Identity health endpoint |
-| `TIMEOUT` | `120` | Seconds to wait for services to become ready |
+| `SUITE_URL` | `https://localhost.emobix.co.uk:8443` | Conformance Suite URL |
+| `IDENTITY_URL` | `http://localhost:5150` | Identity server URL |
+| `CONFIG_PATH` | `conformance/conformance-config.json` | Config file path |
+| `TIMEOUT` | `60` | Timeout per test (seconds) |
 
 ## CI Integration
 
 ```yaml
 - name: Run OIDC Conformance Tests
-  run: cd conformance && ./run-tests.sh
+  run: |
+    cd conformance
+    pip install requests
+    python run.py --exit-on-failure
 ```
+
+## Seed Data
+
+Seed data is applied automatically via database migrations. The conformance
+environment uses `config/conformance.yaml` with pre-configured test users.
 
 ## Security Notes
 
-- `POST /conformance/auto-login` is **only mounted when `APP_ENV=conformance`**. The route
-  does not exist in development or production environments.
-- `conformance.yaml` sets `dangerously_truncate: false` — safe to run repeatedly without
-  losing seed data.
+- `POST /conformance/auto-login` is **only mounted when `APP_ENV=conformance`**.
 - Test credentials are scoped to the `identity_conformance` database only.
+- The route does not exist in development or production environments.
+
+## Architecture
+
+```
+scripts/
+  client.py      # Conformance Suite API client
+  auto_login.py  # Automatic login handler
+  runner.py      # Test execution engine
+run.py           # Main CI entry point
+```

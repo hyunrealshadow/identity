@@ -92,12 +92,6 @@ pub async fn determine_authorize_flow(
             });
         }
 
-        if authorize_service.should_skip_consent(client) {
-            return Err(AppError::from_code(
-                AuthorizeHttpErrorCode::InternalClientLoginRequired,
-            ));
-        }
-
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 
@@ -114,9 +108,7 @@ pub async fn determine_authorize_flow(
         }
     };
 
-    if has_prompt(request.prompt.as_ref(), PromptValue::Login)
-        && !authorize_service.should_skip_consent(client)
-    {
+    if has_prompt(request.prompt.as_ref(), PromptValue::Login) {
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 

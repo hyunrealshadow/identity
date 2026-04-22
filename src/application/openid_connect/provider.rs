@@ -77,6 +77,7 @@ impl Default for OpenIdProviderCapabilities {
             request_object_encryption_enc_values_supported: vec![],
             token_endpoint_auth_methods_supported: vec![
                 "client_secret_basic".to_owned(),
+                "client_secret_post".to_owned(),
                 "private_key_jwt".to_owned(),
             ],
             token_endpoint_auth_signing_alg_values_supported: vec!["RS256".to_owned()],
@@ -93,7 +94,7 @@ impl Default for OpenIdProviderCapabilities {
             claims_locales_supported: vec![],
             ui_locales_supported: vec![],
             claims_parameter_supported: false,
-            request_parameter_supported: false,
+            request_parameter_supported: true,
             request_uri_parameter_supported: true,
             require_request_uri_registration: false,
         }

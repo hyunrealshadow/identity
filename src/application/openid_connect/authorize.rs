@@ -449,9 +449,35 @@ impl AuthorizeService {
             .unwrap_or("none");
         let payload = match algorithm {
             "none" => {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectAlgUnsupported,
-                ));
+                // Unsigned request object (alg=none): decode payload without
+                // signature verification per RFC 9101 §6.1.
+                let parts: Vec<&str> = raw.split('.').collect();
+                if parts.len() < 2 {
+                    return Err(AppError::from_code(
+                        AuthorizeErrorCode::RequestObjectHeaderInvalid,
+                    ));
+                }
+                let decoded = URL_SAFE_NO_PAD
+                    .decode(parts[1])
+                    .map_err(|error| {
+                        AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
+                            .with_source(error)
+                    })?;
+                let payload_value: serde_json::Value = serde_json::from_slice(&decoded)
+                    .map_err(|error| {
+                        AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
+                            .with_source(error)
+                    })?;
+                let mut jwt_payload = jwt::JwtPayload::new();
+                if let serde_json::Value::Object(map) = payload_value {
+                    for (k, v) in map {
+                        jwt_payload.set_claim(&k, Some(v)).map_err(|error| {
+                            AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
+                                .with_source(error)
+                        })?;
+                    }
+                }
+                jwt_payload
             }
             "RS256" => self.verify_rs256_request_object(client, raw).await?,
             _ => {
@@ -650,11 +676,10 @@ impl AuthorizeService {
             "client_id",
             params.client_id.as_str(),
         )?;
-        Self::validate_required_request_object_field(
-            payload,
-            "redirect_uri",
-            params.redirect_uri.as_str(),
-        )?;
+        // Per OIDCC-6.1, request object values supersede query parameters.
+        // For redirect_uri, we do NOT reject mismatches — the request object's
+        // redirect_uri will override the query param during merge.
+        // This allows the request object to specify the authoritative redirect_uri.
         Self::validate_required_request_object_field(payload, "scope", params.scope.as_str())?;
         Self::validate_required_request_object_field(payload, "state", params.state.as_str())?;
         Self::validate_optional_request_object_field(payload, "nonce", params.nonce.as_deref())?;
@@ -2356,7 +2381,10 @@ mod tests {
     }
 
     #[test]
-    fn validate_request_object_claims_rejects_redirect_uri_mismatch() {
+    fn validate_request_object_claims_allows_redirect_uri_mismatch() {
+        // Per OIDCC-6.1, request object values supersede query params.
+        // redirect_uri mismatches are allowed; the merge step will use the
+        // request object's redirect_uri.
         let params = AuthorizationRequestParams {
             response_type: "code".to_string(),
             client_id: Uuid::nil().to_string(),
@@ -2389,7 +2417,7 @@ mod tests {
             &Url::parse("https://identity.example.com/").unwrap(),
         );
 
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -2539,7 +2567,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn parse_unsecured_request_object_is_rejected() {
+    async fn parse_unsecured_request_object_is_accepted() {
         let service = AuthorizeService::new(
             Arc::new(FoundClientRepository),
             Arc::new(InMemoryCredentialRepository::default()),
@@ -2567,7 +2595,10 @@ mod tests {
         let jwt = jwt::encode_unsecured(&payload, &header).unwrap();
         let result = service.parse_request_object_payload(&client, &jwt).await;
 
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed["scope"], "openid email");
+        assert_eq!(parsed["state"], "request-state");
     }
 
     #[tokio::test]
