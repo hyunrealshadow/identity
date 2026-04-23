@@ -1,6 +1,6 @@
 use axum::{
     extract::{Form, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use base64::Engine;
@@ -85,7 +85,16 @@ fn token_error_response(error: AppError) -> Response {
         error_description: format!("error code {}", error.code()),
     };
 
-    (status, axum::Json(body)).into_response()
+    let mut response = (status, axum::Json(body)).into_response();
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::PRAGMA,
+        HeaderValue::from_static("no-cache"),
+    );
+    response
 }
 
 fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
@@ -151,7 +160,18 @@ pub async fn token(
     };
 
     match result {
-        Ok(response) => AppJson(response).into_response(),
+        Ok(response) => {
+            let mut response = AppJson(response).into_response();
+            response.headers_mut().insert(
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("no-store"),
+            );
+            response.headers_mut().insert(
+                axum::http::header::PRAGMA,
+                HeaderValue::from_static("no-cache"),
+            );
+            response
+        }
         Err(error) => token_error_response(error),
     }
 }
@@ -159,7 +179,22 @@ pub async fn token(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderMap, HeaderValue, header::AUTHORIZATION};
+    use axum::http::{HeaderMap, HeaderValue, StatusCode, header::AUTHORIZATION};
+
+    #[test]
+    fn token_error_response_sets_cache_headers() {
+        let response = token_error_response(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers().get("cache-control").unwrap(),
+            HeaderValue::from_static("no-store")
+        );
+        assert_eq!(
+            response.headers().get("pragma").unwrap(),
+            HeaderValue::from_static("no-cache")
+        );
+    }
 
     #[test]
     fn parse_basic_client_auth_reads_client_credentials() {
