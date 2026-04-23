@@ -111,7 +111,7 @@ mod tests {
             json["registration_endpoint"],
             "https://identity.example.com/oauth2/register"
         );
-        assert_eq!(json["claims_parameter_supported"], false);
+        assert_eq!(json["claims_parameter_supported"], true);
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);
         assert_eq!(json["require_request_uri_registration"], false);

@@ -94,7 +94,7 @@ impl Default for OpenIdProviderCapabilities {
             ],
             claims_locales_supported: vec![],
             ui_locales_supported: vec![],
-            claims_parameter_supported: false,
+            claims_parameter_supported: true,
             request_parameter_supported: true,
             request_uri_parameter_supported: true,
             require_request_uri_registration: false,

@@ -111,11 +111,19 @@ class TestRunner:
                         continue
                     processed_urls.add(url)
                     has_new_urls = True
-                    self.auto_login.handle_auth_url(url, url_method)
+                    success = self.auto_login.handle_auth_url(url, url_method)
+                    print(f"    [debug] handle_auth_url returned {success} for {url[:60]}...")
                     time.sleep(self.poll_interval)
 
                 if not has_new_urls:
-                    self._upload_screenshots(run_id)
+                    uploaded = self._upload_screenshots(run_id)
+                    if not uploaded:
+                        # Still WAITING with no new URLs and no screenshots needed.
+                        # Conformance suite may be re-issuing the same URL after a failed
+                        # login attempt. Clear processed_urls to allow a retry.
+                        if processed_urls:
+                            print(f"    [debug] WAITING with no new URLs, clearing processed_urls to retry")
+                            processed_urls.clear()
 
         return TestResult(test_name=test_name, status="TIMEOUT", result=None, run_id=run_id)
 
