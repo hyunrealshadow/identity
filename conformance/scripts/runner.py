@@ -38,6 +38,10 @@ class TestRunner:
         self.timeout_per_test = timeout_per_test
         self.poll_interval = poll_interval
 
+    @staticmethod
+    def _is_active_status(status: str) -> bool:
+        return status in {"CREATED", "CONFIGURED", "RUNNING", "WAITING"}
+
     def _upload_screenshots(self, run_id: str) -> bool:
         try:
             pending = self.client.get_pending_screenshots(run_id)
@@ -58,23 +62,25 @@ class TestRunner:
 
     def run_single_test(self, plan_id: str, test_name: str, variant: dict) -> TestResult:
         modules = self.client.get_modules(plan_id)
-        existing_run_id = None
+        run_id = None
 
         for m in modules:
             if m.test_module == test_name:
                 if m.instances:
-                    existing_run_id = m.instances[0]
-                    info = self.client.get_test_info(existing_run_id)
-                    return TestResult(
-                        test_name=test_name,
-                        status=info.status,
-                        result=info.result,
-                        run_id=existing_run_id,
-                    )
+                    run_id = self.client.select_preferred_instance(m.instances)
+                    info = self.client.get_test_info(run_id)
+                    if not self._is_active_status(info.status):
+                        return TestResult(
+                            test_name=test_name,
+                            status=info.status,
+                            result=info.result,
+                            run_id=run_id,
+                        )
                 break
 
         self.auto_login.reset_session()
-        run_id = self.client.start_test(plan_id, test_name, variant)
+        if run_id is None:
+            run_id = self.client.start_test(plan_id, test_name, variant)
         processed_urls = set()
 
         timeout = SPECIAL_TIMEOUT_TESTS.get(test_name, self.timeout_per_test)
@@ -136,17 +142,24 @@ class TestRunner:
             print(f"[{i + 1}/{total}] {m.test_module}", end="", flush=True)
 
             if m.instances:
-                info = self.client.get_test_info(m.instances[0])
+                run_id = self.client.select_preferred_instance(m.instances)
+                info = self.client.get_test_info(run_id)
                 result = info.result or "?"
-                print(f" - already ran: {info.status} {result}")
-                results.append(
-                    TestResult(
-                        test_name=m.test_module,
-                        status=info.status,
-                        result=info.result,
-                        run_id=m.instances[0],
+                if not self._is_active_status(info.status):
+                    print(f" - already ran: {info.status} {result}")
+                    results.append(
+                        TestResult(
+                            test_name=m.test_module,
+                            status=info.status,
+                            result=info.result,
+                            run_id=run_id,
+                        )
                     )
-                )
+                    continue
+                print(f" - resuming: {info.status} {result}")
+                result = self.run_single_test(plan_id, m.test_module, m.variant)
+                print(f" - {result.status} {result.result or ''}")
+                results.append(result)
                 continue
 
             print(" ...", flush=True)

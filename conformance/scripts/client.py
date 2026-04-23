@@ -68,6 +68,19 @@ class ConformanceClient:
             )
         return modules
 
+    def select_preferred_instance(self, instances: list[str]) -> Optional[str]:
+        if not instances:
+            return None
+
+        infos = [(instance_id, self.get_test_info(instance_id)) for instance_id in instances]
+        active_statuses = {"CREATED", "CONFIGURED", "RUNNING", "WAITING"}
+
+        for instance_id, info in reversed(infos):
+            if info.status in active_statuses:
+                return instance_id
+
+        return instances[-1]
+
     def start_test(self, plan_id: str, test_name: str, variant: dict) -> str:
         variant_encoded = urllib.parse.quote(json.dumps(variant))
         url = f"{self.suite_url}/api/runner?test={test_name}&plan={plan_id}&variant={variant_encoded}"
@@ -116,7 +129,8 @@ class ConformanceClient:
             if not m.instances:
                 summary["PENDING"] += 1
             else:
-                info = self.get_test_info(m.instances[0])
+                run_id = self.select_preferred_instance(m.instances)
+                info = self.get_test_info(run_id)
                 result = info.result or "FAILED"
                 if result in summary:
                     summary[result] += 1

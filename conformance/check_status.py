@@ -28,13 +28,14 @@ def main():
 
     for m in modules:
         if m.instances:
-            info = client.get_test_info(m.instances[0])
+            run_id = client.select_preferred_instance(m.instances)
+            info = client.get_test_info(run_id)
             result = info.result or "?"
             status = info.status
             print(f"{m.test_module}: {result} ({status})")
 
             if args.logs and result in ("FAILURE", "FAILED", "WARNING"):
-                logs = client.get_test_logs(m.instances[0])
+                logs = client.get_test_logs(run_id)
                 for entry in logs:
                     if entry.get("result") in ("FAILURE", "WARNING"):
                         print(f"  {entry.get('src')}: [{entry.get('result')}] {entry.get('msg')}")
