@@ -92,12 +92,17 @@ mod tests {
             registration_endpoint: Some(
                 Url::parse("https://identity.example.com/connect/register").unwrap(),
             ),
-            scopes_supported: Some(vec!["openid".to_owned(), "profile".to_owned()]),
+            scopes_supported: Some(vec![
+                "openid".to_owned(),
+                "profile".to_owned(),
+                "offline_access".to_owned(),
+            ]),
             response_types_supported: vec!["code".to_owned(), "id_token".to_owned()],
             response_modes_supported: Some(vec!["query".to_owned(), "fragment".to_owned()]),
             grant_types_supported: Some(vec![
                 "authorization_code".to_owned(),
                 "implicit".to_owned(),
+                "refresh_token".to_owned(),
             ]),
             acr_values_supported: None,
             subject_types_supported: vec!["public".to_owned()],

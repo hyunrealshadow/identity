@@ -174,7 +174,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
 
         let redirect_uris =
             serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"]);
-        let grant_types = serde_json::json!(["authorization_code"]);
+        let grant_types = serde_json::json!(["authorization_code", "refresh_token"]);
         let response_types = serde_json::json!(["code"]);
 
         let _ = client_open_id_connect::ActiveModel {
@@ -245,7 +245,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
 
         let redirect_uris =
             serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"]);
-        let grant_types = serde_json::json!(["authorization_code"]);
+        let grant_types = serde_json::json!(["authorization_code", "refresh_token"]);
         let response_types = serde_json::json!(["code"]);
 
         let _ = client_open_id_connect::ActiveModel {

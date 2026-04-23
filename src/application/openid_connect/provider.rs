@@ -53,6 +53,7 @@ impl Default for OpenIdProviderCapabilities {
                 StandardScopes::OPENID.to_owned(),
                 StandardScopes::PROFILE.to_owned(),
                 StandardScopes::EMAIL.to_owned(),
+                StandardScopes::OFFLINE_ACCESS.to_owned(),
             ],
             response_types_supported: vec![
                 "code".to_owned(),
@@ -60,7 +61,11 @@ impl Default for OpenIdProviderCapabilities {
                 "token id_token".to_owned(),
             ],
             response_modes_supported: vec!["query".to_owned(), "fragment".to_owned()],
-            grant_types_supported: vec!["authorization_code".to_owned(), "implicit".to_owned()],
+            grant_types_supported: vec![
+                "authorization_code".to_owned(),
+                "implicit".to_owned(),
+                "refresh_token".to_owned(),
+            ],
             acr_values_supported: vec!["1".to_owned()],
             subject_types_supported: vec!["public".to_owned()],
             id_token_signing_alg_values_supported: vec!["ES256".to_owned()],
