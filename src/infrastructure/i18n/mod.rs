@@ -5,31 +5,15 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use axum::http::{HeaderMap, header::ACCEPT_LANGUAGE};
 use fluent_templates::{ArcLoader, Loader, fluent_bundle::FluentValue};
+use http::{HeaderMap, header::ACCEPT_LANGUAGE};
 use unic_langid::{LanguageIdentifier, langid};
 
 use crate::application::error::params::ErrorParams;
 
-// Global I18n instance used by `AppError -> IntoResponse` to translate error
+// Global I18n instance used by `AppError` response rendering to translate error
 // codes without access to `AppState`. Initialised once during startup.
 static ERROR_I18N: OnceLock<I18n> = OnceLock::new();
-
-// Per-request locale stored in a task-local by the locale middleware.
-// Allows `AppError::into_response` to use the client's preferred locale
-// without receiving `HeaderMap` explicitly.
-tokio::task_local! {
-    pub static REQUEST_LOCALE: LanguageIdentifier;
-}
-
-/// Returns the current request's resolved locale if the locale middleware has
-/// run; otherwise returns the i18n fallback locale (`en-US`).
-#[must_use]
-pub fn request_locale() -> LanguageIdentifier {
-    REQUEST_LOCALE
-        .try_with(Clone::clone)
-        .unwrap_or_else(|_| langid!("en-US"))
-}
 
 pub fn init_error_i18n(i18n: I18n) {
     let _ = ERROR_I18N.set(i18n);
@@ -178,7 +162,7 @@ fn code_key(code: u32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use axum::http::{HeaderMap, HeaderValue, header::ACCEPT_LANGUAGE};
+    use http::{HeaderMap, HeaderValue, header::ACCEPT_LANGUAGE};
     use unic_langid::langid;
 
     use super::{I18n, resolve_locale_from_headers};

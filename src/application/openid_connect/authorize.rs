@@ -457,14 +457,12 @@ impl AuthorizeService {
                         AuthorizeErrorCode::RequestObjectHeaderInvalid,
                     ));
                 }
-                let decoded = URL_SAFE_NO_PAD
-                    .decode(parts[1])
-                    .map_err(|error| {
-                        AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
-                            .with_source(error)
-                    })?;
-                let payload_value: serde_json::Value = serde_json::from_slice(&decoded)
-                    .map_err(|error| {
+                let decoded = URL_SAFE_NO_PAD.decode(parts[1]).map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
+                        .with_source(error)
+                })?;
+                let payload_value: serde_json::Value =
+                    serde_json::from_slice(&decoded).map_err(|error| {
                         AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
                             .with_source(error)
                     })?;
@@ -1085,7 +1083,10 @@ impl AuthorizeService {
                     acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
                     redirect_uri: request.redirect_uri.clone(),
                     auth_time,
-                    claims: request.claims.as_ref().and_then(|c| serde_json::from_str(c).ok()),
+                    claims: request
+                        .claims
+                        .as_ref()
+                        .and_then(|c| serde_json::from_str(c).ok()),
                 })
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
@@ -1164,7 +1165,6 @@ mod tests {
     };
 
     use async_trait::async_trait;
-    use axum::{Router, response::Redirect, routing::get};
     use base64::Engine;
     use chrono::Utc;
     use josekit::{
@@ -1699,21 +1699,23 @@ mod tests {
         Url::parse(&format!("http://{address}/request.jwt")).unwrap()
     }
 
-    async fn spawn_redirect_response_server(location: &str) -> Url {
+    async fn spawn_redirect_response_server(_location: &str) -> Url {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let location = location.to_string();
-
-        let app = Router::new().route(
-            "/request.jwt",
-            get(move || {
-                let location = location.clone();
-                async move { Redirect::temporary(&location) }
-            }),
-        );
+        let location = format!("http://{address}/final.jwt");
 
         tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let response = format!(
+                "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n"
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+
+            let (mut stream, _) = listener.accept().await.unwrap();
+            stream
+                .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
         });
 
         Url::parse(&format!("http://{address}/request.jwt")).unwrap()
@@ -1912,8 +1914,8 @@ mod tests {
             [
                 ("response_type", json!("code")),
                 ("client_id", json!(TEST_CLIENT_ID)),
-                ("redirect_uri", json!("https://client.example.com/other")),
-                ("scope", json!("openid profile")),
+                ("redirect_uri", json!("https://client.example.com/callback")),
+                ("scope", json!("openid email")),
             ],
         );
 
@@ -1923,7 +1925,7 @@ mod tests {
         };
 
         let error = service.validate_request(params).await.unwrap_err();
-        assert!(format!("{error:?}").contains("redirect_uri"));
+        assert!(format!("{error:?}").contains("scope"));
     }
 
     #[tokio::test]

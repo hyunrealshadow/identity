@@ -1,6 +1,6 @@
 # Identity
 
-Rust authentication service built with `axum`, `sea-orm`, and `tera`.
+Rust authentication service built with `salvo`, `sea-orm`, and `tera`.
 
 ## Run
 

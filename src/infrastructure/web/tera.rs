@@ -1,14 +1,12 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use axum::{
-    http::StatusCode,
-    response::{Html, IntoResponse, Response},
-};
 use fluent_templates::{ArcLoader, Loader};
+use http::HeaderMap;
 use tera::{Context, Function, Tera, Value};
 use unic_langid::{LanguageIdentifier, langid};
 
 use crate::{
+    application::error::{AppError, codes::common::CommonErrorCode},
     boot::AppState,
     infrastructure::i18n::{I18n, resolve_locale_from_headers},
 };
@@ -92,14 +90,14 @@ fn render_with_locale(
 
 pub fn render_view<T: serde::Serialize>(
     state: &AppState,
-    headers: &axum::http::HeaderMap,
+    headers: &HeaderMap,
     template: &str,
     data: T,
-) -> Response {
+) -> Result<String, AppError> {
     match serde_json::to_value(data) {
         Err(e) => {
             tracing::error!(error = %e, "render_view: serialise failed");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Err(AppError::from_code(CommonErrorCode::InternalError))
         }
         Ok(mut data) => {
             let locale = resolve_locale_from_headers(headers).to_string();
@@ -112,7 +110,7 @@ pub fn render_view<T: serde::Serialize>(
             match Context::from_value(data) {
                 Err(e) => {
                     tracing::error!(error = %e, "render_view: context build failed");
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                    Err(AppError::from_code(CommonErrorCode::InternalError))
                 }
                 Ok(context) => match render_with_locale(
                     state.resources().tera(),
@@ -121,10 +119,10 @@ pub fn render_view<T: serde::Serialize>(
                     template,
                     &context,
                 ) {
-                    Ok(body) => Html(body).into_response(),
+                    Ok(body) => Ok(body),
                     Err(e) => {
                         tracing::error!(error = %e, template, "render_view: template render failed");
-                        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                        Err(AppError::from_code(CommonErrorCode::InternalError))
                     }
                 },
             }

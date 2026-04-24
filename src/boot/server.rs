@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::Router;
+use salvo::{Listener, Router, Server, conn::TcpListener};
 
 use crate::infrastructure::{config::AppConfig, health};
 
@@ -14,7 +14,7 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
     let shared_health = health::shares_listener(&config.health, &config.server);
 
     let main_address = format!("{}:{}", config.server.binding, config.server.port);
-    let main_listener = tokio::net::TcpListener::bind(&main_address).await?;
+    let main_listener = TcpListener::new(main_address.clone()).try_bind().await?;
 
     let environment = state.context().environment().as_str();
     tracing::info!(environment, address = main_address.as_str(), "listening");
@@ -23,8 +23,9 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
 
     if needs_separate_health {
         let health_address = health::bind_address(&config.health, &config.server);
-        let health_listener = tokio::net::TcpListener::bind(&health_address).await?;
-        let health_app = health::router(&config.health).with_state(state.clone());
+        let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
+        let health_app =
+            health::router(&config.health).hoop(salvo::affix_state::inject(state.clone()));
 
         tracing::info!(
             environment,
@@ -49,11 +50,18 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
 }
 
 async fn serve_with_shutdown(
-    listener: tokio::net::TcpListener,
+    acceptor: salvo::conn::tcp::TcpAcceptor,
     app: Router,
     lifecycle: Arc<AppLifecycle>,
 ) -> Result<(), std::io::Error> {
-    axum::serve(listener, app)
-        .with_graceful_shutdown(wait_for_shutdown(lifecycle))
-        .await
+    let server = Server::new(acceptor);
+    let handle = server.handle();
+
+    tokio::spawn(async move {
+        wait_for_shutdown(lifecycle).await;
+        handle.stop_graceful(None);
+    });
+
+    server.serve(app).await;
+    Ok(())
 }

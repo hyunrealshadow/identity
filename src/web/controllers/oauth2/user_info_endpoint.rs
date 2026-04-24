@@ -1,11 +1,8 @@
-use axum::{
-    Form,
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    response::Response,
-};
+use http::{HeaderValue, StatusCode, header};
+use salvo::{Depot, Request, Response, handler};
 use serde::Deserialize;
 
+use crate::web::controllers::response::{AppResponse, app_state, json_response, parse_form};
 use crate::{
     application::error::{AppError, kind::ErrorKind},
     boot::AppState,
@@ -16,37 +13,40 @@ pub(crate) struct UserInfoForm {
     access_token: Option<String>,
 }
 
-#[axum::debug_handler]
-pub async fn userinfo(State(ctx): State<AppState>, headers: HeaderMap) -> Response {
+#[handler]
+pub async fn userinfo(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
     let auth_header = headers.get("Authorization").and_then(|v| v.to_str().ok());
 
     let bearer_token = match auth_header {
         Some(header) if header.starts_with("Bearer ") => &header[7..],
         Some(_) => {
-            return build_error_response(
+            return Ok(build_error_response(
                 StatusCode::UNAUTHORIZED,
                 "invalid_request",
                 "Authorization header must use Bearer scheme",
-            );
+            )
+            .into());
         }
         None => {
-            return build_error_response(
+            return Ok(build_error_response(
                 StatusCode::UNAUTHORIZED,
                 "invalid_request",
                 "Authorization header is required",
-            );
+            )
+            .into());
         }
     };
 
-    handle_userinfo_request(ctx, bearer_token).await
+    Ok(handle_userinfo_request(ctx, bearer_token).await.into())
 }
 
-#[axum::debug_handler]
-pub async fn userinfo_post(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(form): Form<UserInfoForm>,
-) -> Response {
+#[handler]
+pub async fn userinfo_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let form: UserInfoForm = parse_form(req).await?;
     // Token may come from Authorization header or POST body
     let auth_header = headers.get("Authorization").and_then(|v| v.to_str().ok());
 
@@ -54,23 +54,25 @@ pub async fn userinfo_post(
         if let Some(token) = header.strip_prefix("Bearer ") {
             token.to_string()
         } else {
-            return build_error_response(
+            return Ok(build_error_response(
                 StatusCode::UNAUTHORIZED,
                 "invalid_request",
                 "Authorization header must use Bearer scheme",
-            );
+            )
+            .into());
         }
     } else if let Some(token) = form.access_token {
         token
     } else {
-        return build_error_response(
+        return Ok(build_error_response(
             StatusCode::UNAUTHORIZED,
             "invalid_request",
             "Bearer token required in Authorization header or access_token parameter",
-        );
+        )
+        .into());
     };
 
-    handle_userinfo_request(ctx, &bearer_token).await
+    Ok(handle_userinfo_request(ctx, &bearer_token).await.into())
 }
 
 async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
@@ -99,13 +101,15 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
 fn build_success_response(
     claims: crate::application::openid_connect::dto::UserInfoClaims,
 ) -> Response {
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "application/json")
-        .header("Cache-Control", "no-store, no-cache, must-revalidate")
-        .header("Pragma", "no-cache")
-        .body(serde_json::to_string(&claims).unwrap().into())
-        .unwrap()
+    let mut response = json_response(StatusCode::OK, claims);
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
+    response
+        .headers_mut()
+        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    response
 }
 
 fn build_error_response(status: StatusCode, error_code: &str, error_description: &str) -> Response {
@@ -114,16 +118,16 @@ fn build_error_response(status: StatusCode, error_code: &str, error_description:
         "error_description": error_description
     });
 
-    Response::builder()
-        .status(status)
-        .header("Content-Type", "application/json")
-        .header("Cache-Control", "no-store")
-        .header(
-            "WWW-Authenticate",
-            format!("Bearer error=\"{}\"", error_code),
-        )
-        .body(serde_json::to_string(&error_body).unwrap().into())
-        .unwrap()
+    let mut response = json_response(status, error_body);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if let Ok(value) = HeaderValue::from_str(&format!("Bearer error=\"{}\"", error_code)) {
+        response
+            .headers_mut()
+            .insert(header::WWW_AUTHENTICATE, value);
+    }
+    response
 }
 
 fn build_error_from_app_error(error: AppError) -> Response {

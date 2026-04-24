@@ -207,7 +207,10 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             code_challenge: value.code_challenge.clone(),
             code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),
             acr_values: value.acr_values.clone(),
-            claims: value.claims.as_ref().and_then(|c| serde_json::to_string(c).ok()),
+            claims: value
+                .claims
+                .as_ref()
+                .and_then(|c| serde_json::to_string(c).ok()),
         }
     }
 }

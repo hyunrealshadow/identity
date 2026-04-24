@@ -1,28 +1,25 @@
-use axum::{Router, extract::State, response::IntoResponse, routing::get};
+use http::StatusCode;
 use josekit::jwk::Jwk;
+use salvo::{Depot, Response, Router, handler};
 use serde::Serialize;
 
 use crate::{
     application::{error::AppError, openid_connect::provider::OpenIdProviderService},
-    boot::AppState,
     domain::key::KeyData,
     infrastructure::crypto::key::public_jwk_from_private_key_pem,
 };
 
-use super::response::AppJson;
+use super::response::{app_state, render_json};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonWebKeySetResponse {
     keys: Vec<Jwk>,
 }
 
-pub fn routes() -> Router<AppState> {
+pub fn routes() -> Router {
     Router::new()
-        .route(
-            "/.well-known/openid-configuration",
-            get(openid_configuration),
-        )
-        .route("/.well-known/keys", get(keys))
+        .push(Router::with_path(".well-known/openid-configuration").get(openid_configuration))
+        .push(Router::with_path(".well-known/keys").get(keys_handler))
 }
 
 fn openid_configuration_document(
@@ -31,14 +28,43 @@ fn openid_configuration_document(
     service.discovery_metadata()
 }
 
-#[axum::debug_handler]
-async fn openid_configuration(State(ctx): State<AppState>) -> axum::response::Response {
-    let metadata = match openid_configuration_document(ctx.services().oidc()) {
-        Ok(metadata) => metadata,
-        Err(error) => return error.into_response(),
-    };
+#[handler]
+async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let metadata = openid_configuration_document(ctx.services().oidc())?;
+    render_json(res, StatusCode::OK, metadata);
+    Ok(())
+}
 
-    AppJson(metadata).into_response()
+#[handler]
+async fn keys_handler(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let keys = ctx
+        .services()
+        .key()
+        .list_available()
+        .await?
+        .into_iter()
+        .filter_map(|key| match key.data {
+            KeyData::Asymmetric(data) => Some((key.oid, data.private_key, data.certificate)),
+            KeyData::Symmetric(_) => None,
+        })
+        .map(|(oid, private_key, certificate)| {
+            public_jwk_from_private_key_pem(
+                &private_key,
+                Some(&uuid::Uuid::from(oid).to_string()),
+                certificate.as_deref(),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from);
+
+    let keys = keys?;
+
+    let response = JsonWebKeySetResponse { keys };
+
+    render_json(res, StatusCode::OK, response);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -125,35 +151,4 @@ mod tests {
             serde_json::json!(["ES256"])
         );
     }
-}
-
-#[axum::debug_handler]
-async fn keys(State(ctx): State<AppState>) -> axum::response::Response {
-    let keys = match ctx.services().key().list_available().await {
-        Ok(keys) => keys,
-        Err(error) => return error.into_response(),
-    }
-    .into_iter()
-    .filter_map(|key| match key.data {
-        KeyData::Asymmetric(data) => Some((key.oid, data.private_key, data.certificate)),
-        KeyData::Symmetric(_) => None,
-    })
-    .map(|(oid, private_key, certificate)| {
-        public_jwk_from_private_key_pem(
-            &private_key,
-            Some(&uuid::Uuid::from(oid).to_string()),
-            certificate.as_deref(),
-        )
-    })
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(AppError::from);
-
-    let keys = match keys {
-        Ok(keys) => keys,
-        Err(error) => return error.into_response(),
-    };
-
-    let response = JsonWebKeySetResponse { keys };
-
-    AppJson(response).into_response()
 }

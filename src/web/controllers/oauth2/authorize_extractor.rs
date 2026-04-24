@@ -1,8 +1,5 @@
-use axum::{
-    body::{Body, to_bytes},
-    extract::FromRequest,
-    http::Method,
-};
+use http::{Method, header};
+use salvo::Request;
 use serde::Deserialize;
 
 use crate::application::{
@@ -104,15 +101,15 @@ pub fn parse_authorize_pairs(input: &[u8]) -> RawAuthorizeRequest {
     raw
 }
 
-async fn extract_authorize_request(
-    request: axum::http::Request<Body>,
+pub async fn extract_authorize_request(
+    request: &mut Request,
 ) -> Result<AuthorizeRequestExtractor, AppError> {
     let raw = match *request.method() {
         Method::GET => parse_authorize_pairs(request.uri().query().unwrap_or_default().as_bytes()),
         Method::POST => {
             let is_form = request
                 .headers()
-                .get(axum::http::header::CONTENT_TYPE)
+                .get(header::CONTENT_TYPE)
                 .and_then(|value| value.to_str().ok())
                 .map(|value| value.starts_with("application/x-www-form-urlencoded"))
                 .unwrap_or(false);
@@ -123,13 +120,14 @@ async fn extract_authorize_request(
                 ));
             }
 
-            let body = to_bytes(request.into_body(), 64 * 1024)
+            let body = request
+                .payload_with_max_size(64 * 1024)
                 .await
                 .map_err(|error| {
                     AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error)
                 })?;
 
-            parse_authorize_pairs(body.as_ref())
+            parse_authorize_pairs(body)
         }
         _ => {
             return Err(AppError::from_code(
@@ -139,20 +137,6 @@ async fn extract_authorize_request(
     };
 
     Ok(AuthorizeRequestExtractor { raw })
-}
-
-impl<S> FromRequest<S> for AuthorizeRequestExtractor
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
-
-    async fn from_request(
-        request: axum::extract::Request,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        extract_authorize_request(request).await
-    }
 }
 
 pub fn has_request_object_transport(raw: &RawAuthorizeRequest) -> bool {
@@ -216,35 +200,25 @@ pub fn authorize_input_error(raw: &RawAuthorizeRequest) -> Option<AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
+    use salvo::test::TestClient;
 
     #[tokio::test]
     async fn authorize_extractor_reads_query_parameters() {
-        let request = axum::http::Request::builder()
-            .method("GET")
-            .uri("/oauth2/authorize?response_type=code&client_id=client&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&scope=openid&state=state")
-            .body(Body::empty())
-            .unwrap();
+        let mut request = TestClient::get("http://127.0.0.1:5800/oauth2/authorize?response_type=code&client_id=client&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&scope=openid&state=state")
+            .build();
 
-        let extracted = extract_authorize_request(request).await.unwrap();
+        let extracted = extract_authorize_request(&mut request).await.unwrap();
         assert_eq!(extracted.raw.response_type.as_deref(), Some("code"));
     }
 
     #[tokio::test]
     async fn authorize_extractor_reads_form_parameters() {
-        let request = axum::http::Request::builder()
-            .method("POST")
-            .header(
-                axum::http::header::CONTENT_TYPE,
-                "application/x-www-form-urlencoded",
-            )
-            .uri("/oauth2/authorize")
-            .body(Body::from(
-                "response_type=code&client_id=client&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&scope=openid&state=state",
-            ))
-            .unwrap();
+        let mut request = TestClient::post("http://127.0.0.1:5800/oauth2/authorize")
+            .add_header(header::CONTENT_TYPE, "application/x-www-form-urlencoded", true)
+            .text("response_type=code&client_id=client&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&scope=openid&state=state")
+            .build();
 
-        let extracted = extract_authorize_request(request).await.unwrap();
+        let extracted = extract_authorize_request(&mut request).await.unwrap();
         assert_eq!(extracted.raw.scope.as_deref(), Some("openid"));
     }
 }

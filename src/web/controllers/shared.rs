@@ -2,11 +2,9 @@
 //! controllers. Keeping them here avoids duplication and ensures both surfaces
 //! behave identically for cookie handling, etc.
 
-use axum::{
-    http::{HeaderMap, HeaderValue, header},
-    response::Response,
-};
+use http::{HeaderMap, HeaderValue, header};
 use rand::RngCore;
+use salvo::Response;
 use uuid::Uuid;
 
 use crate::{

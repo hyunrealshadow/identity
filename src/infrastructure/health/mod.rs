@@ -1,16 +1,12 @@
-use axum::{
-    Json, Router,
-    extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::get,
-};
+use http::StatusCode;
+use salvo::{Depot, Response, Router, handler};
 use sea_orm::ConnectionTrait;
 use serde::Serialize;
 
 use crate::{
     boot::AppState,
     infrastructure::config::{HealthConfig, ServerConfig},
+    web::controllers::response::{app_state, render_app_error, render_json},
 };
 
 #[derive(Debug, Serialize)]
@@ -32,11 +28,19 @@ pub struct HealthCheckResult {
     pub detail: Option<String>,
 }
 
-pub fn router(config: &HealthConfig) -> Router<AppState> {
-    Router::new().route(&config.route, get(health))
+pub fn router(config: &HealthConfig) -> Router {
+    Router::with_path(config.route.trim_start_matches('/')).get(health_handler)
 }
 
-async fn health(State(state): State<AppState>) -> Response {
+#[handler]
+async fn health_handler(depot: &mut Depot, res: &mut Response) {
+    let state = match app_state(depot) {
+        Ok(state) => state,
+        Err(error) => {
+            render_app_error(res, error);
+            return;
+        }
+    };
     let mut ok = true;
     let mut checks = HealthChecksResponse::default();
 
@@ -59,7 +63,7 @@ async fn health(State(state): State<AppState>) -> Response {
         StatusCode::SERVICE_UNAVAILABLE
     };
 
-    (status, Json(body)).into_response()
+    render_json(res, status, body);
 }
 
 async fn check_database(state: &AppState) -> HealthCheckResult {

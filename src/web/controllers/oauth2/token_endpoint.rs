@@ -1,20 +1,14 @@
-use axum::{
-    extract::{Form, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
-};
 use base64::Engine;
+use http::{HeaderMap, HeaderValue, StatusCode, header};
+use salvo::{Depot, Request, Response, handler};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    application::{
-        error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
-        openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
-    },
-    boot::AppState,
+use crate::application::{
+    error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
+    openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
 };
 
-use super::super::response::AppJson;
+use super::super::response::{AppResponse, app_state, json_response, parse_form};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct TokenForm {
@@ -85,23 +79,18 @@ fn token_error_response(error: AppError) -> Response {
         error_description: format!("error code {}", error.code()),
     };
 
-    let mut response = (status, axum::Json(body)).into_response();
-    response.headers_mut().insert(
-        axum::http::header::CACHE_CONTROL,
-        HeaderValue::from_static("no-store"),
-    );
-    response.headers_mut().insert(
-        axum::http::header::PRAGMA,
-        HeaderValue::from_static("no-cache"),
-    );
+    let mut response = json_response(status, body);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
     response
 }
 
 fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
-    let header = headers
-        .get(axum::http::header::AUTHORIZATION)?
-        .to_str()
-        .ok()?;
+    let header = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let encoded = header.strip_prefix("Basic ")?;
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(encoded)
@@ -111,12 +100,11 @@ fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
     Some((client_id.to_string(), client_secret.to_string()))
 }
 
-#[axum::debug_handler]
-pub async fn token(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(form): Form<TokenForm>,
-) -> Response {
+#[handler]
+pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let form: TokenForm = parse_form(req).await?;
     let basic_auth = parse_basic_client_auth(&headers);
     let client_id = basic_auth
         .as_ref()
@@ -159,33 +147,32 @@ pub async fn token(
         _ => Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)),
     };
 
-    match result {
+    Ok(AppResponse(match result {
         Ok(response) => {
-            let mut response = AppJson(response).into_response();
-            response.headers_mut().insert(
-                axum::http::header::CACHE_CONTROL,
-                HeaderValue::from_static("no-store"),
-            );
-            response.headers_mut().insert(
-                axum::http::header::PRAGMA,
-                HeaderValue::from_static("no-cache"),
-            );
+            let mut response = json_response(StatusCode::OK, response);
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+                .headers_mut()
+                .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
             response
         }
         Err(error) => token_error_response(error),
-    }
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderMap, HeaderValue, StatusCode, header::AUTHORIZATION};
+    use http::{HeaderMap, HeaderValue, StatusCode, header::AUTHORIZATION};
 
     #[test]
     fn token_error_response_sets_cache_headers() {
-        let response = token_error_response(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+        let response =
+            token_error_response(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
         assert_eq!(
             response.headers().get("cache-control").unwrap(),
             HeaderValue::from_static("no-store")

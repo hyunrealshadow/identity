@@ -1,7 +1,5 @@
-use axum::{
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Redirect, Response},
-};
+use http::{HeaderMap, StatusCode};
+use salvo::Response;
 
 use crate::{
     application::error::AppError,
@@ -12,18 +10,18 @@ use crate::{
 };
 
 use super::authorize_extractor::{RawAuthorizeRequest, missing_required_authorize_parameters};
+use crate::web::controllers::response::{redirect_to_response, render_app_error, render_html};
 
 pub fn redirect_oauth_error_response(
     request: &AuthorizationRequest,
     error: OAuthErrorCode,
 ) -> Response {
-    Redirect::to(
+    redirect_to_response(
         OAuthErrorResponse::new(error)
             .with_state(request.state.clone())
             .to_redirect_url(&request.redirect_uri)
             .as_str(),
     )
-    .into_response()
 }
 
 pub fn authorize_error_details(
@@ -73,8 +71,11 @@ pub fn render_authorize_error_page(
         details,
     };
 
-    let mut response = web::tera::render_view(ctx, headers, "oauth2/authorize_error.html", data);
-    *response.status_mut() = status;
+    let mut response = Response::new();
+    match web::tera::render_view(ctx, headers, "oauth2/authorize_error.html", data) {
+        Ok(body) => render_html(&mut response, status, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
     response
 }
 

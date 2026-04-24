@@ -1,4 +1,4 @@
-use axum::http::StatusCode;
+use http::StatusCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {

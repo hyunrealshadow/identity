@@ -6,18 +6,13 @@
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/challenge`  – verify credential, create session
 
-use axum::{
-    Router,
-    extract::{Path, State},
-    http::{HeaderMap, StatusCode, header},
-    response::{IntoResponse, Response},
-    routing::{get, post},
-};
+use http::{HeaderMap, StatusCode};
+use salvo::{Depot, Request, Response, Router, handler};
 
 use crate::application::error::AppError;
 
 use super::{
-    response::AppJson,
+    response::{app_state, parse_json, parse_param, render_json},
     shared::{
         CSRF_HEADER_NAME, append_set_cookie, build_selected_session_cookie, build_session_context,
         ensure_csrf_token, is_secure_cookie, load_active_sessions, validate_csrf,
@@ -28,19 +23,17 @@ use crate::web::views::auth::{
     IdentifierResponse, LoginStatusResponse, SelectAccountRequest, SelectAccountResponse,
     SessionInfo, UserDisplayInfo, mask_email,
 };
-use crate::{
-    application::auth::login::ChallengeOutcome, boot::AppState, domain::user::model::UserOid,
-};
+use crate::{application::auth::login::ChallengeOutcome, domain::user::model::UserOid};
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-pub fn routes() -> Router<AppState> {
+pub fn routes() -> Router {
     Router::new()
-        .route("/api/auth/sessions/active", get(active_sessions))
-        .route("/api/auth/login/{id}", get(login_status))
-        .route("/api/auth/login/select", post(select_account))
-        .route("/api/auth/login/identifier", post(identifier))
-        .route("/api/auth/login/challenge", post(challenge))
+        .push(Router::with_path("api/auth/sessions/active").get(active_sessions))
+        .push(Router::with_path("api/auth/login/{id}").get(login_status))
+        .push(Router::with_path("api/auth/login/select").post(select_account))
+        .push(Router::with_path("api/auth/login/identifier").post(identifier))
+        .push(Router::with_path("api/auth/login/challenge").post(challenge))
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -48,11 +41,14 @@ pub fn routes() -> Router<AppState> {
 /// `GET /api/auth/sessions/active`
 ///
 /// Read the `sessions` cookie and return the list of active accounts.
-#[axum::debug_handler]
+#[handler]
 async fn active_sessions(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Response, AppError> {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
     let accounts = load_active_sessions(&ctx, &headers).await?;
     let items: Vec<AccountItem> = accounts
         .into_iter()
@@ -65,19 +61,26 @@ async fn active_sessions(
         .collect();
 
     let (_, csrf_cookie) = ensure_csrf_token(&headers, is_secure_cookie(&ctx));
-    let mut response = AppJson(ActiveAccountsResponse { accounts: items }).into_response();
+    render_json(
+        res,
+        StatusCode::OK,
+        ActiveAccountsResponse { accounts: items },
+    );
     if let Some(cookie) = csrf_cookie {
-        append_set_cookie(&mut response, &cookie);
+        append_set_cookie(res, &cookie);
     }
 
-    Ok(response)
+    Ok(())
 }
 
-#[axum::debug_handler]
+#[handler]
 async fn login_status(
-    State(ctx): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Response, AppError> {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let id: String = parse_param(req, "id")?;
     let login_oid = ctx
         .services()
         .oidc_authorize()
@@ -98,20 +101,27 @@ async fn login_status(
         None => None,
     };
 
-    Ok(AppJson(LoginStatusResponse {
-        id,
-        status: login.status,
-        user,
-    })
-    .into_response())
+    render_json(
+        res,
+        StatusCode::OK,
+        LoginStatusResponse {
+            id,
+            status: login.status,
+            user,
+        },
+    );
+    Ok(())
 }
 
-#[axum::debug_handler]
+#[handler]
 async fn select_account(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    AppJson(body): AppJson<SelectAccountRequest>,
-) -> Result<Response, AppError> {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let body: SelectAccountRequest = parse_json(req).await?;
     validate_csrf(
         &headers,
         headers
@@ -130,15 +140,20 @@ async fn select_account(
         },
     };
 
-    Ok(([(header::SET_COOKIE, cookie)], AppJson(resp)).into_response())
+    render_json(res, StatusCode::OK, resp);
+    append_set_cookie(res, &cookie);
+    Ok(())
 }
 
-#[axum::debug_handler]
+#[handler]
 async fn identifier(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    AppJson(body): AppJson<IdentifierRequest>,
-) -> Result<Response, AppError> {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let body: IdentifierRequest = parse_json(req).await?;
     validate_csrf(
         &headers,
         headers
@@ -172,15 +187,19 @@ async fn identifier(
         },
     };
 
-    Ok(AppJson(resp).into_response())
+    render_json(res, StatusCode::OK, resp);
+    Ok(())
 }
 
-#[axum::debug_handler]
+#[handler]
 async fn challenge(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    AppJson(body): AppJson<ChallengeRequest>,
-) -> Result<Response, AppError> {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let body: ChallengeRequest = parse_json(req).await?;
     validate_csrf(
         &headers,
         headers
@@ -207,30 +226,36 @@ async fn challenge(
         .await?;
 
     match outcome {
-        ChallengeOutcome::MfaRequired { .. } => Ok(AppJson(ChallengeResponse {
-            status: "mfa_required",
-            session: None,
-            acr: None,
-        })
-        .into_response()),
+        ChallengeOutcome::MfaRequired { .. } => {
+            render_json(
+                res,
+                StatusCode::OK,
+                ChallengeResponse {
+                    status: "mfa_required",
+                    session: None,
+                    acr: None,
+                },
+            );
+        }
         ChallengeOutcome::Authenticated { session, .. } => {
             let cookie =
                 build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
             let acr = session.acr.clone();
 
-            Ok((
+            render_json(
+                res,
                 StatusCode::CREATED,
-                [(header::SET_COOKIE, cookie)],
-                AppJson(ChallengeResponse {
+                ChallengeResponse {
                     status: "authenticated",
                     session: Some(SessionInfo {
                         id: session.oid,
                         expires_at: session.expires_at,
                     }),
                     acr,
-                }),
-            )
-                .into_response())
+                },
+            );
+            append_set_cookie(res, &cookie);
         }
     }
+    Ok(())
 }

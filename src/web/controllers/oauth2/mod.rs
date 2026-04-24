@@ -1,9 +1,4 @@
-use axum::{
-    Router,
-    routing::{get, post},
-};
-
-use crate::boot::AppState;
+use salvo::Router;
 
 mod authorize_endpoint;
 mod authorize_extractor;
@@ -19,23 +14,27 @@ pub use authorize_extractor::{
 pub use authorize_interaction::{FlowDecision, select_active_session};
 pub use authorize_response::redirect_oauth_error_response;
 
-pub fn routes() -> Router<AppState> {
+pub fn routes() -> Router {
     Router::new()
-        .route(
-            "/oauth2/authorize",
-            get(authorize_endpoint::authorize).post(authorize_endpoint::authorize),
+        .push(
+            Router::with_path("oauth2/authorize")
+                .get(authorize_endpoint::authorize)
+                .post(authorize_endpoint::authorize),
         )
-        .route("/oauth2/token", post(token_endpoint::token))
-        .route(
-            "/oauth2/userinfo",
-            get(user_info_endpoint::userinfo).post(user_info_endpoint::userinfo_post),
+        .push(Router::with_path("oauth2/token").post(token_endpoint::token))
+        .push(
+            Router::with_path("oauth2/userinfo")
+                .get(user_info_endpoint::userinfo)
+                .post(user_info_endpoint::userinfo_post),
         )
-        .route(
-            "/oauth2/authorize/consent",
-            get(consent_endpoint::consent_page).post(consent_endpoint::consent_submit),
+        .push(
+            Router::with_path("oauth2/authorize/consent")
+                .get(consent_endpoint::consent_page)
+                .post(consent_endpoint::consent_submit),
         )
-        .route(
-            "/api/oauth2/authorize/consent",
-            get(consent_endpoint::consent_api).post(consent_endpoint::consent_api_submit),
+        .push(
+            Router::with_path("api/oauth2/authorize/consent")
+                .get(consent_endpoint::consent_api)
+                .post(consent_endpoint::consent_api_submit),
         )
 }

@@ -6,27 +6,21 @@
 //! Routes:
 //!   POST /conformance/auto-login  – complete a full login+consent in one call
 
-use axum::{
-    Router,
-    extract::State,
-    http::{HeaderMap, StatusCode, header},
-    response::{IntoResponse, Response},
-    routing::post,
-};
+use http::{HeaderMap, StatusCode};
+use salvo::{Depot, Request, Response, Router, handler};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     application::auth::login::ChallengeOutcome,
-    boot::AppState,
     web::controllers::shared::{
         build_selected_session_cookie, build_session_context, is_secure_cookie,
     },
 };
 
-use super::response::AppJson;
+use super::response::{app_state, parse_json, render_json};
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/conformance/auto-login", post(auto_login))
+pub fn routes() -> Router {
+    Router::with_path("conformance/auto-login").post(auto_login)
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,12 +40,15 @@ struct AutoLoginError {
     error: String,
 }
 
-#[axum::debug_handler]
+#[handler]
 async fn auto_login(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    AppJson(body): AppJson<AutoLoginRequest>,
-) -> Response {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), crate::application::error::AppError> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let body: AutoLoginRequest = parse_json(req).await?;
     // Step 1: decrypt login_id → login_oid
     let login_oid = match ctx
         .services()
@@ -62,13 +59,14 @@ async fn auto_login(
         Ok(oid) => oid,
         Err(e) => {
             tracing::warn!(error = %e, "auto_login: decrypt_login_id failed");
-            return (
+            render_json(
+                res,
                 StatusCode::BAD_REQUEST,
-                AppJson(AutoLoginError {
+                AutoLoginError {
                     error: "invalid_login_id".to_string(),
-                }),
-            )
-                .into_response();
+                },
+            );
+            return Ok(());
         }
     };
 
@@ -82,13 +80,14 @@ async fn auto_login(
         Ok(result) => result,
         Err(e) => {
             tracing::warn!(error = %e, "auto_login: identify failed");
-            return (
+            render_json(
+                res,
                 StatusCode::BAD_REQUEST,
-                AppJson(AutoLoginError {
+                AutoLoginError {
                     error: e.to_string(),
-                }),
-            )
-                .into_response();
+                },
+            );
+            return Ok(());
         }
     };
 
@@ -102,23 +101,25 @@ async fn auto_login(
     {
         Ok(ChallengeOutcome::Authenticated { session, .. }) => session,
         Ok(ChallengeOutcome::MfaRequired { .. }) => {
-            return (
+            render_json(
+                res,
                 StatusCode::BAD_REQUEST,
-                AppJson(AutoLoginError {
+                AutoLoginError {
                     error: "mfa_required".to_string(),
-                }),
-            )
-                .into_response();
+                },
+            );
+            return Ok(());
         }
         Err(e) => {
             tracing::warn!(error = %e, "auto_login: challenge failed");
-            return (
+            render_json(
+                res,
                 StatusCode::UNAUTHORIZED,
-                AppJson(AutoLoginError {
+                AutoLoginError {
                     error: e.to_string(),
-                }),
-            )
-                .into_response();
+                },
+            );
+            return Ok(());
         }
     };
 
@@ -137,51 +138,49 @@ async fn auto_login(
         Ok(url) => url,
         Err(e) => {
             tracing::error!(error = %e, "auto_login: approve failed");
-            return (
+            render_json(
+                res,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                AppJson(AutoLoginError {
+                AutoLoginError {
                     error: e.to_string(),
-                }),
-            )
-                .into_response();
+                },
+            );
+            return Ok(());
         }
     };
 
     // Step 5: build session cookie and return redirect_uri
     let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
 
-    (
-        [(header::SET_COOKIE, cookie)],
-        AppJson(AutoLoginResponse {
+    render_json(
+        res,
+        StatusCode::OK,
+        AutoLoginResponse {
             redirect_uri: redirect_uri.to_string(),
-        }),
-    )
-        .into_response()
+        },
+    );
+    super::shared::append_set_cookie(res, &cookie);
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use axum::body::Body;
-    use axum::http::{Method, Request, StatusCode};
-    use tower::ServiceExt;
+    use http::StatusCode;
+    use salvo::{Service, test::TestClient};
 
     #[tokio::test]
     async fn auto_login_returns_bad_request_for_invalid_login_id() {
-        let app =
-            super::routes().with_state(crate::boot::test_app_state_with_mock_settings().await);
+        let app = super::routes().hoop(salvo::affix_state::inject(
+            crate::boot::test_app_state_with_mock_settings().await,
+        ));
+        let service = Service::new(app);
 
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri("/conformance/auto-login")
-            .header("content-type", "application/json")
-            .body(Body::from(
-                r#"{"login_id":"invalid","username":"test@example.com","password":"wrong"}"#,
-            ))
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
+        let response = TestClient::post("http://127.0.0.1:5800/conformance/auto-login")
+            .raw_json(r#"{"login_id":"invalid","username":"test@example.com","password":"wrong"}"#)
+            .send(&service)
+            .await;
 
         // The mock DB cannot decrypt the login_id, so we expect 400.
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
     }
 }

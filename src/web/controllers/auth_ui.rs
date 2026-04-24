@@ -11,16 +11,15 @@
 
 use std::error::Error as StdError;
 
-use axum::{
-    Router,
-    extract::{Form, Query, State},
-    http::{HeaderMap, header},
-    response::{IntoResponse, Redirect, Response},
-    routing::{get, post},
-};
+use http::HeaderMap;
+use salvo::{Depot, Request, Response, Router, handler};
 use serde::Deserialize;
 use uuid::Uuid;
 
+use super::response::{
+    AppResponse, app_state, parse_form, parse_query, redirect_to_response, render_app_error,
+    render_html,
+};
 use super::shared::{
     append_set_cookie, build_selected_session_cookie, build_session_context, ensure_csrf_token,
     is_secure_cookie, load_active_sessions, validate_csrf,
@@ -37,12 +36,20 @@ use crate::{
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-pub fn routes() -> Router<AppState> {
+pub fn routes() -> Router {
     Router::new()
-        .route("/login", get(login_page).post(identifier_post))
-        .route("/login/select", post(select_post))
-        .route("/login/password", get(password_page).post(password_post))
-        .route("/login/otp", get(otp_page).post(otp_post))
+        .push(
+            Router::with_path("login")
+                .get(login_page)
+                .post(identifier_post),
+        )
+        .push(Router::with_path("login/select").post(select_post))
+        .push(
+            Router::with_path("login/password")
+                .get(password_page)
+                .post(password_post),
+        )
+        .push(Router::with_path("login/otp").get(otp_page).post(otp_post))
 }
 
 // ─── Query param structs ──────────────────────────────────────────────────────
@@ -140,7 +147,11 @@ fn render_identifier_page(
         error,
         csrf_token,
     };
-    let mut response = web::tera::render_view(ctx, headers, "auth/login.html", data);
+    let mut response = Response::new();
+    match web::tera::render_view(ctx, headers, "auth/login.html", data) {
+        Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
     if let Some(cookie) = csrf_cookie {
         append_set_cookie(&mut response, &cookie);
     }
@@ -154,7 +165,11 @@ fn render_password_page(
 ) -> Response {
     let (csrf_token, csrf_cookie) = ensure_csrf_token(headers, is_secure_cookie(ctx));
     data.csrf_token = csrf_token;
-    let mut response = web::tera::render_view(ctx, headers, "auth/password.html", data);
+    let mut response = Response::new();
+    match web::tera::render_view(ctx, headers, "auth/password.html", data) {
+        Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
     if let Some(cookie) = csrf_cookie {
         append_set_cookie(&mut response, &cookie);
     }
@@ -164,7 +179,11 @@ fn render_password_page(
 fn render_otp_page(ctx: &AppState, headers: &HeaderMap, mut data: OtpPageData) -> Response {
     let (csrf_token, csrf_cookie) = ensure_csrf_token(headers, is_secure_cookie(ctx));
     data.csrf_token = csrf_token;
-    let mut response = web::tera::render_view(ctx, headers, "auth/otp.html", data);
+    let mut response = Response::new();
+    match web::tera::render_view(ctx, headers, "auth/otp.html", data) {
+        Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
     if let Some(cookie) = csrf_cookie {
         append_set_cookie(&mut response, &cookie);
     }
@@ -177,11 +196,11 @@ fn render_otp_page(ctx: &AppState, headers: &HeaderMap, mut data: OtpPageData) -
 ///
 /// Renders the account picker when active sessions exist, or the identifier
 /// entry form when the user has no existing sessions.
-async fn login_page(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Query<LoginQuery>,
-) -> Response {
+#[handler]
+async fn login_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let q: LoginQuery = parse_query(req)?;
     let accounts = match load_active_sessions(&ctx, &headers).await {
         Ok(list) => list
             .into_iter()
@@ -202,21 +221,20 @@ async fn login_page(
     } else {
         None
     };
-    render_identifier_page(&ctx, &headers, accounts, None, q.login_id, error)
+    Ok(render_identifier_page(&ctx, &headers, accounts, None, q.login_id, error).into())
 }
 
 /// `GET /login/password`
 ///
 /// Renders the password entry form. Requires `login_id` and `identifier`
 /// query parameters. Redirects back to `/login` if either is missing.
-#[axum::debug_handler]
-async fn password_page(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Query<PasswordQuery>,
-) -> Response {
+#[handler]
+async fn password_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let q: PasswordQuery = parse_query(req)?;
     let (Some(login_id), Some(identifier)) = (q.login_id, q.identifier) else {
-        return Redirect::to("/login").into_response();
+        return Ok(redirect_to_response("/login").into());
     };
 
     let data = PasswordPageData {
@@ -228,21 +246,20 @@ async fn password_page(
         csrf_token: String::new(),
     };
 
-    render_password_page(&ctx, &headers, data)
+    Ok(render_password_page(&ctx, &headers, data).into())
 }
 
 /// `GET /login/otp`
 ///
 /// Renders the OTP/TOTP entry form. Requires `login_id` and `identifier`
 /// query parameters. Redirects back to `/login` if either is missing.
-#[axum::debug_handler]
-async fn otp_page(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Query<OtpQuery>,
-) -> Response {
+#[handler]
+async fn otp_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let q: OtpQuery = parse_query(req)?;
     let (Some(login_id), Some(identifier)) = (q.login_id, q.identifier) else {
-        return Redirect::to("/login").into_response();
+        return Ok(redirect_to_response("/login").into());
     };
 
     let data = OtpPageData {
@@ -254,7 +271,7 @@ async fn otp_page(
         csrf_token: String::new(),
     };
 
-    render_otp_page(&ctx, &headers, data)
+    Ok(render_otp_page(&ctx, &headers, data).into())
 }
 
 // ─── POST Handlers ────────────────────────────────────────────────────────────
@@ -263,75 +280,79 @@ async fn otp_page(
 ///
 /// Select an existing session from the account picker. Reorders the sessions
 /// cookie so the chosen account is first, then redirects to `/`.
-#[axum::debug_handler]
-async fn select_post(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(body): Form<SelectForm>,
-) -> Response {
+#[handler]
+async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let body: SelectForm = parse_form(req).await?;
     if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        return Redirect::to("/login").into_response();
+        return Ok(redirect_to_response("/login").into());
     }
 
-    match ctx
-        .services()
-        .session()
-        .select_session(body.session_id)
-        .await
-    {
-        Ok(session) => {
-            let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-            let target = body
-                .login_id
-                .map(|value| {
-                    format!(
-                        "/oauth2/authorize/consent?login_id={}",
-                        urlencoding::encode(&value)
-                    )
-                })
-                .unwrap_or_else(|| "/".to_string());
-            ([(header::SET_COOKIE, cookie)], Redirect::to(&target)).into_response()
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "select_session failed");
-            Redirect::to("/login").into_response()
-        }
-    }
+    Ok(AppResponse(
+        match ctx
+            .services()
+            .session()
+            .select_session(body.session_id)
+            .await
+        {
+            Ok(session) => {
+                let cookie =
+                    build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+                let target = body
+                    .login_id
+                    .map(|value| {
+                        format!(
+                            "/oauth2/authorize/consent?login_id={}",
+                            urlencoding::encode(&value)
+                        )
+                    })
+                    .unwrap_or_else(|| "/".to_string());
+                let mut response = redirect_to_response(&target);
+                append_set_cookie(&mut response, &cookie);
+                response
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "select_session failed");
+                redirect_to_response("/login")
+            }
+        },
+    ))
 }
 
 /// `POST /login`
 ///
 /// Validate the identifier. On success, redirect to the password page.
 /// On failure, re-render the login page with an inline error.
-#[axum::debug_handler]
-async fn identifier_post(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(body): Form<IdentifierForm>,
-) -> Response {
+#[handler]
+async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let body: IdentifierForm = parse_form(req).await?;
     if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
         let accounts = load_account_data(&ctx, &headers).await;
-        return render_identifier_page(
+        return Ok(render_identifier_page(
             &ctx,
             &headers,
             accounts,
             Some(body.identifier),
             body.login_id,
-            Some(invalid_request_message(&ctx, &headers)),
-        );
+            Some(invalid_request_message(&ctx, &headers).into()),
+        )
+        .into());
     }
 
     let Some(protected_login_id) = body.login_id else {
         let accounts = load_account_data(&ctx, &headers).await;
-        return render_identifier_page(
+        return Ok(render_identifier_page(
             &ctx,
             &headers,
             accounts,
             Some(body.identifier),
             None,
-            Some(invalid_request_message(&ctx, &headers)),
-        );
+            Some(invalid_request_message(&ctx, &headers).into()),
+        )
+        .into());
     };
 
     let login_oid = match ctx
@@ -344,70 +365,75 @@ async fn identifier_post(
         Err(e) => {
             tracing::error!(error = %e, "decrypt_login_id failed");
             let accounts = load_account_data(&ctx, &headers).await;
-            return render_identifier_page(
+            return Ok(render_identifier_page(
                 &ctx,
                 &headers,
                 accounts,
                 Some(body.identifier),
                 Some(protected_login_id),
-                Some(invalid_request_message(&ctx, &headers)),
-            );
+                Some(invalid_request_message(&ctx, &headers).into()),
+            )
+            .into());
         }
     };
 
-    match ctx
-        .services()
-        .login()
-        .identify(login_oid, &body.identifier)
-        .await
-    {
-        Ok(result) => {
-            let protected_result_id = match ctx
-                .services()
-                .oidc_authorize()
-                .encrypt_login_id(result.login.oid)
-                .await
-            {
-                Ok(id) => id,
-                Err(e) => {
-                    tracing::error!(error = %e, "encrypt_login_id failed");
-                    let accounts = load_account_data(&ctx, &headers).await;
-                    return render_identifier_page(
-                        &ctx,
-                        &headers,
-                        accounts,
-                        Some(body.identifier),
-                        Some(protected_login_id),
-                        Some(invalid_request_message(&ctx, &headers)),
-                    );
-                }
-            };
+    Ok(AppResponse(
+        match ctx
+            .services()
+            .login()
+            .identify(login_oid, &body.identifier)
+            .await
+        {
+            Ok(result) => {
+                let protected_result_id = match ctx
+                    .services()
+                    .oidc_authorize()
+                    .encrypt_login_id(result.login.oid)
+                    .await
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        tracing::error!(error = %e, "encrypt_login_id failed");
+                        let accounts = load_account_data(&ctx, &headers).await;
+                        return Ok(render_identifier_page(
+                            &ctx,
+                            &headers,
+                            accounts,
+                            Some(body.identifier),
+                            Some(protected_login_id),
+                            Some(invalid_request_message(&ctx, &headers).into()),
+                        )
+                        .into());
+                    }
+                };
 
-            let identifier = urlencoding::encode(&body.identifier).into_owned();
-            let name = urlencoding::encode(&result.user.name).into_owned();
-            let email =
-                urlencoding::encode(&crate::web::views::auth::mask_email(&result.user.email))
-                    .into_owned();
+                let identifier = urlencoding::encode(&body.identifier).into_owned();
+                let name = urlencoding::encode(&result.user.name).into_owned();
+                let email =
+                    urlencoding::encode(&crate::web::views::auth::mask_email(&result.user.email))
+                        .into_owned();
 
-            let url = format!(
-                "/login/password?login_id={protected_result_id}&identifier={identifier}&name={name}&email={email}"
-            );
-            Redirect::to(&url).into_response()
-        }
-        Err(err) => {
-            let locale = resolve_locale_from_headers(&headers);
-            let error_msg = super::response::error_message(ctx.resources().i18n(), &locale, &err);
-            let accounts = load_account_data(&ctx, &headers).await;
-            render_identifier_page(
-                &ctx,
-                &headers,
-                accounts,
-                Some(body.identifier),
-                Some(protected_login_id),
-                Some(error_msg),
-            )
-        }
-    }
+                let url = format!(
+                    "/login/password?login_id={protected_result_id}&identifier={identifier}&name={name}&email={email}"
+                );
+                redirect_to_response(&url)
+            }
+            Err(err) => {
+                let locale = resolve_locale_from_headers(&headers);
+                let error_msg =
+                    super::response::error_message(ctx.resources().i18n(), &locale, &err);
+                let accounts = load_account_data(&ctx, &headers).await;
+                render_identifier_page(
+                    &ctx,
+                    &headers,
+                    accounts,
+                    Some(body.identifier),
+                    Some(protected_login_id),
+                    Some(error_msg),
+                )
+            }
+        },
+    ))
 }
 
 /// `POST /login/password`
@@ -416,14 +442,13 @@ async fn identifier_post(
 /// - Authenticated  → set cookie, redirect to `/`
 /// - MFA required   → redirect to `/login/otp?...`
 /// - Error          → re-render password page with inline error
-#[axum::debug_handler]
-async fn password_post(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(body): Form<PasswordForm>,
-) -> Response {
+#[handler]
+async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let body: PasswordForm = parse_form(req).await?;
     if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        return render_password_page(
+        return Ok(render_password_page(
             &ctx,
             &headers,
             PasswordPageData {
@@ -431,10 +456,11 @@ async fn password_post(
                 identifier: body.identifier,
                 user_name: String::new(),
                 masked_email: String::new(),
-                error: Some(invalid_request_message(&ctx, &headers)),
+                error: Some(invalid_request_message(&ctx, &headers).into()),
                 csrf_token: String::new(),
             },
-        );
+        )
+        .into());
     }
 
     let login_oid = match ctx
@@ -446,7 +472,7 @@ async fn password_post(
         Ok(oid) => oid,
         Err(e) => {
             tracing::error!(error = %e, "decrypt_login_id failed");
-            return render_password_page(
+            return Ok(render_password_page(
                 &ctx,
                 &headers,
                 PasswordPageData {
@@ -454,75 +480,82 @@ async fn password_post(
                     identifier: body.identifier,
                     user_name: String::new(),
                     masked_email: String::new(),
-                    error: Some(invalid_request_message(&ctx, &headers)),
+                    error: Some(invalid_request_message(&ctx, &headers).into()),
                     csrf_token: String::new(),
                 },
-            );
+            )
+            .into());
         }
     };
 
     let sess_ctx = build_session_context(&headers);
 
-    match ctx
-        .services()
-        .login()
-        .challenge(login_oid, "password", &body.credential, sess_ctx)
-        .await
-    {
-        Ok(ChallengeOutcome::Authenticated { session, .. }) => {
-            let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-            let target = format!(
-                "/oauth2/authorize/consent?login_id={}",
-                urlencoding::encode(&body.login_id)
-            );
-            ([(header::SET_COOKIE, cookie)], Redirect::to(&target)).into_response()
-        }
-        Ok(ChallengeOutcome::MfaRequired { login }) => {
-            let protected_mfa_id = match ctx
-                .services()
-                .oidc_authorize()
-                .encrypt_login_id(login.oid)
-                .await
-            {
-                Ok(id) => id,
-                Err(e) => {
-                    tracing::error!(error = %e, "encrypt_login_id failed");
-                    return render_password_page(
-                        &ctx,
-                        &headers,
-                        PasswordPageData {
-                            login_id: body.login_id,
-                            identifier: body.identifier,
-                            user_name: String::new(),
-                            masked_email: String::new(),
-                            error: Some(invalid_request_message(&ctx, &headers)),
-                            csrf_token: String::new(),
-                        },
-                    );
-                }
-            };
-            let identifier = urlencoding::encode(&body.identifier).into_owned();
-            let url = format!("/login/otp?login_id={protected_mfa_id}&identifier={identifier}");
-            Redirect::to(&url).into_response()
-        }
-        Err(err) => {
-            let locale = resolve_locale_from_headers(&headers);
-            let error_msg = super::response::error_message(ctx.resources().i18n(), &locale, &err);
-            render_password_page(
-                &ctx,
-                &headers,
-                PasswordPageData {
-                    login_id: body.login_id,
-                    identifier: body.identifier,
-                    user_name: String::new(),
-                    masked_email: String::new(),
-                    error: Some(error_msg),
-                    csrf_token: String::new(),
-                },
-            )
-        }
-    }
+    Ok(AppResponse(
+        match ctx
+            .services()
+            .login()
+            .challenge(login_oid, "password", &body.credential, sess_ctx)
+            .await
+        {
+            Ok(ChallengeOutcome::Authenticated { session, .. }) => {
+                let cookie =
+                    build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+                let target = format!(
+                    "/oauth2/authorize/consent?login_id={}",
+                    urlencoding::encode(&body.login_id)
+                );
+                let mut response = redirect_to_response(&target);
+                append_set_cookie(&mut response, &cookie);
+                response
+            }
+            Ok(ChallengeOutcome::MfaRequired { login }) => {
+                let protected_mfa_id = match ctx
+                    .services()
+                    .oidc_authorize()
+                    .encrypt_login_id(login.oid)
+                    .await
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        tracing::error!(error = %e, "encrypt_login_id failed");
+                        return Ok(render_password_page(
+                            &ctx,
+                            &headers,
+                            PasswordPageData {
+                                login_id: body.login_id,
+                                identifier: body.identifier,
+                                user_name: String::new(),
+                                masked_email: String::new(),
+                                error: Some(invalid_request_message(&ctx, &headers).into()),
+                                csrf_token: String::new(),
+                            },
+                        )
+                        .into());
+                    }
+                };
+                let identifier = urlencoding::encode(&body.identifier).into_owned();
+                let url = format!("/login/otp?login_id={protected_mfa_id}&identifier={identifier}");
+                redirect_to_response(&url)
+            }
+            Err(err) => {
+                let locale = resolve_locale_from_headers(&headers);
+                let error_msg =
+                    super::response::error_message(ctx.resources().i18n(), &locale, &err);
+                render_password_page(
+                    &ctx,
+                    &headers,
+                    PasswordPageData {
+                        login_id: body.login_id,
+                        identifier: body.identifier,
+                        user_name: String::new(),
+                        masked_email: String::new(),
+                        error: Some(error_msg),
+                        csrf_token: String::new(),
+                    },
+                )
+            }
+        },
+    ))
 }
 
 /// `POST /login/otp`
@@ -530,14 +563,13 @@ async fn password_post(
 /// Verify the TOTP code.
 /// - Authenticated → set cookie, redirect to `/`
 /// - Error         → re-render OTP page with inline error
-#[axum::debug_handler]
-async fn otp_post(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(body): Form<OtpForm>,
-) -> Response {
+#[handler]
+async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let body: OtpForm = parse_form(req).await?;
     if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        return render_otp_page(
+        return Ok(render_otp_page(
             &ctx,
             &headers,
             OtpPageData {
@@ -545,10 +577,11 @@ async fn otp_post(
                 identifier: body.identifier,
                 user_name: String::new(),
                 masked_email: String::new(),
-                error: Some(invalid_request_message(&ctx, &headers)),
+                error: Some(invalid_request_message(&ctx, &headers).into()),
                 csrf_token: String::new(),
             },
-        );
+        )
+        .into());
     }
 
     let login_oid = match ctx
@@ -560,7 +593,7 @@ async fn otp_post(
         Ok(oid) => oid,
         Err(e) => {
             tracing::error!(error = %e, "decrypt_login_id failed");
-            return render_otp_page(
+            return Ok(render_otp_page(
                 &ctx,
                 &headers,
                 OtpPageData {
@@ -568,49 +601,55 @@ async fn otp_post(
                     identifier: body.identifier,
                     user_name: String::new(),
                     masked_email: String::new(),
-                    error: Some(invalid_request_message(&ctx, &headers)),
+                    error: Some(invalid_request_message(&ctx, &headers).into()),
                     csrf_token: String::new(),
                 },
-            );
+            )
+            .into());
         }
     };
 
     let sess_ctx = build_session_context(&headers);
 
-    match ctx
-        .services()
-        .login()
-        .challenge(login_oid, "otp", &body.credential, sess_ctx)
-        .await
-    {
-        Ok(ChallengeOutcome::Authenticated { session, .. }) => {
-            let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-            let target = format!(
-                "/oauth2/authorize/consent?login_id={}",
-                urlencoding::encode(&body.login_id)
-            );
-            ([(header::SET_COOKIE, cookie)], Redirect::to(&target)).into_response()
-        }
-        Ok(ChallengeOutcome::MfaRequired { .. }) => {
-            tracing::warn!("otp challenge returned MfaRequired unexpectedly");
-            Redirect::to("/login").into_response()
-        }
-        Err(err) => {
-            let locale = resolve_locale_from_headers(&headers);
-            let error_msg = super::response::error_message(ctx.resources().i18n(), &locale, &err);
-            render_otp_page(
-                &ctx,
-                &headers,
-                OtpPageData {
-                    login_id: body.login_id,
-                    identifier: body.identifier,
-                    user_name: String::new(),
-                    masked_email: String::new(),
-                    error: Some(error_msg),
-                    csrf_token: String::new(),
-                },
-            )
-        }
-    }
+    Ok(AppResponse(
+        match ctx
+            .services()
+            .login()
+            .challenge(login_oid, "otp", &body.credential, sess_ctx)
+            .await
+        {
+            Ok(ChallengeOutcome::Authenticated { session, .. }) => {
+                let cookie =
+                    build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+                let target = format!(
+                    "/oauth2/authorize/consent?login_id={}",
+                    urlencoding::encode(&body.login_id)
+                );
+                let mut response = redirect_to_response(&target);
+                append_set_cookie(&mut response, &cookie);
+                response
+            }
+            Ok(ChallengeOutcome::MfaRequired { .. }) => {
+                tracing::warn!("otp challenge returned MfaRequired unexpectedly");
+                redirect_to_response("/login")
+            }
+            Err(err) => {
+                let locale = resolve_locale_from_headers(&headers);
+                let error_msg =
+                    super::response::error_message(ctx.resources().i18n(), &locale, &err);
+                render_otp_page(
+                    &ctx,
+                    &headers,
+                    OtpPageData {
+                        login_id: body.login_id,
+                        identifier: body.identifier,
+                        user_name: String::new(),
+                        masked_email: String::new(),
+                        error: Some(error_msg),
+                        csrf_token: String::new(),
+                    },
+                )
+            }
+        },
+    ))
 }

@@ -2,13 +2,10 @@ use std::collections::HashSet;
 use url::Url;
 use uuid::Uuid;
 
-use axum::response::{IntoResponse, Redirect, Response};
+use salvo::Response;
 
 use crate::{
-    application::{
-        error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
-        openid_connect::authorize::AuthorizeService,
-    },
+    application::{error::AppError, openid_connect::authorize::AuthorizeService},
     domain::{
         auth::model::ActiveSession,
         openid_connect::{AuthorizationRequest, OAuthErrorCode, OpenIdConnectClient, PromptValue},
@@ -32,18 +29,21 @@ pub enum FlowDecision {
     },
 }
 
-impl IntoResponse for FlowDecision {
-    fn into_response(self) -> Response {
+impl FlowDecision {
+    pub fn into_response(self) -> Response {
         match self {
             FlowDecision::LoginRequired { login_id } => {
-                Redirect::to(&format!("/login?login_id={login_id}")).into_response()
+                crate::web::controllers::response::redirect_to_response(&format!(
+                    "/login?login_id={login_id}"
+                ))
             }
             FlowDecision::ConsentRequired { login_id } => {
-                Redirect::to(&format!("/oauth2/authorize/consent?login_id={login_id}"))
-                    .into_response()
+                crate::web::controllers::response::redirect_to_response(&format!(
+                    "/oauth2/authorize/consent?login_id={login_id}"
+                ))
             }
             FlowDecision::AutoApprove { redirect_uri } => {
-                Redirect::to(redirect_uri.as_str()).into_response()
+                crate::web::controllers::response::redirect_to_response(redirect_uri.as_str())
             }
             FlowDecision::ConsentDenied { request, error } => {
                 super::authorize_response::redirect_oauth_error_response(&request, error)

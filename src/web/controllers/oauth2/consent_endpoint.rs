@@ -1,8 +1,5 @@
-use axum::{
-    extract::{Form, Query, State},
-    http::HeaderMap,
-    response::{IntoResponse, Redirect, Response},
-};
+use http::{HeaderMap, StatusCode};
+use salvo::{Depot, Request, Response, handler};
 use serde::Deserialize;
 
 use crate::{
@@ -18,7 +15,10 @@ use crate::{
 
 use super::{
     super::{
-        response::AppJson,
+        response::{
+            AppResponse, app_state, parse_form, parse_json, parse_query, redirect_to_response,
+            render_app_error, render_html,
+        },
         shared::{ensure_csrf_token, is_secure_cookie, load_active_sessions, validate_csrf},
     },
     authorize_interaction::select_active_session,
@@ -29,17 +29,16 @@ pub(crate) struct ConsentQuery {
     login_id: String,
 }
 
-#[axum::debug_handler]
-pub async fn consent_page(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<ConsentQuery>,
-) -> Result<Response, AppError> {
+#[handler]
+pub async fn consent_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let query: ConsentQuery = parse_query(req)?;
     let authorize_service = ctx.services().oidc_authorize();
     let active_sessions = load_active_sessions(&ctx, &headers).await?;
 
     if active_sessions.is_empty() {
-        return Ok(Redirect::to("/login").into_response());
+        return Ok(redirect_to_response("/login").into());
     }
 
     let (_login, request, client) = authorize_service
@@ -47,7 +46,7 @@ pub async fn consent_page(
         .await?;
 
     if select_active_session(&active_sessions, request.login_hint.as_deref()).is_none() {
-        return Ok(Redirect::to("/login").into_response());
+        return Ok(redirect_to_response("/login").into());
     }
 
     let (csrf_token, csrf_cookie) = ensure_csrf_token(&headers, is_secure_cookie(&ctx));
@@ -63,19 +62,22 @@ pub async fn consent_page(
         csrf_token,
     };
 
-    let mut response = web::tera::render_view(&ctx, &headers, "oauth2/consent.html", data);
+    let mut response = Response::new();
+    match web::tera::render_view(&ctx, &headers, "oauth2/consent.html", data) {
+        Ok(body) => render_html(&mut response, StatusCode::OK, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
     if let Some(cookie) = csrf_cookie {
         crate::web::controllers::shared::append_set_cookie(&mut response, &cookie);
     }
-    Ok(response)
+    Ok(response.into())
 }
 
-#[axum::debug_handler]
-pub async fn consent_api(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<ConsentQuery>,
-) -> Result<Response, AppError> {
+#[handler]
+pub async fn consent_api(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let query: ConsentQuery = parse_query(req)?;
     let authorize_service = ctx.services().oidc_authorize();
     let active_sessions = load_active_sessions(&ctx, &headers).await?;
 
@@ -89,36 +91,40 @@ pub async fn consent_api(
         ));
     }
 
-    Ok(AppJson(ConsentPageData {
-        login_id: query.login_id,
-        client_name: client.client().name.clone(),
-        client_uri: client
-            .metadata()
-            .client_uri
-            .as_ref()
-            .map(|value| value.to_string()),
-        scopes: build_scope_display(&ScopeSet::parse(&request.scope).unwrap_or_default()),
-        csrf_token: String::new(),
-    })
-    .into_response())
+    Ok(super::super::response::json_response(
+        StatusCode::OK,
+        ConsentPageData {
+            login_id: query.login_id,
+            client_name: client.client().name.clone(),
+            client_uri: client
+                .metadata()
+                .client_uri
+                .as_ref()
+                .map(|value| value.to_string()),
+            scopes: build_scope_display(&ScopeSet::parse(&request.scope).unwrap_or_default()),
+            csrf_token: String::new(),
+        },
+    )
+    .into())
 }
 
-#[axum::debug_handler]
-pub async fn consent_submit(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(form): Form<ConsentDecisionForm>,
-) -> Result<Response, AppError> {
+#[handler]
+pub async fn consent_submit(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let form: ConsentDecisionForm = parse_form(req).await?;
     validate_csrf(&headers, Some(&form.csrf_token))?;
     handle_consent_decision(ctx, headers, form.login_id, form.decision, true).await
 }
 
-#[axum::debug_handler]
+#[handler]
 pub async fn consent_api_submit(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    AppJson(payload): AppJson<ConsentDecisionPayload>,
-) -> Result<Response, AppError> {
+    depot: &mut Depot,
+    req: &mut Request,
+) -> Result<AppResponse, AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let payload: ConsentDecisionPayload = parse_json(req).await?;
     handle_consent_decision(ctx, headers, payload.login_id, payload.decision, false).await
 }
 
@@ -128,7 +134,7 @@ async fn handle_consent_decision(
     login_id: String,
     decision: ConsentDecision,
     is_html: bool,
-) -> Result<Response, AppError> {
+) -> Result<AppResponse, AppError> {
     let authorize_service = ctx.services().oidc_authorize();
     let active_sessions = load_active_sessions(&ctx, &headers).await?;
 
@@ -138,7 +144,7 @@ async fn handle_consent_decision(
 
     let Some(session) = select_active_session(&active_sessions, request.login_hint.as_deref())
     else {
-        return Ok(Redirect::to("/login").into_response());
+        return Ok(redirect_to_response("/login").into());
     };
 
     let redirect = match decision {
@@ -168,16 +174,19 @@ async fn handle_consent_decision(
     };
 
     if is_html {
-        return Ok(Redirect::to(redirect.as_str()).into_response());
+        return Ok(redirect_to_response(redirect.as_str()).into());
     }
 
-    Ok(AppJson(ConsentApiResponse {
-        status: match decision {
-            ConsentDecision::Approve => "approved",
-            ConsentDecision::Deny => "denied",
+    Ok(super::super::response::json_response(
+        StatusCode::OK,
+        ConsentApiResponse {
+            status: match decision {
+                ConsentDecision::Approve => "approved",
+                ConsentDecision::Deny => "denied",
+            },
+            redirect_uri: Some(redirect.to_string()),
+            error: None,
         },
-        redirect_uri: Some(redirect.to_string()),
-        error: None,
-    })
-    .into_response())
+    )
+    .into())
 }

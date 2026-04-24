@@ -143,7 +143,9 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         tracing::debug!("conformance seed: OIDC client already exists, ensuring skip_consent=true");
         // Update skip_consent in case it was created before this fix
         let oidc_row = client_open_id_connect::Entity::find()
-            .filter(client_open_id_connect::Column::ClientId.eq(existing_client.as_ref().unwrap().id))
+            .filter(
+                client_open_id_connect::Column::ClientId.eq(existing_client.as_ref().unwrap().id),
+            )
             .one(&txn)
             .await
             .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
@@ -151,9 +153,9 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
             if !row.skip_consent {
                 let mut am: client_open_id_connect::ActiveModel = row.into();
                 am.skip_consent = Set(true);
-                am.update(&txn)
-                    .await
-                    .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+                am.update(&txn).await.map_err(|e| {
+                    AppError::from_code(CommonErrorCode::InternalError).with_source(e)
+                })?;
                 tracing::info!("conformance seed: updated skip_consent to true");
             }
         }

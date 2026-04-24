@@ -1,15 +1,13 @@
 use std::error::Error as _;
 
-use axum::{
-    Router,
-    extract::{Form, State},
-    http::HeaderMap,
-    response::{IntoResponse, Redirect, Response},
-    routing::get,
-};
+use http::{HeaderMap, StatusCode};
+use salvo::{Depot, Request, Response, Router, handler};
 use serde::Deserialize;
 
-use super::shared::{append_set_cookie, ensure_csrf_token, is_secure_cookie, validate_csrf};
+use super::{
+    response::{app_state, parse_form, redirect_to, render_app_error, render_html},
+    shared::{append_set_cookie, ensure_csrf_token, is_secure_cookie, validate_csrf},
+};
 use crate::{
     application::{
         error::codes::common::CommonErrorCode, install::InstallInput,
@@ -21,8 +19,10 @@ use crate::{
     web::views::install::{InstallAlgorithmOption, InstallPageData},
 };
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/install", get(install_page).post(install_submit))
+pub fn routes() -> Router {
+    Router::with_path("install")
+        .get(install_page)
+        .post(install_submit)
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,20 +104,31 @@ fn render_install_page(
         algorithms: install_algorithms(selected_algorithm),
     };
 
-    let mut response = web::tera::render_view(ctx, headers, "install/index.html", data);
+    let mut response = Response::new();
+    match web::tera::render_view(ctx, headers, "install/index.html", data) {
+        Ok(body) => render_html(&mut response, StatusCode::OK, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
     if let Some(cookie) = csrf_cookie {
         append_set_cookie(&mut response, &cookie);
     }
     response
 }
 
-#[axum::debug_handler]
-async fn install_page(State(ctx): State<AppState>, headers: HeaderMap) -> Response {
+#[handler]
+async fn install_page(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), crate::application::error::AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
     if ctx.settings().installation().current_value().initialized {
-        return Redirect::to("/login").into_response();
+        redirect_to(res, "/login");
+        return Ok(());
     }
 
-    render_install_page(
+    *res = render_install_page(
         &ctx,
         &headers,
         String::new(),
@@ -125,21 +136,26 @@ async fn install_page(State(ctx): State<AppState>, headers: HeaderMap) -> Respon
         String::new(),
         "ecdsa-p256",
         None,
-    )
+    );
+    Ok(())
 }
 
-#[axum::debug_handler]
+#[handler]
 async fn install_submit(
-    State(ctx): State<AppState>,
-    headers: HeaderMap,
-    Form(form): Form<InstallForm>,
-) -> Response {
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), crate::application::error::AppError> {
+    let ctx = app_state(depot)?;
+    let headers = req.headers().clone();
+    let form: InstallForm = parse_form(req).await?;
     if ctx.settings().installation().current_value().initialized {
-        return Redirect::to("/login").into_response();
+        redirect_to(res, "/login");
+        return Ok(());
     }
 
     if validate_csrf(&headers, Some(&form.csrf_token)).is_err() {
-        return render_install_page(
+        *res = render_install_page(
             &ctx,
             &headers,
             form.username,
@@ -148,12 +164,13 @@ async fn install_submit(
             &form.key_algorithm,
             Some(localized_invalid_request(&ctx, &headers)),
         );
+        return Ok(());
     }
 
     let algorithm = match parse_algorithm(&form.key_algorithm) {
         Ok(algorithm) => algorithm,
         Err(message) => {
-            return render_install_page(
+            *res = render_install_page(
                 &ctx,
                 &headers,
                 form.username,
@@ -162,6 +179,7 @@ async fn install_submit(
                 &form.key_algorithm,
                 Some(message),
             );
+            return Ok(());
         }
     };
 
@@ -176,11 +194,11 @@ async fn install_submit(
     match ctx.services().install().install(input).await {
         Ok(_) => {
             ctx.lifecycle().request_shutdown();
-            Redirect::to("/login").into_response()
+            redirect_to(res, "/login");
         }
         Err(error) => {
             log_install_failure(&error, &form);
-            render_install_page(
+            *res = render_install_page(
                 &ctx,
                 &headers,
                 form.username,
@@ -192,9 +210,10 @@ async fn install_submit(
                     &resolve_locale_from_headers(&headers),
                     &error,
                 )),
-            )
+            );
         }
     }
+    Ok(())
 }
 
 fn localized_invalid_request(ctx: &AppState, headers: &HeaderMap) -> String {
