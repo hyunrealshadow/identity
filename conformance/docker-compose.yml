@@ -34,7 +34,7 @@ services:
     image: mongo:6.0.13
   server:
     build:
-      context: ./conformance-server
+      context: ./server
     command: >
       java
       -jar /app/fapi-test-suite.jar
