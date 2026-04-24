@@ -146,6 +146,146 @@
       "sourceType": "github",
       "computedHash": "e3a9f3c4cfdc8534ea0f963e55c5f871e710a9b2fe0ddb09a77701d15dd7ac8a"
     },
+    "salvo-auth": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "84485a144ff5fb8db6b3e6aae9ecb1b057ecaf837e31380c42764b4b863486d7"
+    },
+    "salvo-basic-app": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "957a99293e5a021ee5a9841e5a9d599d11c272769f51a56c6888ae6a8bd04c46"
+    },
+    "salvo-caching": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "30337e103f4736205ea595826e5d5b1032274865ef0251e27f9aaf54701cfa7c"
+    },
+    "salvo-compression": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "ab1c79bd7a960f1183e549b96efff0d279af122754652df3c3eabb279c090a86"
+    },
+    "salvo-concurrency-limiter": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "f77d2fdba96090b4fae83a2ac00e59da933b83c6b0bbfad1f2c2eaf7ff411510"
+    },
+    "salvo-cors": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "63250f71af8a268502f2048351c31c713533e892478b9511acb21d0e9fde0640"
+    },
+    "salvo-csrf": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "c4d6b74af489847cc7666f88099c6cb005b9c42e95a6d1008220e35a77b48cfd"
+    },
+    "salvo-data-extraction": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "8335fe82ac430884d867f9ba1baa8c0585e68fd7c17e01000509388b6f8131c4"
+    },
+    "salvo-database": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "089ad1e438a3ba1d528fd29ef263faff4301702474a914edc8a36af1c7ab53e0"
+    },
+    "salvo-error-handling": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "56c7198e8c3a2cb4936cfd2cbe94c17906febc7ac1528364ea6b59a0916d5da2"
+    },
+    "salvo-file-handling": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "dd44e33a0ce11ae8fce292080962a4d76ee60347c78ff79e9d34d58686dc21a9"
+    },
+    "salvo-flash": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "87fdf666c95e0015abcbc0b9c3b299c43ddd1f42378a25d6069863efbe05eb75"
+    },
+    "salvo-graceful-shutdown": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "c627aea020d7162f394ef30108663940913dd7e293a763144e0c8040dfba3f78"
+    },
+    "salvo-logging": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "00b787118806b39105c4ed231afb28f80e4bf602f7ffb358ebfcb3dff73c53e7"
+    },
+    "salvo-middleware": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "dfb6df21e818a9acf59aa649d6b379380ea632116f8060643921e5d9ec9e1562"
+    },
+    "salvo-openapi": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "3182a491883143104f0cce88e9415b7018db50f0bbb52b2337d77d012914a4d7"
+    },
+    "salvo-path-syntax": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "99e0e59f8e92bd097efcaec69a1dca78ff86e33e00116f10e7c41392ce97915e"
+    },
+    "salvo-proxy": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "9e0568e6ab341315e529138d45794c35bf31fd0de4828986754fb6aede04cc0d"
+    },
+    "salvo-rate-limiter": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "57c499f854e4e3f17f324e67776335a551e22f52385b7b7845e97e531a25b32d"
+    },
+    "salvo-realtime": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "da9b539dee2cb6ffae2f449b9e236283957ba506688648b61ccee4244575895e"
+    },
+    "salvo-routing": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "6cab54391ce6573e9251e41b6fc7fea1920beb579947e771300cf9f8fecc40df"
+    },
+    "salvo-session": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "4c5a0048875d252b6e5f4923da5db4c20cc4871ece86ecc3a1e231d74a7c1063"
+    },
+    "salvo-sse": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "94378ff0f58424e215353cee6ebb7f21c82d8dd1c84856e5feb6ab726c305a72"
+    },
+    "salvo-static-files": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "24f08d99a6310c9000c19076933719774f4fd17611041fe749033ba32383f24b"
+    },
+    "salvo-testing": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "cac0d2c7b2242e9acf93dea6bb3a657e2a41f85d222dfcc0fa95cd1996dc0302"
+    },
+    "salvo-timeout": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "e6e90210ff2a03efee61fb32fd3113bde6298925135407fc6023081eb63702a2"
+    },
+    "salvo-tls-acme": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "3c38a1248f3de8349ad3e111b4b339a5635418eb1419e40f55df38f653b9f63e"
+    },
+    "salvo-websocket": {
+      "source": "salvo-rs/salvo-skills",
+      "sourceType": "github",
+      "computedHash": "e04e131a7b0a44561159f82e315ba2ce468d7a6a2742ffa351c7b0e23eaaf22b"
+    },
     "unsafe-checker": {
       "source": "ZhangHanDong/rust-skills",
       "sourceType": "github",
