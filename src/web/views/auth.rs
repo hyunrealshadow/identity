@@ -41,6 +41,7 @@ impl BusinessErrorResponse {
 #[derive(Debug, Serialize)]
 pub struct ActiveAccountsResponse {
     pub accounts: Vec<AccountItem>,
+    pub csrf_token: String,
 }
 
 /// A single logged-in account entry.

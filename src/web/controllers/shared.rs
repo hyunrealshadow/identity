@@ -3,21 +3,19 @@
 //! behave identically for cookie handling, etc.
 
 use http::{HeaderMap, HeaderValue, header};
-use rand::RngCore;
-use salvo::Response;
+use salvo::{
+    Depot, Response,
+    csrf::{CsrfDepotExt, FormFinder, HeaderFinder, JsonFinder, bcrypt_cookie_csrf},
+};
 use uuid::Uuid;
 
 use crate::{
-    application::{
-        auth::login::SessionContext,
-        error::{AppError, codes::common::CommonErrorCode},
-    },
+    application::{auth::login::SessionContext, error::AppError},
     boot::AppState,
     domain::auth::model::ActiveSession,
     domain::auth::{SESSION_COOKIE_NAME, SESSION_EXPIRY},
 };
 
-pub const CSRF_COOKIE_NAME: &str = "csrf_token";
 pub const CSRF_HEADER_NAME: &str = "x-csrf-token";
 pub const CSRF_FORM_FIELD_NAME: &str = "csrf_token";
 
@@ -46,10 +44,6 @@ pub fn parse_session_cookie(headers: &HeaderMap) -> Vec<Uuid> {
     parse_cookie(headers, SESSION_COOKIE_NAME)
         .and_then(|raw| serde_json::from_str::<Vec<Uuid>>(&raw).ok())
         .unwrap_or_default()
-}
-
-pub fn parse_csrf_cookie(headers: &HeaderMap) -> Option<String> {
-    parse_cookie(headers, CSRF_COOKIE_NAME).filter(|token| !token.is_empty())
 }
 
 /// Build the `Set-Cookie` header value for the sessions cookie.
@@ -97,39 +91,20 @@ pub fn is_secure_cookie(ctx: &AppState) -> bool {
     ctx.context().is_production()
 }
 
-pub fn build_csrf_cookie(token: &str, secure: bool) -> String {
-    let max_age = SESSION_EXPIRY.as_secs();
-    let secure_flag = if secure { "; Secure" } else { "" };
-    format!("{CSRF_COOKIE_NAME}={token};{secure_flag}; SameSite=Lax; Path=/; Max-Age={max_age}")
-}
-
-pub fn ensure_csrf_token(headers: &HeaderMap, secure: bool) -> (String, Option<String>) {
-    if let Some(token) = parse_csrf_cookie(headers) {
-        return (token, None);
-    }
-
-    let mut bytes = [0_u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    let token = hex::encode(bytes);
-    let cookie = build_csrf_cookie(&token, secure);
-    (token, Some(cookie))
-}
-
 pub fn append_set_cookie(response: &mut Response, cookie: &str) {
     if let Ok(value) = HeaderValue::from_str(cookie) {
         response.headers_mut().append(header::SET_COOKIE, value);
     }
 }
 
-pub fn validate_csrf(headers: &HeaderMap, submitted_token: Option<&str>) -> Result<(), AppError> {
-    let cookie_token = parse_csrf_cookie(headers);
-    let submitted_token = submitted_token.filter(|token| !token.is_empty());
+pub fn csrf_hoop() -> salvo::csrf::Csrf<salvo::csrf::BcryptCipher, salvo::csrf::CookieStore> {
+    bcrypt_cookie_csrf(FormFinder::new(CSRF_FORM_FIELD_NAME))
+        .add_finder(HeaderFinder::new(CSRF_HEADER_NAME))
+        .add_finder(JsonFinder::new(CSRF_FORM_FIELD_NAME))
+}
 
-    if cookie_token.as_deref().is_some() && cookie_token.as_deref() == submitted_token {
-        return Ok(());
-    }
-
-    Err(AppError::from_code(CommonErrorCode::InvalidRequest))
+pub fn csrf_token(depot: &Depot) -> String {
+    depot.csrf_token().unwrap_or_default().to_owned()
 }
 
 // ─── Request helpers ──────────────────────────────────────────────────────────

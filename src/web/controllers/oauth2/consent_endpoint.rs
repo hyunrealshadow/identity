@@ -19,7 +19,7 @@ use super::{
             AppResponse, app_state, parse_form, parse_json, parse_query, redirect_to_response,
             render_app_error, render_html,
         },
-        shared::{ensure_csrf_token, is_secure_cookie, load_active_sessions, validate_csrf},
+        shared::{csrf_token, load_active_sessions},
     },
     authorize_interaction::select_active_session,
 };
@@ -49,7 +49,6 @@ pub async fn consent_page(depot: &mut Depot, req: &mut Request) -> Result<AppRes
         return Ok(redirect_to_response("/login").into());
     }
 
-    let (csrf_token, csrf_cookie) = ensure_csrf_token(&headers, is_secure_cookie(&ctx));
     let data = ConsentPageData {
         login_id: query.login_id,
         client_name: client.client().name.clone(),
@@ -59,16 +58,13 @@ pub async fn consent_page(depot: &mut Depot, req: &mut Request) -> Result<AppRes
             .as_ref()
             .map(|value| value.to_string()),
         scopes: build_scope_display(&ScopeSet::parse(&request.scope).unwrap_or_default()),
-        csrf_token,
+        csrf_token: csrf_token(depot),
     };
 
     let mut response = Response::new();
     match web::tera::render_view(&ctx, &headers, "oauth2/consent.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
-    }
-    if let Some(cookie) = csrf_cookie {
-        crate::web::controllers::shared::append_set_cookie(&mut response, &cookie);
     }
     Ok(response.into())
 }
@@ -102,7 +98,7 @@ pub async fn consent_api(depot: &mut Depot, req: &mut Request) -> Result<AppResp
                 .as_ref()
                 .map(|value| value.to_string()),
             scopes: build_scope_display(&ScopeSet::parse(&request.scope).unwrap_or_default()),
-            csrf_token: String::new(),
+            csrf_token: csrf_token(depot),
         },
     )
     .into())
@@ -113,7 +109,6 @@ pub async fn consent_submit(depot: &mut Depot, req: &mut Request) -> Result<AppR
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let form: ConsentDecisionForm = parse_form(req).await?;
-    validate_csrf(&headers, Some(&form.csrf_token))?;
     handle_consent_decision(ctx, headers, form.login_id, form.decision, true).await
 }
 

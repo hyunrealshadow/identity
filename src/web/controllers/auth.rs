@@ -14,8 +14,8 @@ use crate::application::error::AppError;
 use super::{
     response::{app_state, parse_json, parse_param, render_json},
     shared::{
-        CSRF_HEADER_NAME, append_set_cookie, build_selected_session_cookie, build_session_context,
-        ensure_csrf_token, is_secure_cookie, load_active_sessions, validate_csrf,
+        append_set_cookie, build_selected_session_cookie, build_session_context, csrf_hoop,
+        csrf_token, is_secure_cookie, load_active_sessions,
     },
 };
 use crate::web::views::auth::{
@@ -29,6 +29,7 @@ use crate::{application::auth::login::ChallengeOutcome, domain::user::model::Use
 
 pub fn routes() -> Router {
     Router::new()
+        .hoop(csrf_hoop())
         .push(Router::with_path("api/auth/sessions/active").get(active_sessions))
         .push(Router::with_path("api/auth/login/{id}").get(login_status))
         .push(Router::with_path("api/auth/login/select").post(select_account))
@@ -60,15 +61,14 @@ async fn active_sessions(
         })
         .collect();
 
-    let (_, csrf_cookie) = ensure_csrf_token(&headers, is_secure_cookie(&ctx));
     render_json(
         res,
         StatusCode::OK,
-        ActiveAccountsResponse { accounts: items },
+        ActiveAccountsResponse {
+            accounts: items,
+            csrf_token: csrf_token(depot),
+        },
     );
-    if let Some(cookie) = csrf_cookie {
-        append_set_cookie(res, &cookie);
-    }
 
     Ok(())
 }
@@ -122,12 +122,6 @@ async fn select_account(
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: SelectAccountRequest = parse_json(req).await?;
-    validate_csrf(
-        &headers,
-        headers
-            .get(CSRF_HEADER_NAME)
-            .and_then(|value| value.to_str().ok()),
-    )?;
 
     let session = ctx.services().session().select_session(body.id).await?;
     let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
@@ -152,14 +146,7 @@ async fn identifier(
     res: &mut Response,
 ) -> Result<(), AppError> {
     let ctx = app_state(depot)?;
-    let headers: HeaderMap = req.headers().clone();
     let body: IdentifierRequest = parse_json(req).await?;
-    validate_csrf(
-        &headers,
-        headers
-            .get(CSRF_HEADER_NAME)
-            .and_then(|value| value.to_str().ok()),
-    )?;
 
     let login_oid = ctx
         .services()
@@ -200,12 +187,6 @@ async fn challenge(
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: ChallengeRequest = parse_json(req).await?;
-    validate_csrf(
-        &headers,
-        headers
-            .get(CSRF_HEADER_NAME)
-            .and_then(|value| value.to_str().ok()),
-    )?;
 
     let session_ctx = build_session_context(&headers);
     let login_oid = ctx

@@ -21,8 +21,8 @@ use super::response::{
     render_html,
 };
 use super::shared::{
-    append_set_cookie, build_selected_session_cookie, build_session_context, ensure_csrf_token,
-    is_secure_cookie, load_active_sessions, validate_csrf,
+    append_set_cookie, build_selected_session_cookie, build_session_context, csrf_hoop, csrf_token,
+    is_secure_cookie, load_active_sessions,
 };
 use crate::web::views::auth_ui::{AccountData, IdentifierPageData, OtpPageData, PasswordPageData};
 use crate::{
@@ -38,6 +38,7 @@ use crate::{
 
 pub fn routes() -> Router {
     Router::new()
+        .hoop(csrf_hoop())
         .push(
             Router::with_path("login")
                 .get(login_page)
@@ -81,14 +82,12 @@ struct LoginQuery {
 struct IdentifierForm {
     login_id: Option<String>,
     identifier: String,
-    csrf_token: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct SelectForm {
     session_id: Uuid,
     login_id: Option<String>,
-    csrf_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,7 +95,6 @@ struct PasswordForm {
     login_id: String,
     identifier: String,
     credential: String,
-    csrf_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,7 +102,6 @@ struct OtpForm {
     login_id: String,
     identifier: String,
     credential: String,
-    csrf_token: String,
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -134,12 +131,12 @@ async fn load_account_data(ctx: &AppState, headers: &HeaderMap) -> Vec<AccountDa
 fn render_identifier_page(
     ctx: &AppState,
     headers: &HeaderMap,
+    csrf_token: String,
     accounts: Vec<AccountData>,
     identifier: Option<String>,
     login_id: Option<String>,
     error: Option<String>,
 ) -> Response {
-    let (csrf_token, csrf_cookie) = ensure_csrf_token(headers, is_secure_cookie(ctx));
     let data = IdentifierPageData {
         accounts,
         identifier,
@@ -152,9 +149,6 @@ fn render_identifier_page(
         Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
     }
-    if let Some(cookie) = csrf_cookie {
-        append_set_cookie(&mut response, &cookie);
-    }
     response
 }
 
@@ -162,30 +156,28 @@ fn render_password_page(
     ctx: &AppState,
     headers: &HeaderMap,
     mut data: PasswordPageData,
+    csrf_token: String,
 ) -> Response {
-    let (csrf_token, csrf_cookie) = ensure_csrf_token(headers, is_secure_cookie(ctx));
     data.csrf_token = csrf_token;
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "auth/password.html", data) {
         Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
     }
-    if let Some(cookie) = csrf_cookie {
-        append_set_cookie(&mut response, &cookie);
-    }
     response
 }
 
-fn render_otp_page(ctx: &AppState, headers: &HeaderMap, mut data: OtpPageData) -> Response {
-    let (csrf_token, csrf_cookie) = ensure_csrf_token(headers, is_secure_cookie(ctx));
+fn render_otp_page(
+    ctx: &AppState,
+    headers: &HeaderMap,
+    mut data: OtpPageData,
+    csrf_token: String,
+) -> Response {
     data.csrf_token = csrf_token;
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "auth/otp.html", data) {
         Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
-    }
-    if let Some(cookie) = csrf_cookie {
-        append_set_cookie(&mut response, &cookie);
     }
     response
 }
@@ -221,7 +213,16 @@ async fn login_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse,
     } else {
         None
     };
-    Ok(render_identifier_page(&ctx, &headers, accounts, None, q.login_id, error).into())
+    Ok(render_identifier_page(
+        &ctx,
+        &headers,
+        csrf_token(depot),
+        accounts,
+        None,
+        q.login_id,
+        error,
+    )
+    .into())
 }
 
 /// `GET /login/password`
@@ -246,7 +247,7 @@ async fn password_page(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         csrf_token: String::new(),
     };
 
-    Ok(render_password_page(&ctx, &headers, data).into())
+    Ok(render_password_page(&ctx, &headers, data, csrf_token(depot)).into())
 }
 
 /// `GET /login/otp`
@@ -271,7 +272,7 @@ async fn otp_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
         csrf_token: String::new(),
     };
 
-    Ok(render_otp_page(&ctx, &headers, data).into())
+    Ok(render_otp_page(&ctx, &headers, data, csrf_token(depot)).into())
 }
 
 // ─── POST Handlers ────────────────────────────────────────────────────────────
@@ -285,9 +286,6 @@ async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: SelectForm = parse_form(req).await?;
-    if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        return Ok(redirect_to_response("/login").into());
-    }
 
     Ok(AppResponse(
         match ctx
@@ -329,24 +327,13 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: IdentifierForm = parse_form(req).await?;
-    if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        let accounts = load_account_data(&ctx, &headers).await;
-        return Ok(render_identifier_page(
-            &ctx,
-            &headers,
-            accounts,
-            Some(body.identifier),
-            body.login_id,
-            Some(invalid_request_message(&ctx, &headers).into()),
-        )
-        .into());
-    }
 
     let Some(protected_login_id) = body.login_id else {
         let accounts = load_account_data(&ctx, &headers).await;
         return Ok(render_identifier_page(
             &ctx,
             &headers,
+            csrf_token(depot),
             accounts,
             Some(body.identifier),
             None,
@@ -368,6 +355,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
             return Ok(render_identifier_page(
                 &ctx,
                 &headers,
+                csrf_token(depot),
                 accounts,
                 Some(body.identifier),
                 Some(protected_login_id),
@@ -398,6 +386,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
                         return Ok(render_identifier_page(
                             &ctx,
                             &headers,
+                            csrf_token(depot),
                             accounts,
                             Some(body.identifier),
                             Some(protected_login_id),
@@ -426,6 +415,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
                 render_identifier_page(
                     &ctx,
                     &headers,
+                    csrf_token(depot),
                     accounts,
                     Some(body.identifier),
                     Some(protected_login_id),
@@ -447,21 +437,6 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: PasswordForm = parse_form(req).await?;
-    if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        return Ok(render_password_page(
-            &ctx,
-            &headers,
-            PasswordPageData {
-                login_id: body.login_id,
-                identifier: body.identifier,
-                user_name: String::new(),
-                masked_email: String::new(),
-                error: Some(invalid_request_message(&ctx, &headers).into()),
-                csrf_token: String::new(),
-            },
-        )
-        .into());
-    }
 
     let login_oid = match ctx
         .services()
@@ -483,6 +458,7 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
                     error: Some(invalid_request_message(&ctx, &headers).into()),
                     csrf_token: String::new(),
                 },
+                csrf_token(depot),
             )
             .into());
         }
@@ -529,6 +505,7 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
                                 error: Some(invalid_request_message(&ctx, &headers).into()),
                                 csrf_token: String::new(),
                             },
+                            csrf_token(depot),
                         )
                         .into());
                     }
@@ -552,6 +529,7 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
                         error: Some(error_msg),
                         csrf_token: String::new(),
                     },
+                    csrf_token(depot),
                 )
             }
         },
@@ -568,21 +546,6 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: OtpForm = parse_form(req).await?;
-    if validate_csrf(&headers, Some(&body.csrf_token)).is_err() {
-        return Ok(render_otp_page(
-            &ctx,
-            &headers,
-            OtpPageData {
-                login_id: body.login_id,
-                identifier: body.identifier,
-                user_name: String::new(),
-                masked_email: String::new(),
-                error: Some(invalid_request_message(&ctx, &headers).into()),
-                csrf_token: String::new(),
-            },
-        )
-        .into());
-    }
 
     let login_oid = match ctx
         .services()
@@ -604,6 +567,7 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
                     error: Some(invalid_request_message(&ctx, &headers).into()),
                     csrf_token: String::new(),
                 },
+                csrf_token(depot),
             )
             .into());
         }
@@ -648,6 +612,7 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
                         error: Some(error_msg),
                         csrf_token: String::new(),
                     },
+                    csrf_token(depot),
                 )
             }
         },

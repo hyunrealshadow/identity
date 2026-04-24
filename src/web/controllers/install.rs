@@ -6,13 +6,10 @@ use serde::Deserialize;
 
 use super::{
     response::{app_state, parse_form, redirect_to, render_app_error, render_html},
-    shared::{append_set_cookie, ensure_csrf_token, is_secure_cookie, validate_csrf},
+    shared::{csrf_hoop, csrf_token},
 };
 use crate::{
-    application::{
-        error::codes::common::CommonErrorCode, install::InstallInput,
-        setting::runtime::SettingProvider,
-    },
+    application::{install::InstallInput, setting::runtime::SettingProvider},
     boot::AppState,
     domain::key::AsymmetricKeyAlgorithm,
     infrastructure::{i18n::resolve_locale_from_headers, web},
@@ -21,6 +18,7 @@ use crate::{
 
 pub fn routes() -> Router {
     Router::with_path("install")
+        .hoop(csrf_hoop())
         .get(install_page)
         .post(install_submit)
 }
@@ -32,7 +30,6 @@ struct InstallForm {
     password: String,
     domain: String,
     key_algorithm: String,
-    csrf_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,13 +85,13 @@ fn log_install_failure(error: &crate::application::error::AppError, form: &Insta
 fn render_install_page(
     ctx: &AppState,
     headers: &HeaderMap,
+    csrf_token: String,
     username: String,
     email: String,
     domain: String,
     selected_algorithm: &str,
     error: Option<String>,
 ) -> Response {
-    let (csrf_token, csrf_cookie) = ensure_csrf_token(headers, is_secure_cookie(ctx));
     let data = InstallPageData {
         username,
         email,
@@ -108,9 +105,6 @@ fn render_install_page(
     match web::tera::render_view(ctx, headers, "install/index.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
-    }
-    if let Some(cookie) = csrf_cookie {
-        append_set_cookie(&mut response, &cookie);
     }
     response
 }
@@ -131,6 +125,7 @@ async fn install_page(
     *res = render_install_page(
         &ctx,
         &headers,
+        csrf_token(depot),
         String::new(),
         String::new(),
         String::new(),
@@ -154,25 +149,13 @@ async fn install_submit(
         return Ok(());
     }
 
-    if validate_csrf(&headers, Some(&form.csrf_token)).is_err() {
-        *res = render_install_page(
-            &ctx,
-            &headers,
-            form.username,
-            form.email,
-            form.domain,
-            &form.key_algorithm,
-            Some(localized_invalid_request(&ctx, &headers)),
-        );
-        return Ok(());
-    }
-
     let algorithm = match parse_algorithm(&form.key_algorithm) {
         Ok(algorithm) => algorithm,
         Err(message) => {
             *res = render_install_page(
                 &ctx,
                 &headers,
+                csrf_token(depot),
                 form.username,
                 form.email,
                 form.domain,
@@ -201,6 +184,7 @@ async fn install_submit(
             *res = render_install_page(
                 &ctx,
                 &headers,
+                csrf_token(depot),
                 form.username,
                 form.email,
                 form.domain,
@@ -214,14 +198,6 @@ async fn install_submit(
         }
     }
     Ok(())
-}
-
-fn localized_invalid_request(ctx: &AppState, headers: &HeaderMap) -> String {
-    super::response::error_message(
-        ctx.resources().i18n(),
-        &resolve_locale_from_headers(headers),
-        &crate::application::error::AppError::from_code(CommonErrorCode::InvalidRequest),
-    )
 }
 
 fn install_algorithms(selected: &str) -> Vec<InstallAlgorithmOption> {
@@ -274,7 +250,6 @@ mod tests {
             password: "super-secret-password".to_owned(),
             domain: "identity.example.com".to_owned(),
             key_algorithm: "ed25519".to_owned(),
-            csrf_token: "csrf-token".to_owned(),
         };
         let error = AppError::from_code(CommonErrorCode::InternalError);
 

@@ -29,7 +29,6 @@ pub struct ConsentPageData {
 pub struct ConsentDecisionForm {
     pub login_id: String,
     pub decision: ConsentDecision,
-    pub csrf_token: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
