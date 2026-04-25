@@ -108,8 +108,11 @@ impl InstallService {
         let now = Utc::now();
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
-        let normalized_username = username.to_lowercase();
-        let normalized_email = email.to_lowercase();
+        let normalized_username =
+            crate::domain::user::normalization::normalize_username(&username)
+                .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
+        let normalized_email = crate::domain::user::normalization::normalize_email(&email)
+            .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
         let password_json = serde_json::to_value(&password).map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
@@ -323,13 +326,13 @@ fn normalize_domain(domain: &str) -> Result<String, AppError> {
 }
 
 fn normalize_email(email: &str) -> Result<String, AppError> {
-    let email = normalize_required(email, "email")?.to_lowercase();
-    let mut parts = email.split('@');
-    let local = parts.next().unwrap_or_default();
-    let domain = parts.next().unwrap_or_default();
-    if local.is_empty() || domain.is_empty() || parts.next().is_some() || !domain.contains('.') {
-        return Err(AppError::from_code(InstallErrorCode::EmailInvalid));
-    }
-
-    Ok(email)
+    crate::domain::user::normalization::normalize_email(email).map_err(|error| match error {
+        crate::domain::user::normalization::EmailNormalizationError::Empty => {
+            AppError::from_code(InstallErrorCode::EmailRequired)
+        }
+        crate::domain::user::normalization::EmailNormalizationError::InvalidFormat
+        | crate::domain::user::normalization::EmailNormalizationError::InvalidDomain => {
+            AppError::from_code(InstallErrorCode::EmailInvalid)
+        }
+    })
 }

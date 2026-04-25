@@ -61,7 +61,8 @@ impl UserInfoService {
             .await?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::UserNotFound))?;
 
-        let mut claims = UserInfoClaims::from_user(&user);
+        let issuer = self.provider_service.issuer()?;
+        let mut claims = UserInfoClaims::from_user_with_profile_base(&user, issuer.as_str());
         claims.apply_scope_filter(scope, claims_request);
         Ok(claims)
     }

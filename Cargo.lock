@@ -2101,6 +2101,7 @@ dependencies = [
  "hex",
  "hkdf",
  "http",
+ "idna",
  "include_dir",
  "insta",
  "josekit",

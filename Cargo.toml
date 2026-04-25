@@ -59,6 +59,7 @@ josekit = { version = "0.10.3" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 openssl = { version = "0.10" }
 url = { version = "2", features = ["serde"] }
+idna = { version = "1" }
 
 [features]
 oidc-conformance = []

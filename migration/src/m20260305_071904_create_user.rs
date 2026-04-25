@@ -12,6 +12,17 @@ pub enum User {
     EmailNormalized,
     Name,
     NameNormalized,
+    GivenName,
+    FamilyName,
+    MiddleName,
+    Nickname,
+    Profile,
+    Picture,
+    Website,
+    Gender,
+    Birthdate,
+    Zoneinfo,
+    Locale,
     EmailVerified,
     FailedAttempts,
     Enabled,
@@ -35,6 +46,17 @@ impl MigrationTrait for Migration {
                     .col(string_uniq(User::EmailNormalized))
                     .col(string(User::Name))
                     .col(string_uniq(User::NameNormalized))
+                    .col(string_null(User::GivenName))
+                    .col(string_null(User::FamilyName))
+                    .col(string_null(User::MiddleName))
+                    .col(string_null(User::Nickname))
+                    .col(string_null(User::Profile))
+                    .col(string_null(User::Picture))
+                    .col(string_null(User::Website))
+                    .col(string_null(User::Gender))
+                    .col(string_null(User::Birthdate))
+                    .col(string_null(User::Zoneinfo))
+                    .col(string_null(User::Locale))
                     .col(boolean(User::EmailVerified).default(false))
                     .col(integer(User::FailedAttempts).default(0))
                     .col(boolean(User::Enabled).default(true))

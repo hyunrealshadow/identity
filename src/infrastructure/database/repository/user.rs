@@ -17,6 +17,17 @@ fn to_domain(m: user::Model) -> User {
         email_normalized: m.email_normalized,
         name: m.name,
         name_normalized: m.name_normalized,
+        given_name: m.given_name,
+        family_name: m.family_name,
+        middle_name: m.middle_name,
+        nickname: m.nickname,
+        profile: m.profile,
+        picture: m.picture,
+        website: m.website,
+        gender: m.gender,
+        birthdate: m.birthdate,
+        zoneinfo: m.zoneinfo,
+        locale: m.locale,
         email_verified: m.email_verified,
         failed_attempts: m.failed_attempts,
         enabled: m.enabled,
@@ -41,7 +52,8 @@ impl UserRepositoryImpl {
 impl UserRepository for UserRepositoryImpl {
     async fn find_by_identifier(&self, identifier: &str) -> Result<User, UserRepositoryError> {
         use sea_orm::Condition;
-        let normalized = identifier.trim().to_lowercase();
+        let normalized = crate::domain::user::normalization::normalize_identifier(identifier)
+            .ok_or(UserRepositoryError::UserNotFound)?;
         let model = UserEntity::find()
             .filter(
                 Condition::any()

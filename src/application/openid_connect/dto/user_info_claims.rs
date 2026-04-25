@@ -32,6 +32,54 @@ pub struct UserInfoClaims {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
+    /// Given name(s) or first name(s) of the end-user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub given_name: Option<String>,
+
+    /// Surname(s) or last name(s) of the end-user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub family_name: Option<String>,
+
+    /// Middle name(s) of the end-user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub middle_name: Option<String>,
+
+    /// Casual name of the end-user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nickname: Option<String>,
+
+    /// URL of the end-user's profile page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+
+    /// URL of the end-user's profile picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<String>,
+
+    /// URL of the end-user's web page or blog.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website: Option<String>,
+
+    /// End-user's gender.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gender: Option<String>,
+
+    /// End-user's birthday, represented as an ISO 8601 date.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub birthdate: Option<String>,
+
+    /// End-user's time zone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zoneinfo: Option<String>,
+
+    /// End-user's locale.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+
+    /// Shorthand name by which the end-user wishes to be referred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_username: Option<String>,
+
     /// End-user's email address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
@@ -53,6 +101,18 @@ impl UserInfoClaims {
         Self {
             sub,
             name: None,
+            given_name: None,
+            family_name: None,
+            middle_name: None,
+            nickname: None,
+            profile: None,
+            picture: None,
+            website: None,
+            gender: None,
+            birthdate: None,
+            zoneinfo: None,
+            locale: None,
+            preferred_username: None,
             email: None,
             email_verified: None,
             updated_at: None,
@@ -60,9 +120,28 @@ impl UserInfoClaims {
     }
 
     pub fn from_user(user: &crate::domain::user::User) -> Self {
+        Self::from_user_with_profile_base(user, "https://identity.local")
+    }
+
+    pub fn from_user_with_profile_base(
+        user: &crate::domain::user::User,
+        profile_base_url: &str,
+    ) -> Self {
         Self {
             sub: user.oid.0.to_string(),
             name: Some(user.name.clone()),
+            given_name: user.given_name.clone(),
+            family_name: user.family_name.clone(),
+            middle_name: user.middle_name.clone(),
+            nickname: user.nickname.clone(),
+            profile: absolute_profile_url(profile_base_url, user.profile.as_deref()),
+            picture: absolute_profile_url(profile_base_url, user.picture.as_deref()),
+            website: absolute_profile_url(profile_base_url, user.website.as_deref()),
+            gender: user.gender.clone(),
+            birthdate: user.birthdate.clone(),
+            zoneinfo: user.zoneinfo.clone(),
+            locale: user.locale.clone(),
+            preferred_username: Some(user.name.clone()),
             email: Some(user.email.clone()),
             email_verified: Some(user.email_verified),
             updated_at: user.updated_at,
@@ -90,6 +169,42 @@ impl UserInfoClaims {
         if !scope.profile && !essential_claims.contains(&"name") {
             self.name = None;
         }
+        if !scope.profile && !essential_claims.contains(&"given_name") {
+            self.given_name = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"family_name") {
+            self.family_name = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"middle_name") {
+            self.middle_name = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"nickname") {
+            self.nickname = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"profile") {
+            self.profile = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"picture") {
+            self.picture = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"website") {
+            self.website = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"gender") {
+            self.gender = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"birthdate") {
+            self.birthdate = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"zoneinfo") {
+            self.zoneinfo = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"locale") {
+            self.locale = None;
+        }
+        if !scope.profile && !essential_claims.contains(&"preferred_username") {
+            self.preferred_username = None;
+        }
         if !scope.profile && !essential_claims.contains(&"updated_at") {
             self.updated_at = None;
         }
@@ -108,12 +223,23 @@ impl UserInfoClaims {
                     for (claim_name, claim_spec) in obj {
                         if let Some(spec_obj) = claim_spec.as_object() {
                             if spec_obj.get("essential").and_then(|v| v.as_bool()) == Some(true) {
-                                if claim_name == "name" {
-                                    essential.push("name");
-                                } else if claim_name == "email" {
-                                    essential.push("email");
-                                } else if claim_name == "updated_at" {
-                                    essential.push("updated_at");
+                                match claim_name.as_str() {
+                                    "name" => essential.push("name"),
+                                    "given_name" => essential.push("given_name"),
+                                    "family_name" => essential.push("family_name"),
+                                    "middle_name" => essential.push("middle_name"),
+                                    "nickname" => essential.push("nickname"),
+                                    "profile" => essential.push("profile"),
+                                    "picture" => essential.push("picture"),
+                                    "website" => essential.push("website"),
+                                    "gender" => essential.push("gender"),
+                                    "birthdate" => essential.push("birthdate"),
+                                    "zoneinfo" => essential.push("zoneinfo"),
+                                    "locale" => essential.push("locale"),
+                                    "preferred_username" => essential.push("preferred_username"),
+                                    "email" => essential.push("email"),
+                                    "updated_at" => essential.push("updated_at"),
+                                    _ => {}
                                 }
                             }
                         }
@@ -123,6 +249,17 @@ impl UserInfoClaims {
         }
         essential
     }
+}
+
+fn absolute_profile_url(profile_base_url: &str, value: Option<&str>) -> Option<String> {
+    let value = value?;
+    if value.contains("://") {
+        return Some(value.to_owned());
+    }
+
+    let base = profile_base_url.trim_end_matches('/');
+    let path = value.trim_start_matches('/');
+    Some(format!("{base}/{path}"))
 }
 
 #[cfg(test)]
@@ -137,6 +274,9 @@ mod tests {
 
         assert_eq!(claims.sub, sub);
         assert_eq!(claims.name, None);
+        assert_eq!(claims.given_name, None);
+        assert_eq!(claims.family_name, None);
+        assert_eq!(claims.preferred_username, None);
         assert_eq!(claims.email, None);
         assert_eq!(claims.email_verified, None);
         assert_eq!(claims.updated_at, None);
@@ -170,6 +310,17 @@ mod tests {
             email_normalized: "john@example.com".to_string(),
             name: "John Doe".to_string(),
             name_normalized: "john doe".to_string(),
+            given_name: Some("John".to_string()),
+            family_name: Some("Doe".to_string()),
+            middle_name: Some("John Doe".to_string()),
+            nickname: Some("john".to_string()),
+            profile: Some("users/john".to_string()),
+            picture: Some("users/john.png".to_string()),
+            website: Some("https://example.com".to_string()),
+            gender: Some("unspecified".to_string()),
+            birthdate: Some("1970-01-01".to_string()),
+            zoneinfo: Some("UTC".to_string()),
+            locale: Some("en-US".to_string()),
             email_verified: true,
             failed_attempts: 0,
             enabled: true,
@@ -183,6 +334,18 @@ mod tests {
 
         assert_eq!(claims.sub, user_oid.to_string());
         assert_eq!(claims.name, Some("John Doe".to_string()));
+        assert_eq!(claims.given_name, Some("John".to_string()));
+        assert_eq!(claims.family_name, Some("Doe".to_string()));
+        assert_eq!(claims.middle_name, Some("John Doe".to_string()));
+        assert_eq!(claims.nickname, Some("john".to_string()));
+        assert_eq!(claims.gender, Some("unspecified".to_string()));
+        assert_eq!(claims.birthdate, Some("1970-01-01".to_string()));
+        assert_eq!(claims.zoneinfo, Some("UTC".to_string()));
+        assert_eq!(claims.locale, Some("en-US".to_string()));
+        assert_eq!(claims.preferred_username, Some("John Doe".to_string()));
+        assert!(claims.profile.is_some());
+        assert!(claims.picture.is_some());
+        assert!(claims.website.is_some());
         assert_eq!(claims.email, Some("john@example.com".to_string()));
         assert_eq!(claims.email_verified, Some(true));
         assert!(claims.updated_at.is_some());
@@ -205,11 +368,31 @@ mod tests {
 
     use crate::domain::openid_connect::ScopeSet;
 
+    fn full_profile_claims() -> UserInfoClaims {
+        UserInfoClaims {
+            sub: "user-123".to_string(),
+            name: Some("John Doe".to_string()),
+            given_name: Some("John".to_string()),
+            family_name: Some("Doe".to_string()),
+            middle_name: Some("John Doe".to_string()),
+            nickname: Some("john".to_string()),
+            profile: Some("https://example.com/john".to_string()),
+            picture: Some("https://example.com/john.png".to_string()),
+            website: Some("https://example.com".to_string()),
+            gender: Some("unspecified".to_string()),
+            birthdate: Some("1970-01-01".to_string()),
+            zoneinfo: Some("UTC".to_string()),
+            locale: Some("en-US".to_string()),
+            preferred_username: Some("john".to_string()),
+            email: Some("john@example.com".to_string()),
+            email_verified: Some(true),
+            updated_at: Some(chrono::Utc::now()),
+        }
+    }
+
     #[test]
     fn apply_scope_filter_removes_profile_claims_without_profile_scope() {
-        let claims = UserInfoClaims::new("user-123".to_string())
-            .with_name("John Doe".to_string())
-            .with_email("john@example.com".to_string(), true);
+        let claims = full_profile_claims();
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid email").unwrap();
@@ -217,20 +400,45 @@ mod tests {
 
         assert_eq!(filtered.sub, "user-123");
         assert_eq!(filtered.name, None);
+        assert_eq!(filtered.given_name, None);
+        assert_eq!(filtered.family_name, None);
+        assert_eq!(filtered.middle_name, None);
+        assert_eq!(filtered.nickname, None);
+        assert_eq!(filtered.profile, None);
+        assert_eq!(filtered.picture, None);
+        assert_eq!(filtered.website, None);
+        assert_eq!(filtered.gender, None);
+        assert_eq!(filtered.birthdate, None);
+        assert_eq!(filtered.zoneinfo, None);
+        assert_eq!(filtered.locale, None);
+        assert_eq!(filtered.preferred_username, None);
         assert_eq!(filtered.email, Some("john@example.com".to_string()));
     }
 
     #[test]
     fn apply_scope_filter_keeps_all_claims_with_all_scopes() {
-        let claims = UserInfoClaims::new("user-123".to_string())
-            .with_name("John Doe".to_string())
-            .with_email("john@example.com".to_string(), true);
+        let claims = full_profile_claims();
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid profile email").unwrap();
         filtered.apply_scope_filter(&scope, None);
 
         assert_eq!(filtered.name, Some("John Doe".to_string()));
+        assert_eq!(filtered.given_name, Some("John".to_string()));
+        assert_eq!(filtered.family_name, Some("Doe".to_string()));
+        assert_eq!(filtered.middle_name, Some("John Doe".to_string()));
+        assert_eq!(filtered.nickname, Some("john".to_string()));
+        assert_eq!(filtered.profile, Some("https://example.com/john".to_string()));
+        assert_eq!(
+            filtered.picture,
+            Some("https://example.com/john.png".to_string())
+        );
+        assert_eq!(filtered.website, Some("https://example.com".to_string()));
+        assert_eq!(filtered.gender, Some("unspecified".to_string()));
+        assert_eq!(filtered.birthdate, Some("1970-01-01".to_string()));
+        assert_eq!(filtered.zoneinfo, Some("UTC".to_string()));
+        assert_eq!(filtered.locale, Some("en-US".to_string()));
+        assert_eq!(filtered.preferred_username, Some("john".to_string()));
         assert_eq!(filtered.email, Some("john@example.com".to_string()));
     }
 

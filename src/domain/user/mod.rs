@@ -1,5 +1,6 @@
 pub mod credential;
 pub mod model;
+pub mod normalization;
 pub mod otp;
 pub mod password;
 pub mod recovery_code;
