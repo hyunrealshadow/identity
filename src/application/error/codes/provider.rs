@@ -1,5 +1,6 @@
 use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
 
+/// Range: 20000-20099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderErrorCode {
     NotInitialized,
@@ -22,11 +23,11 @@ impl AppErrorCode for ProviderErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::NotInitialized => 8100,
-            Self::DomainMissing => 8101,
-            Self::IssuerMustUseHttps => 8102,
-            Self::IssuerMustNotHaveQueryOrFragment => 8103,
-            Self::IssuerUrlParseFailed => 8104,
+            Self::NotInitialized => 20000,
+            Self::DomainMissing => 20001,
+            Self::IssuerMustUseHttps => 20002,
+            Self::IssuerMustNotHaveQueryOrFragment => 20003,
+            Self::IssuerUrlParseFailed => 20004,
         }
     }
 }

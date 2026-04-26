@@ -1,5 +1,6 @@
 use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
 
+/// Range: 13000-13099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstallErrorCode {
     AlreadyInitialized,
@@ -32,16 +33,16 @@ impl AppErrorCode for InstallErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::AlreadyInitialized => 8000,
-            Self::UsernameRequired => 8001,
-            Self::EmailRequired => 8002,
-            Self::PasswordRequired => 8003,
-            Self::DomainRequired => 8004,
-            Self::DomainInvalid => 8005,
-            Self::EmailInvalid => 8006,
-            Self::UsernameExists => 8007,
-            Self::EmailExists => 8008,
-            Self::AlgorithmInvalid => 8009,
+            Self::AlreadyInitialized => 13000,
+            Self::UsernameRequired => 13001,
+            Self::EmailRequired => 13002,
+            Self::PasswordRequired => 13003,
+            Self::DomainRequired => 13004,
+            Self::DomainInvalid => 13005,
+            Self::EmailInvalid => 13006,
+            Self::UsernameExists => 13007,
+            Self::EmailExists => 13008,
+            Self::AlgorithmInvalid => 13009,
         }
     }
 }

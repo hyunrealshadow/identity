@@ -1,6 +1,6 @@
 # OpenID Provider errors
-E8100 = The system has not been initialized yet.
-E8101 = The issuer domain is not configured.
-E8102 = The issuer URL must use HTTPS.
-E8103 = The issuer URL must not contain a query string or fragment.
-E8104 = The issuer URL could not be parsed.
+E20000 = The system has not been initialized yet.
+E20001 = The issuer domain is not configured.
+E20002 = The issuer URL must use HTTPS.
+E20003 = The issuer URL must not contain a query string or fragment.
+E20004 = The issuer URL could not be parsed.

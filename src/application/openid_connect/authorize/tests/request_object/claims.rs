@@ -21,7 +21,7 @@ fn validate_request_object_claims_rejects_future_issued_at() {
     );
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().code(), 6033); // RequestObjectIatFuture
+    assert_eq!(result.unwrap_err().code(), 23033); // RequestObjectIatFuture
 }
 
 #[test]

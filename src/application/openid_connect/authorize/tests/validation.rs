@@ -95,7 +95,7 @@ async fn validate_request_rejects_request_and_request_uri_together() {
 
     let error = service.validate_request(params).await.unwrap_err();
 
-    assert_eq!(error.code(), 6012); // RequestAndUriConflict
+    assert_eq!(error.code(), 23012); // RequestAndUriConflict
 }
 
 #[tokio::test]

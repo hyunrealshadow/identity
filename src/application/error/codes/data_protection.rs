@@ -1,7 +1,7 @@
 use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for data protection (encryption/decryption) operations.
-/// Range: 9000–9099
+/// Range: 14000-14099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataProtectionErrorCode {
     InvalidProtectedPayload,
@@ -20,9 +20,9 @@ impl AppErrorCode for DataProtectionErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::InvalidProtectedPayload => 9000,
-            Self::KeyRingEmpty => 9001,
-            Self::EncryptionFailed => 9002,
+            Self::InvalidProtectedPayload => 14000,
+            Self::KeyRingEmpty => 14001,
+            Self::EncryptionFailed => 14002,
         }
     }
 }

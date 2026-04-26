@@ -18,7 +18,7 @@ pub struct BusinessErrorResponse {
 
 #[derive(Debug, Serialize)]
 pub struct ErrorDetail {
-    /// Machine-readable numeric error code, e.g. `2001`.
+    /// Machine-readable numeric error code, e.g. `11001`.
     pub code: u32,
     /// Localized human-readable message.
     pub message: String,

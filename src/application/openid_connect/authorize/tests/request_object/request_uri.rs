@@ -11,7 +11,7 @@ async fn validate_request_uri_rejects_fragment() {
     };
 
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6016); // RequestUriHasFragment
+    assert_eq!(error.code(), 23016); // RequestUriHasFragment
 }
 
 #[tokio::test]
@@ -23,7 +23,7 @@ async fn validate_request_uri_rejects_loopback_target() {
     };
 
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "loopback must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "loopback must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -34,7 +34,7 @@ async fn validate_request_uri_rejects_rfc1918_class_a() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "10.x.x.x must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "10.x.x.x must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -45,7 +45,7 @@ async fn validate_request_uri_rejects_rfc1918_class_b() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "172.16.x must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "172.16.x must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -56,7 +56,7 @@ async fn validate_request_uri_rejects_rfc1918_class_b_upper_bound() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "172.31.x must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "172.31.x must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -67,7 +67,7 @@ async fn validate_request_uri_rejects_rfc1918_class_c() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "192.168.x must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "192.168.x must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -78,7 +78,7 @@ async fn validate_request_uri_rejects_link_local_ipv4() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "169.254.x link-local must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "169.254.x link-local must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -89,7 +89,7 @@ async fn validate_request_uri_rejects_ipv6_loopback() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "::1 loopback must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "::1 loopback must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ async fn validate_request_uri_rejects_ipv6_ula() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "fc00::/7 ULA must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "fc00::/7 ULA must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -111,7 +111,7 @@ async fn validate_request_uri_rejects_ipv6_link_local() {
         ..params("openid profile")
     };
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 6017, "fe80::/10 link-local must be blocked"); // RequestUriUnsafeHost
+    assert_eq!(error.code(), 23017, "fe80::/10 link-local must be blocked"); // RequestUriUnsafeHost
 }
 
 #[tokio::test]
@@ -132,7 +132,7 @@ async fn fetch_request_object_rejects_oversized_chunked_response_before_completi
     let error = result
         .expect("oversized response should be rejected before server finishes")
         .unwrap_err();
-    assert_eq!(error.code(), 6021); // RequestUriTooLarge
+    assert_eq!(error.code(), 23021); // RequestUriTooLarge
 }
 
 #[tokio::test]
@@ -145,5 +145,5 @@ async fn fetch_request_object_rejects_redirect_response() {
         .await
         .unwrap_err();
 
-    assert_eq!(error.code(), 6020); // RequestUriNot200
+    assert_eq!(error.code(), 23020); // RequestUriNot200
 }

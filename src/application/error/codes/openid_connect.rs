@@ -1,7 +1,7 @@
 use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for OIDC userinfo and token validation.
-/// Range: 10000–10099
+/// Range: 21000-21099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenIdConnectErrorCode {
     InvalidToken,
@@ -20,9 +20,9 @@ impl AppErrorCode for OpenIdConnectErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::InvalidToken => 10000,
-            Self::InsufficientScope => 10001,
-            Self::UserNotFound => 10002,
+            Self::InvalidToken => 21000,
+            Self::InsufficientScope => 21001,
+            Self::UserNotFound => 21002,
         }
     }
 }

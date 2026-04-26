@@ -2,7 +2,7 @@ use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for the `/oauth2/authorize` HTTP layer:
 /// request extraction, method validation, and interaction routing.
-/// Range: 5000–5099
+/// Range: 22000-22099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthorizeHttpErrorCode {
     /// POST request does not use `application/x-www-form-urlencoded` Content-Type.
@@ -30,11 +30,11 @@ impl AppErrorCode for AuthorizeHttpErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::PostContentTypeInvalid => 5000,
-            Self::MethodNotAllowed => 5001,
-            Self::RequiredParamMissing => 5002,
-            Self::InternalClientLoginRequired => 5003,
-            Self::ConsentSessionNotFound => 5004,
+            Self::PostContentTypeInvalid => 22000,
+            Self::MethodNotAllowed => 22001,
+            Self::RequiredParamMissing => 22002,
+            Self::InternalClientLoginRequired => 22003,
+            Self::ConsentSessionNotFound => 22004,
         }
     }
 }

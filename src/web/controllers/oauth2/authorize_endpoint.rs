@@ -21,7 +21,7 @@ fn render_error(
 ) -> Response {
     tracing::warn!(error_code = error.code(), error = %error, "authorize validation error");
     // Non-redirectable error codes (client/redirect_uri issues)
-    const NON_REDIRECTABLE: &[u32] = &[6000, 6001, 6002, 6004, 6014];
+    const NON_REDIRECTABLE: &[u32] = &[23000, 23001, 23002, 23004, 23014];
 
     let can_redirect = !NON_REDIRECTABLE.contains(&error.code())
         && raw.redirect_uri.as_deref().is_some_and(|u| !u.is_empty())

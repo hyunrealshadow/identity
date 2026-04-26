@@ -1,5 +1,6 @@
 use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
 
+/// Range: 12000-12099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyErrorCode {
     NotFound,
@@ -24,12 +25,12 @@ impl AppErrorCode for KeyErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::NotFound => 3000,
-            Self::Revoked => 3001,
-            Self::AlgorithmInvalid => 3002,
-            Self::InvalidCertificatePem => 3003,
-            Self::InvalidKeyType => 3004,
-            Self::CertificateRequiresAsymmetricKey => 3005,
+            Self::NotFound => 12000,
+            Self::Revoked => 12001,
+            Self::AlgorithmInvalid => 12002,
+            Self::InvalidCertificatePem => 12003,
+            Self::InvalidKeyType => 12004,
+            Self::CertificateRequiresAsymmetricKey => 12005,
         }
     }
 }

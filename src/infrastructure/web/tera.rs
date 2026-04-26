@@ -146,7 +146,7 @@ mod tests {
             .insert("identifier", "alice@example.com")
             .insert("identifier_kind", "email");
 
-        let translated = i18n.t_code_with_params(&langid!("en-US"), 2000, &params);
+        let translated = i18n.t_code_with_params(&langid!("en-US"), 11000, &params);
 
         assert_eq!(
             translated,
