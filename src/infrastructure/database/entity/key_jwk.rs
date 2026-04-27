@@ -1,0 +1,34 @@
+use sea_orm::entity::prelude::*;
+
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+#[sea_orm(table_name = "key_jwk")]
+pub struct Model {
+    #[sea_orm(primary_key)]
+    pub id: i32,
+    #[sea_orm(unique)]
+    pub oid: Uuid,
+    pub key_oid: Uuid,
+    pub algorithm: String,
+    #[sea_orm(column_type = "JsonBinary")]
+    pub jwk: Json,
+    pub created_at: DateTime,
+    pub updated_at: Option<DateTime>,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::key::Entity",
+        from = "Column::KeyOid",
+        to = "super::key::Column::Oid"
+    )]
+    Key,
+}
+
+impl Related<super::key::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Key.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}

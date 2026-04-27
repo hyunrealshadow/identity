@@ -32,8 +32,9 @@ use crate::{
     },
     infrastructure::{
         crypto::certificate::generate_self_signed_certificate,
+        crypto::key::generate_all_jwks_for_key,
         database::{
-            entity::{setting, user, user_credential},
+            entity::{key_jwk, setting, user, user_credential},
             repository::shared::encode_nonnullable_expiry,
         },
     },
@@ -115,10 +116,11 @@ impl InstallService {
         let password_json = serde_json::to_value(&password).map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
-        let key_json = serde_json::to_value(crate::domain::key::KeyData::Asymmetric(key_data))
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+        let key_json =
+            serde_json::to_value(crate::domain::key::KeyData::Asymmetric(key_data.clone()))
+                .map_err(|error| {
+                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+                })?;
 
         let installation_state = InstallationState {
             initialized: true,
@@ -209,6 +211,36 @@ impl InstallService {
         .insert(&txn)
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+        let jwks = generate_all_jwks_for_key(
+            &key_data.private_key,
+            &key_oid.to_string(),
+            key_data.certificate.as_deref(),
+        )
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        let jwk_models = jwks
+            .into_iter()
+            .map(|(algorithm, jwk)| {
+                serde_json::to_value(jwk).map(|jwk| key_jwk::ActiveModel {
+                    oid: Set(Uuid::new_v4()),
+                    key_oid: Set(key_oid),
+                    algorithm: Set(algorithm),
+                    jwk: Set(jwk),
+                    created_at: Set(now.naive_utc()),
+                    updated_at: Set(Some(now.naive_utc())),
+                    ..Default::default()
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        key_jwk::Entity::insert_many(jwk_models)
+            .exec(&txn)
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
 
         // Create an initial symmetric key for data protection (encrypting login IDs etc.)
         let mut sym_key_bytes = [0u8; 32];

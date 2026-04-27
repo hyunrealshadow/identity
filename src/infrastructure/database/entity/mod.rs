@@ -8,6 +8,7 @@ pub mod client_open_id_connect;
 pub mod client_open_id_connect_credential;
 pub mod client_scope;
 pub mod key;
+pub mod key_jwk;
 pub mod login;
 pub mod scope;
 pub mod session;

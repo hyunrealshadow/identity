@@ -210,6 +210,7 @@ fn user_info_service_with_key(
         Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
             repo: Arc::new(InMemoryKeyRepository { keys: vec![key] }),
             generator: Arc::new(AsymmetricKeyGeneratorImpl),
+            jwk_repo: None,
         }),
         provider_service(),
     )

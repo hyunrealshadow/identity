@@ -4,9 +4,8 @@ use salvo::{Depot, Response, Router, handler};
 use serde::Serialize;
 
 use crate::{
-    application::{error::AppError, openid_connect::provider::OpenIdProviderService},
-    domain::key::KeyData,
-    infrastructure::crypto::key::public_jwk_from_private_key_pem,
+    application::error::{AppError, codes::common::CommonErrorCode},
+    application::openid_connect::provider::OpenIdProviderService,
 };
 
 use super::response::{app_state, render_json};
@@ -39,27 +38,15 @@ async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> Result<(
 #[handler]
 async fn keys_handler(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
     let ctx = app_state(depot)?;
-    let keys = ctx
-        .services()
-        .key()
-        .list_available()
-        .await?
+    let key_jwks = ctx.services().key().list_available_jwks().await?;
+    let keys: Vec<Jwk> = key_jwks
         .into_iter()
-        .filter_map(|key| match key.data {
-            KeyData::Asymmetric(data) => Some((key.oid, data.private_key, data.certificate)),
-            KeyData::Symmetric(_) => None,
+        .map(|binding| {
+            serde_json::from_value(binding.jwk).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })
         })
-        .map(|(oid, private_key, certificate)| {
-            public_jwk_from_private_key_pem(
-                &private_key,
-                Some(&uuid::Uuid::from(oid).to_string()),
-                certificate.as_deref(),
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(AppError::from);
-
-    let keys = keys?;
+        .collect::<Result<_, _>>()?;
 
     let response = JsonWebKeySetResponse { keys };
 

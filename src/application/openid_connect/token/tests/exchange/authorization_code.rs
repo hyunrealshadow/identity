@@ -462,6 +462,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
             repo: key_repo,
             generator: Arc::new(AsymmetricKeyGeneratorImpl),
+            jwk_repo: None,
         }),
         provider_service(),
     );

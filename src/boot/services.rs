@@ -17,7 +17,8 @@ use crate::infrastructure::{
     crypto::key::AsymmetricKeyGeneratorImpl,
     database::repository::{
         client_authorization::ClientAuthorizationRepositoryImpl, key::KeyRepositoryImpl,
-        login::LoginRepositoryImpl, openid_connect::OpenIdConnectClientRepositoryImpl,
+        key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
+        openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
         session::SessionRepositoryImpl, user::UserRepositoryImpl,
         user_credential::UserCredentialRepositoryImpl,
@@ -96,6 +97,7 @@ impl AppServices {
             key: AsymmetricKeyService {
                 repo: key_repo.clone(),
                 generator: Arc::new(AsymmetricKeyGeneratorImpl),
+                jwk_repo: Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
             },
             install: InstallService {
                 db: db.clone(),
@@ -129,6 +131,7 @@ impl AppServices {
                 Arc::new(AsymmetricKeyService {
                     repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                     generator: Arc::new(AsymmetricKeyGeneratorImpl),
+                    jwk_repo: None,
                 }),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
             ),

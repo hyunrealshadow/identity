@@ -1,5 +1,6 @@
 pub mod client_authorization;
 pub mod key;
+pub mod key_jwk;
 pub mod login;
 pub mod openid_connect;
 pub mod openid_connect_credential;

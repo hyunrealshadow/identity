@@ -2,6 +2,7 @@ use josekit::jwk::{
     Jwk, KeyPair,
     alg::{ec::EcCurve, ed::EdCurve},
 };
+use josekit::jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512};
 use openssl::{
     base64::encode_block,
     hash::{MessageDigest, hash},
@@ -196,6 +197,89 @@ pub fn public_jwk_from_private_key_pem(
     Ok(jwk)
 }
 
+pub fn generate_all_jwks_for_key(
+    private_key_pem: &str,
+    key_id: &str,
+    certificate_pem: Option<&str>,
+) -> Result<Vec<(String, Jwk)>, KeyMaterialError> {
+    let alg_labels = jwk_algorithm_labels_for_private_key(private_key_pem)?;
+    let mut base_jwk = public_jwk_from_private_key_pem_without_alg(private_key_pem)?;
+    base_jwk.set_key_use("sig");
+    base_jwk.set_key_id(key_id);
+
+    if let Some(cert_pem) = certificate_pem {
+        apply_certificate_params(&mut base_jwk, cert_pem)?;
+    }
+
+    alg_labels
+        .iter()
+        .map(|alg| {
+            let mut jwk = base_jwk.clone();
+            jwk.set_algorithm(alg);
+            Ok((alg.to_string(), jwk))
+        })
+        .collect()
+}
+
+fn jwk_algorithm_labels_for_private_key(
+    private_key_pem: &str,
+) -> Result<Vec<String>, KeyMaterialError> {
+    let pem = private_key_pem.as_bytes();
+    let mut labels = Vec::new();
+
+    for (label, can_sign) in [
+        ("RS256", RS256.signer_from_pem(pem).is_ok()),
+        ("RS384", RS384.signer_from_pem(pem).is_ok()),
+        ("RS512", RS512.signer_from_pem(pem).is_ok()),
+        ("PS256", PS256.signer_from_pem(pem).is_ok()),
+        ("PS384", PS384.signer_from_pem(pem).is_ok()),
+        ("PS512", PS512.signer_from_pem(pem).is_ok()),
+        ("ES256", ES256.signer_from_pem(pem).is_ok()),
+        ("ES384", ES384.signer_from_pem(pem).is_ok()),
+        ("ES512", ES512.signer_from_pem(pem).is_ok()),
+        ("ES256K", ES256K.signer_from_pem(pem).is_ok()),
+        ("EdDSA", EdDSA.signer_from_pem(pem).is_ok()),
+    ] {
+        if can_sign {
+            labels.push(label.to_owned());
+        }
+    }
+
+    if labels.is_empty() {
+        return Err(KeyMaterialError::InvalidInput(
+            "unsupported private key format".to_owned(),
+        ));
+    }
+
+    Ok(labels)
+}
+
+fn public_jwk_from_private_key_pem_without_alg(
+    private_key_pem: &str,
+) -> Result<Jwk, KeyMaterialError> {
+    if let Ok(key_pair) =
+        josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(private_key_pem, None, None, None)
+    {
+        return Ok(key_pair.to_jwk_public_key());
+    }
+
+    if let Ok(key_pair) = josekit::jwk::alg::rsa::RsaKeyPair::from_pem(private_key_pem) {
+        return Ok(key_pair.to_jwk_public_key());
+    }
+
+    if let Ok(key_pair) = josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key_pem, None) {
+        return Ok(key_pair.to_jwk_public_key());
+    }
+
+    if let Ok(key_pair) = josekit::jwk::alg::ed::EdKeyPair::from_pem(private_key_pem) {
+        return Ok(key_pair.to_jwk_public_key());
+    }
+
+    Err(KeyMaterialError::InvalidInput(
+        "unsupported private key format".to_owned(),
+    ))
+}
+
 fn jwa_algorithm_name(algorithm: &AsymmetricKeyAlgorithm) -> &'static str {
     match algorithm {
         AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 4096 => "RS512",
@@ -321,6 +405,70 @@ mod tests {
             .unwrap()
             .to_owned();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn generate_all_jwks_for_rsa_key_produces_rs_jwks() {
+        let data = generate_rsa_key(2048).unwrap();
+        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-rsa", None).unwrap();
+        assert_eq!(jwks.len(), 3);
+        let algs: Vec<&str> = jwks.iter().map(|(alg, _)| alg.as_str()).collect();
+        assert!(algs.contains(&"RS256"));
+        assert!(algs.contains(&"RS384"));
+        assert!(algs.contains(&"RS512"));
+        assert!(!algs.contains(&"PS256"));
+        assert!(!algs.contains(&"PS384"));
+        assert!(!algs.contains(&"PS512"));
+    }
+
+    #[test]
+    fn generate_all_jwks_for_rsa_pss_key_produces_ps_jwk() {
+        let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
+            2048,
+            josekit::util::SHA_256,
+            josekit::util::SHA_256,
+            32,
+        )
+        .unwrap();
+        let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
+
+        let jwks = generate_all_jwks_for_key(&private_key, "kid-ps", None).unwrap();
+
+        assert_eq!(jwks.len(), 1);
+        assert_eq!(jwks[0].0, "PS256");
+        assert_eq!(jwks[0].1.algorithm().unwrap(), "PS256");
+        assert_eq!(jwks[0].1.key_id().unwrap(), "kid-ps");
+    }
+
+    #[test]
+    fn generate_all_jwks_for_rsa_key_sets_kid_on_each_jwk() {
+        let data = generate_rsa_key(2048).unwrap();
+        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-rsa", None).unwrap();
+        for (_, jwk) in &jwks {
+            assert_eq!(
+                jwk.key_id().unwrap(),
+                "kid-rsa",
+                "kid should be set on JWK with alg {}",
+                jwk.algorithm().unwrap_or("none")
+            );
+        }
+    }
+
+    #[test]
+    fn generate_all_jwks_for_ec_p256_key_produces_one_jwk() {
+        let data = generate_p256_key().unwrap();
+        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-ec", None).unwrap();
+        assert_eq!(jwks.len(), 1);
+        assert_eq!(jwks[0].0, "ES256");
+        assert_eq!(jwks[0].1.algorithm().unwrap(), "ES256");
+    }
+
+    #[test]
+    fn generate_all_jwks_for_ed25519_key_produces_one_jwk() {
+        let data = generate_ed25519_key().unwrap();
+        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-ed", None).unwrap();
+        assert_eq!(jwks.len(), 1);
+        assert_eq!(jwks[0].0, "EdDSA");
     }
 }
 

@@ -3,7 +3,9 @@ use crate::{
         AppError,
         codes::{common::CommonErrorCode, key::KeyErrorCode},
     },
-    domain::key::{generator::KeyMaterialError, repository::KeyRepositoryError},
+    domain::key::{
+        generator::KeyMaterialError, jwk::KeyJwkRepositoryError, repository::KeyRepositoryError,
+    },
 };
 
 impl From<KeyMaterialError> for AppError {
@@ -28,5 +30,11 @@ impl From<KeyRepositoryError> for AppError {
             }
             other => AppError::from_code(CommonErrorCode::InternalError).with_source(other),
         }
+    }
+}
+
+impl From<KeyJwkRepositoryError> for AppError {
+    fn from(error: KeyJwkRepositoryError) -> Self {
+        AppError::from_code(CommonErrorCode::InternalError).with_source(error)
     }
 }

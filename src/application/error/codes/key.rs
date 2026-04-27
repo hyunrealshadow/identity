@@ -9,6 +9,8 @@ pub enum KeyErrorCode {
     InvalidCertificatePem,
     InvalidKeyType,
     CertificateRequiresAsymmetricKey,
+    JwkGenerationFailed,
+    JwkSerializationFailed,
 }
 
 impl AppErrorCode for KeyErrorCode {
@@ -20,6 +22,8 @@ impl AppErrorCode for KeyErrorCode {
             Self::InvalidCertificatePem => ErrorKind::Validation,
             Self::InvalidKeyType => ErrorKind::Validation,
             Self::CertificateRequiresAsymmetricKey => ErrorKind::Validation,
+            Self::JwkGenerationFailed => ErrorKind::Internal,
+            Self::JwkSerializationFailed => ErrorKind::Internal,
         }
     }
 
@@ -31,6 +35,8 @@ impl AppErrorCode for KeyErrorCode {
             Self::InvalidCertificatePem => 12003,
             Self::InvalidKeyType => 12004,
             Self::CertificateRequiresAsymmetricKey => 12005,
+            Self::JwkGenerationFailed => 12006,
+            Self::JwkSerializationFailed => 12007,
         }
     }
 }
