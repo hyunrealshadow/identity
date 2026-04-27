@@ -43,10 +43,14 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .await
         .unwrap();
 
+    let initial_refresh_token = initial.refresh_token.unwrap();
+    let initial_refresh_oid =
+        Uuid::from_slice(&STANDARD.decode(&initial_refresh_token).unwrap()).unwrap();
+
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
             grant_type: "refresh_token".to_string(),
-            refresh_token: initial.refresh_token.unwrap(),
+            refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
             client_assertion_type: None,
@@ -58,15 +62,25 @@ async fn exchange_refresh_token_returns_new_access_token() {
     assert_eq!(refreshed.token_type, "Bearer");
     assert!(refreshed.id_token.is_some());
     assert!(refreshed.refresh_token.is_some());
-    let rotated = repo
-        .find_refresh_token_by_token(refreshed.refresh_token.as_ref().unwrap())
-        .await
-        .unwrap();
-    assert!(rotated.is_some());
+    let rotated_oid = Uuid::from_slice(
+        &STANDARD
+            .decode(refreshed.refresh_token.as_ref().unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    let rotated = repo.find_by_oid(rotated_oid).await.unwrap();
+    let rotated = rotated.unwrap();
+    assert_eq!(rotated.type_, ClientAuthorizationType::RefreshToken);
+    let rotated_data: RefreshTokenData = serde_json::from_value(rotated.data).unwrap();
+    let expected_rotated_from = initial_refresh_oid.to_string();
+    assert_eq!(
+        rotated_data.rotated_from.as_deref(),
+        Some(expected_rotated_from.as_str())
+    );
 }
 
 #[tokio::test]
-async fn exchange_refresh_token_accepts_es256_signed_refresh_token() {
+async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signing_key() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let generator = AsymmetricKeyGeneratorImpl;

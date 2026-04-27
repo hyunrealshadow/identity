@@ -10,6 +10,7 @@ use crate::{
         openid_connect::{dto::UserInfoClaims, provider::OpenIdProviderService},
     },
     domain::{
+        client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
         key::KeyData,
         openid_connect::{
             ScopeSet,
@@ -26,6 +27,7 @@ use uuid::Uuid;
 
 pub struct UserInfoService {
     user_repo: Arc<dyn UserRepository>,
+    client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_service: Arc<AsymmetricKeyService>,
     provider_service: Arc<OpenIdProviderService>,
 }
@@ -39,11 +41,13 @@ pub struct TokenClaims {
 impl UserInfoService {
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
+        client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         key_service: Arc<AsymmetricKeyService>,
         provider_service: Arc<OpenIdProviderService>,
     ) -> Self {
         Self {
             user_repo,
+            client_authorization_repo,
             key_service,
             provider_service,
         }
@@ -110,6 +114,26 @@ impl UserInfoService {
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         if token_use != TokenUseValues::ACCESS_TOKEN {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+
+        let jti = payload
+            .jwt_id()
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let access_token_oid = Uuid::parse_str(jti)
+            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let access_token_record = self
+            .client_authorization_repo
+            .find_by_oid(access_token_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        if access_token_record.type_ != ClientAuthorizationType::AccessToken
+            || access_token_record.revoked_at.is_some()
+            || access_token_record.expires_at <= chrono::Utc::now()
+        {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 

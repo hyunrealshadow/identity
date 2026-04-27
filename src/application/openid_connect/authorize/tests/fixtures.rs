@@ -71,23 +71,11 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         Ok(self.records.lock().unwrap().get(&oid).cloned())
     }
 
-    async fn find_refresh_token_by_token(
+    async fn revoke_access_tokens_for_authorization_code(
         &self,
-        token: &str,
-    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
-        Ok(self
-            .records
-            .lock()
-            .unwrap()
-            .values()
-            .find(|record| {
-                serde_json::from_value::<crate::domain::client_authorization::RefreshTokenData>(
-                    record.data.clone(),
-                )
-                .map(|data| data.token == token)
-                .unwrap_or(false)
-            })
-            .cloned())
+        _authorization_code_oid: Uuid,
+    ) -> Result<(), ClientAuthorizationRepositoryError> {
+        Ok(())
     }
 
     async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {

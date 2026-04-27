@@ -83,13 +83,12 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
-        // Expression index on JSON token field for refresh token lookup.
         manager
             .get_connection()
             .execute_unprepared(
-                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_data_token"
-                   ON "client_authorization" (("data"->>'token'))
-                   WHERE "type" = 'refresh_token'"#,
+                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_data_code_oid"
+                   ON "client_authorization" (("data"->>'authorization_code_oid'))
+                   WHERE "type" = 'access_token'"#,
             )
             .await?;
         Ok(())
@@ -98,7 +97,7 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .get_connection()
-            .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_authorization_data_token""#)
+            .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_authorization_data_code_oid""#)
             .await?;
         manager
             .drop_index(

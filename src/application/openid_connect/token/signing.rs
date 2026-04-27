@@ -33,67 +33,9 @@ impl TokenService {
         Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
     }
 
-    pub(super) async fn verify_refresh_token(&self, raw: &str) -> Result<JwtPayload, AppError> {
-        let keys = self
-            .key_repo
-            .list_available_asymmetric()
-            .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-            })?;
-
-        for key in keys {
-            if let KeyData::Asymmetric(data) = key.data {
-                if let Ok(verifier) = RS256.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = ES256.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = ES256K.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = ES384.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = ES512.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = RS384.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = RS512.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-                if let Ok(verifier) = EdDSA.verifier_from_pem(data.public_key.as_bytes()) {
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
-                        return Ok(payload);
-                    }
-                }
-            }
-        }
-
-        Err(AppError::from_code(
-            TokenErrorCode::RefreshTokenVerifyFailed,
-        ))
-    }
-
     pub(super) fn sign_access_token(
         &self,
+        token_id: &str,
         key_id: &str,
         private_key_pem: &str,
         alg: &str,
@@ -116,7 +58,7 @@ impl TokenService {
         payload.set_audience(vec![audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
-        payload.set_jwt_id(&Uuid::new_v4().to_string());
+        payload.set_jwt_id(token_id);
         payload
             .set_claim(JwtClaimNames::CLIENT_ID, Some(serde_json::json!(client_id)))
             .map_err(|error| {
@@ -231,66 +173,15 @@ impl TokenService {
         })
     }
 
-    pub(super) fn sign_refresh_token(
-        &self,
-        key_id: &str,
-        private_key_pem: &str,
-        alg: &str,
-        issuer: &url::Url,
-        audience: &str,
-        user_oid: &Uuid,
-    ) -> Result<String, AppError> {
-        let mut header = JwsHeader::new();
-        header.set_token_type("JWT");
-        header.set_key_id(key_id);
-
-        let mut payload = JwtPayload::new();
-        let now = std::time::SystemTime::now();
-        payload.set_issuer(issuer.as_str());
-        payload.set_subject(&user_oid.to_string());
-        payload.set_audience(vec![audience]);
-        payload.set_issued_at(&now);
-        payload.set_expires_at(&(now + std::time::Duration::from_secs(30 * 24 * 60 * 60)));
-        payload
-            .set_claim(
-                JwtClaimNames::TOKEN_USE,
-                Some(serde_json::json!(TokenUseValues::REFRESH_TOKEN)),
-            )
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-            })?;
-
-        let signer: Box<dyn josekit::jws::JwsSigner> = match alg {
-            "RS256" => Box::new(RS256.signer_from_pem(private_key_pem.as_bytes()).map_err(
-                |error| {
-                    AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-                },
-            )?),
-            _ => Box::new(
-                ES256
-                    .signer_from_pem(private_key_pem.as_bytes())
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::SignRefreshTokenFailed)
-                            .with_source(error)
-                    })?,
-            ),
-        };
-        jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
-            AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-        })
-    }
-
     pub(super) async fn store_refresh_token(
         &self,
         client_oid: Uuid,
-        token: &str,
         scope: &str,
         user_oid: &str,
         session_oid: &str,
         rotated_from: Option<&str>,
-    ) -> Result<(), AppError> {
+    ) -> Result<String, AppError> {
         let data = serde_json::to_value(RefreshTokenData {
-            token: token.to_string(),
             scope: scope.to_string(),
             user_oid: user_oid.to_string(),
             session_oid: session_oid.to_string(),
@@ -300,7 +191,8 @@ impl TokenService {
             AppError::from_code(TokenErrorCode::SerializeRefreshFailed).with_source(error)
         })?;
 
-        self.client_authorization_repo
+        let record = self
+            .client_authorization_repo
             .create(
                 client_oid,
                 ClientAuthorizationType::RefreshToken,
@@ -312,7 +204,43 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::StoreRefreshFailed).with_source(error)
             })?;
 
-        Ok(())
+        self.data_protector
+            .protect("refresh-token", record.oid.as_bytes())
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
+            })
+    }
+
+    pub(super) async fn create_access_token_record(
+        &self,
+        client_oid: Uuid,
+        scope: &str,
+        user_oid: &str,
+        session_oid: &str,
+        authorization_code_oid: Option<Uuid>,
+    ) -> Result<ClientAuthorization, AppError> {
+        let data = serde_json::to_value(AccessTokenData {
+            scope: scope.to_string(),
+            user_oid: user_oid.to_string(),
+            session_oid: session_oid.to_string(),
+            authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
+        })
+        .map_err(|error| {
+            AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+        })?;
+
+        self.client_authorization_repo
+            .create(
+                client_oid,
+                ClientAuthorizationType::AccessToken,
+                data,
+                chrono::Utc::now() + chrono::Duration::hours(1),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+            })
     }
 
     #[cfg(test)]

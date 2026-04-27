@@ -124,6 +124,7 @@ impl AppServices {
             ),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
+                Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(AsymmetricKeyService {
                     repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                     generator: Arc::new(AsymmetricKeyGeneratorImpl),

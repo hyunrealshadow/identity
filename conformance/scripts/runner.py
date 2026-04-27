@@ -24,6 +24,10 @@ SPECIAL_TIMEOUT_TESTS = {
     "oidcc-codereuse-30seconds": 90,
 }
 
+NO_URL_RETRY_TESTS = {
+    "oidcc-codereuse-30seconds",
+}
+
 
 class TestRunner:
     def __init__(
@@ -127,7 +131,7 @@ class TestRunner:
                         # Still WAITING with no new URLs and no screenshots needed.
                         # Conformance suite may be re-issuing the same URL after a failed
                         # login attempt. Clear processed_urls to allow a retry.
-                        if processed_urls:
+                        if processed_urls and test_name not in NO_URL_RETRY_TESTS:
                             print(f"    [debug] WAITING with no new URLs, clearing processed_urls to retry")
                             processed_urls.clear()
 

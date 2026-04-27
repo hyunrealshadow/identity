@@ -20,10 +20,10 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         oid: Uuid,
     ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError>;
 
-    async fn find_refresh_token_by_token(
+    async fn revoke_access_tokens_for_authorization_code(
         &self,
-        token: &str,
-    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError>;
+        authorization_code_oid: Uuid,
+    ) -> Result<(), ClientAuthorizationRepositoryError>;
 
     async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError>;
 }

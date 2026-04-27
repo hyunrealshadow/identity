@@ -17,8 +17,8 @@ use crate::{
     },
     domain::{
         client_authorization::{
-            AuthorizationCodeData, ClientAuthorizationRepository, ClientAuthorizationType,
-            RefreshTokenData,
+            AccessTokenData, AuthorizationCodeData, ClientAuthorization,
+            ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
         },
         key::{KeyData, repository::KeyRepository},
         openid_connect::{

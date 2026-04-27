@@ -12,6 +12,7 @@ pub type ClientAuthorizationOid = Uuid;
 pub enum ClientAuthorizationType {
     AuthorizationRequest,
     AuthorizationCode,
+    AccessToken,
     RefreshToken,
 }
 
@@ -31,6 +32,7 @@ impl fmt::Display for ClientAuthorizationType {
         f.write_str(match self {
             Self::AuthorizationRequest => "authorization_request",
             Self::AuthorizationCode => "authorization_code",
+            Self::AccessToken => "access_token",
             Self::RefreshToken => "refresh_token",
         })
     }
@@ -43,6 +45,7 @@ impl FromStr for ClientAuthorizationType {
         Ok(match s {
             "authorization_request" => Self::AuthorizationRequest,
             "authorization_code" => Self::AuthorizationCode,
+            "access_token" => Self::AccessToken,
             "refresh_token" => Self::RefreshToken,
             _ => return Err(ParseClientAuthorizationTypeError),
         })
@@ -65,11 +68,18 @@ pub struct AuthorizationCodeData {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RefreshTokenData {
-    pub token: String,
     pub scope: String,
     pub user_oid: String,
     pub session_oid: String,
     pub rotated_from: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AccessTokenData {
+    pub scope: String,
+    pub user_oid: String,
+    pub session_oid: String,
+    pub authorization_code_oid: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +96,9 @@ pub struct ClientAuthorization {
 
 #[cfg(test)]
 mod tests {
-    use super::{AuthorizationCodeData, ClientAuthorizationType, RefreshTokenData};
+    use super::{
+        AccessTokenData, AuthorizationCodeData, ClientAuthorizationType, RefreshTokenData,
+    };
     use std::str::FromStr;
 
     #[test]
@@ -98,6 +110,10 @@ mod tests {
         assert_eq!(
             ClientAuthorizationType::from_str("authorization_code").unwrap(),
             ClientAuthorizationType::AuthorizationCode
+        );
+        assert_eq!(
+            ClientAuthorizationType::from_str("access_token").unwrap(),
+            ClientAuthorizationType::AccessToken
         );
     }
 
@@ -124,16 +140,31 @@ mod tests {
     #[test]
     fn refresh_token_data_serialization() {
         let data = RefreshTokenData {
-            token: "refresh-123".to_string(),
             scope: "openid offline_access profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: uuid::Uuid::nil().to_string(),
-            rotated_from: Some("refresh-old".to_string()),
+            rotated_from: Some(uuid::Uuid::nil().to_string()),
         };
 
         let json = serde_json::to_string(&data).unwrap();
         let parsed: RefreshTokenData = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.token, "refresh-123");
-        assert_eq!(parsed.rotated_from.as_deref(), Some("refresh-old"));
+        assert_eq!(parsed.scope, "openid offline_access profile");
+        let rotated_from = uuid::Uuid::nil().to_string();
+        assert_eq!(parsed.rotated_from.as_deref(), Some(rotated_from.as_str()));
+    }
+
+    #[test]
+    fn access_token_data_serialization() {
+        let data = AccessTokenData {
+            scope: "openid profile".to_string(),
+            user_oid: uuid::Uuid::nil().to_string(),
+            session_oid: uuid::Uuid::nil().to_string(),
+            authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let parsed: AccessTokenData = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.scope, "openid profile");
+        assert!(parsed.authorization_code_oid.is_some());
     }
 }

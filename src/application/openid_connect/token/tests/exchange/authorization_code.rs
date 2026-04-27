@@ -8,58 +8,59 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = rsa.public_key_to_pem().unwrap();
+    let public_key_string = String::from_utf8(public_key.clone()).unwrap();
+    let key_repo = Arc::new(InMemoryKeyRepository {
+        keys: vec![Key {
+            oid: KeyOid(Uuid::new_v4()),
+            r#type: KeyType::Asymmetric,
+            data: KeyData::Asymmetric(AsymmetricKeyData {
+                public_key: public_key_string.clone(),
+                private_key,
+                certificate: None,
+            }),
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }],
+    });
+    let user = User {
+        oid: UserOid(user_oid),
+        email: "alice@example.com".to_string(),
+        email_normalized: "alice@example.com".to_string(),
+        name: "Alice".to_string(),
+        name_normalized: "alice".to_string(),
+        given_name: None,
+        family_name: None,
+        middle_name: None,
+        nickname: None,
+        profile: None,
+        picture: None,
+        website: None,
+        gender: None,
+        birthdate: None,
+        zoneinfo: None,
+        locale: None,
+        email_verified: true,
+        phone_number: None,
+        phone_number_verified: None,
+        address_formatted: None,
+        address_street_address: None,
+        address_locality: None,
+        address_region: None,
+        address_postal_code: None,
+        address_country: None,
+        failed_attempts: 0,
+        enabled: true,
+        locked: false,
+        locked_until: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
     let service = TokenService::new(
         repo.clone(),
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![Key {
-                oid: KeyOid(Uuid::new_v4()),
-                r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(AsymmetricKeyData {
-                    public_key: String::from_utf8(public_key.clone()).unwrap(),
-                    private_key,
-                    certificate: None,
-                }),
-                expires_at: None,
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
-        Arc::new(InMemoryUserRepository {
-            user: User {
-                oid: UserOid(user_oid),
-                email: "alice@example.com".to_string(),
-                email_normalized: "alice@example.com".to_string(),
-                name: "Alice".to_string(),
-                name_normalized: "alice".to_string(),
-                given_name: None,
-                family_name: None,
-                middle_name: None,
-                nickname: None,
-                profile: None,
-                picture: None,
-                website: None,
-                gender: None,
-                birthdate: None,
-                zoneinfo: None,
-                locale: None,
-                email_verified: true,
-                phone_number: None,
-                phone_number_verified: None,
-                address_formatted: None,
-                address_street_address: None,
-                address_locality: None,
-                address_region: None,
-                address_postal_code: None,
-                address_country: None,
-                failed_attempts: 0,
-                enabled: true,
-                locked: false,
-                locked_until: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            },
-        }),
+        key_repo.clone(),
+        Arc::new(InMemoryUserRepository { user: user.clone() }),
         Arc::new(InMemoryClientRepository),
         Arc::new(InMemoryCredentialRepository {
             credentials: vec![OpenIdConnectCredential {
@@ -146,58 +147,59 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = rsa.public_key_to_pem().unwrap();
+    let public_key_string = String::from_utf8(public_key.clone()).unwrap();
+    let key_repo = Arc::new(InMemoryKeyRepository {
+        keys: vec![Key {
+            oid: KeyOid(Uuid::new_v4()),
+            r#type: KeyType::Asymmetric,
+            data: KeyData::Asymmetric(AsymmetricKeyData {
+                public_key: public_key_string,
+                private_key,
+                certificate: None,
+            }),
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }],
+    });
+    let user = User {
+        oid: UserOid(user_oid),
+        email: "alice@example.com".to_string(),
+        email_normalized: "alice@example.com".to_string(),
+        name: "Alice".to_string(),
+        name_normalized: "alice".to_string(),
+        given_name: None,
+        family_name: None,
+        middle_name: None,
+        nickname: None,
+        profile: None,
+        picture: None,
+        website: None,
+        gender: None,
+        birthdate: None,
+        zoneinfo: None,
+        locale: None,
+        email_verified: true,
+        phone_number: None,
+        phone_number_verified: None,
+        address_formatted: None,
+        address_street_address: None,
+        address_locality: None,
+        address_region: None,
+        address_postal_code: None,
+        address_country: None,
+        failed_attempts: 0,
+        enabled: true,
+        locked: false,
+        locked_until: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
     let service = TokenService::new(
         repo.clone(),
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![Key {
-                oid: KeyOid(Uuid::new_v4()),
-                r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(AsymmetricKeyData {
-                    public_key: String::from_utf8(public_key.clone()).unwrap(),
-                    private_key,
-                    certificate: None,
-                }),
-                expires_at: None,
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
-        Arc::new(InMemoryUserRepository {
-            user: User {
-                oid: UserOid(user_oid),
-                email: "alice@example.com".to_string(),
-                email_normalized: "alice@example.com".to_string(),
-                name: "Alice".to_string(),
-                name_normalized: "alice".to_string(),
-                given_name: None,
-                family_name: None,
-                middle_name: None,
-                nickname: None,
-                profile: None,
-                picture: None,
-                website: None,
-                gender: None,
-                birthdate: None,
-                zoneinfo: None,
-                locale: None,
-                email_verified: true,
-                phone_number: None,
-                phone_number_verified: None,
-                address_formatted: None,
-                address_street_address: None,
-                address_locality: None,
-                address_region: None,
-                address_postal_code: None,
-                address_country: None,
-                failed_attempts: 0,
-                enabled: true,
-                locked: false,
-                locked_until: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            },
-        }),
+        key_repo.clone(),
+        Arc::new(InMemoryUserRepository { user: user.clone() }),
         Arc::new(InMemoryClientRepository),
         Arc::new(InMemoryCredentialRepository {
             credentials: vec![OpenIdConnectCredential {
@@ -311,7 +313,81 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
 async fn exchange_authorization_code_rejects_reused_code() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
-    let service = build_token_service(repo.clone(), user_oid);
+    let rsa = Rsa::generate(2048).unwrap();
+    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
+    let public_key = rsa.public_key_to_pem().unwrap();
+    let public_key_string = String::from_utf8(public_key.clone()).unwrap();
+    let key_repo = Arc::new(InMemoryKeyRepository {
+        keys: vec![Key {
+            oid: KeyOid(Uuid::new_v4()),
+            r#type: KeyType::Asymmetric,
+            data: KeyData::Asymmetric(AsymmetricKeyData {
+                public_key: public_key_string,
+                private_key,
+                certificate: None,
+            }),
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }],
+    });
+    let user = User {
+        oid: UserOid(user_oid),
+        email: "alice@example.com".to_string(),
+        email_normalized: "alice@example.com".to_string(),
+        name: "Alice".to_string(),
+        name_normalized: "alice".to_string(),
+        given_name: None,
+        family_name: None,
+        middle_name: None,
+        nickname: None,
+        profile: None,
+        picture: None,
+        website: None,
+        gender: None,
+        birthdate: None,
+        zoneinfo: None,
+        locale: None,
+        email_verified: true,
+        phone_number: None,
+        phone_number_verified: None,
+        address_formatted: None,
+        address_street_address: None,
+        address_locality: None,
+        address_region: None,
+        address_postal_code: None,
+        address_country: None,
+        failed_attempts: 0,
+        enabled: true,
+        locked: false,
+        locked_until: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let service = TokenService::new(
+        repo.clone(),
+        key_repo.clone(),
+        Arc::new(InMemoryUserRepository { user: user.clone() }),
+        Arc::new(InMemoryClientRepository),
+        Arc::new(InMemoryCredentialRepository {
+            credentials: vec![OpenIdConnectCredential {
+                oid: Uuid::new_v4(),
+                client_oid: Uuid::nil(),
+                r#type: OpenIdConnectCredentialType::ClientSecret,
+                hint: "token".to_string(),
+                data: OpenIdConnectCredentialData::ClientSecret {
+                    secret: "secret-123".to_string(),
+                },
+                expires_at: Utc::now() + chrono::Duration::days(1),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            }],
+        }),
+        provider_service(),
+        InMemoryDataProtector::new(),
+    );
 
     let record = repo
         .create(
@@ -336,7 +412,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         .unwrap();
 
     let code = STANDARD.encode(record.oid.as_bytes());
-    service
+    let first_response = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
             grant_type: "authorization_code".to_string(),
             code: code.clone(),
@@ -349,6 +425,10 @@ async fn exchange_authorization_code_rejects_reused_code() {
         })
         .await
         .unwrap();
+    let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (access_payload, _) =
+        jwt::decode_with_verifier(&first_response.access_token, &verifier).unwrap();
+    let access_token_jti = access_payload.jwt_id().unwrap().to_string();
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
@@ -364,6 +444,29 @@ async fn exchange_authorization_code_rejects_reused_code() {
         .await;
 
     assert!(result.is_err());
+    assert!(
+        repo.find_by_oid(Uuid::parse_str(&access_token_jti).unwrap())
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_at
+            .is_some()
+    );
+    let user_info_service = crate::application::openid_connect::user_info::UserInfoService::new(
+        Arc::new(InMemoryUserRepository { user }),
+        repo.clone(),
+        Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
+            repo: key_repo,
+            generator: Arc::new(AsymmetricKeyGeneratorImpl),
+        }),
+        provider_service(),
+    );
+    assert!(
+        user_info_service
+            .validate_access_token(&first_response.access_token)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -409,9 +512,15 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
         .unwrap();
 
     assert!(result.refresh_token.is_some());
-    let stored = repo
-        .find_refresh_token_by_token(result.refresh_token.as_ref().unwrap())
-        .await
-        .unwrap();
-    assert!(stored.is_some());
+    let refresh_token_oid = Uuid::from_slice(
+        &STANDARD
+            .decode(result.refresh_token.as_ref().unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    let stored = repo.find_by_oid(refresh_token_oid).await.unwrap();
+    assert_eq!(
+        stored.as_ref().map(|record| &record.type_),
+        Some(&ClientAuthorizationType::RefreshToken)
+    );
 }

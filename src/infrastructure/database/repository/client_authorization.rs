@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set,
-    sea_query::Expr,
+    sea_query::{Expr, SimpleExpr},
 };
 use uuid::Uuid;
 
@@ -108,32 +108,37 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(Some(to_domain(request_model, client_model.oid)?))
     }
 
-    async fn find_refresh_token_by_token(
+    async fn revoke_access_tokens_for_authorization_code(
         &self,
-        token: &str,
-    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
-        let Some((request_model, Some(client_model))) = ClientAuthorizationEntity::find()
+        authorization_code_oid: Uuid,
+    ) -> Result<(), ClientAuthorizationRepositoryError> {
+        let now = Utc::now();
+        ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::RevokedAt,
+                SimpleExpr::Value(now.into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(now.into()),
+            )
             .filter(
                 Condition::all()
                     .add(
                         client_authorization::Column::Type
-                            .eq(ClientAuthorizationType::RefreshToken.to_string()),
+                            .eq(ClientAuthorizationType::AccessToken.to_string()),
                     )
+                    .add(client_authorization::Column::RevokedAt.is_null())
                     .add(Expr::cust_with_values(
-                        r#"("client_authorization"."data"->>'token') = $1"#,
-                        [token],
+                        r#"("client_authorization"."data"->>'authorization_code_oid') = $1"#,
+                        [authorization_code_oid.to_string()],
                     )),
             )
-            .inner_join(ClientEntity)
-            .select_also(ClientEntity)
-            .one(&self.db)
+            .exec(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
-        else {
-            return Ok(None);
-        };
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
 
-        Ok(Some(to_domain(request_model, client_model.oid)?))
+        Ok(())
     }
 
     async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {

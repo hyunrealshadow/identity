@@ -401,23 +401,24 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         Ok(self.records.lock().unwrap().get(&oid).cloned())
     }
 
-    async fn find_refresh_token_by_token(
+    async fn revoke_access_tokens_for_authorization_code(
         &self,
-        token: &str,
-    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
-        Ok(self
-            .records
-            .lock()
-            .unwrap()
-            .values()
-            .find(|record| {
-                serde_json::from_value::<crate::domain::client_authorization::RefreshTokenData>(
-                    record.data.clone(),
-                )
-                .map(|data| data.token == token)
-                .unwrap_or(false)
-            })
-            .cloned())
+        authorization_code_oid: Uuid,
+    ) -> Result<(), ClientAuthorizationRepositoryError> {
+        let authorization_code_oid = authorization_code_oid.to_string();
+        for record in self.records.lock().unwrap().values_mut() {
+            let should_revoke = record.type_ == ClientAuthorizationType::AccessToken
+                && serde_json::from_value::<AccessTokenData>(record.data.clone())
+                    .map(|data| {
+                        data.authorization_code_oid.as_deref()
+                            == Some(authorization_code_oid.as_str())
+                    })
+                    .unwrap_or(false);
+            if should_revoke {
+                record.revoked_at = Some(Utc::now());
+            }
+        }
+        Ok(())
     }
 
     async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {
