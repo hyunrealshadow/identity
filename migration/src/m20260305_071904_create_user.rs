@@ -8,22 +8,30 @@ pub enum User {
     Table,
     Id,
     Oid,
-    Email,
-    EmailNormalized,
     Name,
     NameNormalized,
+    Email,
+    EmailNormalized,
+    EmailVerified,
+    Nickname,
     GivenName,
     FamilyName,
     MiddleName,
-    Nickname,
     Profile,
     Picture,
     Website,
     Gender,
     Birthdate,
-    Zoneinfo,
+    ZoneInfo,
     Locale,
-    EmailVerified,
+    PhoneNumber,
+    PhoneNumberVerified,
+    AddressFormatted,
+    AddressStreetAddress,
+    AddressLocality,
+    AddressRegion,
+    AddressPostalCode,
+    AddressCountry,
     FailedAttempts,
     Enabled,
     Locked,
@@ -42,22 +50,30 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(User::Id).big_integer())
                     .col(uuid_uniq(User::Oid).default(Expr::cust("gen_random_uuid()")))
-                    .col(string(User::Email))
-                    .col(string_uniq(User::EmailNormalized))
                     .col(string(User::Name))
                     .col(string_uniq(User::NameNormalized))
+                    .col(string(User::Email))
+                    .col(string_uniq(User::EmailNormalized))
+                    .col(boolean(User::EmailVerified).default(false))
+                    .col(string_null(User::PhoneNumber))
+                    .col(boolean_null(User::PhoneNumberVerified))
+                    .col(string_null(User::Nickname))
                     .col(string_null(User::GivenName))
                     .col(string_null(User::FamilyName))
                     .col(string_null(User::MiddleName))
-                    .col(string_null(User::Nickname))
                     .col(string_null(User::Profile))
                     .col(string_null(User::Picture))
                     .col(string_null(User::Website))
                     .col(string_null(User::Gender))
                     .col(string_null(User::Birthdate))
-                    .col(string_null(User::Zoneinfo))
+                    .col(string_null(User::ZoneInfo))
                     .col(string_null(User::Locale))
-                    .col(boolean(User::EmailVerified).default(false))
+                    .col(string_null(User::AddressFormatted))
+                    .col(string_null(User::AddressStreetAddress))
+                    .col(string_null(User::AddressLocality))
+                    .col(string_null(User::AddressRegion))
+                    .col(string_null(User::AddressPostalCode))
+                    .col(string_null(User::AddressCountry))
                     .col(integer(User::FailedAttempts).default(0))
                     .col(boolean(User::Enabled).default(true))
                     .col(boolean(User::Locked).default(false))

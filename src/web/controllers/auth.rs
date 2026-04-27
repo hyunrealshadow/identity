@@ -14,7 +14,7 @@ use crate::application::error::AppError;
 use super::{
     response::{app_state, parse_json, parse_param, render_json},
     shared::{
-        append_set_cookie, build_selected_session_cookie, build_session_context, csrf_hoop,
+        append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
         csrf_token, is_secure_cookie, load_active_sessions,
     },
 };
@@ -29,7 +29,7 @@ use crate::{application::auth::login::ChallengeOutcome, domain::user::model::Use
 
 pub fn routes() -> Router {
     Router::new()
-        .hoop(csrf_hoop())
+        .hoop(csrf_middleware())
         .push(Router::with_path("api/auth/sessions/active").get(active_sessions))
         .push(Router::with_path("api/auth/login/{id}").get(login_status))
         .push(Router::with_path("api/auth/login/select").post(select_account))

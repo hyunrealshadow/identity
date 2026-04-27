@@ -34,7 +34,9 @@ pub fn normalize_email(email: &str) -> Result<String, EmailNormalizationError> {
 }
 
 pub fn normalize_identifier(identifier: &str) -> Option<String> {
-    normalize_email(identifier).ok().or_else(|| normalize_username(identifier))
+    normalize_email(identifier)
+        .ok()
+        .or_else(|| normalize_username(identifier))
 }
 
 #[cfg(test)]

@@ -143,6 +143,8 @@ pub enum AuthorizeErrorCode {
     // --- login_id ---
     /// Encrypted login_id decryption or parsing failed.
     LoginIdInvalid,
+    /// Requested scope is not assigned to the client.
+    ScopeNotAssignedToClient,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -204,6 +206,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::SerializeCodeFailed => ErrorKind::Internal,
             Self::StoreCodeFailed => ErrorKind::Internal,
             Self::LoginIdInvalid => ErrorKind::Validation,
+            Self::ScopeNotAssignedToClient => ErrorKind::Validation,
         }
     }
 
@@ -265,6 +268,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::SerializeCodeFailed => 23053,
             Self::StoreCodeFailed => 23054,
             Self::LoginIdInvalid => 23055,
+            Self::ScopeNotAssignedToClient => 23056,
         }
     }
 }

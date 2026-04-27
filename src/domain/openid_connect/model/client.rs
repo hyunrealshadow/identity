@@ -39,18 +39,24 @@ pub struct OpenIdConnectClientMetadata {
 pub struct OpenIdConnectClient {
     client: Client,
     metadata: OpenIdConnectClientMetadata,
+    assigned_scopes: Vec<String>,
 }
 
 impl OpenIdConnectClient {
     pub fn new(
         client: Client,
         metadata: OpenIdConnectClientMetadata,
+        assigned_scopes: Vec<String>,
     ) -> Result<Self, InvalidOpenIdConnectClientError> {
         if client.protocol != crate::domain::client::model::ClientProtocol::OpenIdConnect {
             return Err(InvalidOpenIdConnectClientError);
         }
 
-        Ok(Self { client, metadata })
+        Ok(Self {
+            client,
+            metadata,
+            assigned_scopes,
+        })
     }
 
     pub fn client(&self) -> &Client {
@@ -59,6 +65,16 @@ impl OpenIdConnectClient {
 
     pub fn metadata(&self) -> &OpenIdConnectClientMetadata {
         &self.metadata
+    }
+
+    pub fn assigned_scopes(&self) -> &[String] {
+        &self.assigned_scopes
+    }
+
+    pub fn has_assigned_scope(&self, scope_name: &str) -> bool {
+        self.assigned_scopes
+            .iter()
+            .any(|assigned| assigned == scope_name)
     }
 }
 
@@ -166,7 +182,7 @@ mod tests {
             skip_consent: false,
         };
 
-        let oidc_client = OpenIdConnectClient::new(client, metadata).unwrap();
+        let oidc_client = OpenIdConnectClient::new(client, metadata, vec![]).unwrap();
 
         assert_eq!(
             oidc_client.metadata().redirect_uris.as_ref().unwrap()[0].as_str(),
@@ -218,7 +234,7 @@ mod tests {
             skip_consent: false,
         };
 
-        assert!(OpenIdConnectClient::new(client, metadata).is_err());
+        assert!(OpenIdConnectClient::new(client, metadata, vec![]).is_err());
     }
 
     #[test]
@@ -256,5 +272,60 @@ mod tests {
         };
 
         assert_eq!(metadata.skip_consent, true);
+    }
+
+    #[test]
+    fn stores_assigned_scope_names() {
+        let client = Client {
+            oid: uuid::Uuid::nil(),
+            protocol: ClientProtocol::OpenIdConnect,
+            name: "Example RP".to_string(),
+            names: vec![],
+            description: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        };
+        let metadata = OpenIdConnectClientMetadata {
+            redirect_uris: None,
+            post_logout_redirect_uris: None,
+            response_types: None,
+            grant_types: None,
+            application_type: None,
+            contacts: None,
+            logo_uri: None,
+            client_uri: None,
+            policy_uri: None,
+            tos_uri: None,
+            sector_identifier_uri: None,
+            subject_type: None,
+            id_token_signed_response_alg: None,
+            id_token_encrypted_response_alg: None,
+            id_token_encrypted_response_enc: None,
+            userinfo_signed_response_alg: None,
+            userinfo_encrypted_response_alg: None,
+            userinfo_encrypted_response_enc: None,
+            request_object_signing_alg: None,
+            request_object_encryption_alg: None,
+            request_object_encryption_enc: None,
+            token_endpoint_auth_method: None,
+            token_endpoint_auth_signing_alg: None,
+            default_max_age: None,
+            require_auth_time: None,
+            default_acr_values: None,
+            initiate_login_uri: None,
+            request_uris: None,
+            skip_consent: false,
+        };
+
+        let oidc_client = OpenIdConnectClient::new(
+            client,
+            metadata,
+            vec!["openid".to_string(), "email".to_string()],
+        )
+        .unwrap();
+
+        assert!(oidc_client.has_assigned_scope("openid"));
+        assert!(oidc_client.has_assigned_scope("email"));
+        assert!(!oidc_client.has_assigned_scope("profile"));
     }
 }

@@ -55,3 +55,4 @@ E23052 = An unexpected error occurred due to a data integrity issue.
 E23053 = An unexpected error occurred while issuing the authorization code.
 E23054 = An unexpected error occurred while issuing the authorization code.
 E23055 = The login request is invalid or has expired.
+E23056 = The client is not allowed to request one or more scopes.

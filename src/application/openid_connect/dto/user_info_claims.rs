@@ -23,6 +23,46 @@ where
 ///
 /// All fields except `sub` are optional and may be omitted based on
 /// the scopes granted and user's profile data.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AddressClaim {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formatted: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub street_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locality: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub postal_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+}
+
+impl AddressClaim {
+    fn from_user(user: &crate::domain::user::User) -> Option<Self> {
+        let claim = Self {
+            formatted: user.address_formatted.clone(),
+            street_address: user.address_street_address.clone(),
+            locality: user.address_locality.clone(),
+            region: user.address_region.clone(),
+            postal_code: user.address_postal_code.clone(),
+            country: user.address_country.clone(),
+        };
+
+        claim.has_any_value().then_some(claim)
+    }
+
+    fn has_any_value(&self) -> bool {
+        self.formatted.is_some()
+            || self.street_address.is_some()
+            || self.locality.is_some()
+            || self.region.is_some()
+            || self.postal_code.is_some()
+            || self.country.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UserInfoClaims {
     /// Subject - unique identifier for the user (required).
@@ -88,6 +128,18 @@ pub struct UserInfoClaims {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email_verified: Option<bool>,
 
+    /// End-user's preferred telephone number.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone_number: Option<String>,
+
+    /// True if the end-user's phone number has been verified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone_number_verified: Option<bool>,
+
+    /// End-user's preferred postal address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<AddressClaim>,
+
     /// Time the end-user's information was last updated.
     #[serde(
         skip_serializing_if = "Option::is_none",
@@ -115,6 +167,9 @@ impl UserInfoClaims {
             preferred_username: None,
             email: None,
             email_verified: None,
+            phone_number: None,
+            phone_number_verified: None,
+            address: None,
             updated_at: None,
         }
     }
@@ -144,6 +199,9 @@ impl UserInfoClaims {
             preferred_username: Some(user.name.clone()),
             email: Some(user.email.clone()),
             email_verified: Some(user.email_verified),
+            phone_number: user.phone_number.clone(),
+            phone_number_verified: user.phone_number_verified,
+            address: AddressClaim::from_user(user),
             updated_at: user.updated_at,
         }
     }
@@ -213,6 +271,15 @@ impl UserInfoClaims {
             self.email = None;
             self.email_verified = None;
         }
+
+        if !scope.phone && !essential_claims.contains(&"phone_number") {
+            self.phone_number = None;
+            self.phone_number_verified = None;
+        }
+
+        if !scope.address && !essential_claims.contains(&"address") {
+            self.address = None;
+        }
     }
 
     fn extract_essential_claims(claims_request: Option<&serde_json::Value>) -> Vec<&'static str> {
@@ -238,6 +305,8 @@ impl UserInfoClaims {
                                     "locale" => essential.push("locale"),
                                     "preferred_username" => essential.push("preferred_username"),
                                     "email" => essential.push("email"),
+                                    "phone_number" => essential.push("phone_number"),
+                                    "address" => essential.push("address"),
                                     "updated_at" => essential.push("updated_at"),
                                     _ => {}
                                 }
@@ -322,6 +391,14 @@ mod tests {
             zoneinfo: Some("UTC".to_string()),
             locale: Some("en-US".to_string()),
             email_verified: true,
+            phone_number: None,
+            phone_number_verified: None,
+            address_formatted: None,
+            address_street_address: None,
+            address_locality: None,
+            address_region: None,
+            address_postal_code: None,
+            address_country: None,
             failed_attempts: 0,
             enabled: true,
             locked: false,
@@ -386,6 +463,9 @@ mod tests {
             preferred_username: Some("john".to_string()),
             email: Some("john@example.com".to_string()),
             email_verified: Some(true),
+            phone_number: None,
+            phone_number_verified: None,
+            address: None,
             updated_at: Some(chrono::Utc::now()),
         }
     }
@@ -428,7 +508,10 @@ mod tests {
         assert_eq!(filtered.family_name, Some("Doe".to_string()));
         assert_eq!(filtered.middle_name, Some("John Doe".to_string()));
         assert_eq!(filtered.nickname, Some("john".to_string()));
-        assert_eq!(filtered.profile, Some("https://example.com/john".to_string()));
+        assert_eq!(
+            filtered.profile,
+            Some("https://example.com/john".to_string())
+        );
         assert_eq!(
             filtered.picture,
             Some("https://example.com/john.png".to_string())
@@ -492,5 +575,50 @@ mod tests {
 
         assert_eq!(filtered.name, None);
         assert_eq!(filtered.email, None);
+    }
+
+    #[test]
+    fn apply_scope_filter_keeps_phone_claims_with_phone_scope() {
+        let mut claims = full_profile_claims();
+        claims.phone_number = Some("+12025550123".to_string());
+        claims.phone_number_verified = Some(true);
+
+        let scope = ScopeSet::parse("openid phone").unwrap();
+        claims.apply_scope_filter(&scope, None);
+
+        assert_eq!(claims.phone_number.as_deref(), Some("+12025550123"));
+        assert_eq!(claims.phone_number_verified, Some(true));
+        assert_eq!(claims.email, None);
+    }
+
+    #[test]
+    fn apply_scope_filter_removes_phone_claims_without_phone_scope() {
+        let mut claims = full_profile_claims();
+        claims.phone_number = Some("+12025550123".to_string());
+        claims.phone_number_verified = Some(true);
+
+        let scope = ScopeSet::parse("openid profile").unwrap();
+        claims.apply_scope_filter(&scope, None);
+
+        assert_eq!(claims.phone_number, None);
+        assert_eq!(claims.phone_number_verified, None);
+    }
+
+    #[test]
+    fn serializes_address_object_when_address_scope_is_present() {
+        let mut claims = UserInfoClaims::new("user-123".to_string());
+        claims.address = Some(AddressClaim {
+            formatted: Some("1 Main St\nExample City".to_string()),
+            street_address: Some("1 Main St".to_string()),
+            locality: Some("Example City".to_string()),
+            region: Some("CA".to_string()),
+            postal_code: Some("94000".to_string()),
+            country: Some("US".to_string()),
+        });
+
+        let json = serde_json::to_value(&claims).unwrap();
+
+        assert_eq!(json["address"]["street_address"], "1 Main St");
+        assert_eq!(json["address"]["country"], "US");
     }
 }

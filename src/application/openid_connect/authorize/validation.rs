@@ -64,6 +64,7 @@ impl AuthorizeService {
         if !scope.contains_openid() {
             return Err(AppError::from_code(AuthorizeErrorCode::OpenidScopeRequired));
         }
+        Self::validate_client_scope_assignment(&client, &scope)?;
 
         let display = params
             .display
@@ -200,6 +201,26 @@ impl AuthorizeService {
             return Err(AppError::from_code(
                 AuthorizeErrorCode::RedirectUriNotRegistered,
             ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_client_scope_assignment(
+        client: &OpenIdConnectClient,
+        scope: &ScopeSet,
+    ) -> Result<(), AppError> {
+        let unassigned = scope
+            .names()
+            .into_iter()
+            .filter(|name| !client.has_assigned_scope(name))
+            .collect::<Vec<_>>();
+
+        if !unassigned.is_empty() {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::ScopeNotAssignedToClient)
+                    .with_param("scopes", unassigned.join(", ")),
+            );
         }
 
         Ok(())

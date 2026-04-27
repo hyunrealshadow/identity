@@ -208,6 +208,10 @@ pub(super) struct RequestUriClientRepository {
     pub(super) request_uris: Vec<Url>,
 }
 
+pub(super) struct ScopedClientRepository {
+    pub(super) assigned_scopes: Vec<String>,
+}
+
 pub(super) const TEST_CLIENT_ID: Uuid = Uuid::nil();
 
 #[async_trait]
@@ -260,6 +264,69 @@ impl OpenIdConnectClientRepository for FoundClientRepository {
                     request_uris: None,
                     skip_consent: false,
                 },
+                vec![
+                    "openid".to_string(),
+                    "profile".to_string(),
+                    "email".to_string(),
+                    "offline_access".to_string(),
+                ],
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for ScopedClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: Uuid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        Ok(Some(
+            OpenIdConnectClient::new(
+                Client {
+                    oid,
+                    protocol: ClientProtocol::OpenIdConnect,
+                    name: "Example RP".to_string(),
+                    names: vec![],
+                    description: None,
+                    created_at: Utc::now(),
+                    updated_at: None,
+                },
+                OpenIdConnectClientMetadata {
+                    redirect_uris: Some(vec![
+                        url::Url::parse("https://client.example.com/callback").unwrap(),
+                    ]),
+                    post_logout_redirect_uris: None,
+                    response_types: None,
+                    grant_types: None,
+                    application_type: None,
+                    contacts: None,
+                    logo_uri: None,
+                    client_uri: None,
+                    policy_uri: None,
+                    tos_uri: None,
+                    sector_identifier_uri: None,
+                    subject_type: None,
+                    id_token_signed_response_alg: None,
+                    id_token_encrypted_response_alg: None,
+                    id_token_encrypted_response_enc: None,
+                    userinfo_signed_response_alg: None,
+                    userinfo_encrypted_response_alg: None,
+                    userinfo_encrypted_response_enc: None,
+                    request_object_signing_alg: None,
+                    request_object_encryption_alg: None,
+                    request_object_encryption_enc: None,
+                    token_endpoint_auth_method: None,
+                    token_endpoint_auth_signing_alg: None,
+                    default_max_age: None,
+                    require_auth_time: None,
+                    default_acr_values: None,
+                    initiate_login_uri: None,
+                    request_uris: None,
+                    skip_consent: false,
+                },
+                self.assigned_scopes.clone(),
             )
             .unwrap(),
         ))
@@ -316,6 +383,12 @@ impl OpenIdConnectClientRepository for RequestUriClientRepository {
                     request_uris: Some(self.request_uris.clone()),
                     skip_consent: false,
                 },
+                vec![
+                    "openid".to_string(),
+                    "profile".to_string(),
+                    "email".to_string(),
+                    "offline_access".to_string(),
+                ],
             )
             .unwrap(),
         ))

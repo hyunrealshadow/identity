@@ -21,8 +21,8 @@ use super::response::{
     render_html,
 };
 use super::shared::{
-    append_set_cookie, build_selected_session_cookie, build_session_context, csrf_hoop, csrf_token,
-    is_secure_cookie, load_active_sessions,
+    append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
+    csrf_token, is_secure_cookie, load_active_sessions,
 };
 use crate::web::views::auth_ui::{AccountData, IdentifierPageData, OtpPageData, PasswordPageData};
 use crate::{
@@ -38,7 +38,7 @@ use crate::{
 
 pub fn routes() -> Router {
     Router::new()
-        .hoop(csrf_hoop())
+        .hoop(csrf_middleware())
         .push(
             Router::with_path("login")
                 .get(login_page)

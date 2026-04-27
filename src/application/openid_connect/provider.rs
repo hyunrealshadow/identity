@@ -53,6 +53,8 @@ impl Default for OpenIdProviderCapabilities {
                 StandardScopes::OPENID.to_owned(),
                 StandardScopes::PROFILE.to_owned(),
                 StandardScopes::EMAIL.to_owned(),
+                StandardScopes::ADDRESS.to_owned(),
+                StandardScopes::PHONE.to_owned(),
                 StandardScopes::OFFLINE_ACCESS.to_owned(),
             ],
             response_types_supported: vec![
@@ -109,6 +111,9 @@ impl Default for OpenIdProviderCapabilities {
                 JwtClaimNames::PREFERRED_USERNAME.to_owned(),
                 JwtClaimNames::EMAIL.to_owned(),
                 JwtClaimNames::EMAIL_VERIFIED.to_owned(),
+                JwtClaimNames::PHONE_NUMBER.to_owned(),
+                JwtClaimNames::PHONE_NUMBER_VERIFIED.to_owned(),
+                JwtClaimNames::ADDRESS.to_owned(),
             ],
             claims_locales_supported: vec![],
             ui_locales_supported: vec![],
@@ -403,6 +408,28 @@ mod tests {
             metadata.response_types_supported,
             vec!["code", "id_token", "token id_token"]
         );
+    }
+
+    #[tokio::test]
+    async fn default_discovery_advertises_supported_address_and_phone_claims() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().unwrap();
+        let scopes = metadata.scopes_supported.unwrap();
+        let claims = metadata.claims_supported.unwrap();
+
+        assert!(scopes.iter().any(|scope| scope == "address"));
+        assert!(scopes.iter().any(|scope| scope == "phone"));
+        assert!(claims.iter().any(|claim| claim == "address"));
+        assert!(claims.iter().any(|claim| claim == "phone_number"));
+        assert!(claims.iter().any(|claim| claim == "phone_number_verified"));
     }
 
     impl OpenIdProviderService {

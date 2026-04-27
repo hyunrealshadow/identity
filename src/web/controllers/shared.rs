@@ -97,9 +97,9 @@ pub fn append_set_cookie(response: &mut Response, cookie: &str) {
     }
 }
 
-pub fn csrf_hoop() -> salvo::csrf::Csrf<salvo::csrf::BcryptCipher, salvo::csrf::CookieStore> {
-    bcrypt_cookie_csrf(FormFinder::new(CSRF_FORM_FIELD_NAME))
-        .add_finder(HeaderFinder::new(CSRF_HEADER_NAME))
+pub fn csrf_middleware() -> salvo::csrf::Csrf<salvo::csrf::BcryptCipher, salvo::csrf::CookieStore> {
+    bcrypt_cookie_csrf(HeaderFinder::new(CSRF_HEADER_NAME))
+        .add_finder(FormFinder::new(CSRF_FORM_FIELD_NAME))
         .add_finder(JsonFinder::new(CSRF_FORM_FIELD_NAME))
 }
 

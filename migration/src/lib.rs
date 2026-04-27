@@ -11,6 +11,8 @@ mod m20260407_060453_create_client_openid_connect;
 mod m20260407_060506_create_client_openid_connect_credential;
 mod m20260407_060938_create_client_request;
 mod m20260407_071449_create_login;
+mod m20260426_000001_create_scope;
+mod m20260426_000002_create_client_scope;
 
 pub struct Migrator;
 
@@ -28,6 +30,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260407_060506_create_client_openid_connect_credential::Migration),
             Box::new(m20260407_060938_create_client_request::Migration),
             Box::new(m20260407_071449_create_login::Migration),
+            Box::new(m20260426_000001_create_scope::Migration),
+            Box::new(m20260426_000002_create_client_scope::Migration),
         ]
     }
 }

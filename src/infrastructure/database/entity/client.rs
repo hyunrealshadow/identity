@@ -26,6 +26,8 @@ pub enum Relation {
     ClientOpenIdConnectCredential,
     #[sea_orm(has_many = "super::client_request::Entity")]
     ClientRequest,
+    #[sea_orm(has_many = "super::client_scope::Entity")]
+    ClientScope,
     #[sea_orm(has_many = "super::login::Entity")]
     Login,
 }
@@ -45,6 +47,12 @@ impl Related<super::client_open_id_connect_credential::Entity> for Entity {
 impl Related<super::client_request::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientRequest.def()
+    }
+}
+
+impl Related<super::client_scope::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ClientScope.def()
     }
 }
 

@@ -75,6 +75,20 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             essential: false,
         });
     }
+    if scope.address {
+        scopes.push(ScopeDisplay {
+            name: "address",
+            description: "Read your postal address",
+            essential: false,
+        });
+    }
+    if scope.phone {
+        scopes.push(ScopeDisplay {
+            name: "phone",
+            description: "Read your phone number",
+            essential: false,
+        });
+    }
     if scope.offline_access {
         scopes.push(ScopeDisplay {
             name: "offline_access",
@@ -98,6 +112,16 @@ mod tests {
         assert_eq!(scopes[0].name, "openid");
         assert!(scopes[0].essential);
         assert_eq!(scopes[1].name, "profile");
+    }
+
+    #[test]
+    fn build_scope_display_includes_address_and_phone() {
+        let scopes = build_scope_display(&ScopeSet::parse("openid address phone").unwrap());
+        let names = scopes.iter().map(|scope| scope.name).collect::<Vec<_>>();
+
+        assert_eq!(names, vec!["openid", "address", "phone"]);
+        assert_eq!(scopes[1].description, "Read your postal address");
+        assert_eq!(scopes[2].description, "Read your phone number");
     }
 
     #[test]

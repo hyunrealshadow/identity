@@ -19,7 +19,8 @@ use crate::{
     application::error::AppError,
     application::error::codes::common::CommonErrorCode,
     infrastructure::database::entity::{
-        client, client_open_id_connect, client_open_id_connect_credential, user, user_credential,
+        client, client_open_id_connect, client_open_id_connect_credential, client_scope, scope,
+        user, user_credential,
     },
 };
 
@@ -109,9 +110,17 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
             website: Set(Some(format!("users/{USER_OID}"))),
             gender: Set(Some("unspecified".to_owned())),
             birthdate: Set(Some("1970-01-01".to_owned())),
-            zoneinfo: Set(Some("UTC".to_owned())),
+            zone_info: Set(Some("UTC".to_owned())),
             locale: Set(Some("en-US".to_owned())),
             email_verified: Set(true),
+            phone_number: Set(Some("+12025550123".to_owned())),
+            phone_number_verified: Set(Some(true)),
+            address_formatted: Set(Some("1 Main St\nConformance City, CA 94000\nUS".to_owned())),
+            address_street_address: Set(Some("1 Main St".to_owned())),
+            address_locality: Set(Some("Conformance City".to_owned())),
+            address_region: Set(Some("CA".to_owned())),
+            address_postal_code: Set(Some("94000".to_owned())),
+            address_country: Set(Some("US".to_owned())),
             failed_attempts: Set(0),
             enabled: Set(true),
             locked: Set(false),
@@ -150,13 +159,12 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
-    if existing_client.is_some() {
+    let client_id = if existing_client.is_some() {
         tracing::debug!("conformance seed: OIDC client already exists, ensuring skip_consent=true");
+        let existing_client_id = existing_client.as_ref().unwrap().id;
         // Update skip_consent in case it was created before this fix
         let oidc_row = client_open_id_connect::Entity::find()
-            .filter(
-                client_open_id_connect::Column::ClientId.eq(existing_client.as_ref().unwrap().id),
-            )
+            .filter(client_open_id_connect::Column::ClientId.eq(existing_client_id))
             .one(&txn)
             .await
             .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
@@ -170,6 +178,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
                 tracing::info!("conformance seed: updated skip_consent to true");
             }
         }
+        existing_client_id
     } else {
         let created_client = client::ActiveModel {
             oid: Set(client_oid),
@@ -226,7 +235,9 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
         tracing::info!("conformance seed: created OIDC client");
-    }
+        created_client.id
+    };
+    assign_all_built_in_oidc_scopes(&txn, client_id).await?;
 
     // ── Second OIDC client (client_secret_post) ────────────────────────────
 
@@ -241,7 +252,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
-    if existing_client2.is_none() {
+    let client2_id = if existing_client2.is_none() {
         let created_client2 = client::ActiveModel {
             oid: Set(client2_oid),
             protocol: Set("openid_connect".to_owned()),
@@ -297,7 +308,11 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
 
         tracing::info!("conformance seed: created OIDC client2 (client_secret_post)");
-    }
+        created_client2.id
+    } else {
+        existing_client2.unwrap().id
+    };
+    assign_all_built_in_oidc_scopes(&txn, client2_id).await?;
 
     txn.commit()
         .await
@@ -355,4 +370,43 @@ fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
 
     serde_json::to_value(&password)
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))
+}
+
+async fn assign_all_built_in_oidc_scopes(
+    db: &impl sea_orm::ConnectionTrait,
+    client_id: i64,
+) -> Result<(), AppError> {
+    use crate::infrastructure::database::seed::scope::OPENID_CONNECT_PROTOCOL;
+
+    let scopes = scope::Entity::find()
+        .filter(scope::Column::Protocol.eq(OPENID_CONNECT_PROTOCOL))
+        .all(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    for scope in scopes {
+        let existing = client_scope::Entity::find()
+            .filter(client_scope::Column::ClientId.eq(client_id))
+            .filter(client_scope::Column::ScopeId.eq(scope.id))
+            .one(db)
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+
+        if existing.is_none() {
+            client_scope::ActiveModel {
+                client_id: Set(client_id),
+                scope_id: Set(scope.id),
+                ..Default::default()
+            }
+            .insert(db)
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+    }
+
+    Ok(())
 }

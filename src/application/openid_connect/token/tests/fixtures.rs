@@ -88,6 +88,12 @@ impl OpenIdConnectClientRepository for InMemoryClientRepository {
                     request_uris: None,
                     skip_consent: false,
                 },
+                vec![
+                    "openid".to_string(),
+                    "profile".to_string(),
+                    "email".to_string(),
+                    "offline_access".to_string(),
+                ],
             )
             .unwrap(),
         ))
@@ -271,6 +277,14 @@ pub(super) fn build_token_service(
                 zoneinfo: None,
                 locale: None,
                 email_verified: true,
+                phone_number: None,
+                phone_number_verified: None,
+                address_formatted: None,
+                address_street_address: None,
+                address_locality: None,
+                address_region: None,
+                address_postal_code: None,
+                address_country: None,
                 failed_attempts: 0,
                 enabled: true,
                 locked: false,

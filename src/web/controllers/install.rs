@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use super::{
     response::{app_state, parse_form, redirect_to, render_app_error, render_html},
-    shared::{csrf_hoop, csrf_token},
+    shared::{csrf_middleware, csrf_token},
 };
 use crate::{
     application::{install::InstallInput, setting::runtime::SettingProvider},
@@ -18,7 +18,7 @@ use crate::{
 
 pub fn routes() -> Router {
     Router::with_path("install")
-        .hoop(csrf_hoop())
+        .hoop(csrf_middleware())
         .get(install_page)
         .post(install_submit)
 }

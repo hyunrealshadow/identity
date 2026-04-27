@@ -1,6 +1,6 @@
 use salvo::Router;
 
-use super::shared::csrf_hoop;
+use super::shared::csrf_middleware;
 
 mod authorize_endpoint;
 mod authorize_extractor;
@@ -31,13 +31,13 @@ pub fn routes() -> Router {
         )
         .push(
             Router::with_path("oauth2/authorize/consent")
-                .hoop(csrf_hoop())
+                .hoop(csrf_middleware())
                 .get(consent_endpoint::consent_page)
                 .post(consent_endpoint::consent_submit),
         )
         .push(
             Router::with_path("api/oauth2/authorize/consent")
-                .hoop(csrf_hoop())
+                .hoop(csrf_middleware())
                 .get(consent_endpoint::consent_api)
                 .post(consent_endpoint::consent_api_submit),
         )

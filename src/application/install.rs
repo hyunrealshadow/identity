@@ -108,9 +108,8 @@ impl InstallService {
         let now = Utc::now();
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
-        let normalized_username =
-            crate::domain::user::normalization::normalize_username(&username)
-                .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
+        let normalized_username = crate::domain::user::normalization::normalize_username(&username)
+            .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
         let normalized_email = crate::domain::user::normalization::normalize_email(&email)
             .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
         let password_json = serde_json::to_value(&password).map_err(|error| {

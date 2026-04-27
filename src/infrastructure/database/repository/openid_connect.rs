@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
 use serde_json::Value;
 use url::Url;
 
@@ -11,7 +11,8 @@ use crate::domain::openid_connect::{
 };
 use crate::infrastructure::database::entity::{
     client, client::Entity as ClientEntity, client_open_id_connect,
-    client_open_id_connect::Entity as OpenIdConnectClientEntity,
+    client_open_id_connect::Entity as OpenIdConnectClientEntity, client_scope,
+    client_scope::Entity as ClientScopeEntity, scope, scope::Entity as ScopeEntity,
 };
 
 fn deserialize_optional_string_vec(
@@ -130,11 +131,24 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
             return Err(OpenIdConnectClientRepositoryError::MissingMetadata(oid));
         };
 
+        let client_id = client_model.id;
+        let assigned_scopes = ScopeEntity::find()
+            .inner_join(ClientScopeEntity)
+            .filter(client_scope::Column::ClientId.eq(client_id))
+            .filter(scope::Column::Protocol.eq("openid_connect"))
+            .select_only()
+            .column(scope::Column::Name)
+            .into_tuple::<String>()
+            .all(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+
         let client = to_client(client_model)?;
         let metadata = to_metadata(metadata_model)?;
-        Ok(Some(OpenIdConnectClient::new(client, metadata).map_err(
-            OpenIdConnectClientRepositoryError::InvalidClient,
-        )?))
+        Ok(Some(
+            OpenIdConnectClient::new(client, metadata, assigned_scopes)
+                .map_err(OpenIdConnectClientRepositoryError::InvalidClient)?,
+        ))
     }
 }
 

@@ -6,6 +6,8 @@ pub struct ScopeSet {
     pub openid: bool,
     pub profile: bool,
     pub email: bool,
+    pub address: bool,
+    pub phone: bool,
     pub offline_access: bool,
 }
 
@@ -37,6 +39,8 @@ impl ScopeSet {
                 StandardScopes::OPENID => set.openid = true,
                 StandardScopes::PROFILE => set.profile = true,
                 StandardScopes::EMAIL => set.email = true,
+                StandardScopes::ADDRESS => set.address = true,
+                StandardScopes::PHONE => set.phone = true,
                 StandardScopes::OFFLINE_ACCESS => set.offline_access = true,
                 other => {
                     return Err(ScopeParseError {
@@ -60,10 +64,39 @@ impl ScopeSet {
         if self.email {
             scopes.push(StandardScopes::EMAIL);
         }
+        if self.address {
+            scopes.push(StandardScopes::ADDRESS);
+        }
+        if self.phone {
+            scopes.push(StandardScopes::PHONE);
+        }
         if self.offline_access {
             scopes.push(StandardScopes::OFFLINE_ACCESS);
         }
         scopes.join(" ")
+    }
+
+    pub fn names(&self) -> Vec<&'static str> {
+        let mut scopes = Vec::new();
+        if self.openid {
+            scopes.push(StandardScopes::OPENID);
+        }
+        if self.profile {
+            scopes.push(StandardScopes::PROFILE);
+        }
+        if self.email {
+            scopes.push(StandardScopes::EMAIL);
+        }
+        if self.address {
+            scopes.push(StandardScopes::ADDRESS);
+        }
+        if self.phone {
+            scopes.push(StandardScopes::PHONE);
+        }
+        if self.offline_access {
+            scopes.push(StandardScopes::OFFLINE_ACCESS);
+        }
+        scopes
     }
 
     pub fn contains_openid(&self) -> bool {
@@ -122,9 +155,44 @@ mod tests {
             openid: true,
             profile: true,
             email: false,
+            address: false,
+            phone: false,
             offline_access: true,
         };
         assert_eq!(scope.to_scope_string(), "openid profile offline_access");
+    }
+
+    #[test]
+    fn parse_scope_with_address_and_phone() {
+        let scope = ScopeSet::parse("openid address phone").unwrap();
+
+        assert!(scope.openid);
+        assert!(scope.address);
+        assert!(scope.phone);
+    }
+
+    #[test]
+    fn to_scope_string_includes_address_and_phone_in_standard_order() {
+        let scope = ScopeSet {
+            openid: true,
+            profile: false,
+            email: false,
+            address: true,
+            phone: true,
+            offline_access: true,
+        };
+
+        assert_eq!(
+            scope.to_scope_string(),
+            "openid address phone offline_access"
+        );
+    }
+
+    #[test]
+    fn names_returns_requested_scope_names_in_standard_order() {
+        let scope = ScopeSet::parse("phone openid address").unwrap();
+
+        assert_eq!(scope.names(), vec!["openid", "address", "phone"]);
     }
 
     #[test]

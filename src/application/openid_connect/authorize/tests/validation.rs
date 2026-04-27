@@ -113,3 +113,45 @@ async fn validate_request_accepts_registered_redirect_uri() {
 
     assert!(result.is_ok());
 }
+
+#[tokio::test]
+async fn validate_request_rejects_scope_not_assigned_to_client() {
+    let service = AuthorizeService::new(
+        Arc::new(ScopedClientRepository {
+            assigned_scopes: vec!["openid".to_string()],
+        }),
+        Arc::new(InMemoryCredentialRepository::default()),
+        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryLoginRepository),
+        provider_service(),
+        test_data_protector(),
+    );
+
+    let error = service
+        .validate_request(params("openid email"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23056);
+}
+
+#[tokio::test]
+async fn validate_request_rejects_unassigned_openid_scope() {
+    let service = AuthorizeService::new(
+        Arc::new(ScopedClientRepository {
+            assigned_scopes: vec!["profile".to_string()],
+        }),
+        Arc::new(InMemoryCredentialRepository::default()),
+        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryLoginRepository),
+        provider_service(),
+        test_data_protector(),
+    );
+
+    let error = service
+        .validate_request(params("openid"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23056);
+}
