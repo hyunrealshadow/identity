@@ -34,7 +34,7 @@ impl TokenService {
         })?;
 
         let record = self
-            .client_request_repo
+            .client_authorization_repo
             .find_by_oid(code_oid)
             .await
             .map_err(|error| {
@@ -42,7 +42,7 @@ impl TokenService {
             })?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeNotFound))?;
 
-        if record.type_ != ClientRequestType::AuthorizationCode {
+        if record.type_ != ClientAuthorizationType::AuthorizationCode {
             return Err(AppError::from_code(TokenErrorCode::AuthCodeNotFound));
         }
 
@@ -149,7 +149,7 @@ impl TokenService {
             None
         };
 
-        self.client_request_repo
+        self.client_authorization_repo
             .revoke(record.oid)
             .await
             .map_err(|error| {
@@ -188,7 +188,7 @@ impl TokenService {
             .await?;
 
         let refresh_record = self
-            .client_request_repo
+            .client_authorization_repo
             .find_refresh_token_by_token(&params.refresh_token)
             .await
             .map_err(|error| {
@@ -284,7 +284,7 @@ impl TokenService {
             client_id,
             &user_oid,
         )?);
-        self.client_request_repo
+        self.client_authorization_repo
             .revoke(refresh_record.oid)
             .await
             .map_err(|error| {

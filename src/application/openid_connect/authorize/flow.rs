@@ -11,10 +11,10 @@ impl AuthorizeService {
             })?;
 
         let record = self
-            .client_request_repo
+            .client_authorization_repo
             .create(
                 request.client_id,
-                ClientRequestType::AuthorizationRequest,
+                ClientAuthorizationType::AuthorizationRequest,
                 data,
                 chrono::Utc::now() + chrono::Duration::minutes(10),
             )
@@ -48,7 +48,7 @@ impl AuthorizeService {
         authorization_request_id: Uuid,
     ) -> Result<AuthorizationRequestData, AppError> {
         let record = self
-            .client_request_repo
+            .client_authorization_repo
             .find_by_oid(authorization_request_id)
             .await
             .map_err(|error| {
@@ -56,7 +56,7 @@ impl AuthorizeService {
             })?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::AuthzRequestNotFound))?;
 
-        if record.type_ != ClientRequestType::AuthorizationRequest {
+        if record.type_ != ClientAuthorizationType::AuthorizationRequest {
             return Err(AppError::from_code(
                 AuthorizeErrorCode::AuthzRequestTypeMismatch,
             ));
@@ -101,7 +101,9 @@ impl AuthorizeService {
         AppError,
     > {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
-        let (request, client) = self.load_consent_context(login.client_request_oid).await?;
+        let (request, client) = self
+            .load_consent_context(login.client_authorization_oid)
+            .await?;
         Ok((login, request, client))
     }
 
@@ -135,14 +137,14 @@ impl AuthorizeService {
         })?;
 
         let record = self
-            .client_request_repo
+            .client_authorization_repo
             .create(
                 Uuid::parse_str(&request.client_id).map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid)
                         .with_source(error)
                 })?,
-                ClientRequestType::AuthorizationCode,
-                serde_json::to_value(crate::domain::client_request::AuthorizationCodeData {
+                ClientAuthorizationType::AuthorizationCode,
+                serde_json::to_value(crate::domain::client_authorization::AuthorizationCodeData {
                     scope: request.scope.clone(),
                     nonce: request.nonce.clone(),
                     code_challenge: request.code_challenge.clone(),
@@ -193,7 +195,7 @@ impl AuthorizeService {
     ) -> Result<Url, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
         self.approve_authorization_request(
-            login.client_request_oid,
+            login.client_authorization_oid,
             session_oid,
             user_oid,
             auth_time,
@@ -221,7 +223,7 @@ impl AuthorizeService {
         protected_login_oid: &str,
     ) -> Result<Url, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
-        self.deny_authorization_request(login.client_request_oid)
+        self.deny_authorization_request(login.client_authorization_oid)
             .await
     }
 }

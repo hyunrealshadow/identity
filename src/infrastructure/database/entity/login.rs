@@ -10,7 +10,7 @@ pub struct Model {
     #[sea_orm(unique)]
     pub oid: Uuid,
     pub client_id: i64,
-    pub client_request_id: i64,
+    pub client_authorization_id: i64,
     pub session_id: Option<i64>,
     pub user_id: Option<i64>,
     pub status: String,
@@ -33,13 +33,13 @@ pub enum Relation {
     )]
     Client,
     #[sea_orm(
-        belongs_to = "super::client_request::Entity",
-        from = "Column::ClientRequestId",
-        to = "super::client_request::Column::Id",
+        belongs_to = "super::client_authorization::Entity",
+        from = "Column::ClientAuthorizationId",
+        to = "super::client_authorization::Column::Id",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    ClientRequest,
+    ClientAuthorization,
     #[sea_orm(
         belongs_to = "super::session::Entity",
         from = "Column::SessionId",
@@ -64,9 +64,9 @@ impl Related<super::client::Entity> for Entity {
     }
 }
 
-impl Related<super::client_request::Entity> for Entity {
+impl Related<super::client_authorization::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::ClientRequest.def()
+        Relation::ClientAuthorization.def()
     }
 }
 

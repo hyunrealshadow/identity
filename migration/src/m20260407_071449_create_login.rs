@@ -1,7 +1,7 @@
 use crate::m20260305_071904_create_user::User;
 use crate::m20260306_031058_create_client::Client;
 use crate::m20260306_090746_create_session::Session;
-use crate::m20260407_060938_create_client_request::ClientRequest;
+use crate::m20260407_060938_create_client_authorization::ClientAuthorization;
 use sea_orm_migration::{prelude::*, schema::*};
 
 #[derive(DeriveMigrationName)]
@@ -13,7 +13,7 @@ enum Login {
     Id,
     Oid,
     ClientId,
-    ClientRequestId,
+    ClientAuthorizationId,
     SessionId,
     UserId,
     Status,
@@ -36,7 +36,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(Login::Id).big_integer())
                     .col(uuid_uniq(Login::Oid).default(Expr::cust("gen_random_uuid()")))
                     .col(big_integer(Login::ClientId))
-                    .col(big_integer(Login::ClientRequestId))
+                    .col(big_integer(Login::ClientAuthorizationId))
                     .col(big_integer_null(Login::SessionId))
                     .col(big_integer_null(Login::UserId))
                     .col(string(Login::Status))
@@ -59,9 +59,9 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_login_client_request_id")
-                            .from(Login::Table, Login::ClientRequestId)
-                            .to(ClientRequest::Table, ClientRequest::Id)
+                            .name("fk_login_client_authorization_id")
+                            .from(Login::Table, Login::ClientAuthorizationId)
+                            .to(ClientAuthorization::Table, ClientAuthorization::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -96,8 +96,8 @@ impl MigrationTrait for Migration {
             .create_index(
                 Index::create()
                     .table(Login::Table)
-                    .name("idx_login_client_request_id")
-                    .col(Login::ClientRequestId)
+                    .name("idx_login_client_authorization_id")
+                    .col(Login::ClientAuthorizationId)
                     .to_owned(),
             )
             .await?;
@@ -144,7 +144,7 @@ impl MigrationTrait for Migration {
             .drop_index(
                 Index::drop()
                     .table(Login::Table)
-                    .name("idx_login_client_request_id")
+                    .name("idx_login_client_authorization_id")
                     .to_owned(),
             )
             .await?;

@@ -8,27 +8,31 @@ use uuid::Uuid;
 
 use crate::domain::{
     client::model::ClientOid,
-    client_request::{
-        ClientRequest, ClientRequestRepository, ClientRequestRepositoryError, ClientRequestType,
+    client_authorization::{
+        ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
+        ClientAuthorizationType,
     },
 };
 use crate::infrastructure::database::entity::{
-    client, client::Entity as ClientEntity, client_request,
-    client_request::Entity as ClientRequestEntity,
+    client, client::Entity as ClientEntity, client_authorization,
+    client_authorization::Entity as ClientAuthorizationEntity,
 };
 
 fn to_domain(
-    model: client_request::Model,
+    model: client_authorization::Model,
     client_oid: ClientOid,
-) -> Result<ClientRequest, ClientRequestRepositoryError> {
-    Ok(ClientRequest {
+) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
+    Ok(ClientAuthorization {
         oid: model.oid,
         client_oid,
-        type_: model.r#type.parse::<ClientRequestType>().map_err(|_| {
-            ClientRequestRepositoryError::QueryFailed(sea_orm::DbErr::Type(
-                "invalid client_request.type".into(),
-            ))
-        })?,
+        type_: model
+            .r#type
+            .parse::<ClientAuthorizationType>()
+            .map_err(|_| {
+                ClientAuthorizationRepositoryError::QueryFailed(sea_orm::DbErr::Type(
+                    "invalid client_authorization.type".into(),
+                ))
+            })?,
         data: model.data,
         expires_at: model.expires_at.with_timezone(&Utc),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
@@ -37,38 +41,38 @@ fn to_domain(
     })
 }
 
-pub struct ClientRequestRepositoryImpl {
+pub struct ClientAuthorizationRepositoryImpl {
     db: DatabaseConnection,
 }
 
-impl ClientRequestRepositoryImpl {
+impl ClientAuthorizationRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 }
 
 #[async_trait]
-impl ClientRequestRepository for ClientRequestRepositoryImpl {
+impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
     async fn create(
         &self,
         client_oid: ClientOid,
-        type_: ClientRequestType,
+        type_: ClientAuthorizationType,
         data: serde_json::Value,
         expires_at: chrono::DateTime<Utc>,
-    ) -> Result<ClientRequest, ClientRequestRepositoryError> {
+    ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
         let client_model = ClientEntity::find()
             .filter(client::Column::Oid.eq(client_oid))
             .one(&self.db)
             .await
-            .map_err(ClientRequestRepositoryError::QueryFailed)?
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
             .ok_or_else(|| {
-                ClientRequestRepositoryError::QueryFailed(sea_orm::DbErr::RecordNotFound(format!(
-                    "client {client_oid} not found"
-                )))
+                ClientAuthorizationRepositoryError::QueryFailed(sea_orm::DbErr::RecordNotFound(
+                    format!("client {client_oid} not found"),
+                ))
             })?;
 
         let now = Utc::now();
-        let model = client_request::ActiveModel {
+        let model = client_authorization::ActiveModel {
             id: Default::default(),
             oid: Set(Uuid::new_v4()),
             client_id: Set(client_model.id),
@@ -81,7 +85,7 @@ impl ClientRequestRepository for ClientRequestRepositoryImpl {
         }
         .insert(&self.db)
         .await
-        .map_err(ClientRequestRepositoryError::QueryFailed)?;
+        .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
 
         to_domain(model, client_oid)
     }
@@ -89,14 +93,14 @@ impl ClientRequestRepository for ClientRequestRepositoryImpl {
     async fn find_by_oid(
         &self,
         oid: Uuid,
-    ) -> Result<Option<ClientRequest>, ClientRequestRepositoryError> {
-        let Some((request_model, Some(client_model))) = ClientRequestEntity::find()
-            .filter(client_request::Column::Oid.eq(oid))
+    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
+        let Some((request_model, Some(client_model))) = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(oid))
             .inner_join(ClientEntity)
             .select_also(ClientEntity)
             .one(&self.db)
             .await
-            .map_err(ClientRequestRepositoryError::QueryFailed)?
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
         else {
             return Ok(None);
         };
@@ -107,16 +111,16 @@ impl ClientRequestRepository for ClientRequestRepositoryImpl {
     async fn find_refresh_token_by_token(
         &self,
         token: &str,
-    ) -> Result<Option<ClientRequest>, ClientRequestRepositoryError> {
-        let Some((request_model, Some(client_model))) = ClientRequestEntity::find()
+    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
+        let Some((request_model, Some(client_model))) = ClientAuthorizationEntity::find()
             .filter(
                 Condition::all()
                     .add(
-                        client_request::Column::Type
-                            .eq(ClientRequestType::RefreshToken.to_string()),
+                        client_authorization::Column::Type
+                            .eq(ClientAuthorizationType::RefreshToken.to_string()),
                     )
                     .add(Expr::cust_with_values(
-                        r#"("client_request"."data"->>'token') = $1"#,
+                        r#"("client_authorization"."data"->>'token') = $1"#,
                         [token],
                     )),
             )
@@ -124,7 +128,7 @@ impl ClientRequestRepository for ClientRequestRepositoryImpl {
             .select_also(ClientEntity)
             .one(&self.db)
             .await
-            .map_err(ClientRequestRepositoryError::QueryFailed)?
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
         else {
             return Ok(None);
         };
@@ -132,23 +136,23 @@ impl ClientRequestRepository for ClientRequestRepositoryImpl {
         Ok(Some(to_domain(request_model, client_model.oid)?))
     }
 
-    async fn revoke(&self, oid: Uuid) -> Result<(), ClientRequestRepositoryError> {
-        let Some(model) = ClientRequestEntity::find()
-            .filter(client_request::Column::Oid.eq(oid))
+    async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {
+        let Some(model) = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(ClientRequestRepositoryError::QueryFailed)?
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
         else {
             return Ok(());
         };
 
-        let mut active: client_request::ActiveModel = model.into();
+        let mut active: client_authorization::ActiveModel = model.into();
         active.revoked_at = Set(Some(Utc::now().into()));
         active.updated_at = Set(Some(Utc::now().into()));
         active
             .update(&self.db)
             .await
-            .map_err(ClientRequestRepositoryError::QueryFailed)?;
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
 
         Ok(())
     }
@@ -156,10 +160,10 @@ impl ClientRequestRepository for ClientRequestRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::ClientRequestRepositoryImpl;
+    use super::ClientAuthorizationRepositoryImpl;
 
     #[test]
-    fn client_request_repo_impl_exists() {
-        let _ = ClientRequestRepositoryImpl::new;
+    fn client_authorization_repo_impl_exists() {
+        let _ = ClientAuthorizationRepositoryImpl::new;
     }
 }

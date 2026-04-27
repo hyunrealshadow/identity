@@ -41,7 +41,7 @@ async fn parse_unsecured_request_object_is_accepted() {
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -96,7 +96,7 @@ async fn parse_rs256_request_object_extracts_payload() {
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(credential_repo),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),

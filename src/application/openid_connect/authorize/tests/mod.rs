@@ -33,8 +33,9 @@ use crate::domain::{
         repository::{LoginRepository, LoginRepositoryError},
     },
     client::model::{Client, ClientProtocol},
-    client_request::{
-        ClientRequest, ClientRequestRepository, ClientRequestRepositoryError, ClientRequestType,
+    client_authorization::{
+        ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
+        ClientAuthorizationType,
     },
     key::{
         Key, KeyData, KeyOid, KeyType,

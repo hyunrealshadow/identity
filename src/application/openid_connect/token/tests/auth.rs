@@ -4,7 +4,7 @@ use super::*;
 #[tokio::test]
 async fn authenticate_client_secret_basic_accepts_matching_secret() {
     let service = build_token_service(
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Uuid::new_v4(),
     );
 
@@ -18,7 +18,7 @@ async fn authenticate_client_secret_basic_accepts_matching_secret() {
 #[tokio::test]
 async fn authenticate_client_secret_basic_rejects_wrong_secret() {
     let service = build_token_service(
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Uuid::new_v4(),
     );
 
@@ -32,7 +32,7 @@ async fn authenticate_client_secret_basic_rejects_wrong_secret() {
 #[tokio::test]
 async fn authenticate_private_key_jwt_accepts_signed_assertion() {
     let service = build_token_service(
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Uuid::new_v4(),
     );
     let assertion = service
@@ -49,7 +49,7 @@ async fn authenticate_private_key_jwt_accepts_signed_assertion() {
 #[tokio::test]
 async fn authenticate_private_key_jwt_rejects_wrong_subject() {
     let service = build_token_service(
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Uuid::new_v4(),
     );
     let assertion = service
@@ -65,7 +65,7 @@ async fn authenticate_private_key_jwt_rejects_wrong_subject() {
 
 #[tokio::test]
 async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let generator = AsymmetricKeyGeneratorImpl;
     let key = generator
         .generate(&crate::domain::key::generator::AsymmetricKeySpec {
@@ -146,7 +146,7 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
 
 #[tokio::test]
 async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let generator = AsymmetricKeyGeneratorImpl;
     let key = generator
         .generate(&crate::domain::key::generator::AsymmetricKeySpec {

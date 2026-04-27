@@ -106,7 +106,7 @@ pub trait LoginRepository: Send + Sync {
     async fn create_pending(
         &self,
         client_oid: Uuid,
-        client_request_oid: Uuid,
+        client_authorization_oid: Uuid,
         requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError>;
 

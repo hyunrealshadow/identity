@@ -13,7 +13,7 @@ use crate::{
     },
     domain::{
         auth::repository::LoginRepository,
-        client_request::{ClientRequestRepository, ClientRequestType},
+        client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
         openid_connect::{
             AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display,
             OAuthErrorCode, OAuthErrorResponse, OpenIdConnectClient, OpenIdConnectClientRepository,
@@ -50,7 +50,7 @@ pub struct AuthorizationRequestParams {
 pub struct AuthorizeService {
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
-    client_request_repo: Arc<dyn ClientRequestRepository>,
+    client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     login_repo: Arc<dyn LoginRepository>,
     provider_service: Arc<OpenIdProviderService>,
     http_client: reqwest::Client,
@@ -61,7 +61,7 @@ impl AuthorizeService {
     pub fn new(
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
         credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
-        client_request_repo: Arc<dyn ClientRequestRepository>,
+        client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         login_repo: Arc<dyn LoginRepository>,
         provider_service: Arc<OpenIdProviderService>,
         data_protector: Arc<dyn DataProtector>,
@@ -69,7 +69,7 @@ impl AuthorizeService {
         Self {
             client_repo,
             credential_repo,
-            client_request_repo,
+            client_authorization_repo,
             login_repo,
             provider_service,
             http_client: reqwest::Client::builder()

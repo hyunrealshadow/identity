@@ -3,7 +3,7 @@ use super::super::*;
 
 #[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
@@ -83,7 +83,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     let record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-123".to_string()),
@@ -141,7 +141,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
 
 #[tokio::test]
 async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
@@ -221,7 +221,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
     let record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "email openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
@@ -264,14 +264,14 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
 
 #[tokio::test]
 async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let service = build_token_service(repo.clone(), user_oid);
 
     let record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
@@ -309,14 +309,14 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
 
 #[tokio::test]
 async fn exchange_authorization_code_rejects_reused_code() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let service = build_token_service(repo.clone(), user_oid);
 
     let record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
@@ -368,14 +368,14 @@ async fn exchange_authorization_code_rejects_reused_code() {
 
 #[tokio::test]
 async fn exchange_authorization_code_returns_refresh_token_for_offline_access() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let service = build_token_service(repo.clone(), user_oid);
 
     let record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-offline".to_string()),

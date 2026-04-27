@@ -300,10 +300,10 @@ impl TokenService {
             AppError::from_code(TokenErrorCode::SerializeRefreshFailed).with_source(error)
         })?;
 
-        self.client_request_repo
+        self.client_authorization_repo
             .create(
                 client_oid,
-                ClientRequestType::RefreshToken,
+                ClientAuthorizationType::RefreshToken,
                 data,
                 chrono::Utc::now() + chrono::Duration::days(30),
             )

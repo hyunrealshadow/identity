@@ -3,7 +3,7 @@ use super::*;
 
 #[tokio::test]
 async fn create_authorization_request_returns_oid() {
-    let request_repo = Arc::new(InMemoryClientRequestRepository::default());
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -27,7 +27,7 @@ async fn create_authorization_request_returns_oid() {
 
 #[tokio::test]
 async fn create_login_flow_returns_protected_id() {
-    let request_repo = Arc::new(InMemoryClientRequestRepository::default());
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -55,7 +55,7 @@ async fn create_login_flow_returns_protected_id() {
 
 #[tokio::test]
 async fn load_authorization_request_returns_stored_data() {
-    let request_repo = Arc::new(InMemoryClientRequestRepository::default());
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -81,7 +81,7 @@ async fn load_authorization_request_returns_stored_data() {
 
 #[tokio::test]
 async fn approve_authorization_request_returns_redirect_with_code_and_state() {
-    let request_repo = Arc::new(InMemoryClientRequestRepository::default());
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -111,7 +111,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
 
 #[tokio::test]
 async fn create_authorization_request_persists_login_hint() {
-    let request_repo = Arc::new(InMemoryClientRequestRepository::default());
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -136,7 +136,7 @@ async fn create_authorization_request_persists_login_hint() {
 
 #[tokio::test]
 async fn deny_authorization_request_returns_access_denied_redirect() {
-    let request_repo = Arc::new(InMemoryClientRequestRepository::default());
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),

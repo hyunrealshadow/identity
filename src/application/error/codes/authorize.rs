@@ -117,7 +117,7 @@ pub enum AuthorizeErrorCode {
     StoreLoginFailed,
 
     // --- loading stored state ---
-    /// Database read of client request record failed.
+    /// Database read of client authorization record failed.
     LoadRequestFailed,
     /// Authorization request record was not found.
     AuthzRequestNotFound,

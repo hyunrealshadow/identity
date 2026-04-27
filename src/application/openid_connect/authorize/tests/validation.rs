@@ -6,7 +6,7 @@ async fn validate_request_rejects_missing_openid_scope() {
     let service = AuthorizeService::new(
         Arc::new(MissingClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -22,7 +22,7 @@ async fn validate_request_rejects_unknown_scope() {
     let service = AuthorizeService::new(
         Arc::new(MissingClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -40,7 +40,7 @@ async fn validate_request_reports_missing_required_fields() {
     let service = AuthorizeService::new(
         Arc::new(MissingClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -82,7 +82,7 @@ async fn validate_request_rejects_request_and_request_uri_together() {
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -103,7 +103,7 @@ async fn validate_request_accepts_registered_redirect_uri() {
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -121,7 +121,7 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
             assigned_scopes: vec!["openid".to_string()],
         }),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -142,7 +142,7 @@ async fn validate_request_rejects_unassigned_openid_scope() {
             assigned_scopes: vec!["profile".to_string()],
         }),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),

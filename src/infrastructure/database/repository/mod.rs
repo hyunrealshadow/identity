@@ -1,4 +1,4 @@
-pub mod client_request;
+pub mod client_authorization;
 pub mod key;
 pub mod login;
 pub mod openid_connect;

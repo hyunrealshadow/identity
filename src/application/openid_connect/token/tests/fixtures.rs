@@ -32,8 +32,8 @@ impl crate::application::data_protection::DataProtector for InMemoryDataProtecto
 }
 
 #[derive(Default)]
-pub(super) struct InMemoryClientRequestRepository {
-    pub(super) records: Mutex<HashMap<Uuid, ClientRequest>>,
+pub(super) struct InMemoryClientAuthorizationRepository {
+    pub(super) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
 }
 
 pub(super) struct InMemoryClientRepository;
@@ -234,7 +234,7 @@ impl UserRepository for InMemoryUserRepository {
 }
 
 pub(super) fn build_token_service(
-    repo: Arc<InMemoryClientRequestRepository>,
+    repo: Arc<InMemoryClientAuthorizationRepository>,
     user_oid: Uuid,
 ) -> TokenService {
     let rsa = Rsa::generate(2048).unwrap();
@@ -369,15 +369,15 @@ pub(super) fn build_client_assertion_with_algorithm(
 }
 
 #[async_trait]
-impl ClientRequestRepository for InMemoryClientRequestRepository {
+impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
     async fn create(
         &self,
         client_oid: ClientOid,
-        type_: ClientRequestType,
+        type_: ClientAuthorizationType,
         data: serde_json::Value,
         expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<ClientRequest, ClientRequestRepositoryError> {
-        let record = ClientRequest {
+    ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
+        let record = ClientAuthorization {
             oid: Uuid::new_v4(),
             client_oid,
             type_,
@@ -397,21 +397,21 @@ impl ClientRequestRepository for InMemoryClientRequestRepository {
     async fn find_by_oid(
         &self,
         oid: Uuid,
-    ) -> Result<Option<ClientRequest>, ClientRequestRepositoryError> {
+    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
         Ok(self.records.lock().unwrap().get(&oid).cloned())
     }
 
     async fn find_refresh_token_by_token(
         &self,
         token: &str,
-    ) -> Result<Option<ClientRequest>, ClientRequestRepositoryError> {
+    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
         Ok(self
             .records
             .lock()
             .unwrap()
             .values()
             .find(|record| {
-                serde_json::from_value::<crate::domain::client_request::RefreshTokenData>(
+                serde_json::from_value::<crate::domain::client_authorization::RefreshTokenData>(
                     record.data.clone(),
                 )
                 .map(|data| data.token == token)
@@ -420,7 +420,7 @@ impl ClientRequestRepository for InMemoryClientRequestRepository {
             .cloned())
     }
 
-    async fn revoke(&self, oid: Uuid) -> Result<(), ClientRequestRepositoryError> {
+    async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {
         if let Some(record) = self.records.lock().unwrap().get_mut(&oid) {
             record.revoked_at = Some(Utc::now());
         }

@@ -25,9 +25,9 @@ use crate::{
     },
     domain::{
         client::model::{Client, ClientOid, ClientProtocol},
-        client_request::{
-            AuthorizationCodeData, ClientRequest, ClientRequestRepository,
-            ClientRequestRepositoryError, ClientRequestType,
+        client_authorization::{
+            AuthorizationCodeData, ClientAuthorization, ClientAuthorizationRepository,
+            ClientAuthorizationRepositoryError, ClientAuthorizationType,
         },
         key::generator::AsymmetricKeyGenerator,
         key::{

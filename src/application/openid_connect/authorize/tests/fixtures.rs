@@ -27,8 +27,8 @@ pub(super) fn provider_service() -> Arc<OpenIdProviderService> {
 pub(super) struct MissingClientRepository;
 
 #[derive(Default)]
-pub(super) struct InMemoryClientRequestRepository {
-    pub(super) records: Mutex<HashMap<Uuid, ClientRequest>>,
+pub(super) struct InMemoryClientAuthorizationRepository {
+    pub(super) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
 }
 
 pub(super) struct InMemoryLoginRepository;
@@ -39,15 +39,15 @@ pub(super) struct InMemoryCredentialRepository {
 }
 
 #[async_trait]
-impl ClientRequestRepository for InMemoryClientRequestRepository {
+impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
     async fn create(
         &self,
         client_oid: Uuid,
-        type_: ClientRequestType,
+        type_: ClientAuthorizationType,
         data: serde_json::Value,
         expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<ClientRequest, ClientRequestRepositoryError> {
-        let record = ClientRequest {
+    ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
+        let record = ClientAuthorization {
             oid: Uuid::new_v4(),
             client_oid,
             type_,
@@ -67,21 +67,21 @@ impl ClientRequestRepository for InMemoryClientRequestRepository {
     async fn find_by_oid(
         &self,
         oid: Uuid,
-    ) -> Result<Option<ClientRequest>, ClientRequestRepositoryError> {
+    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
         Ok(self.records.lock().unwrap().get(&oid).cloned())
     }
 
     async fn find_refresh_token_by_token(
         &self,
         token: &str,
-    ) -> Result<Option<ClientRequest>, ClientRequestRepositoryError> {
+    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
         Ok(self
             .records
             .lock()
             .unwrap()
             .values()
             .find(|record| {
-                serde_json::from_value::<crate::domain::client_request::RefreshTokenData>(
+                serde_json::from_value::<crate::domain::client_authorization::RefreshTokenData>(
                     record.data.clone(),
                 )
                 .map(|data| data.token == token)
@@ -90,7 +90,7 @@ impl ClientRequestRepository for InMemoryClientRequestRepository {
             .cloned())
     }
 
-    async fn revoke(&self, oid: Uuid) -> Result<(), ClientRequestRepositoryError> {
+    async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {
         if let Some(record) = self.records.lock().unwrap().get_mut(&oid) {
             record.revoked_at = Some(chrono::Utc::now());
         }
@@ -107,13 +107,13 @@ impl LoginRepository for InMemoryLoginRepository {
     async fn create_pending(
         &self,
         _client_oid: Uuid,
-        _client_request_oid: Uuid,
+        _client_authorization_oid: Uuid,
         requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError> {
         Ok(Login {
             oid: Uuid::new_v4(),
             client_oid: _client_oid,
-            client_request_oid: _client_request_oid,
+            client_authorization_oid: _client_authorization_oid,
             user_oid: None,
             status: LoginStatus::CREATED.to_string(),
             failed_attempts: 0,
@@ -132,7 +132,7 @@ impl LoginRepository for InMemoryLoginRepository {
         Ok(Login {
             oid: login_oid,
             client_oid: Uuid::new_v4(),
-            client_request_oid: Uuid::new_v4(),
+            client_authorization_oid: Uuid::new_v4(),
             user_oid: Some(user_oid),
             status: status.to_string(),
             failed_attempts: 0,
@@ -512,7 +512,7 @@ pub(super) fn authorize_service_with_public_key(public_key: Vec<u8>) -> Authoriz
     AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(credential_repo),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),
@@ -525,7 +525,7 @@ pub(super) fn authorize_service_with_request_uri(request_uri: &str) -> Authorize
             request_uris: vec![Url::parse(request_uri).unwrap()],
         }),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientRequestRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
         provider_service(),
         test_data_protector(),

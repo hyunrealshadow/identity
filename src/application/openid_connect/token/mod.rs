@@ -16,8 +16,9 @@ use crate::{
         openid_connect::provider::OpenIdProviderService,
     },
     domain::{
-        client_request::{
-            AuthorizationCodeData, ClientRequestRepository, ClientRequestType, RefreshTokenData,
+        client_authorization::{
+            AuthorizationCodeData, ClientAuthorizationRepository, ClientAuthorizationType,
+            RefreshTokenData,
         },
         key::{KeyData, repository::KeyRepository},
         openid_connect::{
@@ -62,7 +63,7 @@ pub struct TokenResponse {
 }
 
 pub struct TokenService {
-    client_request_repo: Arc<dyn ClientRequestRepository>,
+    client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_repo: Arc<dyn KeyRepository>,
     user_repo: Arc<dyn UserRepository>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
@@ -73,7 +74,7 @@ pub struct TokenService {
 
 impl TokenService {
     pub fn new(
-        client_request_repo: Arc<dyn ClientRequestRepository>,
+        client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         key_repo: Arc<dyn KeyRepository>,
         user_repo: Arc<dyn UserRepository>,
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
@@ -82,7 +83,7 @@ impl TokenService {
         data_protector: Arc<dyn DataProtector>,
     ) -> Self {
         Self {
-            client_request_repo,
+            client_authorization_repo,
             key_repo,
             user_repo,
             client_repo,

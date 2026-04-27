@@ -16,7 +16,7 @@ use crate::infrastructure::{
     auth::{otp::TotpVerifierImpl, password::PasswordHasherImpl},
     crypto::key::AsymmetricKeyGeneratorImpl,
     database::repository::{
-        client_request::ClientRequestRepositoryImpl, key::KeyRepositoryImpl,
+        client_authorization::ClientAuthorizationRepositoryImpl, key::KeyRepositoryImpl,
         login::LoginRepositoryImpl, openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
         session::SessionRepositoryImpl, user::UserRepositoryImpl,
@@ -108,13 +108,13 @@ impl AppServices {
             oidc_authorize: AuthorizeService::new(
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),
-                Arc::new(ClientRequestRepositoryImpl::new(db.clone())),
+                Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(LoginRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
                 data_protector.clone(),
             ),
             oidc_token: TokenService::new(
-                Arc::new(ClientRequestRepositoryImpl::new(db.clone())),
+                Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(KeyRepositoryImpl::new(db.clone())),
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),

@@ -11,21 +11,21 @@ use crate::domain::auth::{
     repository::{LoginRepository, LoginRepositoryError},
 };
 use crate::infrastructure::database::entity::{
-    client, client::Entity as ClientEntity, client_request,
-    client_request::Entity as ClientRequestEntity, login, login::Entity as LoginEntity, session,
-    session::Entity as SessionEntity, user, user::Entity as UserEntity,
+    client, client::Entity as ClientEntity, client_authorization,
+    client_authorization::Entity as ClientAuthorizationEntity, login, login::Entity as LoginEntity,
+    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 
 fn to_domain(
     m: login::Model,
     client_oid: Uuid,
-    client_request_oid: Uuid,
+    client_authorization_oid: Uuid,
     user_oid: Option<Uuid>,
 ) -> Login {
     Login {
         oid: m.oid,
         client_oid,
-        client_request_oid,
+        client_authorization_oid,
         user_oid,
         status: m.status,
         failed_attempts: m.failed_attempts,
@@ -63,11 +63,12 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(LoginRepositoryError::QueryFailed)?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
-        let client_request_model = ClientRequestEntity::find_by_id(model.client_request_id)
-            .one(&self.db)
-            .await
-            .map_err(LoginRepositoryError::QueryFailed)?
-            .ok_or(LoginRepositoryError::LoginNotFound)?;
+        let client_authorization_model =
+            ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
+                .one(&self.db)
+                .await
+                .map_err(LoginRepositoryError::QueryFailed)?
+                .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         let user_oid = match model.user_id {
             Some(user_id) => UserEntity::find_by_id(user_id)
@@ -81,7 +82,7 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(Some(to_domain(
             model,
             client_model.oid,
-            client_request_model.oid,
+            client_authorization_model.oid,
             user_oid,
         )))
     }
@@ -89,7 +90,7 @@ impl LoginRepository for LoginRepositoryImpl {
     async fn create_pending(
         &self,
         client_oid: Uuid,
-        client_request_oid: Uuid,
+        client_authorization_oid: Uuid,
         requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError> {
         let client = ClientEntity::find()
@@ -99,8 +100,8 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(LoginRepositoryError::QueryFailed)?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
-        let client_request_model = ClientRequestEntity::find()
-            .filter(client_request::Column::Oid.eq(client_request_oid))
+        let client_authorization_model = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(client_authorization_oid))
             .one(&self.db)
             .await
             .map_err(LoginRepositoryError::QueryFailed)?
@@ -110,7 +111,7 @@ impl LoginRepository for LoginRepositoryImpl {
         let active = login::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(client.id),
-            client_request_id: Set(client_request_model.id),
+            client_authorization_id: Set(client_authorization_model.id),
             user_id: Set(None),
             status: Set(crate::domain::auth::LoginStatus::CREATED.to_owned()),
             failed_attempts: Set(0),
@@ -122,7 +123,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .insert(&self.db)
             .await
             .map_err(LoginRepositoryError::CreateFailed)?;
-        Ok(to_domain(model, client_oid, client_request_oid, None))
+        Ok(to_domain(model, client_oid, client_authorization_oid, None))
     }
 
     async fn bind_user(
@@ -161,16 +162,17 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(LoginRepositoryError::QueryFailed)?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
-        let client_request_model = ClientRequestEntity::find_by_id(model.client_request_id)
-            .one(&self.db)
-            .await
-            .map_err(LoginRepositoryError::QueryFailed)?
-            .ok_or(LoginRepositoryError::LoginNotFound)?;
+        let client_authorization_model =
+            ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
+                .one(&self.db)
+                .await
+                .map_err(LoginRepositoryError::QueryFailed)?
+                .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         Ok(to_domain(
             model,
             client_model.oid,
-            client_request_model.oid,
+            client_authorization_model.oid,
             Some(user_oid),
         ))
     }

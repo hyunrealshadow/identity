@@ -3,14 +3,14 @@ use super::super::*;
 
 #[tokio::test]
 async fn exchange_refresh_token_returns_new_access_token() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let service = build_token_service(repo.clone(), user_oid);
 
     let refresh_record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
@@ -67,7 +67,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
 #[tokio::test]
 async fn exchange_refresh_token_accepts_es256_signed_refresh_token() {
-    let repo = Arc::new(InMemoryClientRequestRepository::default());
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let generator = AsymmetricKeyGeneratorImpl;
     let key = generator
@@ -150,7 +150,7 @@ async fn exchange_refresh_token_accepts_es256_signed_refresh_token() {
     let refresh_record = repo
         .create(
             Uuid::nil(),
-            ClientRequestType::AuthorizationCode,
+            ClientAuthorizationType::AuthorizationCode,
             serde_json::to_value(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh-es256".to_string()),

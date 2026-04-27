@@ -6,27 +6,27 @@ use uuid::Uuid;
 
 use crate::domain::client::model::ClientOid;
 
-pub type ClientRequestOid = Uuid;
+pub type ClientAuthorizationOid = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ClientRequestType {
+pub enum ClientAuthorizationType {
     AuthorizationRequest,
     AuthorizationCode,
     RefreshToken,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseClientRequestTypeError;
+pub struct ParseClientAuthorizationTypeError;
 
-impl fmt::Display for ParseClientRequestTypeError {
+impl fmt::Display for ParseClientAuthorizationTypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("invalid client request type")
+        f.write_str("invalid client authorization type")
     }
 }
 
-impl std::error::Error for ParseClientRequestTypeError {}
+impl std::error::Error for ParseClientAuthorizationTypeError {}
 
-impl fmt::Display for ClientRequestType {
+impl fmt::Display for ClientAuthorizationType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::AuthorizationRequest => "authorization_request",
@@ -36,15 +36,15 @@ impl fmt::Display for ClientRequestType {
     }
 }
 
-impl FromStr for ClientRequestType {
-    type Err = ParseClientRequestTypeError;
+impl FromStr for ClientAuthorizationType {
+    type Err = ParseClientAuthorizationTypeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "authorization_request" => Self::AuthorizationRequest,
             "authorization_code" => Self::AuthorizationCode,
             "refresh_token" => Self::RefreshToken,
-            _ => return Err(ParseClientRequestTypeError),
+            _ => return Err(ParseClientAuthorizationTypeError),
         })
     }
 }
@@ -73,10 +73,10 @@ pub struct RefreshTokenData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClientRequest {
-    pub oid: ClientRequestOid,
+pub struct ClientAuthorization {
+    pub oid: ClientAuthorizationOid,
     pub client_oid: ClientOid,
-    pub type_: ClientRequestType,
+    pub type_: ClientAuthorizationType,
     pub data: serde_json::Value,
     pub expires_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
@@ -86,18 +86,18 @@ pub struct ClientRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{AuthorizationCodeData, ClientRequestType, RefreshTokenData};
+    use super::{AuthorizationCodeData, ClientAuthorizationType, RefreshTokenData};
     use std::str::FromStr;
 
     #[test]
-    fn client_request_type_from_str() {
+    fn client_authorization_type_from_str() {
         assert_eq!(
-            ClientRequestType::from_str("authorization_request").unwrap(),
-            ClientRequestType::AuthorizationRequest
+            ClientAuthorizationType::from_str("authorization_request").unwrap(),
+            ClientAuthorizationType::AuthorizationRequest
         );
         assert_eq!(
-            ClientRequestType::from_str("authorization_code").unwrap(),
-            ClientRequestType::AuthorizationCode
+            ClientAuthorizationType::from_str("authorization_code").unwrap(),
+            ClientAuthorizationType::AuthorizationCode
         );
     }
 
