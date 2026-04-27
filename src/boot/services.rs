@@ -104,7 +104,8 @@ impl AppServices {
                 installation_setting: settings.installation(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
             },
-            oidc: OpenIdProviderService::new(settings.installation()),
+            oidc: OpenIdProviderService::new(settings.installation())
+                .with_key_repo(key_repo.clone()),
             oidc_authorize: AuthorizeService::new(
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),

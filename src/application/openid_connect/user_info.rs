@@ -20,7 +20,9 @@ use crate::{
     },
 };
 use josekit::{
-    jws::{ES256, JwsHeader, RS256},
+    jws::{
+        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+    },
     jwt,
 };
 use uuid::Uuid;
@@ -174,7 +176,61 @@ impl UserInfoService {
             .ok()
             .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
             .or_else(|| {
+                RS384
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                RS512
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                PS256
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                PS384
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                PS512
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
                 ES256
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                ES384
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                ES512
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                ES256K
+                    .verifier_from_pem(public_key)
+                    .ok()
+                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
+            })
+            .or_else(|| {
+                EdDSA
                     .verifier_from_pem(public_key)
                     .ok()
                     .and_then(|v| jwt::decode_with_verifier(token, &v).ok())

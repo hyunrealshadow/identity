@@ -71,6 +71,7 @@ pub struct RefreshTokenData {
     pub scope: String,
     pub user_oid: String,
     pub session_oid: String,
+    pub auth_time: Option<i64>,
     pub rotated_from: Option<String>,
 }
 
@@ -143,14 +144,31 @@ mod tests {
             scope: "openid offline_access profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: uuid::Uuid::nil().to_string(),
+            auth_time: Some(1234567890),
             rotated_from: Some(uuid::Uuid::nil().to_string()),
         };
 
         let json = serde_json::to_string(&data).unwrap();
         let parsed: RefreshTokenData = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scope, "openid offline_access profile");
+        assert_eq!(parsed.auth_time, Some(1234567890));
         let rotated_from = uuid::Uuid::nil().to_string();
         assert_eq!(parsed.rotated_from.as_deref(), Some(rotated_from.as_str()));
+    }
+
+    #[test]
+    fn refresh_token_data_auth_time_is_none_when_not_set() {
+        let data = RefreshTokenData {
+            scope: "openid offline_access".to_string(),
+            user_oid: uuid::Uuid::nil().to_string(),
+            session_oid: uuid::Uuid::nil().to_string(),
+            auth_time: None,
+            rotated_from: None,
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let parsed: RefreshTokenData = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.auth_time, None);
     }
 
     #[test]

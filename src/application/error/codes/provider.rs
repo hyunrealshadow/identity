@@ -8,6 +8,7 @@ pub enum ProviderErrorCode {
     IssuerMustUseHttps,
     IssuerMustNotHaveQueryOrFragment,
     IssuerUrlParseFailed,
+    KeyLookupFailed,
 }
 
 impl AppErrorCode for ProviderErrorCode {
@@ -18,6 +19,7 @@ impl AppErrorCode for ProviderErrorCode {
             Self::IssuerMustUseHttps => ErrorKind::Validation,
             Self::IssuerMustNotHaveQueryOrFragment => ErrorKind::Validation,
             Self::IssuerUrlParseFailed => ErrorKind::Internal,
+            Self::KeyLookupFailed => ErrorKind::Internal,
         }
     }
 
@@ -28,6 +30,7 @@ impl AppErrorCode for ProviderErrorCode {
             Self::IssuerMustUseHttps => 20002,
             Self::IssuerMustNotHaveQueryOrFragment => 20003,
             Self::IssuerUrlParseFailed => 20004,
+            Self::KeyLookupFailed => 20005,
         }
     }
 }

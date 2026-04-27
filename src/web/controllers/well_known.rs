@@ -22,16 +22,16 @@ pub fn routes() -> Router {
         .push(Router::with_path(".well-known/keys").get(keys_handler))
 }
 
-fn openid_configuration_document(
+async fn openid_configuration_document(
     service: &OpenIdProviderService,
 ) -> Result<crate::domain::openid_connect::OpenIdProviderMetadata, AppError> {
-    service.discovery_metadata()
+    service.discovery_metadata().await
 }
 
 #[handler]
 async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
     let ctx = app_state(depot)?;
-    let metadata = openid_configuration_document(ctx.services().oidc())?;
+    let metadata = openid_configuration_document(ctx.services().oidc()).await?;
     render_json(res, StatusCode::OK, metadata);
     Ok(())
 }
@@ -88,8 +88,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn openid_configuration_returns_provider_metadata() {
+    #[tokio::test]
+    async fn openid_configuration_returns_provider_metadata() {
         let service = OpenIdProviderService::new(Arc::new(TestInstallationSetting(Arc::new(
             InstallationState {
                 initialized: true,
@@ -100,7 +100,7 @@ mod tests {
             },
         ))));
 
-        let metadata = openid_configuration_document(&service).unwrap();
+        let metadata = openid_configuration_document(&service).await.unwrap();
 
         assert_eq!(metadata.issuer.as_str(), "https://identity.example.com/");
         assert_eq!(
@@ -113,8 +113,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn discovery_contract_contains_expected_fields() {
+    #[tokio::test]
+    async fn discovery_contract_contains_expected_fields() {
         let service = OpenIdProviderService::new(Arc::new(TestInstallationSetting(Arc::new(
             InstallationState {
                 initialized: true,
@@ -125,7 +125,7 @@ mod tests {
             },
         ))));
 
-        let metadata = openid_configuration_document(&service).unwrap();
+        let metadata = openid_configuration_document(&service).await.unwrap();
         let json = serde_json::to_value(metadata).unwrap();
 
         assert_eq!(json["issuer"], "https://identity.example.com/");
@@ -133,10 +133,7 @@ mod tests {
             json["token_endpoint"],
             "https://identity.example.com/oauth2/token"
         );
-        assert_eq!(
-            json["registration_endpoint"],
-            "https://identity.example.com/oauth2/register"
-        );
+        assert!(json.get("registration_endpoint").is_none());
         assert_eq!(json["claims_parameter_supported"], true);
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);

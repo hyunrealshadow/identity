@@ -25,6 +25,8 @@ pub enum AuthorizeErrorCode {
     DisplayValueInvalid,
     /// `prompt` parameter value could not be parsed.
     PromptValueInvalid,
+    /// `prompt` contains `none` along with other values.
+    PromptNoneCombined,
     /// `max_age` parameter is not a valid integer.
     MaxAgeInvalid,
     /// `request_uri` parameter is not a valid URL.
@@ -159,6 +161,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::OpenidScopeRequired => ErrorKind::Validation,
             Self::DisplayValueInvalid => ErrorKind::Validation,
             Self::PromptValueInvalid => ErrorKind::Validation,
+            Self::PromptNoneCombined => ErrorKind::Validation,
             Self::MaxAgeInvalid => ErrorKind::Validation,
             Self::RequestUriInvalid => ErrorKind::Validation,
             Self::CodeChallengeMethodInvalid => ErrorKind::Validation,
@@ -221,6 +224,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::OpenidScopeRequired => 23006,
             Self::DisplayValueInvalid => 23007,
             Self::PromptValueInvalid => 23008,
+            Self::PromptNoneCombined => 23057,
             Self::MaxAgeInvalid => 23009,
             Self::RequestUriInvalid => 23010,
             Self::CodeChallengeMethodInvalid => 23011,

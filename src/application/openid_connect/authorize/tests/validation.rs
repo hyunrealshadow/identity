@@ -136,6 +136,49 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
 }
 
 #[tokio::test]
+async fn prompt_none_combined_with_other_value_rejects() {
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        Arc::new(InMemoryLoginRepository),
+        provider_service(),
+        test_data_protector(),
+    );
+
+    let error = service
+        .validate_request(AuthorizationRequestParams {
+            prompt: Some("none login".to_string()),
+            ..params("openid profile")
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23057);
+}
+
+#[tokio::test]
+async fn prompt_none_alone_is_accepted() {
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        Arc::new(InMemoryLoginRepository),
+        provider_service(),
+        test_data_protector(),
+    );
+
+    let result = service
+        .validate_request(AuthorizationRequestParams {
+            prompt: Some("none".to_string()),
+            ..params("openid profile")
+        })
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
 async fn validate_request_rejects_unassigned_openid_scope() {
     let service = AuthorizeService::new(
         Arc::new(ScopedClientRepository {

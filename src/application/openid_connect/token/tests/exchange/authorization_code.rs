@@ -130,6 +130,10 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         id_payload.claim(JwtClaimNames::NONCE).unwrap(),
         &serde_json::json!("nonce-123")
     );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
+        &serde_json::json!(expected_at_hash(&result.access_token))
+    );
     assert!(
         repo.find_by_oid(record.oid)
             .await
@@ -523,4 +527,143 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
         stored.as_ref().map(|record| &record.type_),
         Some(&ClientAuthorizationType::RefreshToken)
     );
+}
+
+#[tokio::test]
+async fn exchange_authorization_code_signs_and_validates_supported_default_algs() {
+    for alg in [
+        "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512", "ES256K",
+        "EdDSA",
+    ] {
+        let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+        let user_oid = Uuid::new_v4();
+        let key = key_for_algorithm(alg);
+        let public_key = match &key.data {
+            KeyData::Asymmetric(data) => data.public_key.clone(),
+            KeyData::Symmetric(_) => unreachable!(),
+        };
+        let service = build_token_service_with_key(repo.clone(), key.clone(), user_oid);
+
+        let record = repo
+            .create(
+                Uuid::nil(),
+                ClientAuthorizationType::AuthorizationCode,
+                serde_json::to_value(AuthorizationCodeData {
+                    scope: "openid profile".to_string(),
+                    nonce: Some(format!("nonce-{alg}")),
+                    code_challenge: Some(format!("verifier-{alg}")),
+                    code_challenge_method: Some("plain".to_string()),
+                    user_oid: user_oid.to_string(),
+                    session_oid: Uuid::new_v4().to_string(),
+                    acr: None,
+                    auth_time: None,
+                    redirect_uri: "https://client.example.com/callback".to_string(),
+                    claims: None,
+                })
+                .unwrap(),
+                Utc::now() + chrono::Duration::minutes(10),
+            )
+            .await
+            .unwrap();
+
+        let result = service
+            .exchange_authorization_code(AuthorizationCodeGrantParams {
+                grant_type: "authorization_code".to_string(),
+                code: STANDARD.encode(record.oid.as_bytes()),
+                redirect_uri: Some("https://client.example.com/callback".to_string()),
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_string()),
+                client_assertion_type: None,
+                client_assertion: None,
+                code_verifier: Some(format!("verifier-{alg}")),
+            })
+            .await
+            .unwrap();
+
+        let access_payload = decode_jwt_with_alg(&result.access_token, &public_key, alg);
+        let id_payload = decode_jwt_with_alg(result.id_token.as_ref().unwrap(), &public_key, alg);
+        assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
+        assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+        assert_eq!(
+            id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
+            &serde_json::json!(expected_at_hash_for_alg(&result.access_token, alg))
+        );
+
+        user_info_service_with_key(repo.clone(), key, user_oid)
+            .validate_access_token(&result.access_token)
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
+    for alg in ["PS256", "PS384", "PS512"] {
+        let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+        let user_oid = Uuid::new_v4();
+        let key = key_for_algorithm(alg);
+        let (key_id, private_key, public_key) = match &key.data {
+            KeyData::Asymmetric(data) => (
+                Uuid::from(key.oid).to_string(),
+                data.private_key.clone(),
+                data.public_key.clone(),
+            ),
+            KeyData::Symmetric(_) => unreachable!(),
+        };
+        let service = build_token_service_with_key(repo.clone(), key.clone(), user_oid);
+        let issuer = provider_service().issuer().unwrap();
+        let access_record = service
+            .create_access_token_record(
+                Uuid::nil(),
+                "openid profile",
+                &user_oid.to_string(),
+                &Uuid::new_v4().to_string(),
+                None,
+            )
+            .await
+            .unwrap();
+        let access_token = service
+            .sign_access_token(
+                &access_record.oid.to_string(),
+                &key_id,
+                &private_key,
+                alg,
+                &issuer,
+                &Uuid::nil().to_string(),
+                &Uuid::nil().to_string(),
+                &user_oid,
+                &Uuid::new_v4().to_string(),
+                "openid profile",
+                None,
+            )
+            .unwrap();
+        let id_token = service
+            .sign_id_token(
+                &key_id,
+                &private_key,
+                alg,
+                &issuer,
+                &Uuid::nil().to_string(),
+                &test_user(user_oid),
+                None,
+                None,
+                None,
+                Some(&access_token),
+                "openid profile",
+            )
+            .unwrap();
+
+        let access_payload = decode_jwt_with_alg(&access_token, &public_key, alg);
+        let id_payload = decode_jwt_with_alg(&id_token, &public_key, alg);
+        assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
+        assert_eq!(
+            id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
+            &serde_json::json!(expected_at_hash_for_alg(&access_token, alg))
+        );
+
+        user_info_service_with_key(repo.clone(), key, user_oid)
+            .validate_access_token(&access_token)
+            .await
+            .unwrap();
+    }
 }

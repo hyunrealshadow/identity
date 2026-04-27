@@ -1,10 +1,12 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::{
-    jws::{ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, RS256, RS384, RS512},
+    jws::{
+        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+    },
     jwt,
     jwt::JwtPayload,
 };
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::sync::Arc;
 use uuid::Uuid;
 

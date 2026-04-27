@@ -137,6 +137,7 @@ impl TokenService {
                 data.nonce.as_deref(),
                 data.auth_time,
                 data.acr.as_deref(),
+                Some(&access_token),
                 &data.scope,
             )?)
         } else {
@@ -153,6 +154,7 @@ impl TokenService {
                     &data.scope,
                     &data.user_oid,
                     &data.session_oid,
+                    data.auth_time,
                     None,
                 )
                 .await?,
@@ -281,8 +283,9 @@ impl TokenService {
             client_id,
             &user,
             None,
+            refresh_data.auth_time,
             None,
-            None,
+            Some(&access_token),
             &scope,
         )?);
         self.client_authorization_repo
@@ -298,6 +301,7 @@ impl TokenService {
                 &scope,
                 &refresh_data.user_oid,
                 &refresh_data.session_oid,
+                refresh_data.auth_time,
                 Some(rotated_from.as_str()),
             )
             .await?,

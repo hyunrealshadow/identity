@@ -87,6 +87,12 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::PromptValueInvalid).with_source(error)
             })?;
 
+        if let Some(ref prompt_set) = prompt {
+            if prompt_set.contains(&PromptValue::None) && prompt_set.len() > 1 {
+                return Err(AppError::from_code(AuthorizeErrorCode::PromptNoneCombined));
+            }
+        }
+
         let max_age = params
             .max_age
             .map(|value| value.parse::<i32>())
