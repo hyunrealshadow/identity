@@ -147,6 +147,10 @@ pub enum AuthorizeErrorCode {
     LoginIdInvalid,
     /// Requested scope is not assigned to the client.
     ScopeNotAssignedToClient,
+    /// Nonce is required for implicit flow.
+    ImplicitNonceRequired,
+    /// User lookup failed during token issuance.
+    ImplicitUserNotFound,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -210,6 +214,8 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::StoreCodeFailed => ErrorKind::Internal,
             Self::LoginIdInvalid => ErrorKind::Validation,
             Self::ScopeNotAssignedToClient => ErrorKind::Validation,
+            Self::ImplicitNonceRequired => ErrorKind::Validation,
+            Self::ImplicitUserNotFound => ErrorKind::Validation,
         }
     }
 
@@ -273,6 +279,8 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::StoreCodeFailed => 23054,
             Self::LoginIdInvalid => 23055,
             Self::ScopeNotAssignedToClient => 23056,
+            Self::ImplicitNonceRequired => 23058,
+            Self::ImplicitUserNotFound => 23059,
         }
     }
 }

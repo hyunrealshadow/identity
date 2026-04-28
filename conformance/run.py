@@ -11,7 +11,9 @@ Usage:
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
     IDENTITY_URL     - Identity server URL (default: http://localhost:5150)
-    CONFIG_PATH      - Config file path (default: conformance/conformance-config.json)
+    PROFILE          - Profile to create: basic or implicit (default: basic)
+    CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
+    PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
     TIMEOUT          - Timeout per test in seconds (default: 60)
 """
 
@@ -79,6 +81,22 @@ def main():
     parser.add_argument("--plan-id", help="Existing plan ID to run tests on")
     parser.add_argument("--check", help="Check status of plan ID only")
     parser.add_argument(
+        "--profile",
+        choices=("basic", "implicit"),
+        default=os.environ.get("PROFILE", "basic"),
+        help="Conformance profile to create when --plan-id is not provided",
+    )
+    parser.add_argument(
+        "--config",
+        default=os.environ.get("CONFIG_PATH"),
+        help="Plan config JSON path. Defaults to conformance/plans/<profile>.json",
+    )
+    parser.add_argument(
+        "--plan-name",
+        default=os.environ.get("PLAN_NAME"),
+        help="Conformance suite plan name. Defaults from --profile",
+    )
+    parser.add_argument(
         "--no-docker",
         action="store_true",
         help="Don't start/stop Docker (services already running)",
@@ -107,7 +125,14 @@ def main():
     args = parser.parse_args()
 
     compose_file = os.path.join(script_dir, "docker-compose.yml")
-    config_path = os.path.join(script_dir, "conformance-config.json")
+    plan_names = {
+        "basic": "oidcc-basic-certification-test-plan",
+        "implicit": "oidcc-implicit-certification-test-plan",
+    }
+    if args.profile not in plan_names:
+        parser.error("--profile must be one of: basic, implicit")
+    config_path = args.config or os.path.join(script_dir, "plans", f"{args.profile}.json")
+    plan_name = args.plan_name or plan_names[args.profile]
 
     if args.check:
         client = ConformanceClient(args.suite_url)
@@ -142,8 +167,8 @@ def main():
     if args.plan_id:
         plan_id = args.plan_id
     else:
-        print("Creating test plan...")
-        plan_id = client.create_plan(config_path)
+        print(f"Creating {args.profile} test plan...")
+        plan_id = client.create_plan(config_path, plan_name=plan_name)
         print(f"Plan ID: {plan_id}")
 
     print(f"\nRunning tests...")

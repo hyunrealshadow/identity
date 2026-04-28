@@ -8,6 +8,8 @@ async fn validate_request_rejects_missing_openid_scope() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -24,6 +26,8 @@ async fn validate_request_rejects_unknown_scope() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -42,6 +46,8 @@ async fn validate_request_reports_missing_required_fields() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -84,6 +90,8 @@ async fn validate_request_rejects_request_and_request_uri_together() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -105,6 +113,8 @@ async fn validate_request_accepts_registered_redirect_uri() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -123,6 +133,8 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -142,6 +154,8 @@ async fn prompt_none_combined_with_other_value_rejects() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -164,6 +178,8 @@ async fn prompt_none_alone_is_accepted() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -187,6 +203,8 @@ async fn validate_request_rejects_unassigned_openid_scope() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );

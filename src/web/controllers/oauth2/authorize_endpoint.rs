@@ -3,7 +3,7 @@ use salvo::{Depot, Request, Response, handler};
 
 use crate::application::error::AppError;
 use crate::boot::AppState;
-use crate::domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse};
+use crate::domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
 use crate::web::controllers::response::AppResponse;
 
 use super::{
@@ -36,7 +36,16 @@ fn render_error(
                 } else {
                     error_response
                 };
-                let error_response = error_response.to_redirect_url(&uri);
+                let error_response = match raw
+                    .response_type
+                    .as_deref()
+                    .and_then(|value| value.parse::<ResponseType>().ok())
+                {
+                    Some(response_type) if response_type.is_implicit() => {
+                        error_response.to_fragment_redirect_url(&uri)
+                    }
+                    _ => error_response.to_redirect_url(&uri),
+                };
                 return crate::web::controllers::response::redirect_to_response(
                     error_response.as_str(),
                 );
@@ -203,5 +212,43 @@ mod tests {
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         let location = response.headers().get(header::LOCATION).unwrap();
         assert!(location.to_str().unwrap().contains("error=login_required"));
+    }
+
+    #[tokio::test]
+    async fn authorize_redirects_implicit_oauth_error_in_fragment() {
+        let request = AuthorizationRequest {
+            response_type: ResponseType::IdToken,
+            client_id: uuid::Uuid::nil(),
+            redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            scope: ScopeSet::parse("openid").unwrap(),
+            state: "state".to_string(),
+            nonce: Some("nonce".to_string()),
+            display: None,
+            prompt: Some(HashSet::from([PromptValue::None])),
+            max_age: None,
+            ui_locales: None,
+            claims_locales: None,
+            id_token_hint: None,
+            login_hint: None,
+            acr_values: None,
+            claims: None,
+            request_uri: None,
+            code_challenge: None,
+            code_challenge_method: None,
+        };
+
+        let response = super::super::authorize_response::redirect_oauth_error_response(
+            &request,
+            OAuthErrorCode::LoginRequired,
+        );
+
+        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
+        let location = response.headers().get(header::LOCATION).unwrap();
+        let location = url::Url::parse(location.to_str().unwrap()).unwrap();
+        assert_eq!(location.query(), None);
+        assert_eq!(
+            location.fragment(),
+            Some("error=login_required&state=state")
+        );
     }
 }

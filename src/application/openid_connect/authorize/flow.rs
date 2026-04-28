@@ -1,4 +1,5 @@
 use super::*;
+use std::str::FromStr;
 
 impl AuthorizeService {
     pub async fn create_authorization_request(
@@ -132,6 +133,28 @@ impl AuthorizeService {
         let request = self
             .load_authorization_request(authorization_request_id)
             .await?;
+
+        let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+        })?;
+
+        if response_type.is_implicit() {
+            return self
+                .approve_implicit_flow(&request, session_oid, user_oid, response_type, auth_time)
+                .await;
+        }
+
+        self.approve_code_flow(&request, user_oid, session_oid, auth_time)
+            .await
+    }
+
+    async fn approve_code_flow(
+        &self,
+        request: &AuthorizationRequestData,
+        user_oid: Uuid,
+        session_oid: Uuid,
+        auth_time: Option<i64>,
+    ) -> Result<Url, AppError> {
         let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
         })?;
@@ -186,6 +209,29 @@ impl AuthorizeService {
         Ok(redirect)
     }
 
+    pub async fn deny_authorization_request(
+        &self,
+        authorization_request_id: Uuid,
+    ) -> Result<Url, AppError> {
+        let request = self
+            .load_authorization_request(authorization_request_id)
+            .await?;
+        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
+        })?;
+        let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied).with_state(request.state);
+
+        let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+        })?;
+
+        Ok(if response_type.is_implicit() {
+            error.to_fragment_redirect_url(&redirect_uri)
+        } else {
+            error.to_redirect_url(&redirect_uri)
+        })
+    }
+
     pub async fn approve_authorization_request_by_login(
         &self,
         protected_login_oid: &str,
@@ -201,21 +247,6 @@ impl AuthorizeService {
             auth_time,
         )
         .await
-    }
-
-    pub async fn deny_authorization_request(
-        &self,
-        authorization_request_id: Uuid,
-    ) -> Result<Url, AppError> {
-        let request = self
-            .load_authorization_request(authorization_request_id)
-            .await?;
-        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
-        })?;
-        Ok(OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
-            .with_state(request.state)
-            .to_redirect_url(&redirect_uri))
     }
 
     pub async fn deny_authorization_request_by_login(

@@ -222,7 +222,24 @@ impl UserInfoClaims {
         scope: &crate::domain::openid_connect::ScopeSet,
         claims_request: Option<&serde_json::Value>,
     ) {
-        let essential_claims = Self::extract_essential_claims(claims_request);
+        self.apply_scope_filter_for_claim_sections(scope, claims_request, &["userinfo"]);
+    }
+
+    pub fn apply_scope_filter_for_id_token(
+        &mut self,
+        scope: &crate::domain::openid_connect::ScopeSet,
+        claims_request: Option<&serde_json::Value>,
+    ) {
+        self.apply_scope_filter_for_claim_sections(scope, claims_request, &["id_token"]);
+    }
+
+    fn apply_scope_filter_for_claim_sections(
+        &mut self,
+        scope: &crate::domain::openid_connect::ScopeSet,
+        claims_request: Option<&serde_json::Value>,
+        claim_sections: &[&str],
+    ) {
+        let essential_claims = Self::extract_essential_claims(claims_request, claim_sections);
 
         if !scope.profile && !essential_claims.contains(&"name") {
             self.name = None;
@@ -282,33 +299,41 @@ impl UserInfoClaims {
         }
     }
 
-    fn extract_essential_claims(claims_request: Option<&serde_json::Value>) -> Vec<&'static str> {
+    fn extract_essential_claims(
+        claims_request: Option<&serde_json::Value>,
+        claim_sections: &[&str],
+    ) -> Vec<&'static str> {
         let mut essential = Vec::new();
         if let Some(cr) = claims_request {
-            if let Some(userinfo) = cr.get("userinfo") {
-                if let Some(obj) = userinfo.as_object() {
-                    for (claim_name, claim_spec) in obj {
-                        if let Some(spec_obj) = claim_spec.as_object() {
-                            if spec_obj.get("essential").and_then(|v| v.as_bool()) == Some(true) {
-                                match claim_name.as_str() {
-                                    "name" => essential.push("name"),
-                                    "given_name" => essential.push("given_name"),
-                                    "family_name" => essential.push("family_name"),
-                                    "middle_name" => essential.push("middle_name"),
-                                    "nickname" => essential.push("nickname"),
-                                    "profile" => essential.push("profile"),
-                                    "picture" => essential.push("picture"),
-                                    "website" => essential.push("website"),
-                                    "gender" => essential.push("gender"),
-                                    "birthdate" => essential.push("birthdate"),
-                                    "zoneinfo" => essential.push("zoneinfo"),
-                                    "locale" => essential.push("locale"),
-                                    "preferred_username" => essential.push("preferred_username"),
-                                    "email" => essential.push("email"),
-                                    "phone_number" => essential.push("phone_number"),
-                                    "address" => essential.push("address"),
-                                    "updated_at" => essential.push("updated_at"),
-                                    _ => {}
+            for section in claim_sections {
+                if let Some(claims_section) = cr.get(section) {
+                    if let Some(obj) = claims_section.as_object() {
+                        for (claim_name, claim_spec) in obj {
+                            if let Some(spec_obj) = claim_spec.as_object() {
+                                if spec_obj.get("essential").and_then(|v| v.as_bool()) == Some(true)
+                                {
+                                    match claim_name.as_str() {
+                                        "name" => essential.push("name"),
+                                        "given_name" => essential.push("given_name"),
+                                        "family_name" => essential.push("family_name"),
+                                        "middle_name" => essential.push("middle_name"),
+                                        "nickname" => essential.push("nickname"),
+                                        "profile" => essential.push("profile"),
+                                        "picture" => essential.push("picture"),
+                                        "website" => essential.push("website"),
+                                        "gender" => essential.push("gender"),
+                                        "birthdate" => essential.push("birthdate"),
+                                        "zoneinfo" => essential.push("zoneinfo"),
+                                        "locale" => essential.push("locale"),
+                                        "preferred_username" => {
+                                            essential.push("preferred_username")
+                                        }
+                                        "email" => essential.push("email"),
+                                        "phone_number" => essential.push("phone_number"),
+                                        "address" => essential.push("address"),
+                                        "updated_at" => essential.push("updated_at"),
+                                        _ => {}
+                                    }
                                 }
                             }
                         }
@@ -555,6 +580,44 @@ mod tests {
         filtered.apply_scope_filter(&scope, Some(&claims_request));
 
         assert_eq!(filtered.name, Some("John Doe".to_string()));
+        assert_eq!(filtered.email, None);
+    }
+
+    #[test]
+    fn apply_scope_filter_for_id_token_keeps_id_token_essential_claim_without_scope() {
+        let claims = UserInfoClaims::new("user-123".to_string())
+            .with_name("John Doe".to_string())
+            .with_email("john@example.com".to_string(), true);
+
+        let mut filtered = claims;
+        let scope = ScopeSet::parse("openid").unwrap();
+        let claims_request = serde_json::json!({
+            "id_token": {
+                "name": {"essential": true}
+            }
+        });
+        filtered.apply_scope_filter_for_id_token(&scope, Some(&claims_request));
+
+        assert_eq!(filtered.name, Some("John Doe".to_string()));
+        assert_eq!(filtered.email, None);
+    }
+
+    #[test]
+    fn apply_scope_filter_ignores_id_token_essential_claim_for_userinfo() {
+        let claims = UserInfoClaims::new("user-123".to_string())
+            .with_name("John Doe".to_string())
+            .with_email("john@example.com".to_string(), true);
+
+        let mut filtered = claims;
+        let scope = ScopeSet::parse("openid").unwrap();
+        let claims_request = serde_json::json!({
+            "id_token": {
+                "name": {"essential": true}
+            }
+        });
+        filtered.apply_scope_filter(&scope, Some(&claims_request));
+
+        assert_eq!(filtered.name, None);
         assert_eq!(filtered.email, None);
     }
 

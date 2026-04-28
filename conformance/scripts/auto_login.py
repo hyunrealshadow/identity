@@ -1,7 +1,7 @@
 import re
 import requests
 from typing import Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 
 
 class AutoLoginHandler:
@@ -28,8 +28,13 @@ class AutoLoginHandler:
         return url.replace(self.docker_identity_url, self.identity_url)
 
     def _complete_callback(self, callback_url: str) -> bool:
+        fragment = ""
+        request_url = callback_url
+        if "#" in callback_url:
+            request_url, fragment = callback_url.split("#", 1)
+
         try:
-            resp = self.session.get(callback_url, allow_redirects=False)
+            resp = self.session.get(request_url, allow_redirects=False)
         except Exception:
             return False
 
@@ -37,7 +42,12 @@ class AutoLoginHandler:
         if match:
             submit_url = match.group(1).replace("\\/", "/")
             try:
-                self.session.post(submit_url, data="", headers={"Content-Type": "text/plain"})
+                body = f"#{fragment}" if fragment else ""
+                self.session.post(
+                    submit_url,
+                    data=body,
+                    headers={"Content-Type": "text/plain"},
+                )
             except Exception:
                 return False
         return True

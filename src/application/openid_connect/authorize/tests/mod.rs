@@ -49,6 +49,10 @@ use crate::domain::{
         OpenIdConnectCredentialType,
     },
     setting::installation::{InstallationSetting, InstallationState},
+    user::{
+        User, UserOid,
+        repository::{UserRepository, UserRepositoryError},
+    },
 };
 
 mod fixtures;

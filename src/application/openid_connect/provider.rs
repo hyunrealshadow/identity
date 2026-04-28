@@ -62,7 +62,7 @@ impl Default for OpenIdProviderCapabilities {
             response_types_supported: vec![
                 "code".to_owned(),
                 "id_token".to_owned(),
-                "token id_token".to_owned(),
+                "id_token token".to_owned(),
             ],
             response_modes_supported: vec!["query".to_owned(), "fragment".to_owned()],
             grant_types_supported: vec![
@@ -621,7 +621,7 @@ mod tests {
         assert!(metadata.end_session_endpoint.is_none());
         assert_eq!(
             metadata.response_types_supported,
-            vec!["code", "id_token", "token id_token"]
+            vec!["code", "id_token", "id_token token"]
         );
     }
 

@@ -14,6 +14,7 @@ use crate::{
     domain::{
         auth::repository::LoginRepository,
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
+        key::{KeyData, repository::KeyRepository},
         openid_connect::{
             AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display,
             OAuthErrorCode, OAuthErrorResponse, OpenIdConnectClient, OpenIdConnectClientRepository,
@@ -21,6 +22,7 @@ use crate::{
             OpenIdConnectCredentialType, PromptValue, ResponseType, ScopeSet,
             model::authorization_request::ClaimsRequest, model::claim::JwtClaimNames,
         },
+        user::{UserOid, repository::UserRepository},
     },
 };
 
@@ -52,6 +54,8 @@ pub struct AuthorizeService {
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     login_repo: Arc<dyn LoginRepository>,
+    user_repo: Arc<dyn UserRepository>,
+    key_repo: Arc<dyn KeyRepository>,
     provider_service: Arc<OpenIdProviderService>,
     http_client: reqwest::Client,
     data_protector: Arc<dyn DataProtector>,
@@ -63,6 +67,8 @@ impl AuthorizeService {
         credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
         client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         login_repo: Arc<dyn LoginRepository>,
+        user_repo: Arc<dyn UserRepository>,
+        key_repo: Arc<dyn KeyRepository>,
         provider_service: Arc<OpenIdProviderService>,
         data_protector: Arc<dyn DataProtector>,
     ) -> Self {
@@ -71,6 +77,8 @@ impl AuthorizeService {
             credential_repo,
             client_authorization_repo,
             login_repo,
+            user_repo,
+            key_repo,
             provider_service,
             http_client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
@@ -83,8 +91,10 @@ impl AuthorizeService {
 }
 
 mod flow;
+mod implicit_flow;
 mod protection;
 mod request_object;
+mod signing;
 mod validation;
 
 #[cfg(test)]

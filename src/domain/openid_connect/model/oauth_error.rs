@@ -96,6 +96,17 @@ impl OAuthErrorResponse {
         }
         url
     }
+
+    pub fn to_fragment_redirect_url(&self, redirect_uri: &url::Url) -> url::Url {
+        let mut url = redirect_uri.clone();
+        let mut fragment = format!("error={}", self.error);
+        if let Some(state) = &self.state {
+            use std::fmt::Write;
+            write!(fragment, "&state={state}").unwrap();
+        }
+        url.set_fragment(Some(&fragment));
+        url
+    }
 }
 
 #[cfg(test)]
@@ -154,5 +165,27 @@ mod tests {
             "invalid_request"
         );
         assert_eq!(OAuthErrorCode::LoginRequired.to_string(), "login_required");
+    }
+
+    #[test]
+    fn to_fragment_redirect_url_places_error_in_fragment() {
+        let error =
+            super::OAuthErrorResponse::new(OAuthErrorCode::AccessDenied).with_state("state123");
+        let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
+        let url = error.to_fragment_redirect_url(&redirect_uri);
+
+        assert_eq!(url.query(), None);
+        assert_eq!(url.fragment(), Some("error=access_denied&state=state123"));
+    }
+
+    #[test]
+    fn to_redirect_url_places_error_in_query() {
+        let error = super::OAuthErrorResponse::new(OAuthErrorCode::LoginRequired).with_state("abc");
+        let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
+        let url = error.to_redirect_url(&redirect_uri);
+
+        assert_eq!(url.fragment(), None);
+        assert!(url.query().unwrap().contains("error=login_required"));
+        assert!(url.query().unwrap().contains("state=abc"));
     }
 }

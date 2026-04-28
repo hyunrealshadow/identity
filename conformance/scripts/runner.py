@@ -46,6 +46,10 @@ class TestRunner:
     def _is_active_status(status: str) -> bool:
         return status in {"CREATED", "CONFIGURED", "RUNNING", "WAITING"}
 
+    @staticmethod
+    def _same_variant(left: dict, right: dict) -> bool:
+        return left == right
+
     def _upload_screenshots(self, run_id: str) -> bool:
         try:
             pending = self.client.get_pending_screenshots(run_id)
@@ -69,7 +73,7 @@ class TestRunner:
         run_id = None
 
         for m in modules:
-            if m.test_module == test_name:
+            if m.test_module == test_name and self._same_variant(m.variant, variant):
                 if m.instances:
                     run_id = self.client.select_preferred_instance(m.instances)
                     info = self.client.get_test_info(run_id)

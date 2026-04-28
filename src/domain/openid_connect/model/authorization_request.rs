@@ -13,12 +13,18 @@ pub enum ResponseType {
     TokenIdToken,
 }
 
+impl ResponseType {
+    pub fn is_implicit(&self) -> bool {
+        matches!(self, Self::IdToken | Self::TokenIdToken)
+    }
+}
+
 impl fmt::Display for ResponseType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Code => "code",
             Self::IdToken => "id_token",
-            Self::TokenIdToken => "token id_token",
+            Self::TokenIdToken => "id_token token",
         })
     }
 }
@@ -41,6 +47,7 @@ impl FromStr for ResponseType {
         Ok(match s {
             "code" => Self::Code,
             "id_token" => Self::IdToken,
+            "id_token token" => Self::TokenIdToken,
             "token id_token" => Self::TokenIdToken,
             _ => return Err(ParseResponseTypeError),
         })
@@ -231,6 +238,31 @@ mod tests {
     fn parse_response_type_code() {
         let rt = ResponseType::from_str("code").unwrap();
         assert_eq!(rt, ResponseType::Code);
+        assert!(!rt.is_implicit());
+    }
+
+    #[test]
+    fn implicit_response_types_report_is_implicit() {
+        assert!(ResponseType::IdToken.is_implicit());
+        assert!(ResponseType::TokenIdToken.is_implicit());
+    }
+
+    #[test]
+    fn parse_implicit_response_type_with_access_token() {
+        assert_eq!(
+            ResponseType::from_str("id_token token").unwrap(),
+            ResponseType::TokenIdToken
+        );
+        assert_eq!(
+            ResponseType::from_str("token id_token").unwrap(),
+            ResponseType::TokenIdToken
+        );
+        assert_eq!(ResponseType::TokenIdToken.to_string(), "id_token token");
+    }
+
+    #[test]
+    fn code_response_type_is_not_implicit() {
+        assert!(!ResponseType::Code.is_implicit());
     }
 
     #[test]

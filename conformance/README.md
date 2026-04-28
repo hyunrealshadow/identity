@@ -34,8 +34,10 @@ Use `--exit-on-failure` to exit 1 on any non-passing results.
 
 ```bash
 python run.py                           # Start Docker, run all tests
+python run.py --profile implicit        # Run the Implicit OP certification plan
 python run.py --no-docker               # Services already running
 python run.py --plan-id <ID>            # Run on existing plan
+python run.py --config plans/basic.json # Override plan config JSON
 python run.py --timeout 30              # 30s timeout per test
 python run.py --exit-on-failure         # Exit 1 on failures
 ```
@@ -59,7 +61,9 @@ python run_single.py --plan-id <ID> --test oidcc-server
 |----------|---------|-------------|
 | `SUITE_URL` | `https://localhost.emobix.co.uk:8443` | Conformance Suite URL |
 | `IDENTITY_URL` | `http://localhost:5150` | Identity server URL |
-| `CONFIG_PATH` | `conformance/conformance-config.json` | Config file path |
+| `PROFILE` | `basic` | Test profile to create (`basic` or `implicit`) |
+| `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
+| `PLAN_NAME` | Derived from `PROFILE` | Conformance suite plan name |
 | `TIMEOUT` | `60` | Timeout per test (seconds) |
 
 ## CI Integration

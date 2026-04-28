@@ -441,6 +441,23 @@ pub(super) fn test_data_protector() -> Arc<dyn DataProtector> {
     Arc::new(DataProtectorImpl::new(Arc::new(MockKeyRepository)))
 }
 
+pub(super) fn build_test_service(
+    client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
+    login_repo: Arc<dyn LoginRepository>,
+) -> AuthorizeService {
+    AuthorizeService::new(
+        client_repo,
+        credential_repo,
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        login_repo,
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        provider_service(),
+        test_data_protector(),
+    )
+}
+
 pub(super) fn params(scope: &str) -> AuthorizationRequestParams {
     AuthorizationRequestParams {
         response_type: "code".to_string(),
@@ -502,6 +519,8 @@ pub(super) fn authorize_service_with_public_key(public_key: Vec<u8>) -> Authoriz
         Arc::new(credential_repo),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     )
@@ -515,6 +534,8 @@ pub(super) fn authorize_service_with_request_uri(request_uri: &str) -> Authorize
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     )
@@ -587,4 +608,71 @@ pub(super) fn signed_request_object(
 
     let signer = RS256.signer_from_pem(private_key).unwrap();
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()
+}
+
+pub(super) struct StubUserRepository;
+
+#[async_trait]
+impl UserRepository for StubUserRepository {
+    async fn find_by_oid(&self, _oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_identifier(&self, _identifier: &str) -> Result<User, UserRepositoryError> {
+        Err(UserRepositoryError::UserNotFound)
+    }
+
+    async fn increment_failed_attempts(
+        &self,
+        _user_oid: UserOid,
+        _lock_until: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(), UserRepositoryError> {
+        Ok(())
+    }
+
+    async fn reset_failed_attempts(&self, _user_oid: UserOid) -> Result<(), UserRepositoryError> {
+        Ok(())
+    }
+}
+
+pub(super) struct StubKeyRepository;
+
+#[async_trait]
+impl KeyRepository for StubKeyRepository {
+    async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
+        Ok(None)
+    }
+
+    async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn create(
+        &self,
+        _key_type: KeyType,
+        _data: &KeyData,
+        _expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Key, KeyRepositoryError> {
+        unimplemented!()
+    }
+
+    async fn update_certificate_by_oid(
+        &self,
+        _oid: KeyOid,
+        _certificate_pem: &str,
+    ) -> Result<Option<Key>, KeyRepositoryError> {
+        unimplemented!()
+    }
+
+    async fn revoke_by_oid(
+        &self,
+        _oid: KeyOid,
+        _revoked_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<Key>, KeyRepositoryError> {
+        unimplemented!()
+    }
 }

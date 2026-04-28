@@ -43,6 +43,8 @@ async fn parse_unsecured_request_object_is_accepted() {
         Arc::new(InMemoryCredentialRepository::default()),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );
@@ -98,6 +100,8 @@ async fn parse_rs256_request_object_extracts_payload() {
         Arc::new(credential_repo),
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
         provider_service(),
         test_data_protector(),
     );

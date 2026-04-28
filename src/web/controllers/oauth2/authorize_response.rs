@@ -16,12 +16,14 @@ pub fn redirect_oauth_error_response(
     request: &AuthorizationRequest,
     error: OAuthErrorCode,
 ) -> Response {
-    redirect_to_response(
-        OAuthErrorResponse::new(error)
-            .with_state(request.state.clone())
-            .to_redirect_url(&request.redirect_uri)
-            .as_str(),
-    )
+    let error_response = OAuthErrorResponse::new(error).with_state(request.state.clone());
+    let redirect_uri = if request.response_type.is_implicit() {
+        error_response.to_fragment_redirect_url(&request.redirect_uri)
+    } else {
+        error_response.to_redirect_url(&request.redirect_uri)
+    };
+
+    redirect_to_response(redirect_uri.as_str())
 }
 
 pub fn authorize_error_details(

@@ -1,0 +1,19 @@
+{
+  "alias": "identity",
+  "description": "Identity server Implicit OP conformance",
+  "server": {
+    "discoveryUrl": "http://identity:5150/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "00000001-0000-0000-0000-000000000001",
+    "client_secret": "conformance-secret"
+  },
+  "client2": {
+    "client_id": "00000002-0000-0000-0000-000000000001",
+    "client_secret": "conformance-secret-2"
+  },
+  "client_secret_post": {
+    "client_id": "00000002-0000-0000-0000-000000000001",
+    "client_secret": "conformance-secret-2"
+  }
+}

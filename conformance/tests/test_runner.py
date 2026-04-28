@@ -187,6 +187,49 @@ class TestRunnerResumeTests(unittest.TestCase):
             [("http://identity:5150/oauth2/authorize?claims_locales=se", "GET")],
         )
 
+    @patch("scripts.runner.time.sleep", return_value=None)
+    def test_run_single_test_does_not_resume_same_module_with_different_variant(self, _sleep):
+        id_token_run_id = "id-token-run"
+        hybrid_run_id = "hybrid-run"
+        id_token_variant = {
+            "client_auth_type": "client_secret_basic",
+            "response_type": "id_token",
+            "response_mode": "default",
+        }
+        hybrid_variant = {
+            "client_auth_type": "client_secret_basic",
+            "response_type": "id_token token",
+            "response_mode": "default",
+        }
+        client = FakeClient(
+            modules=[
+                TestModule("oidcc-server", id_token_variant, [id_token_run_id], ""),
+                TestModule("oidcc-server", hybrid_variant, [], ""),
+            ],
+            info_sequences={
+                id_token_run_id: [TestInfo(id_token_run_id, "FINISHED", "PASSED")],
+                hybrid_run_id: [
+                    TestInfo(hybrid_run_id, "WAITING", None),
+                    TestInfo(hybrid_run_id, "FINISHED", "PASSED"),
+                ],
+            },
+            browser_urls={hybrid_run_id: ["http://identity:5150/oauth2/authorize?response_type=id_token+token"]},
+            start_run_ids={"oidcc-server": hybrid_run_id},
+        )
+        auto_login = FakeAutoLogin()
+        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+
+        result = runner.run_single_test("plan-1", "oidcc-server", hybrid_variant)
+
+        self.assertEqual(result.status, "FINISHED")
+        self.assertEqual(result.result, "PASSED")
+        self.assertEqual(result.run_id, hybrid_run_id)
+        self.assertEqual(client.started_tests, [("plan-1", "oidcc-server", hybrid_variant, hybrid_run_id)])
+        self.assertEqual(
+            auto_login.handled_urls,
+            [("http://identity:5150/oauth2/authorize?response_type=id_token+token", "GET")],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

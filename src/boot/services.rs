@@ -113,6 +113,8 @@ impl AppServices {
                 Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(LoginRepositoryImpl::new(db.clone())),
+                Arc::new(UserRepositoryImpl::new(db.clone())),
+                Arc::new(KeyRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
                 data_protector.clone(),
             ),
