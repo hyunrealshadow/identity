@@ -61,8 +61,26 @@ impl TokenService {
             }
         }
 
-        let client_secret =
-            client_secret.ok_or_else(|| AppError::from_code(TokenErrorCode::ClientAuthRequired))?;
+        let Some(client_secret) = client_secret else {
+            let client_oid = Uuid::parse_str(client_id).map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
+            })?;
+            let client = self
+                .client_repo
+                .find_by_oid(client_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+                })?
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+
+            if client.metadata().settings.allow_public_client_flow {
+                return Ok(client.client().oid);
+            }
+
+            return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+        };
+
         self.authenticate_client_secret_basic(client_id, client_secret)
             .await
     }

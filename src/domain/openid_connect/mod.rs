@@ -7,6 +7,7 @@ pub use model::authorization_request::{
 };
 pub use model::client::{
     InvalidOpenIdConnectClientError, OpenIdConnectClient, OpenIdConnectClientMetadata,
+    OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
 };
 pub use model::credential::{
     OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,

@@ -19,6 +19,12 @@ pub enum OpenIdConnectClientRepositoryError {
     #[error("failed to parse openid connect url")]
     ParseUrl(#[source] url::ParseError),
 
+    #[error("failed to parse openid connect client platform")]
+    ParseClientPlatform(
+        #[source]
+        crate::domain::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError,
+    ),
+
     #[error("invalid openid connect client")]
     InvalidClient(
         #[source] crate::domain::openid_connect::model::client::InvalidOpenIdConnectClientError,

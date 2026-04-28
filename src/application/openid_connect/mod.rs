@@ -1,6 +1,8 @@
 pub mod authorize;
 pub mod dto;
 pub mod provider;
+#[cfg(test)]
+mod tests;
 pub mod token;
 pub mod user_info;
 

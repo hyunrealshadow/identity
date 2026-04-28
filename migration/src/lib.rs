@@ -14,6 +14,7 @@ mod m20260407_071449_create_login;
 mod m20260426_000001_create_scope;
 mod m20260426_000002_create_client_scope;
 mod m20260427_000001_create_key_jwk;
+mod m20260428_000001_create_client_platform;
 
 pub struct Migrator;
 
@@ -34,6 +35,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260426_000001_create_scope::Migration),
             Box::new(m20260426_000002_create_client_scope::Migration),
             Box::new(m20260427_000001_create_key_jwk::Migration),
+            Box::new(m20260428_000001_create_client_platform::Migration),
         ]
     }
 }

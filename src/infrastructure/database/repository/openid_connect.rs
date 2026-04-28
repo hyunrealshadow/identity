@@ -6,12 +6,14 @@ use url::Url;
 
 use crate::domain::client::model::Client;
 use crate::domain::openid_connect::{
-    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientRepository,
-    OpenIdConnectClientRepositoryError,
+    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+    OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
+    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
 };
 use crate::infrastructure::database::entity::{
     client, client::Entity as ClientEntity, client_open_id_connect,
-    client_open_id_connect::Entity as OpenIdConnectClientEntity, client_scope,
+    client_open_id_connect::Entity as OpenIdConnectClientEntity, client_platform,
+    client_platform::Entity as ClientPlatformEntity, client_scope,
     client_scope::Entity as ClientScopeEntity, scope, scope::Entity as ScopeEntity,
 };
 
@@ -66,12 +68,13 @@ fn to_client(model: client::Model) -> Result<Client, OpenIdConnectClientReposito
 fn to_metadata(
     model: client_open_id_connect::Model,
 ) -> Result<OpenIdConnectClientMetadata, OpenIdConnectClientRepositoryError> {
+    let settings = serde_json::from_value::<OpenIdConnectClientSettings>(model.settings)
+        .map_err(OpenIdConnectClientRepositoryError::DeserializeMetadata)?;
+
     Ok(OpenIdConnectClientMetadata {
-        redirect_uris: parse_optional_urls(model.redirect_uris.as_ref())?,
         post_logout_redirect_uris: parse_optional_urls(model.post_logout_redirect_uris.as_ref())?,
         response_types: deserialize_optional_string_vec(model.response_types.as_ref())?,
         grant_types: deserialize_optional_string_vec(model.grant_types.as_ref())?,
-        application_type: model.application_type,
         contacts: deserialize_optional_string_vec(model.contacts.as_ref())?,
         logo_uri: parse_optional_url(model.logo_uri.as_deref())?,
         client_uri: parse_optional_url(model.client_uri.as_deref())?,
@@ -95,7 +98,19 @@ fn to_metadata(
         default_acr_values: deserialize_optional_string_vec(model.default_acr_values.as_ref())?,
         initiate_login_uri: parse_optional_url(model.initiate_login_uri.as_deref())?,
         request_uris: parse_optional_urls(model.request_uris.as_ref())?,
-        skip_consent: model.skip_consent,
+        settings,
+    })
+}
+
+fn to_platform(
+    model: client_platform::Model,
+) -> Result<OpenIdConnectClientPlatform, OpenIdConnectClientRepositoryError> {
+    Ok(OpenIdConnectClientPlatform {
+        platform: model
+            .platform
+            .parse::<OpenIdConnectClientPlatformType>()
+            .map_err(OpenIdConnectClientRepositoryError::ParseClientPlatform)?,
+        redirect_uris: parse_optional_urls(model.redirect_uris.as_ref())?.unwrap_or_default(),
     })
 }
 
@@ -132,6 +147,16 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         };
 
         let client_id = client_model.id;
+        let platform_models = ClientPlatformEntity::find()
+            .filter(client_platform::Column::ClientId.eq(client_id))
+            .all(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+        let platforms = platform_models
+            .into_iter()
+            .map(to_platform)
+            .collect::<Result<Vec<_>, _>>()?;
+
         let assigned_scopes = ScopeEntity::find()
             .inner_join(ClientScopeEntity)
             .filter(client_scope::Column::ClientId.eq(client_id))
@@ -146,7 +171,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         let client = to_client(client_model)?;
         let metadata = to_metadata(metadata_model)?;
         Ok(Some(
-            OpenIdConnectClient::new(client, metadata, assigned_scopes)
+            OpenIdConnectClient::new(client, metadata, platforms, assigned_scopes)
                 .map_err(OpenIdConnectClientRepositoryError::InvalidClient)?,
         ))
     }
@@ -154,7 +179,14 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::{deserialize_optional_string_vec, parse_optional_url, parse_optional_urls};
+    use super::{
+        deserialize_optional_string_vec, parse_optional_url, parse_optional_urls, to_platform,
+    };
+    use crate::{
+        domain::openid_connect::OpenIdConnectClientPlatformType,
+        infrastructure::database::entity::client_platform,
+    };
+    use chrono::Utc;
     use serde_json::json;
 
     #[test]
@@ -177,5 +209,44 @@ mod tests {
         ])))
         .unwrap();
         assert_eq!(urls.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn maps_client_platform_redirect_uris() {
+        let platform = to_platform(client_platform::Model {
+            id: 1,
+            client_id: 2,
+            platform: "web".to_string(),
+            redirect_uris: Some(json!(["https://example.com/callback"])),
+            created_at: Utc::now().into(),
+            updated_at: None,
+        })
+        .unwrap();
+
+        assert_eq!(platform.platform, OpenIdConnectClientPlatformType::Web);
+        assert_eq!(
+            platform.redirect_uris[0].as_str(),
+            "https://example.com/callback"
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_client_platform() {
+        let error = to_platform(client_platform::Model {
+            id: 1,
+            client_id: 2,
+            platform: "ios".to_string(),
+            redirect_uris: Some(json!(["com.example.app:/callback"])),
+            created_at: Utc::now().into(),
+            updated_at: None,
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::domain::openid_connect::OpenIdConnectClientRepositoryError::ParseClientPlatform(
+                _
+            )
+        ));
     }
 }

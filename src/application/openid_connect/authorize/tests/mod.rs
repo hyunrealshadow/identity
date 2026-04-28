@@ -32,7 +32,6 @@ use crate::domain::{
         model::Login,
         repository::{LoginRepository, LoginRepositoryError},
     },
-    client::model::{Client, ClientProtocol},
     client_authorization::{
         ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
         ClientAuthorizationType,
@@ -43,10 +42,9 @@ use crate::domain::{
         repository::{KeyRepository, KeyRepositoryError},
     },
     openid_connect::{
-        OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientRepository,
-        OpenIdConnectClientRepositoryError, OpenIdConnectCredential, OpenIdConnectCredentialData,
-        OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
-        OpenIdConnectCredentialType,
+        OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
+        OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
+        OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
     },
     setting::installation::{InstallationSetting, InstallationState},
     user::{

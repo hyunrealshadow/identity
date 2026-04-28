@@ -28,6 +28,8 @@ pub enum Relation {
     ClientAuthorization,
     #[sea_orm(has_many = "super::client_scope::Entity")]
     ClientScope,
+    #[sea_orm(has_many = "super::client_platform::Entity")]
+    ClientPlatform,
     #[sea_orm(has_many = "super::login::Entity")]
     Login,
 }
@@ -53,6 +55,12 @@ impl Related<super::client_authorization::Entity> for Entity {
 impl Related<super::client_scope::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientScope.def()
+    }
+}
+
+impl Related<super::client_platform::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ClientPlatform.def()
     }
 }
 

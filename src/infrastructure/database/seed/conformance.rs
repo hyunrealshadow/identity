@@ -1,6 +1,6 @@
 //! Conformance-environment seed.
 //!
-//! Creates the fixed test user and OIDC client that the OpenID Conformance
+//! Creates the fixed test user and OIDC clients that the OpenID Conformance
 //! Test Suite expects.  This module is only called when `APP_ENV=conformance`.
 //!
 //! All operations are idempotent: rows are inserted only when the fixed OIDs
@@ -19,14 +19,14 @@ use crate::{
     application::error::AppError,
     application::error::codes::common::CommonErrorCode,
     infrastructure::database::entity::{
-        client, client_open_id_connect, client_open_id_connect_credential, client_scope, scope,
-        user, user_credential,
+        client, client_open_id_connect, client_open_id_connect_credential, client_platform,
+        client_scope, scope, user, user_credential,
     },
 };
 
 use super::Seed;
 
-/// Seed that creates the fixed conformance test user and OIDC client.
+/// Seed that creates the fixed conformance test user and OIDC clients.
 pub struct ConformanceSeed;
 
 #[async_trait]
@@ -44,23 +44,39 @@ impl Seed for ConformanceSeed {
 /// conformance suite config references.
 const USER_OID: &str = "00000000-0000-0000-0000-000000000001";
 const USER_CRED_OID: &str = "00000000-0000-0000-0000-000000000002";
-const CLIENT_OID: &str = "00000001-0000-0000-0000-000000000001";
-const CLIENT_CRED_OID: &str = "00000001-0000-0000-0000-000000000002";
-const CLIENT2_OID: &str = "00000002-0000-0000-0000-000000000001";
-const CLIENT2_CRED_OID: &str = "00000002-0000-0000-0000-000000000002";
+const BASIC_CLIENT_OID: &str = "00000001-0000-0000-0000-000000000001";
+const BASIC_CLIENT_CRED_OID: &str = "00000001-0000-0000-0000-000000000002";
+const BASIC_CLIENT_POST_OID: &str = "00000002-0000-0000-0000-000000000001";
+const BASIC_CLIENT_POST_CRED_OID: &str = "00000002-0000-0000-0000-000000000002";
+const IMPLICIT_CLIENT_OID: &str = "00000003-0000-0000-0000-000000000001";
+const IMPLICIT_CLIENT_CRED_OID: &str = "00000003-0000-0000-0000-000000000002";
+const IMPLICIT_CLIENT_POST_OID: &str = "00000004-0000-0000-0000-000000000001";
+const IMPLICIT_CLIENT_POST_CRED_OID: &str = "00000004-0000-0000-0000-000000000002";
 
-/// Public constant for the conformance client OID, used by other modules to
-/// identify this special client (e.g. to skip consent automatically).
-pub const CONFORMANCE_CLIENT_OID: &str = CLIENT_OID;
+/// Legacy public constant for the default Basic conformance client OID.
+pub const CONFORMANCE_CLIENT_OID: &str = BASIC_CLIENT_OID;
 
 pub const CONFORMANCE_USERNAME: &str = "conformance-test";
 pub const CONFORMANCE_EMAIL: &str = "conformance-test@example.com";
 /// Plain-text password used by the auto-login endpoint.
 pub const CONFORMANCE_PASSWORD: &str = "ConformanceTest1!";
 
-pub const CONFORMANCE_CLIENT_NAME: &str = "OpenID Conformance Suite";
-pub const CONFORMANCE_CLIENT_SECRET: &str = "conformance-secret";
-pub const CONFORMANCE_CLIENT2_SECRET: &str = "conformance-secret-2";
+pub const CONFORMANCE_BASIC_CLIENT_NAME: &str = "OpenID Conformance Suite (Basic)";
+pub const CONFORMANCE_BASIC_CLIENT_SECRET: &str = "conformance-secret";
+pub const CONFORMANCE_BASIC_CLIENT_POST_SECRET: &str = "conformance-secret-2";
+pub const CONFORMANCE_IMPLICIT_CLIENT_NAME: &str = "OpenID Conformance Suite (Implicit)";
+pub const CONFORMANCE_IMPLICIT_CLIENT_SECRET: &str = "conformance-implicit-secret";
+pub const CONFORMANCE_IMPLICIT_CLIENT_POST_SECRET: &str = "conformance-implicit-secret-2";
+
+struct ConformanceClientSpec {
+    oid: &'static str,
+    credential_oid: &'static str,
+    name: &'static str,
+    secret: &'static str,
+    token_endpoint_auth_method: &'static str,
+    grant_types: &'static [&'static str],
+    response_types: &'static [&'static str],
+}
 
 /// Run the conformance seed.  Safe to call multiple times.
 pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
@@ -73,10 +89,6 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     let user_cred_oid: Uuid = USER_CRED_OID
         .parse()
         .expect("USER_CRED_OID literal is valid");
-    let client_oid: Uuid = CLIENT_OID.parse().expect("CLIENT_OID literal is valid");
-    let client_cred_oid: Uuid = CLIENT_CRED_OID
-        .parse()
-        .expect("CLIENT_CRED_OID literal is valid");
 
     let now = Utc::now();
 
@@ -151,172 +163,272 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     };
     let _ = user_id; // used only for logging; client rows don't need it
 
-    // ── OIDC client ────────────────────────────────────────────────────────
+    // ── OIDC clients ───────────────────────────────────────────────────────
 
-    let existing_client = client::Entity::find()
-        .filter(client::Column::Oid.eq(client_oid))
-        .one(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-    let client_id = if existing_client.is_some() {
-        tracing::debug!("conformance seed: OIDC client already exists, ensuring skip_consent=true");
-        let existing_client_id = existing_client.as_ref().unwrap().id;
-        // Update skip_consent in case it was created before this fix
-        let oidc_row = client_open_id_connect::Entity::find()
-            .filter(client_open_id_connect::Column::ClientId.eq(existing_client_id))
-            .one(&txn)
-            .await
-            .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-        if let Some(row) = oidc_row {
-            if !row.skip_consent {
-                let mut am: client_open_id_connect::ActiveModel = row.into();
-                am.skip_consent = Set(true);
-                am.update(&txn).await.map_err(|e| {
-                    AppError::from_code(CommonErrorCode::InternalError).with_source(e)
-                })?;
-                tracing::info!("conformance seed: updated skip_consent to true");
-            }
-        }
-        existing_client_id
-    } else {
-        let created_client = client::ActiveModel {
-            oid: Set(client_oid),
-            protocol: Set("openid_connect".to_owned()),
-            name: Set(CONFORMANCE_CLIENT_NAME.to_owned()),
-            names: Set(None),
-            description: Set(None),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-        let redirect_uris =
-            serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"]);
-        let grant_types = serde_json::json!(["authorization_code", "refresh_token"]);
-        let response_types = serde_json::json!(["code"]);
-
-        let _ = client_open_id_connect::ActiveModel {
-            client_id: Set(created_client.id),
-            redirect_uris: Set(Some(redirect_uris)),
-            grant_types: Set(Some(grant_types)),
-            response_types: Set(Some(response_types)),
-            token_endpoint_auth_method: Set(Some("client_secret_basic".to_owned())),
-            skip_consent: Set(true),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-        let secret_json = serde_json::json!({ "secret": CONFORMANCE_CLIENT_SECRET });
-        let expires_at = chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
-            .expect("non-expiring timestamp literal is valid");
-
-        let _ = client_open_id_connect_credential::ActiveModel {
-            oid: Set(client_cred_oid),
-            client_id: Set(created_client.id),
-            r#type: Set("client_secret".to_owned()),
-            data: Set(secret_json),
-            hint: Set(CONFORMANCE_CLIENT_SECRET.to_owned()),
-            expires_at: Set(expires_at),
-            revoked_at: Set(None),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-        tracing::info!("conformance seed: created OIDC client");
-        created_client.id
-    };
-    assign_all_built_in_oidc_scopes(&txn, client_id).await?;
-
-    // ── Second OIDC client (client_secret_post) ────────────────────────────
-
-    let client2_oid: Uuid = CLIENT2_OID.parse().expect("CLIENT2_OID literal is valid");
-    let client2_cred_oid: Uuid = CLIENT2_CRED_OID
-        .parse()
-        .expect("CLIENT2_CRED_OID literal is valid");
-
-    let existing_client2 = client::Entity::find()
-        .filter(client::Column::Oid.eq(client2_oid))
-        .one(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-    let client2_id = if existing_client2.is_none() {
-        let created_client2 = client::ActiveModel {
-            oid: Set(client2_oid),
-            protocol: Set("openid_connect".to_owned()),
-            name: Set("OpenID Conformance Suite (client_secret_post)".to_owned()),
-            names: Set(None),
-            description: Set(None),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-        let redirect_uris =
-            serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"]);
-        let grant_types = serde_json::json!(["authorization_code", "refresh_token"]);
-        let response_types = serde_json::json!(["code"]);
-
-        let _ = client_open_id_connect::ActiveModel {
-            client_id: Set(created_client2.id),
-            redirect_uris: Set(Some(redirect_uris)),
-            grant_types: Set(Some(grant_types)),
-            response_types: Set(Some(response_types)),
-            token_endpoint_auth_method: Set(Some("client_secret_post".to_owned())),
-            skip_consent: Set(true),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-        let secret_json = serde_json::json!({ "secret": CONFORMANCE_CLIENT2_SECRET });
-        let expires_at = chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
-            .expect("non-expiring timestamp literal is valid");
-
-        let _ = client_open_id_connect_credential::ActiveModel {
-            oid: Set(client2_cred_oid),
-            client_id: Set(created_client2.id),
-            r#type: Set("client_secret".to_owned()),
-            data: Set(secret_json),
-            hint: Set(CONFORMANCE_CLIENT2_SECRET.to_owned()),
-            expires_at: Set(expires_at),
-            revoked_at: Set(None),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
-
-        tracing::info!("conformance seed: created OIDC client2 (client_secret_post)");
-        created_client2.id
-    } else {
-        existing_client2.unwrap().id
-    };
-    assign_all_built_in_oidc_scopes(&txn, client2_id).await?;
+    for spec in conformance_client_specs() {
+        let client_id = ensure_conformance_client(&txn, spec, now).await?;
+        ensure_web_platform_redirect_uri(&txn, client_id).await?;
+        assign_all_built_in_oidc_scopes(&txn, client_id).await?;
+    }
 
     txn.commit()
         .await
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+
+    Ok(())
+}
+
+fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
+    &[
+        ConformanceClientSpec {
+            oid: BASIC_CLIENT_OID,
+            credential_oid: BASIC_CLIENT_CRED_OID,
+            name: CONFORMANCE_BASIC_CLIENT_NAME,
+            secret: CONFORMANCE_BASIC_CLIENT_SECRET,
+            token_endpoint_auth_method: "client_secret_basic",
+            grant_types: &["authorization_code", "refresh_token"],
+            response_types: &["code"],
+        },
+        ConformanceClientSpec {
+            oid: BASIC_CLIENT_POST_OID,
+            credential_oid: BASIC_CLIENT_POST_CRED_OID,
+            name: "OpenID Conformance Suite (Basic client_secret_post)",
+            secret: CONFORMANCE_BASIC_CLIENT_POST_SECRET,
+            token_endpoint_auth_method: "client_secret_post",
+            grant_types: &["authorization_code", "refresh_token"],
+            response_types: &["code"],
+        },
+        ConformanceClientSpec {
+            oid: IMPLICIT_CLIENT_OID,
+            credential_oid: IMPLICIT_CLIENT_CRED_OID,
+            name: CONFORMANCE_IMPLICIT_CLIENT_NAME,
+            secret: CONFORMANCE_IMPLICIT_CLIENT_SECRET,
+            token_endpoint_auth_method: "client_secret_basic",
+            grant_types: &["implicit"],
+            response_types: &["id_token", "id_token token"],
+        },
+        ConformanceClientSpec {
+            oid: IMPLICIT_CLIENT_POST_OID,
+            credential_oid: IMPLICIT_CLIENT_POST_CRED_OID,
+            name: "OpenID Conformance Suite (Implicit client_secret_post)",
+            secret: CONFORMANCE_IMPLICIT_CLIENT_POST_SECRET,
+            token_endpoint_auth_method: "client_secret_post",
+            grant_types: &["implicit"],
+            response_types: &["id_token", "id_token token"],
+        },
+    ]
+}
+
+async fn ensure_conformance_client(
+    db: &impl sea_orm::ConnectionTrait,
+    spec: &ConformanceClientSpec,
+    now: chrono::DateTime<Utc>,
+) -> Result<i64, AppError> {
+    let client_oid: Uuid = spec.oid.parse().expect("client OID literal is valid");
+    let credential_oid: Uuid = spec
+        .credential_oid
+        .parse()
+        .expect("client credential OID literal is valid");
+
+    let existing_client = client::Entity::find()
+        .filter(client::Column::Oid.eq(client_oid))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    let client_id = if let Some(row) = existing_client {
+        if row.protocol != "openid_connect" || row.name != spec.name {
+            let mut am: client::ActiveModel = row.clone().into();
+            am.protocol = Set("openid_connect".to_owned());
+            am.name = Set(spec.name.to_owned());
+            am.updated_at = Set(Some(now.naive_utc()));
+            am.update(db).await.map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+        row.id
+    } else {
+        client::ActiveModel {
+            oid: Set(client_oid),
+            protocol: Set("openid_connect".to_owned()),
+            name: Set(spec.name.to_owned()),
+            names: Set(None),
+            description: Set(None),
+            created_at: Set(now.naive_utc()),
+            updated_at: Set(None),
+            ..Default::default()
+        }
+        .insert(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .id
+    };
+
+    ensure_conformance_oidc_metadata(db, client_id, spec, now).await?;
+    ensure_conformance_client_secret(db, client_id, credential_oid, spec.secret, now).await?;
+
+    Ok(client_id)
+}
+
+async fn ensure_conformance_oidc_metadata(
+    db: &impl sea_orm::ConnectionTrait,
+    client_id: i64,
+    spec: &ConformanceClientSpec,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let grant_types = serde_json::json!(spec.grant_types);
+    let response_types = serde_json::json!(spec.response_types);
+    let auth_method = Some(spec.token_endpoint_auth_method.to_owned());
+    let settings = conformance_client_settings();
+
+    let existing = client_open_id_connect::Entity::find()
+        .filter(client_open_id_connect::Column::ClientId.eq(client_id))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    if let Some(row) = existing {
+        if row.grant_types.as_ref() != Some(&grant_types)
+            || row.response_types.as_ref() != Some(&response_types)
+            || row.token_endpoint_auth_method != auth_method
+            || row.settings != settings
+        {
+            let mut am: client_open_id_connect::ActiveModel = row.into();
+            am.grant_types = Set(Some(grant_types));
+            am.response_types = Set(Some(response_types));
+            am.token_endpoint_auth_method = Set(auth_method);
+            am.settings = Set(settings);
+            am.updated_at = Set(Some(now.into()));
+            am.update(db).await.map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+
+        return Ok(());
+    }
+
+    client_open_id_connect::ActiveModel {
+        client_id: Set(client_id),
+        grant_types: Set(Some(grant_types)),
+        response_types: Set(Some(response_types)),
+        token_endpoint_auth_method: Set(auth_method),
+        settings: Set(settings),
+        created_at: Set(now.into()),
+        updated_at: Set(None),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    Ok(())
+}
+
+async fn ensure_conformance_client_secret(
+    db: &impl sea_orm::ConnectionTrait,
+    client_id: i64,
+    credential_oid: Uuid,
+    secret: &str,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let secret_json = serde_json::json!({ "secret": secret });
+    let expires_at = chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
+        .expect("non-expiring timestamp literal is valid");
+
+    let existing = client_open_id_connect_credential::Entity::find()
+        .filter(client_open_id_connect_credential::Column::Oid.eq(credential_oid))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    if let Some(row) = existing {
+        if row.client_id != client_id
+            || row.r#type != "client_secret"
+            || row.data != secret_json
+            || row.hint != secret
+            || row.expires_at != expires_at
+            || row.revoked_at.is_some()
+        {
+            let mut am: client_open_id_connect_credential::ActiveModel = row.into();
+            am.client_id = Set(client_id);
+            am.r#type = Set("client_secret".to_owned());
+            am.data = Set(secret_json);
+            am.hint = Set(secret.to_owned());
+            am.expires_at = Set(expires_at);
+            am.revoked_at = Set(None);
+            am.updated_at = Set(Some(now.into()));
+            am.update(db).await.map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+
+        return Ok(());
+    }
+
+    client_open_id_connect_credential::ActiveModel {
+        oid: Set(credential_oid),
+        client_id: Set(client_id),
+        r#type: Set("client_secret".to_owned()),
+        data: Set(secret_json),
+        hint: Set(secret.to_owned()),
+        expires_at: Set(expires_at),
+        revoked_at: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(None),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    Ok(())
+}
+
+fn conformance_redirect_uris() -> serde_json::Value {
+    serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"])
+}
+
+fn conformance_client_settings() -> serde_json::Value {
+    serde_json::json!({
+        "skip_consent": true,
+        "allow_public_client_flow": false
+    })
+}
+
+async fn ensure_web_platform_redirect_uri(
+    db: &impl sea_orm::ConnectionTrait,
+    client_id: i64,
+) -> Result<(), AppError> {
+    let existing = client_platform::Entity::find()
+        .filter(client_platform::Column::ClientId.eq(client_id))
+        .filter(client_platform::Column::Platform.eq("web"))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    if let Some(row) = existing {
+        if row.redirect_uris.as_ref() != Some(&conformance_redirect_uris()) {
+            let mut am: client_platform::ActiveModel = row.into();
+            am.redirect_uris = Set(Some(conformance_redirect_uris()));
+            am.update(db).await.map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+
+        return Ok(());
+    }
+
+    client_platform::ActiveModel {
+        client_id: Set(client_id),
+        platform: Set("web".to_owned()),
+        redirect_uris: Set(Some(conformance_redirect_uris())),
+        created_at: Set(Utc::now().into()),
+        updated_at: Set(None),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
     Ok(())
 }

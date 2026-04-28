@@ -1,14 +1,66 @@
+use std::{fmt, str::FromStr};
+
 use url::Url;
 
 use crate::domain::client::model::Client;
 
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
+pub struct OpenIdConnectClientSettings {
+    #[serde(default)]
+    pub skip_consent: bool,
+    #[serde(default)]
+    pub allow_public_client_flow: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenIdConnectClientPlatformType {
+    Web,
+    Native,
+}
+
+impl fmt::Display for OpenIdConnectClientPlatformType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Web => f.write_str("web"),
+            Self::Native => f.write_str("native"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseOpenIdConnectClientPlatformKindError;
+
+impl fmt::Display for ParseOpenIdConnectClientPlatformKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid openid connect client platform")
+    }
+}
+
+impl std::error::Error for ParseOpenIdConnectClientPlatformKindError {}
+
+impl FromStr for OpenIdConnectClientPlatformType {
+    type Err = ParseOpenIdConnectClientPlatformKindError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "web" => Ok(Self::Web),
+            "native" => Ok(Self::Native),
+            _ => Err(ParseOpenIdConnectClientPlatformKindError),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenIdConnectClientPlatform {
+    pub platform: OpenIdConnectClientPlatformType,
+    pub redirect_uris: Vec<Url>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenIdConnectClientMetadata {
-    pub redirect_uris: Option<Vec<Url>>,
     pub post_logout_redirect_uris: Option<Vec<Url>>,
     pub response_types: Option<Vec<String>>,
     pub grant_types: Option<Vec<String>>,
-    pub application_type: Option<String>,
     pub contacts: Option<Vec<String>>,
     pub logo_uri: Option<Url>,
     pub client_uri: Option<Url>,
@@ -32,13 +84,14 @@ pub struct OpenIdConnectClientMetadata {
     pub default_acr_values: Option<Vec<String>>,
     pub initiate_login_uri: Option<Url>,
     pub request_uris: Option<Vec<Url>>,
-    pub skip_consent: bool,
+    pub settings: OpenIdConnectClientSettings,
 }
 
 #[derive(Debug, Clone)]
 pub struct OpenIdConnectClient {
     client: Client,
     metadata: OpenIdConnectClientMetadata,
+    platforms: Vec<OpenIdConnectClientPlatform>,
     assigned_scopes: Vec<String>,
 }
 
@@ -46,6 +99,7 @@ impl OpenIdConnectClient {
     pub fn new(
         client: Client,
         metadata: OpenIdConnectClientMetadata,
+        platforms: Vec<OpenIdConnectClientPlatform>,
         assigned_scopes: Vec<String>,
     ) -> Result<Self, InvalidOpenIdConnectClientError> {
         if client.protocol != crate::domain::client::model::ClientProtocol::OpenIdConnect {
@@ -55,6 +109,7 @@ impl OpenIdConnectClient {
         Ok(Self {
             client,
             metadata,
+            platforms,
             assigned_scopes,
         })
     }
@@ -65,6 +120,19 @@ impl OpenIdConnectClient {
 
     pub fn metadata(&self) -> &OpenIdConnectClientMetadata {
         &self.metadata
+    }
+
+    pub fn platforms(&self) -> &[OpenIdConnectClientPlatform] {
+        &self.platforms
+    }
+
+    pub fn has_redirect_uri(&self, redirect_uri: &Url) -> bool {
+        self.platforms.iter().any(|platform| {
+            platform
+                .redirect_uris
+                .iter()
+                .any(|registered| registered == redirect_uri)
+        })
     }
 
     pub fn assigned_scopes(&self) -> &[String] {
@@ -91,7 +159,10 @@ impl std::error::Error for InvalidOpenIdConnectClientError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{OpenIdConnectClient, OpenIdConnectClientMetadata};
+    use super::{
+        OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+        OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
+    };
     use crate::domain::client::model::{Client, ClientProtocol};
     use chrono::Utc;
     use url::Url;
@@ -99,13 +170,11 @@ mod tests {
     #[test]
     fn stores_redirect_and_logout_metadata() {
         let metadata = OpenIdConnectClientMetadata {
-            redirect_uris: Some(vec![Url::parse("https://rp.example.com/callback").unwrap()]),
             post_logout_redirect_uris: Some(vec![
                 Url::parse("https://rp.example.com/logout/callback").unwrap(),
             ]),
             response_types: Some(vec!["code".to_string()]),
             grant_types: Some(vec!["authorization_code".to_string()]),
-            application_type: Some("web".to_string()),
             contacts: None,
             logo_uri: None,
             client_uri: None,
@@ -129,12 +198,34 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: false,
+            settings: OpenIdConnectClientSettings::default(),
         };
 
         assert_eq!(
-            metadata.redirect_uris.unwrap()[0].as_str(),
-            "https://rp.example.com/callback"
+            metadata.post_logout_redirect_uris.unwrap()[0].as_str(),
+            "https://rp.example.com/logout/callback"
+        );
+    }
+
+    #[test]
+    fn parses_protocol_platform_values() {
+        assert_eq!(
+            "web".parse::<OpenIdConnectClientPlatformType>().unwrap(),
+            OpenIdConnectClientPlatformType::Web
+        );
+        assert_eq!(
+            "native".parse::<OpenIdConnectClientPlatformType>().unwrap(),
+            OpenIdConnectClientPlatformType::Native
+        );
+        assert!("ios".parse::<OpenIdConnectClientPlatformType>().is_err());
+    }
+
+    #[test]
+    fn displays_protocol_platform_values() {
+        assert_eq!(OpenIdConnectClientPlatformType::Web.to_string(), "web");
+        assert_eq!(
+            OpenIdConnectClientPlatformType::Native.to_string(),
+            "native"
         );
     }
 
@@ -151,11 +242,9 @@ mod tests {
         };
 
         let metadata = OpenIdConnectClientMetadata {
-            redirect_uris: Some(vec![Url::parse("https://rp.example.com/callback").unwrap()]),
             post_logout_redirect_uris: None,
             response_types: None,
             grant_types: None,
-            application_type: None,
             contacts: None,
             logo_uri: None,
             client_uri: None,
@@ -179,14 +268,22 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: false,
+            settings: OpenIdConnectClientSettings::default(),
         };
 
-        let oidc_client = OpenIdConnectClient::new(client, metadata, vec![]).unwrap();
+        let oidc_client = OpenIdConnectClient::new(
+            client,
+            metadata,
+            vec![OpenIdConnectClientPlatform {
+                platform: OpenIdConnectClientPlatformType::Web,
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            }],
+            vec![],
+        )
+        .unwrap();
 
-        assert_eq!(
-            oidc_client.metadata().redirect_uris.as_ref().unwrap()[0].as_str(),
-            "https://rp.example.com/callback"
+        assert!(
+            oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/callback").unwrap())
         );
     }
 
@@ -203,11 +300,9 @@ mod tests {
         };
 
         let metadata = OpenIdConnectClientMetadata {
-            redirect_uris: None,
             post_logout_redirect_uris: None,
             response_types: None,
             grant_types: None,
-            application_type: None,
             contacts: None,
             logo_uri: None,
             client_uri: None,
@@ -231,20 +326,18 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: false,
+            settings: OpenIdConnectClientSettings::default(),
         };
 
-        assert!(OpenIdConnectClient::new(client, metadata, vec![]).is_err());
+        assert!(OpenIdConnectClient::new(client, metadata, vec![], vec![]).is_err());
     }
 
     #[test]
     fn stores_skip_consent_flag() {
         let metadata = OpenIdConnectClientMetadata {
-            redirect_uris: None,
             post_logout_redirect_uris: None,
             response_types: None,
             grant_types: None,
-            application_type: None,
             contacts: None,
             logo_uri: None,
             client_uri: None,
@@ -268,10 +361,120 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: true,
+            settings: OpenIdConnectClientSettings {
+                skip_consent: true,
+                allow_public_client_flow: false,
+            },
         };
 
-        assert_eq!(metadata.skip_consent, true);
+        assert_eq!(metadata.settings.skip_consent, true);
+    }
+
+    #[test]
+    fn stores_client_policy_settings_together() {
+        let metadata = OpenIdConnectClientMetadata {
+            post_logout_redirect_uris: None,
+            response_types: None,
+            grant_types: None,
+            contacts: None,
+            logo_uri: None,
+            client_uri: None,
+            policy_uri: None,
+            tos_uri: None,
+            sector_identifier_uri: None,
+            subject_type: None,
+            id_token_signed_response_alg: None,
+            id_token_encrypted_response_alg: None,
+            id_token_encrypted_response_enc: None,
+            userinfo_signed_response_alg: None,
+            userinfo_encrypted_response_alg: None,
+            userinfo_encrypted_response_enc: None,
+            request_object_signing_alg: None,
+            request_object_encryption_alg: None,
+            request_object_encryption_enc: None,
+            token_endpoint_auth_method: None,
+            token_endpoint_auth_signing_alg: None,
+            default_max_age: None,
+            require_auth_time: None,
+            default_acr_values: None,
+            initiate_login_uri: None,
+            request_uris: None,
+            settings: OpenIdConnectClientSettings {
+                skip_consent: true,
+                allow_public_client_flow: true,
+            },
+        };
+
+        assert!(metadata.settings.skip_consent);
+        assert!(metadata.settings.allow_public_client_flow);
+    }
+
+    #[test]
+    fn accepts_redirect_uri_from_any_client_platform() {
+        let client = Client {
+            oid: uuid::Uuid::nil(),
+            protocol: ClientProtocol::OpenIdConnect,
+            name: "Example RP".to_string(),
+            names: vec![],
+            description: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        };
+
+        let metadata = OpenIdConnectClientMetadata {
+            post_logout_redirect_uris: None,
+            response_types: None,
+            grant_types: None,
+            contacts: None,
+            logo_uri: None,
+            client_uri: None,
+            policy_uri: None,
+            tos_uri: None,
+            sector_identifier_uri: None,
+            subject_type: None,
+            id_token_signed_response_alg: None,
+            id_token_encrypted_response_alg: None,
+            userinfo_signed_response_alg: None,
+            userinfo_encrypted_response_alg: None,
+            userinfo_encrypted_response_enc: None,
+            id_token_encrypted_response_enc: None,
+            request_object_signing_alg: None,
+            request_object_encryption_alg: None,
+            request_object_encryption_enc: None,
+            token_endpoint_auth_method: None,
+            token_endpoint_auth_signing_alg: None,
+            default_max_age: None,
+            require_auth_time: None,
+            default_acr_values: None,
+            initiate_login_uri: None,
+            request_uris: None,
+            settings: OpenIdConnectClientSettings::default(),
+        };
+
+        let oidc_client = OpenIdConnectClient::new(
+            client,
+            metadata,
+            vec![
+                OpenIdConnectClientPlatform {
+                    platform: OpenIdConnectClientPlatformType::Web,
+                    redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                },
+                OpenIdConnectClientPlatform {
+                    platform: OpenIdConnectClientPlatformType::Native,
+                    redirect_uris: vec![Url::parse("com.example.app:/callback").unwrap()],
+                },
+            ],
+            vec![],
+        )
+        .unwrap();
+
+        assert!(
+            oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/callback").unwrap())
+        );
+        assert!(oidc_client.has_redirect_uri(&Url::parse("com.example.app:/callback").unwrap()));
+        assert!(
+            !oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/other").unwrap())
+        );
     }
 
     #[test]
@@ -286,11 +489,9 @@ mod tests {
             updated_at: None,
         };
         let metadata = OpenIdConnectClientMetadata {
-            redirect_uris: None,
             post_logout_redirect_uris: None,
             response_types: None,
             grant_types: None,
-            application_type: None,
             contacts: None,
             logo_uri: None,
             client_uri: None,
@@ -314,12 +515,13 @@ mod tests {
             default_acr_values: None,
             initiate_login_uri: None,
             request_uris: None,
-            skip_consent: false,
+            settings: OpenIdConnectClientSettings::default(),
         };
 
         let oidc_client = OpenIdConnectClient::new(
             client,
             metadata,
+            vec![],
             vec!["openid".to_string(), "email".to_string()],
         )
         .unwrap();

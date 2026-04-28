@@ -1,5 +1,9 @@
 use super::*;
 
+mod clients;
+
+pub(super) use clients::{InMemoryClientRepository, PublicFlowClientRepository};
+
 pub(super) struct InMemoryDataProtector;
 
 impl InMemoryDataProtector {
@@ -34,70 +38,6 @@ impl crate::application::data_protection::DataProtector for InMemoryDataProtecto
 #[derive(Default)]
 pub(super) struct InMemoryClientAuthorizationRepository {
     pub(super) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
-}
-
-pub(super) struct InMemoryClientRepository;
-
-#[async_trait]
-impl OpenIdConnectClientRepository for InMemoryClientRepository {
-    async fn find_by_oid(
-        &self,
-        oid: ClientOid,
-    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
-        Ok(Some(
-            OpenIdConnectClient::new(
-                Client {
-                    oid,
-                    protocol: ClientProtocol::OpenIdConnect,
-                    name: "Example RP".to_string(),
-                    names: vec![],
-                    description: None,
-                    created_at: Utc::now(),
-                    updated_at: None,
-                },
-                OpenIdConnectClientMetadata {
-                    redirect_uris: Some(vec![
-                        url::Url::parse("https://client.example.com/callback").unwrap(),
-                    ]),
-                    post_logout_redirect_uris: None,
-                    response_types: None,
-                    grant_types: None,
-                    application_type: None,
-                    contacts: None,
-                    logo_uri: None,
-                    client_uri: None,
-                    policy_uri: None,
-                    tos_uri: None,
-                    sector_identifier_uri: None,
-                    subject_type: None,
-                    id_token_signed_response_alg: None,
-                    id_token_encrypted_response_alg: None,
-                    id_token_encrypted_response_enc: None,
-                    userinfo_signed_response_alg: None,
-                    userinfo_encrypted_response_alg: None,
-                    userinfo_encrypted_response_enc: None,
-                    request_object_signing_alg: None,
-                    request_object_encryption_alg: None,
-                    request_object_encryption_enc: None,
-                    token_endpoint_auth_method: Some("client_secret_basic".to_string()),
-                    token_endpoint_auth_signing_alg: None,
-                    default_max_age: None,
-                    require_auth_time: None,
-                    default_acr_values: None,
-                    initiate_login_uri: None,
-                    request_uris: None,
-                    skip_consent: false,
-                },
-                vec![
-                    "openid".to_string(),
-                    "profile".to_string(),
-                    "email".to_string(),
-                    "offline_access".to_string(),
-                ],
-            )
-            .unwrap(),
-        ))
-    }
 }
 
 pub(super) struct InMemoryCredentialRepository {

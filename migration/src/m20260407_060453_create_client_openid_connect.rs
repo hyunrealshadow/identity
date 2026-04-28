@@ -9,11 +9,9 @@ pub enum ClientOpenIdConnect {
     Table,
     Id,
     ClientId,
-    RedirectUris,
     PostLogoutRedirectUris,
     ResponseTypes,
     GrantTypes,
-    ApplicationType,
     Contacts,
     LogoUri,
     ClientUri,
@@ -37,7 +35,7 @@ pub enum ClientOpenIdConnect {
     DefaultAcrValues,
     InitiateLoginUri,
     RequestUris,
-    SkipConsent,
+    Settings,
     CreatedAt,
     UpdatedAt,
 }
@@ -52,13 +50,11 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(ClientOpenIdConnect::Id).big_integer())
                     .col(big_integer(ClientOpenIdConnect::ClientId))
-                    .col(json_binary_null(ClientOpenIdConnect::RedirectUris))
                     .col(json_binary_null(
                         ClientOpenIdConnect::PostLogoutRedirectUris,
                     ))
                     .col(json_binary_null(ClientOpenIdConnect::ResponseTypes))
                     .col(json_binary_null(ClientOpenIdConnect::GrantTypes))
-                    .col(string_null(ClientOpenIdConnect::ApplicationType))
                     .col(json_binary_null(ClientOpenIdConnect::Contacts))
                     .col(string_null(ClientOpenIdConnect::LogoUri))
                     .col(string_null(ClientOpenIdConnect::ClientUri))
@@ -92,7 +88,10 @@ impl MigrationTrait for Migration {
                     .col(json_binary_null(ClientOpenIdConnect::DefaultAcrValues))
                     .col(string_null(ClientOpenIdConnect::InitiateLoginUri))
                     .col(json_binary_null(ClientOpenIdConnect::RequestUris))
-                    .col(boolean(ClientOpenIdConnect::SkipConsent).default(false))
+                    .col(
+                        json_binary(ClientOpenIdConnect::Settings)
+                            .default(Expr::cust("'{}'::jsonb")),
+                    )
                     .col(
                         timestamp_with_time_zone(ClientOpenIdConnect::CreatedAt)
                             .default(Expr::current_timestamp()),

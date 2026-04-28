@@ -10,14 +10,11 @@ pub struct Model {
     #[sea_orm(unique)]
     pub client_id: i64,
     #[sea_orm(column_type = "JsonBinary", nullable)]
-    pub redirect_uris: Option<Json>,
-    #[sea_orm(column_type = "JsonBinary", nullable)]
     pub post_logout_redirect_uris: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub response_types: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub grant_types: Option<Json>,
-    pub application_type: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub contacts: Option<Json>,
     pub logo_uri: Option<String>,
@@ -44,7 +41,8 @@ pub struct Model {
     pub initiate_login_uri: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub request_uris: Option<Json>,
-    pub skip_consent: bool,
+    #[sea_orm(column_type = "JsonBinary")]
+    pub settings: Json,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
 }

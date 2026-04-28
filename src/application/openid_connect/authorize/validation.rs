@@ -197,13 +197,9 @@ impl AuthorizeService {
         client: &OpenIdConnectClient,
         redirect_uri: &Url,
     ) -> Result<(), AppError> {
-        let allowed = client
-            .metadata()
-            .redirect_uris
-            .as_ref()
-            .filter(|uris| uris.iter().any(|uri| uri == redirect_uri));
+        let allowed = client.has_redirect_uri(redirect_uri);
 
-        if allowed.is_none() {
+        if !allowed {
             return Err(AppError::from_code(
                 AuthorizeErrorCode::RedirectUriNotRegistered,
             ));
@@ -233,6 +229,6 @@ impl AuthorizeService {
     }
 
     pub fn should_skip_consent(&self, client: &OpenIdConnectClient) -> bool {
-        client.metadata().skip_consent
+        client.metadata().settings.skip_consent
     }
 }

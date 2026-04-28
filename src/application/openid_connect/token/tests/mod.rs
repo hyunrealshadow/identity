@@ -27,7 +27,7 @@ use crate::{
         openid_connect::provider::OpenIdProviderService, setting::runtime::SettingProvider,
     },
     domain::{
-        client::model::{Client, ClientOid, ClientProtocol},
+        client::model::ClientOid,
         client_authorization::{
             AccessTokenData, AuthorizationCodeData, ClientAuthorization,
             ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
@@ -39,11 +39,10 @@ use crate::{
             model::AsymmetricKeyAlgorithm, repository::KeyRepository,
         },
         openid_connect::{
-            OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientRepository,
-            OpenIdConnectClientRepositoryError, OpenIdConnectCredential,
-            OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
-            OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
-            model::claim::JwtClaimNames,
+            OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
+            OpenIdConnectCredential, OpenIdConnectCredentialData,
+            OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
+            OpenIdConnectCredentialType, model::claim::JwtClaimNames,
         },
         setting::installation::{InstallationSetting, InstallationState},
         user::{

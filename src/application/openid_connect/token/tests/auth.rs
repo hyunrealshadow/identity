@@ -1,6 +1,42 @@
 use super::fixtures::*;
 use super::*;
 
+fn default_user(email: &str) -> User {
+    User {
+        oid: UserOid(Uuid::new_v4()),
+        email: email.to_string(),
+        email_normalized: email.to_string(),
+        name: email.to_string(),
+        name_normalized: email.to_string(),
+        given_name: None,
+        family_name: None,
+        middle_name: None,
+        nickname: None,
+        profile: None,
+        picture: None,
+        website: None,
+        gender: None,
+        birthdate: None,
+        zoneinfo: None,
+        locale: None,
+        email_verified: true,
+        phone_number: None,
+        phone_number_verified: None,
+        address_formatted: None,
+        address_street_address: None,
+        address_locality: None,
+        address_region: None,
+        address_postal_code: None,
+        address_country: None,
+        failed_attempts: 0,
+        enabled: true,
+        locked: false,
+        locked_until: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    }
+}
+
 #[tokio::test]
 async fn authenticate_client_secret_basic_accepts_matching_secret() {
     let service = build_token_service(
@@ -61,6 +97,45 @@ async fn authenticate_private_key_jwt_rejects_wrong_subject() {
         .await;
 
     assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn authenticate_client_rejects_public_flow_by_default() {
+    let service = build_token_service(
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        Uuid::new_v4(),
+    );
+
+    let error = service
+        .authenticate_client("00000000-0000-0000-0000-000000000000", None, None, None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 24031);
+}
+
+#[tokio::test]
+async fn authenticate_client_accepts_public_flow_when_enabled() {
+    let service = TokenService::new(
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        Arc::new(InMemoryKeyRepository { keys: vec![] }),
+        Arc::new(InMemoryUserRepository {
+            user: default_user("public@example.com"),
+        }),
+        Arc::new(PublicFlowClientRepository),
+        Arc::new(InMemoryCredentialRepository {
+            credentials: vec![],
+        }),
+        provider_service(),
+        InMemoryDataProtector::new(),
+    );
+
+    let client_oid = service
+        .authenticate_client("00000000-0000-0000-0000-000000000000", None, None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(client_oid, Uuid::nil());
 }
 
 #[tokio::test]
