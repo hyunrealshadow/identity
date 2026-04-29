@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
+pub(in crate::openid_connect) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
     let rsa = Rsa::generate(2048).unwrap();
     (
         rsa.private_key_to_pem().unwrap(),
@@ -8,7 +8,9 @@ pub(crate) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
     )
 }
 
-pub(crate) fn authorize_service_with_public_key(public_key: Vec<u8>) -> AuthorizeService {
+pub(in crate::openid_connect) fn authorize_service_with_public_key(
+    public_key: Vec<u8>,
+) -> AuthorizeService {
     let credential_repo = InMemoryCredentialRepository {
         credentials: Mutex::new(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
@@ -38,7 +40,9 @@ pub(crate) fn authorize_service_with_public_key(public_key: Vec<u8>) -> Authoriz
     )
 }
 
-pub(crate) fn authorize_service_with_request_uri(request_uri: &str) -> AuthorizeService {
+pub(in crate::openid_connect) fn authorize_service_with_request_uri(
+    request_uri: &str,
+) -> AuthorizeService {
     AuthorizeService::new(
         Arc::new(RequestUriClientRepository {
             request_uris: vec![Url::parse(request_uri).unwrap()],
@@ -54,7 +58,7 @@ pub(crate) fn authorize_service_with_request_uri(request_uri: &str) -> Authorize
     )
 }
 
-pub(crate) async fn spawn_chunked_response_server(
+pub(in crate::openid_connect) async fn spawn_chunked_response_server(
     chunks: Vec<Vec<u8>>,
     keep_open_for: Duration,
 ) -> Url {
@@ -85,7 +89,7 @@ pub(crate) async fn spawn_chunked_response_server(
     Url::parse(&format!("http://{address}/request.jwt")).unwrap()
 }
 
-pub(crate) async fn spawn_redirect_response_server(_location: &str) -> Url {
+pub(in crate::openid_connect) async fn spawn_redirect_response_server(_location: &str) -> Url {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let location = format!("http://{address}/final.jwt");
@@ -107,7 +111,7 @@ pub(crate) async fn spawn_redirect_response_server(_location: &str) -> Url {
     Url::parse(&format!("http://{address}/request.jwt")).unwrap()
 }
 
-pub(crate) fn signed_request_object(
+pub(in crate::openid_connect) fn signed_request_object(
     private_key: &[u8],
     fields: impl IntoIterator<Item = (&'static str, serde_json::Value)>,
 ) -> String {

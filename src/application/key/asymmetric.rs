@@ -36,10 +36,10 @@ pub struct GenerateAsymmetricKeyInput {
 }
 
 pub struct AsymmetricKeyService {
-    pub(crate) repo: Arc<dyn KeyRepository>,
-    pub(crate) generator: Arc<dyn AsymmetricKeyGenerator>,
-    pub(crate) jwk_generator: Arc<dyn KeyJwkGenerator>,
-    pub(crate) jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
+    repo: Arc<dyn KeyRepository>,
+    generator: Arc<dyn AsymmetricKeyGenerator>,
+    jwk_generator: Arc<dyn KeyJwkGenerator>,
+    jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
 }
 
 impl AsymmetricKeyService {

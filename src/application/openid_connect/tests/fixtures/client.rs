@@ -9,7 +9,7 @@ use identity_domain::{
     },
 };
 
-pub(crate) fn test_client(oid: ClientOid) -> Client {
+pub(in crate::openid_connect) fn test_client(oid: ClientOid) -> Client {
     Client {
         oid,
         protocol: ClientProtocol::OpenIdConnect,
@@ -21,7 +21,7 @@ pub(crate) fn test_client(oid: ClientOid) -> Client {
     }
 }
 
-pub(crate) fn test_metadata(
+pub(in crate::openid_connect) fn test_metadata(
     request_uris: Option<Vec<Url>>,
     token_endpoint_auth_method: Option<&str>,
 ) -> OpenIdConnectClientMetadata {
@@ -56,14 +56,14 @@ pub(crate) fn test_metadata(
     }
 }
 
-pub(crate) fn test_platforms() -> Vec<OpenIdConnectClientPlatform> {
+pub(in crate::openid_connect) fn test_platforms() -> Vec<OpenIdConnectClientPlatform> {
     vec![OpenIdConnectClientPlatform {
         platform: OpenIdConnectClientPlatformType::Web,
         redirect_uris: vec![Url::parse("https://client.example.com/callback").unwrap()],
     }]
 }
 
-pub(crate) fn test_scopes() -> Vec<String> {
+pub(in crate::openid_connect) fn test_scopes() -> Vec<String> {
     vec![
         "openid".to_string(),
         "profile".to_string(),

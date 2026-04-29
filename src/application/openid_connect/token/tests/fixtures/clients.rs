@@ -3,8 +3,8 @@ use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
 
-pub(crate) struct InMemoryClientRepository;
-pub(crate) struct PublicFlowClientRepository;
+pub(in crate::openid_connect) struct InMemoryClientRepository;
+pub(in crate::openid_connect) struct PublicFlowClientRepository;
 
 #[async_trait]
 impl OpenIdConnectClientRepository for InMemoryClientRepository {

@@ -3,19 +3,19 @@ use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
 
-pub(crate) struct MissingClientRepository;
+pub(in crate::openid_connect) struct MissingClientRepository;
 
-pub(crate) struct FoundClientRepository;
+pub(in crate::openid_connect) struct FoundClientRepository;
 
-pub(crate) struct RequestUriClientRepository {
-    pub(crate) request_uris: Vec<Url>,
+pub(in crate::openid_connect) struct RequestUriClientRepository {
+    pub(in crate::openid_connect) request_uris: Vec<Url>,
 }
 
-pub(crate) struct ScopedClientRepository {
-    pub(crate) assigned_scopes: Vec<String>,
+pub(in crate::openid_connect) struct ScopedClientRepository {
+    pub(in crate::openid_connect) assigned_scopes: Vec<String>,
 }
 
-pub(crate) const TEST_CLIENT_ID: Uuid = Uuid::nil();
+pub(in crate::openid_connect) const TEST_CLIENT_ID: Uuid = Uuid::nil();
 
 #[async_trait]
 impl OpenIdConnectClientRepository for MissingClientRepository {

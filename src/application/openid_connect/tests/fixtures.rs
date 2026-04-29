@@ -1,1 +1,1 @@
-pub(crate) mod client;
+pub(in crate::openid_connect) mod client;

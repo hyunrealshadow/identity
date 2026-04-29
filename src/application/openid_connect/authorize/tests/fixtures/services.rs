@@ -1,7 +1,7 @@
 use super::*;
 
-pub(crate) struct StaticInstallationProvider {
-    pub(crate) value: Arc<InstallationState>,
+pub(in crate::openid_connect) struct StaticInstallationProvider {
+    pub(in crate::openid_connect) value: Arc<InstallationState>,
 }
 
 impl SettingProvider<InstallationSetting> for StaticInstallationProvider {
@@ -10,7 +10,7 @@ impl SettingProvider<InstallationSetting> for StaticInstallationProvider {
     }
 }
 
-pub(crate) fn provider_service() -> Arc<OpenIdProviderService> {
+pub(in crate::openid_connect) fn provider_service() -> Arc<OpenIdProviderService> {
     Arc::new(OpenIdProviderService::new(Arc::new(
         StaticInstallationProvider {
             value: Arc::new(InstallationState {
@@ -24,7 +24,7 @@ pub(crate) fn provider_service() -> Arc<OpenIdProviderService> {
     )))
 }
 
-pub(crate) struct MockKeyRepository;
+pub(in crate::openid_connect) struct MockKeyRepository;
 
 #[async_trait]
 impl KeyRepository for MockKeyRepository {
@@ -78,7 +78,7 @@ impl KeyRepository for MockKeyRepository {
     }
 }
 
-pub(crate) struct StubUserRepository;
+pub(in crate::openid_connect) struct StubUserRepository;
 
 #[async_trait]
 impl UserRepository for StubUserRepository {
@@ -103,7 +103,7 @@ impl UserRepository for StubUserRepository {
     }
 }
 
-pub(crate) struct StubKeyRepository;
+pub(in crate::openid_connect) struct StubKeyRepository;
 
 #[async_trait]
 impl KeyRepository for StubKeyRepository {
@@ -145,7 +145,7 @@ impl KeyRepository for StubKeyRepository {
     }
 }
 
-pub(crate) fn test_data_protector() -> Arc<dyn DataProtector> {
+pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector> {
     Arc::new(DataProtectorImpl::new(
         Arc::new(MockKeyRepository),
         Arc::new(TestCipher),
@@ -175,7 +175,8 @@ impl DataProtectionCipher for TestCipher {
     }
 }
 
-pub(crate) fn test_signing_algorithm_detector() -> Arc<dyn SigningAlgorithmDetector> {
+pub(in crate::openid_connect) fn test_signing_algorithm_detector()
+-> Arc<dyn SigningAlgorithmDetector> {
     Arc::new(TestSigningAlgorithmDetector)
 }
 
@@ -190,7 +191,7 @@ impl SigningAlgorithmDetector for TestSigningAlgorithmDetector {
     }
 }
 
-pub(crate) fn build_test_service(
+pub(in crate::openid_connect) fn build_test_service(
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     login_repo: Arc<dyn LoginRepository>,

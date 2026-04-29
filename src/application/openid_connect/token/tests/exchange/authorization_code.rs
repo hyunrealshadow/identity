@@ -463,12 +463,12 @@ async fn exchange_authorization_code_rejects_reused_code() {
         Arc::new(InMemoryUserRepository { user }),
         Arc::new(InMemoryClientRepository),
         repo.clone(),
-        Arc::new(crate::key::asymmetric::AsymmetricKeyService {
-            repo: key_repo,
-            generator: Arc::new(TestAsymmetricKeyGenerator),
-            jwk_generator: test_key_jwk_generator(),
-            jwk_repo: None,
-        }),
+        Arc::new(crate::key::asymmetric::AsymmetricKeyService::new(
+            key_repo,
+            Arc::new(TestAsymmetricKeyGenerator),
+            test_key_jwk_generator(),
+            None,
+        )),
         provider_service(),
     );
     assert!(

@@ -26,7 +26,7 @@ use super::{
 };
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct ConsentQuery {
+struct ConsentQuery {
     login_id: String,
 }
 

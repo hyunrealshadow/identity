@@ -11,7 +11,7 @@ use identity_application::{
 use super::super::response::{AppResponse, app_state, json_response, parse_form};
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct TokenForm {
+struct TokenForm {
     grant_type: String,
     code: Option<String>,
     refresh_token: Option<String>,

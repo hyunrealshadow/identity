@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct UserInfoForm {
+struct UserInfoForm {
     access_token: Option<String>,
 }
 

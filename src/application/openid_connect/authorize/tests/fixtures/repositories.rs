@@ -1,15 +1,15 @@
 use super::*;
 
 #[derive(Default)]
-pub(crate) struct InMemoryClientAuthorizationRepository {
-    pub(crate) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
+pub(in crate::openid_connect) struct InMemoryClientAuthorizationRepository {
+    pub(in crate::openid_connect) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
 }
 
-pub(crate) struct InMemoryLoginRepository;
+pub(in crate::openid_connect) struct InMemoryLoginRepository;
 
 #[derive(Default)]
-pub(crate) struct InMemoryCredentialRepository {
-    pub(crate) credentials: Mutex<Vec<OpenIdConnectCredential>>,
+pub(in crate::openid_connect) struct InMemoryCredentialRepository {
+    pub(in crate::openid_connect) credentials: Mutex<Vec<OpenIdConnectCredential>>,
 }
 
 #[async_trait]

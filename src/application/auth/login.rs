@@ -56,13 +56,13 @@ pub enum ChallengeOutcome {
 // ─── LoginService ────────────────────────────────────────────────────────────
 
 pub struct LoginService {
-    pub(crate) user_repo: Arc<dyn UserRepository>,
-    pub(crate) credential_repo: Arc<dyn UserCredentialRepository>,
-    pub(crate) session_repo: Arc<dyn SessionRepository>,
-    pub(crate) login_repo: Arc<dyn LoginRepository>,
-    pub(crate) password_hasher: Arc<dyn PasswordHasher>,
-    pub(crate) totp_verifier: Arc<dyn TotpVerifier>,
-    pub(crate) hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
+    user_repo: Arc<dyn UserRepository>,
+    credential_repo: Arc<dyn UserCredentialRepository>,
+    session_repo: Arc<dyn SessionRepository>,
+    login_repo: Arc<dyn LoginRepository>,
+    password_hasher: Arc<dyn PasswordHasher>,
+    totp_verifier: Arc<dyn TotpVerifier>,
+    hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
 }
 
 impl LoginService {
