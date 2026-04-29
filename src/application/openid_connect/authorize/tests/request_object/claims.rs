@@ -34,6 +34,7 @@ fn merge_request_object_overrides_scope_and_login_hint() {
 
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
@@ -65,6 +66,7 @@ fn merge_request_object_overrides_scope_and_login_hint() {
 fn validate_request_object_claims_rejects_client_id_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
@@ -105,6 +107,7 @@ fn validate_request_object_claims_allows_redirect_uri_mismatch() {
     // request object's redirect_uri.
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
@@ -142,6 +145,7 @@ fn validate_request_object_claims_allows_redirect_uri_mismatch() {
 fn validate_request_object_claims_rejects_issuer_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
@@ -179,6 +183,7 @@ fn validate_request_object_claims_rejects_issuer_mismatch() {
 fn validate_request_object_claims_rejects_audience_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
@@ -216,6 +221,7 @@ fn validate_request_object_claims_rejects_audience_mismatch() {
 fn validate_request_object_claims_rejects_expired_request_object() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
@@ -252,6 +258,7 @@ fn validate_request_object_claims_rejects_expired_request_object() {
 fn validate_request_object_claims_rejects_future_not_before() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),

@@ -5,16 +5,44 @@ pub(super) fn decode_assertion_with_alg(
     assertion: &str,
     public_key_pem: &[u8],
 ) -> Result<JwtPayload, AppError> {
-    match alg {
-        "RS256" => decode_with_verifier(assertion, RS256.verifier_from_pem(public_key_pem)),
-        "RS384" => decode_with_verifier(assertion, RS384.verifier_from_pem(public_key_pem)),
-        "RS512" => decode_with_verifier(assertion, RS512.verifier_from_pem(public_key_pem)),
-        "ES256" => decode_with_verifier(assertion, ES256.verifier_from_pem(public_key_pem)),
-        "ES384" => decode_with_verifier(assertion, ES384.verifier_from_pem(public_key_pem)),
-        "ES512" => decode_with_verifier(assertion, ES512.verifier_from_pem(public_key_pem)),
-        "ES256K" => decode_with_verifier(assertion, ES256K.verifier_from_pem(public_key_pem)),
-        "EdDSA" => decode_with_verifier(assertion, EdDSA.verifier_from_pem(public_key_pem)),
-        _ => Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)),
+    use crate::domain::key::JwaSigningAlgorithm;
+    let jwa: JwaSigningAlgorithm = alg
+        .parse()
+        .map_err(|_| AppError::from_code(TokenErrorCode::AssertionAlgUnsupported))?;
+    match jwa {
+        JwaSigningAlgorithm::Rs256 => {
+            decode_with_verifier(assertion, RS256.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Rs384 => {
+            decode_with_verifier(assertion, RS384.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Rs512 => {
+            decode_with_verifier(assertion, RS512.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Ps256 => {
+            decode_with_verifier(assertion, PS256.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Ps384 => {
+            decode_with_verifier(assertion, PS384.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Ps512 => {
+            decode_with_verifier(assertion, PS512.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es256 => {
+            decode_with_verifier(assertion, ES256.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es384 => {
+            decode_with_verifier(assertion, ES384.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es512 => {
+            decode_with_verifier(assertion, ES512.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es256k => {
+            decode_with_verifier(assertion, ES256K.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::EdDsa => {
+            decode_with_verifier(assertion, EdDSA.verifier_from_pem(public_key_pem))
+        }
     }
 }
 

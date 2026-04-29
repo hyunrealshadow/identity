@@ -22,6 +22,7 @@ use super::{
         shared::{csrf_token, load_active_sessions},
     },
     authorize_interaction::select_active_session,
+    authorize_response::{render_form_post_redirect_response, response_mode_from_value},
 };
 
 #[derive(Debug, Deserialize)]
@@ -169,6 +170,11 @@ async fn handle_consent_decision(
     };
 
     if is_html {
+        if response_mode_from_value(request.response_mode.as_deref())
+            == Some(crate::domain::openid_connect::ResponseMode::FormPost)
+        {
+            return Ok(render_form_post_redirect_response(&ctx, &headers, &redirect).into());
+        }
         return Ok(redirect_to_response(redirect.as_str()).into());
     }
 

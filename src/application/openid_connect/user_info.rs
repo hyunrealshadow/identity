@@ -13,15 +13,17 @@ use crate::{
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
         key::KeyData,
         openid_connect::{
-            ScopeSet,
+            OpenIdConnectClientRepository, ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
         },
         user::{UserOid, repository::UserRepository},
     },
 };
 use josekit::{
+    JoseError,
     jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, JwsVerifier, PS256, PS384, PS512, RS256,
+        RS384, RS512,
     },
     jwt,
 };
@@ -29,6 +31,7 @@ use uuid::Uuid;
 
 pub struct UserInfoService {
     user_repo: Arc<dyn UserRepository>,
+    client_repo: Arc<dyn OpenIdConnectClientRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_service: Arc<AsymmetricKeyService>,
     provider_service: Arc<OpenIdProviderService>,
@@ -36,6 +39,7 @@ pub struct UserInfoService {
 
 pub struct TokenClaims {
     pub user_oid: UserOid,
+    pub client_oid: Uuid,
     pub scope: ScopeSet,
     pub claims: Option<serde_json::Value>,
 }
@@ -43,12 +47,14 @@ pub struct TokenClaims {
 impl UserInfoService {
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
+        client_repo: Arc<dyn OpenIdConnectClientRepository>,
         client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         key_service: Arc<AsymmetricKeyService>,
         provider_service: Arc<OpenIdProviderService>,
     ) -> Self {
         Self {
             user_repo,
+            client_repo,
             client_authorization_repo,
             key_service,
             provider_service,
@@ -58,6 +64,7 @@ impl UserInfoService {
     pub async fn get_user_info(
         &self,
         user_oid: UserOid,
+        client_oid: Uuid,
         scope: &ScopeSet,
         claims_request: Option<&serde_json::Value>,
     ) -> Result<UserInfoClaims, AppError> {
@@ -69,18 +76,53 @@ impl UserInfoService {
 
         let issuer = self.provider_service.issuer()?;
         let mut claims = UserInfoClaims::from_user_with_profile_base(&user, issuer.as_str());
+        let client = self
+            .client_repo
+            .find_by_oid(client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        claims.sub = client.subject_identifier(Uuid::from(user.oid), &issuer);
         claims.apply_scope_filter(scope, claims_request);
         Ok(claims)
     }
 
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {
+        let header = jwt::decode_header(raw_token).map_err(|error| {
+            AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+        })?;
+
+        let alg = header
+            .claim(JwtClaimNames::ALG)
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+
+        let kid = header
+            .claim(JwtClaimNames::KID)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_owned());
         let keys = self.key_service.list_available().await?;
 
         let mut verified_result = None;
-        for key in keys {
-            if let Ok(result) = self.verify_jwt_with_key(raw_token, &key) {
-                verified_result = Some(result);
-                break;
+
+        if let Some(kid_str) = kid.as_deref() {
+            if let Ok(kid_uuid) = Uuid::parse_str(kid_str) {
+                if let Some(key) = keys.iter().find(|k| Uuid::from(k.oid) == kid_uuid) {
+                    if let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg) {
+                        verified_result = Some(result);
+                    }
+                }
+            }
+        }
+
+        if verified_result.is_none() {
+            for key in &keys {
+                if let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg) {
+                    verified_result = Some(result);
+                    break;
+                }
             }
         }
 
@@ -156,89 +198,74 @@ impl UserInfoService {
 
         Ok(TokenClaims {
             user_oid: UserOid::from(user_oid),
+            client_oid: access_token_record.client_oid,
             scope,
             claims,
         })
     }
 
-    fn verify_jwt_with_key(
+    fn verify_jwt_with_key_and_alg(
         &self,
         token: &str,
         key: &crate::domain::key::Key,
-    ) -> Result<(josekit::jwt::JwtPayload, JwsHeader), AppError> {
+        alg: &str,
+    ) -> Result<(jwt::JwtPayload, JwsHeader), AppError> {
+        use crate::domain::key::JwaSigningAlgorithm;
+        let jwa: JwaSigningAlgorithm = alg
+            .parse()
+            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
         let public_key = match &key.data {
             KeyData::Asymmetric(data) => data.public_key.as_bytes(),
             _ => return Err(AppError::from_code(CommonErrorCode::InternalError)),
         };
 
-        let result = RS256
-            .verifier_from_pem(public_key)
-            .ok()
-            .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            .or_else(|| {
-                RS384
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                RS512
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                PS256
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                PS384
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                PS512
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                ES256
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                ES384
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                ES512
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                ES256K
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            })
-            .or_else(|| {
-                EdDSA
-                    .verifier_from_pem(public_key)
-                    .ok()
-                    .and_then(|v| jwt::decode_with_verifier(token, &v).ok())
-            });
+        let result = match jwa {
+            JwaSigningAlgorithm::Rs256 => {
+                decode_jwt_with_verifier(token, RS256.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Rs384 => {
+                decode_jwt_with_verifier(token, RS384.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Rs512 => {
+                decode_jwt_with_verifier(token, RS512.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Ps256 => {
+                decode_jwt_with_verifier(token, PS256.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Ps384 => {
+                decode_jwt_with_verifier(token, PS384.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Ps512 => {
+                decode_jwt_with_verifier(token, PS512.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Es256 => {
+                decode_jwt_with_verifier(token, ES256.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Es384 => {
+                decode_jwt_with_verifier(token, ES384.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Es512 => {
+                decode_jwt_with_verifier(token, ES512.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::Es256k => {
+                decode_jwt_with_verifier(token, ES256K.verifier_from_pem(public_key))
+            }
+            JwaSigningAlgorithm::EdDsa => {
+                decode_jwt_with_verifier(token, EdDSA.verifier_from_pem(public_key))
+            }
+        };
 
         let (payload, header) =
-            result.ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            result.map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         Ok((payload, header))
     }
+}
+
+fn decode_jwt_with_verifier<V: JwsVerifier>(
+    token: &str,
+    verifier: Result<V, JoseError>,
+) -> Result<(jwt::JwtPayload, JwsHeader), JoseError> {
+    let v = verifier?;
+    jwt::decode_with_verifier(token, &v)
 }

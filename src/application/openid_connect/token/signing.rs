@@ -1,5 +1,4 @@
 use super::*;
-use crate::infrastructure::crypto::key::infer_algorithm_from_private_key_pem;
 
 impl TokenService {
     pub(super) async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
@@ -12,58 +11,19 @@ impl TokenService {
             })?;
 
         for key in keys {
-            if let KeyData::Asymmetric(data) = key.data {
-                let pem = data.private_key.as_bytes();
-                if PS256.signer_from_pem(pem).is_ok() {
-                    return Ok((
-                        Uuid::from(key.oid).to_string(),
-                        data.private_key,
-                        "PS256".to_string(),
-                    ));
-                }
-                if PS384.signer_from_pem(pem).is_ok() {
-                    return Ok((
-                        Uuid::from(key.oid).to_string(),
-                        data.private_key,
-                        "PS384".to_string(),
-                    ));
-                }
-                if PS512.signer_from_pem(pem).is_ok() {
-                    return Ok((
-                        Uuid::from(key.oid).to_string(),
-                        data.private_key,
-                        "PS512".to_string(),
-                    ));
-                }
-                let Ok(alg_name) =
-                    infer_algorithm_from_private_key_pem(&data.private_key).map(|algorithm| {
-                        match algorithm {
-                            crate::domain::key::AsymmetricKeyAlgorithm::Rsa { bits }
-                                if bits >= 4096 =>
-                            {
-                                "RS512"
-                            }
-                            crate::domain::key::AsymmetricKeyAlgorithm::Rsa { bits }
-                                if bits >= 3072 =>
-                            {
-                                "RS384"
-                            }
-                            crate::domain::key::AsymmetricKeyAlgorithm::Rsa { .. } => "RS256",
-                            crate::domain::key::AsymmetricKeyAlgorithm::EcdsaP256 => "ES256",
-                            crate::domain::key::AsymmetricKeyAlgorithm::EcdsaP384 => "ES384",
-                            crate::domain::key::AsymmetricKeyAlgorithm::EcdsaP521 => "ES512",
-                            crate::domain::key::AsymmetricKeyAlgorithm::EcdsaSecp256k1 => "ES256K",
-                            crate::domain::key::AsymmetricKeyAlgorithm::Ed25519
-                            | crate::domain::key::AsymmetricKeyAlgorithm::Ed448 => "EdDSA",
-                        }
-                    })
+            if let KeyData::Asymmetric(data) = &key.data {
+                let Some(alg) = self
+                    .signing_algorithm_detector
+                    .detect(&key)
+                    .into_iter()
+                    .next()
                 else {
                     continue;
                 };
                 return Ok((
                     Uuid::from(key.oid).to_string(),
-                    data.private_key,
-                    alg_name.to_string(),
+                    data.private_key.clone(),
+                    alg.as_str().to_owned(),
                 ));
             }
         }
@@ -141,6 +101,7 @@ impl TokenService {
         alg: &str,
         issuer: &url::Url,
         audience: &str,
+        client: &crate::domain::openid_connect::OpenIdConnectClient,
         user: &crate::domain::user::User,
         nonce: Option<&str>,
         auth_time: Option<i64>,
@@ -155,7 +116,7 @@ impl TokenService {
         let mut payload = JwtPayload::new();
         let now = std::time::SystemTime::now();
         payload.set_issuer(issuer.as_str());
-        payload.set_subject(&Uuid::from(user.oid).to_string());
+        payload.set_subject(client.subject_identifier(Uuid::from(user.oid), issuer));
         payload.set_audience(vec![audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
@@ -215,54 +176,75 @@ fn build_jws_signer(
     alg: &str,
     error_code: TokenErrorCode,
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
+    let jwa: JwaSigningAlgorithm = alg.parse().map_err(|_| AppError::from_code(error_code))?;
     let pem = private_key_pem.as_bytes();
-    match alg {
-        "RS256" => Ok(Box::new(RS256.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "RS384" => Ok(Box::new(RS384.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "RS512" => Ok(Box::new(RS512.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "PS256" => Ok(Box::new(PS256.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "PS384" => Ok(Box::new(PS384.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "PS512" => Ok(Box::new(PS512.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "ES256" => Ok(Box::new(ES256.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "ES384" => Ok(Box::new(ES384.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "ES512" => Ok(Box::new(ES512.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        "ES256K" => {
+    match jwa {
+        JwaSigningAlgorithm::Rs256 => {
+            Ok(Box::new(RS256.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Rs384 => {
+            Ok(Box::new(RS384.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Rs512 => {
+            Ok(Box::new(RS512.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Ps256 => {
+            Ok(Box::new(PS256.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Ps384 => {
+            Ok(Box::new(PS384.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Ps512 => {
+            Ok(Box::new(PS512.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es256 => {
+            Ok(Box::new(ES256.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es384 => {
+            Ok(Box::new(ES384.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es512 => {
+            Ok(Box::new(ES512.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es256k => {
             Ok(Box::new(ES256K.signer_from_pem(pem).map_err(|error| {
                 AppError::from_code(error_code).with_source(error)
             })?))
         }
-        "EdDSA" => Ok(Box::new(EdDSA.signer_from_pem(pem).map_err(|error| {
-            AppError::from_code(error_code).with_source(error)
-        })?)),
-        _ => Err(AppError::from_code(error_code)),
+        JwaSigningAlgorithm::EdDsa => {
+            Ok(Box::new(EdDSA.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(error_code).with_source(error)
+            })?))
+        }
     }
 }
 
 fn compute_at_hash(access_token: &str, alg: &str) -> String {
-    match alg {
-        "RS384" | "PS384" | "ES384" => {
+    let jwa: JwaSigningAlgorithm = alg.parse().unwrap_or(JwaSigningAlgorithm::Rs256);
+    match jwa.at_hash_bits() {
+        384 => {
             let digest = Sha384::digest(access_token.as_bytes());
             URL_SAFE_NO_PAD.encode(&digest[..24])
         }
-        "RS512" | "PS512" | "ES512" | "EdDSA" => {
+        512 => {
             let digest = Sha512::digest(access_token.as_bytes());
             URL_SAFE_NO_PAD.encode(&digest[..32])
         }

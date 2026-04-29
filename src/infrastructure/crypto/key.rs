@@ -10,6 +10,7 @@ use openssl::{
     x509::X509,
 };
 
+use crate::domain::key::JwaSigningAlgorithm;
 use crate::domain::key::{
     generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
     model::{AsymmetricKeyAlgorithm, AsymmetricKeyData},
@@ -23,7 +24,7 @@ where
 }
 
 /// Encodes bytes as base64url (RFC 4648 §5): URL-safe alphabet, no padding.
-fn base64url_encode(bytes: &[u8]) -> String {
+pub(super) fn base64url_encode(bytes: &[u8]) -> String {
     encode_block(bytes)
         .replace('+', "-")
         .replace('/', "_")
@@ -74,7 +75,7 @@ impl AsymmetricKeyGenerator for AsymmetricKeyGeneratorImpl {
     }
 }
 
-fn generate_rsa_key(bits: usize) -> Result<AsymmetricKeyData, KeyMaterialError> {
+pub(super) fn generate_rsa_key(bits: usize) -> Result<AsymmetricKeyData, KeyMaterialError> {
     if bits < 2048 {
         return Err(KeyMaterialError::InvalidInput(
             "rsa bits must be at least 2048".to_owned(),
@@ -85,7 +86,7 @@ fn generate_rsa_key(bits: usize) -> Result<AsymmetricKeyData, KeyMaterialError> 
     build_key_data(&jwk)
 }
 
-fn generate_p256_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
+pub(super) fn generate_p256_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
     let jwk = Jwk::generate_ec_key(EcCurve::P256).map_err(internal)?;
     build_key_data(&jwk)
 }
@@ -105,7 +106,7 @@ fn generate_k256_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
     build_key_data(&jwk)
 }
 
-fn generate_ed25519_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
+pub(super) fn generate_ed25519_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
     let jwk = Jwk::generate_ed_key(EdCurve::Ed25519).map_err(internal)?;
     build_key_data(&jwk)
 }
@@ -155,6 +156,22 @@ pub fn infer_algorithm_from_private_key_pem(
     Err(KeyMaterialError::InvalidInput(
         "unsupported private key format".to_owned(),
     ))
+}
+
+pub fn jwa_algorithm_can_sign(jwa: JwaSigningAlgorithm, private_key_pem: &[u8]) -> bool {
+    match jwa {
+        JwaSigningAlgorithm::Rs256 => RS256.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Rs384 => RS384.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Rs512 => RS512.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Ps256 => PS256.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Ps384 => PS384.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Ps512 => PS512.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Es256 => ES256.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Es384 => ES384.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Es512 => ES512.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::Es256k => ES256K.signer_from_pem(private_key_pem).is_ok(),
+        JwaSigningAlgorithm::EdDsa => EdDSA.signer_from_pem(private_key_pem).is_ok(),
+    }
 }
 
 pub fn public_jwk_from_private_key_pem(
@@ -224,33 +241,12 @@ pub fn generate_all_jwks_for_key(
 fn jwk_algorithm_labels_for_private_key(
     private_key_pem: &str,
 ) -> Result<Vec<String>, KeyMaterialError> {
+    let algorithm = infer_algorithm_from_private_key_pem(private_key_pem)?;
     let pem = private_key_pem.as_bytes();
-    let mut labels = Vec::new();
-
-    for (label, can_sign) in [
-        ("RS256", RS256.signer_from_pem(pem).is_ok()),
-        ("RS384", RS384.signer_from_pem(pem).is_ok()),
-        ("RS512", RS512.signer_from_pem(pem).is_ok()),
-        ("PS256", PS256.signer_from_pem(pem).is_ok()),
-        ("PS384", PS384.signer_from_pem(pem).is_ok()),
-        ("PS512", PS512.signer_from_pem(pem).is_ok()),
-        ("ES256", ES256.signer_from_pem(pem).is_ok()),
-        ("ES384", ES384.signer_from_pem(pem).is_ok()),
-        ("ES512", ES512.signer_from_pem(pem).is_ok()),
-        ("ES256K", ES256K.signer_from_pem(pem).is_ok()),
-        ("EdDSA", EdDSA.signer_from_pem(pem).is_ok()),
-    ] {
-        if can_sign {
-            labels.push(label.to_owned());
-        }
-    }
-
-    if labels.is_empty() {
-        return Err(KeyMaterialError::InvalidInput(
-            "unsupported private key format".to_owned(),
-        ));
-    }
-
+    let labels: Vec<String> = JwaSigningAlgorithm::trials_for_key_type(&algorithm)
+        .iter()
+        .filter_map(|jwa| jwa_algorithm_can_sign(*jwa, pem).then(|| jwa.as_str().to_owned()))
+        .collect();
     Ok(labels)
 }
 
@@ -281,195 +277,11 @@ fn public_jwk_from_private_key_pem_without_alg(
 }
 
 fn jwa_algorithm_name(algorithm: &AsymmetricKeyAlgorithm) -> &'static str {
-    match algorithm {
-        AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 4096 => "RS512",
-        AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 3072 => "RS384",
-        AsymmetricKeyAlgorithm::Rsa { .. } => "RS256",
-        AsymmetricKeyAlgorithm::EcdsaP256 => "ES256",
-        AsymmetricKeyAlgorithm::EcdsaP384 => "ES384",
-        AsymmetricKeyAlgorithm::EcdsaP521 => "ES512",
-        AsymmetricKeyAlgorithm::EcdsaSecp256k1 => "ES256K",
-        AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => "EdDSA",
-    }
+    JwaSigningAlgorithm::primary_for_key_type(algorithm).as_str()
 }
 
 fn export_private_pem(jwk: &Jwk) -> Result<String, KeyMaterialError> {
     export_pem(jwk, true)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Generates a minimal RSA 2048 key PEM and a self-signed cert PEM for testing.
-    fn test_rsa_key_and_cert() -> (String, String) {
-        use crate::domain::key::model::AsymmetricKeyAlgorithm;
-        use crate::infrastructure::crypto::certificate::generate_self_signed_certificate;
-
-        let data = generate_rsa_key(2048).unwrap();
-        let cert = generate_self_signed_certificate(
-            &data.private_key,
-            "test.example.com",
-            &AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
-        )
-        .unwrap();
-        (data.private_key, cert)
-    }
-
-    #[test]
-    fn jwk_without_certificate_has_no_x5_fields() {
-        let (private_key, _cert) = test_rsa_key_and_cert();
-        let jwk = public_jwk_from_private_key_pem(&private_key, None, None).unwrap();
-        assert!(jwk.parameter("x5c").is_none());
-        assert!(jwk.parameter("x5t").is_none());
-        assert!(jwk.parameter("x5t#S256").is_none());
-    }
-
-    #[test]
-    fn jwk_with_certificate_has_x5c_x5t_x5t_s256() {
-        let (private_key, cert) = test_rsa_key_and_cert();
-        let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert)).unwrap();
-
-        // x5c must be a non-empty array
-        let x5c = jwk.parameter("x5c").expect("x5c missing");
-        assert!(x5c.is_array(), "x5c must be a JSON array");
-        let arr = x5c.as_array().unwrap();
-        assert_eq!(arr.len(), 1, "x5c must have exactly one element");
-        assert!(arr[0].is_string(), "x5c[0] must be a string");
-
-        // x5t must be a non-empty string
-        let x5t = jwk.parameter("x5t").expect("x5t missing");
-        assert!(x5t.is_string());
-        assert!(!x5t.as_str().unwrap().is_empty());
-
-        // x5t#S256 must be a non-empty string
-        let x5t_s256 = jwk.parameter("x5t#S256").expect("x5t#S256 missing");
-        assert!(x5t_s256.is_string());
-        assert!(!x5t_s256.as_str().unwrap().is_empty());
-    }
-
-    #[test]
-    fn x5t_s256_matches_sha256_of_der() {
-        use openssl::hash::{MessageDigest, hash};
-        use openssl::x509::X509;
-
-        let (private_key, cert_pem) = test_rsa_key_and_cert();
-        let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert_pem)).unwrap();
-
-        // Independently compute expected x5t#S256
-        let x509 = X509::from_pem(cert_pem.as_bytes()).unwrap();
-        let der = x509.to_der().unwrap();
-        let digest = hash(MessageDigest::sha256(), &der).unwrap();
-        let expected = base64url_encode(&digest);
-
-        let actual = jwk
-            .parameter("x5t#S256")
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_owned();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn x5t_matches_sha1_of_der() {
-        use openssl::hash::{MessageDigest, hash};
-        use openssl::x509::X509;
-
-        let (private_key, cert_pem) = test_rsa_key_and_cert();
-        let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert_pem)).unwrap();
-
-        let x509 = X509::from_pem(cert_pem.as_bytes()).unwrap();
-        let der = x509.to_der().unwrap();
-        let digest = hash(MessageDigest::sha1(), &der).unwrap();
-        let expected = base64url_encode(&digest);
-
-        let actual = jwk.parameter("x5t").unwrap().as_str().unwrap().to_owned();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn x5c_matches_base64_standard_of_der() {
-        use openssl::base64::encode_block;
-        use openssl::x509::X509;
-
-        let (private_key, cert_pem) = test_rsa_key_and_cert();
-        let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert_pem)).unwrap();
-
-        let x509 = X509::from_pem(cert_pem.as_bytes()).unwrap();
-        let der = x509.to_der().unwrap();
-        let expected = encode_block(&der);
-
-        let actual = jwk.parameter("x5c").unwrap().as_array().unwrap()[0]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn generate_all_jwks_for_rsa_key_produces_rs_jwks() {
-        let data = generate_rsa_key(2048).unwrap();
-        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-rsa", None).unwrap();
-        assert_eq!(jwks.len(), 3);
-        let algs: Vec<&str> = jwks.iter().map(|(alg, _)| alg.as_str()).collect();
-        assert!(algs.contains(&"RS256"));
-        assert!(algs.contains(&"RS384"));
-        assert!(algs.contains(&"RS512"));
-        assert!(!algs.contains(&"PS256"));
-        assert!(!algs.contains(&"PS384"));
-        assert!(!algs.contains(&"PS512"));
-    }
-
-    #[test]
-    fn generate_all_jwks_for_rsa_pss_key_produces_ps_jwk() {
-        let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-            2048,
-            josekit::util::SHA_256,
-            josekit::util::SHA_256,
-            32,
-        )
-        .unwrap();
-        let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
-
-        let jwks = generate_all_jwks_for_key(&private_key, "kid-ps", None).unwrap();
-
-        assert_eq!(jwks.len(), 1);
-        assert_eq!(jwks[0].0, "PS256");
-        assert_eq!(jwks[0].1.algorithm().unwrap(), "PS256");
-        assert_eq!(jwks[0].1.key_id().unwrap(), "kid-ps");
-    }
-
-    #[test]
-    fn generate_all_jwks_for_rsa_key_sets_kid_on_each_jwk() {
-        let data = generate_rsa_key(2048).unwrap();
-        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-rsa", None).unwrap();
-        for (_, jwk) in &jwks {
-            assert_eq!(
-                jwk.key_id().unwrap(),
-                "kid-rsa",
-                "kid should be set on JWK with alg {}",
-                jwk.algorithm().unwrap_or("none")
-            );
-        }
-    }
-
-    #[test]
-    fn generate_all_jwks_for_ec_p256_key_produces_one_jwk() {
-        let data = generate_p256_key().unwrap();
-        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-ec", None).unwrap();
-        assert_eq!(jwks.len(), 1);
-        assert_eq!(jwks[0].0, "ES256");
-        assert_eq!(jwks[0].1.algorithm().unwrap(), "ES256");
-    }
-
-    #[test]
-    fn generate_all_jwks_for_ed25519_key_produces_one_jwk() {
-        let data = generate_ed25519_key().unwrap();
-        let jwks = generate_all_jwks_for_key(&data.private_key, "kid-ed", None).unwrap();
-        assert_eq!(jwks.len(), 1);
-        assert_eq!(jwks[0].0, "EdDSA");
-    }
 }
 
 fn export_public_pem(jwk: &Jwk) -> Result<String, KeyMaterialError> {

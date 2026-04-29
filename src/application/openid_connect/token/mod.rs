@@ -15,14 +15,14 @@ use crate::application::data_protection::DataProtector;
 use crate::{
     application::{
         error::{AppError, codes::token::TokenErrorCode},
-        openid_connect::provider::OpenIdProviderService,
+        openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
     domain::{
         client_authorization::{
             AccessTokenData, AuthorizationCodeData, ClientAuthorization,
             ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
         },
-        key::{KeyData, repository::KeyRepository},
+        key::{JwaSigningAlgorithm, KeyData, repository::KeyRepository},
         openid_connect::{
             OpenIdConnectClientRepository, OpenIdConnectCredentialData,
             OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,
@@ -71,6 +71,7 @@ pub struct TokenService {
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     provider_service: Arc<OpenIdProviderService>,
+    signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     data_protector: Arc<dyn DataProtector>,
 }
 
@@ -82,6 +83,7 @@ impl TokenService {
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
         credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
         provider_service: Arc<OpenIdProviderService>,
+        signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
         data_protector: Arc<dyn DataProtector>,
     ) -> Self {
         Self {
@@ -91,6 +93,7 @@ impl TokenService {
             client_repo,
             credential_repo,
             provider_service,
+            signing_algorithm_detector,
             data_protector,
         }
     }

@@ -24,7 +24,10 @@ use uuid::Uuid;
 use super::{AuthorizationCodeGrantParams, RefreshTokenGrantParams, TokenService, verify_pkce};
 use crate::{
     application::{
-        openid_connect::provider::OpenIdProviderService, setting::runtime::SettingProvider,
+        error::AppError,
+        key::asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
+        openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
+        setting::runtime::SettingProvider,
     },
     domain::{
         client::model::ClientOid,
@@ -33,10 +36,10 @@ use crate::{
             ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
             ClientAuthorizationType, RefreshTokenData,
         },
-        key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
+        key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
         key::{
-            Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
-            model::AsymmetricKeyAlgorithm, repository::KeyRepository,
+            JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
+            repository::KeyRepository,
         },
         openid_connect::{
             OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
@@ -50,7 +53,6 @@ use crate::{
             repository::{UserRepository, UserRepositoryError},
         },
     },
-    infrastructure::crypto::key::AsymmetricKeyGeneratorImpl,
 };
 
 mod auth;
@@ -61,6 +63,7 @@ mod helpers;
 use self::fixtures::{
     InMemoryClientAuthorizationRepository, InMemoryClientRepository, InMemoryCredentialRepository,
     InMemoryDataProtector, InMemoryKeyRepository, InMemoryUserRepository, provider_service,
+    signing_algorithm_detector,
 };
 
 fn expected_at_hash(access_token: &str) -> String {
@@ -89,7 +92,10 @@ fn key_for_algorithm(alg: &str) -> Key {
         return Key {
             oid: KeyOid(Uuid::new_v4()),
             r#type: KeyType::Asymmetric,
-            data: KeyData::Asymmetric(data),
+            data: KeyData::Asymmetric(AsymmetricKeyData {
+                certificate: Some(alg.to_owned()),
+                ..data
+            }),
             expires_at: None,
             revoked_at: None,
             created_at: Utc::now(),
@@ -97,30 +103,88 @@ fn key_for_algorithm(alg: &str) -> Key {
         };
     }
 
-    let generator = AsymmetricKeyGeneratorImpl;
-    let algorithm = match alg {
-        "RS256" => AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
-        "RS384" => AsymmetricKeyAlgorithm::Rsa { bits: 3072 },
-        "RS512" => AsymmetricKeyAlgorithm::Rsa { bits: 4096 },
-        "ES256" => AsymmetricKeyAlgorithm::EcdsaP256,
-        "ES384" => AsymmetricKeyAlgorithm::EcdsaP384,
-        "ES512" => AsymmetricKeyAlgorithm::EcdsaP521,
-        "ES256K" => AsymmetricKeyAlgorithm::EcdsaSecp256k1,
-        "EdDSA" => AsymmetricKeyAlgorithm::Ed25519,
-        other => panic!("unsupported test alg: {other}"),
-    };
-    let data = generator
-        .generate(&AsymmetricKeySpec { algorithm })
-        .unwrap();
+    let data = key_data_for_algorithm(alg);
     Key {
         oid: KeyOid(Uuid::new_v4()),
         r#type: KeyType::Asymmetric,
-        data: KeyData::Asymmetric(data),
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            certificate: Some(alg.to_owned()),
+            ..data
+        }),
         expires_at: None,
         revoked_at: None,
         created_at: Utc::now(),
         updated_at: None,
     }
+}
+
+fn key_data_for_algorithm(alg: &str) -> AsymmetricKeyData {
+    match alg {
+        "RS256" => rsa_key_data(2048),
+        "RS384" => rsa_key_data(3072),
+        "RS512" => rsa_key_data(4096),
+        "ES256" => ec_key_data(josekit::jwk::alg::ec::EcCurve::P256),
+        "ES384" => ec_key_data(josekit::jwk::alg::ec::EcCurve::P384),
+        "ES512" => ec_key_data(josekit::jwk::alg::ec::EcCurve::P521),
+        "ES256K" => ec_key_data(josekit::jwk::alg::ec::EcCurve::Secp256k1),
+        "EdDSA" => ed_key_data(josekit::jwk::alg::ed::EdCurve::Ed25519),
+        other => panic!("unsupported test alg: {other}"),
+    }
+}
+
+fn rsa_key_data(bits: u32) -> AsymmetricKeyData {
+    let jwk = josekit::jwk::Jwk::generate_rsa_key(bits).unwrap();
+    let key_pair = josekit::jwk::alg::rsa::RsaKeyPair::from_jwk(&jwk).unwrap();
+    AsymmetricKeyData {
+        private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
+        public_key: String::from_utf8(key_pair.to_pem_public_key()).unwrap(),
+        certificate: None,
+    }
+}
+
+fn ec_key_data(curve: josekit::jwk::alg::ec::EcCurve) -> AsymmetricKeyData {
+    let jwk = josekit::jwk::Jwk::generate_ec_key(curve).unwrap();
+    let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
+    AsymmetricKeyData {
+        private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
+        public_key: String::from_utf8(key_pair.to_pem_public_key()).unwrap(),
+        certificate: None,
+    }
+}
+
+fn ed_key_data(curve: josekit::jwk::alg::ed::EdCurve) -> AsymmetricKeyData {
+    let jwk = josekit::jwk::Jwk::generate_ed_key(curve).unwrap();
+    let key_pair = josekit::jwk::alg::ed::EdKeyPair::from_jwk(&jwk).unwrap();
+    AsymmetricKeyData {
+        private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
+        public_key: String::from_utf8(key_pair.to_pem_public_key()).unwrap(),
+        certificate: None,
+    }
+}
+
+struct TestKeyJwkGenerator;
+
+struct TestAsymmetricKeyGenerator;
+
+impl AsymmetricKeyGenerator for TestAsymmetricKeyGenerator {
+    fn generate(&self, _spec: &AsymmetricKeySpec) -> Result<AsymmetricKeyData, KeyMaterialError> {
+        Ok(key_data_for_algorithm("RS256"))
+    }
+}
+
+impl KeyJwkGenerator for TestKeyJwkGenerator {
+    fn generate(
+        &self,
+        _private_key_pem: &str,
+        _key_id: &str,
+        _certificate_pem: Option<&str>,
+    ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
+        Ok(vec![])
+    }
+}
+
+fn test_key_jwk_generator() -> Arc<dyn KeyJwkGenerator> {
+    Arc::new(TestKeyJwkGenerator)
 }
 
 fn rsa_pss_key_for_algorithm(alg: &str) -> Option<AsymmetricKeyData> {
@@ -192,6 +256,7 @@ fn build_token_service_with_key(
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     )
 }
@@ -205,10 +270,12 @@ fn user_info_service_with_key(
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
+        Arc::new(InMemoryClientRepository),
         repo,
         Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
             repo: Arc::new(InMemoryKeyRepository { keys: vec![key] }),
-            generator: Arc::new(AsymmetricKeyGeneratorImpl),
+            generator: Arc::new(TestAsymmetricKeyGenerator),
+            jwk_generator: test_key_jwk_generator(),
             jwk_repo: None,
         }),
         provider_service(),

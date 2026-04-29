@@ -21,6 +21,14 @@ impl TokenService {
                 params.client_assertion.as_deref(),
             )
             .await?;
+        let authenticated_client = self
+            .client_repo
+            .find_by_oid(authenticated_client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let code_oid_bytes = self
             .data_protector
@@ -133,6 +141,7 @@ impl TokenService {
                 &signing_alg,
                 &issuer,
                 &audience,
+                &authenticated_client,
                 &user,
                 data.nonce.as_deref(),
                 data.auth_time,
@@ -200,6 +209,14 @@ impl TokenService {
                 params.client_assertion.as_deref(),
             )
             .await?;
+        let authenticated_client = self
+            .client_repo
+            .find_by_oid(authenticated_client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let refresh_oid_bytes = self
             .data_protector
@@ -281,6 +298,7 @@ impl TokenService {
             &signing_alg,
             &issuer,
             client_id,
+            &authenticated_client,
             &user,
             None,
             refresh_data.auth_time,

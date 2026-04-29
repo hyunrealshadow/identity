@@ -11,8 +11,22 @@ use crate::{
         model::{AsymmetricKeyAlgorithm, Key, KeyData, KeyType},
         repository::KeyRepository,
     },
-    infrastructure::crypto::key::generate_all_jwks_for_key,
 };
+
+#[derive(Debug, Clone)]
+pub struct GeneratedKeyJwk {
+    pub algorithm: String,
+    pub jwk: serde_json::Value,
+}
+
+pub trait KeyJwkGenerator: Send + Sync {
+    fn generate(
+        &self,
+        private_key_pem: &str,
+        key_id: &str,
+        certificate_pem: Option<&str>,
+    ) -> Result<Vec<GeneratedKeyJwk>, AppError>;
+}
 
 #[derive(Debug, Clone)]
 pub struct GenerateAsymmetricKeyInput {
@@ -24,6 +38,7 @@ pub struct GenerateAsymmetricKeyInput {
 pub struct AsymmetricKeyService {
     pub(crate) repo: Arc<dyn KeyRepository>,
     pub(crate) generator: Arc<dyn AsymmetricKeyGenerator>,
+    pub(crate) jwk_generator: Arc<dyn KeyJwkGenerator>,
     pub(crate) jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
 }
 
@@ -69,7 +84,9 @@ impl AsymmetricKeyService {
             .await?;
 
         if let Some(ref jwk_repo) = self.jwk_repo {
-            jwk_repo.create_batch(build_jwk_inputs(&key)?).await?;
+            jwk_repo
+                .create_batch(build_jwk_inputs(&key, self.jwk_generator.as_ref())?)
+                .await?;
         }
 
         Ok(key)
@@ -88,7 +105,9 @@ impl AsymmetricKeyService {
 
         if let Some(ref jwk_repo) = self.jwk_repo {
             jwk_repo.delete_by_key_oid(key.oid).await?;
-            jwk_repo.create_batch(build_jwk_inputs(&key)?).await?;
+            jwk_repo
+                .create_batch(build_jwk_inputs(&key, self.jwk_generator.as_ref())?)
+                .await?;
         }
 
         Ok(key)
@@ -122,27 +141,23 @@ impl AsymmetricKeyService {
     }
 }
 
-fn build_jwk_inputs(key: &Key) -> Result<Vec<CreateKeyJwkInput>, AppError> {
+fn build_jwk_inputs(
+    key: &Key,
+    jwk_generator: &dyn KeyJwkGenerator,
+) -> Result<Vec<CreateKeyJwkInput>, AppError> {
     let KeyData::Asymmetric(data) = &key.data else {
         return Ok(vec![]);
     };
 
     let key_id = Uuid::from(key.oid).to_string();
-    let jwks = generate_all_jwks_for_key(&data.private_key, &key_id, data.certificate.as_deref())
-        .map_err(|error| {
-        AppError::from_code(KeyErrorCode::JwkGenerationFailed).with_source(error)
-    })?;
+    let jwks = jwk_generator.generate(&data.private_key, &key_id, data.certificate.as_deref())?;
 
     jwks.into_iter()
-        .map(|(algorithm, jwk)| {
-            let jwk = serde_json::to_value(jwk).map_err(|error| {
-                AppError::from_code(KeyErrorCode::JwkSerializationFailed).with_source(error)
-            })?;
-
+        .map(|generated| {
             Ok(CreateKeyJwkInput {
                 key_oid: key.oid,
-                algorithm,
-                jwk,
+                algorithm: generated.algorithm,
+                jwk: generated.jwk,
             })
         })
         .collect()

@@ -25,6 +25,11 @@ pub enum OpenIdConnectClientRepositoryError {
         crate::domain::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError,
     ),
 
+    #[error("failed to parse openid connect subject type")]
+    ParseSubjectType(
+        #[source] crate::domain::openid_connect::model::provider::ParseSubjectTypeError,
+    ),
+
     #[error("invalid openid connect client")]
     InvalidClient(
         #[source] crate::domain::openid_connect::model::client::InvalidOpenIdConnectClientError,

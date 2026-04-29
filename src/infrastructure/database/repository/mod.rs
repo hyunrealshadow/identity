@@ -1,4 +1,5 @@
 pub mod client_authorization;
+pub mod install;
 pub mod key;
 pub mod key_jwk;
 pub mod login;

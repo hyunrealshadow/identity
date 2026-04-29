@@ -146,7 +146,48 @@ impl KeyRepository for StubKeyRepository {
 }
 
 pub(crate) fn test_data_protector() -> Arc<dyn DataProtector> {
-    Arc::new(DataProtectorImpl::new(Arc::new(MockKeyRepository)))
+    Arc::new(DataProtectorImpl::new(
+        Arc::new(MockKeyRepository),
+        Arc::new(TestCipher),
+    ))
+}
+
+struct TestCipher;
+
+impl DataProtectionCipher for TestCipher {
+    fn encrypt(
+        &self,
+        _key: &[u8; DATA_PROTECTION_KEY_SIZE],
+        plaintext: &[u8],
+        _aad: &[u8],
+    ) -> Result<([u8; 24], Vec<u8>), crate::domain::data_protection::DataProtectionError> {
+        Ok(([0u8; 24], plaintext.to_vec()))
+    }
+
+    fn decrypt(
+        &self,
+        _key: &[u8; DATA_PROTECTION_KEY_SIZE],
+        _nonce: &[u8; 24],
+        ciphertext: &[u8],
+        _aad: &[u8],
+    ) -> Result<Vec<u8>, crate::domain::data_protection::DataProtectionError> {
+        Ok(ciphertext.to_vec())
+    }
+}
+
+pub(crate) fn test_signing_algorithm_detector() -> Arc<dyn SigningAlgorithmDetector> {
+    Arc::new(TestSigningAlgorithmDetector)
+}
+
+struct TestSigningAlgorithmDetector;
+
+impl SigningAlgorithmDetector for TestSigningAlgorithmDetector {
+    fn detect(&self, key: &Key) -> Vec<JwaSigningAlgorithm> {
+        match key.data {
+            KeyData::Asymmetric(_) => vec![JwaSigningAlgorithm::Rs256],
+            KeyData::Symmetric(_) => vec![],
+        }
+    }
 }
 
 pub(crate) fn build_test_service(
@@ -162,6 +203,7 @@ pub(crate) fn build_test_service(
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     )
 }

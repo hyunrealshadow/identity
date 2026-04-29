@@ -18,12 +18,13 @@ pub(super) use request_object::{
 };
 pub(super) use services::{
     StubKeyRepository, StubUserRepository, build_test_service, provider_service,
-    test_data_protector,
+    test_data_protector, test_signing_algorithm_detector,
 };
 
 pub(super) fn params(scope: &str) -> AuthorizationRequestParams {
     AuthorizationRequestParams {
         response_type: "code".to_string(),
+        response_mode: None,
         client_id: TEST_CLIENT_ID.to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: scope.to_string(),

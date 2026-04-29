@@ -13,6 +13,7 @@ use crate::application::{
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct RawAuthorizeRequest {
     pub response_type: Option<String>,
+    pub response_mode: Option<String>,
     pub client_id: Option<String>,
     pub redirect_uri: Option<String>,
     pub scope: Option<String>,
@@ -37,6 +38,7 @@ impl RawAuthorizeRequest {
     fn insert(&mut self, key: &str, value: String) {
         match key {
             "response_type" => self.response_type = Some(value),
+            "response_mode" => self.response_mode = Some(value),
             "client_id" => self.client_id = Some(value),
             "redirect_uri" => self.redirect_uri = Some(value),
             "scope" => self.scope = Some(value),
@@ -64,6 +66,7 @@ impl From<RawAuthorizeRequest> for AuthorizationRequestParams {
     fn from(value: RawAuthorizeRequest) -> Self {
         Self {
             response_type: value.response_type.unwrap_or_default(),
+            response_mode: value.response_mode,
             client_id: value.client_id.unwrap_or_default(),
             redirect_uri: value.redirect_uri.unwrap_or_default(),
             scope: value.scope.unwrap_or_default(),
@@ -209,6 +212,15 @@ mod tests {
 
         let extracted = extract_authorize_request(&mut request).await.unwrap();
         assert_eq!(extracted.raw.response_type.as_deref(), Some("code"));
+    }
+
+    #[tokio::test]
+    async fn authorize_extractor_reads_response_mode() {
+        let mut request = TestClient::get("http://127.0.0.1:5800/oauth2/authorize?response_type=code&response_mode=form_post&client_id=client&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&scope=openid&state=state")
+            .build();
+
+        let extracted = extract_authorize_request(&mut request).await.unwrap();
+        assert_eq!(extracted.raw.response_mode.as_deref(), Some("form_post"));
     }
 
     #[tokio::test]

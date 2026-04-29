@@ -22,8 +22,10 @@ use uuid::Uuid;
 
 use super::{AuthorizationRequestParams, AuthorizeService};
 use crate::application::{
-    data_protection::{DataProtector, DataProtectorImpl},
-    openid_connect::provider::OpenIdProviderService,
+    data_protection::{
+        DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl,
+    },
+    openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     setting::runtime::SettingProvider,
 };
 use crate::domain::{
@@ -37,7 +39,7 @@ use crate::domain::{
         ClientAuthorizationType,
     },
     key::{
-        Key, KeyData, KeyOid, KeyType,
+        JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
         repository::{KeyRepository, KeyRepositoryError},
     },

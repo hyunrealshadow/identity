@@ -33,6 +33,7 @@ pub(crate) fn authorize_service_with_public_key(public_key: Vec<u8>) -> Authoriz
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     )
 }
@@ -48,6 +49,7 @@ pub(crate) fn authorize_service_with_request_uri(request_uri: &str) -> Authorize
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     )
 }

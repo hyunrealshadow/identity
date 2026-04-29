@@ -1,8 +1,11 @@
 use std::{fmt, str::FromStr};
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::domain::client::model::Client;
+use crate::domain::openid_connect::model::provider::SubjectType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct OpenIdConnectClientSettings {
@@ -67,7 +70,7 @@ pub struct OpenIdConnectClientMetadata {
     pub policy_uri: Option<Url>,
     pub tos_uri: Option<Url>,
     pub sector_identifier_uri: Option<Url>,
-    pub subject_type: Option<String>,
+    pub subject_type: Option<SubjectType>,
     pub id_token_signed_response_alg: Option<String>,
     pub id_token_encrypted_response_alg: Option<String>,
     pub id_token_encrypted_response_enc: Option<String>,
@@ -85,6 +88,20 @@ pub struct OpenIdConnectClientMetadata {
     pub initiate_login_uri: Option<Url>,
     pub request_uris: Option<Vec<Url>>,
     pub settings: OpenIdConnectClientSettings,
+}
+
+pub fn pairwise_subject_identifier(
+    user_oid: uuid::Uuid,
+    sector_identifier: &str,
+    issuer: &Url,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(sector_identifier.as_bytes());
+    digest.update(b"\0");
+    digest.update(user_oid.as_bytes());
+    digest.update(b"\0");
+    digest.update(issuer.as_str().as_bytes());
+    URL_SAFE_NO_PAD.encode(digest.finalize())
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +161,31 @@ impl OpenIdConnectClient {
             .iter()
             .any(|assigned| assigned == scope_name)
     }
+
+    pub fn subject_identifier(&self, user_oid: uuid::Uuid, issuer: &Url) -> String {
+        match self.metadata.subject_type.unwrap_or(SubjectType::Public) {
+            SubjectType::Public => user_oid.to_string(),
+            SubjectType::Pairwise => {
+                let sector_identifier = self
+                    .metadata
+                    .sector_identifier_uri
+                    .as_ref()
+                    .and_then(Url::host_str)
+                    .or_else(|| {
+                        self.platforms
+                            .iter()
+                            .flat_map(|platform| platform.redirect_uris.iter())
+                            .find_map(Url::host_str)
+                    });
+                let fallback = self.client.oid.to_string();
+                pairwise_subject_identifier(
+                    user_oid,
+                    sector_identifier.unwrap_or(fallback.as_str()),
+                    issuer,
+                )
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,9 +203,10 @@ impl std::error::Error for InvalidOpenIdConnectClientError {}
 mod tests {
     use super::{
         OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-        OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
+        OpenIdConnectClientPlatformType, OpenIdConnectClientSettings, pairwise_subject_identifier,
     };
     use crate::domain::client::model::{Client, ClientProtocol};
+    use crate::domain::openid_connect::SubjectType;
     use chrono::Utc;
     use url::Url;
 
@@ -218,6 +261,37 @@ mod tests {
             OpenIdConnectClientPlatformType::Native
         );
         assert!("ios".parse::<OpenIdConnectClientPlatformType>().is_err());
+    }
+
+    #[test]
+    fn parses_subject_type_values() {
+        assert_eq!(
+            "public".parse::<SubjectType>().unwrap(),
+            SubjectType::Public
+        );
+        assert_eq!(
+            "pairwise".parse::<SubjectType>().unwrap(),
+            SubjectType::Pairwise
+        );
+        assert!("sector".parse::<SubjectType>().is_err());
+    }
+
+    #[test]
+    fn pairwise_subject_identifier_uses_sector_identifier() {
+        let user_oid = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let issuer = Url::parse("https://identity.example.com/").unwrap();
+        let sector_a = Url::parse("https://rp-a.example.com/sector.json").unwrap();
+        let sector_b = Url::parse("https://rp-b.example.com/sector.json").unwrap();
+
+        let subject_a = pairwise_subject_identifier(user_oid, "rp-a.example.com", &issuer);
+        let subject_a_from_uri =
+            pairwise_subject_identifier(user_oid, sector_a.host_str().unwrap(), &issuer);
+        let subject_b =
+            pairwise_subject_identifier(user_oid, sector_b.host_str().unwrap(), &issuer);
+
+        assert_eq!(subject_a, subject_a_from_uri);
+        assert_ne!(subject_a, user_oid.to_string());
+        assert_ne!(subject_a, subject_b);
     }
 
     #[test]

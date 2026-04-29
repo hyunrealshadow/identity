@@ -57,6 +57,14 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::RedirectUriInvalid).with_source(error)
         })?;
 
+        let response_mode = params
+            .response_mode
+            .map(|value| value.parse::<ResponseMode>())
+            .transpose()
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+            })?;
+
         let scope = ScopeSet::parse(&params.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;
@@ -126,6 +134,7 @@ impl AuthorizeService {
 
         let request = AuthorizationRequest {
             response_type,
+            response_mode,
             client_id,
             redirect_uri,
             scope,

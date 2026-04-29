@@ -12,6 +12,80 @@ impl InMemoryDataProtector {
     }
 }
 
+pub(super) fn signing_algorithm_detector() -> Arc<dyn SigningAlgorithmDetector> {
+    Arc::new(InMemorySigningAlgorithmDetector)
+}
+
+struct InMemorySigningAlgorithmDetector;
+
+impl SigningAlgorithmDetector for InMemorySigningAlgorithmDetector {
+    fn detect(&self, key: &Key) -> Vec<JwaSigningAlgorithm> {
+        let KeyData::Asymmetric(data) = &key.data else {
+            return vec![];
+        };
+
+        if let Some(algorithm) = data
+            .certificate
+            .as_deref()
+            .and_then(|value| value.parse().ok())
+        {
+            return vec![algorithm];
+        }
+
+        let pem = data.private_key.as_bytes();
+        [
+            (
+                JwaSigningAlgorithm::Ps256,
+                PS256.signer_from_pem(pem).is_ok(),
+            ),
+            (
+                preferred_rsa_algorithm(pem),
+                RS256.signer_from_pem(pem).is_ok(),
+            ),
+            (
+                JwaSigningAlgorithm::Es256,
+                ES256.signer_from_pem(pem).is_ok(),
+            ),
+            (
+                JwaSigningAlgorithm::Es384,
+                ES384.signer_from_pem(pem).is_ok(),
+            ),
+            (
+                JwaSigningAlgorithm::Es512,
+                ES512.signer_from_pem(pem).is_ok(),
+            ),
+            (
+                JwaSigningAlgorithm::Es256k,
+                ES256K.signer_from_pem(pem).is_ok(),
+            ),
+            (
+                JwaSigningAlgorithm::EdDsa,
+                EdDSA.signer_from_pem(pem).is_ok(),
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(algorithm, supported)| supported.then_some(algorithm))
+        .collect()
+    }
+}
+
+fn preferred_rsa_algorithm(pem: &[u8]) -> JwaSigningAlgorithm {
+    let Ok(key) = openssl::pkey::PKey::private_key_from_pem(pem) else {
+        return JwaSigningAlgorithm::Rs256;
+    };
+    let Ok(rsa) = key.rsa() else {
+        return JwaSigningAlgorithm::Rs256;
+    };
+    let bits = rsa.size() * 8;
+    if bits >= 4096 {
+        JwaSigningAlgorithm::Rs512
+    } else if bits >= 3072 {
+        JwaSigningAlgorithm::Rs384
+    } else {
+        JwaSigningAlgorithm::Rs256
+    }
+}
+
 #[async_trait::async_trait]
 impl crate::application::data_protection::DataProtector for InMemoryDataProtector {
     async fn protect(
@@ -263,6 +337,7 @@ pub(super) fn build_token_service(
             ],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     )
 }

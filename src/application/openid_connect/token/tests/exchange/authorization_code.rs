@@ -78,6 +78,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 
@@ -221,6 +222,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 
@@ -390,6 +392,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 
@@ -458,10 +461,12 @@ async fn exchange_authorization_code_rejects_reused_code() {
     );
     let user_info_service = crate::application::openid_connect::user_info::UserInfoService::new(
         Arc::new(InMemoryUserRepository { user }),
+        Arc::new(InMemoryClientRepository),
         repo.clone(),
         Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
             repo: key_repo,
-            generator: Arc::new(AsymmetricKeyGeneratorImpl),
+            generator: Arc::new(TestAsymmetricKeyGenerator),
+            jwk_generator: test_key_jwk_generator(),
             jwk_repo: None,
         }),
         provider_service(),
@@ -638,6 +643,12 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 None,
             )
             .unwrap();
+        let client = service
+            .client_repo
+            .find_by_oid(Uuid::nil())
+            .await
+            .unwrap()
+            .unwrap();
         let id_token = service
             .sign_id_token(
                 &key_id,
@@ -645,6 +656,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 alg,
                 &issuer,
                 &Uuid::nil().to_string(),
+                &client,
                 &test_user(user_oid),
                 None,
                 None,

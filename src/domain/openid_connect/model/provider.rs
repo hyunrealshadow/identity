@@ -1,8 +1,65 @@
+use std::{fmt, str::FromStr};
+
 use serde::Serialize;
 use url::Url;
 
 fn is_empty<T>(value: &Option<Vec<T>>) -> bool {
     value.as_ref().is_none_or(Vec::is_empty)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubjectType {
+    Public,
+    Pairwise,
+}
+
+impl fmt::Display for SubjectType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Public => "public",
+            Self::Pairwise => "pairwise",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseSubjectTypeError;
+
+impl fmt::Display for ParseSubjectTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid subject type")
+    }
+}
+
+impl std::error::Error for ParseSubjectTypeError {}
+
+impl FromStr for SubjectType {
+    type Err = ParseSubjectTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "public" => Self::Public,
+            "pairwise" => Self::Pairwise,
+            _ => return Err(ParseSubjectTypeError),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenEndpointAuthMethod {
+    ClientSecretBasic,
+    ClientSecretPost,
+    PrivateKeyJwt,
+}
+
+impl fmt::Display for TokenEndpointAuthMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::ClientSecretBasic => "client_secret_basic",
+            Self::ClientSecretPost => "client_secret_post",
+            Self::PrivateKeyJwt => "private_key_jwt",
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -76,7 +133,7 @@ mod tests {
     use serde_json::json;
     use url::Url;
 
-    use super::OpenIdProviderMetadata;
+    use super::{OpenIdProviderMetadata, SubjectType};
 
     #[test]
     fn serializes_required_fields_and_explicit_booleans() {
@@ -148,6 +205,12 @@ mod tests {
             value["response_types_supported"],
             json!(["code", "id_token"])
         );
+    }
+
+    #[test]
+    fn subject_type_serializes_to_discovery_value() {
+        assert_eq!(SubjectType::Public.to_string(), "public");
+        assert_eq!(SubjectType::Pairwise.to_string(), "pairwise");
     }
 
     #[test]

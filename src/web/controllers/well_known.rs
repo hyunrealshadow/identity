@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(json["acr_values_supported"], serde_json::json!(["1"]));
         assert_eq!(
             json["subject_types_supported"],
-            serde_json::json!(["public"])
+            serde_json::json!(["public", "pairwise"])
         );
         assert_eq!(
             json["id_token_signing_alg_values_supported"],

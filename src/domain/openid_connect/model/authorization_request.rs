@@ -54,6 +54,47 @@ impl FromStr for ResponseType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResponseMode {
+    Query,
+    Fragment,
+    FormPost,
+}
+
+impl fmt::Display for ResponseMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Query => "query",
+            Self::Fragment => "fragment",
+            Self::FormPost => "form_post",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseResponseModeError;
+
+impl fmt::Display for ParseResponseModeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid response mode")
+    }
+}
+
+impl std::error::Error for ParseResponseModeError {}
+
+impl FromStr for ResponseMode {
+    type Err = ParseResponseModeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "query" => Self::Query,
+            "fragment" => Self::Fragment,
+            "form_post" => Self::FormPost,
+            _ => return Err(ParseResponseModeError),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PromptValue {
     None,
@@ -167,6 +208,7 @@ pub struct ClaimsRequest {
 #[derive(Debug, Clone)]
 pub struct AuthorizationRequest {
     pub response_type: ResponseType,
+    pub response_mode: Option<ResponseMode>,
     pub client_id: Uuid,
     pub redirect_uri: Url,
     pub scope: ScopeSet,
@@ -189,6 +231,8 @@ pub struct AuthorizationRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuthorizationRequestData {
     pub response_type: String,
+    #[serde(default)]
+    pub response_mode: Option<String>,
     pub client_id: String,
     pub redirect_uri: String,
     pub scope: String,
@@ -205,6 +249,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
     fn from(value: &AuthorizationRequest) -> Self {
         Self {
             response_type: value.response_type.to_string(),
+            response_mode: value.response_mode.map(|mode| mode.to_string()),
             client_id: value.client_id.to_string(),
             redirect_uri: value.redirect_uri.to_string(),
             scope: value.scope.to_scope_string(),
@@ -230,7 +275,7 @@ mod tests {
 
     use super::{
         AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display, PromptValue,
-        ResponseType,
+        ResponseMode, ResponseType,
     };
     use std::str::FromStr;
 
@@ -280,6 +325,23 @@ mod tests {
     }
 
     #[test]
+    fn parse_response_mode_values() {
+        assert_eq!(
+            ResponseMode::from_str("query").unwrap(),
+            ResponseMode::Query
+        );
+        assert_eq!(
+            ResponseMode::from_str("fragment").unwrap(),
+            ResponseMode::Fragment
+        );
+        assert_eq!(
+            ResponseMode::from_str("form_post").unwrap(),
+            ResponseMode::FormPost
+        );
+        assert!("web_message".parse::<ResponseMode>().is_err());
+    }
+
+    #[test]
     fn parse_code_challenge_method() {
         let method = CodeChallengeMethod::from_str("S256").unwrap();
         assert_eq!(method, CodeChallengeMethod::S256);
@@ -289,6 +351,7 @@ mod tests {
     fn authorization_request_basic() {
         let req = AuthorizationRequest {
             response_type: ResponseType::Code,
+            response_mode: Some(ResponseMode::FormPost),
             client_id: Uuid::nil(),
             redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             scope: ScopeSet::parse("openid profile").unwrap(),
@@ -309,6 +372,7 @@ mod tests {
         };
 
         assert_eq!(req.response_type, ResponseType::Code);
+        assert_eq!(req.response_mode, Some(ResponseMode::FormPost));
         assert!(req.scope.openid);
         assert!(req.scope.profile);
     }
@@ -317,6 +381,7 @@ mod tests {
     fn authorization_request_data_round_trips() {
         let request = AuthorizationRequest {
             response_type: ResponseType::Code,
+            response_mode: None,
             client_id: Uuid::nil(),
             redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             scope: ScopeSet::parse("openid email").unwrap(),

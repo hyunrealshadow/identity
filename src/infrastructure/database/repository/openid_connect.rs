@@ -81,7 +81,12 @@ fn to_metadata(
         policy_uri: parse_optional_url(model.policy_uri.as_deref())?,
         tos_uri: parse_optional_url(model.tos_uri.as_deref())?,
         sector_identifier_uri: parse_optional_url(model.sector_identifier_uri.as_deref())?,
-        subject_type: model.subject_type,
+        subject_type: model
+            .subject_type
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(OpenIdConnectClientRepositoryError::ParseSubjectType)?,
         id_token_signed_response_alg: model.id_token_signed_response_alg,
         id_token_encrypted_response_alg: model.id_token_encrypted_response_alg,
         id_token_encrypted_response_enc: model.id_token_encrypted_response_enc,

@@ -10,7 +10,7 @@ use super::{
     super::shared::load_active_sessions,
     authorize_extractor::{authorize_input_error, extract_authorize_request},
     authorize_interaction::determine_authorize_flow,
-    authorize_response::render_authorize_error_page,
+    authorize_response::{render_authorize_error_page, render_form_post_response},
 };
 
 fn render_error(
@@ -36,6 +36,10 @@ fn render_error(
                 } else {
                     error_response
                 };
+                if raw.response_mode.as_deref() == Some("form_post") {
+                    return render_form_post_response(ctx, headers, &uri, &error_response);
+                }
+
                 let error_response = match raw
                     .response_type
                     .as_deref()
@@ -119,7 +123,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).into()),
     };
 
-    Ok(flow.into_response().into())
+    Ok(flow.into_response(&ctx, &headers).into())
 }
 
 #[cfg(test)]
@@ -127,7 +131,7 @@ mod tests {
     use crate::domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
     };
-    use http::{StatusCode, header};
+    use http::{HeaderMap, StatusCode, header};
     use salvo::{
         Service,
         test::{ResponseExt, TestClient},
@@ -185,6 +189,7 @@ mod tests {
     async fn authorize_redirects_oauth_error_after_redirect_uri_validation() {
         let request = AuthorizationRequest {
             response_type: ResponseType::Code,
+            response_mode: None,
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
             scope: ScopeSet::parse("openid").unwrap(),
@@ -205,6 +210,8 @@ mod tests {
         };
 
         let response = super::super::authorize_response::redirect_oauth_error_response(
+            &crate::boot::test_app_state_with_mock_settings().await,
+            &HeaderMap::new(),
             &request,
             OAuthErrorCode::LoginRequired,
         );
@@ -218,6 +225,7 @@ mod tests {
     async fn authorize_redirects_implicit_oauth_error_in_fragment() {
         let request = AuthorizationRequest {
             response_type: ResponseType::IdToken,
+            response_mode: None,
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
             scope: ScopeSet::parse("openid").unwrap(),
@@ -238,6 +246,8 @@ mod tests {
         };
 
         let response = super::super::authorize_response::redirect_oauth_error_response(
+            &crate::boot::test_app_state_with_mock_settings().await,
+            &HeaderMap::new(),
             &request,
             OAuthErrorCode::LoginRequired,
         );

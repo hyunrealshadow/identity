@@ -6,6 +6,24 @@ impl TokenService {
         client_id: &str,
         client_secret: &str,
     ) -> Result<Uuid, AppError> {
+        self.authenticate_client_secret(client_id, client_secret)
+            .await
+    }
+
+    pub(super) async fn authenticate_client_secret_post(
+        &self,
+        client_id: &str,
+        client_secret: &str,
+    ) -> Result<Uuid, AppError> {
+        self.authenticate_client_secret(client_id, client_secret)
+            .await
+    }
+
+    async fn authenticate_client_secret(
+        &self,
+        client_id: &str,
+        client_secret: &str,
+    ) -> Result<Uuid, AppError> {
         let client_oid = Uuid::parse_str(client_id).map_err(|error| {
             AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
         })?;
@@ -81,8 +99,25 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
         };
 
-        self.authenticate_client_secret_basic(client_id, client_secret)
+        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
+            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
+        })?;
+        let client = self
+            .client_repo
+            .find_by_oid(client_oid)
             .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+
+        if client.metadata().token_endpoint_auth_method.as_deref() == Some("client_secret_basic") {
+            self.authenticate_client_secret_basic(client_id, client_secret)
+                .await
+        } else {
+            self.authenticate_client_secret_post(client_id, client_secret)
+                .await
+        }
     }
 
     pub(super) async fn authenticate_private_key_jwt(

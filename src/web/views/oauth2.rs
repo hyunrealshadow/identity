@@ -51,6 +51,20 @@ pub struct AuthorizeErrorPageData {
     pub details: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct FormPostField {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FormPostPageData {
+    pub title: String,
+    pub message: String,
+    pub action: String,
+    pub fields: Vec<FormPostField>,
+}
+
 pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
     let mut scopes = Vec::new();
 

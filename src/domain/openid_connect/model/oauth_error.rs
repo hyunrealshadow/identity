@@ -12,6 +12,12 @@ pub enum OAuthErrorCode {
     LoginRequired,
     ConsentRequired,
     InteractionRequired,
+    AccountSelectionRequired,
+    InvalidRequestUri,
+    InvalidRequestObject,
+    RequestNotSupported,
+    RequestUriNotSupported,
+    RegistrationNotSupported,
 }
 
 impl fmt::Display for OAuthErrorCode {
@@ -27,6 +33,12 @@ impl fmt::Display for OAuthErrorCode {
             Self::LoginRequired => "login_required",
             Self::ConsentRequired => "consent_required",
             Self::InteractionRequired => "interaction_required",
+            Self::AccountSelectionRequired => "account_selection_required",
+            Self::InvalidRequestUri => "invalid_request_uri",
+            Self::InvalidRequestObject => "invalid_request_object",
+            Self::RequestNotSupported => "request_not_supported",
+            Self::RequestUriNotSupported => "request_uri_not_supported",
+            Self::RegistrationNotSupported => "registration_not_supported",
         })
     }
 }
@@ -57,6 +69,12 @@ impl FromStr for OAuthErrorCode {
             "login_required" => Self::LoginRequired,
             "consent_required" => Self::ConsentRequired,
             "interaction_required" => Self::InteractionRequired,
+            "account_selection_required" => Self::AccountSelectionRequired,
+            "invalid_request_uri" => Self::InvalidRequestUri,
+            "invalid_request_object" => Self::InvalidRequestObject,
+            "request_not_supported" => Self::RequestNotSupported,
+            "request_uri_not_supported" => Self::RequestUriNotSupported,
+            "registration_not_supported" => Self::RegistrationNotSupported,
             _ => return Err(ParseOAuthErrorCodeError),
         })
     }
@@ -156,6 +174,30 @@ mod tests {
             OAuthErrorCode::from_str("interaction_required").unwrap(),
             OAuthErrorCode::InteractionRequired
         );
+        assert_eq!(
+            OAuthErrorCode::from_str("account_selection_required").unwrap(),
+            OAuthErrorCode::AccountSelectionRequired
+        );
+        assert_eq!(
+            OAuthErrorCode::from_str("invalid_request_uri").unwrap(),
+            OAuthErrorCode::InvalidRequestUri
+        );
+        assert_eq!(
+            OAuthErrorCode::from_str("invalid_request_object").unwrap(),
+            OAuthErrorCode::InvalidRequestObject
+        );
+        assert_eq!(
+            OAuthErrorCode::from_str("request_not_supported").unwrap(),
+            OAuthErrorCode::RequestNotSupported
+        );
+        assert_eq!(
+            OAuthErrorCode::from_str("request_uri_not_supported").unwrap(),
+            OAuthErrorCode::RequestUriNotSupported
+        );
+        assert_eq!(
+            OAuthErrorCode::from_str("registration_not_supported").unwrap(),
+            OAuthErrorCode::RegistrationNotSupported
+        );
     }
 
     #[test]
@@ -165,6 +207,14 @@ mod tests {
             "invalid_request"
         );
         assert_eq!(OAuthErrorCode::LoginRequired.to_string(), "login_required");
+        assert_eq!(
+            OAuthErrorCode::AccountSelectionRequired.to_string(),
+            "account_selection_required"
+        );
+        assert_eq!(
+            OAuthErrorCode::RegistrationNotSupported.to_string(),
+            "registration_not_supported"
+        );
     }
 
     #[test]

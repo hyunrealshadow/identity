@@ -1,7 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use josekit::{jws::RS256, jwt};
+use josekit::{
+    jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512},
+    jwt,
+};
 use url::Url;
 use uuid::Uuid;
 
@@ -9,17 +12,17 @@ use crate::{
     application::{
         data_protection::DataProtector,
         error::{AppError, codes::authorize::AuthorizeErrorCode},
-        openid_connect::provider::OpenIdProviderService,
+        openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
     domain::{
         auth::repository::LoginRepository,
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
-        key::{KeyData, repository::KeyRepository},
+        key::{JwaSigningAlgorithm, KeyData, repository::KeyRepository},
         openid_connect::{
             AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display,
             OAuthErrorCode, OAuthErrorResponse, OpenIdConnectClient, OpenIdConnectClientRepository,
             OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
-            OpenIdConnectCredentialType, PromptValue, ResponseType, ScopeSet,
+            OpenIdConnectCredentialType, PromptValue, ResponseMode, ResponseType, ScopeSet,
             model::authorization_request::ClaimsRequest, model::claim::JwtClaimNames,
         },
         user::{UserOid, repository::UserRepository},
@@ -29,6 +32,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct AuthorizationRequestParams {
     pub response_type: String,
+    pub response_mode: Option<String>,
     pub client_id: String,
     pub redirect_uri: String,
     pub scope: String,
@@ -57,6 +61,7 @@ pub struct AuthorizeService {
     user_repo: Arc<dyn UserRepository>,
     key_repo: Arc<dyn KeyRepository>,
     provider_service: Arc<OpenIdProviderService>,
+    signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     http_client: reqwest::Client,
     data_protector: Arc<dyn DataProtector>,
 }
@@ -70,6 +75,7 @@ impl AuthorizeService {
         user_repo: Arc<dyn UserRepository>,
         key_repo: Arc<dyn KeyRepository>,
         provider_service: Arc<OpenIdProviderService>,
+        signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
         data_protector: Arc<dyn DataProtector>,
     ) -> Self {
         Self {
@@ -80,6 +86,7 @@ impl AuthorizeService {
             user_repo,
             key_repo,
             provider_service,
+            signing_algorithm_detector,
             http_client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(5))

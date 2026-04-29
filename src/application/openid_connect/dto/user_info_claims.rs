@@ -6,6 +6,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
+use crate::domain::openid_connect::model::claim::JwtClaimNames;
+
 fn serialize_datetime_as_unix<S>(
     dt: &Option<DateTime<Utc>>,
     serializer: S,
@@ -241,60 +243,60 @@ impl UserInfoClaims {
     ) {
         let essential_claims = Self::extract_essential_claims(claims_request, claim_sections);
 
-        if !scope.profile && !essential_claims.contains(&"name") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::NAME) {
             self.name = None;
         }
-        if !scope.profile && !essential_claims.contains(&"given_name") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::GIVEN_NAME) {
             self.given_name = None;
         }
-        if !scope.profile && !essential_claims.contains(&"family_name") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::FAMILY_NAME) {
             self.family_name = None;
         }
-        if !scope.profile && !essential_claims.contains(&"middle_name") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::MIDDLE_NAME) {
             self.middle_name = None;
         }
-        if !scope.profile && !essential_claims.contains(&"nickname") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::NICKNAME) {
             self.nickname = None;
         }
-        if !scope.profile && !essential_claims.contains(&"profile") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::PROFILE) {
             self.profile = None;
         }
-        if !scope.profile && !essential_claims.contains(&"picture") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::PICTURE) {
             self.picture = None;
         }
-        if !scope.profile && !essential_claims.contains(&"website") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::WEBSITE) {
             self.website = None;
         }
-        if !scope.profile && !essential_claims.contains(&"gender") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::GENDER) {
             self.gender = None;
         }
-        if !scope.profile && !essential_claims.contains(&"birthdate") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::BIRTHDATE) {
             self.birthdate = None;
         }
-        if !scope.profile && !essential_claims.contains(&"zoneinfo") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::ZONEINFO) {
             self.zoneinfo = None;
         }
-        if !scope.profile && !essential_claims.contains(&"locale") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::LOCALE) {
             self.locale = None;
         }
-        if !scope.profile && !essential_claims.contains(&"preferred_username") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::PREFERRED_USERNAME) {
             self.preferred_username = None;
         }
-        if !scope.profile && !essential_claims.contains(&"updated_at") {
+        if !scope.profile && !essential_claims.contains(&JwtClaimNames::UPDATED_AT) {
             self.updated_at = None;
         }
 
-        if !scope.email && !essential_claims.contains(&"email") {
+        if !scope.email && !essential_claims.contains(&JwtClaimNames::EMAIL) {
             self.email = None;
             self.email_verified = None;
         }
 
-        if !scope.phone && !essential_claims.contains(&"phone_number") {
+        if !scope.phone && !essential_claims.contains(&JwtClaimNames::PHONE_NUMBER) {
             self.phone_number = None;
             self.phone_number_verified = None;
         }
 
-        if !scope.address && !essential_claims.contains(&"address") {
+        if !scope.address && !essential_claims.contains(&JwtClaimNames::ADDRESS) {
             self.address = None;
         }
     }
@@ -303,41 +305,55 @@ impl UserInfoClaims {
         claims_request: Option<&serde_json::Value>,
         claim_sections: &[&str],
     ) -> Vec<&'static str> {
+        let Some(cr) = claims_request else {
+            return Vec::new();
+        };
         let mut essential = Vec::new();
-        if let Some(cr) = claims_request {
-            for section in claim_sections {
-                if let Some(claims_section) = cr.get(section) {
-                    if let Some(obj) = claims_section.as_object() {
-                        for (claim_name, claim_spec) in obj {
-                            if let Some(spec_obj) = claim_spec.as_object() {
-                                if spec_obj.get("essential").and_then(|v| v.as_bool()) == Some(true)
-                                {
-                                    match claim_name.as_str() {
-                                        "name" => essential.push("name"),
-                                        "given_name" => essential.push("given_name"),
-                                        "family_name" => essential.push("family_name"),
-                                        "middle_name" => essential.push("middle_name"),
-                                        "nickname" => essential.push("nickname"),
-                                        "profile" => essential.push("profile"),
-                                        "picture" => essential.push("picture"),
-                                        "website" => essential.push("website"),
-                                        "gender" => essential.push("gender"),
-                                        "birthdate" => essential.push("birthdate"),
-                                        "zoneinfo" => essential.push("zoneinfo"),
-                                        "locale" => essential.push("locale"),
-                                        "preferred_username" => {
-                                            essential.push("preferred_username")
-                                        }
-                                        "email" => essential.push("email"),
-                                        "phone_number" => essential.push("phone_number"),
-                                        "address" => essential.push("address"),
-                                        "updated_at" => essential.push("updated_at"),
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
+        for section in claim_sections {
+            let Some(claims_section) = cr.get(section) else {
+                continue;
+            };
+            let Some(obj) = claims_section.as_object() else {
+                continue;
+            };
+            for (claim_name, claim_spec) in obj {
+                let Some(spec_obj) = claim_spec.as_object() else {
+                    continue;
+                };
+                if spec_obj.get("essential").and_then(|v| v.as_bool()) != Some(true) {
+                    continue;
+                }
+                match claim_name.as_str() {
+                    n if n == JwtClaimNames::NAME => essential.push(JwtClaimNames::NAME),
+                    n if n == JwtClaimNames::GIVEN_NAME => {
+                        essential.push(JwtClaimNames::GIVEN_NAME)
                     }
+                    n if n == JwtClaimNames::FAMILY_NAME => {
+                        essential.push(JwtClaimNames::FAMILY_NAME)
+                    }
+                    n if n == JwtClaimNames::MIDDLE_NAME => {
+                        essential.push(JwtClaimNames::MIDDLE_NAME)
+                    }
+                    n if n == JwtClaimNames::NICKNAME => essential.push(JwtClaimNames::NICKNAME),
+                    n if n == JwtClaimNames::PROFILE => essential.push(JwtClaimNames::PROFILE),
+                    n if n == JwtClaimNames::PICTURE => essential.push(JwtClaimNames::PICTURE),
+                    n if n == JwtClaimNames::WEBSITE => essential.push(JwtClaimNames::WEBSITE),
+                    n if n == JwtClaimNames::GENDER => essential.push(JwtClaimNames::GENDER),
+                    n if n == JwtClaimNames::BIRTHDATE => essential.push(JwtClaimNames::BIRTHDATE),
+                    n if n == JwtClaimNames::ZONEINFO => essential.push(JwtClaimNames::ZONEINFO),
+                    n if n == JwtClaimNames::LOCALE => essential.push(JwtClaimNames::LOCALE),
+                    n if n == JwtClaimNames::PREFERRED_USERNAME => {
+                        essential.push(JwtClaimNames::PREFERRED_USERNAME)
+                    }
+                    n if n == JwtClaimNames::EMAIL => essential.push(JwtClaimNames::EMAIL),
+                    n if n == JwtClaimNames::PHONE_NUMBER => {
+                        essential.push(JwtClaimNames::PHONE_NUMBER)
+                    }
+                    n if n == JwtClaimNames::ADDRESS => essential.push(JwtClaimNames::ADDRESS),
+                    n if n == JwtClaimNames::UPDATED_AT => {
+                        essential.push(JwtClaimNames::UPDATED_AT)
+                    }
+                    _ => {}
                 }
             }
         }

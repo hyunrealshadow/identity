@@ -12,6 +12,7 @@ async fn create_authorization_request_returns_oid() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -38,6 +39,7 @@ async fn create_login_flow_returns_protected_id() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -68,6 +70,7 @@ async fn load_authorization_request_returns_stored_data() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -96,6 +99,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -128,6 +132,7 @@ async fn create_authorization_request_persists_login_hint() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -155,6 +160,7 @@ async fn deny_authorization_request_returns_access_denied_redirect() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 

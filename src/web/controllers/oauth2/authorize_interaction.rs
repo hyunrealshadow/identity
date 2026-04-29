@@ -6,6 +6,7 @@ use salvo::Response;
 
 use crate::{
     application::{error::AppError, openid_connect::authorize::AuthorizeService},
+    boot::AppState,
     domain::{
         auth::model::ActiveSession,
         openid_connect::{AuthorizationRequest, OAuthErrorCode, OpenIdConnectClient, PromptValue},
@@ -22,6 +23,7 @@ pub enum FlowDecision {
     },
     AutoApprove {
         redirect_uri: Url,
+        response_mode: Option<crate::domain::openid_connect::ResponseMode>,
     },
     ConsentDenied {
         request: AuthorizationRequest,
@@ -30,7 +32,7 @@ pub enum FlowDecision {
 }
 
 impl FlowDecision {
-    pub fn into_response(self) -> Response {
+    pub fn into_response(self, ctx: &AppState, headers: &http::HeaderMap) -> Response {
         match self {
             FlowDecision::LoginRequired { login_id } => {
                 crate::web::controllers::response::redirect_to_response(&format!(
@@ -42,11 +44,23 @@ impl FlowDecision {
                     "/oauth2/authorize/consent?login_id={login_id}"
                 ))
             }
-            FlowDecision::AutoApprove { redirect_uri } => {
-                crate::web::controllers::response::redirect_to_response(redirect_uri.as_str())
-            }
+            FlowDecision::AutoApprove {
+                redirect_uri,
+                response_mode,
+            } => match response_mode {
+                Some(crate::domain::openid_connect::ResponseMode::FormPost) => {
+                    super::authorize_response::render_form_post_redirect_response(
+                        ctx,
+                        headers,
+                        &redirect_uri,
+                    )
+                }
+                _ => crate::web::controllers::response::redirect_to_response(redirect_uri.as_str()),
+            },
             FlowDecision::ConsentDenied { request, error } => {
-                super::authorize_response::redirect_oauth_error_response(&request, error)
+                super::authorize_response::redirect_oauth_error_response(
+                    ctx, headers, &request, error,
+                )
             }
         }
     }
@@ -146,7 +160,10 @@ pub async fn determine_authorize_flow(
             )
             .await?;
 
-        return Ok(FlowDecision::AutoApprove { redirect_uri });
+        return Ok(FlowDecision::AutoApprove {
+            redirect_uri,
+            response_mode: request.response_mode,
+        });
     }
 
     if has_prompt(request.prompt.as_ref(), PromptValue::None) {

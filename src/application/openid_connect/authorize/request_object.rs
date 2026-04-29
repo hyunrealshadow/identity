@@ -1,4 +1,5 @@
 use super::*;
+use josekit::{JoseError, jws::JwsVerifier};
 
 impl AuthorizeService {
     pub(super) async fn resolve_request_object(
@@ -138,8 +139,6 @@ impl AuthorizeService {
             .unwrap_or("none");
         let payload = match algorithm {
             "none" => {
-                // Unsigned request object (alg=none): decode payload without
-                // signature verification per RFC 9101 §6.1.
                 let parts: Vec<&str> = raw.split('.').collect();
                 if parts.len() < 2 {
                     return Err(AppError::from_code(
@@ -166,11 +165,9 @@ impl AuthorizeService {
                 }
                 jwt_payload
             }
-            "RS256" => self.verify_rs256_request_object(client, raw).await?,
             _ => {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectAlgUnsupported,
-                ));
+                self.verify_signed_request_object(client, raw, algorithm)
+                    .await?
             }
         };
 
@@ -207,10 +204,11 @@ impl AuthorizeService {
         Ok(serde_json::Value::Object(value))
     }
 
-    async fn verify_rs256_request_object(
+    async fn verify_signed_request_object(
         &self,
         client: &OpenIdConnectClient,
         raw: &str,
+        algorithm: &str,
     ) -> Result<jwt::JwtPayload, AppError> {
         let credentials = self
             .credential_repo
@@ -225,13 +223,7 @@ impl AuthorizeService {
 
         for credential in credentials {
             if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data {
-                let verifier = RS256
-                    .verifier_from_pem(public_key.as_bytes())
-                    .map_err(|error| {
-                        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
-                            .with_source(error)
-                    })?;
-                if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
+                if let Ok(payload) = decode_request_object(raw, algorithm, public_key.as_bytes()) {
                     return Ok(payload);
                 }
             }
@@ -253,14 +245,9 @@ impl AuthorizeService {
                 credential.data
             {
                 for public_key in public_keys {
-                    let verifier =
-                        RS256
-                            .verifier_from_pem(public_key.as_bytes())
-                            .map_err(|error| {
-                                AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
-                                    .with_source(error)
-                            })?;
-                    if let Ok((payload, _)) = jwt::decode_with_verifier(raw, &verifier) {
+                    if let Ok(payload) =
+                        decode_request_object(raw, algorithm, public_key.as_bytes())
+                    {
                         return Ok(payload);
                     }
                 }
@@ -281,6 +268,12 @@ impl AuthorizeService {
             .and_then(|value| value.as_str())
         {
             params.response_type = value.to_string();
+        }
+        if let Some(value) = payload
+            .get("response_mode")
+            .and_then(|value| value.as_str())
+        {
+            params.response_mode = Some(value.to_string());
         }
         if let Some(value) = payload.get("client_id").and_then(|value| value.as_str()) {
             params.client_id = value.to_string();
@@ -357,6 +350,11 @@ impl AuthorizeService {
             payload,
             "response_type",
             params.response_type.as_str(),
+        )?;
+        Self::validate_optional_request_object_field(
+            payload,
+            "response_mode",
+            params.response_mode.as_deref(),
         )?;
         Self::validate_required_request_object_field(
             payload,
@@ -620,4 +618,63 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid).with_source(error)
         })
     }
+}
+
+fn decode_request_object(
+    raw: &str,
+    alg: &str,
+    public_key_pem: &[u8],
+) -> Result<jwt::JwtPayload, AppError> {
+    use crate::domain::key::JwaSigningAlgorithm;
+    let jwa: JwaSigningAlgorithm = alg
+        .parse()
+        .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported))?;
+    match jwa {
+        JwaSigningAlgorithm::Rs256 => {
+            decode_with_verifier(raw, RS256.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Rs384 => {
+            decode_with_verifier(raw, RS384.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Rs512 => {
+            decode_with_verifier(raw, RS512.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Ps256 => {
+            decode_with_verifier(raw, PS256.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Ps384 => {
+            decode_with_verifier(raw, PS384.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Ps512 => {
+            decode_with_verifier(raw, PS512.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es256 => {
+            decode_with_verifier(raw, ES256.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es384 => {
+            decode_with_verifier(raw, ES384.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es512 => {
+            decode_with_verifier(raw, ES512.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::Es256k => {
+            decode_with_verifier(raw, ES256K.verifier_from_pem(public_key_pem))
+        }
+        JwaSigningAlgorithm::EdDsa => {
+            decode_with_verifier(raw, EdDSA.verifier_from_pem(public_key_pem))
+        }
+    }
+}
+
+fn decode_with_verifier<V: JwsVerifier>(
+    raw: &str,
+    verifier: Result<V, JoseError>,
+) -> Result<jwt::JwtPayload, AppError> {
+    let verifier = verifier.map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid).with_source(error)
+    })?;
+    let (payload, _) = jwt::decode_with_verifier(raw, &verifier).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed).with_source(error)
+    })?;
+    Ok(payload)
 }

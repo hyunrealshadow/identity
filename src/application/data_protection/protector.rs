@@ -8,7 +8,25 @@ use tracing::warn;
 use crate::domain::data_protection::DataProtectionError;
 use crate::domain::data_protection::{KeyRing, ProtectedPayload, Purpose, derive_subkey};
 use crate::domain::key::repository::KeyRepository;
-use crate::infrastructure::crypto::xchacha20::{self, KEY_SIZE};
+
+pub const DATA_PROTECTION_KEY_SIZE: usize = 32;
+
+pub trait DataProtectionCipher: Send + Sync {
+    fn encrypt(
+        &self,
+        key: &[u8; DATA_PROTECTION_KEY_SIZE],
+        plaintext: &[u8],
+        aad: &[u8],
+    ) -> Result<([u8; 24], Vec<u8>), DataProtectionError>;
+
+    fn decrypt(
+        &self,
+        key: &[u8; DATA_PROTECTION_KEY_SIZE],
+        nonce: &[u8; 24],
+        ciphertext: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, DataProtectionError>;
+}
 
 #[async_trait]
 pub trait DataProtector: Send + Sync {
@@ -19,11 +37,12 @@ pub trait DataProtector: Send + Sync {
 
 pub struct DataProtectorImpl {
     key_repo: Arc<dyn KeyRepository>,
+    cipher: Arc<dyn DataProtectionCipher>,
 }
 
 impl DataProtectorImpl {
-    pub fn new(key_repo: Arc<dyn KeyRepository>) -> Self {
-        Self { key_repo }
+    pub fn new(key_repo: Arc<dyn KeyRepository>, cipher: Arc<dyn DataProtectionCipher>) -> Self {
+        Self { key_repo, cipher }
     }
 }
 
@@ -53,8 +72,7 @@ impl DataProtector for DataProtectorImpl {
         let subkey = derive_subkey(&master_key, &purpose.hkdf_info());
         let aad = ProtectedPayload::new(key.oid, [0u8; 24], vec![]).aad(&purpose_hash);
 
-        let (nonce, ciphertext) = xchacha20::encrypt(&subkey, plaintext, &aad)
-            .map_err(|_| DataProtectionError::EncryptionFailed)?;
+        let (nonce, ciphertext) = self.cipher.encrypt(&subkey, plaintext, &aad)?;
 
         let payload = ProtectedPayload::new(key.oid, nonce, ciphertext);
         Ok(payload.encode())
@@ -91,14 +109,18 @@ impl DataProtector for DataProtectorImpl {
         let master_key = decode_master_key(key)?;
         let subkey = derive_subkey(&master_key, &purpose.hkdf_info());
 
-        xchacha20::decrypt(&subkey, &payload.nonce, &payload.ciphertext, &aad).map_err(|_| {
-            warn!("decryption failed for protected payload");
-            DataProtectionError::InvalidProtectedPayload
-        })
+        self.cipher
+            .decrypt(&subkey, &payload.nonce, &payload.ciphertext, &aad)
+            .map_err(|_| {
+                warn!("decryption failed for protected payload");
+                DataProtectionError::InvalidProtectedPayload
+            })
     }
 }
 
-fn decode_master_key(key: &crate::domain::key::Key) -> Result<[u8; KEY_SIZE], DataProtectionError> {
+fn decode_master_key(
+    key: &crate::domain::key::Key,
+) -> Result<[u8; DATA_PROTECTION_KEY_SIZE], DataProtectionError> {
     use crate::domain::key::KeyData;
     let KeyData::Symmetric(sym_data) = &key.data else {
         return Err(DataProtectionError::Internal(Box::new(
@@ -110,13 +132,17 @@ fn decode_master_key(key: &crate::domain::key::Key) -> Result<[u8; KEY_SIZE], Da
         .decode(&sym_data.key)
         .map_err(|e| DataProtectionError::Internal(Box::new(e)))?;
 
-    if raw.len() != KEY_SIZE {
+    if raw.len() != DATA_PROTECTION_KEY_SIZE {
         return Err(DataProtectionError::Internal(Box::new(
-            std::io::Error::other(format!("expected {}-byte key, got {}", KEY_SIZE, raw.len())),
+            std::io::Error::other(format!(
+                "expected {}-byte key, got {}",
+                DATA_PROTECTION_KEY_SIZE,
+                raw.len()
+            )),
         )));
     }
 
-    let mut out = [0u8; KEY_SIZE];
+    let mut out = [0u8; DATA_PROTECTION_KEY_SIZE];
     out.copy_from_slice(&raw);
     Ok(out)
 }
@@ -136,7 +162,52 @@ mod tests {
         repository::{KeyRepository, KeyRepositoryError},
     };
 
-    use super::{DataProtector, DataProtectorImpl};
+    use super::{DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl};
+
+    struct TestCipher;
+
+    impl DataProtectionCipher for TestCipher {
+        fn encrypt(
+            &self,
+            key: &[u8; DATA_PROTECTION_KEY_SIZE],
+            plaintext: &[u8],
+            aad: &[u8],
+        ) -> Result<([u8; 24], Vec<u8>), DataProtectionError> {
+            let mut ciphertext = plaintext.to_vec();
+            ciphertext.extend_from_slice(&tag(key, aad));
+            Ok(([0u8; 24], ciphertext))
+        }
+
+        fn decrypt(
+            &self,
+            key: &[u8; DATA_PROTECTION_KEY_SIZE],
+            _nonce: &[u8; 24],
+            ciphertext: &[u8],
+            aad: &[u8],
+        ) -> Result<Vec<u8>, DataProtectionError> {
+            let expected = tag(key, aad);
+            if ciphertext.len() < expected.len() {
+                return Err(DataProtectionError::InvalidProtectedPayload);
+            }
+            let split_at = ciphertext.len() - expected.len();
+            if ciphertext[split_at..] != expected {
+                return Err(DataProtectionError::InvalidProtectedPayload);
+            }
+            Ok(ciphertext[..split_at].to_vec())
+        }
+    }
+
+    fn tag(key: &[u8; DATA_PROTECTION_KEY_SIZE], aad: &[u8]) -> [u8; 16] {
+        let mut tag = [0u8; 16];
+        for (index, byte) in key.iter().chain(aad.iter()).enumerate() {
+            tag[index % 4] ^= byte;
+        }
+        tag
+    }
+
+    fn test_cipher() -> Arc<dyn DataProtectionCipher> {
+        Arc::new(TestCipher)
+    }
 
     struct MockKeyRepo {
         keys: Vec<Key>,
@@ -216,7 +287,7 @@ mod tests {
         let now = Utc::now();
         let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
         let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo);
+        let protector = DataProtectorImpl::new(repo, test_cipher());
 
         let plaintext = b"secret session data";
         let token = protector.protect("session", plaintext).await.unwrap();
@@ -230,7 +301,7 @@ mod tests {
         let now = Utc::now();
         let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
         let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo);
+        let protector = DataProtectorImpl::new(repo, test_cipher());
 
         let plaintext = b"secret";
         let token = protector.protect("session", plaintext).await.unwrap();
@@ -251,7 +322,7 @@ mod tests {
             Some(now),
         );
         let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo);
+        let protector = DataProtectorImpl::new(repo, test_cipher());
 
         let result = protector.protect("session", b"secret").await;
         assert!(matches!(result, Err(DataProtectionError::KeyRingEmpty)));
@@ -268,7 +339,7 @@ mod tests {
         let repo = Arc::new(MockKeyRepo {
             keys: vec![valid_key],
         });
-        let protector = DataProtectorImpl::new(repo);
+        let protector = DataProtectorImpl::new(repo, test_cipher());
 
         let plaintext = b"secret";
         let token = protector.protect("session", plaintext).await.unwrap();
@@ -283,7 +354,7 @@ mod tests {
         let expired_repo = Arc::new(MockKeyRepo {
             keys: vec![expired_key],
         });
-        let expired_protector = DataProtectorImpl::new(expired_repo);
+        let expired_protector = DataProtectorImpl::new(expired_repo, test_cipher());
 
         let decrypted = expired_protector
             .unprotect("session", &token)
@@ -303,7 +374,7 @@ mod tests {
         let repo = Arc::new(MockKeyRepo {
             keys: vec![expired],
         });
-        let protector = DataProtectorImpl::new(repo);
+        let protector = DataProtectorImpl::new(repo, test_cipher());
 
         let result = protector.protect("session", b"test").await;
         assert!(matches!(result, Err(DataProtectionError::KeyRingEmpty)));
@@ -314,7 +385,7 @@ mod tests {
         let now = Utc::now();
         let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
         let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo);
+        let protector = DataProtectorImpl::new(repo, test_cipher());
 
         let plaintext = b"secret";
         let mut token = protector.protect("session", plaintext).await.unwrap();

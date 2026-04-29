@@ -11,6 +11,7 @@ async fn validate_request_rejects_missing_openid_scope() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -29,6 +30,7 @@ async fn validate_request_rejects_unknown_scope() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -49,11 +51,13 @@ async fn validate_request_reports_missing_required_fields() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
     let params = AuthorizationRequestParams {
         response_type: String::new(),
+        response_mode: None,
         client_id: String::new(),
         redirect_uri: String::new(),
         scope: String::new(),
@@ -93,6 +97,7 @@ async fn validate_request_rejects_request_and_request_uri_together() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
     let params = AuthorizationRequestParams {
@@ -116,6 +121,7 @@ async fn validate_request_accepts_registered_redirect_uri() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -136,6 +142,7 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -157,6 +164,7 @@ async fn prompt_none_combined_with_other_value_rejects() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -181,6 +189,7 @@ async fn prompt_none_alone_is_accepted() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
@@ -206,6 +215,7 @@ async fn validate_request_rejects_unassigned_openid_scope() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 

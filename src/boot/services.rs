@@ -14,10 +14,14 @@ use crate::application::{
 };
 use crate::infrastructure::{
     auth::{otp::TotpVerifierImpl, password::PasswordHasherImpl},
-    crypto::key::AsymmetricKeyGeneratorImpl,
+    crypto::{
+        certificate_generator::CertificateGeneratorImpl,
+        data_protection::XChaCha20DataProtectionCipher, key::AsymmetricKeyGeneratorImpl,
+        key_jwk::KeyJwkGeneratorImpl, signing_algorithm::SigningAlgorithmDetectorImpl,
+    },
     database::repository::{
-        client_authorization::ClientAuthorizationRepositoryImpl, key::KeyRepositoryImpl,
-        key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
+        client_authorization::ClientAuthorizationRepositoryImpl, install::InstallPersistenceImpl,
+        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
         session::SessionRepositoryImpl, user::UserRepositoryImpl,
@@ -79,7 +83,12 @@ impl AppServices {
     #[must_use]
     pub fn from_db(db: DatabaseConnection, settings: &AppRuntimeSettings) -> Self {
         let key_repo = Arc::new(KeyRepositoryImpl::new(db.clone()));
-        let data_protector = Arc::new(DataProtectorImpl::new(key_repo.clone()));
+        let signing_algorithm_detector = Arc::new(SigningAlgorithmDetectorImpl);
+        let key_jwk_generator = Arc::new(KeyJwkGeneratorImpl);
+        let data_protector = Arc::new(DataProtectorImpl::new(
+            key_repo.clone(),
+            Arc::new(XChaCha20DataProtectionCipher),
+        ));
 
         Self {
             login: LoginService {
@@ -97,17 +106,20 @@ impl AppServices {
             key: AsymmetricKeyService {
                 repo: key_repo.clone(),
                 generator: Arc::new(AsymmetricKeyGeneratorImpl),
+                jwk_generator: key_jwk_generator.clone(),
                 jwk_repo: Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
             },
             install: InstallService {
-                db: db.clone(),
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 password_hash_options: settings.password_hash_options(),
                 installation_setting: settings.installation(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
+                certificate_generator: Arc::new(CertificateGeneratorImpl),
+                persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
             },
             oidc: OpenIdProviderService::new(settings.installation())
-                .with_key_repo(key_repo.clone()),
+                .with_key_repo(key_repo.clone())
+                .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
             oidc_authorize: AuthorizeService::new(
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),
@@ -116,6 +128,7 @@ impl AppServices {
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(KeyRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
+                signing_algorithm_detector.clone(),
                 data_protector.clone(),
             ),
             oidc_token: TokenService::new(
@@ -125,14 +138,17 @@ impl AppServices {
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
+                signing_algorithm_detector.clone(),
                 data_protector.clone(),
             ),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
+                Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(AsymmetricKeyService {
                     repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                     generator: Arc::new(AsymmetricKeyGeneratorImpl),
+                    jwk_generator: key_jwk_generator,
                     jwk_repo: None,
                 }),
                 Arc::new(OpenIdProviderService::new(settings.installation())),

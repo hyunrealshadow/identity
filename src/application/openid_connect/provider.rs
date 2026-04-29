@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use josekit::jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512};
 use url::Url;
 
 use crate::{
@@ -9,9 +8,9 @@ use crate::{
         setting::runtime::SettingProvider,
     },
     domain::{
-        key::{Key, KeyData, repository::KeyRepository},
+        key::{JwaSigningAlgorithm, Key, KeyData, repository::KeyRepository},
         openid_connect::{
-            OpenIdProviderMetadata,
+            OpenIdProviderMetadata, ResponseMode, SubjectType, TokenEndpointAuthMethod,
             model::claim::{JwtClaimNames, StandardScopes},
         },
         setting::installation::{InstallationSetting, InstallationState},
@@ -22,10 +21,10 @@ use crate::{
 pub struct OpenIdProviderCapabilities {
     pub scopes_supported: Vec<String>,
     pub response_types_supported: Vec<String>,
-    pub response_modes_supported: Vec<String>,
+    pub response_modes_supported: Vec<ResponseMode>,
     pub grant_types_supported: Vec<String>,
     pub acr_values_supported: Vec<String>,
-    pub subject_types_supported: Vec<String>,
+    pub subject_types_supported: Vec<SubjectType>,
     pub id_token_signing_alg_values_supported: Vec<String>,
     pub id_token_encryption_alg_values_supported: Vec<String>,
     pub id_token_encryption_enc_values_supported: Vec<String>,
@@ -35,7 +34,7 @@ pub struct OpenIdProviderCapabilities {
     pub request_object_signing_alg_values_supported: Vec<String>,
     pub request_object_encryption_alg_values_supported: Vec<String>,
     pub request_object_encryption_enc_values_supported: Vec<String>,
-    pub token_endpoint_auth_methods_supported: Vec<String>,
+    pub token_endpoint_auth_methods_supported: Vec<TokenEndpointAuthMethod>,
     pub token_endpoint_auth_signing_alg_values_supported: Vec<String>,
     pub display_values_supported: Vec<String>,
     pub claim_types_supported: Vec<String>,
@@ -46,6 +45,10 @@ pub struct OpenIdProviderCapabilities {
     pub request_parameter_supported: bool,
     pub request_uri_parameter_supported: bool,
     pub require_request_uri_registration: bool,
+}
+
+pub trait SigningAlgorithmDetector: Send + Sync {
+    fn detect(&self, key: &Key) -> Vec<JwaSigningAlgorithm>;
 }
 
 impl Default for OpenIdProviderCapabilities {
@@ -64,14 +67,18 @@ impl Default for OpenIdProviderCapabilities {
                 "id_token".to_owned(),
                 "id_token token".to_owned(),
             ],
-            response_modes_supported: vec!["query".to_owned(), "fragment".to_owned()],
+            response_modes_supported: vec![
+                ResponseMode::Query,
+                ResponseMode::Fragment,
+                ResponseMode::FormPost,
+            ],
             grant_types_supported: vec![
                 "authorization_code".to_owned(),
                 "implicit".to_owned(),
                 "refresh_token".to_owned(),
             ],
             acr_values_supported: vec!["1".to_owned()],
-            subject_types_supported: vec!["public".to_owned()],
+            subject_types_supported: vec![SubjectType::Public, SubjectType::Pairwise],
             id_token_signing_alg_values_supported: vec!["ES256".to_owned()],
             id_token_encryption_alg_values_supported: vec![],
             id_token_encryption_enc_values_supported: vec![],
@@ -85,9 +92,9 @@ impl Default for OpenIdProviderCapabilities {
             request_object_encryption_alg_values_supported: vec![],
             request_object_encryption_enc_values_supported: vec![],
             token_endpoint_auth_methods_supported: vec![
-                "client_secret_basic".to_owned(),
-                "client_secret_post".to_owned(),
-                "private_key_jwt".to_owned(),
+                TokenEndpointAuthMethod::ClientSecretBasic,
+                TokenEndpointAuthMethod::ClientSecretPost,
+                TokenEndpointAuthMethod::PrivateKeyJwt,
             ],
             token_endpoint_auth_signing_alg_values_supported: vec!["RS256".to_owned()],
             display_values_supported: vec!["page".to_owned()],
@@ -132,46 +139,22 @@ pub struct OpenIdProviderService {
     installation_setting: Arc<dyn SettingProvider<InstallationSetting>>,
     capabilities: OpenIdProviderCapabilities,
     key_repo: Option<Arc<dyn KeyRepository>>,
+    signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
 }
 
-fn detect_id_token_signing_algorithms(keys: &[Key]) -> Vec<String> {
+fn detect_id_token_signing_algorithms(
+    keys: &[Key],
+    detector: &dyn SigningAlgorithmDetector,
+) -> Vec<String> {
     let mut algos = std::collections::BTreeSet::new();
     for key in keys {
-        if let KeyData::Asymmetric(ref data) = key.data {
-            let pem = data.private_key.as_bytes();
-            if RS256.signer_from_pem(pem).is_ok() {
-                algos.insert("RS256".to_owned());
-            }
-            if RS384.signer_from_pem(pem).is_ok() {
-                algos.insert("RS384".to_owned());
-            }
-            if RS512.signer_from_pem(pem).is_ok() {
-                algos.insert("RS512".to_owned());
-            }
-            if PS256.signer_from_pem(pem).is_ok() {
-                algos.insert("PS256".to_owned());
-            }
-            if PS384.signer_from_pem(pem).is_ok() {
-                algos.insert("PS384".to_owned());
-            }
-            if PS512.signer_from_pem(pem).is_ok() {
-                algos.insert("PS512".to_owned());
-            }
-            if ES256.signer_from_pem(pem).is_ok() {
-                algos.insert("ES256".to_owned());
-            }
-            if ES384.signer_from_pem(pem).is_ok() {
-                algos.insert("ES384".to_owned());
-            }
-            if ES512.signer_from_pem(pem).is_ok() {
-                algos.insert("ES512".to_owned());
-            }
-            if ES256K.signer_from_pem(pem).is_ok() {
-                algos.insert("ES256K".to_owned());
-            }
-            if EdDSA.signer_from_pem(pem).is_ok() {
-                algos.insert("EdDSA".to_owned());
-            }
+        if let KeyData::Asymmetric(_) = key.data {
+            algos.extend(
+                detector
+                    .detect(key)
+                    .into_iter()
+                    .map(|jwa| jwa.as_str().to_owned()),
+            );
         }
     }
     algos.into_iter().collect()
@@ -183,6 +166,7 @@ impl OpenIdProviderService {
             installation_setting,
             capabilities: OpenIdProviderCapabilities::default(),
             key_repo: None,
+            signing_algorithm_detector: None,
         }
     }
 
@@ -194,11 +178,20 @@ impl OpenIdProviderService {
             installation_setting,
             capabilities,
             key_repo: None,
+            signing_algorithm_detector: None,
         }
     }
 
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
         self.key_repo = Some(key_repo);
+        self
+    }
+
+    pub fn with_signing_algorithm_detector(
+        mut self,
+        detector: Arc<dyn SigningAlgorithmDetector>,
+    ) -> Self {
+        self.signing_algorithm_detector = Some(detector);
         self
     }
 
@@ -221,10 +214,12 @@ impl OpenIdProviderService {
             registration_endpoint: None,
             scopes_supported: non_empty(self.capabilities.scopes_supported.clone()),
             response_types_supported: self.capabilities.response_types_supported.clone(),
-            response_modes_supported: non_empty(self.capabilities.response_modes_supported.clone()),
+            response_modes_supported: non_empty(to_string_values(
+                &self.capabilities.response_modes_supported,
+            )),
             grant_types_supported: non_empty(self.capabilities.grant_types_supported.clone()),
             acr_values_supported: non_empty(self.capabilities.acr_values_supported.clone()),
-            subject_types_supported: self.capabilities.subject_types_supported.clone(),
+            subject_types_supported: to_string_values(&self.capabilities.subject_types_supported),
             id_token_signing_alg_values_supported: id_token_algos,
             id_token_encryption_alg_values_supported: non_empty(
                 self.capabilities
@@ -266,11 +261,9 @@ impl OpenIdProviderService {
                     .request_object_encryption_enc_values_supported
                     .clone(),
             ),
-            token_endpoint_auth_methods_supported: non_empty(
-                self.capabilities
-                    .token_endpoint_auth_methods_supported
-                    .clone(),
-            ),
+            token_endpoint_auth_methods_supported: non_empty(to_string_values(
+                &self.capabilities.token_endpoint_auth_methods_supported,
+            )),
             token_endpoint_auth_signing_alg_values_supported: non_empty(
                 self.capabilities
                     .token_endpoint_auth_signing_alg_values_supported
@@ -301,7 +294,11 @@ impl OpenIdProviderService {
                     .map_err(|error| {
                         AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
                     })?;
-                let detected = detect_id_token_signing_algorithms(&keys);
+                let detected = self
+                    .signing_algorithm_detector
+                    .as_ref()
+                    .map(|detector| detect_id_token_signing_algorithms(&keys, detector.as_ref()))
+                    .unwrap_or_default();
                 Ok(if detected.is_empty() {
                     self.capabilities
                         .id_token_signing_alg_values_supported
@@ -320,6 +317,10 @@ impl OpenIdProviderService {
 
 fn non_empty(values: Vec<String>) -> Option<Vec<String>> {
     (!values.is_empty()).then_some(values)
+}
+
+fn to_string_values<T: ToString>(values: &[T]) -> Vec<String> {
+    values.iter().map(ToString::to_string).collect()
 }
 
 fn endpoint_url(issuer: &Url, path: &str) -> Result<Url, AppError> {
@@ -379,16 +380,15 @@ mod tests {
 
     use async_trait::async_trait;
     use chrono::Utc;
-    use josekit::jwk::KeyPair;
     use serde_json::to_value;
     use uuid::Uuid;
 
-    use super::OpenIdProviderService;
+    use super::{OpenIdProviderService, SigningAlgorithmDetector};
     use crate::{
         application::setting::runtime::CachedSetting,
         domain::{
             key::{
-                Key, KeyData, KeyOid, KeyType,
+                JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType,
                 material::AsymmetricKeyData,
                 repository::{KeyRepository, KeyRepositoryError},
             },
@@ -511,6 +511,37 @@ mod tests {
         }
     }
 
+    struct TestSigningAlgorithmDetector;
+
+    impl SigningAlgorithmDetector for TestSigningAlgorithmDetector {
+        fn detect(&self, key: &Key) -> Vec<JwaSigningAlgorithm> {
+            let KeyData::Asymmetric(data) = &key.data else {
+                return vec![];
+            };
+
+            match data.private_key.as_str() {
+                "rsa" => vec![
+                    JwaSigningAlgorithm::Rs256,
+                    JwaSigningAlgorithm::Rs384,
+                    JwaSigningAlgorithm::Rs512,
+                ],
+                "ps256" => vec![JwaSigningAlgorithm::Ps256],
+                "ps384" => vec![JwaSigningAlgorithm::Ps384],
+                "ps512" => vec![JwaSigningAlgorithm::Ps512],
+                "ec-p256" => vec![JwaSigningAlgorithm::Es256],
+                "ec-p384" => vec![JwaSigningAlgorithm::Es384],
+                "ec-p521" => vec![JwaSigningAlgorithm::Es512],
+                "ec-secp256k1" => vec![JwaSigningAlgorithm::Es256k],
+                "ed25519" => vec![JwaSigningAlgorithm::EdDsa],
+                _ => vec![],
+            }
+        }
+    }
+
+    fn test_signing_algorithm_detector() -> Arc<dyn SigningAlgorithmDetector> {
+        Arc::new(TestSigningAlgorithmDetector)
+    }
+
     fn make_asymmetric_key(private_key_pem: String) -> Key {
         Key {
             oid: KeyOid(Uuid::new_v4()),
@@ -528,53 +559,36 @@ mod tests {
     }
 
     fn generate_rsa_pem() -> String {
-        let jwk = josekit::jwk::Jwk::generate_rsa_key(2048).unwrap();
-        let key_pair = josekit::jwk::alg::rsa::RsaKeyPair::from_jwk(&jwk).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        "rsa".to_owned()
     }
 
     fn generate_rsa_pss_pem(alg: &str) -> String {
-        let (hash, salt_len) = match alg {
-            "PS256" => (josekit::util::SHA_256, 32),
-            "PS384" => (josekit::util::SHA_384, 48),
-            "PS512" => (josekit::util::SHA_512, 64),
+        match alg {
+            "PS256" => "ps256".to_owned(),
+            "PS384" => "ps384".to_owned(),
+            "PS512" => "ps512".to_owned(),
             other => panic!("unsupported RSA-PSS test alg: {other}"),
-        };
-        let key_pair =
-            josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(2048, hash, hash, salt_len).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        }
     }
 
     fn generate_ec_p256_pem() -> String {
-        let jwk = josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::P256).unwrap();
-        let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        "ec-p256".to_owned()
     }
 
     fn generate_ec_p384_pem() -> String {
-        let jwk = josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::P384).unwrap();
-        let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        "ec-p384".to_owned()
     }
 
     fn generate_ec_p521_pem() -> String {
-        let jwk = josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::P521).unwrap();
-        let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        "ec-p521".to_owned()
     }
 
     fn generate_ec_secp256k1_pem() -> String {
-        let jwk =
-            josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::Secp256k1).unwrap();
-        let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        "ec-secp256k1".to_owned()
     }
 
     fn generate_ed25519_pem() -> String {
-        let jwk =
-            josekit::jwk::Jwk::generate_ed_key(josekit::jwk::alg::ed::EdCurve::Ed25519).unwrap();
-        let key_pair = josekit::jwk::alg::ed::EdKeyPair::from_jwk(&jwk).unwrap();
-        String::from_utf8(key_pair.to_pem_private_key()).unwrap()
+        "ed25519".to_owned()
     }
 
     #[tokio::test]
@@ -648,6 +662,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn default_discovery_advertises_form_post_and_pairwise() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().await.unwrap();
+
+        assert!(
+            metadata
+                .response_modes_supported
+                .unwrap()
+                .contains(&"form_post".to_owned())
+        );
+        assert!(
+            metadata
+                .subject_types_supported
+                .contains(&"pairwise".to_owned())
+        );
+    }
+
+    #[tokio::test]
     async fn discovery_uses_rsa_key_repo_algorithm() {
         let service = OpenIdProviderService::for_test(InstallationState {
             initialized: true,
@@ -659,7 +699,8 @@ mod tests {
         .await
         .with_key_repo(StaticKeyRepository::with_keys(vec![make_asymmetric_key(
             generate_rsa_pem(),
-        )]));
+        )]))
+        .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
 
@@ -683,7 +724,8 @@ mod tests {
             make_asymmetric_key(generate_rsa_pss_pem("PS256")),
             make_asymmetric_key(generate_rsa_pss_pem("PS384")),
             make_asymmetric_key(generate_rsa_pss_pem("PS512")),
-        ]));
+        ]))
+        .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
 
@@ -705,7 +747,8 @@ mod tests {
         .await
         .with_key_repo(StaticKeyRepository::with_keys(vec![make_asymmetric_key(
             generate_ec_p256_pem(),
-        )]));
+        )]))
+        .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
 
@@ -735,7 +778,8 @@ mod tests {
             make_asymmetric_key(generate_ec_p521_pem()),
             make_asymmetric_key(generate_ec_secp256k1_pem()),
             make_asymmetric_key(generate_ed25519_pem()),
-        ]));
+        ]))
+        .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
 
@@ -808,13 +852,16 @@ mod tests {
 
     mod detect_algorithms {
         use super::super::detect_id_token_signing_algorithms;
+        use super::{
+            TestSigningAlgorithmDetector, generate_ec_p256_pem, generate_ec_p384_pem,
+            generate_ec_p521_pem, generate_ec_secp256k1_pem, generate_ed25519_pem,
+            generate_rsa_pem, generate_rsa_pss_pem,
+        };
         use crate::domain::key::{
             Key, KeyData, KeyOid, KeyType,
             material::{AsymmetricKeyData, SymmetricKeyAlgorithm, SymmetricKeyData},
         };
         use chrono::Utc;
-        use josekit::jwk::alg::{ec::EcCurve, ed::EdCurve};
-        use josekit::jwk::{Jwk, KeyPair};
         use uuid::Uuid;
 
         fn make_asymmetric_key(private_key_pem: String) -> Key {
@@ -848,65 +895,16 @@ mod tests {
             }
         }
 
-        fn generate_rsa_pem() -> String {
-            let jwk = Jwk::generate_rsa_key(2048).unwrap();
-            let key_pair = josekit::jwk::alg::rsa::RsaKeyPair::from_jwk(&jwk).unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
-        fn generate_rsa_pss_pem(alg: &str) -> String {
-            let (hash, salt_len) = match alg {
-                "PS256" => (josekit::util::SHA_256, 32),
-                "PS384" => (josekit::util::SHA_384, 48),
-                "PS512" => (josekit::util::SHA_512, 64),
-                other => panic!("unsupported RSA-PSS test alg: {other}"),
-            };
-            let key_pair =
-                josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(2048, hash, hash, salt_len)
-                    .unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
-        fn generate_ec_p256_pem() -> String {
-            let jwk = Jwk::generate_ec_key(EcCurve::P256).unwrap();
-            let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
-        fn generate_ec_p384_pem() -> String {
-            let jwk = Jwk::generate_ec_key(EcCurve::P384).unwrap();
-            let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
-        fn generate_ec_p521_pem() -> String {
-            let jwk = Jwk::generate_ec_key(EcCurve::P521).unwrap();
-            let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
-        fn generate_ec_secp256k1_pem() -> String {
-            let jwk = Jwk::generate_ec_key(EcCurve::Secp256k1).unwrap();
-            let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
-        fn generate_ed25519_pem() -> String {
-            let jwk = Jwk::generate_ed_key(EdCurve::Ed25519).unwrap();
-            let key_pair = josekit::jwk::alg::ed::EdKeyPair::from_jwk(&jwk).unwrap();
-            String::from_utf8(key_pair.to_pem_private_key()).unwrap()
-        }
-
         #[test]
         fn empty_keys_returns_empty_vec() {
-            let algos = detect_id_token_signing_algorithms(&[]);
+            let algos = detect_id_token_signing_algorithms(&[], &TestSigningAlgorithmDetector);
             assert!(algos.is_empty());
         }
 
         #[test]
         fn symmetric_key_is_ignored() {
             let key = make_symmetric_key();
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(algos.is_empty());
         }
 
@@ -914,7 +912,7 @@ mod tests {
         fn rsa_key_detects_all_rs_variants() {
             let pem = generate_rsa_pem();
             let key = make_asymmetric_key(pem);
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(
                 algos.contains(&"RS256".to_owned()),
                 "expected RS256, got: {algos:?}"
@@ -936,7 +934,7 @@ mod tests {
                 make_asymmetric_key(generate_rsa_pss_pem("PS384")),
                 make_asymmetric_key(generate_rsa_pss_pem("PS512")),
             ];
-            let algos = detect_id_token_signing_algorithms(&keys);
+            let algos = detect_id_token_signing_algorithms(&keys, &TestSigningAlgorithmDetector);
             assert!(
                 algos.contains(&"PS256".to_owned()),
                 "expected PS256, got: {algos:?}"
@@ -955,7 +953,7 @@ mod tests {
         fn rsa_key_does_not_falsely_detect_ec_algorithms() {
             let pem = generate_rsa_pem();
             let key = make_asymmetric_key(pem);
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(!algos.contains(&"ES256".to_owned()));
             assert!(!algos.contains(&"ES256K".to_owned()));
             assert!(!algos.contains(&"EdDSA".to_owned()));
@@ -965,7 +963,7 @@ mod tests {
         fn ec_p256_key_detects_es256() {
             let pem = generate_ec_p256_pem();
             let key = make_asymmetric_key(pem);
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(
                 algos.contains(&"ES256".to_owned()),
                 "expected ES256, got: {algos:?}"
@@ -975,28 +973,28 @@ mod tests {
         #[test]
         fn ec_p384_key_detects_es384() {
             let key = make_asymmetric_key(generate_ec_p384_pem());
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert_eq!(algos, vec!["ES384".to_owned()]);
         }
 
         #[test]
         fn ec_p521_key_detects_es512() {
             let key = make_asymmetric_key(generate_ec_p521_pem());
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert_eq!(algos, vec!["ES512".to_owned()]);
         }
 
         #[test]
         fn ec_secp256k1_key_detects_es256k() {
             let key = make_asymmetric_key(generate_ec_secp256k1_pem());
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert_eq!(algos, vec!["ES256K".to_owned()]);
         }
 
         #[test]
         fn ed25519_key_detects_eddsa() {
             let key = make_asymmetric_key(generate_ed25519_pem());
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert_eq!(algos, vec!["EdDSA".to_owned()]);
         }
 
@@ -1004,7 +1002,7 @@ mod tests {
         fn ec_p256_key_does_not_falsely_detect_rs_or_ed_algorithms() {
             let pem = generate_ec_p256_pem();
             let key = make_asymmetric_key(pem);
-            let algos = detect_id_token_signing_algorithms(&[key]);
+            let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(!algos.contains(&"RS256".to_owned()));
             assert!(!algos.contains(&"RS384".to_owned()));
             assert!(!algos.contains(&"EdDSA".to_owned()));
@@ -1015,7 +1013,10 @@ mod tests {
             let rsa_key = make_asymmetric_key(generate_rsa_pem());
             let ps_key = make_asymmetric_key(generate_rsa_pss_pem("PS256"));
             let ec_key = make_asymmetric_key(generate_ec_p256_pem());
-            let algos = detect_id_token_signing_algorithms(&[rsa_key, ps_key, ec_key]);
+            let algos = detect_id_token_signing_algorithms(
+                &[rsa_key, ps_key, ec_key],
+                &TestSigningAlgorithmDetector,
+            );
             assert!(algos.contains(&"RS256".to_owned()));
             assert!(algos.contains(&"RS384".to_owned()));
             assert!(algos.contains(&"RS512".to_owned()));

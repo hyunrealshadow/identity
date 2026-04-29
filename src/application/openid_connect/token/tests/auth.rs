@@ -66,6 +66,20 @@ async fn authenticate_client_secret_basic_rejects_wrong_secret() {
 }
 
 #[tokio::test]
+async fn authenticate_client_secret_post_accepts_matching_secret() {
+    let service = build_token_service(
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        Uuid::new_v4(),
+    );
+
+    let result = service
+        .authenticate_client_secret_post("00000000-0000-0000-0000-000000000000", "secret-123")
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
 async fn authenticate_private_key_jwt_accepts_signed_assertion() {
     let service = build_token_service(
         Arc::new(InMemoryClientAuthorizationRepository::default()),
@@ -127,6 +141,7 @@ async fn authenticate_client_accepts_public_flow_when_enabled() {
             credentials: vec![],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 
@@ -141,12 +156,7 @@ async fn authenticate_client_accepts_public_flow_when_enabled() {
 #[tokio::test]
 async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
-    let generator = AsymmetricKeyGeneratorImpl;
-    let key = generator
-        .generate(&crate::domain::key::generator::AsymmetricKeySpec {
-            algorithm: crate::domain::key::model::AsymmetricKeyAlgorithm::EcdsaP256,
-        })
-        .unwrap();
+    let key = key_data_for_algorithm("ES256");
     let service = TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository { keys: vec![] }),
@@ -202,6 +212,7 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 
@@ -222,12 +233,7 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
 #[tokio::test]
 async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
-    let generator = AsymmetricKeyGeneratorImpl;
-    let key = generator
-        .generate(&crate::domain::key::generator::AsymmetricKeySpec {
-            algorithm: crate::domain::key::model::AsymmetricKeyAlgorithm::Ed25519,
-        })
-        .unwrap();
+    let key = key_data_for_algorithm("EdDSA");
     let service = TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository { keys: vec![] }),
@@ -283,6 +289,7 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 

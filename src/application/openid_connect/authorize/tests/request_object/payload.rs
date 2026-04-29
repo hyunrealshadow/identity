@@ -46,6 +46,7 @@ async fn parse_unsecured_request_object_is_accepted() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
     let client = FoundClientRepository
@@ -103,6 +104,7 @@ async fn parse_rs256_request_object_extracts_payload() {
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
         provider_service(),
+        test_signing_algorithm_detector(),
         test_data_protector(),
     );
 

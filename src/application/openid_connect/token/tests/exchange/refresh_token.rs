@@ -83,12 +83,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signing_key() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
-    let generator = AsymmetricKeyGeneratorImpl;
-    let key = generator
-        .generate(&crate::domain::key::generator::AsymmetricKeySpec {
-            algorithm: crate::domain::key::model::AsymmetricKeyAlgorithm::EcdsaP256,
-        })
-        .unwrap();
+    let key = key_data_for_algorithm("ES256");
     let service = TokenService::new(
         repo.clone(),
         Arc::new(InMemoryKeyRepository {
@@ -158,6 +153,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
 
@@ -288,6 +284,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             }],
         }),
         provider_service(),
+        signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     );
     let original_auth_time: i64 = 1713500000;
