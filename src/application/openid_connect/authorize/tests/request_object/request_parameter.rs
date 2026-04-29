@@ -1,5 +1,5 @@
-use super::super::fixtures::*;
-use super::super::*;
+use crate::openid_connect::authorize::tests::fixtures::*;
+use crate::openid_connect::authorize::tests::*;
 
 #[tokio::test]
 async fn validate_request_supports_request_parameter() {

@@ -391,7 +391,13 @@ mod tests {
         refresher.register(setting);
 
         let handle = refresher.spawn();
-        tokio::time::sleep(Duration::from_millis(35)).await;
+        tokio::time::timeout(Duration::from_millis(250), async {
+            while refresh_calls.load(Ordering::SeqCst) == 0 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("settings refresher should tick at least once");
         handle.abort();
         let _ = handle.await;
 

@@ -1,13 +1,15 @@
 use http::HeaderMap;
 use salvo::{Depot, Request, Response, handler};
 
-use crate::controllers::response::AppResponse;
+use crate::controllers::{
+    response::{AppResponse, app_state, redirect_to_response},
+    shared::load_active_sessions,
+};
 use identity_application::error::AppError;
 use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
 use identity_infrastructure::AppState;
 
 use super::{
-    super::shared::load_active_sessions,
     authorize_extractor::{authorize_input_error, extract_authorize_request},
     authorize_interaction::determine_authorize_flow,
     authorize_response::{render_authorize_error_page, render_form_post_response},
@@ -51,7 +53,7 @@ fn render_error(
             }
             _ => error_response.to_redirect_url(&uri),
         };
-        return crate::controllers::response::redirect_to_response(error_response.as_str());
+        return redirect_to_response(error_response.as_str());
     }
 
     render_authorize_error_page(ctx, headers, raw, error)
@@ -59,7 +61,7 @@ fn render_error(
 
 #[handler]
 pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
-    let ctx = crate::controllers::response::app_state(depot)?;
+    let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let authorize_request = extract_authorize_request(req).await?;
     if let Some(error) = authorize_input_error(&authorize_request.raw) {
@@ -125,6 +127,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 
 #[cfg(test)]
 mod tests {
+    use crate::controllers::oauth2::{authorize_response::redirect_oauth_error_response, routes};
     use http::{HeaderMap, StatusCode, header};
     use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
@@ -140,7 +143,7 @@ mod tests {
     }
 
     async fn call_authorize(uri: &str) -> salvo::Response {
-        let app = super::super::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(salvo::affix_state::inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
@@ -152,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn authorize_routes_accept_post_requests() {
-        let app = super::super::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(salvo::affix_state::inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
@@ -206,7 +209,7 @@ mod tests {
             code_challenge_method: None,
         };
 
-        let response = super::super::authorize_response::redirect_oauth_error_response(
+        let response = redirect_oauth_error_response(
             &identity_infrastructure::test_app_state_with_mock_settings().await,
             &HeaderMap::new(),
             &request,
@@ -242,7 +245,7 @@ mod tests {
             code_challenge_method: None,
         };
 
-        let response = super::super::authorize_response::redirect_oauth_error_response(
+        let response = redirect_oauth_error_response(
             &identity_infrastructure::test_app_state_with_mock_settings().await,
             &HeaderMap::new(),
             &request,

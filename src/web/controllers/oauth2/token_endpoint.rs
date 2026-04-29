@@ -8,7 +8,7 @@ use identity_application::{
     openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
 };
 
-use super::super::response::{AppResponse, app_state, json_response, parse_form};
+use crate::controllers::response::{AppResponse, app_state, json_response, parse_form};
 
 #[derive(Debug, Deserialize)]
 struct TokenForm {

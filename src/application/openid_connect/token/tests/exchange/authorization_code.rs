@@ -1,5 +1,6 @@
-use super::super::fixtures::*;
-use super::super::*;
+use crate::key::asymmetric::AsymmetricKeyService;
+use crate::openid_connect::token::tests::fixtures::*;
+use crate::openid_connect::token::tests::*;
 
 #[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
@@ -463,7 +464,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         Arc::new(InMemoryUserRepository { user }),
         Arc::new(InMemoryClientRepository),
         repo.clone(),
-        Arc::new(crate::key::asymmetric::AsymmetricKeyService::new(
+        Arc::new(AsymmetricKeyService::new(
             key_repo,
             Arc::new(TestAsymmetricKeyGenerator),
             test_key_jwk_generator(),

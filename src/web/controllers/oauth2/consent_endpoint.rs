@@ -7,6 +7,13 @@ use crate::{
     boot::AppState,
     domain::openid_connect::ScopeSet,
     infrastructure::web,
+    web::controllers::{
+        response::{
+            AppResponse, app_state, json_response, parse_form, parse_json, parse_query,
+            redirect_to_response, render_app_error, render_html,
+        },
+        shared::{csrf_token, load_active_sessions},
+    },
     web::views::oauth2::{
         ConsentApiResponse, ConsentDecision, ConsentDecisionForm, ConsentDecisionPayload,
         ConsentPageData, build_scope_display,
@@ -14,13 +21,6 @@ use crate::{
 };
 
 use super::{
-    super::{
-        response::{
-            AppResponse, app_state, parse_form, parse_json, parse_query, redirect_to_response,
-            render_app_error, render_html,
-        },
-        shared::{csrf_token, load_active_sessions},
-    },
     authorize_interaction::select_active_session,
     authorize_response::{render_form_post_redirect_response, response_mode_from_value},
 };
@@ -88,7 +88,7 @@ pub async fn consent_api(depot: &mut Depot, req: &mut Request) -> Result<AppResp
         ));
     }
 
-    Ok(super::super::response::json_response(
+    Ok(json_response(
         StatusCode::OK,
         ConsentPageData {
             login_id: query.login_id,
@@ -178,7 +178,7 @@ async fn handle_consent_decision(
         return Ok(redirect_to_response(redirect.as_str()).into());
     }
 
-    Ok(super::super::response::json_response(
+    Ok(json_response(
         StatusCode::OK,
         ConsentApiResponse {
             status: match decision {

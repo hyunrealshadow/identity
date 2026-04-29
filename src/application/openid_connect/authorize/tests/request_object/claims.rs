@@ -1,5 +1,5 @@
-use super::super::fixtures::*;
-use super::super::*;
+use crate::openid_connect::authorize::tests::fixtures::*;
+use crate::openid_connect::authorize::tests::*;
 
 #[test]
 fn validate_request_object_claims_rejects_future_issued_at() {

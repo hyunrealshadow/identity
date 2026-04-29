@@ -1,5 +1,5 @@
-use super::super::fixtures::*;
-use super::super::*;
+use crate::openid_connect::token::tests::fixtures::*;
+use crate::openid_connect::token::tests::*;
 
 #[tokio::test]
 async fn exchange_refresh_token_returns_new_access_token() {

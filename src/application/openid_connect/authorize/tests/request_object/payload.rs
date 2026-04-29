@@ -1,5 +1,5 @@
-use super::super::fixtures::*;
-use super::super::*;
+use crate::openid_connect::authorize::tests::fixtures::*;
+use crate::openid_connect::authorize::tests::*;
 
 #[tokio::test]
 async fn parse_request_object_payload_preserves_registered_claims() {

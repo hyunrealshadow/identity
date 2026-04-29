@@ -25,7 +25,7 @@ use super::{AuthorizationCodeGrantParams, RefreshTokenGrantParams, TokenService,
 use crate::{
     application::{
         error::AppError,
-        key::asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
+        key::asymmetric::{AsymmetricKeyService, GeneratedKeyJwk, KeyJwkGenerator},
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
         setting::runtime::SettingProvider,
     },
@@ -272,7 +272,7 @@ fn user_info_service_with_key(
         }),
         Arc::new(InMemoryClientRepository),
         repo,
-        Arc::new(crate::key::asymmetric::AsymmetricKeyService::new(
+        Arc::new(AsymmetricKeyService::new(
             Arc::new(InMemoryKeyRepository { keys: vec![key] }),
             Arc::new(TestAsymmetricKeyGenerator),
             test_key_jwk_generator(),

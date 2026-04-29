@@ -851,12 +851,12 @@ mod tests {
     }
 
     mod detect_algorithms {
-        use super::super::detect_id_token_signing_algorithms;
         use super::{
             TestSigningAlgorithmDetector, generate_ec_p256_pem, generate_ec_p384_pem,
             generate_ec_p521_pem, generate_ec_secp256k1_pem, generate_ed25519_pem,
             generate_rsa_pem, generate_rsa_pss_pem,
         };
+        use crate::openid_connect::provider::detect_id_token_signing_algorithms;
         use chrono::Utc;
         use identity_domain::key::{
             Key, KeyData, KeyOid, KeyType,
