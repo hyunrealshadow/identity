@@ -4,30 +4,33 @@ use std::time::Duration;
 use sea_orm::DatabaseConnection;
 use tera::Tera;
 
-use super::services::AppServices;
-use super::settings::AppRuntimeSettings;
 #[cfg(feature = "oidc-conformance")]
-use crate::application::install::{InstallInput, InstallService};
+use identity_application::install::{InstallInput, InstallService};
 #[cfg(feature = "oidc-conformance")]
-use crate::domain::key::AsymmetricKeyAlgorithm;
+use identity_domain::key::AsymmetricKeyAlgorithm;
 #[cfg(feature = "oidc-conformance")]
-use crate::infrastructure::auth::password::PasswordHasherImpl;
+use identity_infrastructure::auth::password::PasswordHasherImpl;
 #[cfg(feature = "oidc-conformance")]
-use crate::infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
-use crate::infrastructure::{
+use identity_infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
+use identity_infrastructure::{
+    AppContext, AppLifecycle, AppResources, AppState,
     config::{AppConfig, AppEnvironment},
     database,
     database::seed,
     i18n::{I18n, init_error_i18n},
-    observability, web,
+    observability,
+    services::AppServices,
+    settings::AppRuntimeSettings,
+    web,
+};
+#[cfg(feature = "oidc-conformance")]
+use identity_infrastructure::{
+    crypto::certificate_generator::CertificateGeneratorImpl,
+    database::repository::install::InstallPersistenceImpl,
 };
 
 use super::AppResult;
-use super::context::AppContext;
 use super::install_guard::ensure_install_startup_guard;
-use super::lifecycle::AppLifecycle;
-use super::resources::AppResources;
-use super::state::AppState;
 
 /// Application builder that orchestrates the startup pipeline.
 ///
@@ -132,15 +135,15 @@ impl AppBuilder {
 
             // Construct a minimal InstallService without pre-loaded settings.
             // We load settings in-line here just for the install call.
-            let bootstrap_settings =
-                Arc::new(crate::boot::settings::AppRuntimeSettings::from_db(db.clone()).await?);
+            let bootstrap_settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
 
             let install_service = InstallService {
-                db: db.clone(),
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 password_hash_options: bootstrap_settings.password_hash_options(),
                 installation_setting: bootstrap_settings.installation(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
+                certificate_generator: Arc::new(CertificateGeneratorImpl),
+                persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
             };
 
             install_service
@@ -201,10 +204,8 @@ impl AppBuilder {
 async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-    use crate::{
-        domain::setting::{installation::InstallationSetting, model::SettingDefinition},
-        infrastructure::database::entity::setting,
-    };
+    use identity_domain::setting::{installation::InstallationSetting, model::SettingDefinition};
+    use identity_infrastructure::database::entity::setting;
 
     let row = setting::Entity::find()
         .filter(setting::Column::Key.eq(InstallationSetting::KEY))
@@ -215,7 +216,7 @@ async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) 
         return Ok(false);
     };
 
-    let state: crate::domain::setting::installation::InstallationState =
+    let state: identity_domain::setting::installation::InstallationState =
         serde_json::from_value(row.value)?;
 
     Ok(state.initialized)

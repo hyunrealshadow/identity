@@ -1,19 +1,49 @@
 [workspace]
+members = [
+  ".",
+  "migration",
+  "src/application",
+  "src/boot",
+  "src/domain",
+  "src/infrastructure",
+  "src/web",
+]
+resolver = "3"
 
-[package]
-name = "identity"
-version = "0.1.0"
-edition = "2024"
-publish = false
-default-run = "identity"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
+[workspace.dependencies]
+async-trait = { version = "0.1" }
+base64 = { version = "0.22" }
+chacha20poly1305 = { version = "0.10" }
+chrono = { version = "0.4" }
+fluent-templates = { version = "0.13", features = ["tera"] }
+hex = { version = "0.4" }
+hkdf = { version = "0.12" }
+http = "1"
+idna = { version = "1" }
+include_dir = { version = "0.7" }
+insta = { version = "1.34", features = ["redactions", "yaml", "filters"] }
+josekit = { version = "0.10.3" }
+migration = { path = "migration" }
+openssl = { version = "0.10" }
+password-hash = { version = "0.5" }
+rand = { version = "0.8" }
+regex = { version = "1.11" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+rstest = { version = "0.25" }
+salvo = { version = "0.92.1", features = ["affix-state", "csrf", "serve-static", "test"] }
+sea-orm = { version = "2.0.0-rc.37", features = [
+  "sqlx-postgres",
+  "runtime-tokio-rustls",
+  "macros",
+  "mock",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 serde_yml = { version = "0.0.12" }
-base64 = { version = "0.22" }
+serial_test = { version = "3.1.1" }
+sha2 = { version = "0.10" }
+tera = { version = "1.20" }
+thiserror = { version = "1" }
 tokio = { version = "1.45", default-features = false, features = [
   "rt-multi-thread",
   "macros",
@@ -22,47 +52,59 @@ tokio = { version = "1.45", default-features = false, features = [
   "sync",
   "time",
 ] }
-async-trait = { version = "0.1" }
-salvo = { version = "0.92.1", features = ["affix-state", "csrf", "serve-static", "test"] }
-http = "1"
+totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-regex = { version = "1.11" }
-migration = { path = "migration" }
-sea-orm = { version = "2.0.0-rc.37", features = [
-  "sqlx-postgres",
-  "runtime-tokio-rustls",
-  "macros",
-  "mock",
-] }
-chrono = { version = "0.4" }
-validator = { version = "0.20" }
-uuid = { version = "1.6", features = ["v4"] }
-argon2 = { version = "0.5", features = ["std"] }
-password-hash = { version = "0.5" }
-thiserror = { version = "1" }
-rand = { version = "0.8" }
-sha2 = { version = "0.10" }
-chacha20poly1305 = { version = "0.10" }
-hkdf = { version = "0.12" }
-hex = { version = "0.4" }
-include_dir = { version = "0.7" }
-# view engine i18n
-fluent-templates = { version = "0.13", features = ["tera"] }
 unic-langid = { version = "0.9" }
-tera = { version = "1.20" }
-# /view engine
-woothee = { version = "0.13" }
-totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
-urlencoding = { version = "2.1" }
-josekit = { version = "0.10.3" }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-openssl = { version = "0.10" }
 url = { version = "2", features = ["serde"] }
-idna = { version = "1" }
+urlencoding = { version = "2.1" }
+uuid = { version = "1.6", features = ["v4"] }
+validator = { version = "0.20" }
+woothee = { version = "0.13" }
+
+[workspace.dependencies.identity-application]
+path = "src/application"
+
+[workspace.dependencies.identity-boot]
+path = "src/boot"
+
+[workspace.dependencies.identity-domain]
+path = "src/domain"
+
+[workspace.dependencies.identity-infrastructure]
+path = "src/infrastructure"
+
+[workspace.dependencies.identity-web]
+path = "src/web"
+
+[package]
+name = "identity"
+version = "0.1.0"
+edition = "2024"
+publish = false
+default-run = "identity"
+
+[dependencies]
+chrono = { workspace = true }
+identity-application = { workspace = true }
+identity-boot = { workspace = true }
+identity-domain = { workspace = true }
+identity-infrastructure = { workspace = true }
+identity-web = { workspace = true }
+salvo = { workspace = true }
+sea-orm = { workspace = true }
+serde_json = { workspace = true }
+tera = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
 
 [features]
-oidc-conformance = []
+oidc-conformance = [
+  "identity-boot/oidc-conformance",
+  "identity-infrastructure/oidc-conformance",
+  "identity-web/oidc-conformance",
+]
 
 [[bin]]
 name = "identity"
@@ -70,6 +112,4 @@ path = "src/main.rs"
 required-features = []
 
 [dev-dependencies]
-serial_test = { version = "3.1.1" }
-rstest = { version = "0.25" }
-insta = { version = "1.34", features = ["redactions", "yaml", "filters"] }
+serial_test = { workspace = true }

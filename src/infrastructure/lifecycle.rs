@@ -11,6 +11,12 @@ pub struct AppLifecycle {
     shutdown_tx: watch::Sender<bool>,
 }
 
+impl Default for AppLifecycle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppLifecycle {
     pub fn new() -> Self {
         let (shutdown_tx, _) = watch::channel(false);

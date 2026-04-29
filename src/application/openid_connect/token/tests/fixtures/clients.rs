@@ -1,5 +1,5 @@
 use super::*;
-use crate::application::openid_connect::tests::fixtures::client::{
+use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
 

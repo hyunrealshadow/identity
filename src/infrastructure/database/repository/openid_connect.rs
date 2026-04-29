@@ -4,17 +4,17 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySe
 use serde_json::Value;
 use url::Url;
 
-use crate::domain::client::model::Client;
-use crate::domain::openid_connect::{
-    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-    OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
-    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
-};
-use crate::infrastructure::database::entity::{
+use crate::database::entity::{
     client, client::Entity as ClientEntity, client_open_id_connect,
     client_open_id_connect::Entity as OpenIdConnectClientEntity, client_platform,
     client_platform::Entity as ClientPlatformEntity, client_scope,
     client_scope::Entity as ClientScopeEntity, scope, scope::Entity as ScopeEntity,
+};
+use identity_domain::client::model::Client;
+use identity_domain::openid_connect::{
+    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+    OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
+    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
 };
 
 fn deserialize_optional_string_vec(
@@ -133,7 +133,7 @@ impl OpenIdConnectClientRepositoryImpl {
 impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
     async fn find_by_oid(
         &self,
-        oid: crate::domain::client::model::ClientOid,
+        oid: identity_domain::client::model::ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let row = ClientEntity::find()
             .filter(client::Column::Oid.eq(oid))
@@ -249,7 +249,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            crate::domain::openid_connect::OpenIdConnectClientRepositoryError::ParseClientPlatform(
+            identity_domain::openid_connect::OpenIdConnectClientRepositoryError::ParseClientPlatform(
                 _
             )
         ));

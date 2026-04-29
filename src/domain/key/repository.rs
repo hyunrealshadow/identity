@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::domain::key::{Key, KeyData, KeyOid, KeyType};
+use crate::key::{Key, KeyData, KeyOid, KeyType};
 
 #[derive(Debug, Error)]
 pub enum KeyRepositoryError {

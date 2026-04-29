@@ -1,4 +1,4 @@
-use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
+use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for `TokenService` and the `/oauth2/token` HTTP endpoint.
 /// Range: 24000-24099

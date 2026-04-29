@@ -23,10 +23,10 @@ pub enum FlowDecision {
     },
     AutoApprove {
         redirect_uri: Url,
-        response_mode: Option<crate::domain::openid_connect::ResponseMode>,
+        response_mode: Option<identity_domain::openid_connect::ResponseMode>,
     },
     ConsentDenied {
-        request: AuthorizationRequest,
+        request: Box<AuthorizationRequest>,
         error: OAuthErrorCode,
     },
 }
@@ -35,12 +35,12 @@ impl FlowDecision {
     pub fn into_response(self, ctx: &AppState, headers: &http::HeaderMap) -> Response {
         match self {
             FlowDecision::LoginRequired { login_id } => {
-                crate::web::controllers::response::redirect_to_response(&format!(
+                crate::controllers::response::redirect_to_response(&format!(
                     "/login?login_id={login_id}"
                 ))
             }
             FlowDecision::ConsentRequired { login_id } => {
-                crate::web::controllers::response::redirect_to_response(&format!(
+                crate::controllers::response::redirect_to_response(&format!(
                     "/oauth2/authorize/consent?login_id={login_id}"
                 ))
             }
@@ -48,14 +48,14 @@ impl FlowDecision {
                 redirect_uri,
                 response_mode,
             } => match response_mode {
-                Some(crate::domain::openid_connect::ResponseMode::FormPost) => {
+                Some(identity_domain::openid_connect::ResponseMode::FormPost) => {
                     super::authorize_response::render_form_post_redirect_response(
                         ctx,
                         headers,
                         &redirect_uri,
                     )
                 }
-                _ => crate::web::controllers::response::redirect_to_response(redirect_uri.as_str()),
+                _ => crate::controllers::response::redirect_to_response(redirect_uri.as_str()),
             },
             FlowDecision::ConsentDenied { request, error } => {
                 super::authorize_response::redirect_oauth_error_response(
@@ -101,7 +101,7 @@ pub async fn determine_authorize_flow(
     if sessions.is_empty() {
         if has_prompt(request.prompt.as_ref(), PromptValue::None) {
             return Ok(FlowDecision::ConsentDenied {
-                request: request.clone(),
+                request: Box::new(request.clone()),
                 error: OAuthErrorCode::LoginRequired,
             });
         }
@@ -114,7 +114,7 @@ pub async fn determine_authorize_flow(
         None => {
             if has_prompt(request.prompt.as_ref(), PromptValue::None) {
                 return Ok(FlowDecision::ConsentDenied {
-                    request: request.clone(),
+                    request: Box::new(request.clone()),
                     error: OAuthErrorCode::LoginRequired,
                 });
             }
@@ -138,7 +138,7 @@ pub async fn determine_authorize_flow(
         if session_age > max_age as i64 {
             if has_prompt(request.prompt.as_ref(), PromptValue::None) {
                 return Ok(FlowDecision::ConsentDenied {
-                    request: request.clone(),
+                    request: Box::new(request.clone()),
                     error: OAuthErrorCode::LoginRequired,
                 });
             }
@@ -168,7 +168,7 @@ pub async fn determine_authorize_flow(
 
     if has_prompt(request.prompt.as_ref(), PromptValue::None) {
         return Ok(FlowDecision::ConsentDenied {
-            request: request.clone(),
+            request: Box::new(request.clone()),
             error: OAuthErrorCode::ConsentRequired,
         });
     }
@@ -179,8 +179,8 @@ pub async fn determine_authorize_flow(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::auth::model::ActiveSession;
     use chrono::Utc;
+    use identity_domain::auth::model::ActiveSession;
     use std::collections::HashSet;
     use uuid::Uuid;
 
@@ -225,10 +225,10 @@ mod tests {
 
     #[test]
     fn internal_client_without_session_returns_err() {
-        use crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode;
-        use crate::application::error::kind::ErrorKind;
+        use identity_application::error::codes::authorize_http::AuthorizeHttpErrorCode;
+        use identity_application::error::kind::ErrorKind;
 
-        let error = crate::application::error::AppError::from_code(
+        let error = identity_application::error::AppError::from_code(
             AuthorizeHttpErrorCode::InternalClientLoginRequired,
         );
 

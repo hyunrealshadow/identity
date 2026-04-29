@@ -1,0 +1,50 @@
+[package]
+name = "identity-infrastructure"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "mod.rs"
+
+[dependencies]
+argon2 = { version = "0.5", features = ["std"] }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+chacha20poly1305 = { workspace = true }
+chrono = { workspace = true }
+fluent-templates = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+identity-application = { workspace = true }
+identity-domain = { workspace = true }
+idna = { workspace = true }
+include_dir = { workspace = true }
+josekit = { workspace = true }
+migration = { workspace = true }
+openssl = { workspace = true }
+password-hash = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+salvo = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yml = { workspace = true }
+tera = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+totp-rs = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+unic-langid = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+woothee = { workspace = true }
+
+[features]
+oidc-conformance = []
+test-support = []
+
+[dev-dependencies]
+serial_test = { workspace = true }

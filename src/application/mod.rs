@@ -1,3 +1,6 @@
+extern crate identity_domain as domain;
+extern crate self as application;
+
 pub mod auth;
 pub mod data_protection;
 pub mod error;

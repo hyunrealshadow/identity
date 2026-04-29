@@ -1,10 +1,10 @@
-use crate::domain::key::JwaSigningAlgorithm;
-use crate::domain::key::model::AsymmetricKeyAlgorithm;
-use crate::infrastructure::crypto::certificate::generate_self_signed_certificate;
-use crate::infrastructure::crypto::key::{
+use crate::crypto::certificate::generate_self_signed_certificate;
+use crate::crypto::key::{
     base64url_encode, generate_all_jwks_for_key, generate_ed25519_key, generate_p256_key,
     generate_rsa_key, public_jwk_from_private_key_pem,
 };
+use identity_domain::key::JwaSigningAlgorithm;
+use identity_domain::key::model::AsymmetricKeyAlgorithm;
 use josekit::jws::{
     ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
 };

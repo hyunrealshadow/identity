@@ -54,9 +54,9 @@ impl InstallPersistence for InstallPersistenceImpl {
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
         let normalized_username =
-            crate::domain::user::normalization::normalize_username(&input.username)
+            identity_domain::user::normalization::normalize_username(&input.username)
                 .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
-        let normalized_email = crate::domain::user::normalization::normalize_email(&input.email)
+        let normalized_email = identity_domain::user::normalization::normalize_email(&input.email)
             .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
         let password_json = serde_json::to_value(&input.password).map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)

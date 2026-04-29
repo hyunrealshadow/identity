@@ -2,7 +2,7 @@ use http::{Method, header};
 use salvo::Request;
 use serde::Deserialize;
 
-use crate::application::{
+use identity_application::{
     error::{
         AppError,
         codes::{authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode},

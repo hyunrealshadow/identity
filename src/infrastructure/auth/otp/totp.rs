@@ -1,6 +1,6 @@
 use totp_rs::{Algorithm, Secret, TOTP};
 
-use crate::domain::{
+use identity_domain::{
     auth::totp::{TotpError, TotpVerifier},
     user::model::{OtpAlgorithm, OtpCredentialData},
 };

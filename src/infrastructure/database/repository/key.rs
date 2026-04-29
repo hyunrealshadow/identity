@@ -5,11 +5,11 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
-use crate::domain::key::{
+use crate::database::entity::{key, key::Entity as KeyEntity};
+use identity_domain::key::{
     Key, KeyData, KeyOid, KeyType, ParseKeyTypeError,
     repository::{KeyRepository, KeyRepositoryError},
 };
-use crate::infrastructure::database::entity::{key, key::Entity as KeyEntity};
 
 pub struct KeyRepositoryImpl {
     db: DatabaseConnection,
@@ -175,8 +175,8 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::domain::key::KeyData;
-    use crate::infrastructure::database::entity::key;
+    use crate::database::entity::key;
+    use identity_domain::key::KeyData;
 
     #[test]
     fn to_domain_wraps_required_expiry_in_some() {

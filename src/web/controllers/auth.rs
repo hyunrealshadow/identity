@@ -9,7 +9,7 @@
 use http::{HeaderMap, StatusCode};
 use salvo::{Depot, Request, Response, Router, handler};
 
-use crate::application::error::AppError;
+use identity_application::error::AppError;
 
 use super::{
     response::{app_state, parse_json, parse_param, render_json},
@@ -18,7 +18,7 @@ use super::{
         csrf_token, is_secure_cookie, load_active_sessions,
     },
 };
-use crate::web::views::auth::{
+use crate::views::auth::{
     AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse, IdentifierRequest,
     IdentifierResponse, LoginStatusResponse, SelectAccountRequest, SelectAccountResponse,
     SessionInfo, UserDisplayInfo, mask_email,

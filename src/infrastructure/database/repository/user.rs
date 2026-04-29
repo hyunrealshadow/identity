@@ -4,11 +4,11 @@ use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, sea_query::Expr,
 };
 
-use crate::domain::user::{
+use crate::database::entity::{user, user::Entity as UserEntity};
+use identity_domain::user::{
     User, UserOid,
     repository::{UserRepository, UserRepositoryError},
 };
-use crate::infrastructure::database::entity::{user, user::Entity as UserEntity};
 
 fn to_domain(m: user::Model) -> User {
     User {
@@ -40,68 +40,9 @@ fn to_domain(m: user::Model) -> User {
         failed_attempts: m.failed_attempts,
         enabled: m.enabled,
         locked: m.locked,
-        locked_until: m.locked_until.map(|v| chrono::DateTime::<Utc>::from(v)),
+        locked_until: m.locked_until.map(chrono::DateTime::<Utc>::from),
         created_at: DateTime::<Utc>::from(m.created_at),
         updated_at: m.updated_at.map(DateTime::<Utc>::from),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::to_domain;
-    use crate::infrastructure::database::entity::user;
-
-    #[test]
-    fn maps_oidc_phone_and_address_claim_fields() {
-        let now = chrono::Utc::now().into();
-        let model = user::Model {
-            id: 1,
-            oid: uuid::Uuid::nil(),
-            email: "user@example.com".to_string(),
-            email_normalized: "user@example.com".to_string(),
-            name: "User".to_string(),
-            name_normalized: "user".to_string(),
-            given_name: None,
-            family_name: None,
-            middle_name: None,
-            nickname: None,
-            profile: None,
-            picture: None,
-            website: None,
-            gender: None,
-            birthdate: None,
-            zone_info: None,
-            locale: None,
-            email_verified: true,
-            phone_number: Some("+12025550123".to_string()),
-            phone_number_verified: Some(true),
-            address_formatted: Some("1 Main St\nExample City".to_string()),
-            address_street_address: Some("1 Main St".to_string()),
-            address_locality: Some("Example City".to_string()),
-            address_region: Some("CA".to_string()),
-            address_postal_code: Some("94000".to_string()),
-            address_country: Some("US".to_string()),
-            failed_attempts: 0,
-            enabled: true,
-            locked: false,
-            locked_until: None,
-            created_at: now,
-            updated_at: None,
-        };
-
-        let user = to_domain(model);
-
-        assert_eq!(user.phone_number.as_deref(), Some("+12025550123"));
-        assert_eq!(user.phone_number_verified, Some(true));
-        assert_eq!(
-            user.address_formatted.as_deref(),
-            Some("1 Main St\nExample City")
-        );
-        assert_eq!(user.address_street_address.as_deref(), Some("1 Main St"));
-        assert_eq!(user.address_locality.as_deref(), Some("Example City"));
-        assert_eq!(user.address_region.as_deref(), Some("CA"));
-        assert_eq!(user.address_postal_code.as_deref(), Some("94000"));
-        assert_eq!(user.address_country.as_deref(), Some("US"));
     }
 }
 
@@ -119,7 +60,7 @@ impl UserRepositoryImpl {
 impl UserRepository for UserRepositoryImpl {
     async fn find_by_identifier(&self, identifier: &str) -> Result<User, UserRepositoryError> {
         use sea_orm::Condition;
-        let normalized = crate::domain::user::normalization::normalize_identifier(identifier)
+        let normalized = identity_domain::user::normalization::normalize_identifier(identifier)
             .ok_or(UserRepositoryError::UserNotFound)?;
         let model = UserEntity::find()
             .filter(
@@ -198,5 +139,64 @@ impl UserRepository for UserRepositoryImpl {
             .await
             .map_err(UserRepositoryError::ResetFailedAttempts)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::to_domain;
+    use crate::database::entity::user;
+
+    #[test]
+    fn maps_oidc_phone_and_address_claim_fields() {
+        let now = chrono::Utc::now().into();
+        let model = user::Model {
+            id: 1,
+            oid: uuid::Uuid::nil(),
+            email: "user@example.com".to_string(),
+            email_normalized: "user@example.com".to_string(),
+            name: "User".to_string(),
+            name_normalized: "user".to_string(),
+            given_name: None,
+            family_name: None,
+            middle_name: None,
+            nickname: None,
+            profile: None,
+            picture: None,
+            website: None,
+            gender: None,
+            birthdate: None,
+            zone_info: None,
+            locale: None,
+            email_verified: true,
+            phone_number: Some("+12025550123".to_string()),
+            phone_number_verified: Some(true),
+            address_formatted: Some("1 Main St\nExample City".to_string()),
+            address_street_address: Some("1 Main St".to_string()),
+            address_locality: Some("Example City".to_string()),
+            address_region: Some("CA".to_string()),
+            address_postal_code: Some("94000".to_string()),
+            address_country: Some("US".to_string()),
+            failed_attempts: 0,
+            enabled: true,
+            locked: false,
+            locked_until: None,
+            created_at: now,
+            updated_at: None,
+        };
+
+        let user = to_domain(model);
+
+        assert_eq!(user.phone_number.as_deref(), Some("+12025550123"));
+        assert_eq!(user.phone_number_verified, Some(true));
+        assert_eq!(
+            user.address_formatted.as_deref(),
+            Some("1 Main St\nExample City")
+        );
+        assert_eq!(user.address_street_address.as_deref(), Some("1 Main St"));
+        assert_eq!(user.address_locality.as_deref(), Some("Example City"));
+        assert_eq!(user.address_region.as_deref(), Some("CA"));
+        assert_eq!(user.address_postal_code.as_deref(), Some("94000"));
+        assert_eq!(user.address_country.as_deref(), Some("US"));
     }
 }

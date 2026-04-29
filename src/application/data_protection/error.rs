@@ -1,8 +1,8 @@
-use crate::application::error::{
+use crate::error::{
     AppError,
     codes::{common::CommonErrorCode, data_protection::DataProtectionErrorCode},
 };
-use crate::domain::data_protection::DataProtectionError;
+use identity_domain::data_protection::DataProtectionError;
 
 impl From<DataProtectionError> for AppError {
     fn from(error: DataProtectionError) -> Self {

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::domain::key::{Key, KeyOid, KeyType};
+use crate::key::{Key, KeyOid, KeyType};
 
 pub struct KeyRing {
     keys: Vec<Key>,
@@ -23,7 +23,7 @@ impl KeyRing {
     fn is_active(key: &Key, now: DateTime<Utc>) -> bool {
         key.r#type == KeyType::Symmetric
             && key.revoked_at.is_none()
-            && key.expires_at.map_or(true, |exp| exp > now)
+            && key.expires_at.is_none_or(|exp| exp > now)
     }
 
     pub fn keys(&self) -> &[Key] {
@@ -34,8 +34,8 @@ impl KeyRing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::key::material::SymmetricKeyData;
-    use crate::domain::key::{KeyData, SymmetricKeyAlgorithm};
+    use crate::key::material::SymmetricKeyData;
+    use crate::key::{KeyData, SymmetricKeyAlgorithm};
     use chrono::Duration;
 
     fn make_key(

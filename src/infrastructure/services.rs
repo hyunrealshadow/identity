@@ -2,17 +2,7 @@ use std::sync::Arc;
 
 use sea_orm::DatabaseConnection;
 
-use crate::application::{
-    auth::{login::LoginService, session::SessionService},
-    data_protection::{DataProtector, DataProtectorImpl},
-    install::InstallService,
-    key::asymmetric::AsymmetricKeyService,
-    openid_connect::{
-        authorize::AuthorizeService, provider::OpenIdProviderService, token::TokenService,
-        user_info::UserInfoService,
-    },
-};
-use crate::infrastructure::{
+use crate::{
     auth::{otp::TotpVerifierImpl, password::PasswordHasherImpl},
     crypto::{
         certificate_generator::CertificateGeneratorImpl,
@@ -26,6 +16,16 @@ use crate::infrastructure::{
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
         session::SessionRepositoryImpl, user::UserRepositoryImpl,
         user_credential::UserCredentialRepositoryImpl,
+    },
+};
+use identity_application::{
+    auth::{login::LoginService, session::SessionService},
+    data_protection::{DataProtector, DataProtectorImpl},
+    install::InstallService,
+    key::asymmetric::AsymmetricKeyService,
+    openid_connect::{
+        authorize::AuthorizeService, provider::OpenIdProviderService, token::TokenService,
+        user_info::UserInfoService,
     },
 };
 
@@ -59,26 +59,6 @@ pub struct AppServices {
     data_protector: Arc<dyn DataProtector>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::AppServices;
-
-    #[test]
-    fn exposes_openid_connect_provider_service() {
-        let _ = AppServices::oidc;
-    }
-
-    #[test]
-    fn exposes_openid_connect_authorize_service() {
-        let _ = AppServices::oidc_authorize;
-    }
-
-    #[test]
-    fn exposes_openid_connect_token_service() {
-        let _ = AppServices::oidc_token;
-    }
-}
-
 impl AppServices {
     #[must_use]
     pub fn from_db(db: DatabaseConnection, settings: &AppRuntimeSettings) -> Self {
@@ -91,24 +71,24 @@ impl AppServices {
         ));
 
         Self {
-            login: LoginService {
-                user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
-                credential_repo: Arc::new(UserCredentialRepositoryImpl::new(db.clone())),
-                session_repo: Arc::new(SessionRepositoryImpl::new(db.clone())),
-                login_repo: Arc::new(LoginRepositoryImpl::new(db.clone())),
-                password_hasher: Arc::new(PasswordHasherImpl::new()),
-                totp_verifier: Arc::new(TotpVerifierImpl),
-                hash_options: settings.password_hash_options(),
-            },
+            login: LoginService::new(
+                Arc::new(UserRepositoryImpl::new(db.clone())),
+                Arc::new(UserCredentialRepositoryImpl::new(db.clone())),
+                Arc::new(SessionRepositoryImpl::new(db.clone())),
+                Arc::new(LoginRepositoryImpl::new(db.clone())),
+                Arc::new(PasswordHasherImpl::new()),
+                Arc::new(TotpVerifierImpl),
+                settings.password_hash_options(),
+            ),
             session: SessionService {
                 session_repo: Arc::new(SessionRepositoryImpl::new(db.clone())),
             },
-            key: AsymmetricKeyService {
-                repo: key_repo.clone(),
-                generator: Arc::new(AsymmetricKeyGeneratorImpl),
-                jwk_generator: key_jwk_generator.clone(),
-                jwk_repo: Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
-            },
+            key: AsymmetricKeyService::new(
+                key_repo.clone(),
+                Arc::new(AsymmetricKeyGeneratorImpl),
+                key_jwk_generator.clone(),
+                Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
+            ),
             install: InstallService {
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 password_hash_options: settings.password_hash_options(),
@@ -145,12 +125,12 @@ impl AppServices {
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
-                Arc::new(AsymmetricKeyService {
-                    repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
-                    generator: Arc::new(AsymmetricKeyGeneratorImpl),
-                    jwk_generator: key_jwk_generator,
-                    jwk_repo: None,
-                }),
+                Arc::new(AsymmetricKeyService::new(
+                    Arc::new(KeyRepositoryImpl::new(db.clone())),
+                    Arc::new(AsymmetricKeyGeneratorImpl),
+                    key_jwk_generator,
+                    None,
+                )),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
             ),
             data_protector,
@@ -200,5 +180,25 @@ impl AppServices {
     #[must_use]
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppServices;
+
+    #[test]
+    fn exposes_openid_connect_provider_service() {
+        let _ = AppServices::oidc;
+    }
+
+    #[test]
+    fn exposes_openid_connect_authorize_service() {
+        let _ = AppServices::oidc_authorize;
+    }
+
+    #[test]
+    fn exposes_openid_connect_token_service() {
+        let _ = AppServices::oidc_token;
     }
 }

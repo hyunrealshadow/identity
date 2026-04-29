@@ -3,7 +3,7 @@ use http::{HeaderMap, HeaderValue, StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
 use serde::{Deserialize, Serialize};
 
-use crate::application::{
+use identity_application::{
     error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
     openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
 };

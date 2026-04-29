@@ -95,7 +95,7 @@ pub fn shares_listener(health: &HealthConfig, server: &ServerConfig) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{bind_address, shares_listener};
-    use crate::infrastructure::config::{
+    use identity_infrastructure::config::{
         HealthChecksConfig, HealthConfig, HealthServerConfig, ServerConfig,
     };
 

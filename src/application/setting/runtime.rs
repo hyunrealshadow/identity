@@ -193,7 +193,7 @@ impl SettingsRefresher {
     }
 
     pub fn spawn_detached(self) {
-        let _ = self.spawn();
+        drop(self.spawn());
     }
 }
 

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::client::model::ClientOid;
+use crate::client::model::ClientOid;
 
 pub type ClientAuthorizationOid = Uuid;
 

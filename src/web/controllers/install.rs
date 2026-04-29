@@ -51,11 +51,11 @@ impl InstallFailureLogContext {
     }
 }
 
-fn should_log_install_failure_as_error(error: &crate::application::error::AppError) -> bool {
+fn should_log_install_failure_as_error(error: &identity_application::error::AppError) -> bool {
     error.kind().http_status().is_server_error()
 }
 
-fn log_install_failure(error: &crate::application::error::AppError, form: &InstallForm) {
+fn log_install_failure(error: &identity_application::error::AppError, form: &InstallForm) {
     let context = InstallFailureLogContext::from_form(form);
 
     if should_log_install_failure_as_error(error) {
@@ -82,27 +82,29 @@ fn log_install_failure(error: &crate::application::error::AppError, form: &Insta
     }
 }
 
-fn render_install_page(
-    ctx: &AppState,
-    headers: &HeaderMap,
+struct InstallPageRenderInput<'a> {
+    ctx: &'a AppState,
+    headers: &'a HeaderMap,
     csrf_token: String,
     username: String,
     email: String,
     domain: String,
-    selected_algorithm: &str,
+    selected_algorithm: &'a str,
     error: Option<String>,
-) -> Response {
+}
+
+fn render_install_page(input: InstallPageRenderInput<'_>) -> Response {
     let data = InstallPageData {
-        username,
-        email,
-        domain,
-        error,
-        csrf_token,
-        algorithms: install_algorithms(selected_algorithm),
+        username: input.username,
+        email: input.email,
+        domain: input.domain,
+        error: input.error,
+        csrf_token: input.csrf_token,
+        algorithms: install_algorithms(input.selected_algorithm),
     };
 
     let mut response = Response::new();
-    match web::tera::render_view(ctx, headers, "install/index.html", data) {
+    match web::tera::render_view(input.ctx, input.headers, "install/index.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
     }
@@ -114,7 +116,7 @@ async fn install_page(
     depot: &mut Depot,
     req: &mut Request,
     res: &mut Response,
-) -> Result<(), crate::application::error::AppError> {
+) -> Result<(), identity_application::error::AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     if ctx.settings().installation().current_value().initialized {
@@ -122,16 +124,16 @@ async fn install_page(
         return Ok(());
     }
 
-    *res = render_install_page(
-        &ctx,
-        &headers,
-        csrf_token(depot),
-        String::new(),
-        String::new(),
-        String::new(),
-        "ecdsa-p256",
-        None,
-    );
+    *res = render_install_page(InstallPageRenderInput {
+        ctx: &ctx,
+        headers: &headers,
+        csrf_token: csrf_token(depot),
+        username: String::new(),
+        email: String::new(),
+        domain: String::new(),
+        selected_algorithm: "ecdsa-p256",
+        error: None,
+    });
     Ok(())
 }
 
@@ -140,7 +142,7 @@ async fn install_submit(
     depot: &mut Depot,
     req: &mut Request,
     res: &mut Response,
-) -> Result<(), crate::application::error::AppError> {
+) -> Result<(), identity_application::error::AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let form: InstallForm = parse_form(req).await?;
@@ -152,16 +154,16 @@ async fn install_submit(
     let algorithm = match parse_algorithm(&form.key_algorithm) {
         Ok(algorithm) => algorithm,
         Err(message) => {
-            *res = render_install_page(
-                &ctx,
-                &headers,
-                csrf_token(depot),
-                form.username,
-                form.email,
-                form.domain,
-                &form.key_algorithm,
-                Some(message),
-            );
+            *res = render_install_page(InstallPageRenderInput {
+                ctx: &ctx,
+                headers: &headers,
+                csrf_token: csrf_token(depot),
+                username: form.username,
+                email: form.email,
+                domain: form.domain,
+                selected_algorithm: &form.key_algorithm,
+                error: Some(message),
+            });
             return Ok(());
         }
     };
@@ -181,20 +183,20 @@ async fn install_submit(
         }
         Err(error) => {
             log_install_failure(&error, &form);
-            *res = render_install_page(
-                &ctx,
-                &headers,
-                csrf_token(depot),
-                form.username,
-                form.email,
-                form.domain,
-                &form.key_algorithm,
-                Some(super::response::error_message(
+            *res = render_install_page(InstallPageRenderInput {
+                ctx: &ctx,
+                headers: &headers,
+                csrf_token: csrf_token(depot),
+                username: form.username,
+                email: form.email,
+                domain: form.domain,
+                selected_algorithm: &form.key_algorithm,
+                error: Some(super::response::error_message(
                     ctx.resources().i18n(),
                     &resolve_locale_from_headers(&headers),
                     &error,
                 )),
-            );
+            });
         }
     }
     Ok(())
@@ -238,7 +240,7 @@ fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::application::error::{AppError, codes::common::CommonErrorCode};
+    use identity_application::error::{AppError, codes::common::CommonErrorCode};
 
     use super::{InstallFailureLogContext, InstallForm, should_log_install_failure_as_error};
 

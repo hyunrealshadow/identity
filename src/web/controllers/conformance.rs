@@ -45,7 +45,7 @@ async fn auto_login(
     depot: &mut Depot,
     req: &mut Request,
     res: &mut Response,
-) -> Result<(), crate::application::error::AppError> {
+) -> Result<(), identity_application::error::AppError> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: AutoLoginRequest = parse_json(req).await?;
@@ -171,7 +171,7 @@ mod tests {
     #[tokio::test]
     async fn auto_login_returns_bad_request_for_invalid_login_id() {
         let app = super::routes().hoop(salvo::affix_state::inject(
-            crate::boot::test_app_state_with_mock_settings().await,
+            identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
 

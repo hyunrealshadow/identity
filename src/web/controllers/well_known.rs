@@ -23,7 +23,7 @@ pub fn routes() -> Router {
 
 async fn openid_configuration_document(
     service: &OpenIdProviderService,
-) -> Result<crate::domain::openid_connect::OpenIdProviderMetadata, AppError> {
+) -> Result<identity_domain::openid_connect::OpenIdProviderMetadata, AppError> {
     service.discovery_metadata().await
 }
 
@@ -67,7 +67,7 @@ mod tests {
 
     struct TestInstallationSetting(Arc<InstallationState>);
 
-    impl crate::application::setting::runtime::SettingProvider<InstallationSetting>
+    impl identity_application::setting::runtime::SettingProvider<InstallationSetting>
         for TestInstallationSetting
     {
         fn current_value(&self) -> Arc<InstallationState> {

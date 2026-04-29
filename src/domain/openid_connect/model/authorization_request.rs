@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::domain::openid_connect::ScopeSet;
+use crate::openid_connect::ScopeSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseType {
@@ -269,7 +269,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::openid_connect::ScopeSet;
+    use crate::openid_connect::ScopeSet;
     use url::Url;
     use uuid::Uuid;
 

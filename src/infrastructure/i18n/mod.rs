@@ -9,7 +9,7 @@ use fluent_templates::{ArcLoader, Loader, fluent_bundle::FluentValue};
 use http::{HeaderMap, header::ACCEPT_LANGUAGE};
 use unic_langid::{LanguageIdentifier, langid};
 
-use crate::application::error::params::ErrorParams;
+use identity_application::error::params::ErrorParams;
 
 // Global I18n instance used by `AppError` response rendering to translate error
 // codes without access to `AppState`. Initialised once during startup.
@@ -41,10 +41,10 @@ pub fn resolve_locale_from_headers(headers: &HeaderMap) -> LanguageIdentifier {
             return langid;
         }
 
-        if let Some(primary) = locale.split('-').next() {
-            if let Ok(langid) = LanguageIdentifier::from_str(primary) {
-                return langid;
-            }
+        if let Some(primary) = locale.split('-').next()
+            && let Ok(langid) = LanguageIdentifier::from_str(primary)
+        {
+            return langid;
         }
     }
 

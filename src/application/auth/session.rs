@@ -37,7 +37,7 @@ impl SessionService {
         // Filter out expired sessions client-side (DB query already filters by
         // status=active, this just catches rows where expires_at has passed).
         let now = Utc::now();
-        views.retain(|v| v.expires_at.map_or(true, |exp| now <= exp));
+        views.retain(|v| v.expires_at.is_none_or(|exp| now <= exp));
 
         // Preserve the original cookie order.
         let oid_order: std::collections::HashMap<Uuid, usize> = session_oids
@@ -65,10 +65,10 @@ impl SessionService {
             return Err(AppError::from_code(AuthErrorCode::SessionExpired));
         }
 
-        if let Some(expires_at) = &session.expires_at {
-            if Utc::now() > *expires_at {
-                return Err(AppError::from_code(AuthErrorCode::SessionExpired));
-            }
+        if let Some(expires_at) = &session.expires_at
+            && Utc::now() > *expires_at
+        {
+            return Err(AppError::from_code(AuthErrorCode::SessionExpired));
         }
 
         if session.revoked_at.is_some() {

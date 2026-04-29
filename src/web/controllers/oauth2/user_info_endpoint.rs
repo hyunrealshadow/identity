@@ -2,7 +2,7 @@ use http::{HeaderValue, StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
 use serde::Deserialize;
 
-use crate::web::controllers::response::{AppResponse, app_state, json_response, parse_form};
+use crate::controllers::response::{AppResponse, app_state, json_response, parse_form};
 use crate::{
     application::error::{AppError, kind::ErrorKind},
     boot::AppState,
@@ -100,7 +100,7 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
 }
 
 fn build_success_response(
-    claims: crate::application::openid_connect::dto::UserInfoClaims,
+    claims: identity_application::openid_connect::dto::UserInfoClaims,
 ) -> Response {
     let mut response = json_response(StatusCode::OK, claims);
     response.headers_mut().insert(

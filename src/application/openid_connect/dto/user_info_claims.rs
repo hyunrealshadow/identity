@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
-use crate::domain::openid_connect::model::claim::JwtClaimNames;
+use identity_domain::openid_connect::model::claim::JwtClaimNames;
 
 fn serialize_datetime_as_unix<S>(
     dt: &Option<DateTime<Utc>>,
@@ -42,7 +42,7 @@ pub struct AddressClaim {
 }
 
 impl AddressClaim {
-    fn from_user(user: &crate::domain::user::User) -> Option<Self> {
+    fn from_user(user: &identity_domain::user::User) -> Option<Self> {
         let claim = Self {
             formatted: user.address_formatted.clone(),
             street_address: user.address_street_address.clone(),
@@ -176,12 +176,12 @@ impl UserInfoClaims {
         }
     }
 
-    pub fn from_user(user: &crate::domain::user::User) -> Self {
+    pub fn from_user(user: &identity_domain::user::User) -> Self {
         Self::from_user_with_profile_base(user, "https://identity.local")
     }
 
     pub fn from_user_with_profile_base(
-        user: &crate::domain::user::User,
+        user: &identity_domain::user::User,
         profile_base_url: &str,
     ) -> Self {
         Self {
@@ -221,7 +221,7 @@ impl UserInfoClaims {
 
     pub fn apply_scope_filter(
         &mut self,
-        scope: &crate::domain::openid_connect::ScopeSet,
+        scope: &identity_domain::openid_connect::ScopeSet,
         claims_request: Option<&serde_json::Value>,
     ) {
         self.apply_scope_filter_for_claim_sections(scope, claims_request, &["userinfo"]);
@@ -229,7 +229,7 @@ impl UserInfoClaims {
 
     pub fn apply_scope_filter_for_id_token(
         &mut self,
-        scope: &crate::domain::openid_connect::ScopeSet,
+        scope: &identity_domain::openid_connect::ScopeSet,
         claims_request: Option<&serde_json::Value>,
     ) {
         self.apply_scope_filter_for_claim_sections(scope, claims_request, &["id_token"]);
@@ -237,7 +237,7 @@ impl UserInfoClaims {
 
     fn apply_scope_filter_for_claim_sections(
         &mut self,
-        scope: &crate::domain::openid_connect::ScopeSet,
+        scope: &identity_domain::openid_connect::ScopeSet,
         claims_request: Option<&serde_json::Value>,
         claim_sections: &[&str],
     ) {
@@ -409,7 +409,7 @@ mod tests {
         assert!(!json.contains("email"));
     }
 
-    use crate::domain::user::{User, UserOid};
+    use identity_domain::user::{User, UserOid};
 
     #[test]
     fn from_user_creates_claims_from_user_model() {
@@ -484,7 +484,7 @@ mod tests {
         assert_eq!(parsed["email_verified"], true);
     }
 
-    use crate::domain::openid_connect::ScopeSet;
+    use identity_domain::openid_connect::ScopeSet;
 
     fn full_profile_claims() -> UserInfoClaims {
         UserInfoClaims {

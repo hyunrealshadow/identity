@@ -1,9 +1,10 @@
 use salvo::{Response, Router, handler, serve_static::StaticDir};
 
-use crate::application::setting::runtime::SettingProvider;
-use crate::boot::AppState;
-use crate::infrastructure::{config::AppConfig, health};
-use crate::web::controllers::response::redirect_to;
+use crate::controllers::response::redirect_to;
+use crate::health;
+use identity_application::setting::runtime::SettingProvider;
+use identity_infrastructure::AppState;
+use identity_infrastructure::config::AppConfig;
 
 use super::{controllers, middleware::security_headers_middleware};
 

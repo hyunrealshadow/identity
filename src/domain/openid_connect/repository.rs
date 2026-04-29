@@ -2,7 +2,7 @@ use super::model::client::OpenIdConnectClient;
 use super::model::credential::{
     OpenIdConnectCredential, OpenIdConnectCredentialOid, OpenIdConnectCredentialType,
 };
-use crate::domain::client::model::ClientOid;
+use crate::client::model::ClientOid;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,22 +21,17 @@ pub enum OpenIdConnectClientRepositoryError {
 
     #[error("failed to parse openid connect client platform")]
     ParseClientPlatform(
-        #[source]
-        crate::domain::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError,
+        #[source] crate::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError,
     ),
 
     #[error("failed to parse openid connect subject type")]
-    ParseSubjectType(
-        #[source] crate::domain::openid_connect::model::provider::ParseSubjectTypeError,
-    ),
+    ParseSubjectType(#[source] crate::openid_connect::model::provider::ParseSubjectTypeError),
 
     #[error("invalid openid connect client")]
-    InvalidClient(
-        #[source] crate::domain::openid_connect::model::client::InvalidOpenIdConnectClientError,
-    ),
+    InvalidClient(#[source] crate::openid_connect::model::client::InvalidOpenIdConnectClientError),
 
     #[error("failed to parse client protocol")]
-    ParseClientProtocol(#[source] crate::domain::client::model::ParseClientProtocolError),
+    ParseClientProtocol(#[source] crate::client::model::ParseClientProtocolError),
 }
 
 #[derive(Debug, Error)]
@@ -58,8 +53,7 @@ pub enum OpenIdConnectCredentialRepositoryError {
 
     #[error("failed to parse openid connect credential type")]
     ParseCredentialType(
-        #[source]
-        crate::domain::openid_connect::model::credential::ParseOpenIdConnectCredentialTypeError,
+        #[source] crate::openid_connect::model::credential::ParseOpenIdConnectCredentialTypeError,
     ),
 }
 

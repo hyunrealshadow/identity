@@ -4,8 +4,8 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::domain::client::model::Client;
-use crate::domain::openid_connect::model::provider::SubjectType;
+use crate::client::model::Client;
+use crate::openid_connect::model::provider::SubjectType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct OpenIdConnectClientSettings {
@@ -119,7 +119,7 @@ impl OpenIdConnectClient {
         platforms: Vec<OpenIdConnectClientPlatform>,
         assigned_scopes: Vec<String>,
     ) -> Result<Self, InvalidOpenIdConnectClientError> {
-        if client.protocol != crate::domain::client::model::ClientProtocol::OpenIdConnect {
+        if client.protocol != crate::client::model::ClientProtocol::OpenIdConnect {
             return Err(InvalidOpenIdConnectClientError);
         }
 
@@ -205,8 +205,8 @@ mod tests {
         OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
         OpenIdConnectClientPlatformType, OpenIdConnectClientSettings, pairwise_subject_identifier,
     };
-    use crate::domain::client::model::{Client, ClientProtocol};
-    use crate::domain::openid_connect::SubjectType;
+    use crate::client::model::{Client, ClientProtocol};
+    use crate::openid_connect::SubjectType;
     use chrono::Utc;
     use url::Url;
 
@@ -441,7 +441,7 @@ mod tests {
             },
         };
 
-        assert_eq!(metadata.settings.skip_consent, true);
+        assert!(metadata.settings.skip_consent);
     }
 
     #[test]

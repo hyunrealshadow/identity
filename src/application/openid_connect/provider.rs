@@ -857,11 +857,11 @@ mod tests {
             generate_ec_p521_pem, generate_ec_secp256k1_pem, generate_ed25519_pem,
             generate_rsa_pem, generate_rsa_pss_pem,
         };
-        use crate::domain::key::{
+        use chrono::Utc;
+        use identity_domain::key::{
             Key, KeyData, KeyOid, KeyType,
             material::{AsymmetricKeyData, SymmetricKeyAlgorithm, SymmetricKeyData},
         };
-        use chrono::Utc;
         use uuid::Uuid;
 
         fn make_asymmetric_key(private_key_pem: String) -> Key {

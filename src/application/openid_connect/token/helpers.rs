@@ -5,7 +5,7 @@ pub(super) fn decode_assertion_with_alg(
     assertion: &str,
     public_key_pem: &[u8],
 ) -> Result<JwtPayload, AppError> {
-    use crate::domain::key::JwaSigningAlgorithm;
+    use identity_domain::key::JwaSigningAlgorithm;
     let jwa: JwaSigningAlgorithm = alg
         .parse()
         .map_err(|_| AppError::from_code(TokenErrorCode::AssertionAlgUnsupported))?;

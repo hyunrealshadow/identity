@@ -107,14 +107,12 @@ impl UserInfoService {
 
         let mut verified_result = None;
 
-        if let Some(kid_str) = kid.as_deref() {
-            if let Ok(kid_uuid) = Uuid::parse_str(kid_str) {
-                if let Some(key) = keys.iter().find(|k| Uuid::from(k.oid) == kid_uuid) {
-                    if let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg) {
-                        verified_result = Some(result);
-                    }
-                }
-            }
+        if let Some(kid_str) = kid.as_deref()
+            && let Ok(kid_uuid) = Uuid::parse_str(kid_str)
+            && let Some(key) = keys.iter().find(|k| Uuid::from(k.oid) == kid_uuid)
+            && let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg)
+        {
+            verified_result = Some(result);
         }
 
         if verified_result.is_none() {
@@ -138,10 +136,10 @@ impl UserInfoService {
         }
 
         let now = chrono::Utc::now().timestamp();
-        if let Some(exp) = payload.claim(JwtClaimNames::EXP).and_then(|v| v.as_i64()) {
-            if exp <= now {
-                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
-            }
+        if let Some(exp) = payload.claim(JwtClaimNames::EXP).and_then(|v| v.as_i64())
+            && exp <= now
+        {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 
         let sub = payload
@@ -207,10 +205,10 @@ impl UserInfoService {
     fn verify_jwt_with_key_and_alg(
         &self,
         token: &str,
-        key: &crate::domain::key::Key,
+        key: &identity_domain::key::Key,
         alg: &str,
     ) -> Result<(jwt::JwtPayload, JwsHeader), AppError> {
-        use crate::domain::key::JwaSigningAlgorithm;
+        use identity_domain::key::JwaSigningAlgorithm;
         let jwa: JwaSigningAlgorithm = alg
             .parse()
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;

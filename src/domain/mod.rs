@@ -1,3 +1,5 @@
+extern crate self as domain;
+
 pub mod auth;
 pub mod client;
 pub mod client_authorization;

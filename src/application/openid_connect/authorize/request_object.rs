@@ -222,10 +222,10 @@ impl AuthorizeService {
             })?;
 
         for credential in credentials {
-            if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data {
-                if let Ok(payload) = decode_request_object(raw, algorithm, public_key.as_bytes()) {
-                    return Ok(payload);
-                }
+            if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data
+                && let Ok(payload) = decode_request_object(raw, algorithm, public_key.as_bytes())
+            {
+                return Ok(payload);
             }
         }
 
@@ -299,10 +299,10 @@ impl AuthorizeService {
         if let Some(value) = payload.get("prompt").and_then(|value| value.as_str()) {
             params.prompt = Some(value.to_string());
         }
-        if let Some(value) = payload.get("max_age") {
-            if let Some(value) = value.as_i64() {
-                params.max_age = Some(value.to_string());
-            }
+        if let Some(value) = payload.get("max_age")
+            && let Some(value) = value.as_i64()
+        {
+            params.max_age = Some(value.to_string());
         }
         if let Some(value) = payload.get("ui_locales").and_then(|value| value.as_str()) {
             params.ui_locales = Some(value.to_string());
@@ -423,12 +423,11 @@ impl AuthorizeService {
         if let Some(iss) = payload
             .get(JwtClaimNames::ISS)
             .and_then(|value| value.as_str())
+            && iss != params.client_id
         {
-            if iss != params.client_id {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectIssMismatch,
-                ));
-            }
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectIssMismatch,
+            ));
         }
 
         if let Some(aud) = payload.get(JwtClaimNames::AUD) {
@@ -458,34 +457,31 @@ impl AuthorizeService {
         if let Some(exp) = payload
             .get(JwtClaimNames::EXP)
             .and_then(|value| value.as_i64())
+            && exp <= now
         {
-            if exp <= now {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectExpired,
-                ));
-            }
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectExpired,
+            ));
         }
 
         if let Some(nbf) = payload
             .get(JwtClaimNames::NBF)
             .and_then(|value| value.as_i64())
+            && nbf > now
         {
-            if nbf > now {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectNotYetValid,
-                ));
-            }
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectNotYetValid,
+            ));
         }
 
         if let Some(iat) = payload
             .get(JwtClaimNames::IAT)
             .and_then(|value| value.as_i64())
+            && iat > now
         {
-            if iat > now {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectIatFuture,
-                ));
-            }
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectIatFuture,
+            ));
         }
 
         Ok(())
@@ -500,13 +496,13 @@ impl AuthorizeService {
             return Ok(());
         }
 
-        if let Some(inner) = payload.get(field).and_then(|value| value.as_str()) {
-            if inner != outer {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                        .with_param("field", field),
-                );
-            }
+        if let Some(inner) = payload.get(field).and_then(|value| value.as_str())
+            && inner != outer
+        {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
+                    .with_param("field", field),
+            );
         }
 
         Ok(())
@@ -519,13 +515,12 @@ impl AuthorizeService {
     ) -> Result<(), AppError> {
         if let (Some(inner), Some(outer)) =
             (payload.get(field).and_then(|value| value.as_str()), outer)
+            && inner != outer
         {
-            if inner != outer {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                        .with_param("field", field),
-                );
-            }
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
+                    .with_param("field", field),
+            );
         }
 
         Ok(())
@@ -538,13 +533,12 @@ impl AuthorizeService {
     ) -> Result<(), AppError> {
         if let (Some(inner), Some(outer)) =
             (payload.get(field).and_then(|value| value.as_i64()), outer)
+            && inner.to_string() != outer
         {
-            if inner.to_string() != outer {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                        .with_param("field", field),
-                );
-            }
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
+                    .with_param("field", field),
+            );
         }
 
         Ok(())
@@ -625,7 +619,7 @@ fn decode_request_object(
     alg: &str,
     public_key_pem: &[u8],
 ) -> Result<jwt::JwtPayload, AppError> {
-    use crate::domain::key::JwaSigningAlgorithm;
+    use identity_domain::key::JwaSigningAlgorithm;
     let jwa: JwaSigningAlgorithm = alg
         .parse()
         .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported))?;

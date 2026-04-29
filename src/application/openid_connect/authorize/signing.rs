@@ -11,9 +11,9 @@ use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::application::error::codes::common::CommonErrorCode;
-use crate::application::openid_connect::dto::UserInfoClaims;
-use crate::domain::openid_connect::model::claim::{JwtTokenType, TokenUseValues};
+use crate::error::codes::common::CommonErrorCode;
+use crate::openid_connect::dto::UserInfoClaims;
+use identity_domain::openid_connect::model::claim::{JwtTokenType, TokenUseValues};
 
 impl AuthorizeService {
     pub(super) async fn load_signing_key_impl(&self) -> Result<(String, String, String), AppError> {
@@ -46,6 +46,7 @@ impl AuthorizeService {
         Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn sign_implicit_id_token(
         &self,
         key_id: &str,
@@ -53,7 +54,7 @@ impl AuthorizeService {
         alg: &str,
         issuer: &Url,
         audience: &str,
-        user: &crate::domain::user::User,
+        user: &identity_domain::user::User,
         nonce: &str,
         auth_time: i64,
         acr: Option<&str>,
@@ -68,7 +69,7 @@ impl AuthorizeService {
         let mut payload = JwtPayload::new();
         let now = std::time::SystemTime::now();
         payload.set_issuer(issuer.as_str());
-        payload.set_subject(&Uuid::from(user.oid).to_string());
+        payload.set_subject(Uuid::from(user.oid).to_string());
         payload.set_audience(vec![audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
@@ -135,6 +136,7 @@ impl AuthorizeService {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn sign_implicit_access_token(
         &self,
         key_id: &str,

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::openid_connect::ScopeSet;
+use identity_domain::openid_connect::ScopeSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -117,7 +117,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
 #[cfg(test)]
 mod tests {
     use super::{ConsentDecision, build_scope_display};
-    use crate::domain::openid_connect::ScopeSet;
+    use identity_domain::openid_connect::ScopeSet;
 
     #[test]
     fn build_scope_display_marks_openid_as_essential() {

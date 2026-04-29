@@ -31,6 +31,7 @@ impl TokenService {
         Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn sign_access_token(
         &self,
         token_id: &str,
@@ -52,7 +53,7 @@ impl TokenService {
         let mut payload = JwtPayload::new();
         let now = std::time::SystemTime::now();
         payload.set_issuer(issuer.as_str());
-        payload.set_subject(&user_oid.to_string());
+        payload.set_subject(user_oid.to_string());
         payload.set_audience(vec![audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
@@ -94,6 +95,7 @@ impl TokenService {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn sign_id_token(
         &self,
         key_id: &str,
@@ -101,8 +103,8 @@ impl TokenService {
         alg: &str,
         issuer: &url::Url,
         audience: &str,
-        client: &crate::domain::openid_connect::OpenIdConnectClient,
-        user: &crate::domain::user::User,
+        client: &identity_domain::openid_connect::OpenIdConnectClient,
+        user: &identity_domain::user::User,
         nonce: Option<&str>,
         auth_time: Option<i64>,
         acr: Option<&str>,
@@ -343,7 +345,7 @@ impl TokenService {
         payload.set_audience(vec![issuer.as_str()]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
-        payload.set_jwt_id(&Uuid::new_v4().to_string());
+        payload.set_jwt_id(Uuid::new_v4().to_string());
 
         let signer = RS256.signer_from_pem(private_key.as_bytes()).unwrap();
         jwt::encode_with_signer(&payload, &header, &signer).unwrap()

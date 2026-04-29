@@ -111,9 +111,7 @@ pub fn csrf_token(depot: &Depot) -> String {
 
 /// Parse a `User-Agent` header with `woothee` and return device/browser/OS
 /// fields.
-pub fn parse_user_agent(
-    headers: &HeaderMap,
-) -> (
+pub type ParsedUserAgent = (
     Option<String>,
     Option<String>,
     Option<String>,
@@ -121,7 +119,9 @@ pub fn parse_user_agent(
     Option<String>,
     Option<String>,
     Option<String>,
-) {
+);
+
+pub fn parse_user_agent(headers: &HeaderMap) -> ParsedUserAgent {
     let ua_str = headers
         .get(header::USER_AGENT)
         .and_then(|v| v.to_str().ok())

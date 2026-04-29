@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::domain::key::{AsymmetricKeyAlgorithm, AsymmetricKeyData};
+use crate::key::{AsymmetricKeyAlgorithm, AsymmetricKeyData};
 
 #[derive(Debug, Error)]
 pub enum KeyMaterialError {

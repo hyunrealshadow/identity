@@ -9,7 +9,7 @@ use argon2::{
 };
 use password_hash::rand_core::OsRng;
 
-use crate::domain::{
+use identity_domain::{
     auth::password::{HashOptions, PasswordHashError, VerifyResult},
     user::model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
 };
@@ -103,7 +103,7 @@ fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{build_argon2, hash, verify};
-    use crate::domain::{
+    use identity_domain::{
         auth::password::VerifyResult,
         user::model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
     };
@@ -129,7 +129,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            crate::domain::auth::password::PasswordHashError::HashFailed(_)
+            identity_domain::auth::password::PasswordHashError::HashFailed(_)
         ));
     }
 
@@ -156,7 +156,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            crate::domain::auth::password::PasswordHashError::InvalidStoredHash(_)
+            identity_domain::auth::password::PasswordHashError::InvalidStoredHash(_)
         ));
     }
 

@@ -54,7 +54,7 @@ impl AuthorizeService {
                 .create(
                     client_id,
                     ClientAuthorizationType::AccessToken,
-                    serde_json::to_value(crate::domain::client_authorization::AccessTokenData {
+                    serde_json::to_value(identity_domain::client_authorization::AccessTokenData {
                         scope: request.scope.clone(),
                         user_oid: user_oid.to_string(),
                         session_oid: session_oid.to_string(),

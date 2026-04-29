@@ -1,4 +1,4 @@
-use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
+use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for the `/oauth2/authorize` HTTP layer:
 /// request extraction, method validation, and interaction routing.

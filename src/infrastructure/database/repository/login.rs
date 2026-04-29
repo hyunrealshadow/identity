@@ -6,14 +6,14 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use crate::domain::auth::{
-    model::Login,
-    repository::{LoginRepository, LoginRepositoryError},
-};
-use crate::infrastructure::database::entity::{
+use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
     client_authorization::Entity as ClientAuthorizationEntity, login, login::Entity as LoginEntity,
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
+};
+use identity_domain::auth::{
+    model::Login,
+    repository::{LoginRepository, LoginRepositoryError},
 };
 
 fn to_domain(
@@ -113,7 +113,7 @@ impl LoginRepository for LoginRepositoryImpl {
             client_id: Set(client.id),
             client_authorization_id: Set(client_authorization_model.id),
             user_id: Set(None),
-            status: Set(crate::domain::auth::LoginStatus::CREATED.to_owned()),
+            status: Set(identity_domain::auth::LoginStatus::CREATED.to_owned()),
             failed_attempts: Set(0),
             requested_acr: Set(requested_acr.map(str::to_owned)),
             created_at: Set(now.into()),

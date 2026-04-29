@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::domain::user::OtpCredentialData;
+use crate::user::OtpCredentialData;
 
 #[derive(Debug, Error)]
 pub enum TotpError {

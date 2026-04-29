@@ -1,4 +1,4 @@
-use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
+use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for data protection (encryption/decryption) operations.
 /// Range: 14000-14099

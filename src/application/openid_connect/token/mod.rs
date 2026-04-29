@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::application::data_protection::DataProtector;
+use crate::data_protection::DataProtector;
 
 use crate::{
     application::{
@@ -76,6 +76,7 @@ pub struct TokenService {
 }
 
 impl TokenService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         key_repo: Arc<dyn KeyRepository>,

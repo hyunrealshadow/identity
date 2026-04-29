@@ -171,7 +171,7 @@ async fn handle_consent_decision(
 
     if is_html {
         if response_mode_from_value(request.response_mode.as_deref())
-            == Some(crate::domain::openid_connect::ResponseMode::FormPost)
+            == Some(identity_domain::openid_connect::ResponseMode::FormPost)
         {
             return Ok(render_form_post_redirect_response(&ctx, &headers, &redirect).into());
         }

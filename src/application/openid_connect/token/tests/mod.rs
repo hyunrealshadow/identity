@@ -265,14 +265,14 @@ fn user_info_service_with_key(
     repo: Arc<InMemoryClientAuthorizationRepository>,
     key: Key,
     user_oid: Uuid,
-) -> crate::application::openid_connect::user_info::UserInfoService {
-    crate::application::openid_connect::user_info::UserInfoService::new(
+) -> crate::openid_connect::user_info::UserInfoService {
+    crate::openid_connect::user_info::UserInfoService::new(
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
         Arc::new(InMemoryClientRepository),
         repo,
-        Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
+        Arc::new(crate::key::asymmetric::AsymmetricKeyService {
             repo: Arc::new(InMemoryKeyRepository { keys: vec![key] }),
             generator: Arc::new(TestAsymmetricKeyGenerator),
             jwk_generator: test_key_jwk_generator(),

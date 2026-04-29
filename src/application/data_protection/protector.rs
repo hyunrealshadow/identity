@@ -5,9 +5,9 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use tracing::warn;
 
-use crate::domain::data_protection::DataProtectionError;
-use crate::domain::data_protection::{KeyRing, ProtectedPayload, Purpose, derive_subkey};
-use crate::domain::key::repository::KeyRepository;
+use identity_domain::data_protection::DataProtectionError;
+use identity_domain::data_protection::{KeyRing, ProtectedPayload, Purpose, derive_subkey};
+use identity_domain::key::repository::KeyRepository;
 
 pub const DATA_PROTECTION_KEY_SIZE: usize = 32;
 
@@ -119,9 +119,9 @@ impl DataProtector for DataProtectorImpl {
 }
 
 fn decode_master_key(
-    key: &crate::domain::key::Key,
+    key: &identity_domain::key::Key,
 ) -> Result<[u8; DATA_PROTECTION_KEY_SIZE], DataProtectionError> {
-    use crate::domain::key::KeyData;
+    use identity_domain::key::KeyData;
     let KeyData::Symmetric(sym_data) = &key.data else {
         return Err(DataProtectionError::Internal(Box::new(
             std::io::Error::other("expected symmetric key"),
@@ -155,8 +155,8 @@ mod tests {
     use std::sync::Arc;
     use uuid::Uuid;
 
-    use crate::domain::data_protection::DataProtectionError;
-    use crate::domain::key::{
+    use identity_domain::data_protection::DataProtectionError;
+    use identity_domain::key::{
         Key, KeyData, KeyOid, KeyType,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
         repository::{KeyRepository, KeyRepositoryError},

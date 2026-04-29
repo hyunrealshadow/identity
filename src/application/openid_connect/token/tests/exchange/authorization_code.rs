@@ -459,11 +459,11 @@ async fn exchange_authorization_code_rejects_reused_code() {
             .revoked_at
             .is_some()
     );
-    let user_info_service = crate::application::openid_connect::user_info::UserInfoService::new(
+    let user_info_service = crate::openid_connect::user_info::UserInfoService::new(
         Arc::new(InMemoryUserRepository { user }),
         Arc::new(InMemoryClientRepository),
         repo.clone(),
-        Arc::new(crate::application::key::asymmetric::AsymmetricKeyService {
+        Arc::new(crate::key::asymmetric::AsymmetricKeyService {
             repo: key_repo,
             generator: Arc::new(TestAsymmetricKeyGenerator),
             jwk_generator: test_key_jwk_generator(),

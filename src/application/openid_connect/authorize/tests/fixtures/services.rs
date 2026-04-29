@@ -160,7 +160,7 @@ impl DataProtectionCipher for TestCipher {
         _key: &[u8; DATA_PROTECTION_KEY_SIZE],
         plaintext: &[u8],
         _aad: &[u8],
-    ) -> Result<([u8; 24], Vec<u8>), crate::domain::data_protection::DataProtectionError> {
+    ) -> Result<([u8; 24], Vec<u8>), identity_domain::data_protection::DataProtectionError> {
         Ok(([0u8; 24], plaintext.to_vec()))
     }
 
@@ -170,7 +170,7 @@ impl DataProtectionCipher for TestCipher {
         _nonce: &[u8; 24],
         ciphertext: &[u8],
         _aad: &[u8],
-    ) -> Result<Vec<u8>, crate::domain::data_protection::DataProtectionError> {
+    ) -> Result<Vec<u8>, identity_domain::data_protection::DataProtectionError> {
         Ok(ciphertext.to_vec())
     }
 }

@@ -1,10 +1,10 @@
 use http::HeaderMap;
 use salvo::{Depot, Request, Response, handler};
 
-use crate::application::error::AppError;
-use crate::boot::AppState;
-use crate::domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
-use crate::web::controllers::response::AppResponse;
+use crate::controllers::response::AppResponse;
+use identity_application::error::AppError;
+use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
+use identity_infrastructure::AppState;
 
 use super::{
     super::shared::load_active_sessions,
@@ -27,34 +27,31 @@ fn render_error(
         && raw.redirect_uri.as_deref().is_some_and(|u| !u.is_empty())
         && raw.client_id.as_deref().is_some_and(|c| !c.is_empty());
 
-    if can_redirect {
-        if let Some(redirect_uri) = raw.redirect_uri.as_deref() {
-            if let Ok(uri) = url::Url::parse(redirect_uri) {
-                let error_response = OAuthErrorResponse::new(OAuthErrorCode::InvalidRequest);
-                let error_response = if let Some(s) = raw.state.clone() {
-                    error_response.with_state(s)
-                } else {
-                    error_response
-                };
-                if raw.response_mode.as_deref() == Some("form_post") {
-                    return render_form_post_response(ctx, headers, &uri, &error_response);
-                }
-
-                let error_response = match raw
-                    .response_type
-                    .as_deref()
-                    .and_then(|value| value.parse::<ResponseType>().ok())
-                {
-                    Some(response_type) if response_type.is_implicit() => {
-                        error_response.to_fragment_redirect_url(&uri)
-                    }
-                    _ => error_response.to_redirect_url(&uri),
-                };
-                return crate::web::controllers::response::redirect_to_response(
-                    error_response.as_str(),
-                );
-            }
+    if can_redirect
+        && let Some(redirect_uri) = raw.redirect_uri.as_deref()
+        && let Ok(uri) = url::Url::parse(redirect_uri)
+    {
+        let error_response = OAuthErrorResponse::new(OAuthErrorCode::InvalidRequest);
+        let error_response = if let Some(s) = raw.state.clone() {
+            error_response.with_state(s)
+        } else {
+            error_response
+        };
+        if raw.response_mode.as_deref() == Some("form_post") {
+            return render_form_post_response(ctx, headers, &uri, &error_response);
         }
+
+        let error_response = match raw
+            .response_type
+            .as_deref()
+            .and_then(|value| value.parse::<ResponseType>().ok())
+        {
+            Some(response_type) if response_type.is_implicit() => {
+                error_response.to_fragment_redirect_url(&uri)
+            }
+            _ => error_response.to_redirect_url(&uri),
+        };
+        return crate::controllers::response::redirect_to_response(error_response.as_str());
     }
 
     render_authorize_error_page(ctx, headers, raw, error)
@@ -62,7 +59,7 @@ fn render_error(
 
 #[handler]
 pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
-    let ctx = crate::web::controllers::response::app_state(depot)?;
+    let ctx = crate::controllers::response::app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let authorize_request = extract_authorize_request(req).await?;
     if let Some(error) = authorize_input_error(&authorize_request.raw) {
@@ -128,10 +125,10 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::openid_connect::{
+    use http::{HeaderMap, StatusCode, header};
+    use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
     };
-    use http::{HeaderMap, StatusCode, header};
     use salvo::{
         Service,
         test::{ResponseExt, TestClient},
@@ -144,7 +141,7 @@ mod tests {
 
     async fn call_authorize(uri: &str) -> salvo::Response {
         let app = super::super::routes().hoop(salvo::affix_state::inject(
-            crate::boot::test_app_state_with_mock_settings().await,
+            identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
 
@@ -156,7 +153,7 @@ mod tests {
     #[tokio::test]
     async fn authorize_routes_accept_post_requests() {
         let app = super::super::routes().hoop(salvo::affix_state::inject(
-            crate::boot::test_app_state_with_mock_settings().await,
+            identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
 
@@ -210,7 +207,7 @@ mod tests {
         };
 
         let response = super::super::authorize_response::redirect_oauth_error_response(
-            &crate::boot::test_app_state_with_mock_settings().await,
+            &identity_infrastructure::test_app_state_with_mock_settings().await,
             &HeaderMap::new(),
             &request,
             OAuthErrorCode::LoginRequired,
@@ -246,7 +243,7 @@ mod tests {
         };
 
         let response = super::super::authorize_response::redirect_oauth_error_response(
-            &crate::boot::test_app_state_with_mock_settings().await,
+            &identity_infrastructure::test_app_state_with_mock_settings().await,
             &HeaderMap::new(),
             &request,
             OAuthErrorCode::LoginRequired,

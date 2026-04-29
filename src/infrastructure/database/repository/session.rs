@@ -4,13 +4,13 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use uuid::Uuid;
 
 use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
-use crate::domain::auth::{
+use crate::database::entity::{
+    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
+};
+use identity_domain::auth::{
     SessionStatus,
     model::{ActiveSession, Session},
     repository::{SessionRepository, SessionRepositoryError},
-};
-use crate::infrastructure::database::entity::{
-    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 
 fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
@@ -193,8 +193,8 @@ mod tests {
     use chrono::{DateTime, Utc};
     use uuid::Uuid;
 
-    use crate::domain::auth::SessionStatus;
-    use crate::infrastructure::database::entity::session;
+    use crate::database::entity::session;
+    use identity_domain::auth::SessionStatus;
 
     #[test]
     fn session_to_domain_wraps_required_timestamps_in_some() {

@@ -3,7 +3,7 @@ use std::time::Duration;
 use migration::{DbErr, Migrator, MigratorTrait};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 
-use crate::infrastructure::config::DatabaseConfig;
+use crate::config::DatabaseConfig;
 
 pub mod entity;
 pub mod repository;

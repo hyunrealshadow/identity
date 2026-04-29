@@ -24,7 +24,7 @@ use super::shared::{
     append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
     csrf_token, is_secure_cookie, load_active_sessions,
 };
-use crate::web::views::auth_ui::{AccountData, IdentifierPageData, OtpPageData, PasswordPageData};
+use crate::views::auth_ui::{AccountData, IdentifierPageData, OtpPageData, PasswordPageData};
 use crate::{
     application::{
         auth::login::ChallengeOutcome,
@@ -337,7 +337,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
             accounts,
             Some(body.identifier),
             None,
-            Some(invalid_request_message(&ctx, &headers).into()),
+            Some(invalid_request_message(&ctx, &headers)),
         )
         .into());
     };
@@ -359,7 +359,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
                 accounts,
                 Some(body.identifier),
                 Some(protected_login_id),
-                Some(invalid_request_message(&ctx, &headers).into()),
+                Some(invalid_request_message(&ctx, &headers)),
             )
             .into());
         }
@@ -390,7 +390,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
                             accounts,
                             Some(body.identifier),
                             Some(protected_login_id),
-                            Some(invalid_request_message(&ctx, &headers).into()),
+                            Some(invalid_request_message(&ctx, &headers)),
                         )
                         .into());
                     }
@@ -399,7 +399,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
                 let identifier = urlencoding::encode(&body.identifier).into_owned();
                 let name = urlencoding::encode(&result.user.name).into_owned();
                 let email =
-                    urlencoding::encode(&crate::web::views::auth::mask_email(&result.user.email))
+                    urlencoding::encode(&crate::views::auth::mask_email(&result.user.email))
                         .into_owned();
 
                 let url = format!(
@@ -455,7 +455,7 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
                     identifier: body.identifier,
                     user_name: String::new(),
                     masked_email: String::new(),
-                    error: Some(invalid_request_message(&ctx, &headers).into()),
+                    error: Some(invalid_request_message(&ctx, &headers)),
                     csrf_token: String::new(),
                 },
                 csrf_token(depot),
@@ -502,7 +502,7 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
                                 identifier: body.identifier,
                                 user_name: String::new(),
                                 masked_email: String::new(),
-                                error: Some(invalid_request_message(&ctx, &headers).into()),
+                                error: Some(invalid_request_message(&ctx, &headers)),
                                 csrf_token: String::new(),
                             },
                             csrf_token(depot),
@@ -564,7 +564,7 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
                     identifier: body.identifier,
                     user_name: String::new(),
                     masked_email: String::new(),
-                    error: Some(invalid_request_message(&ctx, &headers).into()),
+                    error: Some(invalid_request_message(&ctx, &headers)),
                     csrf_token: String::new(),
                 },
                 csrf_token(depot),

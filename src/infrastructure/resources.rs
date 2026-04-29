@@ -3,7 +3,7 @@ use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 use tera::Tera;
 
-use crate::infrastructure::i18n::I18n;
+use crate::i18n::I18n;
 
 #[derive(Clone)]
 pub struct AppResources {

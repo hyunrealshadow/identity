@@ -1,13 +1,13 @@
-use crate::domain::user::{
-    CredentialData, CredentialType, Password, UserCredential, UserCredentialOid, UserOid,
-    repository::{UserCredentialRepository, UserCredentialRepositoryError},
-};
-use crate::infrastructure::database::entity::{
+use crate::database::entity::{
     user, user::Entity as UserEntity, user_credential,
     user_credential::Entity as UserCredentialEntity,
 };
 use async_trait::async_trait;
 use chrono::Utc;
+use identity_domain::user::{
+    CredentialData, CredentialType, Password, UserCredential, UserCredentialOid, UserOid,
+    repository::{UserCredentialRepository, UserCredentialRepositoryError},
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
 };

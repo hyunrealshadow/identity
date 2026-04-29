@@ -863,18 +863,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "console"
-version = "0.15.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "054ccb5b10f9f2cbf51eb355ca1d05c2d279ce1804688d0db74b4733a5aeafd8"
-dependencies = [
- "encode_unicode",
- "libc",
- "once_cell",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1262,12 +1250,6 @@ name = "embedded-io"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
-
-[[package]]
-name = "encode_unicode"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 
 [[package]]
 name = "encoding_rs"
@@ -2092,22 +2074,33 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 name = "identity"
 version = "0.1.0"
 dependencies = [
- "argon2",
+ "chrono",
+ "identity-application",
+ "identity-boot",
+ "identity-domain",
+ "identity-infrastructure",
+ "identity-web",
+ "salvo",
+ "sea-orm",
+ "serde_json",
+ "serial_test",
+ "tera",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "identity-application"
+version = "0.1.0"
+dependencies = [
  "async-trait",
  "base64",
- "chacha20poly1305",
  "chrono",
- "fluent-templates",
- "hex",
- "hkdf",
  "http",
- "idna",
- "include_dir",
- "insta",
+ "identity-domain",
  "josekit",
- "migration",
  "openssl",
- "password-hash",
  "rand 0.8.5",
  "regex",
  "reqwest 0.12.28",
@@ -2116,9 +2109,80 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "identity-boot"
+version = "0.1.0"
+dependencies = [
+ "identity-application",
+ "identity-domain",
+ "identity-infrastructure",
+ "identity-web",
+ "salvo",
+ "sea-orm",
+ "serde_json",
+ "tera",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "identity-domain"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64",
+ "chacha20poly1305",
+ "chrono",
+ "hkdf",
+ "idna",
+ "josekit",
+ "regex",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 1.0.69",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "identity-infrastructure"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "async-trait",
+ "base64",
+ "chacha20poly1305",
+ "chrono",
+ "fluent-templates",
+ "hex",
+ "http",
+ "identity-application",
+ "identity-domain",
+ "idna",
+ "include_dir",
+ "josekit",
+ "migration",
+ "openssl",
+ "password-hash",
+ "rand 0.8.5",
+ "regex",
+ "salvo",
+ "sea-orm",
+ "serde",
+ "serde_json",
  "serde_yml",
  "serial_test",
- "sha2 0.10.9",
  "tera",
  "thiserror 1.0.69",
  "tokio",
@@ -2127,9 +2191,33 @@ dependencies = [
  "tracing-subscriber",
  "unic-langid",
  "url",
+ "uuid",
+ "woothee",
+]
+
+[[package]]
+name = "identity-web"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64",
+ "chrono",
+ "http",
+ "identity-application",
+ "identity-domain",
+ "identity-infrastructure",
+ "josekit",
+ "salvo",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "tera",
+ "tokio",
+ "tracing",
+ "unic-langid",
+ "url",
  "urlencoding",
  "uuid",
- "validator",
  "woothee",
 ]
 
@@ -2228,22 +2316,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
  "generic-array",
-]
-
-[[package]]
-name = "insta"
-version = "1.46.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e82db8c87c7f1ccecb34ce0c24399b8a73081427f3c7c50a5d597925356115e4"
-dependencies = [
- "console",
- "once_cell",
- "pest",
- "pest_derive",
- "regex",
- "serde",
- "similar",
- "tempfile",
 ]
 
 [[package]]
@@ -4484,12 +4556,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
-name = "similar"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
-
-[[package]]
 name = "siphasher"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5801,15 +5867,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]

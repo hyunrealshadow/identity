@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use salvo::{Listener, Router, Server, conn::TcpListener};
 
-use crate::infrastructure::{config::AppConfig, health};
+use identity_infrastructure::{
+    config::AppConfig,
+    lifecycle::{AppLifecycle, wait_for_shutdown},
+    state::AppState,
+};
+use identity_web::health;
 
 use super::AppResult;
-use super::lifecycle::{AppLifecycle, wait_for_shutdown};
-use super::state::AppState;
 
 /// Start the main HTTP server (and optionally a separate health-check server)
 /// with graceful shutdown support.

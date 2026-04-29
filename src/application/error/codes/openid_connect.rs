@@ -1,4 +1,4 @@
-use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
+use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for OIDC userinfo and token validation.
 /// Range: 21000-21099

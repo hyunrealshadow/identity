@@ -1,0 +1,30 @@
+[package]
+name = "identity-boot"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "mod.rs"
+
+[dependencies]
+identity-application = { workspace = true }
+identity-domain = { workspace = true }
+identity-infrastructure = { workspace = true }
+identity-web = { workspace = true }
+salvo = { workspace = true }
+sea-orm = { workspace = true }
+tera = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+oidc-conformance = [
+  "identity-application/oidc-conformance",
+  "identity-infrastructure/oidc-conformance",
+  "identity-web/oidc-conformance",
+]
+
+[dev-dependencies]
+identity-infrastructure = { workspace = true, features = ["test-support"] }

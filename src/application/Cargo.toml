@@ -1,0 +1,37 @@
+[package]
+name = "identity-application"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "mod.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+identity-domain = { workspace = true }
+josekit = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+salvo = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+validator = { workspace = true }
+
+[features]
+oidc-conformance = []
+
+[dev-dependencies]
+openssl = { workspace = true }
+regex = { workspace = true }
+rstest = { workspace = true }
+sea-orm = { workspace = true }

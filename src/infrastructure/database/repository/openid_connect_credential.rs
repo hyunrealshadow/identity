@@ -5,13 +5,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use url::Url;
 
-use crate::domain::client::model::ClientOid;
-use crate::domain::openid_connect::{
+use crate::database::entity::{client, client_open_id_connect_credential};
+use identity_domain::client::model::ClientOid;
+use identity_domain::openid_connect::{
     OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,
     OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
     OpenIdConnectCredentialType,
 };
-use crate::infrastructure::database::entity::{client, client_open_id_connect_credential};
 
 #[derive(Debug, Deserialize)]
 struct RawClientSecretData {
@@ -112,7 +112,7 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
         oid: OpenIdConnectCredentialOid,
     ) -> Result<Option<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError> {
         let row = client_open_id_connect_credential::Entity::find()
-            .find_also_related(crate::infrastructure::database::entity::client::Entity)
+            .find_also_related(crate::database::entity::client::Entity)
             .filter(client_open_id_connect_credential::Column::Oid.eq(oid))
             .one(&self.db)
             .await
@@ -167,7 +167,7 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
 #[cfg(test)]
 mod tests {
     use super::deserialize_data;
-    use crate::domain::openid_connect::OpenIdConnectCredentialType;
+    use identity_domain::openid_connect::OpenIdConnectCredentialType;
     use serde_json::json;
 
     #[test]
@@ -179,7 +179,7 @@ mod tests {
         .unwrap();
 
         assert!(
-            matches!(data, crate::domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { secret } if secret == "s3cr3t")
+            matches!(data, identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { secret } if secret == "s3cr3t")
         );
     }
 }

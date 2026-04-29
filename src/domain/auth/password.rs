@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::{
+use crate::{
     setting::model::{SettingDefinition, SettingValidationError},
     user::model::{Argon2Options, Argon2Variant, Argon2Version, Password},
 };
@@ -94,7 +94,7 @@ pub trait PasswordHasher: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::{HashOptions, PasswordHashSetting};
-    use crate::domain::{
+    use crate::{
         setting::model::SettingDefinition,
         user::model::{Argon2Options, Argon2Variant, Argon2Version},
     };

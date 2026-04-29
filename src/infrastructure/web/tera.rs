@@ -1,13 +1,13 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use fluent_templates::{ArcLoader, Loader};
 use http::HeaderMap;
 use tera::{Context, Function, Tera, Value};
 use unic_langid::{LanguageIdentifier, langid};
 
+use crate::state::AppState;
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
-    boot::AppState,
     infrastructure::i18n::{I18n, resolve_locale_from_headers},
 };
 
@@ -35,12 +35,12 @@ impl Function for LocaleAwareFluentLoader {
 }
 
 pub fn build_i18n() -> Result<I18n, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let path = Path::new("assets/i18n");
+    let path = workspace_path("assets/i18n");
     if !path.exists() {
         return Ok(I18n::disabled());
     }
 
-    let loader = ArcLoader::builder(path, langid!("en-US"))
+    let loader = ArcLoader::builder(path.as_path(), langid!("en-US"))
         .customize(|bundle| bundle.set_use_isolating(false))
         .build()
         .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -51,7 +51,8 @@ pub fn build_i18n() -> Result<I18n, Box<dyn std::error::Error + Send + Sync + 's
 pub fn build_tera(
     loader: Option<Arc<ArcLoader>>,
 ) -> Result<Arc<Tera>, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let mut tera = Tera::new("assets/views/**/*")?;
+    let template_glob = workspace_path("assets/views/**/*");
+    let mut tera = Tera::new(template_glob.to_string_lossy().as_ref())?;
 
     if let Some(loader) = loader {
         tera.register_function(
@@ -64,6 +65,12 @@ pub fn build_tera(
     }
 
     Ok(Arc::new(tera))
+}
+
+fn workspace_path(relative: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative)
 }
 
 fn render_with_locale(
@@ -136,8 +143,24 @@ mod tests {
     use unic_langid::langid;
 
     use super::{build_i18n, build_tera, render_with_locale};
-    use crate::application::error::params::ErrorParams;
-    use crate::web::views::install::{InstallAlgorithmOption, InstallPageData};
+    use identity_application::error::params::ErrorParams;
+
+    #[derive(serde::Serialize)]
+    struct InstallPageData {
+        username: String,
+        email: String,
+        domain: String,
+        error: Option<String>,
+        csrf_token: String,
+        algorithms: Vec<InstallAlgorithmOption>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct InstallAlgorithmOption {
+        value: &'static str,
+        label: &'static str,
+        selected: bool,
+    }
 
     #[test]
     fn build_i18n_loads_split_error_files_with_args() {

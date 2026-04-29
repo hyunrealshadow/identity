@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
-use crate::domain::key::KeyOid;
+use crate::key::KeyOid;
 
 pub const VERSION: u8 = 0x01;
 pub const ALG_ID: u8 = 0x01;
@@ -29,7 +29,7 @@ impl ProtectedPayload {
     }
 
     pub fn encode(&self) -> String {
-        URL_SAFE_NO_PAD.encode(&self.to_bytes())
+        URL_SAFE_NO_PAD.encode(self.to_bytes())
     }
 
     pub fn decode(input: &str) -> Result<Self, &'static str> {

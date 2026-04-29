@@ -3,14 +3,14 @@ use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 
-use crate::application::{
+use crate::database::repository::setting::SettingRepositoryImpl;
+use identity_application::{
     error::AppError,
     setting::runtime::{CachedSetting, SettingsRefresher},
 };
-use crate::domain::{
+use identity_domain::{
     auth::password::PasswordHashSetting, setting::installation::InstallationSetting,
 };
-use crate::infrastructure::database::repository::setting::SettingRepositoryImpl;
 
 pub type AppPasswordHashSettingService = CachedSetting<PasswordHashSetting, SettingRepositoryImpl>;
 pub type AppInstallationSettingService = CachedSetting<InstallationSetting, SettingRepositoryImpl>;

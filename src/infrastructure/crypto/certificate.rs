@@ -9,7 +9,7 @@ use openssl::{
     },
 };
 
-use crate::domain::key::{generator::KeyMaterialError, model::AsymmetricKeyAlgorithm};
+use identity_domain::key::{generator::KeyMaterialError, model::AsymmetricKeyAlgorithm};
 
 fn internal<E>(error: E) -> KeyMaterialError
 where

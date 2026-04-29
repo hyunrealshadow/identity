@@ -43,11 +43,26 @@ pub struct AsymmetricKeyService {
 }
 
 impl AsymmetricKeyService {
+    #[must_use]
+    pub fn new(
+        repo: Arc<dyn KeyRepository>,
+        generator: Arc<dyn AsymmetricKeyGenerator>,
+        jwk_generator: Arc<dyn KeyJwkGenerator>,
+        jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
+    ) -> Self {
+        Self {
+            repo,
+            generator,
+            jwk_generator,
+            jwk_repo,
+        }
+    }
+
     pub async fn list_available(&self) -> Result<Vec<Key>, AppError> {
         Ok(self.repo.list_available_asymmetric().await?)
     }
 
-    pub async fn list_available_jwks(&self) -> Result<Vec<crate::domain::key::KeyJwk>, AppError> {
+    pub async fn list_available_jwks(&self) -> Result<Vec<identity_domain::key::KeyJwk>, AppError> {
         match self.jwk_repo {
             Some(ref jwk_repo) => Ok(jwk_repo.list_active().await?),
             None => Ok(vec![]),

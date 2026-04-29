@@ -1,4 +1,4 @@
-use crate::application::error::{code::AppErrorCode, kind::ErrorKind};
+use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Range: 12000-12099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -48,7 +48,7 @@ pub struct InstallPersistenceInput {
     pub email: String,
     pub password: Password,
     pub domain: String,
-    pub key_data: crate::domain::key::AsymmetricKeyData,
+    pub key_data: identity_domain::key::AsymmetricKeyData,
 }
 
 #[async_trait]
@@ -85,7 +85,7 @@ impl InstallService {
             .hash(&password, hash_options.as_ref())?;
         let mut key_data =
             self.key_generator
-                .generate(&crate::domain::key::generator::AsymmetricKeySpec {
+                .generate(&identity_domain::key::generator::AsymmetricKeySpec {
                     algorithm: input.key_algorithm.clone(),
                 })?;
         let certificate = self.certificate_generator.generate_self_signed(
@@ -140,12 +140,12 @@ fn normalize_domain(domain: &str) -> Result<String, AppError> {
 }
 
 fn normalize_email(email: &str) -> Result<String, AppError> {
-    crate::domain::user::normalization::normalize_email(email).map_err(|error| match error {
-        crate::domain::user::normalization::EmailNormalizationError::Empty => {
+    identity_domain::user::normalization::normalize_email(email).map_err(|error| match error {
+        identity_domain::user::normalization::EmailNormalizationError::Empty => {
             AppError::from_code(InstallErrorCode::EmailRequired)
         }
-        crate::domain::user::normalization::EmailNormalizationError::InvalidFormat
-        | crate::domain::user::normalization::EmailNormalizationError::InvalidDomain => {
+        identity_domain::user::normalization::EmailNormalizationError::InvalidFormat
+        | identity_domain::user::normalization::EmailNormalizationError::InvalidDomain => {
             AppError::from_code(InstallErrorCode::EmailInvalid)
         }
     })

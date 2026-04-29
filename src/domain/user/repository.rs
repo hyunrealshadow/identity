@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::domain::user::{
-    CredentialType, Password, User, UserCredential, UserCredentialOid, UserOid,
-};
+use crate::user::{CredentialType, Password, User, UserCredential, UserCredentialOid, UserOid};
 
 #[derive(Debug, Error)]
 pub enum UserRepositoryError {

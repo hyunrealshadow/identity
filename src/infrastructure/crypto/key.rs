@@ -10,8 +10,8 @@ use openssl::{
     x509::X509,
 };
 
-use crate::domain::key::JwaSigningAlgorithm;
-use crate::domain::key::{
+use identity_domain::key::JwaSigningAlgorithm;
+use identity_domain::key::{
     generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
     model::{AsymmetricKeyAlgorithm, AsymmetricKeyData},
 };
@@ -130,11 +130,11 @@ fn build_key_data(jwk: &Jwk) -> Result<AsymmetricKeyData, KeyMaterialError> {
 pub fn infer_algorithm_from_private_key_pem(
     private_key_pem: &str,
 ) -> Result<AsymmetricKeyAlgorithm, KeyMaterialError> {
-    if let Ok(private_key) = PKey::private_key_from_pem(private_key_pem.as_bytes()) {
-        if let Ok(rsa) = private_key.rsa() {
-            let bits = (rsa.size() as usize) * 8;
-            return Ok(AsymmetricKeyAlgorithm::Rsa { bits });
-        }
+    if let Ok(private_key) = PKey::private_key_from_pem(private_key_pem.as_bytes())
+        && let Ok(rsa) = private_key.rsa()
+    {
+        let bits = (rsa.size() as usize) * 8;
+        return Ok(AsymmetricKeyAlgorithm::Rsa { bits });
     }
 
     if let Ok(key_pair) = josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key_pem, None) {
@@ -245,7 +245,8 @@ fn jwk_algorithm_labels_for_private_key(
     let pem = private_key_pem.as_bytes();
     let labels: Vec<String> = JwaSigningAlgorithm::trials_for_key_type(&algorithm)
         .iter()
-        .filter_map(|jwa| jwa_algorithm_can_sign(*jwa, pem).then(|| jwa.as_str().to_owned()))
+        .filter(|&jwa| jwa_algorithm_can_sign(*jwa, pem))
+        .map(|jwa| jwa.as_str().to_owned())
         .collect();
     Ok(labels)
 }

@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::user::CredentialType;
+use identity_domain::user::CredentialType;
 
 // ─── Common Error Response ───────────────────────────────────────────────────
 

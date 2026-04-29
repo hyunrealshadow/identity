@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::authorize_extractor::{RawAuthorizeRequest, missing_required_authorize_parameters};
-use crate::web::controllers::response::{redirect_to_response, render_app_error, render_html};
+use crate::controllers::response::{redirect_to_response, render_app_error, render_html};
 
 pub fn redirect_oauth_error_response(
     ctx: &AppState,
@@ -124,7 +124,7 @@ pub fn response_mode_from_value(value: Option<&str>) -> Option<ResponseMode> {
 }
 
 pub fn authorize_error_details(
-    i18n: &crate::infrastructure::i18n::I18n,
+    i18n: &identity_infrastructure::i18n::I18n,
     headers: &HeaderMap,
     raw: &RawAuthorizeRequest,
     error: &AppError,
@@ -137,7 +137,7 @@ pub fn authorize_error_details(
             .collect();
     }
 
-    vec![crate::web::controllers::response::error_message(
+    vec![crate::controllers::response::error_message(
         i18n,
         &resolve_locale_from_headers(headers),
         error,
@@ -150,7 +150,7 @@ pub fn render_authorize_error_page(
     raw: &RawAuthorizeRequest,
     error: AppError,
 ) -> Response {
-    use crate::application::error::kind::ErrorKind;
+    use identity_application::error::kind::ErrorKind;
 
     let i18n = ctx.resources().i18n();
     let locale = resolve_locale_from_headers(headers);
@@ -180,10 +180,10 @@ pub fn render_authorize_error_page(
 
 #[cfg(test)]
 mod tests {
-    use crate::application::error::AppError;
-    use crate::application::error::codes::common::CommonErrorCode;
-    use crate::application::error::kind::ErrorKind;
-    use crate::domain::openid_connect::{
+    use identity_application::error::AppError;
+    use identity_application::error::codes::common::CommonErrorCode;
+    use identity_application::error::kind::ErrorKind;
+    use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, ResponseMode, ResponseType, ScopeSet,
     };
     use salvo::test::ResponseExt;
@@ -197,7 +197,7 @@ mod tests {
 
     #[tokio::test]
     async fn form_post_error_uses_autopost_template() {
-        let ctx = crate::boot::test_app_state_with_mock_settings().await;
+        let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
         let headers = http::HeaderMap::new();
         let request = AuthorizationRequest {
             response_type: ResponseType::Code,

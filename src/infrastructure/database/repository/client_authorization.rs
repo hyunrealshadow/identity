@@ -6,16 +6,16 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use crate::domain::{
+use crate::database::entity::{
+    client, client::Entity as ClientEntity, client_authorization,
+    client_authorization::Entity as ClientAuthorizationEntity,
+};
+use identity_domain::{
     client::model::ClientOid,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
         ClientAuthorizationType,
     },
-};
-use crate::infrastructure::database::entity::{
-    client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity,
 };
 
 fn to_domain(

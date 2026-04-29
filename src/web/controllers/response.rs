@@ -8,7 +8,7 @@ use unic_langid::LanguageIdentifier;
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
     boot::AppState,
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
+    infrastructure::i18n::{I18n, error_i18n},
     web::views::auth::BusinessErrorResponse,
 };
 
@@ -161,17 +161,5 @@ pub fn render_app_error(res: &mut Response, error: AppError) {
         let status = error.kind().http_status();
         let body = BusinessErrorResponse::new(error.code(), error.code().to_string());
         render_json(res, status, body);
-    }
-}
-
-#[async_trait]
-impl Writer for AppError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        if let Some(i18n) = error_i18n() {
-            let locale = resolve_locale_from_headers(req.headers());
-            write_error_response(res, i18n, &locale, self);
-        } else {
-            render_app_error(res, self);
-        }
     }
 }

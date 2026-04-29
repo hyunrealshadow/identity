@@ -71,12 +71,12 @@ impl TokenService {
         client_assertion_type: Option<&str>,
         client_assertion: Option<&str>,
     ) -> Result<Uuid, AppError> {
-        if let (Some(assertion_type), Some(assertion)) = (client_assertion_type, client_assertion) {
-            if assertion_type == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
-                return self
-                    .authenticate_private_key_jwt(client_id, assertion)
-                    .await;
-            }
+        if let (Some(assertion_type), Some(assertion)) = (client_assertion_type, client_assertion)
+            && assertion_type == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+        {
+            return self
+                .authenticate_private_key_jwt(client_id, assertion)
+                .await;
         }
 
         let Some(client_secret) = client_secret else {
@@ -175,18 +175,16 @@ impl TokenService {
         if let Some(exp) = payload
             .claim(JwtClaimNames::EXP)
             .and_then(|value| value.as_i64())
+            && exp <= now
         {
-            if exp <= now {
-                return Err(AppError::from_code(TokenErrorCode::AssertionExpired));
-            }
+            return Err(AppError::from_code(TokenErrorCode::AssertionExpired));
         }
         if let Some(nbf) = payload
             .claim(JwtClaimNames::NBF)
             .and_then(|value| value.as_i64())
+            && nbf > now
         {
-            if nbf > now {
-                return Err(AppError::from_code(TokenErrorCode::AssertionNotYetValid));
-            }
+            return Err(AppError::from_code(TokenErrorCode::AssertionNotYetValid));
         }
 
         Ok(client.client().oid)
@@ -194,7 +192,7 @@ impl TokenService {
 
     pub(super) async fn verify_client_assertion(
         &self,
-        client: &crate::domain::openid_connect::OpenIdConnectClient,
+        client: &identity_domain::openid_connect::OpenIdConnectClient,
         assertion: &str,
     ) -> Result<JwtPayload, AppError> {
         let header = jwt::decode_header(assertion).map_err(|error| {
@@ -217,12 +215,11 @@ impl TokenService {
             })?;
 
         for credential in credentials {
-            if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data {
-                if let Ok(payload) =
+            if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data
+                && let Ok(payload) =
                     decode_assertion_with_alg(algorithm, assertion, public_key.as_bytes())
-                {
-                    return Ok(payload);
-                }
+            {
+                return Ok(payload);
             }
         }
 

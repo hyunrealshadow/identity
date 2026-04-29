@@ -436,12 +436,12 @@ async fn ensure_web_platform_redirect_uri(
 /// Hash `CONFORMANCE_PASSWORD` with the same Argon2id defaults the app uses,
 /// and return the serialised `Password` JSON value ready for the DB.
 fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
-    use crate::domain::user::password::{
-        Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
-    };
     use argon2::{
         Argon2, PasswordHasher,
         password_hash::{SaltString, rand_core::OsRng},
+    };
+    use identity_domain::user::password::{
+        Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
     };
 
     let salt = SaltString::generate(&mut OsRng);
@@ -488,7 +488,7 @@ async fn assign_all_built_in_oidc_scopes(
     db: &impl sea_orm::ConnectionTrait,
     client_id: i64,
 ) -> Result<(), AppError> {
-    use crate::infrastructure::database::seed::scope::OPENID_CONNECT_PROTOCOL;
+    use crate::database::seed::scope::OPENID_CONNECT_PROTOCOL;
 
     let scopes = scope::Entity::find()
         .filter(scope::Column::Protocol.eq(OPENID_CONNECT_PROTOCOL))

@@ -1,0 +1,25 @@
+[package]
+name = "identity-domain"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "mod.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+base64 = { workspace = true }
+chacha20poly1305 = { workspace = true }
+chrono = { workspace = true }
+hkdf = { workspace = true }
+idna = { workspace = true }
+josekit = { workspace = true }
+regex = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }

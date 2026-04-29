@@ -2,16 +2,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
+#[derive(Default)]
 pub enum OtpAlgorithm {
+    #[default]
     Sha1,
     Sha256,
     Sha512,
-}
-
-impl Default for OtpAlgorithm {
-    fn default() -> Self {
-        OtpAlgorithm::Sha1
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

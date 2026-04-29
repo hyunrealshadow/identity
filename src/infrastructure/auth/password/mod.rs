@@ -12,7 +12,7 @@
 
 mod argon2;
 
-use crate::domain::{
+use identity_domain::{
     auth::password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
     user::model::Password,
 };
@@ -51,7 +51,7 @@ impl PasswordHasher for PasswordHasherImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
+    use identity_domain::{
         auth::password::{HashOptions, VerifyResult},
         user::model::{Argon2Options, Argon2Variant, Argon2Version},
     };

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-use crate::domain::client::model::ClientOid;
+use crate::client::model::ClientOid;
 
 pub type OpenIdConnectCredentialOid = uuid::Uuid;
 

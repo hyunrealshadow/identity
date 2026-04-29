@@ -1,4 +1,4 @@
-use crate::infrastructure::config::{AppEnvironment, HealthChecksConfig};
+use crate::config::{AppEnvironment, HealthChecksConfig};
 
 #[derive(Clone)]
 pub struct AppContext {

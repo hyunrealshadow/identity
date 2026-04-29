@@ -1,0 +1,38 @@
+[package]
+name = "identity-web"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "mod.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+identity-application = { workspace = true }
+identity-domain = { workspace = true }
+identity-infrastructure = { workspace = true }
+josekit = { workspace = true }
+salvo = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tera = { workspace = true }
+tracing = { workspace = true }
+unic-langid = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
+uuid = { workspace = true }
+woothee = { workspace = true }
+
+[features]
+oidc-conformance = ["identity-infrastructure/test-support"]
+
+[dev-dependencies]
+chrono = { workspace = true }
+identity-infrastructure = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true }
+uuid = { workspace = true }

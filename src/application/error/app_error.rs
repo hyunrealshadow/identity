@@ -1,5 +1,8 @@
 use std::error::Error as StdError;
 
+use salvo::{Request, Response, Writer, async_trait, prelude::Json};
+use serde::Serialize;
+
 use super::{code::AppErrorCode, kind::ErrorKind, params::ErrorParams};
 
 #[derive(Debug)]
@@ -54,5 +57,48 @@ impl StdError for AppError {
         self.source
             .as_deref()
             .map(|source| source as &(dyn StdError + 'static))
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct BusinessErrorResponse {
+    error: ErrorDetail,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorDetail {
+    code: u32,
+    message: String,
+}
+
+impl BusinessErrorResponse {
+    fn new(code: u32, message: impl Into<String>) -> Self {
+        Self {
+            error: ErrorDetail {
+                code,
+                message: message.into(),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl Writer for AppError {
+    async fn write(self, _req: &mut Request, _depot: &mut salvo::Depot, res: &mut Response) {
+        let status = self.kind().http_status();
+        if status.is_server_error() {
+            tracing::error!(
+                error = %self,
+                source = ?self.source(),
+                code = self.code(),
+                "internal error"
+            );
+        } else {
+            tracing::debug!(error = %self, code = self.code(), "business error");
+        }
+
+        let body = BusinessErrorResponse::new(self.code(), self.code().to_string());
+        res.status_code(status);
+        res.render(Json(body));
     }
 }

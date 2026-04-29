@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::domain::auth::model::{ActiveSession, Login, Session};
+use crate::auth::model::{ActiveSession, Login, Session};
 
 #[derive(Debug, Error)]
 pub enum SessionRepositoryError {
@@ -69,6 +69,7 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<Vec<ActiveSession>, SessionRepositoryError>;
 
     /// Create a new session and return it.
+    #[allow(clippy::too_many_arguments)]
     async fn create(
         &self,
         user_oid: Uuid,

@@ -7,12 +7,11 @@ impl AuthorizeService {
     ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
         Self::validate_request_parameter_conflicts(&params)?;
 
-        if params.client_id.trim().is_empty() {
-            if let Some(request) = params.request.as_deref() {
-                if let Some(client_id) = Self::extract_request_object_client_id(request)? {
-                    params.client_id = client_id;
-                }
-            }
+        if params.client_id.trim().is_empty()
+            && let Some(request) = params.request.as_deref()
+            && let Some(client_id) = Self::extract_request_object_client_id(request)?
+        {
+            params.client_id = client_id;
         }
 
         if params.client_id.trim().is_empty() {
@@ -95,10 +94,11 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::PromptValueInvalid).with_source(error)
             })?;
 
-        if let Some(ref prompt_set) = prompt {
-            if prompt_set.contains(&PromptValue::None) && prompt_set.len() > 1 {
-                return Err(AppError::from_code(AuthorizeErrorCode::PromptNoneCombined));
-            }
+        if let Some(ref prompt_set) = prompt
+            && prompt_set.contains(&PromptValue::None)
+            && prompt_set.len() > 1
+        {
+            return Err(AppError::from_code(AuthorizeErrorCode::PromptNoneCombined));
         }
 
         let max_age = params

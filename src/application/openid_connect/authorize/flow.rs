@@ -95,7 +95,7 @@ impl AuthorizeService {
         protected_login_oid: &str,
     ) -> Result<
         (
-            crate::domain::auth::model::Login,
+            identity_domain::auth::model::Login,
             AuthorizationRequestData,
             OpenIdConnectClient,
         ),
@@ -111,7 +111,7 @@ impl AuthorizeService {
     pub async fn load_login_by_protected_id(
         &self,
         protected_login_id: &str,
-    ) -> Result<crate::domain::auth::model::Login, AppError> {
+    ) -> Result<identity_domain::auth::model::Login, AppError> {
         let login_oid = self.decrypt_login_id(protected_login_id).await?;
 
         self.login_repo
@@ -167,21 +167,23 @@ impl AuthorizeService {
                         .with_source(error)
                 })?,
                 ClientAuthorizationType::AuthorizationCode,
-                serde_json::to_value(crate::domain::client_authorization::AuthorizationCodeData {
-                    scope: request.scope.clone(),
-                    nonce: request.nonce.clone(),
-                    code_challenge: request.code_challenge.clone(),
-                    code_challenge_method: request.code_challenge_method.clone(),
-                    user_oid: user_oid.to_string(),
-                    session_oid: session_oid.to_string(),
-                    acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
-                    redirect_uri: request.redirect_uri.clone(),
-                    auth_time,
-                    claims: request
-                        .claims
-                        .as_ref()
-                        .and_then(|c| serde_json::from_str(c).ok()),
-                })
+                serde_json::to_value(
+                    identity_domain::client_authorization::AuthorizationCodeData {
+                        scope: request.scope.clone(),
+                        nonce: request.nonce.clone(),
+                        code_challenge: request.code_challenge.clone(),
+                        code_challenge_method: request.code_challenge_method.clone(),
+                        user_oid: user_oid.to_string(),
+                        session_oid: session_oid.to_string(),
+                        acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
+                        redirect_uri: request.redirect_uri.clone(),
+                        auth_time,
+                        claims: request
+                            .claims
+                            .as_ref()
+                            .and_then(|c| serde_json::from_str(c).ok()),
+                    },
+                )
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?,

@@ -222,7 +222,7 @@ fn sign_implicit_id_token_includes_scope_claims() {
         updated_at: Some(Utc::now()),
     };
     let issuer = Url::parse("https://identity.example.com").unwrap();
-    let scope = crate::domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
+    let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
         .sign_implicit_id_token(
@@ -300,7 +300,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
         updated_at: None,
     };
     let issuer = Url::parse("https://identity.example.com").unwrap();
-    let scope = crate::domain::openid_connect::ScopeSet::parse("openid").unwrap();
+    let scope = identity_domain::openid_connect::ScopeSet::parse("openid").unwrap();
     let claims_request = serde_json::json!({
         "id_token": {
             "name": {"essential": true}
@@ -376,7 +376,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
         updated_at: None,
     };
     let issuer = Url::parse("https://identity.example.com").unwrap();
-    let scope = crate::domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
+    let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
         .sign_implicit_id_token(

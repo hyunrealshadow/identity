@@ -4,11 +4,11 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::domain::setting::{
+use crate::database::entity::{setting, setting::Entity as SettingEntity};
+use identity_domain::setting::{
     SettingDefinition, SettingEntry,
     repository::{SettingRepository, SettingRepositoryError},
 };
-use crate::infrastructure::database::entity::{setting, setting::Entity as SettingEntity};
 
 pub struct SettingRepositoryImpl {
     db: DatabaseConnection,

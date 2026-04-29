@@ -67,6 +67,7 @@ pub struct AuthorizeService {
 }
 
 impl AuthorizeService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
         credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,

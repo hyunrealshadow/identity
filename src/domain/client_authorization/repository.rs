@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::model::{ClientAuthorization, ClientAuthorizationType};
-use crate::domain::client::model::ClientOid;
+use crate::client::model::ClientOid;
 
 #[async_trait]
 pub trait ClientAuthorizationRepository: Send + Sync {

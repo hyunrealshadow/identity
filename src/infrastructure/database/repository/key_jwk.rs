@@ -3,10 +3,10 @@ use chrono::DateTime;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
-use crate::domain::key::{
+use crate::database::entity::{key_jwk, key_jwk::Entity as KeyJwkEntity};
+use identity_domain::key::{
     CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, KeyOid,
 };
-use crate::infrastructure::database::entity::{key_jwk, key_jwk::Entity as KeyJwkEntity};
 
 pub struct KeyJwkRepositoryImpl {
     db: DatabaseConnection,
@@ -64,7 +64,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
     }
 
     async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        use crate::infrastructure::database::entity::key;
+        use crate::database::entity::key;
         KeyJwkEntity::find()
             .inner_join(key::Entity)
             .filter(key::Column::RevokedAt.is_null())

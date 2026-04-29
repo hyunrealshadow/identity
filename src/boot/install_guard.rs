@@ -5,8 +5,8 @@ use sea_orm::{
     sea_query::{Alias, Expr, Query},
 };
 
-use super::settings::AppRuntimeSettings;
-use crate::application::setting::runtime::SettingProvider;
+use identity_application::setting::runtime::SettingProvider;
+use identity_infrastructure::settings::AppRuntimeSettings;
 
 use super::AppResult;
 

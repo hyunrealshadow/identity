@@ -2,7 +2,7 @@ use std::{env, sync::Once};
 
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::infrastructure::config::LoggerConfig;
+use crate::config::LoggerConfig;
 
 static TRACING_INIT: Once = Once::new();
 

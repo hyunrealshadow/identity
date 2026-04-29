@@ -1,7 +1,7 @@
 use chrono::Utc;
 use url::Url;
 
-use crate::domain::{
+use identity_domain::{
     client::model::{Client, ClientOid, ClientProtocol},
     openid_connect::{
         OpenIdConnectClientMetadata, OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType,

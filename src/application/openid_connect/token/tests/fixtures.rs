@@ -87,12 +87,12 @@ fn preferred_rsa_algorithm(pem: &[u8]) -> JwaSigningAlgorithm {
 }
 
 #[async_trait::async_trait]
-impl crate::application::data_protection::DataProtector for InMemoryDataProtector {
+impl crate::data_protection::DataProtector for InMemoryDataProtector {
     async fn protect(
         &self,
         _purpose: &str,
         plaintext: &[u8],
-    ) -> Result<String, crate::domain::data_protection::DataProtectionError> {
+    ) -> Result<String, identity_domain::data_protection::DataProtectionError> {
         use base64::{Engine, engine::general_purpose::STANDARD};
         Ok(STANDARD.encode(plaintext))
     }
@@ -101,10 +101,10 @@ impl crate::application::data_protection::DataProtector for InMemoryDataProtecto
         &self,
         _purpose: &str,
         token: &str,
-    ) -> Result<Vec<u8>, crate::domain::data_protection::DataProtectionError> {
+    ) -> Result<Vec<u8>, identity_domain::data_protection::DataProtectionError> {
         use base64::{Engine, engine::general_purpose::STANDARD};
         STANDARD.decode(token).map_err(|_| {
-            crate::domain::data_protection::DataProtectionError::InvalidProtectedPayload
+            identity_domain::data_protection::DataProtectionError::InvalidProtectedPayload
         })
     }
 }
@@ -178,19 +178,19 @@ impl KeyRepository for InMemoryKeyRepository {
     async fn find_by_oid(
         &self,
         oid: KeyOid,
-    ) -> Result<Option<Key>, crate::domain::key::repository::KeyRepositoryError> {
+    ) -> Result<Option<Key>, identity_domain::key::repository::KeyRepositoryError> {
         Ok(self.keys.iter().find(|key| key.oid == oid).cloned())
     }
 
     async fn list_available_asymmetric(
         &self,
-    ) -> Result<Vec<Key>, crate::domain::key::repository::KeyRepositoryError> {
+    ) -> Result<Vec<Key>, identity_domain::key::repository::KeyRepositoryError> {
         Ok(self.keys.clone())
     }
 
     async fn list_available_symmetric(
         &self,
-    ) -> Result<Vec<Key>, crate::domain::key::repository::KeyRepositoryError> {
+    ) -> Result<Vec<Key>, identity_domain::key::repository::KeyRepositoryError> {
         Ok(self.keys.clone())
     }
 
@@ -199,7 +199,7 @@ impl KeyRepository for InMemoryKeyRepository {
         _key_type: KeyType,
         _data: &KeyData,
         _expires_at: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<Key, crate::domain::key::repository::KeyRepositoryError> {
+    ) -> Result<Key, identity_domain::key::repository::KeyRepositoryError> {
         unreachable!()
     }
 
@@ -207,7 +207,7 @@ impl KeyRepository for InMemoryKeyRepository {
         &self,
         _oid: KeyOid,
         _certificate_pem: &str,
-    ) -> Result<Option<Key>, crate::domain::key::repository::KeyRepositoryError> {
+    ) -> Result<Option<Key>, identity_domain::key::repository::KeyRepositoryError> {
         unreachable!()
     }
 
@@ -215,7 +215,7 @@ impl KeyRepository for InMemoryKeyRepository {
         &self,
         _oid: KeyOid,
         _revoked_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Option<Key>, crate::domain::key::repository::KeyRepositoryError> {
+    ) -> Result<Option<Key>, identity_domain::key::repository::KeyRepositoryError> {
         unreachable!()
     }
 }
@@ -358,7 +358,7 @@ pub(super) fn build_client_assertion_with_algorithm(
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
     payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
-    payload.set_jwt_id(&Uuid::new_v4().to_string());
+    payload.set_jwt_id(Uuid::new_v4().to_string());
 
     match alg {
         "RS256" => jwt::encode_with_signer(
