@@ -151,6 +151,10 @@ pub enum AuthorizeErrorCode {
     ImplicitNonceRequired,
     /// User lookup failed during token issuance.
     ImplicitUserNotFound,
+    /// `id_token_hint` issuer is missing, malformed, or not this provider.
+    IdTokenHintIssuerInvalid,
+    /// Encrypted request objects (JWE / Nested JWT) are not supported.
+    RequestObjectEncryptionUnsupported,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -216,6 +220,8 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::ScopeNotAssignedToClient => ErrorKind::Validation,
             Self::ImplicitNonceRequired => ErrorKind::Validation,
             Self::ImplicitUserNotFound => ErrorKind::Validation,
+            Self::IdTokenHintIssuerInvalid => ErrorKind::Validation,
+            Self::RequestObjectEncryptionUnsupported => ErrorKind::Validation,
         }
     }
 
@@ -281,6 +287,8 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::ScopeNotAssignedToClient => 23056,
             Self::ImplicitNonceRequired => 23058,
             Self::ImplicitUserNotFound => 23059,
+            Self::IdTokenHintIssuerInvalid => 23060,
+            Self::RequestObjectEncryptionUnsupported => 23061,
         }
     }
 }

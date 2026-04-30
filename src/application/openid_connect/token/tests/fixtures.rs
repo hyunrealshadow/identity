@@ -2,7 +2,12 @@ use super::*;
 
 mod clients;
 
-pub(super) use clients::{InMemoryClientRepository, PublicFlowClientRepository};
+pub(super) use clients::{
+    AuthMethodClientRepository, InMemoryClientRepository, PublicFlowClientRepository,
+};
+
+pub(super) const CLIENT_SECRET_JWT_SECRET: &str =
+    "client-secret-jwt-secret-64-bytes-minimum-for-hs384-and-hs512";
 
 pub(super) struct InMemoryDataProtector;
 
@@ -342,6 +347,78 @@ pub(super) fn build_token_service(
     )
 }
 
+pub(super) fn build_token_service_with_auth_method(method: &'static str) -> TokenService {
+    build_token_service_with_auth_method_and_alg(method, None)
+}
+
+pub(super) fn build_token_service_with_auth_method_and_alg(
+    method: &'static str,
+    signing_alg: Option<&'static str>,
+) -> TokenService {
+    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let user_oid = Uuid::new_v4();
+    let rsa = Rsa::generate(2048).unwrap();
+    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
+    let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
+
+    TokenService::new(
+        repo,
+        Arc::new(InMemoryKeyRepository {
+            keys: vec![Key {
+                oid: KeyOid(Uuid::new_v4()),
+                r#type: KeyType::Asymmetric,
+                data: KeyData::Asymmetric(AsymmetricKeyData {
+                    public_key: public_key.clone(),
+                    private_key,
+                    certificate: None,
+                }),
+                expires_at: None,
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            }],
+        }),
+        Arc::new(InMemoryUserRepository {
+            user: test_user(user_oid),
+        }),
+        Arc::new(AuthMethodClientRepository {
+            method,
+            signing_alg,
+        }),
+        Arc::new(InMemoryCredentialRepository {
+            credentials: vec![
+                OpenIdConnectCredential {
+                    oid: Uuid::new_v4(),
+                    client_oid: Uuid::nil(),
+                    r#type: OpenIdConnectCredentialType::ClientSecret,
+                    hint: "token".to_string(),
+                    data: OpenIdConnectCredentialData::ClientSecret {
+                        secret: CLIENT_SECRET_JWT_SECRET.to_string(),
+                    },
+                    expires_at: Utc::now() + chrono::Duration::days(1),
+                    revoked_at: None,
+                    created_at: Utc::now(),
+                    updated_at: None,
+                },
+                OpenIdConnectCredential {
+                    oid: Uuid::new_v4(),
+                    client_oid: Uuid::nil(),
+                    r#type: OpenIdConnectCredentialType::ClientPublicKey,
+                    hint: "private_key_jwt".to_string(),
+                    data: OpenIdConnectCredentialData::ClientPublicKey { public_key },
+                    expires_at: Utc::now() + chrono::Duration::days(1),
+                    revoked_at: None,
+                    created_at: Utc::now(),
+                    updated_at: None,
+                },
+            ],
+        }),
+        provider_service(),
+        signing_algorithm_detector(),
+        InMemoryDataProtector::new(),
+    )
+}
+
 pub(super) fn build_client_assertion_with_algorithm(
     private_key_pem: &str,
     alg: &str,
@@ -377,6 +454,55 @@ pub(super) fn build_client_assertion_with_algorithm(
             &payload,
             &header,
             &*EdDSA.signer_from_pem(private_key_pem.as_bytes()).unwrap(),
+        )
+        .unwrap(),
+        other => panic!("unsupported test alg: {other}"),
+    }
+}
+
+pub(super) fn build_client_secret_assertion(
+    secret: &str,
+    client_id: &str,
+    audience: &str,
+) -> String {
+    build_client_secret_assertion_with_algorithm(secret, "HS256", client_id, audience)
+}
+
+pub(super) fn build_client_secret_assertion_with_algorithm(
+    secret: &str,
+    alg: &str,
+    client_id: &str,
+    audience: &str,
+) -> String {
+    let mut header = JwsHeader::new();
+    header.set_token_type("JWT");
+
+    let mut payload = JwtPayload::new();
+    let now = std::time::SystemTime::now();
+    payload.set_issuer(client_id);
+    payload.set_subject(client_id);
+    payload.set_audience(vec![audience]);
+    payload.set_issued_at(&now);
+    payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
+    payload.set_jwt_id(Uuid::new_v4().to_string());
+
+    match alg {
+        "HS256" => jwt::encode_with_signer(
+            &payload,
+            &header,
+            &*HS256.signer_from_bytes(secret.as_bytes()).unwrap(),
+        )
+        .unwrap(),
+        "HS384" => jwt::encode_with_signer(
+            &payload,
+            &header,
+            &*HS384.signer_from_bytes(secret.as_bytes()).unwrap(),
+        )
+        .unwrap(),
+        "HS512" => jwt::encode_with_signer(
+            &payload,
+            &header,
+            &*HS512.signer_from_bytes(secret.as_bytes()).unwrap(),
         )
         .unwrap(),
         other => panic!("unsupported test alg: {other}"),

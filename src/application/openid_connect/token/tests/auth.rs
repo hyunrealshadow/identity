@@ -80,6 +80,72 @@ async fn authenticate_client_secret_post_accepts_matching_secret() {
 }
 
 #[tokio::test]
+async fn authenticate_client_secret_jwt_accepts_hs256_assertion() {
+    let service = build_token_service_with_auth_method("client_secret_jwt");
+    let assertion = build_client_secret_assertion(
+        CLIENT_SECRET_JWT_SECRET,
+        "00000000-0000-0000-0000-000000000000",
+        "https://identity.example.com/",
+    );
+
+    let result = service
+        .authenticate_client(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(&assertion),
+        )
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn authenticate_client_secret_jwt_uses_registered_signing_algorithm() {
+    let service = build_token_service_with_auth_method_and_alg("client_secret_jwt", Some("HS384"));
+    let assertion = build_client_secret_assertion_with_algorithm(
+        CLIENT_SECRET_JWT_SECRET,
+        "HS384",
+        "00000000-0000-0000-0000-000000000000",
+        "https://identity.example.com/",
+    );
+
+    let result = service
+        .authenticate_client(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(&assertion),
+        )
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn authenticate_client_secret_jwt_rejects_unregistered_signing_algorithm() {
+    let service = build_token_service_with_auth_method_and_alg("client_secret_jwt", Some("HS384"));
+    let assertion = build_client_secret_assertion_with_algorithm(
+        CLIENT_SECRET_JWT_SECRET,
+        "HS256",
+        "00000000-0000-0000-0000-000000000000",
+        "https://identity.example.com/",
+    );
+
+    let error = service
+        .authenticate_client(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(&assertion),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 24039);
+}
+
+#[tokio::test]
 async fn authenticate_private_key_jwt_accepts_signed_assertion() {
     let service = build_token_service(
         Arc::new(InMemoryClientAuthorizationRepository::default()),

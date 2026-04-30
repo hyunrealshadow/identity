@@ -94,9 +94,15 @@ impl Default for OpenIdProviderCapabilities {
             token_endpoint_auth_methods_supported: vec![
                 TokenEndpointAuthMethod::ClientSecretBasic,
                 TokenEndpointAuthMethod::ClientSecretPost,
+                TokenEndpointAuthMethod::ClientSecretJwt,
                 TokenEndpointAuthMethod::PrivateKeyJwt,
             ],
-            token_endpoint_auth_signing_alg_values_supported: vec!["RS256".to_owned()],
+            token_endpoint_auth_signing_alg_values_supported: vec![
+                "HS256".to_owned(),
+                "HS384".to_owned(),
+                "HS512".to_owned(),
+                "RS256".to_owned(),
+            ],
             display_values_supported: vec!["page".to_owned()],
             claim_types_supported: vec!["normal".to_owned()],
             claims_supported: vec![

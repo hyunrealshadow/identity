@@ -88,6 +88,38 @@ async fn validate_request_reports_missing_required_fields() {
 }
 
 #[tokio::test]
+async fn validate_request_rejects_id_token_hint_from_other_issuer() {
+    let mut params = params("openid profile");
+    params.id_token_hint = Some(unsigned_id_token_hint("https://other.example.com/"));
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let result = service.validate_request(params).await;
+
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), 23060);
+}
+
+fn unsigned_id_token_hint(issuer: &str) -> String {
+    let mut header = JwsHeader::new();
+    header.set_token_type("JWT");
+    let mut payload = JwtPayload::new();
+    payload
+        .set_claim("iss", Some(serde_json::json!(issuer)))
+        .unwrap();
+    jwt::encode_unsecured(&payload, &header).unwrap()
+}
+
+#[tokio::test]
 async fn validate_request_rejects_request_and_request_uri_together() {
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),

@@ -1,6 +1,7 @@
 use crate::key::asymmetric::AsymmetricKeyService;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use identity_domain::auth::ACR_PASSWORD;
 
 #[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
@@ -136,6 +137,14 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
         &serde_json::json!(expected_at_hash(&result.access_token))
     );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::AZP).unwrap(),
+        &serde_json::json!(Uuid::nil().to_string())
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::AMR).unwrap(),
+        &serde_json::json!(["pwd"])
+    );
     assert!(
         repo.find_by_oid(record.oid)
             .await
@@ -238,8 +247,8 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: Uuid::new_v4().to_string(),
-                acr: None,
-                auth_time: None,
+                acr: Some(ACR_PASSWORD.to_string()),
+                auth_time: Some(chrono::Utc::now().timestamp()),
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
             })

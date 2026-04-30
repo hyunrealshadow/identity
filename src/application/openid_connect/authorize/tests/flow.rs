@@ -1,5 +1,6 @@
 use super::fixtures::*;
 use super::*;
+use identity_domain::openid_connect::model::claim::JwtClaimNames;
 
 #[tokio::test]
 async fn create_authorization_request_returns_oid() {
@@ -254,6 +255,14 @@ fn sign_implicit_id_token_includes_scope_claims() {
     assert_eq!(
         payload.claim("given_name").and_then(|v| v.as_str()),
         Some("Alice")
+    );
+    assert_eq!(
+        payload.claim(JwtClaimNames::AZP).unwrap(),
+        &serde_json::json!("client-1")
+    );
+    assert_eq!(
+        payload.claim(JwtClaimNames::AMR).unwrap(),
+        &serde_json::json!(["pwd"])
     );
 }
 

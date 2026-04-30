@@ -74,9 +74,28 @@ impl TokenService {
         if let (Some(assertion_type), Some(assertion)) = (client_assertion_type, client_assertion)
             && assertion_type == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
         {
-            return self
-                .authenticate_private_key_jwt(client_id, assertion)
-                .await;
+            let client_oid = Uuid::parse_str(client_id).map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
+            })?;
+            let client = self
+                .client_repo
+                .find_by_oid(client_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+                })?
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+
+            return match client.metadata().token_endpoint_auth_method.as_deref() {
+                Some("client_secret_jwt") => {
+                    self.authenticate_client_secret_jwt(client_id, assertion)
+                        .await
+                }
+                _ => {
+                    self.authenticate_private_key_jwt(client_id, assertion)
+                        .await
+                }
+            };
         }
 
         let Some(client_secret) = client_secret else {
@@ -138,6 +157,41 @@ impl TokenService {
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let payload = self.verify_client_assertion(&client, assertion).await?;
+        self.validate_client_assertion_payload(client_id, &payload)?;
+
+        Ok(client.client().oid)
+    }
+
+    pub(super) async fn authenticate_client_secret_jwt(
+        &self,
+        client_id: &str,
+        assertion: &str,
+    ) -> Result<Uuid, AppError> {
+        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
+            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
+        })?;
+        let client = self
+            .client_repo
+            .find_by_oid(client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+
+        let payload = self
+            .verify_client_secret_assertion(&client, assertion)
+            .await?;
+        self.validate_client_assertion_payload(client_id, &payload)?;
+
+        Ok(client.client().oid)
+    }
+
+    fn validate_client_assertion_payload(
+        &self,
+        client_id: &str,
+        payload: &JwtPayload,
+    ) -> Result<(), AppError> {
         let issuer = self.provider_service.issuer()?;
 
         let iss = payload
@@ -187,7 +241,7 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::AssertionNotYetValid));
         }
 
-        Ok(client.client().oid)
+        Ok(())
     }
 
     pub(super) async fn verify_client_assertion(
@@ -202,6 +256,12 @@ impl TokenService {
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none");
+        if let Some(registered_algorithm) =
+            client.metadata().token_endpoint_auth_signing_alg.as_deref()
+            && registered_algorithm != algorithm
+        {
+            return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
+        }
 
         let credentials = self
             .credential_repo
@@ -244,6 +304,48 @@ impl TokenService {
                         return Ok(payload);
                     }
                 }
+            }
+        }
+
+        Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed))
+    }
+
+    pub(super) async fn verify_client_secret_assertion(
+        &self,
+        client: &identity_domain::openid_connect::OpenIdConnectClient,
+        assertion: &str,
+    ) -> Result<JwtPayload, AppError> {
+        let header = jwt::decode_header(assertion).map_err(|error| {
+            AppError::from_code(TokenErrorCode::AssertionHeaderInvalid).with_source(error)
+        })?;
+        let algorithm = header
+            .claim(JwtClaimNames::ALG)
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        if let Some(registered_algorithm) =
+            client.metadata().token_endpoint_auth_signing_alg.as_deref()
+            && registered_algorithm != algorithm
+        {
+            return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
+        }
+
+        let credentials = self
+            .credential_repo
+            .find_by_client_oid_and_type(
+                client.client().oid,
+                OpenIdConnectCredentialType::ClientSecret,
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::CredentialLookupFailed).with_source(error)
+            })?;
+
+        for credential in credentials {
+            if let OpenIdConnectCredentialData::ClientSecret { secret } = credential.data
+                && let Ok(payload) =
+                    decode_assertion_with_hmac_alg(algorithm, assertion, secret.as_bytes())
+            {
+                return Ok(payload);
             }
         }
 

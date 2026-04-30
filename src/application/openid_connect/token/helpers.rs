@@ -46,6 +46,19 @@ pub(super) fn decode_assertion_with_alg(
     }
 }
 
+pub(super) fn decode_assertion_with_hmac_alg(
+    alg: &str,
+    assertion: &str,
+    secret: &[u8],
+) -> Result<JwtPayload, AppError> {
+    match alg {
+        "HS256" => decode_with_verifier(assertion, HS256.verifier_from_bytes(secret)),
+        "HS384" => decode_with_verifier(assertion, HS384.verifier_from_bytes(secret)),
+        "HS512" => decode_with_verifier(assertion, HS512.verifier_from_bytes(secret)),
+        _ => Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)),
+    }
+}
+
 fn decode_with_verifier<V>(
     assertion: &str,
     verifier: Result<V, josekit::JoseError>,

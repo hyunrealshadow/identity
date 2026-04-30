@@ -1,7 +1,8 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::{
     jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+        ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, JwsHeader, PS256, PS384, PS512,
+        RS256, RS384, RS512,
     },
     jwt,
     jwt::JwtPayload,
@@ -105,7 +106,9 @@ mod exchange;
 mod helpers;
 mod signing;
 
-use helpers::{constant_time_compare, decode_assertion_with_alg, verify_pkce};
+use helpers::{
+    constant_time_compare, decode_assertion_with_alg, decode_assertion_with_hmac_alg, verify_pkce,
+};
 
 #[cfg(test)]
 mod tests;

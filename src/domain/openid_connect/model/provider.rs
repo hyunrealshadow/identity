@@ -49,6 +49,7 @@ impl FromStr for SubjectType {
 pub enum TokenEndpointAuthMethod {
     ClientSecretBasic,
     ClientSecretPost,
+    ClientSecretJwt,
     PrivateKeyJwt,
 }
 
@@ -57,6 +58,7 @@ impl fmt::Display for TokenEndpointAuthMethod {
         f.write_str(match self {
             Self::ClientSecretBasic => "client_secret_basic",
             Self::ClientSecretPost => "client_secret_post",
+            Self::ClientSecretJwt => "client_secret_jwt",
             Self::PrivateKeyJwt => "private_key_jwt",
         })
     }
@@ -200,6 +202,7 @@ mod tests {
 
         assert_eq!(value["issuer"], json!("https://identity.example.com/"));
         assert_eq!(value["claims_parameter_supported"], json!(false));
+        assert_eq!(value["request_parameter_supported"], json!(false));
         assert_eq!(value["request_uri_parameter_supported"], json!(true));
         assert_eq!(
             value["response_types_supported"],

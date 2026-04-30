@@ -129,6 +129,12 @@ impl AuthorizeService {
         client: &OpenIdConnectClient,
         raw: &str,
     ) -> Result<serde_json::Value, AppError> {
+        if raw.split('.').count() == 5 {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
+            ));
+        }
+
         let header = jwt::decode_header(raw).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
         })?;
@@ -137,6 +143,14 @@ impl AuthorizeService {
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none");
+        if let Some(registered_algorithm) = client.metadata().request_object_signing_alg.as_deref()
+            && registered_algorithm != algorithm
+        {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectVerifyFailed,
+            ));
+        }
+
         let payload = match algorithm {
             "none" => {
                 let parts: Vec<&str> = raw.split('.').collect();

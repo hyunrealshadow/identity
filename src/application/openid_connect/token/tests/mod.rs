@@ -12,7 +12,8 @@ use chrono::Utc;
 use josekit::jwk::KeyPair;
 use josekit::{
     jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+        ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, JwsHeader, PS256, PS384, PS512,
+        RS256, RS384, RS512,
     },
     jwt,
     jwt::JwtPayload,

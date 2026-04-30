@@ -43,6 +43,10 @@ impl AuthorizeService {
             params = Self::merge_request_object_params(params, &payload)?;
         }
 
+        Self::validate_id_token_hint_issuer(
+            params.id_token_hint.as_deref(),
+            &self.provider_service.issuer()?,
+        )?;
         Self::validate_required_params(&params)?;
 
         let response_type = params
@@ -199,6 +203,35 @@ impl AuthorizeService {
         }
 
         Ok(())
+    }
+
+    fn validate_id_token_hint_issuer(raw: Option<&str>, issuer: &Url) -> Result<(), AppError> {
+        let Some(raw) = raw else {
+            return Ok(());
+        };
+
+        let payload_segment = raw
+            .split('.')
+            .nth(1)
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid))?;
+        let payload = URL_SAFE_NO_PAD.decode(payload_segment).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
+        })?;
+        let payload = serde_json::from_slice::<serde_json::Value>(&payload).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
+        })?;
+
+        if payload
+            .get(JwtClaimNames::ISS)
+            .and_then(|value| value.as_str())
+            .is_some_and(|iss| iss == issuer.as_str())
+        {
+            return Ok(());
+        }
+
+        Err(AppError::from_code(
+            AuthorizeErrorCode::IdTokenHintIssuerInvalid,
+        ))
     }
 
     fn validate_redirect_uri(

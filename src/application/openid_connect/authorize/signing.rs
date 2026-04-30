@@ -73,6 +73,16 @@ impl AuthorizeService {
         payload.set_audience(vec![audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
+        payload
+            .set_claim(JwtClaimNames::AZP, Some(serde_json::json!(audience)))
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+            })?;
+        payload
+            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(amr_values(acr))))
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+            })?;
 
         payload
             .set_claim(JwtClaimNames::NONCE, Some(serde_json::json!(nonce)))
@@ -198,6 +208,13 @@ impl AuthorizeService {
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })
+    }
+}
+
+fn amr_values(acr: Option<&str>) -> Vec<&'static str> {
+    match acr {
+        Some(identity_domain::auth::ACR_MFA) => vec!["pwd", "otp"],
+        _ => vec!["pwd"],
     }
 }
 
