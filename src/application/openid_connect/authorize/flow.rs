@@ -144,6 +144,12 @@ impl AuthorizeService {
                 .await;
         }
 
+        if response_type.uses_front_channel_response() {
+            return self
+                .approve_hybrid_flow(&request, session_oid, user_oid, response_type, auth_time)
+                .await;
+        }
+
         self.approve_code_flow(&request, user_oid, session_oid, auth_time)
             .await
     }
@@ -159,6 +165,26 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
         })?;
 
+        let (protected_code, _) = self
+            .create_authorization_code(request, user_oid, session_oid, auth_time)
+            .await?;
+
+        let mut redirect = redirect_uri;
+        redirect
+            .query_pairs_mut()
+            .append_pair("code", &protected_code)
+            .append_pair("state", &request.state);
+
+        Ok(redirect)
+    }
+
+    pub(super) async fn create_authorization_code(
+        &self,
+        request: &AuthorizationRequestData,
+        user_oid: Uuid,
+        session_oid: Uuid,
+        auth_time: Option<i64>,
+    ) -> Result<(String, Uuid), AppError> {
         let record = self
             .client_authorization_repo
             .create(
@@ -202,13 +228,7 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
             })?;
 
-        let mut redirect = redirect_uri;
-        redirect
-            .query_pairs_mut()
-            .append_pair("code", &protected_code)
-            .append_pair("state", &request.state);
-
-        Ok(redirect)
+        Ok((protected_code, record.oid))
     }
 
     pub async fn deny_authorization_request(
@@ -227,7 +247,7 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
         })?;
 
-        Ok(if response_type.is_implicit() {
+        Ok(if response_type.uses_front_channel_response() {
             error.to_fragment_redirect_url(&redirect_uri)
         } else {
             error.to_redirect_url(&redirect_uri)

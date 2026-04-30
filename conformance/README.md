@@ -35,6 +35,7 @@ Use `--exit-on-failure` to exit 1 on any non-passing results.
 ```bash
 python run.py                           # Start Docker, run all tests
 python run.py --profile implicit        # Run the Implicit OP certification plan
+python run.py --profile hybrid          # Run the Hybrid OP certification plan
 python run.py --no-docker               # Services already running
 python run.py --plan-id <ID>            # Run on existing plan
 python run.py --config plans/basic.json # Override plan config JSON
@@ -61,7 +62,7 @@ python run_single.py --plan-id <ID> --test oidcc-server
 |----------|---------|-------------|
 | `SUITE_URL` | `https://localhost.emobix.co.uk:8443` | Conformance Suite URL |
 | `IDENTITY_URL` | `http://localhost:5150` | Identity server URL |
-| `PROFILE` | `basic` | Test profile to create (`basic` or `implicit`) |
+| `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, or `hybrid`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
 | `PLAN_NAME` | Derived from `PROFILE` | Conformance suite plan name |
 | `TIMEOUT` | `60` | Timeout per test (seconds) |

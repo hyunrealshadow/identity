@@ -11,11 +11,39 @@ pub enum ResponseType {
     Code,
     IdToken,
     TokenIdToken,
+    CodeIdToken,
+    CodeToken,
+    CodeTokenIdToken,
 }
 
 impl ResponseType {
     pub fn is_implicit(&self) -> bool {
         matches!(self, Self::IdToken | Self::TokenIdToken)
+    }
+
+    pub fn uses_front_channel_response(&self) -> bool {
+        !matches!(self, Self::Code)
+    }
+
+    pub fn includes_code(&self) -> bool {
+        matches!(
+            self,
+            Self::Code | Self::CodeIdToken | Self::CodeToken | Self::CodeTokenIdToken
+        )
+    }
+
+    pub fn includes_id_token(&self) -> bool {
+        matches!(
+            self,
+            Self::IdToken | Self::TokenIdToken | Self::CodeIdToken | Self::CodeTokenIdToken
+        )
+    }
+
+    pub fn includes_access_token(&self) -> bool {
+        matches!(
+            self,
+            Self::TokenIdToken | Self::CodeToken | Self::CodeTokenIdToken
+        )
     }
 }
 
@@ -25,6 +53,9 @@ impl fmt::Display for ResponseType {
             Self::Code => "code",
             Self::IdToken => "id_token",
             Self::TokenIdToken => "id_token token",
+            Self::CodeIdToken => "code id_token",
+            Self::CodeToken => "code token",
+            Self::CodeTokenIdToken => "code id_token token",
         })
     }
 }
@@ -49,6 +80,16 @@ impl FromStr for ResponseType {
             "id_token" => Self::IdToken,
             "id_token token" => Self::TokenIdToken,
             "token id_token" => Self::TokenIdToken,
+            "code id_token" => Self::CodeIdToken,
+            "id_token code" => Self::CodeIdToken,
+            "code token" => Self::CodeToken,
+            "token code" => Self::CodeToken,
+            "code id_token token" => Self::CodeTokenIdToken,
+            "code token id_token" => Self::CodeTokenIdToken,
+            "id_token code token" => Self::CodeTokenIdToken,
+            "id_token token code" => Self::CodeTokenIdToken,
+            "token code id_token" => Self::CodeTokenIdToken,
+            "token id_token code" => Self::CodeTokenIdToken,
             _ => return Err(ParseResponseTypeError),
         })
     }
@@ -308,6 +349,44 @@ mod tests {
     #[test]
     fn code_response_type_is_not_implicit() {
         assert!(!ResponseType::Code.is_implicit());
+    }
+
+    #[test]
+    fn parse_hybrid_response_types() {
+        assert_eq!(
+            ResponseType::from_str("code id_token").unwrap(),
+            ResponseType::CodeIdToken
+        );
+        assert_eq!(
+            ResponseType::from_str("id_token code").unwrap(),
+            ResponseType::CodeIdToken
+        );
+        assert_eq!(
+            ResponseType::from_str("code token").unwrap(),
+            ResponseType::CodeToken
+        );
+        assert_eq!(
+            ResponseType::from_str("code id_token token").unwrap(),
+            ResponseType::CodeTokenIdToken
+        );
+        assert_eq!(
+            ResponseType::from_str("token id_token code").unwrap(),
+            ResponseType::CodeTokenIdToken
+        );
+        assert_eq!(
+            ResponseType::CodeTokenIdToken.to_string(),
+            "code id_token token"
+        );
+    }
+
+    #[test]
+    fn hybrid_response_types_use_front_channel_response() {
+        assert!(!ResponseType::Code.uses_front_channel_response());
+        assert!(ResponseType::IdToken.uses_front_channel_response());
+        assert!(ResponseType::TokenIdToken.uses_front_channel_response());
+        assert!(ResponseType::CodeIdToken.uses_front_channel_response());
+        assert!(ResponseType::CodeToken.uses_front_channel_response());
+        assert!(ResponseType::CodeTokenIdToken.uses_front_channel_response());
     }
 
     #[test]

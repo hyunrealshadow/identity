@@ -22,7 +22,7 @@ pub fn redirect_oauth_error_response(
 ) -> Response {
     let error_response = OAuthErrorResponse::new(error).with_state(request.state.clone());
     let response_mode = request.response_mode.unwrap_or_else(|| {
-        if request.response_type.is_implicit() {
+        if request.response_type.uses_front_channel_response() {
             ResponseMode::Fragment
         } else {
             ResponseMode::Query

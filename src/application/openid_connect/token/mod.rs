@@ -58,7 +58,9 @@ pub struct RefreshTokenGrantParams {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TokenResponse {
     pub access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
     pub token_type: String,
     pub expires_in: i32,
@@ -112,3 +114,25 @@ use helpers::{
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod serialization_tests {
+    use super::*;
+
+    #[test]
+    fn token_response_omits_absent_optional_tokens() {
+        let response = TokenResponse {
+            access_token: "access".to_owned(),
+            id_token: None,
+            refresh_token: None,
+            token_type: "Bearer".to_owned(),
+            expires_in: 3600,
+            scope: "openid".to_owned(),
+        };
+
+        let value = serde_json::to_value(response).unwrap();
+
+        assert!(value.get("id_token").is_none());
+        assert!(value.get("refresh_token").is_none());
+    }
+}

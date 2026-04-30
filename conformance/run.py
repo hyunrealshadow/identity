@@ -11,7 +11,7 @@ Usage:
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
     IDENTITY_URL     - Identity server URL (default: http://localhost:5150)
-    PROFILE          - Profile to create: basic or implicit (default: basic)
+    PROFILE          - Profile to create: basic, implicit, or hybrid (default: basic)
     CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
     PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
     TIMEOUT          - Timeout per test in seconds (default: 60)
@@ -82,7 +82,7 @@ def main():
     parser.add_argument("--check", help="Check status of plan ID only")
     parser.add_argument(
         "--profile",
-        choices=("basic", "implicit"),
+        choices=("basic", "implicit", "hybrid"),
         default=os.environ.get("PROFILE", "basic"),
         help="Conformance profile to create when --plan-id is not provided",
     )
@@ -128,9 +128,10 @@ def main():
     plan_names = {
         "basic": "oidcc-basic-certification-test-plan",
         "implicit": "oidcc-implicit-certification-test-plan",
+        "hybrid": "oidcc-hybrid-certification-test-plan",
     }
     if args.profile not in plan_names:
-        parser.error("--profile must be one of: basic, implicit")
+        parser.error("--profile must be one of: basic, implicit, hybrid")
     config_path = args.config or os.path.join(script_dir, "plans", f"{args.profile}.json")
     plan_name = args.plan_name or plan_names[args.profile]
 

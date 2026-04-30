@@ -52,6 +52,10 @@ const IMPLICIT_CLIENT_OID: &str = "00000003-0000-0000-0000-000000000001";
 const IMPLICIT_CLIENT_CRED_OID: &str = "00000003-0000-0000-0000-000000000002";
 const IMPLICIT_CLIENT_POST_OID: &str = "00000004-0000-0000-0000-000000000001";
 const IMPLICIT_CLIENT_POST_CRED_OID: &str = "00000004-0000-0000-0000-000000000002";
+const HYBRID_CLIENT_OID: &str = "00000005-0000-0000-0000-000000000001";
+const HYBRID_CLIENT_CRED_OID: &str = "00000005-0000-0000-0000-000000000002";
+const HYBRID_CLIENT_POST_OID: &str = "00000006-0000-0000-0000-000000000001";
+const HYBRID_CLIENT_POST_CRED_OID: &str = "00000006-0000-0000-0000-000000000002";
 
 /// Legacy public constant for the default Basic conformance client OID.
 pub const CONFORMANCE_CLIENT_OID: &str = BASIC_CLIENT_OID;
@@ -67,6 +71,9 @@ pub const CONFORMANCE_BASIC_CLIENT_POST_SECRET: &str = "conformance-secret-2";
 pub const CONFORMANCE_IMPLICIT_CLIENT_NAME: &str = "OpenID Conformance Suite (Implicit)";
 pub const CONFORMANCE_IMPLICIT_CLIENT_SECRET: &str = "conformance-implicit-secret";
 pub const CONFORMANCE_IMPLICIT_CLIENT_POST_SECRET: &str = "conformance-implicit-secret-2";
+pub const CONFORMANCE_HYBRID_CLIENT_NAME: &str = "OpenID Conformance Suite (Hybrid)";
+pub const CONFORMANCE_HYBRID_CLIENT_SECRET: &str = "conformance-hybrid-secret";
+pub const CONFORMANCE_HYBRID_CLIENT_POST_SECRET: &str = "conformance-hybrid-secret-2";
 
 struct ConformanceClientSpec {
     oid: &'static str,
@@ -215,6 +222,24 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             token_endpoint_auth_method: "client_secret_post",
             grant_types: &["implicit"],
             response_types: &["id_token", "id_token token"],
+        },
+        ConformanceClientSpec {
+            oid: HYBRID_CLIENT_OID,
+            credential_oid: HYBRID_CLIENT_CRED_OID,
+            name: CONFORMANCE_HYBRID_CLIENT_NAME,
+            secret: CONFORMANCE_HYBRID_CLIENT_SECRET,
+            token_endpoint_auth_method: "client_secret_basic",
+            grant_types: &["authorization_code", "implicit", "refresh_token"],
+            response_types: &["code id_token", "code token", "code id_token token"],
+        },
+        ConformanceClientSpec {
+            oid: HYBRID_CLIENT_POST_OID,
+            credential_oid: HYBRID_CLIENT_POST_CRED_OID,
+            name: "OpenID Conformance Suite (Hybrid client_secret_post)",
+            secret: CONFORMANCE_HYBRID_CLIENT_POST_SECRET,
+            token_endpoint_auth_method: "client_secret_post",
+            grant_types: &["authorization_code", "implicit", "refresh_token"],
+            response_types: &["code id_token", "code token", "code id_token token"],
         },
     ]
 }

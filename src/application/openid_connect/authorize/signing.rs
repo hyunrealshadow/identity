@@ -59,6 +59,7 @@ impl AuthorizeService {
         auth_time: i64,
         acr: Option<&str>,
         access_token: Option<&str>,
+        code: Option<&str>,
         scope: &ScopeSet,
         claims_request: Option<&serde_json::Value>,
     ) -> Result<String, AppError> {
@@ -104,9 +105,17 @@ impl AuthorizeService {
         }
 
         if let Some(access_token) = access_token {
-            let at_hash = compute_at_hash_for_alg(access_token, alg);
+            let at_hash = compute_front_channel_hash(access_token, alg);
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+                })?;
+        }
+        if let Some(code) = code {
+            let c_hash = compute_front_channel_hash(code, alg);
+            payload
+                .set_claim(JwtClaimNames::C_HASH, Some(serde_json::json!(c_hash)))
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;
@@ -243,19 +252,19 @@ fn build_signer_for_alg(
     }
 }
 
-fn compute_at_hash_for_alg(access_token: &str, alg: &str) -> String {
+fn compute_front_channel_hash(value: &str, alg: &str) -> String {
     let jwa: JwaSigningAlgorithm = alg.parse().unwrap_or(JwaSigningAlgorithm::Rs256);
     match jwa.at_hash_bits() {
         384 => {
-            let digest = Sha384::digest(access_token.as_bytes());
+            let digest = Sha384::digest(value.as_bytes());
             URL_SAFE_NO_PAD.encode(&digest[..24])
         }
         512 => {
-            let digest = Sha512::digest(access_token.as_bytes());
+            let digest = Sha512::digest(value.as_bytes());
             URL_SAFE_NO_PAD.encode(&digest[..32])
         }
         _ => {
-            let digest = Sha256::digest(access_token.as_bytes());
+            let digest = Sha256::digest(value.as_bytes());
             URL_SAFE_NO_PAD.encode(&digest[..16])
         }
     }
