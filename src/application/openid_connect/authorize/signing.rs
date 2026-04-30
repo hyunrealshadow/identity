@@ -121,7 +121,7 @@ impl AuthorizeService {
                 })?;
         }
 
-        let id_token_scope = if access_token.is_some() {
+        let id_token_scope = if access_token.is_some() || code.is_some() {
             ScopeSet {
                 openid: true,
                 ..Default::default()

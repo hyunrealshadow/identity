@@ -701,3 +701,73 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
     assert_eq!(payload.claim("name"), None);
     assert!(payload.claim("at_hash").is_some());
 }
+
+#[test]
+fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        Arc::new(InMemoryLoginRepository),
+    );
+    let (private_key, public_key) = signing_keypair();
+    let user_oid = Uuid::new_v4();
+    let user = User {
+        oid: UserOid::from(user_oid),
+        email: "alice@example.com".to_string(),
+        email_normalized: "alice@example.com".to_string(),
+        name: "Alice Example".to_string(),
+        name_normalized: "alice example".to_string(),
+        given_name: Some("Alice".to_string()),
+        family_name: Some("Example".to_string()),
+        middle_name: None,
+        nickname: None,
+        profile: None,
+        picture: None,
+        website: None,
+        gender: None,
+        birthdate: None,
+        zoneinfo: None,
+        locale: None,
+        email_verified: true,
+        phone_number: None,
+        phone_number_verified: None,
+        address_formatted: None,
+        address_street_address: None,
+        address_locality: None,
+        address_region: None,
+        address_postal_code: None,
+        address_country: None,
+        failed_attempts: 0,
+        enabled: true,
+        locked: false,
+        locked_until: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let issuer = Url::parse("https://identity.example.com").unwrap();
+    let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
+
+    let token = service
+        .sign_implicit_id_token(
+            "kid",
+            std::str::from_utf8(&private_key).unwrap(),
+            "RS256",
+            &issuer,
+            "client-1",
+            &user,
+            "nonce-1",
+            Utc::now().timestamp(),
+            None,
+            None,
+            Some("authorization-code"),
+            &scope,
+            None,
+        )
+        .unwrap();
+    let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (payload, _) = jwt::decode_with_verifier(&token, &verifier).unwrap();
+
+    assert_eq!(payload.claim("email"), None);
+    assert_eq!(payload.claim("name"), None);
+    assert!(payload.claim("c_hash").is_some());
+}
