@@ -10,6 +10,7 @@ async fn validate_request_supports_request_parameter() {
         &private_key,
         [
             ("response_type", json!("code")),
+            ("response_mode", json!("form_post")),
             ("client_id", json!(TEST_CLIENT_ID)),
             ("redirect_uri", json!("https://client.example.com/callback")),
             ("scope", json!("openid profile")),
@@ -31,6 +32,7 @@ async fn validate_request_supports_request_parameter() {
 
     let (request, _) = service.validate_request(params).await.unwrap();
     assert_eq!(request.response_type.to_string(), "code");
+    assert_eq!(request.response_mode.unwrap().to_string(), "form_post");
     assert_eq!(
         request.redirect_uri.as_str(),
         "https://client.example.com/callback"

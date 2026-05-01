@@ -1,4 +1,4 @@
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, HeaderValue, StatusCode, header};
 use salvo::Response;
 
 use crate::{
@@ -89,6 +89,10 @@ fn render_form_post_page(
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, error),
     }
+    response.headers_mut().insert(
+        header::HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'"),
+    );
     response
 }
 

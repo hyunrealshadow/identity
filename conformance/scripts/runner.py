@@ -24,8 +24,11 @@ SPECIAL_TIMEOUT_TESTS = {
     "oidcc-codereuse-30seconds": 90,
 }
 
-NO_URL_RETRY_TESTS = {
-    "oidcc-codereuse-30seconds",
+STOP_PLAN_STATUSES = {
+    "INTERRUPTED",
+    "TIMEOUT",
+    "WAITING_AFTER_SCREENSHOT",
+    "WAITING_NO_PROGRESS",
 }
 
 
@@ -50,7 +53,7 @@ class TestRunner:
     def _same_variant(left: dict, right: dict) -> bool:
         return left == right
 
-    def _upload_screenshots(self, run_id: str) -> bool:
+    def _upload_screenshots(self, run_id: str, urls: list[str], method: str) -> bool:
         try:
             pending = self.client.get_pending_screenshots(run_id)
             if not pending:
@@ -60,7 +63,9 @@ class TestRunner:
                 upload_id = entry.get("upload")
                 if not upload_id or entry.get("img"):
                     continue
-                screenshot = self.auto_login.create_placeholder_screenshot()
+                screenshot = self.auto_login.screenshot_for_upload(urls, method)
+                if not screenshot:
+                    continue
                 if self.client.upload_screenshot(run_id, upload_id, screenshot):
                     print(f"    Uploaded screenshot for {upload_id}")
                     uploaded = True
@@ -90,6 +95,7 @@ class TestRunner:
         if run_id is None:
             run_id = self.client.start_test(plan_id, test_name, variant)
         processed_urls = set()
+        idle_cycles = 0
 
         timeout = SPECIAL_TIMEOUT_TESTS.get(test_name, self.timeout_per_test)
         elapsed = 0
@@ -119,6 +125,27 @@ class TestRunner:
                         url_method = method_info["method"]
 
                 urls = self.client.get_browser_urls(run_id)
+                uploaded = self._upload_screenshots(run_id, urls, url_method)
+                if uploaded:
+                    time.sleep(self.poll_interval)
+                    info = self.client.get_test_info(run_id)
+                    if info.status == "FINISHED":
+                        return TestResult(
+                            test_name=test_name,
+                            status="FINISHED",
+                            result=info.result,
+                            run_id=run_id,
+                        )
+                    idle_cycles += 1
+                    if idle_cycles >= 2:
+                        return TestResult(
+                            test_name=test_name,
+                            status="WAITING_AFTER_SCREENSHOT",
+                            result=None,
+                            run_id=run_id,
+                        )
+                    continue
+
                 has_new_urls = False
                 for url in urls:
                     if url in processed_urls:
@@ -129,15 +156,19 @@ class TestRunner:
                     print(f"    [debug] handle_auth_url returned {success} for {url[:60]}...")
                     time.sleep(self.poll_interval)
 
+                if has_new_urls:
+                    idle_cycles = 0
+                    continue
+
                 if not has_new_urls:
-                    uploaded = self._upload_screenshots(run_id)
-                    if not uploaded:
-                        # Still WAITING with no new URLs and no screenshots needed.
-                        # Conformance suite may be re-issuing the same URL after a failed
-                        # login attempt. Clear processed_urls to allow a retry.
-                        if processed_urls and test_name not in NO_URL_RETRY_TESTS:
-                            print(f"    [debug] WAITING with no new URLs, clearing processed_urls to retry")
-                            processed_urls.clear()
+                    idle_cycles += 1
+                    if idle_cycles >= 15:
+                        return TestResult(
+                            test_name=test_name,
+                            status="WAITING_NO_PROGRESS",
+                            result=None,
+                            run_id=run_id,
+                        )
 
         return TestResult(test_name=test_name, status="TIMEOUT", result=None, run_id=run_id)
 
@@ -174,6 +205,9 @@ class TestRunner:
             result = self.run_single_test(plan_id, m.test_module, m.variant)
             print(f" - {result.status} {result.result or ''}")
             results.append(result)
+            if result.status in STOP_PLAN_STATUSES:
+                print(f"Stopping plan after {result.status} to avoid alias conflicts.")
+                break
 
         return results
 

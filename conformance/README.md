@@ -6,15 +6,16 @@ the identity server locally using Docker Compose.
 ## Prerequisites
 
 - Docker + Docker Compose
-- Python 3.10+ with `requests` library
+- `uv`
 - The identity server built (`cargo build --release`)
 
 ## Quick Start
 
 ```bash
 cd conformance
-pip install requests
-python run.py
+uv sync
+uv run playwright install chromium
+uv run python run.py
 ```
 
 Exits 0 if no tests fail (PASSED, WARNING, SKIPPED, REVIEW are acceptable).
@@ -33,27 +34,27 @@ Use `--exit-on-failure` to exit 1 on any non-passing results.
 ### Run Full Suite
 
 ```bash
-python run.py                           # Start Docker, run all tests
-python run.py --profile implicit        # Run the Implicit OP certification plan
-python run.py --profile hybrid          # Run the Hybrid OP certification plan
-python run.py --no-docker               # Services already running
-python run.py --plan-id <ID>            # Run on existing plan
-python run.py --config plans/basic.json # Override plan config JSON
-python run.py --timeout 30              # 30s timeout per test
-python run.py --exit-on-failure         # Exit 1 on failures
+uv run python run.py                           # Start Docker, run all tests
+uv run python run.py --profile implicit        # Run the Implicit OP certification plan
+uv run python run.py --profile hybrid          # Run the Hybrid OP certification plan
+uv run python run.py --no-docker               # Services already running
+uv run python run.py --plan-id <ID>            # Run on existing plan
+uv run python run.py --config plans/basic.json # Override plan config JSON
+uv run python run.py --timeout 30              # 30s timeout per test
+uv run python run.py --exit-on-failure         # Exit 1 on failures
 ```
 
 ### Check Plan Status
 
 ```bash
-python check_status.py <plan-id>
-python check_status.py <plan-id> --logs  # Show failure logs
+uv run python check_status.py <plan-id>
+uv run python check_status.py <plan-id> --logs  # Show failure logs
 ```
 
 ### Run Single Test
 
 ```bash
-python run_single.py --plan-id <ID> --test oidcc-server
+uv run python run_single.py --plan-id <ID> --test oidcc-server
 ```
 
 ## Environment Variables
@@ -73,8 +74,9 @@ python run_single.py --plan-id <ID> --test oidcc-server
 - name: Run OIDC Conformance Tests
   run: |
     cd conformance
-    pip install requests
-    python run.py --exit-on-failure
+    uv sync
+    uv run playwright install chromium
+    uv run python run.py --exit-on-failure
 ```
 
 ## Seed Data

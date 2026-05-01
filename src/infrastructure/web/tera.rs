@@ -68,9 +68,25 @@ pub fn build_tera(
 }
 
 fn workspace_path(relative: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let compile_time_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
-        .join(relative)
+        .join(relative);
+    let path_to_check = relative
+        .find('*')
+        .map(|index| PathBuf::from(&relative[..index]))
+        .and_then(|path| path.parent().map(PathBuf::from))
+        .map(|path| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(path)
+        })
+        .unwrap_or_else(|| compile_time_path.clone());
+
+    if path_to_check.exists() {
+        return compile_time_path;
+    }
+
+    PathBuf::from(relative)
 }
 
 fn render_with_locale(

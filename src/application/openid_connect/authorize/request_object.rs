@@ -188,6 +188,7 @@ impl AuthorizeService {
         let mut value = serde_json::Map::new();
         for claim in [
             "response_type",
+            "response_mode",
             "client_id",
             "redirect_uri",
             "scope",

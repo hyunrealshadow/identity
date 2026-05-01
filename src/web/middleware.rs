@@ -23,10 +23,9 @@ pub async fn security_headers_middleware(
         header::REFERRER_POLICY,
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
-    headers.insert(
-        header::HeaderName::from_static("content-security-policy"),
-        HeaderValue::from_static("default-src 'self'"),
-    );
+    headers
+        .entry(header::HeaderName::from_static("content-security-policy"))
+        .or_insert(HeaderValue::from_static("default-src 'self'"));
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
         HeaderValue::from_static("max-age=31536000; includeSubDomains"),

@@ -152,7 +152,7 @@ impl AppBuilder {
                     email: "admin@conformance.local".to_owned(),
                     password: "ConformanceAdmin1!".to_owned(),
                     domain: "http://identity:5150".to_owned(),
-                    key_algorithm: AsymmetricKeyAlgorithm::EcdsaP256,
+                    key_algorithm: AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
                 })
                 .await?;
 
