@@ -178,6 +178,10 @@ pub(super) struct InMemoryKeyRepository {
     pub(super) keys: Vec<Key>,
 }
 
+pub(super) struct InMemoryKeyJwkRepository {
+    pub(super) bindings: Vec<KeyJwk>,
+}
+
 #[async_trait]
 impl KeyRepository for InMemoryKeyRepository {
     async fn find_by_oid(
@@ -225,6 +229,36 @@ impl KeyRepository for InMemoryKeyRepository {
     }
 }
 
+#[async_trait]
+impl KeyJwkRepository for InMemoryKeyJwkRepository {
+    async fn create_batch(
+        &self,
+        _inputs: Vec<CreateKeyJwkInput>,
+    ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+        unreachable!()
+    }
+
+    async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+        Ok(self.bindings.clone())
+    }
+
+    async fn find_active_by_key_oid_and_algorithm(
+        &self,
+        key_oid: KeyOid,
+        algorithm: &str,
+    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
+        Ok(self
+            .bindings
+            .iter()
+            .find(|binding| binding.key_oid == key_oid && binding.algorithm == algorithm)
+            .cloned())
+    }
+
+    async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
+        unreachable!()
+    }
+}
+
 pub(super) struct InMemoryUserRepository {
     pub(super) user: User,
 }
@@ -259,23 +293,28 @@ pub(super) fn build_token_service(
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
+    let key = Key {
+        oid: KeyOid(Uuid::new_v4()),
+        r#type: KeyType::Asymmetric,
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            public_key: public_key.clone(),
+            private_key,
+            certificate: None,
+        }),
+        expires_at: None,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
 
     TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository {
-            keys: vec![Key {
-                oid: KeyOid(Uuid::new_v4()),
-                r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(AsymmetricKeyData {
-                    public_key: public_key.clone(),
-                    private_key,
-                    certificate: None,
-                }),
-                expires_at: None,
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
+            keys: vec![key],
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![binding],
         }),
         Arc::new(InMemoryUserRepository {
             user: User {
@@ -360,23 +399,28 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
+    let key = Key {
+        oid: KeyOid(Uuid::new_v4()),
+        r#type: KeyType::Asymmetric,
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            public_key: public_key.clone(),
+            private_key,
+            certificate: None,
+        }),
+        expires_at: None,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
 
     TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository {
-            keys: vec![Key {
-                oid: KeyOid(Uuid::new_v4()),
-                r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(AsymmetricKeyData {
-                    public_key: public_key.clone(),
-                    private_key,
-                    certificate: None,
-                }),
-                expires_at: None,
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
+            keys: vec![key],
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![binding],
         }),
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),

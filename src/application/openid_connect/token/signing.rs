@@ -20,8 +20,20 @@ impl TokenService {
                 else {
                     continue;
                 };
+
+                let Some(binding) = self
+                    .key_jwk_repo
+                    .find_active_by_key_oid_and_algorithm(key.oid, alg.as_str())
+                    .await
+                    .map_err(|error| {
+                        AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
+                    })?
+                else {
+                    continue;
+                };
+
                 return Ok((
-                    Uuid::from(key.oid).to_string(),
+                    Uuid::from(binding.oid).to_string(),
                     data.private_key.clone(),
                     alg.as_str().to_owned(),
                 ));

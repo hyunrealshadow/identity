@@ -5,6 +5,9 @@ from typing import Optional
 from dataclasses import dataclass
 
 
+DEFAULT_VARIANT = object()
+
+
 @dataclass
 class TestModule:
     test_module: str
@@ -33,16 +36,18 @@ class ConformanceClient:
         self,
         config_path: str,
         plan_name: str = "oidcc-basic-certification-test-plan",
-        variant: Optional[dict] = None,
+        variant: Optional[dict] | object = DEFAULT_VARIANT,
     ) -> str:
         with open(config_path, "r") as f:
             config = json.load(f)
 
-        if variant is None:
+        if variant is DEFAULT_VARIANT:
             variant = {"server_metadata": "discovery", "client_registration": "static_client"}
 
-        variant_encoded = urllib.parse.quote(json.dumps(variant))
-        url = f"{self.suite_url}/api/plan?planName={plan_name}&variant={variant_encoded}"
+        url = f"{self.suite_url}/api/plan?planName={plan_name}"
+        if variant is not None:
+            variant_encoded = urllib.parse.quote(json.dumps(variant))
+            url = f"{url}&variant={variant_encoded}"
 
         resp = self.session.post(url, json=config)
         resp.raise_for_status()

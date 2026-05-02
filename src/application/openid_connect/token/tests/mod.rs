@@ -37,6 +37,7 @@ use crate::{
             ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
             ClientAuthorizationType, RefreshTokenData,
         },
+        key::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError},
         key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
         key::{
             JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
@@ -63,8 +64,8 @@ mod helpers;
 
 use self::fixtures::{
     InMemoryClientAuthorizationRepository, InMemoryClientRepository, InMemoryCredentialRepository,
-    InMemoryDataProtector, InMemoryKeyRepository, InMemoryUserRepository, provider_service,
-    signing_algorithm_detector,
+    InMemoryDataProtector, InMemoryKeyJwkRepository, InMemoryKeyRepository,
+    InMemoryUserRepository, provider_service, signing_algorithm_detector,
 };
 
 fn expected_at_hash(access_token: &str) -> String {
@@ -85,6 +86,42 @@ fn expected_at_hash_for_alg(access_token: &str, alg: &str) -> String {
             let digest = Sha256::digest(access_token.as_bytes());
             URL_SAFE_NO_PAD.encode(&digest[..16])
         }
+    }
+}
+
+fn key_jwk_binding(key: &Key, alg: &str, binding_oid: Uuid) -> KeyJwk {
+    let private_key = match &key.data {
+        KeyData::Asymmetric(data) => data.private_key.as_str(),
+        KeyData::Symmetric(_) => panic!("signing key bindings require asymmetric keys"),
+    };
+
+    let mut jwk = if let Ok(key_pair) = josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(
+        private_key,
+        None,
+        None,
+        None,
+    ) {
+        key_pair.to_jwk_public_key()
+    } else if let Ok(key_pair) = josekit::jwk::alg::rsa::RsaKeyPair::from_pem(private_key) {
+        key_pair.to_jwk_public_key()
+    } else if let Ok(key_pair) = josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key, None) {
+        key_pair.to_jwk_public_key()
+    } else if let Ok(key_pair) = josekit::jwk::alg::ed::EdKeyPair::from_pem(private_key) {
+        key_pair.to_jwk_public_key()
+    } else {
+        panic!("unsupported test key format");
+    };
+
+    jwk.set_key_use("sig");
+    jwk.set_algorithm(alg);
+    jwk.set_key_id(binding_oid.to_string());
+
+    KeyJwk {
+        oid: KeyJwkOid::from(binding_oid),
+        key_oid: key.oid,
+        algorithm: alg.to_owned(),
+        jwk: serde_json::to_value(jwk).unwrap(),
+        created_at: Utc::now(),
     }
 }
 
@@ -232,10 +269,14 @@ fn build_token_service_with_key(
     key: Key,
     user_oid: Uuid,
 ) -> TokenService {
+    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
     TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository {
             keys: vec![key.clone()],
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![binding],
         }),
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
@@ -260,6 +301,13 @@ fn build_token_service_with_key(
         signing_algorithm_detector(),
         InMemoryDataProtector::new(),
     )
+}
+
+fn key_data_algorithm(key: &Key) -> String {
+    match &key.data {
+        KeyData::Asymmetric(data) => data.certificate.clone().unwrap_or_else(|| "RS256".to_owned()),
+        KeyData::Symmetric(_) => "RS256".to_owned(),
+    }
 }
 
 fn user_info_service_with_key(
@@ -374,4 +422,29 @@ fn expected_at_hash_uses_sha512_for_512_bit_and_eddsa_algs() {
         expected_at_hash_for_alg(token, "EdDSA"),
         URL_SAFE_NO_PAD.encode(&digest[..32])
     );
+}
+
+#[test]
+fn key_jwk_binding_uses_ec_shape_for_es256_keys() {
+    let key = key_for_algorithm("ES256");
+    let binding = key_jwk_binding(&key, "ES256", Uuid::new_v4());
+
+    assert_eq!(binding.jwk["kty"], serde_json::json!("EC"));
+    assert_eq!(binding.jwk["crv"], serde_json::json!("P-256"));
+    assert_eq!(binding.jwk["alg"], serde_json::json!("ES256"));
+    assert_eq!(binding.jwk["use"], serde_json::json!("sig"));
+    assert!(binding.jwk.get("x").is_some());
+    assert!(binding.jwk.get("y").is_some());
+}
+
+#[test]
+fn key_jwk_binding_uses_okp_shape_for_eddsa_keys() {
+    let key = key_for_algorithm("EdDSA");
+    let binding = key_jwk_binding(&key, "EdDSA", Uuid::new_v4());
+
+    assert_eq!(binding.jwk["kty"], serde_json::json!("OKP"));
+    assert_eq!(binding.jwk["crv"], serde_json::json!("Ed25519"));
+    assert_eq!(binding.jwk["alg"], serde_json::json!("EdDSA"));
+    assert_eq!(binding.jwk["use"], serde_json::json!("sig"));
+    assert!(binding.jwk.get("x").is_some());
 }

@@ -1,6 +1,6 @@
 {
-  "alias": "identity",
-  "description": "Identity server Basic OP conformance",
+  "alias": "identity-formpost-basic",
+  "description": "Identity server Form Post Basic OP conformance",
   "server": {
     "discoveryUrl": "https://identity:5150/.well-known/openid-configuration"
   },

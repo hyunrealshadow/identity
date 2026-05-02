@@ -19,8 +19,8 @@ class AutoLoginHandler:
         self.username = username
         self.password = password
         self.verify_ssl = verify_ssl
-        self.docker_identity_url = "http://identity:5150"
-        self.host_identity_url = "http://host.docker.internal:5150"
+        self.docker_identity_url = "https://identity:5150"
+        self.host_identity_url = "https://host.docker.internal:5150"
         self.session = requests.Session()
         self.session.verify = verify_ssl
         self.last_screenshot: str | None = None

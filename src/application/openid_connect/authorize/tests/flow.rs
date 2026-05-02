@@ -33,6 +33,7 @@ impl UserRepository for HybridUserRepository {
 }
 
 struct HybridKeyRepository {
+    oid: KeyOid,
     private_key: String,
 }
 
@@ -44,7 +45,7 @@ impl KeyRepository for HybridKeyRepository {
 
     async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         Ok(vec![Key {
-            oid: KeyOid::from(Uuid::new_v4()),
+            oid: self.oid,
             r#type: KeyType::Asymmetric,
             data: KeyData::Asymmetric(AsymmetricKeyData {
                 public_key: String::new(),
@@ -129,6 +130,21 @@ fn expected_hash_for_rs256(value: &str) -> String {
     URL_SAFE_NO_PAD.encode(&digest[..16])
 }
 
+fn hybrid_binding(key_oid: KeyOid, binding_oid: Uuid) -> KeyJwk {
+    KeyJwk {
+        oid: KeyJwkOid::from(binding_oid),
+        key_oid,
+        algorithm: "RS256".to_owned(),
+        jwk: serde_json::json!({
+            "kty": "RSA",
+            "use": "sig",
+            "alg": "RS256",
+            "kid": binding_oid.to_string(),
+        }),
+        created_at: Utc::now(),
+    }
+}
+
 #[tokio::test]
 async fn create_authorization_request_returns_oid() {
     let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
@@ -139,6 +155,7 @@ async fn create_authorization_request_returns_oid() {
         Arc::new(InMemoryLoginRepository),
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -166,6 +183,7 @@ async fn create_login_flow_returns_protected_id() {
         Arc::new(InMemoryLoginRepository),
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -197,6 +215,7 @@ async fn load_authorization_request_returns_stored_data() {
         Arc::new(InMemoryLoginRepository),
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -226,6 +245,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
         Arc::new(InMemoryLoginRepository),
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -254,6 +274,8 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
     let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
+    let key_oid = KeyOid::from(Uuid::new_v4());
+    let binding_oid = Uuid::new_v4();
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -263,7 +285,11 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
             user: hybrid_user(user_oid),
         }),
         Arc::new(HybridKeyRepository {
+            oid: key_oid,
             private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![hybrid_binding(key_oid, binding_oid)],
         }),
         provider_service(),
         test_signing_algorithm_detector(),
@@ -294,7 +320,12 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
     assert!(!code.is_empty());
 
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let header = jwt::decode_header(id_token).unwrap();
     let (payload, _) = jwt::decode_with_verifier(id_token, &verifier).unwrap();
+    assert_eq!(
+        header.claim(JwtClaimNames::KID).and_then(|value| value.as_str()),
+        Some(binding_oid.to_string().as_str())
+    );
     assert_eq!(
         payload.claim(JwtClaimNames::NONCE).and_then(|v| v.as_str()),
         Some("nonce-hybrid")
@@ -310,6 +341,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
     let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
+    let key_oid = KeyOid::from(Uuid::new_v4());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -319,7 +351,11 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
             user: hybrid_user(user_oid),
         }),
         Arc::new(HybridKeyRepository {
+            oid: key_oid,
             private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![hybrid_binding(key_oid, Uuid::new_v4())],
         }),
         provider_service(),
         test_signing_algorithm_detector(),
@@ -370,6 +406,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
     let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let (private_key, _public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
+    let key_oid = KeyOid::from(Uuid::new_v4());
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
@@ -379,7 +416,11 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
             user: hybrid_user(user_oid),
         }),
         Arc::new(HybridKeyRepository {
+            oid: key_oid,
             private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![hybrid_binding(key_oid, Uuid::new_v4())],
         }),
         provider_service(),
         test_signing_algorithm_detector(),
@@ -403,9 +444,9 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
         .map(|(name, value)| (name.into_owned(), value.into_owned()))
         .collect::<std::collections::HashMap<_, _>>();
 
-    assert!(pairs.get("code").is_some());
-    assert!(pairs.get("access_token").is_some());
-    assert!(pairs.get("id_token").is_none());
+    assert!(pairs.contains_key("code"));
+    assert!(pairs.contains_key("access_token"));
+    assert!(!pairs.contains_key("id_token"));
     assert_eq!(pairs.get("token_type").map(String::as_str), Some("Bearer"));
     assert_eq!(pairs.get("state").map(String::as_str), Some("state123"));
 }
@@ -420,6 +461,7 @@ async fn create_authorization_request_persists_login_hint() {
         Arc::new(InMemoryLoginRepository),
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -448,6 +490,7 @@ async fn deny_authorization_request_returns_access_denied_redirect() {
         Arc::new(InMemoryLoginRepository),
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),

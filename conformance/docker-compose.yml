@@ -17,7 +17,8 @@ services:
     environment:
       APP_ENV: conformance
       DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
-      HOST: http://identity:5150
+      HOST: https://identity:5150
+      TLS_DOMAIN: identity
       PORT: "5150"
     ports:
       - "5150:5150"

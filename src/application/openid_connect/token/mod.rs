@@ -23,7 +23,7 @@ use crate::{
             AccessTokenData, AuthorizationCodeData, ClientAuthorization,
             ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
         },
-        key::{JwaSigningAlgorithm, KeyData, repository::KeyRepository},
+        key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
         openid_connect::{
             OpenIdConnectClientRepository, OpenIdConnectCredentialData,
             OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,
@@ -70,6 +70,7 @@ pub struct TokenResponse {
 pub struct TokenService {
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_repo: Arc<dyn KeyRepository>,
+    key_jwk_repo: Arc<dyn KeyJwkRepository>,
     user_repo: Arc<dyn UserRepository>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
@@ -83,6 +84,7 @@ impl TokenService {
     pub fn new(
         client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         key_repo: Arc<dyn KeyRepository>,
+        key_jwk_repo: Arc<dyn KeyJwkRepository>,
         user_repo: Arc<dyn UserRepository>,
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
         credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
@@ -93,6 +95,7 @@ impl TokenService {
         Self {
             client_authorization_repo,
             key_repo,
+            key_jwk_repo,
             user_repo,
             client_repo,
             credential_repo,

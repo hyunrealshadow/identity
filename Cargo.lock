@@ -2135,12 +2135,14 @@ dependencies = [
  "identity-domain",
  "identity-infrastructure",
  "identity-web",
+ "rustls",
  "salvo",
  "sea-orm",
  "serde_json",
  "tera",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]

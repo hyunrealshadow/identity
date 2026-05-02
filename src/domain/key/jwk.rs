@@ -65,6 +65,12 @@ pub trait KeyJwkRepository: Send + Sync {
 
     async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError>;
 
+    async fn find_active_by_key_oid_and_algorithm(
+        &self,
+        key_oid: KeyOid,
+        algorithm: &str,
+    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError>;
+
     async fn delete_by_key_oid(&self, key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError>;
 }
 

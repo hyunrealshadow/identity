@@ -105,6 +105,12 @@ impl UserRepository for StubUserRepository {
 
 pub(in crate::openid_connect) struct StubKeyRepository;
 
+pub(in crate::openid_connect) struct EmptyKeyJwkRepository;
+
+pub(in crate::openid_connect) struct InMemoryKeyJwkRepository {
+    pub(in crate::openid_connect) bindings: Vec<KeyJwk>,
+}
+
 #[async_trait]
 impl KeyRepository for StubKeyRepository {
     async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
@@ -142,6 +148,62 @@ impl KeyRepository for StubKeyRepository {
         _revoked_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Option<Key>, KeyRepositoryError> {
         unimplemented!()
+    }
+}
+
+#[async_trait]
+impl KeyJwkRepository for EmptyKeyJwkRepository {
+    async fn create_batch(
+        &self,
+        _inputs: Vec<CreateKeyJwkInput>,
+    ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+        unreachable!()
+    }
+
+    async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn find_active_by_key_oid_and_algorithm(
+        &self,
+        _key_oid: KeyOid,
+        _algorithm: &str,
+    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
+        Ok(None)
+    }
+
+    async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
+        unreachable!()
+    }
+}
+
+#[async_trait]
+impl KeyJwkRepository for InMemoryKeyJwkRepository {
+    async fn create_batch(
+        &self,
+        _inputs: Vec<CreateKeyJwkInput>,
+    ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+        unreachable!()
+    }
+
+    async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+        Ok(self.bindings.clone())
+    }
+
+    async fn find_active_by_key_oid_and_algorithm(
+        &self,
+        key_oid: KeyOid,
+        algorithm: &str,
+    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
+        Ok(self
+            .bindings
+            .iter()
+            .find(|binding| binding.key_oid == key_oid && binding.algorithm == algorithm)
+            .cloned())
+    }
+
+    async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
+        unreachable!()
     }
 }
 
@@ -203,6 +265,7 @@ pub(in crate::openid_connect) fn build_test_service(
         login_repo,
         Arc::new(StubUserRepository),
         Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),

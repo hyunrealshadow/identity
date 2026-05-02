@@ -28,7 +28,7 @@ def main():
     )
     parser.add_argument(
         "--identity-url",
-        default=os.environ.get("IDENTITY_URL", "http://localhost:5150"),
+        default=os.environ.get("IDENTITY_URL", "https://localhost:5150"),
         help="Identity server URL",
     )
     parser.add_argument("--timeout", type=int, default=60, help="Timeout in seconds")

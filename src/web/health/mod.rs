@@ -96,7 +96,7 @@ pub fn shares_listener(health: &HealthConfig, server: &ServerConfig) -> bool {
 mod tests {
     use super::{bind_address, shares_listener};
     use identity_infrastructure::config::{
-        HealthChecksConfig, HealthConfig, HealthServerConfig, ServerConfig,
+        HealthChecksConfig, HealthConfig, HealthServerConfig, ServerConfig, TlsConfig,
     };
 
     fn server() -> ServerConfig {
@@ -104,6 +104,7 @@ mod tests {
             port: 5150,
             binding: "127.0.0.1".to_owned(),
             host: None,
+            tls: TlsConfig::default(),
         }
     }
 

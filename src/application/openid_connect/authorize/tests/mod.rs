@@ -39,6 +39,7 @@ use identity_domain::{
         ClientAuthorizationType,
     },
     key::{
+        CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError,
         JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
         repository::{KeyRepository, KeyRepositoryError},

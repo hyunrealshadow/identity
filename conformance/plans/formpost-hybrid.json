@@ -1,6 +1,6 @@
 {
-  "alias": "identity",
-  "description": "Identity server Hybrid OP conformance",
+  "alias": "identity-formpost-hybrid",
+  "description": "Identity server Form Post Hybrid OP conformance",
   "server": {
     "discoveryUrl": "https://identity:5150/.well-known/openid-configuration"
   },

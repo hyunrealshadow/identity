@@ -136,6 +136,7 @@ async fn build_https_listener(
 ) -> AppResult<salvo::conn::rustls::RustlsAcceptor<salvo::conn::tcp::TcpAcceptor>> {
     let material = prepare_tls_material(&config.server.tls)?;
     log_tls_startup(address, config, material.mode);
+    ensure_rustls_crypto_provider();
 
     let tls_config = RustlsConfig::new(
         Keycert::new()
@@ -147,6 +148,14 @@ async fn build_https_listener(
         .rustls(tls_config)
         .try_bind()
         .await?)
+}
+
+fn ensure_rustls_crypto_provider() {
+    use rustls::crypto::{CryptoProvider, aws_lc_rs};
+
+    if CryptoProvider::get_default().is_none() {
+        let _ = aws_lc_rs::default_provider().install_default();
+    }
 }
 
 fn log_tls_startup(address: &str, config: &AppConfig, mode: TlsMode) {
@@ -170,9 +179,17 @@ fn log_tls_startup(address: &str, config: &AppConfig, mode: TlsMode) {
 
 #[cfg(test)]
 mod tests {
-    use identity_infrastructure::config::{AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
-    use super::{ListenerMode, listener_mode};
+    use identity_infrastructure::config::{
+        AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig,
+    };
+
+    use super::{ListenerMode, build_https_listener, listener_mode};
 
     #[test]
     fn listener_mode_is_http_when_tls_disabled() {
@@ -188,6 +205,25 @@ mod tests {
         assert!(matches!(listener_mode(&config), ListenerMode::Https));
     }
 
+    #[tokio::test]
+    async fn build_https_listener_accepts_generated_tls_material() {
+        let dir = unique_test_dir("https-listener");
+        let cert_path = dir.join("server.crt");
+        let key_path = dir.join("server.key");
+
+        let mut config = app_config(true);
+        config.server.binding = "127.0.0.1".to_owned();
+        config.server.tls.auto_generate = true;
+        config.server.tls.cert_path = cert_path.to_string_lossy().into_owned();
+        config.server.tls.key_path = key_path.to_string_lossy().into_owned();
+        config.server.tls.domain = Some("localhost".to_owned());
+
+        let _listener = build_https_listener(&config, "127.0.0.1:0").await.unwrap();
+
+        assert!(cert_path.exists());
+        assert!(key_path.exists());
+    }
+
     fn app_config(tls_enabled: bool) -> AppConfig {
         let mut config = AppConfig {
             logger: LoggerConfig::default(),
@@ -198,5 +234,15 @@ mod tests {
         };
         config.server.tls.enable = tls_enabled;
         config
+    }
+
+    fn unique_test_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("identity-boot-{label}-{unique}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 }

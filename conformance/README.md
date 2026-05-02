@@ -62,8 +62,8 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SUITE_URL` | `https://localhost.emobix.co.uk:8443` | Conformance Suite URL |
-| `IDENTITY_URL` | `http://localhost:5150` | Identity server URL |
-| `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, or `hybrid`) |
+| `IDENTITY_URL` | `https://localhost:5150` | Identity server URL |
+| `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, or `formpost-basic`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
 | `PLAN_NAME` | Derived from `PROFILE` | Conformance suite plan name |
 | `TIMEOUT` | `60` | Timeout per test (seconds) |

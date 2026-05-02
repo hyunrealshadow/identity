@@ -17,7 +17,7 @@ use crate::{
     domain::{
         auth::repository::LoginRepository,
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
-        key::{JwaSigningAlgorithm, KeyData, repository::KeyRepository},
+        key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
         openid_connect::{
             AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display,
             OAuthErrorCode, OAuthErrorResponse, OpenIdConnectClient, OpenIdConnectClientRepository,
@@ -60,6 +60,7 @@ pub struct AuthorizeService {
     login_repo: Arc<dyn LoginRepository>,
     user_repo: Arc<dyn UserRepository>,
     key_repo: Arc<dyn KeyRepository>,
+    key_jwk_repo: Arc<dyn KeyJwkRepository>,
     provider_service: Arc<OpenIdProviderService>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     http_client: reqwest::Client,
@@ -75,6 +76,7 @@ impl AuthorizeService {
         login_repo: Arc<dyn LoginRepository>,
         user_repo: Arc<dyn UserRepository>,
         key_repo: Arc<dyn KeyRepository>,
+        key_jwk_repo: Arc<dyn KeyJwkRepository>,
         provider_service: Arc<OpenIdProviderService>,
         signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
         data_protector: Arc<dyn DataProtector>,
@@ -86,6 +88,7 @@ impl AuthorizeService {
             login_repo,
             user_repo,
             key_repo,
+            key_jwk_repo,
             provider_service,
             signing_algorithm_detector,
             http_client: reqwest::Client::builder()

@@ -107,6 +107,7 @@ impl AppServices {
                 Arc::new(LoginRepositoryImpl::new(db.clone())),
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(KeyRepositoryImpl::new(db.clone())),
+                Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
                 signing_algorithm_detector.clone(),
                 data_protector.clone(),
@@ -114,6 +115,7 @@ impl AppServices {
             oidc_token: TokenService::new(
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(KeyRepositoryImpl::new(db.clone())),
+                Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),

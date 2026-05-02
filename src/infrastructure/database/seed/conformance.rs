@@ -410,7 +410,13 @@ async fn ensure_conformance_client_secret(
 }
 
 fn conformance_redirect_uris() -> serde_json::Value {
-    serde_json::json!(["https://localhost.emobix.co.uk:8443/test/a/identity/callback"])
+    serde_json::json!([
+        "https://localhost.emobix.co.uk:8443/test/a/identity/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
+    ])
 }
 
 fn conformance_client_settings() -> serde_json::Value {
@@ -546,4 +552,23 @@ async fn assign_all_built_in_oidc_scopes(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn conformance_redirect_uris_include_active_plan_aliases() {
+        let redirect_uris = super::conformance_redirect_uris();
+        let redirect_uris = redirect_uris.as_array().unwrap();
+        let redirect_uris = redirect_uris
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity/callback"));
+        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback"));
+        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback"));
+        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback"));
+        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"));
+    }
 }

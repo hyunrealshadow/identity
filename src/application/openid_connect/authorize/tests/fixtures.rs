@@ -17,7 +17,8 @@ pub(super) use request_object::{
     signing_keypair, spawn_chunked_response_server, spawn_redirect_response_server,
 };
 pub(super) use services::{
-    StubKeyRepository, StubUserRepository, build_test_service, provider_service,
+    EmptyKeyJwkRepository, InMemoryKeyJwkRepository, StubKeyRepository, StubUserRepository,
+    build_test_service, provider_service,
     test_data_protector, test_signing_algorithm_detector,
 };
 

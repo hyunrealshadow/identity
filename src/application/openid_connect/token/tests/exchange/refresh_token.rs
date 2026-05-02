@@ -84,22 +84,27 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
     let key = key_data_for_algorithm("ES256");
+    let signing_key = Key {
+        oid: KeyOid(Uuid::new_v4()),
+        r#type: KeyType::Asymmetric,
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            public_key: key.public_key.clone(),
+            private_key: key.private_key.clone(),
+            certificate: Some("ES256".to_owned()),
+        }),
+        expires_at: None,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let binding = key_jwk_binding(&signing_key, &key_data_algorithm(&signing_key), Uuid::new_v4());
     let service = TokenService::new(
         repo.clone(),
         Arc::new(InMemoryKeyRepository {
-            keys: vec![Key {
-                oid: KeyOid(Uuid::new_v4()),
-                r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(AsymmetricKeyData {
-                    public_key: key.public_key.clone(),
-                    private_key: key.private_key.clone(),
-                    certificate: None,
-                }),
-                expires_at: None,
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
+            keys: vec![signing_key],
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![binding],
         }),
         Arc::new(InMemoryUserRepository {
             user: User {
@@ -215,22 +220,27 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = rsa.public_key_to_pem().unwrap();
     let public_key_string = String::from_utf8(public_key.clone()).unwrap();
+    let signing_key = Key {
+        oid: KeyOid(Uuid::new_v4()),
+        r#type: KeyType::Asymmetric,
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            public_key: public_key_string,
+            private_key,
+            certificate: None,
+        }),
+        expires_at: None,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let binding = key_jwk_binding(&signing_key, &key_data_algorithm(&signing_key), Uuid::new_v4());
     let service = TokenService::new(
         repo.clone(),
         Arc::new(InMemoryKeyRepository {
-            keys: vec![Key {
-                oid: KeyOid(Uuid::new_v4()),
-                r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(AsymmetricKeyData {
-                    public_key: public_key_string,
-                    private_key,
-                    certificate: None,
-                }),
-                expires_at: None,
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
+            keys: vec![signing_key],
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![binding],
         }),
         Arc::new(InMemoryUserRepository {
             user: User {

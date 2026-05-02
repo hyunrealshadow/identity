@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 use tera::Tera;
+use url::Url;
 
 #[cfg(feature = "oidc-conformance")]
 use identity_application::install::{InstallInput, InstallService};
@@ -31,6 +32,35 @@ use identity_infrastructure::{
 
 use super::AppResult;
 use super::install_guard::ensure_install_startup_guard;
+
+#[cfg(feature = "oidc-conformance")]
+fn conformance_install_domain(config: &AppConfig) -> String {
+    let host = config
+        .server
+        .host
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("https://identity:5150");
+
+    if let Ok(mut url) = Url::parse(host) {
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        url.set_query(None);
+        url.set_fragment(None);
+
+        let normalized_path = url.path().trim_end_matches('/').to_owned();
+        url.set_path(if normalized_path.is_empty() {
+            "/"
+        } else {
+            &normalized_path
+        });
+
+        return url.to_string();
+    }
+
+    format!("https://{}", host.trim_end_matches('/'))
+}
 
 /// Application builder that orchestrates the startup pipeline.
 ///
@@ -151,7 +181,7 @@ impl AppBuilder {
                     username: "admin".to_owned(),
                     email: "admin@conformance.local".to_owned(),
                     password: "ConformanceAdmin1!".to_owned(),
-                    domain: "http://identity:5150".to_owned(),
+                    domain: conformance_install_domain(&self.config),
                     key_algorithm: AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
                 })
                 .await?;
@@ -220,4 +250,38 @@ async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) 
         serde_json::from_value(row.value)?;
 
     Ok(state.initialized)
+}
+
+#[cfg(test)]
+mod tests {
+    use identity_infrastructure::config::{AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig};
+
+    use super::conformance_install_domain;
+
+    #[cfg(feature = "oidc-conformance")]
+    #[test]
+    fn conformance_install_domain_uses_https_host_from_config() {
+        let mut config = app_config();
+        config.server.host = Some("https://identity:5150/base/".to_owned());
+
+        assert_eq!(conformance_install_domain(&config), "https://identity:5150/base");
+    }
+
+    #[cfg(feature = "oidc-conformance")]
+    #[test]
+    fn conformance_install_domain_defaults_to_identity_https_origin() {
+        let config = app_config();
+
+        assert_eq!(conformance_install_domain(&config), "https://identity:5150/");
+    }
+
+    fn app_config() -> AppConfig {
+        AppConfig {
+            logger: LoggerConfig::default(),
+            server: ServerConfig::default(),
+            database: DatabaseConfig::default(),
+            health: HealthConfig::default(),
+            settings: SettingsConfig::default(),
+        }
+    }
 }

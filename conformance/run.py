@@ -10,8 +10,8 @@ Usage:
 
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
-    IDENTITY_URL     - Identity server URL (default: http://localhost:5150)
-    PROFILE          - Profile to create: basic, implicit, or hybrid (default: basic)
+    IDENTITY_URL     - Identity server URL (default: https://localhost:5150)
+    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, or formpost-hybrid (default: basic)
     CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
     PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
     TIMEOUT          - Timeout per test in seconds (default: 60)
@@ -38,6 +38,42 @@ except ImportError:
 from scripts.client import ConformanceClient
 from scripts.auto_login import AutoLoginHandler
 from scripts.runner import TestRunner
+
+
+DEFAULT_PLAN_VARIANT = {
+    "server_metadata": "discovery",
+    "client_registration": "static_client",
+}
+
+SUPPORTED_PROFILES = (
+    "basic",
+    "implicit",
+    "hybrid",
+    "config",
+    "formpost-basic",
+    "formpost-implicit",
+    "formpost-hybrid",
+)
+
+PLAN_NAMES = {
+    "basic": "oidcc-basic-certification-test-plan",
+    "implicit": "oidcc-implicit-certification-test-plan",
+    "hybrid": "oidcc-hybrid-certification-test-plan",
+    "config": "oidcc-config-certification-test-plan",
+    "formpost-basic": "oidcc-formpost-basic-certification-test-plan",
+    "formpost-implicit": "oidcc-formpost-implicit-certification-test-plan",
+    "formpost-hybrid": "oidcc-formpost-hybrid-certification-test-plan",
+}
+
+
+def default_plan_name_for_profile(profile: str):
+    return PLAN_NAMES[profile]
+
+
+def plan_variant_for_profile(profile: str):
+    if profile == "config":
+        return None
+    return DEFAULT_PLAN_VARIANT.copy()
 
 
 def wait_for_service(url: str, timeout: int = 120, name: str = "service") -> bool:
@@ -82,7 +118,7 @@ def main():
     parser.add_argument("--check", help="Check status of plan ID only")
     parser.add_argument(
         "--profile",
-        choices=("basic", "implicit", "hybrid"),
+        choices=SUPPORTED_PROFILES,
         default=os.environ.get("PROFILE", "basic"),
         help="Conformance profile to create when --plan-id is not provided",
     )
@@ -114,7 +150,7 @@ def main():
     )
     parser.add_argument(
         "--identity-url",
-        default=os.environ.get("IDENTITY_URL", "http://localhost:5150"),
+        default=os.environ.get("IDENTITY_URL", "https://localhost:5150"),
         help="Identity server URL",
     )
     parser.add_argument(
@@ -125,15 +161,10 @@ def main():
     args = parser.parse_args()
 
     compose_file = os.path.join(script_dir, "docker-compose.yml")
-    plan_names = {
-        "basic": "oidcc-basic-certification-test-plan",
-        "implicit": "oidcc-implicit-certification-test-plan",
-        "hybrid": "oidcc-hybrid-certification-test-plan",
-    }
-    if args.profile not in plan_names:
+    if args.profile not in PLAN_NAMES:
         parser.error("--profile must be one of: basic, implicit, hybrid")
     config_path = args.config or os.path.join(script_dir, "plans", f"{args.profile}.json")
-    plan_name = args.plan_name or plan_names[args.profile]
+    plan_name = args.plan_name or default_plan_name_for_profile(args.profile)
 
     if args.check:
         client = ConformanceClient(args.suite_url)
@@ -169,7 +200,11 @@ def main():
         plan_id = args.plan_id
     else:
         print(f"Creating {args.profile} test plan...")
-        plan_id = client.create_plan(config_path, plan_name=plan_name)
+        plan_id = client.create_plan(
+            config_path,
+            plan_name=plan_name,
+            variant=plan_variant_for_profile(args.profile),
+        )
         print(f"Plan ID: {plan_id}")
 
     print(f"\nRunning tests...")

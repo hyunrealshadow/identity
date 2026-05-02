@@ -199,6 +199,7 @@ async fn authenticate_client_accepts_public_flow_when_enabled() {
     let service = TokenService::new(
         Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryKeyRepository { keys: vec![] }),
+        Arc::new(InMemoryKeyJwkRepository { bindings: vec![] }),
         Arc::new(InMemoryUserRepository {
             user: default_user("public@example.com"),
         }),
@@ -226,6 +227,7 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
     let service = TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository { keys: vec![] }),
+        Arc::new(InMemoryKeyJwkRepository { bindings: vec![] }),
         Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(Uuid::new_v4()),
@@ -303,6 +305,7 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
     let service = TokenService::new(
         repo,
         Arc::new(InMemoryKeyRepository { keys: vec![] }),
+        Arc::new(InMemoryKeyJwkRepository { bindings: vec![] }),
         Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(Uuid::new_v4()),
