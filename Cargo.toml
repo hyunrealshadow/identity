@@ -30,7 +30,7 @@ rand = { version = "0.8" }
 regex = { version = "1.11" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rstest = { version = "0.25" }
-salvo = { version = "0.92.1", features = ["affix-state", "csrf", "serve-static", "test"] }
+salvo = { version = "0.92.1", features = ["affix-state", "csrf", "serve-static", "test", "rustls"] }
 sea-orm = { version = "2.0.0-rc.37", features = [
   "sqlx-postgres",
   "runtime-tokio-rustls",

@@ -2,6 +2,7 @@ use std::{env, fs};
 
 use serde::Deserialize;
 use tera::Tera;
+use url::Url;
 
 pub type ConfigResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
@@ -27,7 +28,22 @@ impl AppConfig {
         let rendered = render_config_template(&raw)?;
         let config: Self = serde_yml::from_str(&rendered)?;
 
-        Ok((config, environment))
+        Ok((config.normalized(), environment))
+    }
+
+    #[must_use]
+    pub fn normalized(mut self) -> Self {
+        if self
+            .server
+            .tls
+            .domain
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            self.server.tls.domain = Some(default_tls_domain_from_host(self.server.host.as_deref()));
+        }
+
+        self
     }
 }
 
@@ -68,6 +84,8 @@ pub struct ServerConfig {
     pub binding: String,
     #[serde(default)]
     pub host: Option<String>,
+    #[serde(default)]
+    pub tls: TlsConfig,
 }
 
 impl Default for ServerConfig {
@@ -76,6 +94,33 @@ impl Default for ServerConfig {
             port: default_port(),
             binding: default_binding(),
             host: None,
+            tls: TlsConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TlsConfig {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default = "default_true")]
+    pub auto_generate: bool,
+    #[serde(default = "default_tls_cert_path")]
+    pub cert_path: String,
+    #[serde(default = "default_tls_key_path")]
+    pub key_path: String,
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            auto_generate: true,
+            cert_path: default_tls_cert_path(),
+            key_path: default_tls_key_path(),
+            domain: None,
         }
     }
 }
@@ -252,6 +297,32 @@ fn default_binding() -> String {
     "127.0.0.1".to_owned()
 }
 
+fn default_tls_cert_path() -> String {
+    "config/tls/server.crt".to_owned()
+}
+
+fn default_tls_key_path() -> String {
+    "config/tls/server.key".to_owned()
+}
+
+fn default_tls_domain() -> String {
+    "localhost".to_owned()
+}
+
+fn default_tls_domain_from_host(host: Option<&str>) -> String {
+    let Some(host) = host.map(str::trim).filter(|value| !value.is_empty()) else {
+        return default_tls_domain();
+    };
+
+    if let Ok(url) = Url::parse(host)
+        && let Some(parsed_host) = url.host_str()
+    {
+        return parsed_host.to_owned();
+    }
+
+    default_tls_domain()
+}
+
 fn default_connect_timeout() -> u64 {
     500
 }
@@ -369,10 +440,84 @@ database:
         assert_eq!(config.logger.format, "compact");
         assert_eq!(config.server.port, 5150);
         assert_eq!(config.server.binding, "127.0.0.1");
+        assert!(!config.server.tls.enable);
         assert_eq!(config.health.route, "/health");
         assert_eq!(config.settings.refresh_interval_secs, 5);
         assert!(config.health.enable);
         assert!(config.health.checks.database);
         assert!(config.database.auto_migrate);
+    }
+
+    #[test]
+    fn deserialization_applies_tls_defaults() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        assert!(!config.server.tls.enable);
+        assert!(config.server.tls.auto_generate);
+        assert_eq!(config.server.tls.cert_path, "config/tls/server.crt");
+        assert_eq!(config.server.tls.key_path, "config/tls/server.key");
+        assert_eq!(config.server.tls.domain, None);
+    }
+
+    #[test]
+    fn tls_domain_prefers_explicit_value() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: http://example.com
+  tls:
+    domain: identity.example.com
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        let config = config.normalized();
+
+        assert_eq!(config.server.tls.domain.as_deref(), Some("identity.example.com"));
+    }
+
+    #[test]
+    fn tls_domain_falls_back_to_server_host() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com:8443/base
+  tls:
+    domain: null
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        let config = config.normalized();
+
+        assert_eq!(config.server.tls.domain.as_deref(), Some("identity.example.com"));
+    }
+
+    #[test]
+    fn tls_domain_falls_back_to_localhost_when_host_is_missing() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  tls:
+    domain: null
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        let config = config.normalized();
+
+        assert_eq!(config.server.tls.domain.as_deref(), Some("localhost"));
     }
 }

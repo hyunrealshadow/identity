@@ -4,6 +4,7 @@ pub mod data_protection;
 pub mod key;
 pub mod key_jwk;
 pub mod signing_algorithm;
+pub mod tls;
 pub mod xchacha20;
 
 #[cfg(test)]

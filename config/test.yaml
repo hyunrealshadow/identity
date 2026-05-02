@@ -20,6 +20,12 @@ server:
   port: 5150
   # The UI hostname or IP address that mailers will point to.
   host: http://localhost
+  tls:
+    enable: false
+    auto_generate: true
+    cert_path: config/tls/server.crt
+    key_path: config/tls/server.key
+    domain: localhost
   # Out of the box middleware configuration. to disable middleware you can changed the `enable` field to `false` of comment the middleware block
   middlewares: 
     static:

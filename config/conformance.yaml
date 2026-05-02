@@ -8,6 +8,12 @@ server:
   port: {{ get_env(name="PORT", default="5150") }}
   binding: 0.0.0.0
   host: {{ get_env(name="HOST", default="http://localhost:5150") }}
+  tls:
+    enable: false
+    auto_generate: true
+    cert_path: config/tls/server.crt
+    key_path: config/tls/server.key
+    domain: localhost
 
 database:
   uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}
