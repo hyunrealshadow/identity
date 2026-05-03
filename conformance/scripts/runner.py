@@ -4,7 +4,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from .client import ConformanceClient, TestModule
-from .auto_login import AutoLoginHandler
+from .browser_auth import BrowserAuthHandler as AutoLoginHandler
 
 
 @dataclass

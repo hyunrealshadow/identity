@@ -18,8 +18,7 @@ pub(super) use request_object::{
 };
 pub(super) use services::{
     EmptyKeyJwkRepository, InMemoryKeyJwkRepository, StubKeyRepository, StubUserRepository,
-    build_test_service, provider_service,
-    test_data_protector, test_signing_algorithm_detector,
+    build_test_service, provider_service, test_data_protector, test_signing_algorithm_detector,
 };
 
 pub(super) fn params(scope: &str) -> AuthorizationRequestParams {

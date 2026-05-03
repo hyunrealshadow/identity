@@ -36,7 +36,7 @@ except ImportError:
     sys.exit(1)
 
 from scripts.client import ConformanceClient
-from scripts.auto_login import AutoLoginHandler
+from scripts.browser_auth import BrowserAuthHandler
 from scripts.runner import TestRunner
 
 
@@ -193,7 +193,7 @@ def main():
             return 1
 
     client = ConformanceClient(args.suite_url)
-    auto_login = AutoLoginHandler(args.identity_url)
+    auto_login = BrowserAuthHandler(args.identity_url)
     runner = TestRunner(client, auto_login, timeout_per_test=args.timeout)
 
     if args.plan_id:

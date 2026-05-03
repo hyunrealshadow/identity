@@ -37,8 +37,8 @@ use crate::{
             ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
             ClientAuthorizationType, RefreshTokenData,
         },
-        key::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError},
         key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
+        key::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError},
         key::{
             JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
             repository::KeyRepository,
@@ -64,8 +64,8 @@ mod helpers;
 
 use self::fixtures::{
     InMemoryClientAuthorizationRepository, InMemoryClientRepository, InMemoryCredentialRepository,
-    InMemoryDataProtector, InMemoryKeyJwkRepository, InMemoryKeyRepository,
-    InMemoryUserRepository, provider_service, signing_algorithm_detector,
+    InMemoryDataProtector, InMemoryKeyJwkRepository, InMemoryKeyRepository, InMemoryUserRepository,
+    provider_service, signing_algorithm_detector,
 };
 
 fn expected_at_hash(access_token: &str) -> String {
@@ -95,12 +95,9 @@ fn key_jwk_binding(key: &Key, alg: &str, binding_oid: Uuid) -> KeyJwk {
         KeyData::Symmetric(_) => panic!("signing key bindings require asymmetric keys"),
     };
 
-    let mut jwk = if let Ok(key_pair) = josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(
-        private_key,
-        None,
-        None,
-        None,
-    ) {
+    let mut jwk = if let Ok(key_pair) =
+        josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(private_key, None, None, None)
+    {
         key_pair.to_jwk_public_key()
     } else if let Ok(key_pair) = josekit::jwk::alg::rsa::RsaKeyPair::from_pem(private_key) {
         key_pair.to_jwk_public_key()
@@ -305,7 +302,10 @@ fn build_token_service_with_key(
 
 fn key_data_algorithm(key: &Key) -> String {
     match &key.data {
-        KeyData::Asymmetric(data) => data.certificate.clone().unwrap_or_else(|| "RS256".to_owned()),
+        KeyData::Asymmetric(data) => data
+            .certificate
+            .clone()
+            .unwrap_or_else(|| "RS256".to_owned()),
         KeyData::Symmetric(_) => "RS256".to_owned(),
     }
 }

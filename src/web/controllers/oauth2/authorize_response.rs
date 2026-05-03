@@ -71,6 +71,24 @@ pub fn render_form_post_redirect_response(
     render_form_post_page(ctx, headers, action, fields)
 }
 
+pub fn finish_authorize_redirect(
+    ctx: &AppState,
+    headers: &HeaderMap,
+    redirect_uri: &url::Url,
+    response_mode: Option<ResponseMode>,
+) -> Response {
+    match response_mode {
+        Some(ResponseMode::FormPost) => {
+            render_form_post_redirect_response(ctx, headers, redirect_uri)
+        }
+        _ => redirect_to_response(redirect_uri.as_str()),
+    }
+}
+
+pub fn inline_script_csp_header_value() -> HeaderValue {
+    HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'")
+}
+
 fn render_form_post_page(
     ctx: &AppState,
     headers: &HeaderMap,
@@ -91,7 +109,7 @@ fn render_form_post_page(
     }
     response.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
-        HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'"),
+        inline_script_csp_header_value(),
     );
     response
 }
@@ -258,5 +276,42 @@ mod tests {
         assert_eq!(fields[0].value, "abc");
         assert_eq!(fields[1].name, "state");
         assert_eq!(fields[1].value, "xyz");
+    }
+
+    #[tokio::test]
+    async fn finish_authorize_redirect_renders_form_post_page() {
+        let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
+        let headers = http::HeaderMap::new();
+        let redirect_uri =
+            url::Url::parse("https://client.example.com/callback#code=abc&state=xyz").unwrap();
+
+        let response = super::finish_authorize_redirect(
+            &ctx,
+            &headers,
+            &redirect_uri,
+            Some(identity_domain::openid_connect::ResponseMode::FormPost),
+        );
+
+        assert_eq!(response.status_code, Some(http::StatusCode::OK));
+    }
+
+    #[tokio::test]
+    async fn finish_authorize_redirect_uses_http_redirect_for_non_form_post() {
+        let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
+        let headers = http::HeaderMap::new();
+        let redirect_uri =
+            url::Url::parse("https://client.example.com/callback?code=abc&state=xyz").unwrap();
+
+        let response = super::finish_authorize_redirect(&ctx, &headers, &redirect_uri, None);
+
+        assert_eq!(response.status_code, Some(http::StatusCode::SEE_OTHER));
+    }
+
+    #[test]
+    fn inline_script_csp_header_value_allows_inline_scripts() {
+        assert_eq!(
+            super::inline_script_csp_header_value(),
+            http::HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'"),
+        );
     }
 }

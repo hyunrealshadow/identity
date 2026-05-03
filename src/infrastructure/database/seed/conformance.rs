@@ -565,10 +565,21 @@ mod tests {
             .map(|value| value.as_str().unwrap())
             .collect::<Vec<_>>();
 
-        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity/callback"));
-        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback"));
-        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback"));
-        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback"));
-        assert!(redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"));
+        assert!(
+            redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity/callback")
+        );
+        assert!(redirect_uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback"
+        ));
+        assert!(redirect_uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback"
+        ));
+        assert!(redirect_uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback"
+        ));
+        assert!(
+            redirect_uris
+                .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback")
+        );
     }
 }

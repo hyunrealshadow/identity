@@ -42,6 +42,7 @@ pub struct Login {
     pub oid: Uuid,
     pub client_oid: Uuid,
     pub client_authorization_oid: Uuid,
+    pub session_oid: Option<Uuid>,
     /// The user this login attempt belongs to.  Set at creation (identifier
     /// step) so that subsequent challenge steps do not need to re-resolve the
     /// identifier string into a user.

@@ -14,7 +14,10 @@ pub use authorize_extractor::{
     AuthorizeRequestExtractor, RawAuthorizeRequest, authorize_input_error,
 };
 pub use authorize_interaction::{FlowDecision, select_active_session};
-pub use authorize_response::redirect_oauth_error_response;
+pub use authorize_response::{
+    finish_authorize_redirect, inline_script_csp_header_value, redirect_oauth_error_response,
+    response_mode_from_value,
+};
 
 pub fn routes() -> Router {
     Router::new()
@@ -30,15 +33,9 @@ pub fn routes() -> Router {
                 .post(user_info_endpoint::userinfo_post),
         )
         .push(
-            Router::with_path("oauth2/authorize/consent")
+            Router::with_path("oauth2/consent")
                 .hoop(csrf_middleware())
-                .get(consent_endpoint::consent_page)
-                .post(consent_endpoint::consent_submit),
-        )
-        .push(
-            Router::with_path("api/oauth2/authorize/consent")
-                .hoop(csrf_middleware())
-                .get(consent_endpoint::consent_api)
-                .post(consent_endpoint::consent_api_submit),
+                .get(consent_endpoint::consent_get)
+                .post(consent_endpoint::consent_post),
         )
 }

@@ -4,23 +4,46 @@
 //! be reachable in production.
 //!
 //! Routes:
-//!   POST /conformance/auto-login  – complete a full login+consent in one call
+//!   GET  /conformance/auto-login  – render an auto-submit form for the fixed
+//!                                    conformance credentials
+//!   POST /conformance/auto-login  – authenticate, set the browser session cookie,
+//!                                    and continue the authorize redirect chain
 
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, StatusCode, header};
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::{Deserialize, Serialize};
 
+use identity_application::error::{AppError, codes::common::CommonErrorCode};
+
 use crate::{
     application::auth::login::ChallengeOutcome,
+    boot::AppState,
+    infrastructure::{
+        database::seed::conformance::{CONFORMANCE_PASSWORD, CONFORMANCE_USERNAME},
+        web,
+    },
+    views::oauth2::{FormPostField, FormPostPageData},
     web::controllers::shared::{
-        build_selected_session_cookie, build_session_context, is_secure_cookie,
+        append_set_cookie, build_selected_session_cookie, build_session_context, is_secure_cookie,
     },
 };
 
-use super::response::{app_state, parse_json, render_json};
+use super::{
+    oauth2::inline_script_csp_header_value,
+    response::{
+        app_state, parse_query, redirect_to_response, render_app_error, render_html, render_json,
+    },
+};
 
 pub fn routes() -> Router {
-    Router::with_path("conformance/auto-login").post(auto_login)
+    Router::with_path("conformance/auto-login")
+        .get(auto_login_page)
+        .post(auto_login)
+}
+
+#[derive(Debug, Deserialize)]
+struct AutoLoginPageQuery {
+    login_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,13 +54,70 @@ struct AutoLoginRequest {
 }
 
 #[derive(Debug, Serialize)]
-struct AutoLoginResponse {
-    redirect_uri: String,
-}
-
-#[derive(Debug, Serialize)]
 struct AutoLoginError {
     error: String,
+}
+
+fn auto_login_form_data(login_id: &str) -> FormPostPageData {
+    FormPostPageData {
+        title: "Completing sign-in".to_owned(),
+        message: "Continuing the conformance browser flow.".to_owned(),
+        action: "/conformance/auto-login".to_owned(),
+        fields: vec![
+            FormPostField {
+                name: "login_id".to_owned(),
+                value: login_id.to_owned(),
+            },
+            FormPostField {
+                name: "username".to_owned(),
+                value: CONFORMANCE_USERNAME.to_owned(),
+            },
+            FormPostField {
+                name: "password".to_owned(),
+                value: CONFORMANCE_PASSWORD.to_owned(),
+            },
+        ],
+    }
+}
+
+fn auto_login_page_response(ctx: &AppState, headers: &HeaderMap, login_id: &str) -> Response {
+    let data = auto_login_form_data(login_id);
+    let mut response = Response::new();
+    match web::tera::render_view(ctx, headers, "oauth2/form_post.html", data) {
+        Ok(body) => render_html(&mut response, StatusCode::OK, body),
+        Err(error) => render_app_error(&mut response, error),
+    }
+    response.headers_mut().insert(
+        header::HeaderName::from_static("content-security-policy"),
+        inline_script_csp_header_value(),
+    );
+    response
+}
+
+fn auto_login_continue_url(login_id: &str) -> String {
+    format!(
+        "/login/continue?login_id={}&auto_approve=1",
+        urlencoding::encode(login_id)
+    )
+}
+
+fn auto_login_success_response(login_id: &str, cookie: &str) -> Response {
+    let mut response = redirect_to_response(&auto_login_continue_url(login_id));
+    append_set_cookie(&mut response, cookie);
+    response
+}
+
+#[handler]
+async fn auto_login_page(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let query: AutoLoginPageQuery = parse_query(req)?;
+    *res = auto_login_page_response(&ctx, &headers, &query.login_id);
+    Ok(())
 }
 
 #[handler]
@@ -45,10 +125,13 @@ async fn auto_login(
     depot: &mut Depot,
     req: &mut Request,
     res: &mut Response,
-) -> Result<(), identity_application::error::AppError> {
+) -> Result<(), AppError> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
-    let body: AutoLoginRequest = parse_json(req).await?;
+    let body: AutoLoginRequest = req
+        .parse_body()
+        .await
+        .map_err(|_| AppError::from_code(CommonErrorCode::InvalidRequest))?;
     // Step 1: decrypt login_id → login_oid
     let login_oid = match ctx
         .services()
@@ -71,7 +154,7 @@ async fn auto_login(
     };
 
     // Step 2: identify
-    let identify_result = match ctx
+    match ctx
         .services()
         .login()
         .identify(login_oid, &body.username)
@@ -123,50 +206,79 @@ async fn auto_login(
         }
     };
 
-    // Step 4: approve authorization request
-    let redirect_uri = match ctx
-        .services()
-        .oidc_authorize()
-        .approve_authorization_request_by_login(
-            &body.login_id,
-            session.oid,
-            identify_result.user.oid.into(),
-            Some(session.created_at.timestamp()),
-        )
-        .await
-    {
-        Ok(url) => url,
-        Err(e) => {
-            tracing::error!(error = %e, "auto_login: approve failed");
-            render_json(
-                res,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                AutoLoginError {
-                    error: e.to_string(),
-                },
-            );
-            return Ok(());
-        }
-    };
-
-    // Step 5: build session cookie and return redirect_uri
+    // Step 4: build the session cookie and jump back into the browser flow.
     let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-
-    render_json(
-        res,
-        StatusCode::OK,
-        AutoLoginResponse {
-            redirect_uri: redirect_uri.to_string(),
-        },
-    );
-    super::shared::append_set_cookie(res, &cookie);
+    *res = auto_login_success_response(&body.login_id, &cookie);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use http::StatusCode;
-    use salvo::{Service, test::TestClient};
+    use http::{StatusCode, header};
+    use salvo::{
+        Service,
+        test::{ResponseExt, TestClient},
+    };
+
+    #[tokio::test]
+    async fn auto_login_page_renders_auto_submit_form() {
+        let app = super::routes().hoop(salvo::affix_state::inject(
+            identity_infrastructure::test_app_state_with_mock_settings().await,
+        ));
+        let service = Service::new(app);
+
+        let mut response =
+            TestClient::get("http://127.0.0.1:5800/conformance/auto-login?login_id=login-123")
+                .send(&service)
+                .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        assert_eq!(
+            response
+                .headers()
+                .get("content-security-policy")
+                .and_then(|value| value.to_str().ok()),
+            Some("default-src 'self'; script-src 'unsafe-inline'"),
+        );
+
+        let body = response.take_string().await.unwrap();
+        assert!(body.contains("<form"), "{body}");
+        assert!(
+            body.contains("action=\"&#x2F;conformance&#x2F;auto-login\""),
+            "{body}"
+        );
+        assert!(
+            body.contains("name=\"login_id\" value=\"login-123\""),
+            "{body}"
+        );
+        assert!(
+            body.contains("name=\"username\" value=\"conformance-test\""),
+            "{body}"
+        );
+        assert!(
+            body.contains("name=\"password\" value=\"ConformanceTest1!\""),
+            "{body}"
+        );
+        assert!(body.contains("submit()"), "{body}");
+    }
+
+    #[test]
+    fn auto_login_success_response_redirects_back_to_login_continue() {
+        let response = super::auto_login_success_response(
+            "login-123",
+            "sessions=[\"session-123\"]; HttpOnly; SameSite=Lax; Path=/; Max-Age=42",
+        );
+
+        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
+        assert_eq!(
+            response.headers().get(header::LOCATION).unwrap(),
+            "/login/continue?login_id=login-123&auto_approve=1",
+        );
+        assert_eq!(
+            response.headers().get(header::SET_COOKIE).unwrap(),
+            "sessions=[\"session-123\"]; HttpOnly; SameSite=Lax; Path=/; Max-Age=42",
+        );
+    }
 
     #[tokio::test]
     async fn auto_login_returns_bad_request_for_invalid_login_id() {

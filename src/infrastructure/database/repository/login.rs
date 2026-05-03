@@ -20,12 +20,14 @@ fn to_domain(
     m: login::Model,
     client_oid: Uuid,
     client_authorization_oid: Uuid,
+    session_oid: Option<Uuid>,
     user_oid: Option<Uuid>,
 ) -> Login {
     Login {
         oid: m.oid,
         client_oid,
         client_authorization_oid,
+        session_oid,
         user_oid,
         status: m.status,
         failed_attempts: m.failed_attempts,
@@ -79,10 +81,20 @@ impl LoginRepository for LoginRepositoryImpl {
             None => None,
         };
 
+        let session_oid = match model.session_id {
+            Some(session_id) => SessionEntity::find_by_id(session_id)
+                .one(&self.db)
+                .await
+                .map_err(LoginRepositoryError::QueryFailed)?
+                .map(|session| session.oid),
+            None => None,
+        };
+
         Ok(Some(to_domain(
             model,
             client_model.oid,
             client_authorization_model.oid,
+            session_oid,
             user_oid,
         )))
     }
@@ -123,7 +135,13 @@ impl LoginRepository for LoginRepositoryImpl {
             .insert(&self.db)
             .await
             .map_err(LoginRepositoryError::CreateFailed)?;
-        Ok(to_domain(model, client_oid, client_authorization_oid, None))
+        Ok(to_domain(
+            model,
+            client_oid,
+            client_authorization_oid,
+            None,
+            None,
+        ))
     }
 
     async fn bind_user(
@@ -173,6 +191,7 @@ impl LoginRepository for LoginRepositoryImpl {
             model,
             client_model.oid,
             client_authorization_model.oid,
+            None,
             Some(user_oid),
         ))
     }

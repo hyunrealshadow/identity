@@ -97,7 +97,11 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         created_at: Utc::now(),
         updated_at: None,
     };
-    let binding = key_jwk_binding(&signing_key, &key_data_algorithm(&signing_key), Uuid::new_v4());
+    let binding = key_jwk_binding(
+        &signing_key,
+        &key_data_algorithm(&signing_key),
+        Uuid::new_v4(),
+    );
     let service = TokenService::new(
         repo.clone(),
         Arc::new(InMemoryKeyRepository {
@@ -233,7 +237,11 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         created_at: Utc::now(),
         updated_at: None,
     };
-    let binding = key_jwk_binding(&signing_key, &key_data_algorithm(&signing_key), Uuid::new_v4());
+    let binding = key_jwk_binding(
+        &signing_key,
+        &key_data_algorithm(&signing_key),
+        Uuid::new_v4(),
+    );
     let service = TokenService::new(
         repo.clone(),
         Arc::new(InMemoryKeyRepository {

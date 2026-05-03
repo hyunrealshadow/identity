@@ -86,7 +86,17 @@ impl From<Response> for AppResponse {
 #[async_trait]
 impl Writer for AppResponse {
     async fn write(self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        *res = self.0;
+        let AppResponse(mut response) = self;
+
+        if let Some(status) = response.status_code {
+            res.status_code(status);
+        }
+        for (name, value) in response.headers_mut().drain() {
+            if let Some(name) = name {
+                res.headers_mut().append(name, value);
+            }
+        }
+        *res.body_mut() = std::mem::take(response.body_mut());
     }
 }
 

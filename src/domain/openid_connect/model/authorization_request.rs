@@ -279,6 +279,8 @@ pub struct AuthorizationRequestData {
     pub scope: String,
     pub state: String,
     pub nonce: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
     pub login_hint: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
@@ -296,6 +298,19 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             scope: value.scope.to_scope_string(),
             state: value.state.clone(),
             nonce: value.nonce.clone(),
+            prompt: value.prompt.as_ref().map(|items| {
+                let mut items = items
+                    .iter()
+                    .map(|item| match item {
+                        PromptValue::None => "none",
+                        PromptValue::Login => "login",
+                        PromptValue::Consent => "consent",
+                        PromptValue::SelectAccount => "select_account",
+                    })
+                    .collect::<Vec<_>>();
+                items.sort();
+                items.join(" ")
+            }),
             login_hint: value.login_hint.clone(),
             code_challenge: value.code_challenge.clone(),
             code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),
@@ -488,5 +503,38 @@ mod tests {
         assert_eq!(parsed.scope, "openid email");
         assert_eq!(parsed.nonce.as_deref(), Some("nonce123"));
         assert_eq!(parsed.login_hint, None);
+    }
+
+    #[test]
+    fn authorization_request_data_preserves_prompt_values() {
+        let request = AuthorizationRequest {
+            response_type: ResponseType::Code,
+            response_mode: None,
+            client_id: Uuid::nil(),
+            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
+            scope: ScopeSet::parse("openid email").unwrap(),
+            state: "abc123".to_string(),
+            nonce: Some("nonce123".to_string()),
+            display: None,
+            prompt: Some(
+                [PromptValue::Consent, PromptValue::Login]
+                    .into_iter()
+                    .collect(),
+            ),
+            max_age: None,
+            ui_locales: None,
+            claims_locales: None,
+            id_token_hint: None,
+            login_hint: None,
+            acr_values: None,
+            claims: None,
+            request_uri: None,
+            code_challenge: None,
+            code_challenge_method: None,
+        };
+
+        let data = AuthorizationRequestData::from(&request);
+
+        assert_eq!(data.prompt.as_deref(), Some("consent login"));
     }
 }

@@ -41,7 +41,7 @@ impl FlowDecision {
             }
             FlowDecision::ConsentRequired { login_id } => {
                 crate::controllers::response::redirect_to_response(&format!(
-                    "/oauth2/authorize/consent?login_id={login_id}"
+                    "/oauth2/consent?login_id={login_id}"
                 ))
             }
             FlowDecision::AutoApprove {

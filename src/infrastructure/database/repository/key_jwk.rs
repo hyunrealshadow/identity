@@ -168,23 +168,21 @@ mod tests {
         let key_oid = Uuid::new_v4();
         let binding_oid = Uuid::new_v4();
         let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([[
-                key_jwk::Model {
-                    id: 1,
-                    oid: binding_oid,
-                    key_oid,
-                    algorithm: "RS256".to_owned(),
-                    jwk: json!({
-                        "kty": "RSA",
-                        "alg": "RS256",
-                        "use": "sig",
-                        "kid": Uuid::new_v4().to_string()
-                    }),
-                    created_at: Utc::now().naive_utc(),
-                    updated_at: None,
-                }
-                .into_mock_row(),
-            ]])
+            .append_query_results([[key_jwk::Model {
+                id: 1,
+                oid: binding_oid,
+                key_oid,
+                algorithm: "RS256".to_owned(),
+                jwk: json!({
+                    "kty": "RSA",
+                    "alg": "RS256",
+                    "use": "sig",
+                    "kid": Uuid::new_v4().to_string()
+                }),
+                created_at: Utc::now().naive_utc(),
+                updated_at: None,
+            }
+            .into_mock_row()]])
             .into_connection();
         let repo = KeyJwkRepositoryImpl::new(db);
 

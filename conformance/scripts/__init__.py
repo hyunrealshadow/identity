@@ -1,5 +1,4 @@
 from .client import ConformanceClient
-from .auto_login import AutoLoginHandler
-from .runner import TestRunner
+from .browser_auth import BrowserAuthHandler
 
-__all__ = ["ConformanceClient", "AutoLoginHandler", "TestRunner"]
+__all__ = ["ConformanceClient", "BrowserAuthHandler", "TestRunner"]

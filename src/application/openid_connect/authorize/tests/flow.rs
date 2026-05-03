@@ -323,7 +323,9 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
     let header = jwt::decode_header(id_token).unwrap();
     let (payload, _) = jwt::decode_with_verifier(id_token, &verifier).unwrap();
     assert_eq!(
-        header.claim(JwtClaimNames::KID).and_then(|value| value.as_str()),
+        header
+            .claim(JwtClaimNames::KID)
+            .and_then(|value| value.as_str()),
         Some(binding_oid.to_string().as_str())
     );
     assert_eq!(
@@ -478,6 +480,35 @@ async fn create_authorization_request_persists_login_hint() {
     let loaded = service.load_authorization_request(oid).await.unwrap();
 
     assert_eq!(loaded.login_hint.as_deref(), Some("alice@example.com"));
+}
+
+#[tokio::test]
+async fn create_authorization_request_persists_prompt() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let mut request_params = params("openid profile");
+    request_params.prompt = Some("consent login".to_string());
+
+    let (request, _) = service.validate_request(request_params).await.unwrap();
+    let oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let loaded = service.load_authorization_request(oid).await.unwrap();
+
+    assert_eq!(loaded.prompt.as_deref(), Some("consent login"));
 }
 
 #[tokio::test]

@@ -18,9 +18,7 @@ where
 /// Generate a self-signed TLS certificate and private key for the given domain.
 ///
 /// Returns `(cert_pem, key_pem)`.
-pub fn generate_self_signed_tls_cert(
-    domain: &str,
-) -> Result<(String, String), KeyMaterialError> {
+pub fn generate_self_signed_tls_cert(domain: &str) -> Result<(String, String), KeyMaterialError> {
     let rsa = Rsa::generate(2048).map_err(internal)?;
     let pkey = PKey::from_rsa(rsa).map_err(internal)?;
     let key_pem =
@@ -56,19 +54,28 @@ pub enum TlsPrepareError {
     #[error(
         "TLS certificate files are missing at '{cert_path}' and '{key_path}', and auto-generate is disabled"
     )]
-    MissingPair {
-        cert_path: String,
-        key_path: String,
-    },
+    MissingPair { cert_path: String, key_path: String },
 
     #[error("failed to create TLS parent directory '{path}': {source}")]
-    CreateDirectory { path: String, #[source] source: io::Error },
+    CreateDirectory {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
 
     #[error("failed to read TLS file '{path}': {source}")]
-    ReadFile { path: String, #[source] source: io::Error },
+    ReadFile {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
 
     #[error("failed to write TLS file '{path}': {source}")]
-    WriteFile { path: String, #[source] source: io::Error },
+    WriteFile {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
 
     #[error("failed to generate self-signed TLS certificate: {0}")]
     Generate(#[from] KeyMaterialError),

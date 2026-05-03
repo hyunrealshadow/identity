@@ -310,9 +310,7 @@ pub(super) fn build_token_service(
 
     TokenService::new(
         repo,
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![key],
-        }),
+        Arc::new(InMemoryKeyRepository { keys: vec![key] }),
         Arc::new(InMemoryKeyJwkRepository {
             bindings: vec![binding],
         }),
@@ -416,9 +414,7 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
 
     TokenService::new(
         repo,
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![key],
-        }),
+        Arc::new(InMemoryKeyRepository { keys: vec![key] }),
         Arc::new(InMemoryKeyJwkRepository {
             bindings: vec![binding],
         }),

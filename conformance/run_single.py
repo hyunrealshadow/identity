@@ -8,7 +8,7 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scripts.client import ConformanceClient
-from scripts.auto_login import AutoLoginHandler
+from scripts.browser_auth import BrowserAuthHandler
 from scripts.runner import TestRunner
 
 
@@ -35,7 +35,7 @@ def main():
     args = parser.parse_args()
 
     client = ConformanceClient(args.suite_url)
-    auto_login = AutoLoginHandler(args.identity_url)
+    auto_login = BrowserAuthHandler(args.identity_url)
     runner = TestRunner(client, auto_login, timeout_per_test=args.timeout)
 
     variant = json.loads(args.variant)

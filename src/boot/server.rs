@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use salvo::{
     Listener, Router, Server,
-    conn::{Acceptor, TcpListener, rustls::{Keycert, RustlsConfig}},
+    conn::{
+        Acceptor, TcpListener,
+        rustls::{Keycert, RustlsConfig},
+    },
 };
 
 use identity_infrastructure::{

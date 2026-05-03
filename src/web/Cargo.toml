@@ -29,7 +29,10 @@ uuid = { workspace = true }
 woothee = { workspace = true }
 
 [features]
-oidc-conformance = ["identity-infrastructure/test-support"]
+oidc-conformance = [
+  "identity-infrastructure/oidc-conformance",
+  "identity-infrastructure/test-support",
+]
 
 [dev-dependencies]
 chrono = { workspace = true }

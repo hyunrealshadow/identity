@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 use tera::Tera;
-use url::Url;
 
 #[cfg(feature = "oidc-conformance")]
 use identity_application::install::{InstallInput, InstallService};
@@ -254,8 +253,11 @@ async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) 
 
 #[cfg(test)]
 mod tests {
-    use identity_infrastructure::config::{AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig};
+    use identity_infrastructure::config::{
+        AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig,
+    };
 
+    #[cfg(feature = "oidc-conformance")]
     use super::conformance_install_domain;
 
     #[cfg(feature = "oidc-conformance")]
@@ -264,7 +266,10 @@ mod tests {
         let mut config = app_config();
         config.server.host = Some("https://identity:5150/base/".to_owned());
 
-        assert_eq!(conformance_install_domain(&config), "https://identity:5150/base");
+        assert_eq!(
+            conformance_install_domain(&config),
+            "https://identity:5150/base"
+        );
     }
 
     #[cfg(feature = "oidc-conformance")]
@@ -272,9 +277,14 @@ mod tests {
     fn conformance_install_domain_defaults_to_identity_https_origin() {
         let config = app_config();
 
-        assert_eq!(conformance_install_domain(&config), "https://identity:5150/");
+        assert_eq!(
+            conformance_install_domain(&config),
+            "https://identity:5150/"
+        );
     }
 
+    #[cfg(feature = "oidc-conformance")]
+    #[test]
     fn app_config() -> AppConfig {
         AppConfig {
             logger: LoggerConfig::default(),

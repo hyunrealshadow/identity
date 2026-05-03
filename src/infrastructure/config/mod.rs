@@ -40,7 +40,8 @@ impl AppConfig {
             .as_deref()
             .is_none_or(|value| value.trim().is_empty())
         {
-            self.server.tls.domain = Some(default_tls_domain_from_host(self.server.host.as_deref()));
+            self.server.tls.domain =
+                Some(default_tls_domain_from_host(self.server.host.as_deref()));
         }
 
         self
@@ -481,7 +482,10 @@ database:
 
         let config = config.normalized();
 
-        assert_eq!(config.server.tls.domain.as_deref(), Some("identity.example.com"));
+        assert_eq!(
+            config.server.tls.domain.as_deref(),
+            Some("identity.example.com")
+        );
     }
 
     #[test]
@@ -500,7 +504,10 @@ database:
 
         let config = config.normalized();
 
-        assert_eq!(config.server.tls.domain.as_deref(), Some("identity.example.com"));
+        assert_eq!(
+            config.server.tls.domain.as_deref(),
+            Some("identity.example.com")
+        );
     }
 
     #[test]

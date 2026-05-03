@@ -26,9 +26,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         updated_at: None,
     };
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    let key_repo = Arc::new(InMemoryKeyRepository {
-        keys: vec![key],
-    });
+    let key_repo = Arc::new(InMemoryKeyRepository { keys: vec![key] });
     let user = User {
         oid: UserOid(user_oid),
         email: "alice@example.com".to_string(),
@@ -183,9 +181,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
         updated_at: None,
     };
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    let key_repo = Arc::new(InMemoryKeyRepository {
-        keys: vec![key],
-    });
+    let key_repo = Arc::new(InMemoryKeyRepository { keys: vec![key] });
     let user = User {
         oid: UserOid(user_oid),
         email: "alice@example.com".to_string(),
@@ -358,9 +354,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         updated_at: None,
     };
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    let key_repo = Arc::new(InMemoryKeyRepository {
-        keys: vec![key],
-    });
+    let key_repo = Arc::new(InMemoryKeyRepository { keys: vec![key] });
     let user = User {
         oid: UserOid(user_oid),
         email: "alice@example.com".to_string(),
@@ -726,11 +720,15 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
     let _ = jwt::decode_with_verifier(result.id_token.as_ref().unwrap(), &verifier).unwrap();
 
     assert_eq!(
-        access_header.claim(JwtClaimNames::KID).and_then(|value| value.as_str()),
+        access_header
+            .claim(JwtClaimNames::KID)
+            .and_then(|value| value.as_str()),
         Some(binding_oid.to_string().as_str())
     );
     assert_eq!(
-        id_header.claim(JwtClaimNames::KID).and_then(|value| value.as_str()),
+        id_header
+            .claim(JwtClaimNames::KID)
+            .and_then(|value| value.as_str()),
         Some(binding_oid.to_string().as_str())
     );
 }
