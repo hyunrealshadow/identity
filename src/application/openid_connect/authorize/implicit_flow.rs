@@ -10,13 +10,13 @@ impl AuthorizeService {
         user_oid: Uuid,
         response_type: ResponseType,
         auth_time: Option<i64>,
-    ) -> Result<url::Url, AppError> {
+    ) -> Result<Url, AppError> {
         let nonce = request
             .nonce
             .as_deref()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ImplicitNonceRequired))?;
 
-        let redirect_uri = url::Url::parse(&request.redirect_uri).map_err(|error| {
+        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
         })?;
 
@@ -113,8 +113,8 @@ impl AuthorizeService {
         user_oid: Uuid,
         response_type: ResponseType,
         auth_time: Option<i64>,
-    ) -> Result<url::Url, AppError> {
-        let redirect_uri = url::Url::parse(&request.redirect_uri).map_err(|error| {
+    ) -> Result<Url, AppError> {
+        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
         })?;
         let client_id = Uuid::parse_str(&request.client_id).map_err(|error| {
@@ -221,7 +221,7 @@ impl AuthorizeService {
         signing_key_id: &str,
         signing_key_pem: &str,
         signing_alg: &str,
-        issuer: &url::Url,
+        issuer: &Url,
         audience: &str,
         claims: Option<&serde_json::Value>,
     ) -> Result<String, AppError> {

@@ -7,7 +7,9 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
+    #[sea_orm(unique_key = "idx_client_platform_client_id_platform")]
     pub client_id: i64,
+    #[sea_orm(unique_key = "idx_client_platform_client_id_platform")]
     pub platform: String,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub redirect_uris: Option<Json>,

@@ -127,7 +127,12 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 
 #[cfg(test)]
 mod tests {
-    use crate::controllers::oauth2::{authorize_response::redirect_oauth_error_response, routes};
+    use crate::controllers::oauth2::{
+        authorize_response::redirect_oauth_error_response,
+        routes,
+    };
+    use crate::controllers::shared::build_session_cookie;
+    use super::super::tests::interaction_fixtures::authorize_first_hop_state;
     use http::{HeaderMap, StatusCode, header};
     use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
@@ -151,6 +156,24 @@ mod tests {
         TestClient::get(format!("http://127.0.0.1:5800{uri}"))
             .send(&service)
             .await
+    }
+
+    async fn call_authorize_with_state(
+        uri: &str,
+        state: identity_infrastructure::AppState,
+        session_cookie: Option<String>,
+    ) -> salvo::Response {
+        let app = routes().hoop(salvo::affix_state::inject(state));
+        let service = Service::new(app);
+
+        let request = TestClient::get(format!("http://127.0.0.1:5800{uri}"));
+        let request = if let Some(cookie) = session_cookie {
+            request.add_header(header::COOKIE, cookie, true)
+        } else {
+            request
+        };
+
+        request.send(&service).await
     }
 
     #[tokio::test]
@@ -183,6 +206,21 @@ mod tests {
             body.contains("missing required parameter: client_id"),
             "{body}"
         );
+    }
+
+    #[tokio::test]
+    async fn authorize_with_reusable_session_redirects_to_oauth2_continue() {
+        let (state, session_oid) = authorize_first_hop_state().await;
+        let response = call_authorize_with_state(
+            "/oauth2/authorize?client_id=00000000-0000-0000-0000-000000000000&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state123",
+            state,
+            Some(build_session_cookie(&[session_oid], false)),
+        )
+        .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
+        let location = response.headers().get(header::LOCATION).unwrap().to_str().unwrap();
+        assert!(location.starts_with("/oauth2/continue?login_id="), "{location}");
     }
 
     #[tokio::test]

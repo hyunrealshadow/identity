@@ -8,7 +8,7 @@ from scripts.browser_auth import BrowserAuthHandler
 
 
 class BrowserAuthHandlerTests(unittest.TestCase):
-    def test_complete_browser_login_navigates_to_conformance_auto_login_page(self):
+    def test_complete_browser_login_navigates_to_oauth2_continue(self):
         handler = BrowserAuthHandler("https://localhost:5150")
         page = FakePage()
 
@@ -20,10 +20,15 @@ class BrowserAuthHandlerTests(unittest.TestCase):
                     "https://localhost:5150/conformance/auto-login?login_id=login-123",
                     "load",
                     30000,
+                ),
+                (
+                    "https://localhost:5150/oauth2/continue?login_id=login-123",
+                    "load",
+                    30000,
                 )
             ],
         )
-        self.assertEqual(page.wait_calls, [("load", 30000)])
+        self.assertEqual(page.wait_calls, [("load", 30000), ("load", 30000)])
 
     def test_submit_post_form_builds_browser_post_for_non_conformance_urls(self):
         handler = BrowserAuthHandler("https://localhost:5150")

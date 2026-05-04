@@ -1,4 +1,20 @@
 use super::*;
+use identity_domain::client_authorization::{
+    ConsentState, SelectionSource, StoredAuthorizationRequest,
+};
+use identity_domain::openid_connect::AuthorizationRequest;
+use identity_domain::openid_connect::AuthorizationRequestData;
+
+fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSource) -> bool {
+    match (current, next) {
+        (Some(SelectionSource::FreshLogin), SelectionSource::AccountPicker) => false,
+        (Some(existing), incoming) if existing == incoming => true,
+        (Some(SelectionSource::Auto), SelectionSource::AccountPicker) => true,
+        (Some(SelectionSource::Auto), SelectionSource::FreshLogin) => true,
+        (None, _) => true,
+        _ => true,
+    }
+}
 
 #[derive(Default)]
 pub(in crate::openid_connect) struct InMemoryClientAuthorizationRepository {
@@ -27,6 +43,7 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
             type_,
             data,
             expires_at,
+            completed_at: None,
             revoked_at: None,
             created_at: chrono::Utc::now(),
             updated_at: None,
@@ -45,6 +62,82 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         Ok(self.records.lock().unwrap().get(&oid).cloned())
     }
 
+    async fn update_authorization_request_selection(
+        &self,
+        oid: Uuid,
+        session_oid: Uuid,
+        user_oid: Uuid,
+        source: SelectionSource,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let mut records = self.records.lock().unwrap();
+        let Some(record) = records.get_mut(&oid) else {
+            return Ok(false);
+        };
+        if record.completed_at.is_some() {
+            return Ok(false);
+        }
+
+        let Ok(mut stored) = serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()) else {
+            return Ok(false);
+        };
+        if !can_overwrite_selection(stored.interaction.selection_source, source) {
+            return Ok(false);
+        }
+
+        stored.interaction.selected_session_oid = Some(session_oid.to_string());
+        stored.interaction.selected_user_oid = Some(user_oid.to_string());
+        stored.interaction.selection_source = Some(source);
+        record.data = serde_json::to_value(stored).unwrap();
+        record.updated_at = Some(chrono::Utc::now());
+        Ok(true)
+    }
+
+    async fn record_authorization_request_consent(
+        &self,
+        oid: Uuid,
+        consent_state: ConsentState,
+        decided_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let mut records = self.records.lock().unwrap();
+        let Some(record) = records.get_mut(&oid) else {
+            return Ok(false);
+        };
+        if record.completed_at.is_some() {
+            return Ok(false);
+        }
+
+        let Ok(mut stored) = serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()) else {
+            return Ok(false);
+        };
+        if stored.interaction.consent_state != ConsentState::Pending {
+            return Ok(false);
+        }
+
+        stored.interaction.consent_state = consent_state;
+        stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
+        record.data = serde_json::to_value(stored).unwrap();
+        record.updated_at = Some(chrono::Utc::now());
+        Ok(true)
+    }
+
+    async fn mark_authorization_request_completed(
+        &self,
+        oid: Uuid,
+        completed_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let mut records = self.records.lock().unwrap();
+        let Some(record) = records.get_mut(&oid) else {
+            return Ok(false);
+        };
+        if record.completed_at.is_some() {
+            return Ok(false);
+        }
+
+        record.completed_at = Some(completed_at);
+        record.updated_at = Some(chrono::Utc::now());
+        Ok(true)
+    }
+
     async fn revoke_access_tokens_for_authorization_code(
         &self,
         _authorization_code_oid: Uuid,
@@ -57,6 +150,54 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
             record.revoked_at = Some(chrono::Utc::now());
         }
         Ok(())
+    }
+}
+
+impl InMemoryClientAuthorizationRepository {
+    pub(in crate::openid_connect) fn insert_legacy_authorization_request_for_test(
+        &self,
+        request: &AuthorizationRequest,
+    ) -> Uuid {
+        let oid = Uuid::new_v4();
+        self.records.lock().unwrap().insert(
+            oid,
+            ClientAuthorization {
+                oid,
+                client_oid: request.client_id,
+                type_: ClientAuthorizationType::AuthorizationRequest,
+                data: serde_json::to_value(AuthorizationRequestData::from(request)).unwrap(),
+                expires_at: chrono::Utc::now() + chrono::Duration::minutes(10),
+                completed_at: None,
+                revoked_at: None,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+            },
+        );
+        oid
+    }
+
+    pub(in crate::openid_connect) fn set_stored_request_redirect_uri_for_test(
+        &self,
+        oid: Uuid,
+        redirect_uri: &str,
+    ) {
+        let mut records = self.records.lock().unwrap();
+        let record = records.get_mut(&oid).unwrap();
+        let mut stored = serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()).unwrap();
+        stored.request.redirect_uri = redirect_uri.to_string();
+        record.data = serde_json::to_value(stored).unwrap();
+        record.updated_at = Some(chrono::Utc::now());
+    }
+
+    pub(in crate::openid_connect) fn completed_at_for_test(
+        &self,
+        oid: Uuid,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.records
+            .lock()
+            .unwrap()
+            .get(&oid)
+            .and_then(|record| record.completed_at)
     }
 }
 

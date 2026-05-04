@@ -14,6 +14,7 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary")]
     pub data: Json,
     pub expires_at: DateTimeWithTimeZone,
+    pub completed_at: Option<DateTimeWithTimeZone>,
     pub revoked_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

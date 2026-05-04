@@ -7,6 +7,7 @@ pub use super::client_open_id_connect_credential::Entity as ClientOpenIdConnectC
 pub use super::client_platform::Entity as ClientPlatform;
 pub use super::client_scope::Entity as ClientScope;
 pub use super::key::Entity as Key;
+pub use super::key_jwk::Entity as KeyJwk;
 pub use super::login::Entity as Login;
 pub use super::scope::Entity as Scope;
 pub use super::session::Entity as Session;

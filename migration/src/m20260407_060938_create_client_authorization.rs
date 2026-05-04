@@ -13,6 +13,7 @@ pub enum ClientAuthorization {
     Type,
     Data,
     ExpiresAt,
+    CompletedAt,
     RevokedAt,
     CreatedAt,
     UpdatedAt,
@@ -35,6 +36,9 @@ impl MigrationTrait for Migration {
                     .col(string(ClientAuthorization::Type))
                     .col(json_binary(ClientAuthorization::Data))
                     .col(timestamp_with_time_zone(ClientAuthorization::ExpiresAt))
+                    .col(timestamp_with_time_zone_null(
+                        ClientAuthorization::CompletedAt,
+                    ))
                     .col(timestamp_with_time_zone_null(
                         ClientAuthorization::RevokedAt,
                     ))

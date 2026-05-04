@@ -281,6 +281,8 @@ pub struct AuthorizationRequestData {
     pub nonce: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
+    #[serde(default)]
+    pub max_age: Option<i32>,
     pub login_hint: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
@@ -311,6 +313,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
                 items.sort();
                 items.join(" ")
             }),
+            max_age: value.max_age,
             login_hint: value.login_hint.clone(),
             code_challenge: value.code_challenge.clone(),
             code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),

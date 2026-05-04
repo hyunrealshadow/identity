@@ -14,9 +14,54 @@ use identity_domain::{
     client::model::ClientOid,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
-        ClientAuthorizationType,
+        ClientAuthorizationType, ConsentState, SelectionSource, StoredAuthorizationRequest,
     },
+    openid_connect::AuthorizationRequestData,
 };
+
+fn parse_stored_authorization_request(
+    data: serde_json::Value,
+) -> Result<StoredAuthorizationRequest, ClientAuthorizationRepositoryError> {
+    serde_json::from_value::<StoredAuthorizationRequest>(data.clone())
+        .or_else(|_| {
+            serde_json::from_value::<AuthorizationRequestData>(data).map(|request| {
+                StoredAuthorizationRequest {
+                    request,
+                    interaction: Default::default(),
+                }
+            })
+        })
+        .map_err(|_| {
+            ClientAuthorizationRepositoryError::QueryFailed(sea_orm::DbErr::Type(
+                "invalid authorization_request payload".into(),
+            ))
+        })
+}
+
+fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSource) -> bool {
+    match (current, next) {
+        (Some(SelectionSource::FreshLogin), SelectionSource::AccountPicker) => false,
+        (Some(existing), incoming) if existing == incoming => true,
+        (Some(SelectionSource::Auto), SelectionSource::AccountPicker) => true,
+        (Some(SelectionSource::Auto), SelectionSource::FreshLogin) => true,
+        (None, _) => true,
+        _ => true,
+    }
+}
+
+fn selection_update_condition(model: &client_authorization::Model) -> Condition {
+    let mut condition = Condition::all()
+        .add(client_authorization::Column::Oid.eq(model.oid))
+        .add(client_authorization::Column::CompletedAt.is_null());
+
+    condition = if let Some(updated_at) = model.updated_at {
+        condition.add(client_authorization::Column::UpdatedAt.eq(updated_at))
+    } else {
+        condition.add(client_authorization::Column::UpdatedAt.is_null())
+    };
+
+    condition
+}
 
 fn to_domain(
     model: client_authorization::Model,
@@ -35,6 +80,7 @@ fn to_domain(
             })?,
         data: model.data,
         expires_at: model.expires_at.with_timezone(&Utc),
+        completed_at: model.completed_at.map(|value| value.with_timezone(&Utc)),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
         created_at: model.created_at.with_timezone(&Utc),
         updated_at: model.updated_at.map(|value| value.with_timezone(&Utc)),
@@ -79,6 +125,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             r#type: Set(type_.to_string()),
             data: Set(data),
             expires_at: Set(expires_at.into()),
+            completed_at: Set(None),
             revoked_at: Set(None),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
@@ -106,6 +153,129 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         };
 
         Ok(Some(to_domain(request_model, client_model.oid)?))
+    }
+
+    async fn update_authorization_request_selection(
+        &self,
+        oid: Uuid,
+        session_oid: Uuid,
+        user_oid: Uuid,
+        source: SelectionSource,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let Some(model) = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(oid))
+            .one(&self.db)
+            .await
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+        else {
+            return Ok(false);
+        };
+
+        if model.r#type != ClientAuthorizationType::AuthorizationRequest.to_string()
+            || model.completed_at.is_some()
+        {
+            return Ok(false);
+        }
+
+        let mut stored = parse_stored_authorization_request(model.data.clone())?;
+        if !can_overwrite_selection(stored.interaction.selection_source, source) {
+            return Ok(false);
+        }
+
+        stored.interaction.selected_session_oid = Some(session_oid.to_string());
+        stored.interaction.selected_user_oid = Some(user_oid.to_string());
+        stored.interaction.selection_source = Some(source);
+
+        let now = Utc::now();
+        let result = ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::Data,
+                SimpleExpr::Value(serde_json::to_value(stored).unwrap().into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(Some(now).into()),
+            )
+            .filter(selection_update_condition(&model))
+            .exec(&self.db)
+            .await
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+
+        Ok(result.rows_affected == 1)
+    }
+
+    async fn record_authorization_request_consent(
+        &self,
+        oid: Uuid,
+        consent_state: ConsentState,
+        decided_at: chrono::DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let Some(model) = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(oid))
+            .one(&self.db)
+            .await
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+        else {
+            return Ok(false);
+        };
+
+        if model.r#type != ClientAuthorizationType::AuthorizationRequest.to_string()
+            || model.completed_at.is_some()
+        {
+            return Ok(false);
+        }
+
+        let mut stored = parse_stored_authorization_request(model.data.clone())?;
+        if stored.interaction.consent_state != ConsentState::Pending {
+            return Ok(false);
+        }
+
+        stored.interaction.consent_state = consent_state;
+        stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
+
+        let now = Utc::now();
+        let result = ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::Data,
+                SimpleExpr::Value(serde_json::to_value(stored).unwrap().into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(Some(now).into()),
+            )
+            .filter(selection_update_condition(&model))
+            .exec(&self.db)
+            .await
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+
+        Ok(result.rows_affected == 1)
+    }
+
+    async fn mark_authorization_request_completed(
+        &self,
+        oid: Uuid,
+        completed_at: chrono::DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let now = Utc::now();
+        let result = ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::CompletedAt,
+                SimpleExpr::Value(Some(completed_at).into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(Some(now).into()),
+            )
+            .filter(
+                Condition::all()
+                    .add(client_authorization::Column::Oid.eq(oid))
+                    .add(client_authorization::Column::CompletedAt.is_null()),
+            )
+            .exec(&self.db)
+            .await
+            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+
+        Ok(result.rows_affected == 1)
     }
 
     async fn revoke_access_tokens_for_authorization_code(

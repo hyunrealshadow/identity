@@ -155,6 +155,8 @@ pub enum AuthorizeErrorCode {
     IdTokenHintIssuerInvalid,
     /// Encrypted request objects (JWE / Nested JWT) are not supported.
     RequestObjectEncryptionUnsupported,
+    /// Authorization request interaction state was already updated or completed.
+    AuthzInteractionConflict,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -222,6 +224,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::ImplicitUserNotFound => ErrorKind::Validation,
             Self::IdTokenHintIssuerInvalid => ErrorKind::Validation,
             Self::RequestObjectEncryptionUnsupported => ErrorKind::Validation,
+            Self::AuthzInteractionConflict => ErrorKind::Validation,
         }
     }
 
@@ -289,6 +292,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::ImplicitUserNotFound => 23059,
             Self::IdTokenHintIssuerInvalid => 23060,
             Self::RequestObjectEncryptionUnsupported => 23061,
+            Self::AuthzInteractionConflict => 23062,
         }
     }
 }

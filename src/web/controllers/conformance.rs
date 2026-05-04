@@ -18,6 +18,7 @@ use identity_application::error::{AppError, codes::common::CommonErrorCode};
 use crate::{
     application::auth::login::ChallengeOutcome,
     boot::AppState,
+    domain::client_authorization::SelectionSource,
     infrastructure::{
         database::seed::conformance::{CONFORMANCE_PASSWORD, CONFORMANCE_USERNAME},
         web,
@@ -96,7 +97,7 @@ fn auto_login_page_response(ctx: &AppState, headers: &HeaderMap, login_id: &str)
 
 fn auto_login_continue_url(login_id: &str) -> String {
     format!(
-        "/login/continue?login_id={}&auto_approve=1",
+        "/oauth2/continue?login_id={}",
         urlencoding::encode(login_id)
     )
 }
@@ -105,6 +106,24 @@ fn auto_login_success_response(login_id: &str, cookie: &str) -> Response {
     let mut response = redirect_to_response(&auto_login_continue_url(login_id));
     append_set_cookie(&mut response, cookie);
     response
+}
+
+async fn record_auto_login_selection<F, Fut>(
+    login_id: &str,
+    session: &identity_domain::auth::model::Session,
+    record_selection: F,
+) -> Result<(), AppError>
+where
+    F: FnOnce(String, uuid::Uuid, uuid::Uuid, SelectionSource) -> Fut,
+    Fut: std::future::Future<Output = Result<(), AppError>>,
+{
+    record_selection(
+        login_id.to_owned(),
+        session.oid,
+        session.user_oid,
+        SelectionSource::FreshLogin,
+    )
+    .await
 }
 
 #[handler]
@@ -207,6 +226,16 @@ async fn auto_login(
     };
 
     // Step 4: build the session cookie and jump back into the browser flow.
+    let authorize_service = ctx.services().oidc_authorize();
+    record_auto_login_selection(&body.login_id, &session, move |login_id, session_oid, user_oid, source| {
+        async move {
+            authorize_service
+                .record_selection_by_login(&login_id, session_oid, user_oid, source)
+                .await
+        }
+    })
+    .await?;
+
     let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
     *res = auto_login_success_response(&body.login_id, &cookie);
     Ok(())
@@ -214,7 +243,11 @@ async fn auto_login(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use chrono::Utc;
     use http::{StatusCode, header};
+    use identity_domain::{auth::model::Session, client_authorization::SelectionSource};
     use salvo::{
         Service,
         test::{ResponseExt, TestClient},
@@ -263,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_login_success_response_redirects_back_to_login_continue() {
+    fn auto_login_success_response_redirects_back_to_oauth2_continue() {
         let response = super::auto_login_success_response(
             "login-123",
             "sessions=[\"session-123\"]; HttpOnly; SameSite=Lax; Path=/; Max-Age=42",
@@ -272,11 +305,63 @@ mod tests {
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         assert_eq!(
             response.headers().get(header::LOCATION).unwrap(),
-            "/login/continue?login_id=login-123&auto_approve=1",
+            "/oauth2/continue?login_id=login-123",
         );
         assert_eq!(
             response.headers().get(header::SET_COOKIE).unwrap(),
             "sessions=[\"session-123\"]; HttpOnly; SameSite=Lax; Path=/; Max-Age=42",
+        );
+    }
+
+    #[tokio::test]
+    async fn record_auto_login_selection_records_fresh_login_source() {
+        let session = Session {
+            oid: uuid::Uuid::new_v4(),
+            user_oid: uuid::Uuid::new_v4(),
+            status: "active".to_owned(),
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            last_active_at: None,
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            acr: Some("pwd".to_owned()),
+            acr_expires_at: None,
+        };
+        let recorded = Arc::new(Mutex::new(None));
+
+        super::record_auto_login_selection(
+            "login-123",
+            &session,
+            {
+                let recorded = recorded.clone();
+                move |login_id, session_oid, user_oid, source| {
+                    let recorded = recorded.clone();
+                    async move {
+                        *recorded.lock().unwrap() =
+                            Some((login_id.to_owned(), session_oid, user_oid, source));
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            *recorded.lock().unwrap(),
+            Some((
+                "login-123".to_owned(),
+                session.oid,
+                session.user_oid,
+                SelectionSource::FreshLogin,
+            ))
         );
     }
 

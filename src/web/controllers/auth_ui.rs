@@ -10,7 +10,6 @@
 //!   POST /login/otp          – process OTP submission
 
 use std::error::Error as StdError;
-use std::str::FromStr;
 
 use http::HeaderMap;
 use salvo::{Depot, Request, Response, Router, handler};
@@ -32,7 +31,7 @@ use crate::{
         error::{AppError, codes::common::CommonErrorCode},
     },
     boot::AppState,
-    domain::openid_connect::PromptValue,
+    domain::client_authorization::SelectionSource,
     infrastructure::{i18n::resolve_locale_from_headers, web},
 };
 
@@ -46,7 +45,6 @@ pub fn routes() -> Router {
                 .get(login_page)
                 .post(identifier_post),
         )
-        .push(Router::with_path("login/continue").get(login_continue))
         .push(Router::with_path("login/select").post(select_post))
         .push(
             Router::with_path("login/password")
@@ -77,13 +75,6 @@ struct OtpQuery {
 #[derive(Debug, Deserialize)]
 struct LoginQuery {
     login_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LoginContinueQuery {
-    login_id: Option<String>,
-    decision: Option<String>,
-    auto_approve: Option<u8>,
 }
 
 // ─── Form body structs ────────────────────────────────────────────────────────
@@ -192,68 +183,8 @@ fn render_otp_page(
     response
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LoginContinueDecision {
-    RedirectToConsent,
-    FinalizeApprove,
-    FinalizeDeny,
-}
-
-fn determine_login_continue_decision(
-    should_skip_consent: bool,
-    force_consent: bool,
-    decision: Option<&str>,
-) -> LoginContinueDecision {
-    match decision {
-        Some("deny") => LoginContinueDecision::FinalizeDeny,
-        Some("approve") => LoginContinueDecision::FinalizeApprove,
-        None if should_skip_consent && !force_consent => LoginContinueDecision::FinalizeApprove,
-        _ => LoginContinueDecision::RedirectToConsent,
-    }
-}
-
-fn login_continue_url(login_id: &str, decision: Option<&str>, auto_approve: bool) -> String {
-    let mut url = format!("/login/continue?login_id={}", urlencoding::encode(login_id));
-    if let Some(decision) = decision {
-        url.push_str(&format!("&decision={}", urlencoding::encode(decision)));
-    }
-    if auto_approve {
-        url.push_str("&auto_approve=1");
-    }
-    url
-}
-
-fn consent_url(login_id: &str, auto_approve: bool) -> String {
-    let mut url = format!(
-        "/oauth2/consent?login_id={}",
-        urlencoding::encode(login_id)
-    );
-    if auto_approve {
-        url.push_str("&auto_approve=1");
-    }
-    url
-}
-
-fn requires_forced_consent_from_value(prompt: Option<&str>) -> bool {
-    prompt
-        .map(|value| {
-            value
-                .split_whitespace()
-                .filter_map(|item| PromptValue::from_str(item).ok())
-                .any(|item| item == PromptValue::Consent)
-        })
-        .unwrap_or(false)
-}
-
-fn session_from_authenticated_login<'a>(
-    login: &identity_domain::auth::model::Login,
-    sessions: &'a [identity_domain::auth::model::ActiveSession],
-) -> Option<&'a identity_domain::auth::model::ActiveSession> {
-    login.session_oid.and_then(|session_oid| {
-        sessions.iter().find(|session| {
-            session.session_oid == session_oid && login.user_oid == Some(session.user_oid)
-        })
-    })
+fn oauth2_continue_url(login_id: &str) -> String {
+    format!("/oauth2/continue?login_id={}", urlencoding::encode(login_id))
 }
 
 // ─── GET Handlers ─────────────────────────────────────────────────────────────
@@ -349,80 +280,6 @@ async fn otp_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
     Ok(render_otp_page(&ctx, &headers, data, csrf_token(depot)).into())
 }
 
-#[handler]
-async fn login_continue(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
-    let ctx = app_state(depot)?;
-    let headers = req.headers().clone();
-    let query: LoginContinueQuery = parse_query(req)?;
-    let Some(login_id) = query.login_id else {
-        return Ok(redirect_to_response("/login").into());
-    };
-
-    let authorize_service = ctx.services().oidc_authorize();
-    let active_sessions = load_active_sessions(&ctx, &headers).await?;
-    let (login, request, client) = authorize_service
-        .load_consent_context_by_login(&login_id)
-        .await?;
-
-    let session = session_from_authenticated_login(&login, &active_sessions).or_else(|| {
-        super::oauth2::select_active_session(&active_sessions, request.login_hint.as_deref())
-    });
-    let Some(session) = session else {
-        return Ok(redirect_to_response(&format!(
-            "/login?login_id={}",
-            urlencoding::encode(&login_id)
-        ))
-        .into());
-    };
-
-    let auto_approve = query.auto_approve == Some(1);
-    let force_consent = requires_forced_consent_from_value(request.prompt.as_deref());
-    let decision = determine_login_continue_decision(
-        authorize_service.should_skip_consent(&client),
-        force_consent,
-        query.decision.as_deref(),
-    );
-    let response_mode = super::oauth2::response_mode_from_value(request.response_mode.as_deref());
-
-    match decision {
-        LoginContinueDecision::RedirectToConsent => {
-            Ok(redirect_to_response(&consent_url(&login_id, auto_approve)).into())
-        }
-        LoginContinueDecision::FinalizeApprove => {
-            let auth_time = ctx
-                .services()
-                .session()
-                .select_session(session.session_oid)
-                .await
-                .ok()
-                .map(|session| session.created_at.timestamp());
-            let redirect = authorize_service
-                .approve_authorization_request_by_login(
-                    &login_id,
-                    session.session_oid,
-                    session.user_oid,
-                    auth_time,
-                )
-                .await?;
-
-            Ok(
-                super::oauth2::finish_authorize_redirect(&ctx, &headers, &redirect, response_mode)
-                    .into(),
-            )
-        }
-        LoginContinueDecision::FinalizeDeny => {
-            let redirect = authorize_service
-                .deny_authorization_request_by_login(&login_id)
-                .await?;
-
-            Ok(
-                super::oauth2::finish_authorize_redirect(&ctx, &headers, &redirect, response_mode)
-                    .into(),
-            )
-        }
-    }
-}
-
 // ─── POST Handlers ────────────────────────────────────────────────────────────
 
 /// `POST /login/select`
@@ -435,31 +292,42 @@ async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse
     let headers = req.headers().clone();
     let body: SelectForm = parse_form(req).await?;
 
-    Ok(AppResponse(
-        match ctx
-            .services()
-            .session()
-            .select_session(body.session_id)
-            .await
-        {
-            Ok(session) => {
-                let cookie =
-                    build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-                let target = body
-                    .login_id
-                    .as_deref()
-                    .map(|value| login_continue_url(value, None, false))
-                    .unwrap_or_else(|| "/".to_string());
-                let mut response = redirect_to_response(&target);
-                append_set_cookie(&mut response, &cookie);
-                response
+    let response = match ctx
+        .services()
+        .session()
+        .select_session(body.session_id)
+        .await
+    {
+        Ok(session) => {
+            if let Some(login_id) = body.login_id.as_deref() {
+                ctx.services()
+                    .oidc_authorize()
+                    .record_selection_by_login(
+                        login_id,
+                        session.oid,
+                        session.user_oid,
+                        SelectionSource::AccountPicker,
+                    )
+                    .await?;
             }
-            Err(e) => {
-                tracing::error!(error = %e, "select_session failed");
-                redirect_to_response("/login")
-            }
-        },
-    ))
+
+            let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+            let target = body
+                .login_id
+                .as_deref()
+                .map(oauth2_continue_url)
+                .unwrap_or_else(|| "/".to_string());
+            let mut response = redirect_to_response(&target);
+            append_set_cookie(&mut response, &cookie);
+            response
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "select_session failed");
+            redirect_to_response("/login")
+        }
+    };
+
+    Ok(AppResponse(response))
 }
 
 /// `POST /login`
@@ -610,71 +478,78 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 
     let sess_ctx = build_session_context(&headers);
 
-    Ok(AppResponse(
-        match ctx
-            .services()
-            .login()
-            .challenge(login_oid, "password", &body.credential, sess_ctx)
-            .await
-        {
-            Ok(ChallengeOutcome::Authenticated { session, .. }) => {
-                let cookie =
-                    build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-                let target = login_continue_url(&body.login_id, None, false);
-                let mut response = redirect_to_response(&target);
-                append_set_cookie(&mut response, &cookie);
-                response
-            }
-            Ok(ChallengeOutcome::MfaRequired { login }) => {
-                let protected_mfa_id = match ctx
-                    .services()
-                    .oidc_authorize()
-                    .encrypt_login_id(login.oid)
-                    .await
-                {
-                    Ok(id) => id,
-                    Err(e) => {
-                        tracing::error!(error = %e, "encrypt_login_id failed");
-                        return Ok(render_password_page(
-                            &ctx,
-                            &headers,
-                            PasswordPageData {
-                                login_id: body.login_id,
-                                identifier: body.identifier,
-                                user_name: String::new(),
-                                masked_email: String::new(),
-                                error: Some(invalid_request_message(&ctx, &headers)),
-                                csrf_token: String::new(),
-                            },
-                            csrf_token(depot),
-                        )
-                        .into());
-                    }
-                };
-                let identifier = urlencoding::encode(&body.identifier).into_owned();
-                let url = format!("/login/otp?login_id={protected_mfa_id}&identifier={identifier}");
-                redirect_to_response(&url)
-            }
-            Err(err) => {
-                let locale = resolve_locale_from_headers(&headers);
-                let error_msg =
-                    super::response::error_message(ctx.resources().i18n(), &locale, &err);
-                render_password_page(
-                    &ctx,
-                    &headers,
-                    PasswordPageData {
-                        login_id: body.login_id,
-                        identifier: body.identifier,
-                        user_name: String::new(),
-                        masked_email: String::new(),
-                        error: Some(error_msg),
-                        csrf_token: String::new(),
-                    },
-                    csrf_token(depot),
+    let response = match ctx
+        .services()
+        .login()
+        .challenge(login_oid, "password", &body.credential, sess_ctx)
+        .await
+    {
+        Ok(ChallengeOutcome::Authenticated { session, .. }) => {
+            ctx.services()
+                .oidc_authorize()
+                .record_selection_by_login(
+                    &body.login_id,
+                    session.oid,
+                    session.user_oid,
+                    SelectionSource::FreshLogin,
                 )
-            }
-        },
-    ))
+                .await?;
+
+            let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+            let mut response = redirect_to_response(&oauth2_continue_url(&body.login_id));
+            append_set_cookie(&mut response, &cookie);
+            response
+        }
+        Ok(ChallengeOutcome::MfaRequired { login }) => {
+            let protected_mfa_id = match ctx
+                .services()
+                .oidc_authorize()
+                .encrypt_login_id(login.oid)
+                .await
+            {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::error!(error = %e, "encrypt_login_id failed");
+                    return Ok(render_password_page(
+                        &ctx,
+                        &headers,
+                        PasswordPageData {
+                            login_id: body.login_id,
+                            identifier: body.identifier,
+                            user_name: String::new(),
+                            masked_email: String::new(),
+                            error: Some(invalid_request_message(&ctx, &headers)),
+                            csrf_token: String::new(),
+                        },
+                        csrf_token(depot),
+                    )
+                    .into());
+                }
+            };
+            let identifier = urlencoding::encode(&body.identifier).into_owned();
+            let url = format!("/login/otp?login_id={protected_mfa_id}&identifier={identifier}");
+            redirect_to_response(&url)
+        }
+        Err(err) => {
+            let locale = resolve_locale_from_headers(&headers);
+            let error_msg = super::response::error_message(ctx.resources().i18n(), &locale, &err);
+            render_password_page(
+                &ctx,
+                &headers,
+                PasswordPageData {
+                    login_id: body.login_id,
+                    identifier: body.identifier,
+                    user_name: String::new(),
+                    masked_email: String::new(),
+                    error: Some(error_msg),
+                    csrf_token: String::new(),
+                },
+                csrf_token(depot),
+            )
+        }
+    };
+
+    Ok(AppResponse(response))
 }
 
 /// `POST /login/otp`
@@ -716,57 +591,69 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
 
     let sess_ctx = build_session_context(&headers);
 
-    Ok(AppResponse(
-        match ctx
-            .services()
-            .login()
-            .challenge(login_oid, "otp", &body.credential, sess_ctx)
-            .await
-        {
-            Ok(ChallengeOutcome::Authenticated { session, .. }) => {
-                let cookie =
-                    build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-                let target = login_continue_url(&body.login_id, None, false);
-                let mut response = redirect_to_response(&target);
-                append_set_cookie(&mut response, &cookie);
-                response
-            }
-            Ok(ChallengeOutcome::MfaRequired { .. }) => {
-                tracing::warn!("otp challenge returned MfaRequired unexpectedly");
-                redirect_to_response("/login")
-            }
-            Err(err) => {
-                let locale = resolve_locale_from_headers(&headers);
-                let error_msg =
-                    super::response::error_message(ctx.resources().i18n(), &locale, &err);
-                render_otp_page(
-                    &ctx,
-                    &headers,
-                    OtpPageData {
-                        login_id: body.login_id,
-                        identifier: body.identifier,
-                        user_name: String::new(),
-                        masked_email: String::new(),
-                        error: Some(error_msg),
-                        csrf_token: String::new(),
-                    },
-                    csrf_token(depot),
+    let response = match ctx
+        .services()
+        .login()
+        .challenge(login_oid, "otp", &body.credential, sess_ctx)
+        .await
+    {
+        Ok(ChallengeOutcome::Authenticated { session, .. }) => {
+            ctx.services()
+                .oidc_authorize()
+                .record_selection_by_login(
+                    &body.login_id,
+                    session.oid,
+                    session.user_oid,
+                    SelectionSource::FreshLogin,
                 )
-            }
-        },
-    ))
+                .await?;
+
+            let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+            let mut response = redirect_to_response(&oauth2_continue_url(&body.login_id));
+            append_set_cookie(&mut response, &cookie);
+            response
+        }
+        Ok(ChallengeOutcome::MfaRequired { .. }) => {
+            tracing::warn!("otp challenge returned MfaRequired unexpectedly");
+            redirect_to_response("/login")
+        }
+        Err(err) => {
+            let locale = resolve_locale_from_headers(&headers);
+            let error_msg = super::response::error_message(ctx.resources().i18n(), &locale, &err);
+            render_otp_page(
+                &ctx,
+                &headers,
+                OtpPageData {
+                    login_id: body.login_id,
+                    identifier: body.identifier,
+                    user_name: String::new(),
+                    masked_email: String::new(),
+                    error: Some(error_msg),
+                    csrf_token: String::new(),
+                },
+                csrf_token(depot),
+            )
+        }
+    };
+
+    Ok(AppResponse(response))
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
     use http::{StatusCode, header};
-    use identity_domain::auth::model::{ActiveSession, Login};
     use salvo::{Service, test::TestClient};
-    use uuid::Uuid;
+
+    #[test]
+    fn oauth2_continue_url_only_contains_login_id() {
+        assert_eq!(
+            super::oauth2_continue_url("login-123"),
+            "/oauth2/continue?login_id=login-123"
+        );
+    }
 
     #[tokio::test]
-    async fn login_continue_redirects_to_login_when_login_id_is_missing() {
+    async fn login_continue_route_is_removed() {
         let app = super::routes().hoop(salvo::affix_state::inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
@@ -776,8 +663,7 @@ mod tests {
             .send(&service)
             .await;
 
-        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
-        assert_eq!(response.headers().get(header::LOCATION).unwrap(), "/login");
+        assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
     }
 
     #[tokio::test]
@@ -800,112 +686,5 @@ mod tests {
             csrf_cookie.is_some_and(|value| value.contains("salvo.csrf=")),
             "expected csrf cookie, got {csrf_cookie:?}",
         );
-    }
-
-    #[test]
-    fn determine_login_continue_decision_requires_consent_when_not_skipped() {
-        assert_eq!(
-            super::determine_login_continue_decision(false, false, None),
-            super::LoginContinueDecision::RedirectToConsent,
-        );
-    }
-
-    #[test]
-    fn determine_login_continue_decision_approves_when_skip_consent_is_enabled() {
-        assert_eq!(
-            super::determine_login_continue_decision(true, false, None),
-            super::LoginContinueDecision::FinalizeApprove,
-        );
-    }
-
-    #[test]
-    fn determine_login_continue_decision_honors_explicit_deny() {
-        assert_eq!(
-            super::determine_login_continue_decision(true, false, Some("deny")),
-            super::LoginContinueDecision::FinalizeDeny,
-        );
-    }
-
-    #[test]
-    fn login_continue_url_appends_decision_and_auto_approve() {
-        assert_eq!(
-            super::login_continue_url("login-123", Some("approve"), true),
-            "/login/continue?login_id=login-123&decision=approve&auto_approve=1",
-        );
-    }
-
-    #[test]
-    fn consent_url_preserves_auto_approve_flag() {
-        assert_eq!(
-            super::consent_url("login-123", true),
-            "/oauth2/consent?login_id=login-123&auto_approve=1",
-        );
-    }
-
-    #[test]
-    fn session_from_authenticated_login_prefers_persisted_session_over_hint_matching() {
-        let matched_login_session = ActiveSession {
-            session_oid: Uuid::new_v4(),
-            user_oid: Uuid::new_v4(),
-            user_name: "alice".to_string(),
-            user_email: "alice@example.com".to_string(),
-            last_active_at: Some(Utc::now()),
-            expires_at: None,
-            created_at: Utc::now(),
-        };
-        let hint_matching_other_session = ActiveSession {
-            session_oid: Uuid::new_v4(),
-            user_oid: Uuid::new_v4(),
-            user_name: "buffy".to_string(),
-            user_email: "buffy@identity".to_string(),
-            last_active_at: Some(Utc::now()),
-            expires_at: None,
-            created_at: Utc::now(),
-        };
-        let login = Login {
-            oid: Uuid::new_v4(),
-            client_oid: Uuid::new_v4(),
-            client_authorization_oid: Uuid::new_v4(),
-            session_oid: Some(matched_login_session.session_oid),
-            user_oid: Some(matched_login_session.user_oid),
-            status: identity_domain::auth::LoginStatus::AUTHENTICATED.to_string(),
-            failed_attempts: 0,
-            created_at: Utc::now(),
-            acr: None,
-            requested_acr: None,
-        };
-        let sessions = [hint_matching_other_session, matched_login_session.clone()];
-
-        let selected = super::session_from_authenticated_login(&login, &sessions).unwrap();
-
-        assert_eq!(selected.session_oid, matched_login_session.session_oid);
-        assert_eq!(selected.user_oid, matched_login_session.user_oid);
-    }
-
-    #[test]
-    fn session_from_authenticated_login_returns_none_without_persisted_session() {
-        let login = Login {
-            oid: Uuid::new_v4(),
-            client_oid: Uuid::new_v4(),
-            client_authorization_oid: Uuid::new_v4(),
-            session_oid: None,
-            user_oid: None,
-            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED.to_string(),
-            failed_attempts: 0,
-            created_at: Utc::now(),
-            acr: None,
-            requested_acr: None,
-        };
-        let sessions = [ActiveSession {
-            session_oid: Uuid::new_v4(),
-            user_oid: Uuid::new_v4(),
-            user_name: "alice".to_string(),
-            user_email: "alice@example.com".to_string(),
-            last_active_at: Some(Utc::now()),
-            expires_at: None,
-            created_at: Utc::now(),
-        }];
-
-        assert!(super::session_from_authenticated_login(&login, &sessions).is_none());
     }
 }

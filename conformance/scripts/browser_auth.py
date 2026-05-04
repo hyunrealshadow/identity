@@ -31,11 +31,16 @@ class BrowserAuthHandler:
     def _auto_login_page_url(self, login_id: str) -> str:
         return f"{self.identity_url}/conformance/auto-login?{urlencode({'login_id': login_id})}"
 
+    def _continue_url(self, login_id: str) -> str:
+        return f"{self.identity_url}/oauth2/continue?{urlencode({'login_id': login_id})}"
+
     def _complete_browser_login(self, page, login_id: str | None) -> bool:
         if not login_id:
             return False
 
         page.goto(self._auto_login_page_url(login_id), wait_until="load", timeout=30_000)
+        page.wait_for_load_state("load", timeout=30_000)
+        page.goto(self._continue_url(login_id), wait_until="load", timeout=30_000)
         page.wait_for_load_state("load", timeout=30_000)
         return True
 

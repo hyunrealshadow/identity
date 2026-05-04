@@ -1,15 +1,79 @@
 use super::*;
 use std::str::FromStr;
 
+use identity_domain::client_authorization::{
+    AuthorizationInteractionState, ConsentState, SelectionSource, StoredAuthorizationRequest,
+};
+
+#[derive(Debug)]
+pub struct TerminalReservation {
+    pub completed_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug)]
+pub struct ContinueContext {
+    pub login: identity_domain::auth::model::Login,
+    pub stored: StoredAuthorizationRequest,
+    pub client: OpenIdConnectClient,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 impl AuthorizeService {
+    fn interaction_conflict() -> AppError {
+        AppError::from_code(AuthorizeErrorCode::AuthzInteractionConflict)
+    }
+
+    async fn load_authorization_request_record(
+        &self,
+        authorization_request_id: Uuid,
+    ) -> Result<identity_domain::client_authorization::ClientAuthorization, AppError> {
+        let record = self
+            .client_authorization_repo
+            .find_by_oid(authorization_request_id)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::AuthzRequestNotFound))?;
+
+        if record.type_ != ClientAuthorizationType::AuthorizationRequest {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::AuthzRequestTypeMismatch,
+            ));
+        }
+
+        Ok(record)
+    }
+
+    fn deserialize_stored_authorization_request(
+        data: serde_json::Value,
+    ) -> Result<StoredAuthorizationRequest, AppError> {
+        serde_json::from_value::<StoredAuthorizationRequest>(data.clone())
+            .or_else(|_| {
+                serde_json::from_value::<AuthorizationRequestData>(data).map(|request| {
+                    StoredAuthorizationRequest {
+                        request,
+                        interaction: AuthorizationInteractionState::default(),
+                    }
+                })
+            })
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::DeserializeRequestFailed).with_source(error)
+            })
+    }
+
     pub async fn create_authorization_request(
         &self,
         request: &AuthorizationRequest,
     ) -> Result<Uuid, AppError> {
-        let data =
-            serde_json::to_value(AuthorizationRequestData::from(request)).map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::SerializeRequestFailed).with_source(error)
-            })?;
+        let data = serde_json::to_value(StoredAuthorizationRequest {
+            request: AuthorizationRequestData::from(request),
+            interaction: AuthorizationInteractionState::default(),
+        })
+        .map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::SerializeRequestFailed).with_source(error)
+        })?;
 
         let record = self
             .client_authorization_repo
@@ -48,24 +112,21 @@ impl AuthorizeService {
         &self,
         authorization_request_id: Uuid,
     ) -> Result<AuthorizationRequestData, AppError> {
+        Ok(self
+            .load_stored_authorization_request(authorization_request_id)
+            .await?
+            .request)
+    }
+
+    pub async fn load_stored_authorization_request(
+        &self,
+        authorization_request_id: Uuid,
+    ) -> Result<StoredAuthorizationRequest, AppError> {
         let record = self
-            .client_authorization_repo
-            .find_by_oid(authorization_request_id)
-            .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::AuthzRequestNotFound))?;
+            .load_authorization_request_record(authorization_request_id)
+            .await?;
 
-        if record.type_ != ClientAuthorizationType::AuthorizationRequest {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::AuthzRequestTypeMismatch,
-            ));
-        }
-
-        serde_json::from_value::<AuthorizationRequestData>(record.data).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::DeserializeRequestFailed).with_source(error)
-        })
+        Self::deserialize_stored_authorization_request(record.data)
     }
 
     pub async fn load_consent_context(
@@ -108,6 +169,150 @@ impl AuthorizeService {
         Ok((login, request, client))
     }
 
+    pub async fn load_continue_context_by_login(
+        &self,
+        protected_login_oid: &str,
+    ) -> Result<ContinueContext, AppError> {
+        let login = self.load_login_by_protected_id(protected_login_oid).await?;
+        let record = self
+            .load_authorization_request_record(login.client_authorization_oid)
+            .await?;
+        let expires_at = record.expires_at;
+        let completed_at = record.completed_at;
+        let stored = Self::deserialize_stored_authorization_request(record.data)?;
+        let client_id = Uuid::parse_str(&stored.request.client_id).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
+        })?;
+        let client = self
+            .client_repo
+            .find_by_oid(client_id)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+
+        Ok(ContinueContext {
+            login,
+            stored,
+            client,
+            expires_at,
+            completed_at,
+        })
+    }
+
+    pub async fn record_selection_by_login(
+        &self,
+        protected_login_oid: &str,
+        session_oid: Uuid,
+        user_oid: Uuid,
+        source: SelectionSource,
+    ) -> Result<(), AppError> {
+        let login = self.load_login_by_protected_id(protected_login_oid).await?;
+        self.record_authorization_selection(login.client_authorization_oid, session_oid, user_oid, source)
+            .await
+    }
+
+    pub async fn record_consent_by_login(
+        &self,
+        protected_login_oid: &str,
+        consent_state: ConsentState,
+    ) -> Result<(), AppError> {
+        let login = self.load_login_by_protected_id(protected_login_oid).await?;
+        self.record_consent_decision(login.client_authorization_oid, consent_state)
+            .await
+    }
+
+    pub async fn record_authorization_selection(
+        &self,
+        authorization_request_id: Uuid,
+        session_oid: Uuid,
+        user_oid: Uuid,
+        source: SelectionSource,
+    ) -> Result<(), AppError> {
+        let updated = self
+            .client_authorization_repo
+            .update_authorization_request_selection(
+                authorization_request_id,
+                session_oid,
+                user_oid,
+                source,
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
+            })?;
+
+        if !updated {
+            return Err(Self::interaction_conflict());
+        }
+
+        Ok(())
+    }
+
+    pub async fn record_consent_decision(
+        &self,
+        authorization_request_id: Uuid,
+        consent_state: ConsentState,
+    ) -> Result<(), AppError> {
+        let updated = self
+            .client_authorization_repo
+            .record_authorization_request_consent(
+                authorization_request_id,
+                consent_state,
+                chrono::Utc::now(),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
+            })?;
+
+        if !updated {
+            return Err(Self::interaction_conflict());
+        }
+
+        Ok(())
+    }
+
+    pub async fn mark_authorization_request_completed(
+        &self,
+        authorization_request_id: Uuid,
+    ) -> Result<(), AppError> {
+        let updated = self
+            .client_authorization_repo
+            .mark_authorization_request_completed(authorization_request_id, chrono::Utc::now())
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
+            })?;
+
+        if !updated {
+            return Err(Self::interaction_conflict());
+        }
+
+        Ok(())
+    }
+
+    pub async fn reserve_authorization_request_terminal(
+        &self,
+        authorization_request_id: Uuid,
+    ) -> Result<TerminalReservation, AppError> {
+        let completed_at = chrono::Utc::now();
+        let updated = self
+            .client_authorization_repo
+            .mark_authorization_request_completed(authorization_request_id, completed_at)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
+            })?;
+
+        if !updated {
+            return Err(Self::interaction_conflict());
+        }
+
+        Ok(TerminalReservation { completed_at })
+    }
+
     pub async fn load_login_by_protected_id(
         &self,
         protected_login_id: &str,
@@ -138,20 +343,21 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
         })?;
 
-        if response_type.is_implicit() {
-            return self
-                .approve_implicit_flow(&request, session_oid, user_oid, response_type, auth_time)
-                .await;
-        }
+        let redirect = if response_type.is_implicit() {
+            self.approve_implicit_flow(&request, session_oid, user_oid, response_type, auth_time)
+                .await?
+        } else if response_type.uses_front_channel_response() {
+            self.approve_hybrid_flow(&request, session_oid, user_oid, response_type, auth_time)
+                .await?
+        } else {
+            self.approve_code_flow(&request, user_oid, session_oid, auth_time)
+                .await?
+        };
 
-        if response_type.uses_front_channel_response() {
-            return self
-                .approve_hybrid_flow(&request, session_oid, user_oid, response_type, auth_time)
-                .await;
-        }
+        self.mark_authorization_request_completed(authorization_request_id)
+            .await?;
 
-        self.approve_code_flow(&request, user_oid, session_oid, auth_time)
-            .await
+        Ok(redirect)
     }
 
     async fn approve_code_flow(
@@ -247,11 +453,16 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
         })?;
 
-        Ok(if response_type.uses_front_channel_response() {
+        let redirect = if response_type.uses_front_channel_response() {
             error.to_fragment_redirect_url(&redirect_uri)
         } else {
             error.to_redirect_url(&redirect_uri)
-        })
+        };
+
+        self.mark_authorization_request_completed(authorization_request_id)
+            .await?;
+
+        Ok(redirect)
     }
 
     pub async fn approve_authorization_request_by_login(

@@ -2,7 +2,8 @@ pub mod model;
 pub mod repository;
 
 pub use model::{
-    AccessTokenData, AuthorizationCodeData, ClientAuthorization, ClientAuthorizationOid,
-    ClientAuthorizationType, RefreshTokenData,
+    AccessTokenData, AuthorizationCodeData, AuthorizationInteractionState, ClientAuthorization,
+    ClientAuthorizationOid, ClientAuthorizationType, ConsentState, RefreshTokenData,
+    SelectionSource, StoredAuthorizationRequest,
 };
 pub use repository::{ClientAuthorizationRepository, ClientAuthorizationRepositoryError};

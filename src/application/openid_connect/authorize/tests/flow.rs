@@ -1,6 +1,7 @@
 use super::fixtures::*;
 use super::*;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use identity_domain::client_authorization::{ConsentState, SelectionSource};
 use identity_domain::key::material::AsymmetricKeyData;
 use identity_domain::openid_connect::model::claim::JwtClaimNames;
 use sha2::{Digest, Sha256};
@@ -236,6 +237,366 @@ async fn load_authorization_request_returns_stored_data() {
 }
 
 #[tokio::test]
+async fn create_authorization_request_stores_wrapped_request_with_pending_interaction() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let mut request_params = params("openid profile");
+    request_params.max_age = Some("300".to_string());
+
+    let (request, _) = service.validate_request(request_params).await.unwrap();
+    let oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let stored = service
+        .load_stored_authorization_request(oid)
+        .await
+        .unwrap();
+
+    assert_eq!(stored.request.max_age, Some(300));
+    assert_eq!(stored.interaction.consent_state, ConsentState::Pending);
+    assert_eq!(stored.interaction.selection_source, None);
+}
+
+#[tokio::test]
+async fn load_stored_authorization_request_supports_legacy_plain_request_rows() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let oid = request_repo.insert_legacy_authorization_request_for_test(&request);
+    let stored = service
+        .load_stored_authorization_request(oid)
+        .await
+        .unwrap();
+
+    assert_eq!(stored.request.state, "state123");
+    assert_eq!(stored.interaction.consent_state, ConsentState::Pending);
+    assert_eq!(stored.interaction.selection_source, None);
+}
+
+#[tokio::test]
+async fn record_selected_session_upgrades_auto_to_fresh_login() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    service
+        .record_authorization_selection(
+            authorization_oid,
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            SelectionSource::Auto,
+        )
+        .await
+        .unwrap();
+
+    let fresh_session = Uuid::new_v4();
+    let fresh_user = Uuid::new_v4();
+    service
+        .record_authorization_selection(
+            authorization_oid,
+            fresh_session,
+            fresh_user,
+            SelectionSource::FreshLogin,
+        )
+        .await
+        .unwrap();
+
+    let stored = service
+        .load_stored_authorization_request(authorization_oid)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        stored.interaction.selected_session_oid.as_deref(),
+        Some(fresh_session.to_string().as_str())
+    );
+    assert_eq!(
+        stored.interaction.selected_user_oid.as_deref(),
+        Some(fresh_user.to_string().as_str())
+    );
+    assert_eq!(
+        stored.interaction.selection_source,
+        Some(SelectionSource::FreshLogin)
+    );
+}
+
+#[tokio::test]
+async fn record_consent_decision_is_single_write_while_pending() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    service
+        .record_consent_decision(authorization_oid, ConsentState::Approved)
+        .await
+        .unwrap();
+
+    let error = service
+        .record_consent_decision(authorization_oid, ConsentState::Denied)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23062);
+}
+
+#[tokio::test]
+async fn mark_authorization_request_completed_allows_only_the_first_transition() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    service
+        .mark_authorization_request_completed(authorization_oid)
+        .await
+        .unwrap();
+    let error = service
+        .mark_authorization_request_completed(authorization_oid)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23062);
+}
+
+#[tokio::test]
+async fn reserve_authorization_request_terminal_allows_only_the_first_transition() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    let reservation = service
+        .reserve_authorization_request_terminal(authorization_oid)
+        .await
+        .unwrap();
+    assert!(reservation.completed_at <= Utc::now());
+
+    let error = service
+        .reserve_authorization_request_terminal(authorization_oid)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23062);
+}
+
+#[tokio::test]
+async fn deny_authorization_request_is_single_use_after_completion() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    service
+        .mark_authorization_request_completed(authorization_oid)
+        .await
+        .unwrap();
+
+    let error = service
+        .deny_authorization_request(authorization_oid)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23062);
+}
+
+#[tokio::test]
+async fn deny_authorization_request_is_single_use_after_first_denial() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    let redirect = service
+        .deny_authorization_request(authorization_oid)
+        .await
+        .unwrap();
+    assert!(redirect.as_str().contains("error=access_denied"));
+
+    let error = service
+        .deny_authorization_request(authorization_oid)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23062);
+}
+
+#[tokio::test]
+async fn approve_authorization_request_is_single_use_after_completion() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+
+    service
+        .mark_authorization_request_completed(authorization_oid)
+        .await
+        .unwrap();
+
+    let error = service
+        .approve_authorization_request(authorization_oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23062);
+}
+
+#[tokio::test]
 async fn approve_authorization_request_returns_redirect_with_code_and_state() {
     let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let service = AuthorizeService::new(
@@ -267,6 +628,55 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
     let query = redirect.query().unwrap();
     assert!(query.contains("code="));
     assert!(query.contains("state=state123"));
+}
+
+#[tokio::test]
+async fn approve_authorization_request_failure_does_not_burn_interaction() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    request_repo.set_stored_request_redirect_uri_for_test(oid, "not a uri");
+
+    let error = service
+        .approve_authorization_request(oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 23052);
+    assert_eq!(request_repo.completed_at_for_test(oid), None);
+
+    request_repo.set_stored_request_redirect_uri_for_test(
+        oid,
+        "https://client.example.com/callback",
+    );
+
+    let redirect = service
+        .approve_authorization_request(oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .await
+        .unwrap();
+
+    let query = redirect.query().unwrap();
+    assert!(query.contains("code="));
+    assert!(query.contains("state=state123"));
+    assert!(request_repo.completed_at_for_test(oid).is_some());
 }
 
 #[tokio::test]
@@ -540,6 +950,52 @@ async fn deny_authorization_request_returns_access_denied_redirect() {
     let query = redirect.query().unwrap();
     assert!(query.contains("error=access_denied"));
     assert!(query.contains("state=state123"));
+}
+
+#[tokio::test]
+async fn deny_authorization_request_failure_does_not_burn_interaction() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo.clone(),
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(StubUserRepository),
+        Arc::new(StubKeyRepository),
+        Arc::new(EmptyKeyJwkRepository),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    request_repo.set_stored_request_redirect_uri_for_test(oid, "not a uri");
+
+    let error = service
+        .deny_authorization_request(oid)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 23052);
+    assert_eq!(request_repo.completed_at_for_test(oid), None);
+
+    request_repo.set_stored_request_redirect_uri_for_test(
+        oid,
+        "https://client.example.com/callback",
+    );
+
+    let redirect = service.deny_authorization_request(oid).await.unwrap();
+
+    let query = redirect.query().unwrap();
+    assert!(query.contains("error=access_denied"));
+    assert!(query.contains("state=state123"));
+    assert!(request_repo.completed_at_for_test(oid).is_some());
 }
 
 #[test]

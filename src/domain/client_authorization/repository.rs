@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::model::{ClientAuthorization, ClientAuthorizationType};
+use super::model::{
+    ClientAuthorization, ClientAuthorizationType, ConsentState, SelectionSource,
+};
 use crate::client::model::ClientOid;
 
 #[async_trait]
@@ -19,6 +21,27 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         &self,
         oid: Uuid,
     ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError>;
+
+    async fn update_authorization_request_selection(
+        &self,
+        oid: Uuid,
+        session_oid: Uuid,
+        user_oid: Uuid,
+        source: SelectionSource,
+    ) -> Result<bool, ClientAuthorizationRepositoryError>;
+
+    async fn record_authorization_request_consent(
+        &self,
+        oid: Uuid,
+        consent_state: ConsentState,
+        decided_at: DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError>;
+
+    async fn mark_authorization_request_completed(
+        &self,
+        oid: Uuid,
+        completed_at: DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError>;
 
     async fn revoke_access_tokens_for_authorization_code(
         &self,

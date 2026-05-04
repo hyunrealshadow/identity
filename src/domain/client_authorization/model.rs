@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::client::model::ClientOid;
+use crate::openid_connect::AuthorizationRequestData;
 
 pub type ClientAuthorizationOid = Uuid;
 
@@ -83,6 +84,40 @@ pub struct AccessTokenData {
     pub authorization_code_oid: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StoredAuthorizationRequest {
+    pub request: AuthorizationRequestData,
+    #[serde(default)]
+    pub interaction: AuthorizationInteractionState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AuthorizationInteractionState {
+    pub selected_session_oid: Option<String>,
+    pub selected_user_oid: Option<String>,
+    pub selection_source: Option<SelectionSource>,
+    #[serde(default)]
+    pub consent_state: ConsentState,
+    pub consent_decided_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionSource {
+    Auto,
+    AccountPicker,
+    FreshLogin,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsentState {
+    #[default]
+    Pending,
+    Approved,
+    Denied,
+}
+
 #[derive(Debug, Clone)]
 pub struct ClientAuthorization {
     pub oid: ClientAuthorizationOid,
@@ -90,6 +125,7 @@ pub struct ClientAuthorization {
     pub type_: ClientAuthorizationType,
     pub data: serde_json::Value,
     pub expires_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,

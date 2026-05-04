@@ -58,3 +58,4 @@ E23055 = The login request is invalid or has expired.
 E23056 = The client is not allowed to request one or more scopes.
 E23060 = The id_token_hint issuer is invalid.
 E23061 = Encrypted request objects are not supported.
+E23062 = The authorization interaction is no longer pending.

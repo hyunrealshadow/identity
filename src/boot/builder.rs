@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 use tera::Tera;
+#[cfg(feature = "oidc-conformance")]
+use url::Url;
 
 #[cfg(feature = "oidc-conformance")]
 use identity_application::install::{InstallInput, InstallService};
@@ -284,7 +286,6 @@ mod tests {
     }
 
     #[cfg(feature = "oidc-conformance")]
-    #[test]
     fn app_config() -> AppConfig {
         AppConfig {
             logger: LoggerConfig::default(),

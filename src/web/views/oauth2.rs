@@ -40,7 +40,7 @@ pub struct ConsentDecisionPayload {
 #[derive(Debug, Clone, Serialize)]
 pub struct ConsentApiResponse {
     pub status: &'static str,
-    pub redirect_uri: Option<String>,
+    pub continue_uri: Option<String>,
     pub error: Option<String>,
 }
 

@@ -564,6 +564,7 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
             type_,
             data,
             expires_at,
+            completed_at: None,
             revoked_at: None,
             created_at: chrono::Utc::now(),
             updated_at: None,
@@ -580,6 +581,33 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         oid: Uuid,
     ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
         Ok(self.records.lock().unwrap().get(&oid).cloned())
+    }
+
+    async fn update_authorization_request_selection(
+        &self,
+        _oid: Uuid,
+        _session_oid: Uuid,
+        _user_oid: Uuid,
+        _source: identity_domain::client_authorization::SelectionSource,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        Ok(false)
+    }
+
+    async fn record_authorization_request_consent(
+        &self,
+        _oid: Uuid,
+        _consent_state: identity_domain::client_authorization::ConsentState,
+        _decided_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        Ok(false)
+    }
+
+    async fn mark_authorization_request_completed(
+        &self,
+        _oid: Uuid,
+        _completed_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        Ok(false)
     }
 
     async fn revoke_access_tokens_for_authorization_code(
