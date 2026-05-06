@@ -24,8 +24,8 @@ use identity_application::{
     install::InstallService,
     key::asymmetric::AsymmetricKeyService,
     openid_connect::{
-        authorize::AuthorizeService, provider::OpenIdProviderService, token::TokenService,
-        user_info::UserInfoService,
+        authorize::AuthorizeService, logout::LogoutService, provider::OpenIdProviderService,
+        token::TokenService, user_info::UserInfoService,
     },
 };
 
@@ -45,6 +45,8 @@ pub type AppOpenIdAuthorizeService = AuthorizeService;
 
 pub type AppOpenIdTokenService = TokenService;
 
+pub type AppOpenIdLogoutService = LogoutService;
+
 pub type AppOpenIdUserInfoService = UserInfoService;
 
 pub struct AppServices {
@@ -55,6 +57,7 @@ pub struct AppServices {
     oidc: AppOpenIdProviderService,
     oidc_authorize: AppOpenIdAuthorizeService,
     oidc_token: AppOpenIdTokenService,
+    oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
     data_protector: Arc<dyn DataProtector>,
 }
@@ -123,6 +126,10 @@ impl AppServices {
                 signing_algorithm_detector.clone(),
                 data_protector.clone(),
             ),
+            oidc_logout: LogoutService::new(
+                Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
+                Arc::new(OpenIdProviderService::new(settings.installation())),
+            ),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
@@ -172,6 +179,11 @@ impl AppServices {
     #[must_use]
     pub fn oidc_token(&self) -> &AppOpenIdTokenService {
         &self.oidc_token
+    }
+
+    #[must_use]
+    pub fn oidc_logout(&self) -> &AppOpenIdLogoutService {
+        &self.oidc_logout
     }
 
     #[must_use]

@@ -9,19 +9,43 @@ use fluent_templates::{ArcLoader, Loader, fluent_bundle::FluentValue};
 use http::{HeaderMap, header::ACCEPT_LANGUAGE};
 use unic_langid::{LanguageIdentifier, langid};
 
-use identity_application::error::params::ErrorParams;
+use identity_application::error::{AppError, init_error_message_resolver, params::ErrorParams};
 
 // Global I18n instance used by `AppError` response rendering to translate error
 // codes without access to `AppState`. Initialised once during startup.
 static ERROR_I18N: OnceLock<I18n> = OnceLock::new();
 
 pub fn init_error_i18n(i18n: I18n) {
+    let writer_i18n = i18n.clone();
+    init_error_message_resolver(move |req, error| {
+        localized_error_message(
+            &writer_i18n,
+            &resolve_locale_from_headers(req.headers()),
+            error,
+        )
+    });
     let _ = ERROR_I18N.set(i18n);
 }
 
 #[must_use]
 pub fn error_i18n() -> Option<&'static I18n> {
     ERROR_I18N.get()
+}
+
+fn localized_error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> String {
+    if let Some(message) = error
+        .params()
+        .get("message")
+        .filter(|message| !message.is_empty())
+    {
+        return message.to_owned();
+    }
+
+    if error.params().is_empty() {
+        i18n.t_code(locale, error.code())
+    } else {
+        i18n.t_code_with_params(locale, error.code(), error.params())
+    }
 }
 
 pub fn resolve_locale_from_headers(headers: &HeaderMap) -> LanguageIdentifier {

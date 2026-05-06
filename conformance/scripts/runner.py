@@ -125,27 +125,6 @@ class TestRunner:
                         url_method = method_info["method"]
 
                 urls = self.client.get_browser_urls(run_id)
-                uploaded = self._upload_screenshots(run_id, urls, url_method)
-                if uploaded:
-                    time.sleep(self.poll_interval)
-                    info = self.client.get_test_info(run_id)
-                    if info.status == "FINISHED":
-                        return TestResult(
-                            test_name=test_name,
-                            status="FINISHED",
-                            result=info.result,
-                            run_id=run_id,
-                        )
-                    idle_cycles += 1
-                    if idle_cycles >= 2:
-                        return TestResult(
-                            test_name=test_name,
-                            status="WAITING_AFTER_SCREENSHOT",
-                            result=None,
-                            run_id=run_id,
-                        )
-                    continue
-
                 has_new_urls = False
                 for url in urls:
                     if url in processed_urls:
@@ -161,6 +140,27 @@ class TestRunner:
                     continue
 
                 if not has_new_urls:
+                    uploaded = self._upload_screenshots(run_id, urls, url_method)
+                    if uploaded:
+                        time.sleep(self.poll_interval)
+                        info = self.client.get_test_info(run_id)
+                        if info.status == "FINISHED":
+                            return TestResult(
+                                test_name=test_name,
+                                status="FINISHED",
+                                result=info.result,
+                                run_id=run_id,
+                            )
+                        idle_cycles += 1
+                        if idle_cycles >= 2:
+                            return TestResult(
+                                test_name=test_name,
+                                status="WAITING_AFTER_SCREENSHOT",
+                                result=None,
+                                run_id=run_id,
+                            )
+                        continue
+
                     idle_cycles += 1
                     if idle_cycles >= 15:
                         return TestResult(

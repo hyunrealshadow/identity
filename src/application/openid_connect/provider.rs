@@ -290,7 +290,12 @@ impl OpenIdProviderService {
             require_request_uri_registration: self.capabilities.require_request_uri_registration,
             op_policy_uri: Some(endpoint_url(&issuer, "/policy")?),
             op_tos_uri: Some(endpoint_url(&issuer, "/terms")?),
-            end_session_endpoint: None,
+            end_session_endpoint: Some(endpoint_url(&issuer, "/oauth2/logout")?),
+            check_session_iframe: None,
+            frontchannel_logout_supported: None,
+            frontchannel_logout_session_supported: None,
+            backchannel_logout_supported: None,
+            backchannel_logout_session_supported: None,
         })
     }
 
@@ -641,7 +646,10 @@ mod tests {
             metadata.jwks_uri.as_str(),
             "https://identity.example.com/issuer1/.well-known/keys"
         );
-        assert!(metadata.end_session_endpoint.is_none());
+        assert_eq!(
+            metadata.end_session_endpoint.unwrap().as_str(),
+            "https://identity.example.com/issuer1/oauth2/logout"
+        );
         assert_eq!(
             metadata.response_types_supported,
             vec![

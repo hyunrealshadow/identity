@@ -1,5 +1,6 @@
 pub mod authorize;
 pub mod dto;
+pub mod logout;
 pub mod provider;
 #[cfg(test)]
 mod tests;

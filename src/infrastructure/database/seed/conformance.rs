@@ -66,7 +66,7 @@ pub const CONFORMANCE_EMAIL: &str = "conformance-test@example.com";
 pub const CONFORMANCE_PASSWORD: &str = "ConformanceTest1!";
 
 pub const CONFORMANCE_BASIC_CLIENT_NAME: &str = "OpenID Conformance Suite (Basic)";
-pub const CONFORMANCE_BASIC_CLIENT_SECRET: &str = "conformance-secret";
+pub const CONFORMANCE_BASIC_CLIENT_SECRET: &str = "conformance-basic-secret-at-least-32-bytes";
 pub const CONFORMANCE_BASIC_CLIENT_POST_SECRET: &str = "conformance-secret-2";
 pub const CONFORMANCE_IMPLICIT_CLIENT_NAME: &str = "OpenID Conformance Suite (Implicit)";
 pub const CONFORMANCE_IMPLICIT_CLIENT_SECRET: &str = "conformance-implicit-secret";
@@ -83,6 +83,14 @@ struct ConformanceClientSpec {
     token_endpoint_auth_method: &'static str,
     grant_types: &'static [&'static str],
     response_types: &'static [&'static str],
+}
+
+struct ConformanceOidcMetadataValues {
+    grant_types: serde_json::Value,
+    response_types: serde_json::Value,
+    token_endpoint_auth_method: Option<String>,
+    post_logout_redirect_uris: Option<serde_json::Value>,
+    settings: serde_json::Value,
 }
 
 /// Run the conformance seed.  Safe to call multiple times.
@@ -301,10 +309,7 @@ async fn ensure_conformance_oidc_metadata(
     spec: &ConformanceClientSpec,
     now: chrono::DateTime<Utc>,
 ) -> Result<(), AppError> {
-    let grant_types = serde_json::json!(spec.grant_types);
-    let response_types = serde_json::json!(spec.response_types);
-    let auth_method = Some(spec.token_endpoint_auth_method.to_owned());
-    let settings = conformance_client_settings();
+    let values = conformance_oidc_metadata_values(spec);
 
     let existing = client_open_id_connect::Entity::find()
         .filter(client_open_id_connect::Column::ClientId.eq(client_id))
@@ -313,16 +318,18 @@ async fn ensure_conformance_oidc_metadata(
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
     if let Some(row) = existing {
-        if row.grant_types.as_ref() != Some(&grant_types)
-            || row.response_types.as_ref() != Some(&response_types)
-            || row.token_endpoint_auth_method != auth_method
-            || row.settings != settings
+        if row.grant_types.as_ref() != Some(&values.grant_types)
+            || row.response_types.as_ref() != Some(&values.response_types)
+            || row.token_endpoint_auth_method != values.token_endpoint_auth_method
+            || row.post_logout_redirect_uris != values.post_logout_redirect_uris
+            || row.settings != values.settings
         {
             let mut am: client_open_id_connect::ActiveModel = row.into();
-            am.grant_types = Set(Some(grant_types));
-            am.response_types = Set(Some(response_types));
-            am.token_endpoint_auth_method = Set(auth_method);
-            am.settings = Set(settings);
+            am.grant_types = Set(Some(values.grant_types));
+            am.response_types = Set(Some(values.response_types));
+            am.token_endpoint_auth_method = Set(values.token_endpoint_auth_method);
+            am.post_logout_redirect_uris = Set(values.post_logout_redirect_uris);
+            am.settings = Set(values.settings);
             am.updated_at = Set(Some(now.into()));
             am.update(db).await.map_err(|error| {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -334,10 +341,11 @@ async fn ensure_conformance_oidc_metadata(
 
     client_open_id_connect::ActiveModel {
         client_id: Set(client_id),
-        grant_types: Set(Some(grant_types)),
-        response_types: Set(Some(response_types)),
-        token_endpoint_auth_method: Set(auth_method),
-        settings: Set(settings),
+        grant_types: Set(Some(values.grant_types)),
+        response_types: Set(Some(values.response_types)),
+        token_endpoint_auth_method: Set(values.token_endpoint_auth_method),
+        post_logout_redirect_uris: Set(values.post_logout_redirect_uris),
+        settings: Set(values.settings),
         created_at: Set(now.into()),
         updated_at: Set(None),
         ..Default::default()
@@ -347,6 +355,16 @@ async fn ensure_conformance_oidc_metadata(
     .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
     Ok(())
+}
+
+fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> ConformanceOidcMetadataValues {
+    ConformanceOidcMetadataValues {
+        grant_types: serde_json::json!(spec.grant_types),
+        response_types: serde_json::json!(spec.response_types),
+        token_endpoint_auth_method: Some(spec.token_endpoint_auth_method.to_owned()),
+        post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
+        settings: conformance_client_settings(),
+    }
 }
 
 async fn ensure_conformance_client_secret(
@@ -415,7 +433,14 @@ fn conformance_redirect_uris() -> serde_json::Value {
         "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
+    ])
+}
+
+fn conformance_post_logout_redirect_uris() -> serde_json::Value {
+    serde_json::json!([
+        "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
     ])
 }
 
@@ -577,9 +602,36 @@ mod tests {
         assert!(redirect_uris.contains(
             &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback"
         ));
+        assert!(redirect_uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback"
+        ));
         assert!(
             redirect_uris
                 .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback")
+        );
+    }
+
+    #[test]
+    fn conformance_post_logout_redirect_uris_include_rp_init_logout_alias() {
+        let uris = super::conformance_post_logout_redirect_uris();
+        let uris = uris.as_array().unwrap();
+        let uris = uris
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
+        ));
+    }
+
+    #[test]
+    fn conformance_oidc_metadata_values_include_post_logout_redirect_uris() {
+        let values = super::conformance_oidc_metadata_values(&super::conformance_client_specs()[0]);
+
+        assert_eq!(
+            values.post_logout_redirect_uris,
+            Some(super::conformance_post_logout_redirect_uris())
         );
     }
 }

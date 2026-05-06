@@ -8,6 +8,7 @@ mod authorize_interaction;
 mod authorize_response;
 mod consent_endpoint;
 mod continue_endpoint;
+mod logout_endpoint;
 mod token_endpoint;
 mod user_info_endpoint;
 
@@ -32,6 +33,11 @@ pub fn routes() -> Router {
                 .post(authorize_endpoint::authorize),
         )
         .push(Router::with_path("oauth2/token").post(token_endpoint::token))
+        .push(
+            Router::with_path("oauth2/logout")
+                .get(logout_endpoint::logout_get)
+                .post(logout_endpoint::logout_post),
+        )
         .push(
             Router::with_path("oauth2/userinfo")
                 .get(user_info_endpoint::userinfo)

@@ -1,9 +1,19 @@
-use std::error::Error as StdError;
+use std::{error::Error as StdError, sync::OnceLock};
 
 use salvo::{Request, Response, Writer, async_trait, prelude::Json};
 use serde::Serialize;
 
 use super::{code::AppErrorCode, kind::ErrorKind, params::ErrorParams};
+
+type ErrorMessageResolver = dyn Fn(&Request, &AppError) -> String + Send + Sync + 'static;
+
+static ERROR_MESSAGE_RESOLVER: OnceLock<Box<ErrorMessageResolver>> = OnceLock::new();
+
+pub fn init_error_message_resolver(
+    resolver: impl Fn(&Request, &AppError) -> String + Send + Sync + 'static,
+) {
+    let _ = ERROR_MESSAGE_RESOLVER.set(Box::new(resolver));
+}
 
 #[derive(Debug)]
 pub struct AppError {
@@ -60,6 +70,15 @@ impl StdError for AppError {
     }
 }
 
+fn fallback_message(error: &AppError) -> String {
+    error
+        .params()
+        .get("message")
+        .filter(|message| !message.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| error.code().to_string())
+}
+
 #[derive(Debug, Serialize)]
 struct BusinessErrorResponse {
     error: ErrorDetail,
@@ -84,7 +103,7 @@ impl BusinessErrorResponse {
 
 #[async_trait]
 impl Writer for AppError {
-    async fn write(self, _req: &mut Request, _depot: &mut salvo::Depot, res: &mut Response) {
+    async fn write(self, req: &mut Request, _depot: &mut salvo::Depot, res: &mut Response) {
         let status = self.kind().http_status();
         if status.is_server_error() {
             tracing::error!(
@@ -97,7 +116,11 @@ impl Writer for AppError {
             tracing::debug!(error = %self, code = self.code(), "business error");
         }
 
-        let body = BusinessErrorResponse::new(self.code(), self.code().to_string());
+        let message = ERROR_MESSAGE_RESOLVER
+            .get()
+            .map(|resolver| resolver(req, &self))
+            .unwrap_or_else(|| fallback_message(&self));
+        let body = BusinessErrorResponse::new(self.code(), message);
         res.status_code(status);
         res.render(Json(body));
     }

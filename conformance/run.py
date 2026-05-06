@@ -11,7 +11,7 @@ Usage:
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
     IDENTITY_URL     - Identity server URL (default: https://localhost:5150)
-    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, or formpost-hybrid (default: basic)
+    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, formpost-hybrid, or rp-init-logout (default: basic)
     CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
     PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
     TIMEOUT          - Timeout per test in seconds (default: 60)
@@ -53,6 +53,7 @@ SUPPORTED_PROFILES = (
     "formpost-basic",
     "formpost-implicit",
     "formpost-hybrid",
+    "rp-init-logout",
 )
 
 PLAN_NAMES = {
@@ -63,6 +64,7 @@ PLAN_NAMES = {
     "formpost-basic": "oidcc-formpost-basic-certification-test-plan",
     "formpost-implicit": "oidcc-formpost-implicit-certification-test-plan",
     "formpost-hybrid": "oidcc-formpost-hybrid-certification-test-plan",
+    "rp-init-logout": "oidcc-rp-initiated-logout-certification-test-plan",
 }
 
 
@@ -73,6 +75,11 @@ def default_plan_name_for_profile(profile: str):
 def plan_variant_for_profile(profile: str):
     if profile == "config":
         return None
+    if profile == "rp-init-logout":
+        return {
+            "client_registration": "static_client",
+            "response_type": "code",
+        }
     return DEFAULT_PLAN_VARIANT.copy()
 
 
@@ -162,7 +169,7 @@ def main():
 
     compose_file = os.path.join(script_dir, "docker-compose.yml")
     if args.profile not in PLAN_NAMES:
-        parser.error("--profile must be one of: basic, implicit, hybrid")
+        parser.error(f"--profile must be one of: {', '.join(SUPPORTED_PROFILES)}")
     config_path = args.config or os.path.join(script_dir, "plans", f"{args.profile}.json")
     plan_name = args.plan_name or default_plan_name_for_profile(args.profile)
 

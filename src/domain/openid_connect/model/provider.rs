@@ -128,6 +128,16 @@ pub struct OpenIdProviderMetadata {
     pub op_tos_uri: Option<Url>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_session_endpoint: Option<Url>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_session_iframe: Option<Url>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frontchannel_logout_supported: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frontchannel_logout_session_supported: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backchannel_logout_supported: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backchannel_logout_session_supported: Option<bool>,
 }
 
 #[cfg(test)]
@@ -196,6 +206,11 @@ mod tests {
             end_session_endpoint: Some(
                 Url::parse("https://identity.example.com/connect/endsession").unwrap(),
             ),
+            check_session_iframe: None,
+            frontchannel_logout_supported: None,
+            frontchannel_logout_session_supported: None,
+            backchannel_logout_supported: None,
+            backchannel_logout_session_supported: None,
         };
 
         let value = serde_json::to_value(&metadata).unwrap();
@@ -256,6 +271,11 @@ mod tests {
             op_policy_uri: None,
             op_tos_uri: None,
             end_session_endpoint: None,
+            check_session_iframe: None,
+            frontchannel_logout_supported: None,
+            frontchannel_logout_session_supported: None,
+            backchannel_logout_supported: None,
+            backchannel_logout_session_supported: None,
         };
 
         let value = serde_json::to_value(&metadata).unwrap();

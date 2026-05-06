@@ -173,3 +173,41 @@ pub fn render_app_error(res: &mut Response, error: AppError) {
         render_json(res, status, body);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use http::StatusCode;
+    use salvo::{
+        Router, Service, handler,
+        test::{ResponseExt, TestClient},
+    };
+
+    use crate::{
+        application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
+        infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
+    };
+
+    #[handler]
+    async fn direct_app_error() -> Result<(), AppError> {
+        Err(AppError::from_code(
+            AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
+        ))
+    }
+
+    #[tokio::test]
+    async fn direct_app_error_writer_uses_localized_message() {
+        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
+        let service = Service::new(Router::with_path("error").get(direct_app_error));
+
+        let mut response = TestClient::get("http://127.0.0.1:5800/error")
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::GONE));
+        let body = response.take_string().await.unwrap();
+        assert!(
+            body.contains("\"message\":\"This authorization interaction is no longer available.\""),
+            "{body}"
+        );
+    }
+}

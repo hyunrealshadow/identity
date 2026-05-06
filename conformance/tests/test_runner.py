@@ -17,6 +17,9 @@ class FakeClient:
         self.browser_urls = browser_urls or {}
         self.start_run_ids = start_run_ids or {}
         self.started_tests = []
+        self.events = []
+        self.pending_screenshots = {}
+        self.uploads = []
 
     def get_modules(self, _plan_id):
         return self.modules
@@ -53,10 +56,12 @@ class FakeClient:
         return self.browser_urls.get(run_id, [])
 
     def get_pending_screenshots(self, _run_id):
-        return []
+        return self.pending_screenshots.get(_run_id, [])
 
     def upload_screenshot(self, _run_id, _upload_id, _image_data):
-        return False
+        self.events.append(("upload", _upload_id, _image_data))
+        self.uploads.append((_run_id, _upload_id, _image_data))
+        return True
 
     def start_test(self, plan_id, test_name, variant):
         run_id = self.start_run_ids[test_name]
@@ -68,16 +73,19 @@ class FakeAutoLogin:
     def __init__(self):
         self.reset_calls = 0
         self.handled_urls = []
+        self.events = []
 
     def reset_session(self):
         self.reset_calls += 1
 
     def handle_auth_url(self, auth_url, method="GET"):
         self.handled_urls.append((auth_url, method))
+        self.events.append(("handle", auth_url, method))
         return True
 
-    def create_placeholder_screenshot(self):
-        return "placeholder"
+    def screenshot_for_upload(self, urls, method="GET"):
+        self.events.append(("screenshot", tuple(urls), method))
+        return "fresh-screenshot"
 
 
 class TestRunnerResumeTests(unittest.TestCase):
@@ -229,6 +237,33 @@ class TestRunnerResumeTests(unittest.TestCase):
             auto_login.handled_urls,
             [("http://identity:5150/oauth2/authorize?response_type=id_token+token", "GET")],
         )
+
+    @patch("scripts.runner.time.sleep", return_value=None)
+    def test_run_single_test_handles_new_browser_url_before_uploading_screenshot(self, _sleep):
+        run_id = "review-run"
+        logout_url = "http://identity:5150/oauth2/logout?id_token_hint=abc"
+        client = FakeClient(
+            modules=[TestModule("oidcc-review", {}, [run_id], "")],
+            info_sequences={
+                run_id: [
+                    TestInfo(run_id, "WAITING", None),
+                    TestInfo(run_id, "WAITING", None),
+                    TestInfo(run_id, "WAITING", None),
+                    TestInfo(run_id, "FINISHED", "REVIEW"),
+                ]
+            },
+            browser_urls={run_id: [logout_url]},
+        )
+        client.pending_screenshots[run_id] = [{"upload": "shot-1"}]
+        auto_login = FakeAutoLogin()
+        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+
+        result = runner.run_single_test("plan-1", "oidcc-review", {})
+
+        self.assertEqual(result.status, "FINISHED")
+        self.assertEqual(result.result, "REVIEW")
+        self.assertEqual(auto_login.handled_urls, [(logout_url, "GET")])
+        self.assertEqual(client.uploads, [(run_id, "shot-1", "fresh-screenshot")])
 
 
 if __name__ == "__main__":

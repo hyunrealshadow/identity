@@ -120,7 +120,14 @@ mod tests {
             json["token_endpoint"],
             "https://identity.example.com/oauth2/token"
         );
+        assert_eq!(
+            json["end_session_endpoint"],
+            "https://identity.example.com/oauth2/logout"
+        );
         assert!(json.get("registration_endpoint").is_none());
+        assert!(json.get("check_session_iframe").is_none());
+        assert!(json.get("frontchannel_logout_supported").is_none());
+        assert!(json.get("backchannel_logout_supported").is_none());
         assert_eq!(json["claims_parameter_supported"], true);
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);

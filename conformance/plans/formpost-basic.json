@@ -6,7 +6,7 @@
   },
   "client": {
     "client_id": "00000001-0000-0000-0000-000000000001",
-    "client_secret": "conformance-secret"
+    "client_secret": "conformance-basic-secret-at-least-32-bytes"
   },
   "client2": {
     "client_id": "00000002-0000-0000-0000-000000000001",
