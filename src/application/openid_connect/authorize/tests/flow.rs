@@ -663,10 +663,8 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
     assert_eq!(error.code(), 23052);
     assert_eq!(request_repo.completed_at_for_test(oid), None);
 
-    request_repo.set_stored_request_redirect_uri_for_test(
-        oid,
-        "https://client.example.com/callback",
-    );
+    request_repo
+        .set_stored_request_redirect_uri_for_test(oid, "https://client.example.com/callback");
 
     let redirect = service
         .approve_authorization_request(oid, Uuid::new_v4(), Uuid::new_v4(), None)
@@ -978,17 +976,12 @@ async fn deny_authorization_request_failure_does_not_burn_interaction() {
         .unwrap();
     request_repo.set_stored_request_redirect_uri_for_test(oid, "not a uri");
 
-    let error = service
-        .deny_authorization_request(oid)
-        .await
-        .unwrap_err();
+    let error = service.deny_authorization_request(oid).await.unwrap_err();
     assert_eq!(error.code(), 23052);
     assert_eq!(request_repo.completed_at_for_test(oid), None);
 
-    request_repo.set_stored_request_redirect_uri_for_test(
-        oid,
-        "https://client.example.com/callback",
-    );
+    request_repo
+        .set_stored_request_redirect_uri_for_test(oid, "https://client.example.com/callback");
 
     let redirect = service.deny_authorization_request(oid).await.unwrap();
 

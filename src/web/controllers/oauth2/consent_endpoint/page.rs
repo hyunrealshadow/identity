@@ -6,16 +6,19 @@ use crate::{
     domain::{client_authorization::ConsentState, openid_connect::ScopeSet},
     infrastructure::web,
     web::controllers::{
-        response::{AppResponse, app_state, parse_query, redirect_to_response, render_app_error, render_html},
+        response::{
+            AppResponse, app_state, parse_query, redirect_to_response, render_app_error,
+            render_html,
+        },
         shared::csrf_token,
     },
     web::views::oauth2::{ConsentPageData, build_scope_display},
 };
 
 use super::{
+    super::inline_script_csp_header_value,
     ConsentQuery,
     context::{has_selected_session, load_consent_context},
-    super::inline_script_csp_header_value,
 };
 
 pub(super) async fn consent_page(
@@ -56,7 +59,9 @@ pub(super) async fn consent_page(
             .client_uri
             .as_ref()
             .map(url::Url::to_string),
-        scopes: build_scope_display(&ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default()),
+        scopes: build_scope_display(
+            &ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default(),
+        ),
         csrf_token: csrf_token(depot),
     };
 

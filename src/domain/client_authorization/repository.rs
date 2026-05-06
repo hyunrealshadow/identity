@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::model::{
-    ClientAuthorization, ClientAuthorizationType, ConsentState, SelectionSource,
-};
+use super::model::{ClientAuthorization, ClientAuthorizationType, ConsentState, SelectionSource};
 use crate::client::model::ClientOid;
 
 #[async_trait]

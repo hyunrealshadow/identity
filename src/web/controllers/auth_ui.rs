@@ -184,7 +184,10 @@ fn render_otp_page(
 }
 
 fn oauth2_continue_url(login_id: &str) -> String {
-    format!("/oauth2/continue?login_id={}", urlencoding::encode(login_id))
+    format!(
+        "/oauth2/continue?login_id={}",
+        urlencoding::encode(login_id)
+    )
 }
 
 // ─── GET Handlers ─────────────────────────────────────────────────────────────
@@ -311,7 +314,8 @@ async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse
                     .await?;
             }
 
-            let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+            let cookie =
+                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
             let target = body
                 .login_id
                 .as_deref()
@@ -495,7 +499,8 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
                 )
                 .await?;
 
-            let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+            let cookie =
+                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
             let mut response = redirect_to_response(&oauth2_continue_url(&body.login_id));
             append_set_cookie(&mut response, &cookie);
             response
@@ -608,7 +613,8 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
                 )
                 .await?;
 
-            let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+            let cookie =
+                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
             let mut response = redirect_to_response(&oauth2_continue_url(&body.login_id));
             append_set_cookie(&mut response, &cookie);
             response

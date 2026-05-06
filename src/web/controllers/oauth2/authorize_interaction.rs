@@ -8,8 +8,8 @@ use crate::{
     application::{error::AppError, openid_connect::authorize::AuthorizeService},
     boot::AppState,
     domain::{
-        client_authorization::SelectionSource,
         auth::model::ActiveSession,
+        client_authorization::SelectionSource,
         openid_connect::{AuthorizationRequest, OAuthErrorCode, OpenIdConnectClient, PromptValue},
     },
 };
@@ -171,7 +171,10 @@ mod tests {
     use identity_application::error::{
         AppError, code::AppErrorCode, codes::authorize::AuthorizeErrorCode,
     };
-    use identity_domain::{auth::model::ActiveSession, openid_connect::{AuthorizationRequest, ResponseType, ScopeSet}};
+    use identity_domain::{
+        auth::model::ActiveSession,
+        openid_connect::{AuthorizationRequest, ResponseType, ScopeSet},
+    };
     use std::collections::HashSet;
     use std::sync::{Arc, Mutex};
     use url::Url;
@@ -316,7 +319,10 @@ mod tests {
 
         assert!(matches!(
             decision,
-            FlowDecision::OAuthError { error: OAuthErrorCode::LoginRequired, .. }
+            FlowDecision::OAuthError {
+                error: OAuthErrorCode::LoginRequired,
+                ..
+            }
         ));
     }
 

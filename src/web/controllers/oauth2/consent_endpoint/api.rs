@@ -53,7 +53,9 @@ pub(super) async fn consent_api(
                 .client_uri
                 .as_ref()
                 .map(url::Url::to_string),
-            scopes: build_scope_display(&ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default()),
+            scopes: build_scope_display(
+                &ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default(),
+            ),
             csrf_token: csrf_token(depot),
         },
     )

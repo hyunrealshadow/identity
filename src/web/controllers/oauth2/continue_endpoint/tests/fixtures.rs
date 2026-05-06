@@ -82,7 +82,10 @@ pub(super) async fn continue_state(
     let authorization_oid = uuid::Uuid::new_v4();
     let login_oid = uuid::Uuid::new_v4();
     let symmetric_key_oid = uuid::Uuid::new_v4();
-    let selected_session_oid = fixture.selection.as_ref().map(|(session_oid, _)| *session_oid);
+    let selected_session_oid = fixture
+        .selection
+        .as_ref()
+        .map(|(session_oid, _)| *session_oid);
     let selected_user_oid = fixture.selection.as_ref().map(|(_, user_oid)| *user_oid);
     let active_session_selection = if fixture.use_selection_as_active_session {
         fixture.active_session.or(fixture.selection)

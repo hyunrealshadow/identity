@@ -4,8 +4,7 @@ use crate::{
     application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
     boot::AppState,
     domain::{
-        auth::model::ActiveSession,
-        client_authorization::StoredAuthorizationRequest,
+        auth::model::ActiveSession, client_authorization::StoredAuthorizationRequest,
         openid_connect::OpenIdConnectClient,
     },
     web::controllers::shared::load_active_sessions,
@@ -30,7 +29,8 @@ pub(super) async fn load_consent_context(
         .load_continue_context_by_login(login_id)
         .await?;
 
-    if continue_context.expires_at <= chrono::Utc::now() || continue_context.completed_at.is_some() {
+    if continue_context.expires_at <= chrono::Utc::now() || continue_context.completed_at.is_some()
+    {
         return Err(AppError::from_code(
             AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
         ));

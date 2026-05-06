@@ -58,5 +58,6 @@ use identity_domain::{
 
 mod fixtures;
 mod flow;
+mod interaction;
 mod request_object;
 mod validation;

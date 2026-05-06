@@ -77,7 +77,9 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
             return Ok(false);
         }
 
-        let Ok(mut stored) = serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()) else {
+        let Ok(mut stored) =
+            serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone())
+        else {
             return Ok(false);
         };
         if !can_overwrite_selection(stored.interaction.selection_source, source) {
@@ -106,7 +108,9 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
             return Ok(false);
         }
 
-        let Ok(mut stored) = serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()) else {
+        let Ok(mut stored) =
+            serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone())
+        else {
             return Ok(false);
         };
         if stored.interaction.consent_state != ConsentState::Pending {
@@ -183,7 +187,8 @@ impl InMemoryClientAuthorizationRepository {
     ) {
         let mut records = self.records.lock().unwrap();
         let record = records.get_mut(&oid).unwrap();
-        let mut stored = serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()).unwrap();
+        let mut stored =
+            serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()).unwrap();
         stored.request.redirect_uri = redirect_uri.to_string();
         record.data = serde_json::to_value(stored).unwrap();
         record.updated_at = Some(chrono::Utc::now());

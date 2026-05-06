@@ -22,8 +22,8 @@ use identity_domain::{
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
     config::{
-        AppConfig, AppEnvironment, DatabaseConfig, HealthChecksConfig, HealthConfig,
-        LoggerConfig, ServerConfig, SettingsConfig,
+        AppConfig, AppEnvironment, DatabaseConfig, HealthChecksConfig, HealthConfig, LoggerConfig,
+        ServerConfig, SettingsConfig,
     },
     services::AppServices,
     settings::AppRuntimeSettings,
@@ -245,10 +245,8 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
         updated_at: None,
     };
 
-    let openid_scope_row = BTreeMap::from([(
-        "name".to_owned(),
-        Value::String(Some("openid".to_owned())),
-    )]);
+    let openid_scope_row =
+        BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]);
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[password_setting]])
@@ -261,9 +259,9 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
         .append_query_results([[authorization_model.clone()]])
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
-        .append_query_results([
-            Vec::<crate::infrastructure::database::entity::client_platform::Model>::new(),
-        ])
+        .append_query_results([Vec::<
+            crate::infrastructure::database::entity::client_platform::Model,
+        >::new()])
         .append_query_results([[openid_scope_row.clone()]])
         .append_query_results([[(active_session.clone(), active_user.clone())]])
         .append_query_results([[symmetric_key.clone()]])
@@ -272,9 +270,9 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
         .append_query_results([[authorization_model.clone()]])
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), oidc_metadata_model)]])
-        .append_query_results([
-            Vec::<crate::infrastructure::database::entity::client_platform::Model>::new(),
-        ])
+        .append_query_results([Vec::<
+            crate::infrastructure::database::entity::client_platform::Model,
+        >::new()])
         .append_query_results([[openid_scope_row]])
         .append_query_results([[symmetric_key]])
         .append_query_results([[login_model.clone()]])

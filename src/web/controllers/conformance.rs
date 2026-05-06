@@ -227,13 +227,15 @@ async fn auto_login(
 
     // Step 4: build the session cookie and jump back into the browser flow.
     let authorize_service = ctx.services().oidc_authorize();
-    record_auto_login_selection(&body.login_id, &session, move |login_id, session_oid, user_oid, source| {
-        async move {
+    record_auto_login_selection(
+        &body.login_id,
+        &session,
+        move |login_id, session_oid, user_oid, source| async move {
             authorize_service
                 .record_selection_by_login(&login_id, session_oid, user_oid, source)
                 .await
-        }
-    })
+        },
+    )
     .await?;
 
     let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
@@ -336,21 +338,17 @@ mod tests {
         };
         let recorded = Arc::new(Mutex::new(None));
 
-        super::record_auto_login_selection(
-            "login-123",
-            &session,
-            {
+        super::record_auto_login_selection("login-123", &session, {
+            let recorded = recorded.clone();
+            move |login_id, session_oid, user_oid, source| {
                 let recorded = recorded.clone();
-                move |login_id, session_oid, user_oid, source| {
-                    let recorded = recorded.clone();
-                    async move {
-                        *recorded.lock().unwrap() =
-                            Some((login_id.to_owned(), session_oid, user_oid, source));
-                        Ok(())
-                    }
+                async move {
+                    *recorded.lock().unwrap() =
+                        Some((login_id.to_owned(), session_oid, user_oid, source));
+                    Ok(())
                 }
-            },
-        )
+            }
+        })
         .await
         .unwrap();
 

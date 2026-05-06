@@ -8,10 +8,7 @@ use fixtures::{
 };
 use http::{StatusCode, header};
 use identity_domain::client_authorization::ConsentState;
-use salvo::{
-    Service,
-    test::TestClient,
-};
+use salvo::{Service, test::TestClient};
 
 use crate::controllers::shared::build_session_cookie;
 
@@ -156,13 +153,12 @@ async fn continue_with_denied_consent_returns_access_denied() {
 
 #[tokio::test]
 async fn continue_skips_consent_when_client_allows_it() {
-    let (state, protected_login_id, session_oid) = continue_selected_session_with_fixture(
-        ContinueFixture {
+    let (state, protected_login_id, session_oid) =
+        continue_selected_session_with_fixture(ContinueFixture {
             skip_consent: true,
             ..ContinueFixture::default()
-        },
-    )
-    .await;
+        })
+        .await;
 
     let response = call_continue_with_state(
         &protected_login_id,
@@ -251,15 +247,14 @@ async fn continue_with_silent_request_and_no_session_returns_login_required() {
 
 #[tokio::test]
 async fn continue_with_expired_session_and_silent_prompt_returns_login_required() {
-    let (state, protected_login_id, session_oid) = continue_selected_session_with_fixture(
-        ContinueFixture {
+    let (state, protected_login_id, session_oid) =
+        continue_selected_session_with_fixture(ContinueFixture {
             prompt: Some("none".to_owned()),
             max_age: Some(60),
             session_created_at: Some(Utc::now() - Duration::seconds(120)),
             ..ContinueFixture::default()
-        },
-    )
-    .await;
+        })
+        .await;
 
     let response = call_continue_with_state(
         &protected_login_id,

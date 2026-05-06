@@ -2,10 +2,7 @@ use http::header;
 use salvo::{Depot, Request, handler};
 use serde::Deserialize;
 
-use crate::{
-    application::error::AppError,
-    web::controllers::response::AppResponse,
-};
+use crate::{application::error::AppError, web::controllers::response::AppResponse};
 
 mod api;
 mod context;

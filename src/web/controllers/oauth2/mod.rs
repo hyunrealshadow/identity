@@ -6,8 +6,8 @@ mod authorize_endpoint;
 mod authorize_extractor;
 mod authorize_interaction;
 mod authorize_response;
-mod continue_endpoint;
 mod consent_endpoint;
+mod continue_endpoint;
 mod token_endpoint;
 mod user_info_endpoint;
 
@@ -25,10 +25,7 @@ pub use authorize_response::{
 
 pub fn routes() -> Router {
     Router::new()
-        .push(
-            Router::with_path("oauth2/continue")
-                .get(continue_endpoint::continue_get),
-        )
+        .push(Router::with_path("oauth2/continue").get(continue_endpoint::continue_get))
         .push(
             Router::with_path("oauth2/authorize")
                 .get(authorize_endpoint::authorize)

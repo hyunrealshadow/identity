@@ -7,10 +7,7 @@ use salvo::{
     test::{ResponseExt, TestClient},
 };
 
-use crate::{
-    controllers::shared::build_session_cookie,
-    router::app_router,
-};
+use crate::{controllers::shared::build_session_cookie, router::app_router};
 
 #[tokio::test]
 async fn consent_get_returns_html_by_default() {

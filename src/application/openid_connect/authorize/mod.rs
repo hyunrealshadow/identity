@@ -103,10 +103,16 @@ impl AuthorizeService {
 
 mod flow;
 mod implicit_flow;
+mod interaction;
 mod protection;
 mod request_object;
 mod signing;
 mod validation;
+
+pub use interaction::{
+    ContinueAction, determine_continue_action, selected_session_exceeds_max_age,
+    stored_request_has_prompt,
+};
 
 #[cfg(test)]
 mod tests;

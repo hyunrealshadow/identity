@@ -127,12 +127,9 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 
 #[cfg(test)]
 mod tests {
-    use crate::controllers::oauth2::{
-        authorize_response::redirect_oauth_error_response,
-        routes,
-    };
-    use crate::controllers::shared::build_session_cookie;
     use super::super::tests::interaction_fixtures::authorize_first_hop_state;
+    use crate::controllers::oauth2::{authorize_response::redirect_oauth_error_response, routes};
+    use crate::controllers::shared::build_session_cookie;
     use http::{HeaderMap, StatusCode, header};
     use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
@@ -219,8 +216,16 @@ mod tests {
         .await;
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
-        let location = response.headers().get(header::LOCATION).unwrap().to_str().unwrap();
-        assert!(location.starts_with("/oauth2/continue?login_id="), "{location}");
+        let location = response
+            .headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(
+            location.starts_with("/oauth2/continue?login_id="),
+            "{location}"
+        );
     }
 
     #[tokio::test]

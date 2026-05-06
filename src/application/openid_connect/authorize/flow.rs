@@ -209,8 +209,13 @@ impl AuthorizeService {
         source: SelectionSource,
     ) -> Result<(), AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
-        self.record_authorization_selection(login.client_authorization_oid, session_oid, user_oid, source)
-            .await
+        self.record_authorization_selection(
+            login.client_authorization_oid,
+            session_oid,
+            user_oid,
+            source,
+        )
+        .await
     }
 
     pub async fn record_consent_by_login(

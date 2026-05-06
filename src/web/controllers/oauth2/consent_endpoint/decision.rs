@@ -6,7 +6,9 @@ use crate::{
     application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
     boot::AppState,
     domain::client_authorization::ConsentState,
-    web::controllers::response::{AppResponse, app_state, json_response, parse_form, redirect_to_response},
+    web::controllers::response::{
+        AppResponse, app_state, json_response, parse_form, redirect_to_response,
+    },
     web::views::oauth2::{ConsentApiResponse, ConsentDecision, ConsentDecisionForm},
 };
 
