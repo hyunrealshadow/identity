@@ -179,30 +179,11 @@ pub fn public_jwk_from_private_key_pem(
     key_id: Option<&str>,
     certificate_pem: Option<&str>,
 ) -> Result<Jwk, KeyMaterialError> {
-    let algorithm = infer_algorithm_from_private_key_pem(private_key_pem)?;
-    let mut jwk = match algorithm {
-        AsymmetricKeyAlgorithm::Rsa { .. } => {
-            josekit::jwk::alg::rsa::RsaKeyPair::from_pem(private_key_pem)
-                .map_err(internal)?
-                .to_jwk_public_key()
-        }
-        AsymmetricKeyAlgorithm::EcdsaP256
-        | AsymmetricKeyAlgorithm::EcdsaP384
-        | AsymmetricKeyAlgorithm::EcdsaP521
-        | AsymmetricKeyAlgorithm::EcdsaSecp256k1 => {
-            josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key_pem, None)
-                .map_err(internal)?
-                .to_jwk_public_key()
-        }
-        AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => {
-            josekit::jwk::alg::ed::EdKeyPair::from_pem(private_key_pem)
-                .map_err(internal)?
-                .to_jwk_public_key()
-        }
-    };
+    let alg = primary_jwa_algorithm_for_private_key(private_key_pem)?;
+    let mut jwk = public_jwk_from_private_key_pem_without_alg(private_key_pem)?;
 
     jwk.set_key_use("sig");
-    jwk.set_algorithm(jwa_algorithm_name(&algorithm));
+    jwk.set_algorithm(alg.as_str());
     if let Some(key_id) = key_id {
         jwk.set_key_id(key_id);
     }
@@ -219,7 +200,7 @@ pub fn generate_all_jwks_for_key(
     key_id: &str,
     certificate_pem: Option<&str>,
 ) -> Result<Vec<(String, Jwk)>, KeyMaterialError> {
-    let alg_labels = jwk_algorithm_labels_for_private_key(private_key_pem)?;
+    let alg = primary_jwa_algorithm_for_private_key(private_key_pem)?;
     let mut base_jwk = public_jwk_from_private_key_pem_without_alg(private_key_pem)?;
     base_jwk.set_key_use("sig");
     base_jwk.set_key_id(key_id);
@@ -228,27 +209,45 @@ pub fn generate_all_jwks_for_key(
         apply_certificate_params(&mut base_jwk, cert_pem)?;
     }
 
-    alg_labels
-        .iter()
-        .map(|alg| {
-            let mut jwk = base_jwk.clone();
-            jwk.set_algorithm(alg);
-            Ok((alg.to_string(), jwk))
-        })
-        .collect()
+    base_jwk.set_algorithm(alg.as_str());
+
+    Ok(vec![(alg.as_str().to_owned(), base_jwk)])
 }
 
-fn jwk_algorithm_labels_for_private_key(
+fn primary_jwa_algorithm_for_private_key(
     private_key_pem: &str,
-) -> Result<Vec<String>, KeyMaterialError> {
+) -> Result<JwaSigningAlgorithm, KeyMaterialError> {
+    if let Some(alg) = primary_rsa_pss_jwa_algorithm(private_key_pem)? {
+        return Ok(alg);
+    }
+
     let algorithm = infer_algorithm_from_private_key_pem(private_key_pem)?;
+    Ok(JwaSigningAlgorithm::primary_for_key_type(&algorithm))
+}
+
+fn primary_rsa_pss_jwa_algorithm(
+    private_key_pem: &str,
+) -> Result<Option<JwaSigningAlgorithm>, KeyMaterialError> {
+    if josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(private_key_pem, None, None, None)
+        .is_err()
+    {
+        return Ok(None);
+    }
+
     let pem = private_key_pem.as_bytes();
-    let labels: Vec<String> = JwaSigningAlgorithm::trials_for_key_type(&algorithm)
-        .iter()
-        .filter(|&jwa| jwa_algorithm_can_sign(*jwa, pem))
-        .map(|jwa| jwa.as_str().to_owned())
-        .collect();
-    Ok(labels)
+    if PS256.signer_from_pem(pem).is_ok() {
+        return Ok(Some(JwaSigningAlgorithm::Ps256));
+    }
+    if PS384.signer_from_pem(pem).is_ok() {
+        return Ok(Some(JwaSigningAlgorithm::Ps384));
+    }
+    if PS512.signer_from_pem(pem).is_ok() {
+        return Ok(Some(JwaSigningAlgorithm::Ps512));
+    }
+
+    Err(KeyMaterialError::InvalidInput(
+        "unsupported rsa-pss parameters".to_owned(),
+    ))
 }
 
 fn public_jwk_from_private_key_pem_without_alg(
@@ -275,10 +274,6 @@ fn public_jwk_from_private_key_pem_without_alg(
     Err(KeyMaterialError::InvalidInput(
         "unsupported private key format".to_owned(),
     ))
-}
-
-fn jwa_algorithm_name(algorithm: &AsymmetricKeyAlgorithm) -> &'static str {
-    JwaSigningAlgorithm::primary_for_key_type(algorithm).as_str()
 }
 
 fn export_private_pem(jwk: &Jwk) -> Result<String, KeyMaterialError> {

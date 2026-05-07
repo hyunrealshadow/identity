@@ -41,12 +41,6 @@ pub enum KeyJwkRepositoryError {
 
     #[error("failed to delete jwk bindings")]
     DeleteByKeyFailed(#[source] sea_orm::DbErr),
-
-    #[error("failed to deserialize jwk json")]
-    Deserialize(#[source] serde_json::Error),
-
-    #[error("chrono parse error")]
-    Chrono(#[from] chrono::ParseError),
 }
 
 #[derive(Debug, Clone)]

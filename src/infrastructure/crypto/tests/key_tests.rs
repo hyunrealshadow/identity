@@ -113,15 +113,45 @@ fn x5c_matches_base64_standard_of_der() {
     assert_eq!(actual, expected);
 }
 
+#[track_caller]
+fn assert_single_generated_jwk(private_key: &str, key_id: &str, expected_alg: &str) {
+    let jwks = generate_all_jwks_for_key(private_key, key_id, None).unwrap();
+
+    assert_eq!(jwks.len(), 1);
+    assert_eq!(jwks[0].0, expected_alg);
+    assert_eq!(jwks[0].1.algorithm().unwrap(), expected_alg);
+    assert_eq!(jwks[0].1.key_id().unwrap(), key_id);
+}
+
 #[test]
-fn generate_all_jwks_for_rsa_key_produces_rs_jwks() {
+fn generate_all_jwks_for_rsa_2048_key_produces_rs256_jwk() {
     let data = generate_rsa_key(2048).unwrap();
+
+    assert_single_generated_jwk(&data.private_key, "kid-rsa", "RS256");
+}
+
+#[test]
+fn generate_all_jwks_for_rsa_3072_key_produces_rs384_jwk() {
+    let data = generate_rsa_key(3072).unwrap();
+
+    assert_single_generated_jwk(&data.private_key, "kid-rsa", "RS384");
+}
+
+#[test]
+fn generate_all_jwks_for_rsa_4096_key_produces_rs512_jwk() {
+    let data = generate_rsa_key(4096).unwrap();
+
+    assert_single_generated_jwk(&data.private_key, "kid-rsa", "RS512");
+}
+
+#[test]
+fn generate_all_jwks_for_plain_rsa_key_does_not_publish_ps_or_secondary_rs_algs() {
+    let data = generate_rsa_key(2048).unwrap();
+
     let jwks = generate_all_jwks_for_key(&data.private_key, "kid-rsa", None).unwrap();
-    assert_eq!(jwks.len(), 3);
     let algs: Vec<&str> = jwks.iter().map(|(alg, _)| alg.as_str()).collect();
-    assert!(algs.contains(&"RS256"));
-    assert!(algs.contains(&"RS384"));
-    assert!(algs.contains(&"RS512"));
+
+    assert_eq!(algs, vec!["RS256"]);
     assert!(!algs.contains(&"PS256"));
     assert!(!algs.contains(&"PS384"));
     assert!(!algs.contains(&"PS512"));
@@ -144,6 +174,34 @@ fn generate_all_jwks_for_rsa_pss_key_produces_ps_jwk() {
     assert_eq!(jwks[0].0, "PS256");
     assert_eq!(jwks[0].1.algorithm().unwrap(), "PS256");
     assert_eq!(jwks[0].1.key_id().unwrap(), "kid-ps");
+}
+
+#[test]
+fn generate_all_jwks_for_rsa_pss_sha384_key_produces_ps384_jwk() {
+    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
+        2048,
+        josekit::util::SHA_384,
+        josekit::util::SHA_384,
+        48,
+    )
+    .unwrap();
+    let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
+
+    assert_single_generated_jwk(&private_key, "kid-ps", "PS384");
+}
+
+#[test]
+fn generate_all_jwks_for_rsa_pss_sha512_key_produces_ps512_jwk() {
+    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
+        2048,
+        josekit::util::SHA_512,
+        josekit::util::SHA_512,
+        64,
+    )
+    .unwrap();
+    let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
+
+    assert_single_generated_jwk(&private_key, "kid-ps", "PS512");
 }
 
 #[test]
