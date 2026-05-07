@@ -291,7 +291,7 @@ impl OpenIdProviderService {
             op_policy_uri: Some(endpoint_url(&issuer, "/policy")?),
             op_tos_uri: Some(endpoint_url(&issuer, "/terms")?),
             end_session_endpoint: Some(endpoint_url(&issuer, "/oauth2/logout")?),
-            check_session_iframe: None,
+            check_session_iframe: Some(endpoint_url(&issuer, "/oauth2/check_session")?),
             frontchannel_logout_supported: None,
             frontchannel_logout_session_supported: None,
             backchannel_logout_supported: None,
@@ -649,6 +649,10 @@ mod tests {
         assert_eq!(
             metadata.end_session_endpoint.unwrap().as_str(),
             "https://identity.example.com/issuer1/oauth2/logout"
+        );
+        assert_eq!(
+            metadata.check_session_iframe.unwrap().as_str(),
+            "https://identity.example.com/issuer1/oauth2/check_session"
         );
         assert_eq!(
             metadata.response_types_supported,

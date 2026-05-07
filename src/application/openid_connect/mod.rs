@@ -2,6 +2,7 @@ pub mod authorize;
 pub mod dto;
 pub mod logout;
 pub mod provider;
+pub mod session;
 #[cfg(test)]
 mod tests;
 pub mod token;

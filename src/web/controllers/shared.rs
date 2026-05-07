@@ -53,8 +53,9 @@ pub fn build_session_cookie(oids: &[Uuid], secure: bool) -> String {
     let json = serde_json::to_string(oids).unwrap_or_else(|_| "[]".to_owned());
     let max_age = SESSION_EXPIRY.as_secs();
     let secure_flag = if secure { "; Secure" } else { "" };
+    let same_site = if secure { "None" } else { "Lax" };
     format!(
-        "{SESSION_COOKIE_NAME}={json}; HttpOnly{secure_flag}; SameSite=Lax; Path=/; Max-Age={max_age}"
+        "{SESSION_COOKIE_NAME}={json}; HttpOnly{secure_flag}; SameSite={same_site}; Path=/; Max-Age={max_age}"
     )
 }
 
@@ -88,7 +89,16 @@ pub async fn load_active_sessions(
 /// Return `true` when the app is running in the `production` environment,
 /// which triggers the `Secure` flag on session cookies.
 pub fn is_secure_cookie(ctx: &AppState) -> bool {
-    ctx.context().is_production()
+    if ctx.context().is_production() {
+        return true;
+    }
+
+    #[cfg(feature = "oidc-conformance")]
+    if ctx.context().is_conformance() {
+        return true;
+    }
+
+    false
 }
 
 pub fn append_set_cookie(response: &mut Response, cookie: &str) {
@@ -105,6 +115,26 @@ pub fn csrf_middleware() -> salvo::csrf::Csrf<salvo::csrf::BcryptCipher, salvo::
 
 pub fn csrf_token(depot: &Depot) -> String {
     depot.csrf_token().unwrap_or_default().to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    #[test]
+    fn build_session_cookie_uses_lax_without_secure_flag() {
+        let cookie = super::build_session_cookie(&[Uuid::nil()], false);
+
+        assert!(cookie.contains("; HttpOnly; SameSite=Lax;"));
+        assert!(!cookie.contains("; Secure;"));
+    }
+
+    #[test]
+    fn build_session_cookie_uses_none_when_secure_for_iframe_session_checks() {
+        let cookie = super::build_session_cookie(&[Uuid::nil()], true);
+
+        assert!(cookie.contains("; HttpOnly; Secure; SameSite=None;"));
+    }
 }
 
 // ─── Request helpers ──────────────────────────────────────────────────────────

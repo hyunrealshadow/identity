@@ -384,7 +384,11 @@ impl AuthorizeService {
         redirect
             .query_pairs_mut()
             .append_pair("code", &protected_code)
-            .append_pair("state", &request.state);
+            .append_pair("state", &request.state)
+            .append_pair(
+                "session_state",
+                &session_state_for_authorize_response(request, session_oid)?,
+            );
 
         Ok(redirect)
     }
@@ -495,4 +499,20 @@ impl AuthorizeService {
         self.deny_authorization_request(login.client_authorization_oid)
             .await
     }
+}
+
+pub(super) fn session_state_for_authorize_response(
+    request: &AuthorizationRequestData,
+    session_oid: Uuid,
+) -> Result<String, AppError> {
+    let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
+    })?;
+    let origin = redirect_uri.origin().ascii_serialization();
+    Ok(crate::openid_connect::session::calculate_session_state(
+        &request.client_id,
+        &origin,
+        &session_oid.to_string(),
+        &session_oid.to_string(),
+    ))
 }

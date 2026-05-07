@@ -628,6 +628,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
     let query = redirect.query().unwrap();
     assert!(query.contains("code="));
     assert!(query.contains("state=state123"));
+    assert!(query.contains("session_state="));
 }
 
 #[tokio::test]
@@ -725,6 +726,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
     let code = pairs.get("code").unwrap();
     let id_token = pairs.get("id_token").unwrap();
     assert_eq!(pairs.get("state").map(String::as_str), Some("state123"));
+    assert!(pairs.contains_key("session_state"));
     assert!(!code.is_empty());
 
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
@@ -744,6 +746,55 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
         payload.claim(JwtClaimNames::C_HASH).unwrap(),
         &serde_json::json!(expected_hash_for_rs256(code))
     );
+}
+
+#[tokio::test]
+async fn approve_implicit_flow_returns_session_state() {
+    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let (private_key, _public_key) = signing_keypair();
+    let user_oid = Uuid::new_v4();
+    let key_oid = KeyOid::from(Uuid::new_v4());
+    let service = AuthorizeService::new(
+        Arc::new(FoundClientRepository),
+        Arc::new(InMemoryCredentialRepository::default()),
+        request_repo,
+        Arc::new(InMemoryLoginRepository),
+        Arc::new(HybridUserRepository {
+            user: hybrid_user(user_oid),
+        }),
+        Arc::new(HybridKeyRepository {
+            oid: key_oid,
+            private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
+        }),
+        Arc::new(InMemoryKeyJwkRepository {
+            bindings: vec![hybrid_binding(key_oid, Uuid::new_v4())],
+        }),
+        provider_service(),
+        test_signing_algorithm_detector(),
+        test_data_protector(),
+    );
+
+    let mut request_params = params("openid profile");
+    request_params.response_type = "id_token".to_string();
+    request_params.nonce = Some("nonce-implicit".to_string());
+    let (request, _) = service.validate_request(request_params).await.unwrap();
+    let oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let redirect = service
+        .approve_authorization_request(oid, Uuid::new_v4(), user_oid, None)
+        .await
+        .unwrap();
+
+    let fragment = redirect.fragment().unwrap();
+    let pairs = url::form_urlencoded::parse(fragment.as_bytes())
+        .map(|(name, value)| (name.into_owned(), value.into_owned()))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    assert!(pairs.contains_key("id_token"));
+    assert_eq!(pairs.get("state").map(String::as_str), Some("state123"));
+    assert!(pairs.contains_key("session_state"));
 }
 
 #[tokio::test]

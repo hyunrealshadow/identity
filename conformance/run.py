@@ -11,7 +11,7 @@ Usage:
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
     IDENTITY_URL     - Identity server URL (default: https://localhost:5150)
-    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, formpost-hybrid, or rp-init-logout (default: basic)
+    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, formpost-hybrid, rp-init-logout, or session (default: basic)
     CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
     PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
     TIMEOUT          - Timeout per test in seconds (default: 60)
@@ -54,6 +54,7 @@ SUPPORTED_PROFILES = (
     "formpost-implicit",
     "formpost-hybrid",
     "rp-init-logout",
+    "session",
 )
 
 PLAN_NAMES = {
@@ -65,6 +66,7 @@ PLAN_NAMES = {
     "formpost-implicit": "oidcc-formpost-implicit-certification-test-plan",
     "formpost-hybrid": "oidcc-formpost-hybrid-certification-test-plan",
     "rp-init-logout": "oidcc-rp-initiated-logout-certification-test-plan",
+    "session": "oidcc-session-management-certification-test-plan",
 }
 
 
@@ -75,7 +77,7 @@ def default_plan_name_for_profile(profile: str):
 def plan_variant_for_profile(profile: str):
     if profile == "config":
         return None
-    if profile == "rp-init-logout":
+    if profile in ("rp-init-logout", "session"):
         return {
             "client_registration": "static_client",
             "response_type": "code",

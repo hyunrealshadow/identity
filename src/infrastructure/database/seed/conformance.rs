@@ -434,13 +434,15 @@ fn conformance_redirect_uris() -> serde_json::Value {
         "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-session/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
     ])
 }
 
 fn conformance_post_logout_redirect_uris() -> serde_json::Value {
     serde_json::json!([
-        "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
+        "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-session/post_logout_redirect"
     ])
 }
 
@@ -607,6 +609,10 @@ mod tests {
         ));
         assert!(
             redirect_uris
+                .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-session/callback")
+        );
+        assert!(
+            redirect_uris
                 .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback")
         );
     }
@@ -622,6 +628,20 @@ mod tests {
 
         assert!(uris.contains(
             &"https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
+        ));
+    }
+
+    #[test]
+    fn conformance_post_logout_redirect_uris_include_session_alias() {
+        let uris = super::conformance_post_logout_redirect_uris();
+        let uris = uris.as_array().unwrap();
+        let uris = uris
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-session/post_logout_redirect"
         ));
     }
 

@@ -54,6 +54,15 @@ class PlanVariantTests(unittest.TestCase):
             },
         )
 
+    def test_session_profile_uses_static_client_response_type_variant(self):
+        self.assertEqual(
+            run.plan_variant_for_profile("session"),
+            {
+                "client_registration": "static_client",
+                "response_type": "code",
+            },
+        )
+
 
 class ProfileConfigurationTests(unittest.TestCase):
     def test_new_formpost_profiles_are_supported(self):
@@ -62,6 +71,9 @@ class ProfileConfigurationTests(unittest.TestCase):
 
     def test_rp_init_logout_profile_is_supported(self):
         self.assertIn("rp-init-logout", run.SUPPORTED_PROFILES)
+
+    def test_session_profile_is_supported(self):
+        self.assertIn("session", run.SUPPORTED_PROFILES)
 
     def test_default_plan_name_for_new_formpost_profiles(self):
         self.assertEqual(
@@ -77,6 +89,12 @@ class ProfileConfigurationTests(unittest.TestCase):
         self.assertEqual(
             run.default_plan_name_for_profile("rp-init-logout"),
             "oidcc-rp-initiated-logout-certification-test-plan",
+        )
+
+    def test_default_plan_name_for_session_profile(self):
+        self.assertEqual(
+            run.default_plan_name_for_profile("session"),
+            "oidcc-session-management-certification-test-plan",
         )
 
 
@@ -105,6 +123,20 @@ class PlanFileTests(unittest.TestCase):
         plan = self._load_plan("rp-init-logout")
 
         self.assertEqual(plan["alias"], "identity-rp-init-logout")
+        self.assertEqual(
+            plan["server"]["discoveryUrl"],
+            "https://identity:5150/.well-known/openid-configuration",
+        )
+        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(
+            plan["client"]["client_secret"],
+            "conformance-basic-secret-at-least-32-bytes",
+        )
+
+    def test_session_plan_exists_with_expected_defaults(self):
+        plan = self._load_plan("session")
+
+        self.assertEqual(plan["alias"], "identity-session")
         self.assertEqual(
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",

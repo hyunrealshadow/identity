@@ -1,3 +1,4 @@
+use super::flow::session_state_for_authorize_response;
 use super::*;
 use std::fmt::Write;
 use uuid::Uuid;
@@ -99,6 +100,12 @@ impl AuthorizeService {
             write!(fragment, "&scope={}", urlencoding(&request.scope)).unwrap();
         }
         write!(fragment, "&state={}", urlencoding(&request.state)).unwrap();
+        write!(
+            fragment,
+            "&session_state={}",
+            urlencoding(&session_state_for_authorize_response(request, session_oid)?)
+        )
+        .unwrap();
 
         let mut url = redirect_uri;
         url.set_fragment(Some(&fragment));
@@ -204,6 +211,12 @@ impl AuthorizeService {
             write!(fragment, "&scope={}", urlencoding(&request.scope)).unwrap();
         }
         write!(fragment, "&state={}", urlencoding(&request.state)).unwrap();
+        write!(
+            fragment,
+            "&session_state={}",
+            urlencoding(&session_state_for_authorize_response(request, session_oid)?)
+        )
+        .unwrap();
 
         let mut url = redirect_uri;
         url.set_fragment(Some(&fragment));

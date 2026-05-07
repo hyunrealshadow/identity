@@ -17,10 +17,12 @@ class BrowserAuthHandler:
         self.browser_storage_state = None
 
     def _localize_url(self, url: str) -> str:
-        return url.replace(self.docker_identity_url, self.identity_url).replace(
-            self.host_identity_url,
-            self.identity_url,
-        )
+        return url
+
+    def _chromium_launch_args(self) -> list[str]:
+        return [
+            "--host-resolver-rules=MAP identity 127.0.0.1,MAP host.docker.internal 127.0.0.1"
+        ]
 
     def _login_id_from_location(self, location: str) -> str | None:
         match = re.search(r"login_id=([^&]+)", location)
@@ -28,19 +30,34 @@ class BrowserAuthHandler:
             return match.group(1)
         return None
 
-    def _auto_login_page_url(self, login_id: str) -> str:
-        return f"{self.identity_url}/conformance/auto-login?{urlencode({'login_id': login_id})}"
+    def _op_browser_url(self, page_url: str) -> str:
+        parsed = urlparse(page_url)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return self.identity_url
 
-    def _continue_url(self, login_id: str) -> str:
-        return f"{self.identity_url}/oauth2/continue?{urlencode({'login_id': login_id})}"
+    def _auto_login_page_url(self, login_id: str, op_browser_url: str) -> str:
+        return f"{op_browser_url}/conformance/auto-login?{urlencode({'login_id': login_id})}"
+
+    def _continue_url(self, login_id: str, op_browser_url: str) -> str:
+        return f"{op_browser_url}/oauth2/continue?{urlencode({'login_id': login_id})}"
 
     def _complete_browser_login(self, page, login_id: str | None) -> bool:
         if not login_id:
             return False
 
-        page.goto(self._auto_login_page_url(login_id), wait_until="load", timeout=30_000)
+        op_browser_url = self._op_browser_url(page.url)
+        page.goto(
+            self._auto_login_page_url(login_id, op_browser_url),
+            wait_until="load",
+            timeout=30_000,
+        )
         page.wait_for_load_state("load", timeout=30_000)
-        page.goto(self._continue_url(login_id), wait_until="load", timeout=30_000)
+        page.goto(
+            self._continue_url(login_id, op_browser_url),
+            wait_until="load",
+            timeout=30_000,
+        )
         page.wait_for_load_state("load", timeout=30_000)
         return True
 
@@ -81,7 +98,7 @@ class BrowserAuthHandler:
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                browser = p.chromium.launch(headless=True, args=self._chromium_launch_args())
                 context_args = {"ignore_https_errors": True}
                 if self.browser_storage_state:
                     context_args["storage_state"] = self.browser_storage_state
@@ -134,7 +151,7 @@ class BrowserAuthHandler:
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                browser = p.chromium.launch(headless=True, args=self._chromium_launch_args())
                 context = browser.new_context(ignore_https_errors=True)
                 page = context.new_page()
 

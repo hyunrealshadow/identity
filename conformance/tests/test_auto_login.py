@@ -8,6 +8,43 @@ from scripts.browser_auth import BrowserAuthHandler
 
 
 class BrowserAuthHandlerTests(unittest.TestCase):
+    def test_browser_launch_args_resolve_docker_identity_on_host(self):
+        handler = BrowserAuthHandler("https://localhost:5150")
+
+        self.assertIn(
+            "--host-resolver-rules=MAP identity 127.0.0.1,MAP host.docker.internal 127.0.0.1",
+            handler._chromium_launch_args(),
+        )
+
+    def test_localize_url_keeps_docker_identity_origin_for_browser_cookie_scope(self):
+        handler = BrowserAuthHandler("https://localhost:5150")
+
+        self.assertEqual(
+            handler._localize_url("https://identity:5150/oauth2/authorize"),
+            "https://identity:5150/oauth2/authorize",
+        )
+
+    def test_complete_browser_login_uses_current_op_origin(self):
+        handler = BrowserAuthHandler("https://localhost:5150")
+        page = FakePage("https://identity:5150/login?login_id=login-123")
+
+        self.assertTrue(handler._complete_browser_login(page, "login-123"))
+        self.assertEqual(
+            page.goto_calls,
+            [
+                (
+                    "https://identity:5150/conformance/auto-login?login_id=login-123",
+                    "load",
+                    30000,
+                ),
+                (
+                    "https://identity:5150/oauth2/continue?login_id=login-123",
+                    "load",
+                    30000,
+                ),
+            ],
+        )
+
     def test_complete_browser_login_navigates_to_oauth2_continue(self):
         handler = BrowserAuthHandler("https://localhost:5150")
         page = FakePage()
@@ -47,12 +84,14 @@ class BrowserAuthHandlerTests(unittest.TestCase):
 
 
 class FakePage:
-    def __init__(self):
+    def __init__(self, url=""):
+        self.url = url
         self.content = None
         self.goto_calls = []
         self.wait_calls = []
 
     def goto(self, url, wait_until=None, timeout=None):
+        self.url = url
         self.goto_calls.append((url, wait_until, timeout))
 
     def set_content(self, content, wait_until=None):

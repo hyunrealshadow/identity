@@ -124,8 +124,11 @@ mod tests {
             json["end_session_endpoint"],
             "https://identity.example.com/oauth2/logout"
         );
+        assert_eq!(
+            json["check_session_iframe"],
+            "https://identity.example.com/oauth2/check_session"
+        );
         assert!(json.get("registration_endpoint").is_none());
-        assert!(json.get("check_session_iframe").is_none());
         assert!(json.get("frontchannel_logout_supported").is_none());
         assert!(json.get("backchannel_logout_supported").is_none());
         assert_eq!(json["claims_parameter_supported"], true);
