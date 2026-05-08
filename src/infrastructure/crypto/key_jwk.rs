@@ -3,6 +3,7 @@ use crate::{
         error::{AppError, codes::key::KeyErrorCode},
         key::asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
     },
+    domain::key::PublicJwk,
     infrastructure::crypto::key::generate_all_jwks_for_key,
 };
 
@@ -21,7 +22,10 @@ impl KeyJwkGenerator for KeyJwkGeneratorImpl {
             })?
             .into_iter()
             .map(|(algorithm, jwk)| {
-                let jwk = serde_json::to_value(jwk).map_err(|error| {
+                let jwk_value = serde_json::to_value(jwk).map_err(|error| {
+                    AppError::from_code(KeyErrorCode::JwkSerializationFailed).with_source(error)
+                })?;
+                let jwk = serde_json::from_value::<PublicJwk>(jwk_value).map_err(|error| {
                     AppError::from_code(KeyErrorCode::JwkSerializationFailed).with_source(error)
                 })?;
                 Ok(GeneratedKeyJwk { algorithm, jwk })

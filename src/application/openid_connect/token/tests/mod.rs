@@ -40,8 +40,8 @@ use crate::{
         key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
         key::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError},
         key::{
-            JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
-            repository::KeyRepository,
+            JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, PublicJwk,
+            material::AsymmetricKeyData, repository::KeyRepository,
         },
         openid_connect::{
             OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
@@ -117,7 +117,7 @@ fn key_jwk_binding(key: &Key, alg: &str, binding_oid: Uuid) -> KeyJwk {
         oid: KeyJwkOid::from(binding_oid),
         key_oid: key.oid,
         algorithm: alg.to_owned(),
-        jwk: serde_json::to_value(jwk).unwrap(),
+        jwk: serde_json::from_value::<PublicJwk>(serde_json::to_value(jwk).unwrap()).unwrap(),
         created_at: Utc::now(),
     }
 }
@@ -428,23 +428,25 @@ fn expected_at_hash_uses_sha512_for_512_bit_and_eddsa_algs() {
 fn key_jwk_binding_uses_ec_shape_for_es256_keys() {
     let key = key_for_algorithm("ES256");
     let binding = key_jwk_binding(&key, "ES256", Uuid::new_v4());
+    let jwk = serde_json::to_value(binding.jwk).unwrap();
 
-    assert_eq!(binding.jwk["kty"], serde_json::json!("EC"));
-    assert_eq!(binding.jwk["crv"], serde_json::json!("P-256"));
-    assert_eq!(binding.jwk["alg"], serde_json::json!("ES256"));
-    assert_eq!(binding.jwk["use"], serde_json::json!("sig"));
-    assert!(binding.jwk.get("x").is_some());
-    assert!(binding.jwk.get("y").is_some());
+    assert_eq!(jwk["kty"], serde_json::json!("EC"));
+    assert_eq!(jwk["crv"], serde_json::json!("P-256"));
+    assert_eq!(jwk["alg"], serde_json::json!("ES256"));
+    assert_eq!(jwk["use"], serde_json::json!("sig"));
+    assert!(jwk.get("x").is_some());
+    assert!(jwk.get("y").is_some());
 }
 
 #[test]
 fn key_jwk_binding_uses_okp_shape_for_eddsa_keys() {
     let key = key_for_algorithm("EdDSA");
     let binding = key_jwk_binding(&key, "EdDSA", Uuid::new_v4());
+    let jwk = serde_json::to_value(binding.jwk).unwrap();
 
-    assert_eq!(binding.jwk["kty"], serde_json::json!("OKP"));
-    assert_eq!(binding.jwk["crv"], serde_json::json!("Ed25519"));
-    assert_eq!(binding.jwk["alg"], serde_json::json!("EdDSA"));
-    assert_eq!(binding.jwk["use"], serde_json::json!("sig"));
-    assert!(binding.jwk.get("x").is_some());
+    assert_eq!(jwk["kty"], serde_json::json!("OKP"));
+    assert_eq!(jwk["crv"], serde_json::json!("Ed25519"));
+    assert_eq!(jwk["alg"], serde_json::json!("EdDSA"));
+    assert_eq!(jwk["use"], serde_json::json!("sig"));
+    assert!(jwk.get("x").is_some());
 }

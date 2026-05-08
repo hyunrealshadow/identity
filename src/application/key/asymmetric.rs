@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     application::error::{AppError, codes::key::KeyErrorCode},
     domain::key::{
-        CreateKeyJwkInput, KeyJwkRepository,
+        CreateKeyJwkInput, KeyJwkRepository, PublicJwk,
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
         model::{AsymmetricKeyAlgorithm, Key, KeyData, KeyType},
         repository::KeyRepository,
@@ -16,7 +16,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct GeneratedKeyJwk {
     pub algorithm: String,
-    pub jwk: serde_json::Value,
+    pub jwk: PublicJwk,
 }
 
 pub trait KeyJwkGenerator: Send + Sync {

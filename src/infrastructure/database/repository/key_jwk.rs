@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::database::entity::{key_jwk, key_jwk::Entity as KeyJwkEntity};
 use identity_domain::key::{
     CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, KeyOid,
+    PublicJwk,
 };
 
 pub struct KeyJwkRepositoryImpl {
@@ -18,20 +19,20 @@ impl KeyJwkRepositoryImpl {
     }
 }
 
-fn normalize_jwk_kid(mut jwk: serde_json::Value, oid: Uuid) -> serde_json::Value {
-    if let Some(object) = jwk.as_object_mut() {
-        object.insert("kid".to_owned(), serde_json::json!(oid.to_string()));
-    }
+fn normalize_jwk_kid(mut jwk: PublicJwk, oid: Uuid) -> PublicJwk {
+    jwk.set_key_id(oid.to_string());
     jwk
 }
 
 fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
     let created_at = DateTime::from_naive_utc_and_offset(model.created_at, chrono::Utc);
+    let jwk = serde_json::from_value::<PublicJwk>(model.jwk)
+        .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
     Ok(KeyJwk {
         oid: KeyJwkOid(model.oid),
         key_oid: KeyOid(model.key_oid),
         algorithm: model.algorithm,
-        jwk: normalize_jwk_kid(model.jwk, model.oid),
+        jwk: normalize_jwk_kid(jwk, model.oid),
         created_at,
     })
 }
@@ -51,16 +52,20 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .into_iter()
             .map(|input| {
                 let oid = Uuid::new_v4();
-                key_jwk::ActiveModel {
+                let jwk = normalize_jwk_kid(input.jwk, oid);
+                let jwk = serde_json::to_value(jwk)
+                    .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
+
+                Ok(key_jwk::ActiveModel {
                     oid: Set(oid),
                     key_oid: Set(Uuid::from(input.key_oid)),
                     algorithm: Set(input.algorithm),
-                    jwk: Set(normalize_jwk_kid(input.jwk, oid)),
+                    jwk: Set(jwk),
                     created_at: Set(now.naive_utc()),
                     ..Default::default()
-                }
+                })
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         let results = KeyJwkEntity::insert_many(models)
             .exec_with_returning(&self.db)
@@ -120,25 +125,33 @@ mod tests {
     use super::{KeyJwkRepositoryImpl, normalize_jwk_kid};
     use crate::database::entity::key_jwk;
     use chrono::Utc;
-    use identity_domain::key::{KeyJwkRepository, KeyOid};
+    use identity_domain::key::{KeyJwkRepository, KeyOid, PublicJwk};
     use sea_orm::{DatabaseBackend, IntoMockRow, MockDatabase};
     use serde_json::json;
     use uuid::Uuid;
+
+    fn rsa_public_jwk(alg: &str, kid: impl Into<String>) -> PublicJwk {
+        PublicJwk::Rsa {
+            key_use: Some("sig".to_owned()),
+            alg: Some(alg.to_owned()),
+            kid: Some(kid.into()),
+            n: "modulus".to_owned(),
+            e: "AQAB".to_owned(),
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        }
+    }
 
     #[test]
     fn key_jwk_repository_sets_kid_to_binding_oid() {
         let binding_oid = Uuid::new_v4();
         let normalized = normalize_jwk_kid(
-            json!({
-                "kty": "RSA",
-                "alg": "RS256",
-                "use": "sig",
-                "kid": Uuid::new_v4().to_string()
-            }),
+            rsa_public_jwk("RS256", Uuid::new_v4().to_string()),
             binding_oid,
         );
 
-        assert_eq!(normalized["kid"], json!(binding_oid.to_string()));
+        assert_eq!(normalized.key_id(), Some(binding_oid.to_string().as_str()));
     }
 
     #[test]
@@ -153,14 +166,16 @@ mod tests {
                 "kty": "RSA",
                 "alg": "RS256",
                 "use": "sig",
-                "kid": Uuid::new_v4().to_string()
+                "kid": Uuid::new_v4().to_string(),
+                "n": "modulus",
+                "e": "AQAB"
             }),
             created_at: Utc::now().naive_utc(),
             updated_at: None,
         })
         .unwrap();
 
-        assert_eq!(binding.jwk["kid"], json!(binding_oid.to_string()));
+        assert_eq!(binding.jwk.key_id(), Some(binding_oid.to_string().as_str()));
     }
 
     #[tokio::test]
@@ -177,7 +192,9 @@ mod tests {
                     "kty": "RSA",
                     "alg": "RS256",
                     "use": "sig",
-                    "kid": Uuid::new_v4().to_string()
+                    "kid": Uuid::new_v4().to_string(),
+                    "n": "modulus",
+                    "e": "AQAB"
                 }),
                 created_at: Utc::now().naive_utc(),
                 updated_at: None,
@@ -193,6 +210,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(Uuid::from(binding.oid), binding_oid);
-        assert_eq!(binding.jwk["kid"], json!(binding_oid.to_string()));
+        assert_eq!(binding.jwk.key_id(), Some(binding_oid.to_string().as_str()));
     }
 }

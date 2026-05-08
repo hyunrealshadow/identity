@@ -2,7 +2,7 @@ use crate::key::asymmetric::AsymmetricKeyService;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
 use identity_domain::auth::ACR_PASSWORD;
-use identity_domain::key::{KeyJwk, KeyJwkOid};
+use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
 
 #[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
@@ -632,12 +632,16 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
         oid: KeyJwkOid::from(binding_oid),
         key_oid: key.oid,
         algorithm: "RS256".to_owned(),
-        jwk: serde_json::json!({
-            "kty": "RSA",
-            "use": "sig",
-            "alg": "RS256",
-            "kid": binding_oid.to_string(),
-        }),
+        jwk: PublicJwk::Rsa {
+            key_use: Some("sig".to_owned()),
+            alg: Some("RS256".to_owned()),
+            kid: Some(binding_oid.to_string()),
+            n: "modulus".to_owned(),
+            e: "AQAB".to_owned(),
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        },
         created_at: Utc::now(),
     };
     let public_key = match &key.data {

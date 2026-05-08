@@ -1,18 +1,17 @@
 use http::StatusCode;
-use josekit::jwk::Jwk;
 use salvo::{Depot, Response, Router, handler};
 use serde::Serialize;
 
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
-    application::openid_connect::provider::OpenIdProviderService,
+    application::error::AppError, application::openid_connect::provider::OpenIdProviderService,
+    domain::key::PublicJwk,
 };
 
 use super::response::{app_state, render_json};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonWebKeySetResponse {
-    keys: Vec<Jwk>,
+    keys: Vec<PublicJwk>,
 }
 
 pub fn routes() -> Router {
@@ -39,14 +38,7 @@ async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> Result<(
 async fn keys_handler(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
     let ctx = app_state(depot)?;
     let key_jwks = ctx.services().key().list_available_jwks().await?;
-    let keys: Vec<Jwk> = key_jwks
-        .into_iter()
-        .map(|binding| {
-            serde_json::from_value(binding.jwk).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })
-        })
-        .collect::<Result<_, _>>()?;
+    let keys: Vec<PublicJwk> = key_jwks.into_iter().map(|binding| binding.jwk).collect();
 
     let response = JsonWebKeySetResponse { keys };
 

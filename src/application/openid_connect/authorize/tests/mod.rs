@@ -40,7 +40,7 @@ use identity_domain::{
     },
     key::{
         CreateKeyJwkInput, JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyJwkRepository,
-        KeyJwkRepositoryError, KeyOid, KeyType,
+        KeyJwkRepositoryError, KeyOid, KeyType, PublicJwk,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
         repository::{KeyRepository, KeyRepositoryError},
     },

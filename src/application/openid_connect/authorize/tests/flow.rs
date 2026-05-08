@@ -136,12 +136,16 @@ fn hybrid_binding(key_oid: KeyOid, binding_oid: Uuid) -> KeyJwk {
         oid: KeyJwkOid::from(binding_oid),
         key_oid,
         algorithm: "RS256".to_owned(),
-        jwk: serde_json::json!({
-            "kty": "RSA",
-            "use": "sig",
-            "alg": "RS256",
-            "kid": binding_oid.to_string(),
-        }),
+        jwk: PublicJwk::Rsa {
+            key_use: Some("sig".to_owned()),
+            alg: Some("RS256".to_owned()),
+            kid: Some(binding_oid.to_string()),
+            n: "modulus".to_owned(),
+            e: "AQAB".to_owned(),
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        },
         created_at: Utc::now(),
     }
 }

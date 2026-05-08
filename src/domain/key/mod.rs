@@ -6,6 +6,8 @@ pub mod model;
 pub mod repository;
 
 pub use algorithm::{AsymmetricKeyAlgorithm, JwaAlgorithmParseError, JwaSigningAlgorithm};
-pub use jwk::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError};
+pub use jwk::{
+    CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, PublicJwk,
+};
 pub use material::{AsymmetricKeyData, KeyData, SymmetricKeyAlgorithm, SymmetricKeyData};
 pub use model::{Key, KeyOid, KeyType, ParseKeyTypeError};
