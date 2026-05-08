@@ -20,11 +20,24 @@ pub struct RpInitiatedLogoutRequest {
     pub post_logout_redirect_uri: Option<String>,
     pub state: Option<String>,
     pub ui_locales: Option<String>,
+    pub session_oid: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrontChannelLogoutNotification {
+    pub client_id: Uuid,
+    pub logout_uri: Url,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LogoutOutcome {
-    Redirect { redirect_uri: Url },
+    Redirect {
+        redirect_uri: Url,
+    },
+    FrontChannel {
+        notifications: Vec<FrontChannelLogoutNotification>,
+        post_logout_redirect_uri: Option<Url>,
+    },
     LoggedOut,
 }
 
@@ -55,7 +68,9 @@ impl LogoutService {
         request: RpInitiatedLogoutRequest,
     ) -> Result<LogoutOutcome, AppError> {
         let Some(raw_redirect_uri) = request.post_logout_redirect_uri.as_deref() else {
-            return Ok(LogoutOutcome::LoggedOut);
+            return self
+                .outcome_with_frontchannel_notifications(request.session_oid, None)
+                .await;
         };
 
         let redirect_uri = Url::parse(raw_redirect_uri).map_err(|error| {
@@ -101,7 +116,62 @@ impl LogoutService {
             redirect_uri.query_pairs_mut().append_pair("state", state);
         }
 
-        Ok(LogoutOutcome::Redirect { redirect_uri })
+        self.outcome_with_frontchannel_notifications(request.session_oid, Some(redirect_uri))
+            .await
+    }
+
+    async fn outcome_with_frontchannel_notifications(
+        &self,
+        session_oid: Option<Uuid>,
+        post_logout_redirect_uri: Option<Url>,
+    ) -> Result<LogoutOutcome, AppError> {
+        let notifications = self.frontchannel_logout_notifications(session_oid).await?;
+
+        if !notifications.is_empty() {
+            return Ok(LogoutOutcome::FrontChannel {
+                notifications,
+                post_logout_redirect_uri,
+            });
+        }
+
+        match post_logout_redirect_uri {
+            Some(redirect_uri) => Ok(LogoutOutcome::Redirect { redirect_uri }),
+            None => Ok(LogoutOutcome::LoggedOut),
+        }
+    }
+
+    async fn frontchannel_logout_notifications(
+        &self,
+        session_oid: Option<Uuid>,
+    ) -> Result<Vec<FrontChannelLogoutNotification>, AppError> {
+        let Some(session_oid) = session_oid else {
+            return Ok(Vec::new());
+        };
+
+        let issuer = self.provider_service.issuer()?;
+        let clients = self
+            .client_repo
+            .find_frontchannel_logout_clients_by_session_oid(session_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::LogoutClientLookupFailed)
+                    .with_source(error)
+            })?;
+
+        Ok(clients
+            .into_iter()
+            .filter_map(|client| {
+                let mut logout_uri = client.metadata().frontchannel_logout_uri.clone()?;
+                logout_uri
+                    .query_pairs_mut()
+                    .append_pair("iss", issuer.as_str())
+                    .append_pair("sid", &session_oid.to_string());
+                Some(FrontChannelLogoutNotification {
+                    client_id: client.client().oid,
+                    logout_uri,
+                })
+            })
+            .collect())
     }
 
     fn validate_id_token_hint_issuer(&self, claims: &IdTokenHintClaims) -> Result<(), AppError> {
@@ -265,13 +335,21 @@ mod tests {
         ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
             Ok(self.clients.get(&oid).cloned())
         }
+
+        async fn find_frontchannel_logout_clients_by_session_oid(
+            &self,
+            _session_oid: Uuid,
+        ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+            Ok(self.clients.values().cloned().collect())
+        }
     }
 
-    fn service_with_client(
+    fn test_client(
         client_oid: Uuid,
         post_logout_redirect_uri: Option<&str>,
-    ) -> LogoutService {
-        let client = OpenIdConnectClient::new(
+        frontchannel_logout_uri: Option<&str>,
+    ) -> OpenIdConnectClient {
+        OpenIdConnectClient::new(
             Client {
                 oid: client_oid,
                 protocol: ClientProtocol::OpenIdConnect,
@@ -284,6 +362,9 @@ mod tests {
             OpenIdConnectClientMetadata {
                 post_logout_redirect_uris: post_logout_redirect_uri
                     .map(|uri| vec![Url::parse(uri).unwrap()]),
+                frontchannel_logout_uri: frontchannel_logout_uri
+                    .map(|uri| Url::parse(uri).unwrap()),
+                frontchannel_logout_session_required: Some(true),
                 response_types: Some(vec!["code".to_owned()]),
                 grant_types: Some(vec!["authorization_code".to_owned()]),
                 contacts: None,
@@ -317,13 +398,19 @@ mod tests {
             }],
             vec!["openid".to_owned()],
         )
-        .unwrap();
+        .unwrap()
+    }
 
-        let mut clients = HashMap::new();
-        clients.insert(client_oid, client);
+    fn service_with_clients(clients: Vec<OpenIdConnectClient>) -> LogoutService {
+        let mut client_map = HashMap::new();
+        for client in clients {
+            client_map.insert(client.client().oid, client);
+        }
 
         LogoutService::new(
-            Arc::new(FakeClientRepository { clients }),
+            Arc::new(FakeClientRepository {
+                clients: client_map,
+            }),
             Arc::new(OpenIdProviderService::new(Arc::new(
                 TestInstallationSetting(Arc::new(InstallationState {
                     initialized: true,
@@ -334,6 +421,17 @@ mod tests {
                 })),
             ))),
         )
+    }
+
+    fn service_with_client(
+        client_oid: Uuid,
+        post_logout_redirect_uri: Option<&str>,
+    ) -> LogoutService {
+        service_with_clients(vec![test_client(
+            client_oid,
+            post_logout_redirect_uri,
+            None,
+        )])
     }
 
     #[tokio::test]
@@ -353,6 +451,7 @@ mod tests {
                 post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
                 state: Some("state-123".to_owned()),
                 ui_locales: None,
+                session_oid: None,
             })
             .await
             .unwrap();
@@ -383,6 +482,7 @@ mod tests {
                 post_logout_redirect_uri: Some("https://evil.example.com/logout".to_owned()),
                 state: None,
                 ui_locales: None,
+                session_oid: None,
             })
             .await
             .unwrap_err();
@@ -403,11 +503,95 @@ mod tests {
                 post_logout_redirect_uri: None,
                 state: None,
                 ui_locales: None,
+                session_oid: None,
             })
             .await
             .unwrap();
 
         assert_eq!(outcome, LogoutOutcome::LoggedOut);
+    }
+
+    #[tokio::test]
+    async fn returns_frontchannel_logout_notifications_for_session_clients() {
+        let client_oid = Uuid::new_v4();
+        let session_oid = Uuid::new_v4();
+        let service = service_with_clients(vec![test_client(
+            client_oid,
+            None,
+            Some("https://rp.example.com/frontchannel_logout?existing=1"),
+        )]);
+
+        let outcome = service
+            .rp_initiated_logout(RpInitiatedLogoutRequest {
+                id_token_hint: None,
+                client_id: None,
+                logout_hint: None,
+                post_logout_redirect_uri: None,
+                state: None,
+                ui_locales: None,
+                session_oid: Some(session_oid),
+            })
+            .await
+            .unwrap();
+
+        let LogoutOutcome::FrontChannel {
+            notifications,
+            post_logout_redirect_uri,
+        } = outcome
+        else {
+            panic!("expected front-channel logout outcome");
+        };
+
+        assert!(post_logout_redirect_uri.is_none());
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].client_id, client_oid);
+        assert_eq!(
+            notifications[0].logout_uri.as_str(),
+            format!(
+                "https://rp.example.com/frontchannel_logout?existing=1&iss=https%3A%2F%2Fidentity.example.com%2F&sid={session_oid}"
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn frontchannel_logout_preserves_post_logout_redirect_uri() {
+        let client_oid = Uuid::new_v4();
+        let session_oid = Uuid::new_v4();
+        let service = service_with_clients(vec![test_client(
+            client_oid,
+            Some("https://rp.example.com/logout/callback"),
+            Some("https://rp.example.com/frontchannel_logout"),
+        )]);
+
+        let outcome = service
+            .rp_initiated_logout(RpInitiatedLogoutRequest {
+                id_token_hint: Some(signed_like_id_token_hint_for_test(
+                    "https://identity.example.com/",
+                    client_oid,
+                )),
+                client_id: None,
+                logout_hint: None,
+                post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
+                state: Some("state-123".to_owned()),
+                ui_locales: None,
+                session_oid: Some(session_oid),
+            })
+            .await
+            .unwrap();
+
+        let LogoutOutcome::FrontChannel {
+            notifications,
+            post_logout_redirect_uri,
+        } = outcome
+        else {
+            panic!("expected front-channel logout outcome");
+        };
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(
+            post_logout_redirect_uri.unwrap().as_str(),
+            "https://rp.example.com/logout/callback?state=state-123"
+        );
     }
 
     #[tokio::test]
@@ -424,6 +608,7 @@ mod tests {
                 post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
                 state: None,
                 ui_locales: None,
+                session_oid: None,
             })
             .await
             .unwrap_err();
@@ -448,6 +633,7 @@ mod tests {
                 post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
                 state: None,
                 ui_locales: None,
+                session_oid: None,
             })
             .await
             .unwrap_err();
@@ -472,6 +658,7 @@ mod tests {
                 post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
                 state: None,
                 ui_locales: None,
+                session_oid: None,
             })
             .await
             .unwrap_err();

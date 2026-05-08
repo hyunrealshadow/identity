@@ -90,6 +90,8 @@ struct ConformanceOidcMetadataValues {
     response_types: serde_json::Value,
     token_endpoint_auth_method: Option<String>,
     post_logout_redirect_uris: Option<serde_json::Value>,
+    frontchannel_logout_uri: Option<String>,
+    frontchannel_logout_session_required: Option<bool>,
     settings: serde_json::Value,
 }
 
@@ -322,6 +324,9 @@ async fn ensure_conformance_oidc_metadata(
             || row.response_types.as_ref() != Some(&values.response_types)
             || row.token_endpoint_auth_method != values.token_endpoint_auth_method
             || row.post_logout_redirect_uris != values.post_logout_redirect_uris
+            || row.frontchannel_logout_uri != values.frontchannel_logout_uri
+            || row.frontchannel_logout_session_required
+                != values.frontchannel_logout_session_required
             || row.settings != values.settings
         {
             let mut am: client_open_id_connect::ActiveModel = row.into();
@@ -329,6 +334,9 @@ async fn ensure_conformance_oidc_metadata(
             am.response_types = Set(Some(values.response_types));
             am.token_endpoint_auth_method = Set(values.token_endpoint_auth_method);
             am.post_logout_redirect_uris = Set(values.post_logout_redirect_uris);
+            am.frontchannel_logout_uri = Set(values.frontchannel_logout_uri);
+            am.frontchannel_logout_session_required =
+                Set(values.frontchannel_logout_session_required);
             am.settings = Set(values.settings);
             am.updated_at = Set(Some(now.into()));
             am.update(db).await.map_err(|error| {
@@ -345,6 +353,8 @@ async fn ensure_conformance_oidc_metadata(
         response_types: Set(Some(values.response_types)),
         token_endpoint_auth_method: Set(values.token_endpoint_auth_method),
         post_logout_redirect_uris: Set(values.post_logout_redirect_uris),
+        frontchannel_logout_uri: Set(values.frontchannel_logout_uri),
+        frontchannel_logout_session_required: Set(values.frontchannel_logout_session_required),
         settings: Set(values.settings),
         created_at: Set(now.into()),
         updated_at: Set(None),
@@ -363,6 +373,8 @@ fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> Conformance
         response_types: serde_json::json!(spec.response_types),
         token_endpoint_auth_method: Some(spec.token_endpoint_auth_method.to_owned()),
         post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
+        frontchannel_logout_uri: Some(conformance_frontchannel_logout_uri()),
+        frontchannel_logout_session_required: Some(true),
         settings: conformance_client_settings(),
     }
 }
@@ -435,6 +447,7 @@ fn conformance_redirect_uris() -> serde_json::Value {
         "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-session/callback",
+        "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/callback",
         "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
     ])
 }
@@ -444,6 +457,11 @@ fn conformance_post_logout_redirect_uris() -> serde_json::Value {
         "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect",
         "https://localhost.emobix.co.uk:8443/test/a/identity-session/post_logout_redirect"
     ])
+}
+
+fn conformance_frontchannel_logout_uri() -> String {
+    "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout"
+        .to_owned()
 }
 
 fn conformance_client_settings() -> serde_json::Value {
@@ -611,6 +629,9 @@ mod tests {
             redirect_uris
                 .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-session/callback")
         );
+        assert!(redirect_uris.contains(
+            &"https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/callback"
+        ));
         assert!(
             redirect_uris
                 .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback")
@@ -653,5 +674,18 @@ mod tests {
             values.post_logout_redirect_uris,
             Some(super::conformance_post_logout_redirect_uris())
         );
+    }
+
+    #[test]
+    fn conformance_oidc_metadata_values_include_frontchannel_logout_metadata() {
+        let values = super::conformance_oidc_metadata_values(&super::conformance_client_specs()[0]);
+
+        assert_eq!(
+            values.frontchannel_logout_uri.as_deref(),
+            Some(
+                "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout"
+            )
+        );
+        assert_eq!(values.frontchannel_logout_session_required, Some(true));
     }
 }

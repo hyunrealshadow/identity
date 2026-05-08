@@ -27,6 +27,8 @@ pub(in crate::openid_connect) fn test_metadata(
 ) -> OpenIdConnectClientMetadata {
     OpenIdConnectClientMetadata {
         post_logout_redirect_uris: None,
+        frontchannel_logout_uri: None,
+        frontchannel_logout_session_required: None,
         response_types: None,
         grant_types: None,
         contacts: None,

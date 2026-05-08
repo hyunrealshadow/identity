@@ -11,6 +11,8 @@ pub struct Model {
     pub client_id: i64,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub post_logout_redirect_uris: Option<Json>,
+    pub frontchannel_logout_uri: Option<String>,
+    pub frontchannel_logout_session_required: Option<bool>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub response_types: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]

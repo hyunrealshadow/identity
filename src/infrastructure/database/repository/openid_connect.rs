@@ -8,7 +8,8 @@ use crate::database::entity::{
     client, client::Entity as ClientEntity, client_open_id_connect,
     client_open_id_connect::Entity as OpenIdConnectClientEntity, client_platform,
     client_platform::Entity as ClientPlatformEntity, client_scope,
-    client_scope::Entity as ClientScopeEntity, scope, scope::Entity as ScopeEntity,
+    client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
+    scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
 };
 use identity_domain::client::model::Client;
 use identity_domain::openid_connect::{
@@ -73,6 +74,8 @@ fn to_metadata(
 
     Ok(OpenIdConnectClientMetadata {
         post_logout_redirect_uris: parse_optional_urls(model.post_logout_redirect_uris.as_ref())?,
+        frontchannel_logout_uri: parse_optional_url(model.frontchannel_logout_uri.as_deref())?,
+        frontchannel_logout_session_required: model.frontchannel_logout_session_required,
         response_types: deserialize_optional_string_vec(model.response_types.as_ref())?,
         grant_types: deserialize_optional_string_vec(model.grant_types.as_ref())?,
         contacts: deserialize_optional_string_vec(model.contacts.as_ref())?,
@@ -180,16 +183,66 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
                 .map_err(OpenIdConnectClientRepositoryError::InvalidClient)?,
         ))
     }
+
+    async fn find_frontchannel_logout_clients_by_session_oid(
+        &self,
+        session_oid: uuid::Uuid,
+    ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let Some(session_model) = SessionEntity::find()
+            .filter(session::Column::Oid.eq(session_oid))
+            .one(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+        else {
+            return Ok(Vec::new());
+        };
+
+        let client_ids = LoginEntity::find()
+            .filter(login::Column::SessionId.eq(session_model.id))
+            .select_only()
+            .column(login::Column::ClientId)
+            .into_tuple::<i64>()
+            .all(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+
+        let mut clients = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for client_id in client_ids {
+            if !seen.insert(client_id) {
+                continue;
+            }
+
+            let Some(client_model) = ClientEntity::find_by_id(client_id)
+                .one(&self.db)
+                .await
+                .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+            else {
+                continue;
+            };
+
+            let Some(client) = self.find_by_oid(client_model.oid).await? else {
+                continue;
+            };
+
+            if client.metadata().frontchannel_logout_uri.is_some() {
+                clients.push(client);
+            }
+        }
+
+        Ok(clients)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        deserialize_optional_string_vec, parse_optional_url, parse_optional_urls, to_platform,
+        deserialize_optional_string_vec, parse_optional_url, parse_optional_urls, to_metadata,
+        to_platform,
     };
     use crate::{
         domain::openid_connect::OpenIdConnectClientPlatformType,
-        infrastructure::database::entity::client_platform,
+        infrastructure::database::entity::{client_open_id_connect, client_platform},
     };
     use chrono::Utc;
     use serde_json::json;
@@ -214,6 +267,52 @@ mod tests {
         ])))
         .unwrap();
         assert_eq!(urls.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn maps_frontchannel_logout_metadata() {
+        let metadata = to_metadata(client_open_id_connect::Model {
+            id: 1,
+            client_id: 2,
+            post_logout_redirect_uris: None,
+            frontchannel_logout_uri: Some("https://rp.example.com/frontchannel_logout".to_owned()),
+            frontchannel_logout_session_required: Some(true),
+            response_types: None,
+            grant_types: None,
+            contacts: None,
+            logo_uri: None,
+            client_uri: None,
+            policy_uri: None,
+            tos_uri: None,
+            sector_identifier_uri: None,
+            subject_type: None,
+            id_token_signed_response_alg: None,
+            id_token_encrypted_response_alg: None,
+            id_token_encrypted_response_enc: None,
+            userinfo_signed_response_alg: None,
+            userinfo_encrypted_response_alg: None,
+            userinfo_encrypted_response_enc: None,
+            request_object_signing_alg: None,
+            request_object_encryption_alg: None,
+            request_object_encryption_enc: None,
+            token_endpoint_auth_method: None,
+            token_endpoint_auth_signing_alg: None,
+            default_max_age: None,
+            require_auth_time: None,
+            default_acr_values: None,
+            initiate_login_uri: None,
+            request_uris: None,
+            settings: json!({}),
+            created_at: Utc::now().into(),
+            updated_at: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            metadata.frontchannel_logout_uri.unwrap().as_str(),
+            "https://rp.example.com/frontchannel_logout"
+        );
+        assert_eq!(metadata.frontchannel_logout_session_required, Some(true));
     }
 
     #[test]

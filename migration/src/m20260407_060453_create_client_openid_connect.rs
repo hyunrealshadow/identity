@@ -10,6 +10,8 @@ pub enum ClientOpenIdConnect {
     Id,
     ClientId,
     PostLogoutRedirectUris,
+    FrontchannelLogoutUri,
+    FrontchannelLogoutSessionRequired,
     ResponseTypes,
     GrantTypes,
     Contacts,
@@ -52,6 +54,10 @@ impl MigrationTrait for Migration {
                     .col(big_integer(ClientOpenIdConnect::ClientId))
                     .col(json_binary_null(
                         ClientOpenIdConnect::PostLogoutRedirectUris,
+                    ))
+                    .col(string_null(ClientOpenIdConnect::FrontchannelLogoutUri))
+                    .col(boolean_null(
+                        ClientOpenIdConnect::FrontchannelLogoutSessionRequired,
                     ))
                     .col(json_binary_null(ClientOpenIdConnect::ResponseTypes))
                     .col(json_binary_null(ClientOpenIdConnect::GrantTypes))

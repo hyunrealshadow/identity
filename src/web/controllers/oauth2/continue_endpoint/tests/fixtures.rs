@@ -215,6 +215,8 @@ pub(super) async fn continue_state(
         id: 31,
         client_id: client_model.id,
         post_logout_redirect_uris: None,
+        frontchannel_logout_uri: None,
+        frontchannel_logout_session_required: None,
         response_types: None,
         grant_types: None,
         contacts: None,

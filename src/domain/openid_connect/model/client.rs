@@ -62,6 +62,8 @@ pub struct OpenIdConnectClientPlatform {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenIdConnectClientMetadata {
     pub post_logout_redirect_uris: Option<Vec<Url>>,
+    pub frontchannel_logout_uri: Option<Url>,
+    pub frontchannel_logout_session_required: Option<bool>,
     pub response_types: Option<Vec<String>>,
     pub grant_types: Option<Vec<String>>,
     pub contacts: Option<Vec<String>>,
@@ -216,6 +218,10 @@ mod tests {
             post_logout_redirect_uris: Some(vec![
                 Url::parse("https://rp.example.com/logout/callback").unwrap(),
             ]),
+            frontchannel_logout_uri: Some(
+                Url::parse("https://rp.example.com/frontchannel_logout").unwrap(),
+            ),
+            frontchannel_logout_session_required: Some(true),
             response_types: Some(vec!["code".to_string()]),
             grant_types: Some(vec!["authorization_code".to_string()]),
             contacts: None,
@@ -248,6 +254,11 @@ mod tests {
             metadata.post_logout_redirect_uris.unwrap()[0].as_str(),
             "https://rp.example.com/logout/callback"
         );
+        assert_eq!(
+            metadata.frontchannel_logout_uri.unwrap().as_str(),
+            "https://rp.example.com/frontchannel_logout"
+        );
+        assert_eq!(metadata.frontchannel_logout_session_required, Some(true));
     }
 
     #[test]
@@ -317,6 +328,8 @@ mod tests {
 
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: None,
+            frontchannel_logout_uri: None,
+            frontchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -375,6 +388,8 @@ mod tests {
 
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: None,
+            frontchannel_logout_uri: None,
+            frontchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -410,6 +425,8 @@ mod tests {
     fn stores_skip_consent_flag() {
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: None,
+            frontchannel_logout_uri: None,
+            frontchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -448,6 +465,8 @@ mod tests {
     fn stores_client_policy_settings_together() {
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: None,
+            frontchannel_logout_uri: None,
+            frontchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -497,6 +516,8 @@ mod tests {
 
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: None,
+            frontchannel_logout_uri: None,
+            frontchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -564,6 +585,8 @@ mod tests {
         };
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: None,
+            frontchannel_logout_uri: None,
+            frontchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
