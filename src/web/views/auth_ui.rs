@@ -3,15 +3,14 @@
 //! These structs hold data passed to Tera templates for the login flow.
 
 use serde::Serialize;
-use uuid::Uuid;
 
 // ─── Shared sub-types ─────────────────────────────────────────────────────────
 
 /// A single active account entry for the account picker.
 #[derive(Debug, Serialize)]
 pub struct AccountData {
-    /// session.oid — carried as the form `session_id` field.
-    pub id: Uuid,
+    /// Data-protected session.oid carried as the form `session_id` field.
+    pub id: String,
     pub name: String,
     pub email: String,
 }

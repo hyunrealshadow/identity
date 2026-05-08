@@ -206,6 +206,7 @@ impl AuthorizeService {
         protected_login_oid: &str,
         session_oid: Uuid,
         user_oid: Uuid,
+        protected_session_id: Option<String>,
         source: SelectionSource,
     ) -> Result<(), AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
@@ -213,6 +214,7 @@ impl AuthorizeService {
             login.client_authorization_oid,
             session_oid,
             user_oid,
+            protected_session_id,
             source,
         )
         .await
@@ -233,6 +235,7 @@ impl AuthorizeService {
         authorization_request_id: Uuid,
         session_oid: Uuid,
         user_oid: Uuid,
+        protected_session_id: Option<String>,
         source: SelectionSource,
     ) -> Result<(), AppError> {
         let updated = self
@@ -241,6 +244,7 @@ impl AuthorizeService {
                 authorization_request_id,
                 session_oid,
                 user_oid,
+                protected_session_id,
                 source,
             )
             .await
@@ -340,23 +344,85 @@ impl AuthorizeService {
         user_oid: Uuid,
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
-        let request = self
-            .load_authorization_request(authorization_request_id)
+        self.approve_authorization_request_with_protected_session_id(
+            authorization_request_id,
+            session_oid,
+            user_oid,
+            None,
+            auth_time,
+        )
+        .await
+    }
+
+    pub async fn approve_authorization_request_with_protected_session_id(
+        &self,
+        authorization_request_id: Uuid,
+        session_oid: Uuid,
+        user_oid: Uuid,
+        protected_session_id: Option<String>,
+        auth_time: Option<i64>,
+    ) -> Result<Url, AppError> {
+        let stored = self
+            .load_stored_authorization_request(authorization_request_id)
             .await?;
+        let request = stored.request;
+        let protected_session_id = match stored.interaction.selected_protected_session_id {
+            Some(protected_session_id) => {
+                let stored_session_oid = self.decrypt_session_id(&protected_session_id).await?;
+                if stored_session_oid != session_oid {
+                    return Err(AppError::from_code(
+                        AuthorizeErrorCode::StoredSessionIdInvalid,
+                    ));
+                }
+                protected_session_id
+            }
+            None => match protected_session_id {
+                Some(protected_session_id) => {
+                    let stored_session_oid = self.decrypt_session_id(&protected_session_id).await?;
+                    if stored_session_oid != session_oid {
+                        return Err(AppError::from_code(
+                            AuthorizeErrorCode::StoredSessionIdInvalid,
+                        ));
+                    }
+                    protected_session_id
+                }
+                None => self.encrypt_session_id(session_oid).await?,
+            },
+        };
 
         let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
         })?;
 
         let redirect = if response_type.is_implicit() {
-            self.approve_implicit_flow(&request, session_oid, user_oid, response_type, auth_time)
-                .await?
+            self.approve_implicit_flow(
+                &request,
+                session_oid,
+                &protected_session_id,
+                user_oid,
+                response_type,
+                auth_time,
+            )
+            .await?
         } else if response_type.uses_front_channel_response() {
-            self.approve_hybrid_flow(&request, session_oid, user_oid, response_type, auth_time)
-                .await?
+            self.approve_hybrid_flow(
+                &request,
+                session_oid,
+                &protected_session_id,
+                user_oid,
+                response_type,
+                auth_time,
+            )
+            .await?
         } else {
-            self.approve_code_flow(&request, user_oid, session_oid, auth_time)
-                .await?
+            self.approve_code_flow(
+                &request,
+                user_oid,
+                session_oid,
+                &protected_session_id,
+                auth_time,
+            )
+            .await?
         };
 
         self.mark_authorization_request_completed(authorization_request_id)
@@ -370,6 +436,7 @@ impl AuthorizeService {
         request: &AuthorizationRequestData,
         user_oid: Uuid,
         session_oid: Uuid,
+        protected_session_id: &str,
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
         let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
@@ -377,7 +444,13 @@ impl AuthorizeService {
         })?;
 
         let (protected_code, _) = self
-            .create_authorization_code(request, user_oid, session_oid, auth_time)
+            .create_authorization_code(
+                request,
+                user_oid,
+                session_oid,
+                protected_session_id,
+                auth_time,
+            )
             .await?;
 
         let mut redirect = redirect_uri;
@@ -387,7 +460,7 @@ impl AuthorizeService {
             .append_pair("state", &request.state)
             .append_pair(
                 "session_state",
-                &session_state_for_authorize_response(request, session_oid)?,
+                &session_state_for_authorize_response(request, protected_session_id)?,
             );
 
         Ok(redirect)
@@ -398,6 +471,7 @@ impl AuthorizeService {
         request: &AuthorizationRequestData,
         user_oid: Uuid,
         session_oid: Uuid,
+        protected_session_id: &str,
         auth_time: Option<i64>,
     ) -> Result<(String, Uuid), AppError> {
         let record = self
@@ -416,6 +490,7 @@ impl AuthorizeService {
                         code_challenge_method: request.code_challenge_method.clone(),
                         user_oid: user_oid.to_string(),
                         session_oid: session_oid.to_string(),
+                        protected_session_id: Some(protected_session_id.to_string()),
                         acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
                         redirect_uri: request.redirect_uri.clone(),
                         auth_time,
@@ -479,13 +554,15 @@ impl AuthorizeService {
         protected_login_oid: &str,
         session_oid: Uuid,
         user_oid: Uuid,
+        protected_session_id: Option<String>,
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
-        self.approve_authorization_request(
+        self.approve_authorization_request_with_protected_session_id(
             login.client_authorization_oid,
             session_oid,
             user_oid,
+            protected_session_id,
             auth_time,
         )
         .await
@@ -503,7 +580,7 @@ impl AuthorizeService {
 
 pub(super) fn session_state_for_authorize_response(
     request: &AuthorizationRequestData,
-    session_oid: Uuid,
+    protected_session_id: &str,
 ) -> Result<String, AppError> {
     let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
         AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
@@ -512,7 +589,7 @@ pub(super) fn session_state_for_authorize_response(
     Ok(crate::openid_connect::session::calculate_session_state(
         &request.client_id,
         &origin,
-        &session_oid.to_string(),
-        &session_oid.to_string(),
+        protected_session_id,
+        protected_session_id,
     ))
 }

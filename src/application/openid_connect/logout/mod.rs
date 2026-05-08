@@ -21,6 +21,7 @@ pub struct RpInitiatedLogoutRequest {
     pub state: Option<String>,
     pub ui_locales: Option<String>,
     pub session_oid: Option<Uuid>,
+    pub protected_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,7 +70,11 @@ impl LogoutService {
     ) -> Result<LogoutOutcome, AppError> {
         let Some(raw_redirect_uri) = request.post_logout_redirect_uri.as_deref() else {
             return self
-                .outcome_with_frontchannel_notifications(request.session_oid, None)
+                .outcome_with_frontchannel_notifications(
+                    request.session_oid,
+                    request.protected_session_id.as_deref(),
+                    None,
+                )
                 .await;
         };
 
@@ -116,16 +121,23 @@ impl LogoutService {
             redirect_uri.query_pairs_mut().append_pair("state", state);
         }
 
-        self.outcome_with_frontchannel_notifications(request.session_oid, Some(redirect_uri))
-            .await
+        self.outcome_with_frontchannel_notifications(
+            request.session_oid,
+            request.protected_session_id.as_deref(),
+            Some(redirect_uri),
+        )
+        .await
     }
 
     async fn outcome_with_frontchannel_notifications(
         &self,
         session_oid: Option<Uuid>,
+        protected_session_id: Option<&str>,
         post_logout_redirect_uri: Option<Url>,
     ) -> Result<LogoutOutcome, AppError> {
-        let notifications = self.frontchannel_logout_notifications(session_oid).await?;
+        let notifications = self
+            .frontchannel_logout_notifications(session_oid, protected_session_id)
+            .await?;
 
         if !notifications.is_empty() {
             return Ok(LogoutOutcome::FrontChannel {
@@ -143,6 +155,7 @@ impl LogoutService {
     async fn frontchannel_logout_notifications(
         &self,
         session_oid: Option<Uuid>,
+        protected_session_id: Option<&str>,
     ) -> Result<Vec<FrontChannelLogoutNotification>, AppError> {
         let Some(session_oid) = session_oid else {
             return Ok(Vec::new());
@@ -165,7 +178,7 @@ impl LogoutService {
                 logout_uri
                     .query_pairs_mut()
                     .append_pair("iss", issuer.as_str())
-                    .append_pair("sid", &session_oid.to_string());
+                    .append_pair("sid", protected_session_id.unwrap_or_default());
                 Some(FrontChannelLogoutNotification {
                     client_id: client.client().oid,
                     logout_uri,
@@ -452,6 +465,7 @@ mod tests {
                 state: Some("state-123".to_owned()),
                 ui_locales: None,
                 session_oid: None,
+                protected_session_id: Some("protected-session".to_string()),
             })
             .await
             .unwrap();
@@ -483,6 +497,7 @@ mod tests {
                 state: None,
                 ui_locales: None,
                 session_oid: None,
+                protected_session_id: None,
             })
             .await
             .unwrap_err();
@@ -504,6 +519,7 @@ mod tests {
                 state: None,
                 ui_locales: None,
                 session_oid: None,
+                protected_session_id: None,
             })
             .await
             .unwrap();
@@ -530,6 +546,7 @@ mod tests {
                 state: None,
                 ui_locales: None,
                 session_oid: Some(session_oid),
+                protected_session_id: Some("protected-session".to_string()),
             })
             .await
             .unwrap();
@@ -547,9 +564,13 @@ mod tests {
         assert_eq!(notifications[0].client_id, client_oid);
         assert_eq!(
             notifications[0].logout_uri.as_str(),
-            format!(
-                "https://rp.example.com/frontchannel_logout?existing=1&iss=https%3A%2F%2Fidentity.example.com%2F&sid={session_oid}"
-            )
+            "https://rp.example.com/frontchannel_logout?existing=1&iss=https%3A%2F%2Fidentity.example.com%2F&sid=protected-session"
+        );
+        assert!(
+            !notifications[0]
+                .logout_uri
+                .as_str()
+                .contains(&session_oid.to_string())
         );
     }
 
@@ -575,6 +596,7 @@ mod tests {
                 state: Some("state-123".to_owned()),
                 ui_locales: None,
                 session_oid: Some(session_oid),
+                protected_session_id: Some("protected-session".to_string()),
             })
             .await
             .unwrap();
@@ -609,6 +631,7 @@ mod tests {
                 state: None,
                 ui_locales: None,
                 session_oid: None,
+                protected_session_id: None,
             })
             .await
             .unwrap_err();
@@ -634,6 +657,7 @@ mod tests {
                 state: None,
                 ui_locales: None,
                 session_oid: None,
+                protected_session_id: None,
             })
             .await
             .unwrap_err();
@@ -659,6 +683,7 @@ mod tests {
                 state: None,
                 ui_locales: None,
                 session_oid: None,
+                protected_session_id: None,
             })
             .await
             .unwrap_err();

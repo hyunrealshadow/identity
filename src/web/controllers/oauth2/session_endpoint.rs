@@ -3,7 +3,7 @@ use salvo::{Depot, Request, Response, handler};
 
 use crate::controllers::{
     response::{app_state, render_html},
-    shared::load_active_sessions,
+    shared::load_active_session_entries,
 };
 
 #[handler]
@@ -13,10 +13,10 @@ pub async fn check_session_iframe(
     res: &mut Response,
 ) -> Result<(), identity_application::error::AppError> {
     let ctx = app_state(depot)?;
-    let active_sessions = load_active_sessions(&ctx, req.headers()).await?;
+    let active_sessions = load_active_session_entries(&ctx, req.headers()).await?;
     let op_browser_state = active_sessions
         .iter()
-        .map(|session| session.session_oid.to_string())
+        .map(|entry| entry.protected_session_id.as_str())
         .collect::<Vec<_>>()
         .join(".");
     let body = format!(

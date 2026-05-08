@@ -164,6 +164,7 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
         },
         interaction: AuthorizationInteractionState {
             selected_session_oid: Some(session_oid.to_string()),
+            selected_protected_session_id: None,
             selected_user_oid: Some(user_oid.to_string()),
             selection_source: Some(SelectionSource::FreshLogin),
             consent_state: ConsentState::Pending,

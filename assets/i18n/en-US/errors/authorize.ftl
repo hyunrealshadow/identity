@@ -59,3 +59,4 @@ E23056 = The client is not allowed to request one or more scopes.
 E23060 = The id_token_hint issuer is invalid.
 E23061 = Encrypted request objects are not supported.
 E23062 = The authorization interaction is no longer pending.
+E23063 = An unexpected error occurred due to an invalid stored session_id.

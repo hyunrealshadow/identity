@@ -67,6 +67,7 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         oid: Uuid,
         session_oid: Uuid,
         user_oid: Uuid,
+        protected_session_id: Option<String>,
         source: SelectionSource,
     ) -> Result<bool, ClientAuthorizationRepositoryError> {
         let mut records = self.records.lock().unwrap();
@@ -87,6 +88,7 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         }
 
         stored.interaction.selected_session_oid = Some(session_oid.to_string());
+        stored.interaction.selected_protected_session_id = protected_session_id;
         stored.interaction.selected_user_oid = Some(user_oid.to_string());
         stored.interaction.selection_source = Some(source);
         record.data = serde_json::to_value(stored).unwrap();

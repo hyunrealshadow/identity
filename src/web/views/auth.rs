@@ -4,7 +4,6 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use identity_domain::user::CredentialType;
 
@@ -47,8 +46,8 @@ pub struct ActiveAccountsResponse {
 /// A single logged-in account entry.
 #[derive(Debug, Serialize)]
 pub struct AccountItem {
-    /// session.oid, externally named `id`.
-    pub id: Uuid,
+    /// Data-protected session.oid, externally named `id`.
+    pub id: String,
     /// User display name.
     pub name: String,
     /// Full email (not masked — this is the user's own account list).
@@ -63,8 +62,8 @@ pub struct AccountItem {
 /// `POST /api/auth/login/select` request.
 #[derive(Debug, Deserialize)]
 pub struct SelectAccountRequest {
-    /// session.oid to select.
-    pub id: Uuid,
+    /// Data-protected session.oid to select.
+    pub id: String,
 }
 
 /// `POST /api/auth/login/select` response (success).
@@ -154,8 +153,8 @@ pub struct ChallengeResponse {
 /// Session summary.
 #[derive(Debug, Serialize)]
 pub struct SessionInfo {
-    /// session.oid, externally named `id`.
-    pub id: Uuid,
+    /// Data-protected session.oid, externally named `id`.
+    pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
 }

@@ -588,6 +588,7 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
         _oid: Uuid,
         _session_oid: Uuid,
         _user_oid: Uuid,
+        _protected_session_id: Option<String>,
         _source: identity_domain::client_authorization::SelectionSource,
     ) -> Result<bool, ClientAuthorizationRepositoryError> {
         Ok(false)

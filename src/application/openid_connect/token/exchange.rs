@@ -76,6 +76,9 @@ impl TokenService {
             serde_json::from_value(record.data.clone()).map_err(|error| {
                 AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
             })?;
+        let protected_session_id = self
+            .protected_session_id(&data.session_oid, data.protected_session_id.as_deref())
+            .await?;
 
         let redirect_uri = params
             .redirect_uri
@@ -118,6 +121,7 @@ impl TokenService {
                 &data.scope,
                 &data.user_oid,
                 &data.session_oid,
+                Some(&protected_session_id),
                 Some(record.oid),
             )
             .await?;
@@ -130,7 +134,7 @@ impl TokenService {
             &audience,
             &client_id_str,
             &user_oid,
-            &data.session_oid,
+            &protected_session_id,
             &data.scope,
             data.claims.as_ref(),
         )?;
@@ -163,6 +167,7 @@ impl TokenService {
                     &data.scope,
                     &data.user_oid,
                     &data.session_oid,
+                    Some(&protected_session_id),
                     data.auth_time,
                     None,
                 )
@@ -247,6 +252,12 @@ impl TokenService {
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::DeserializeRefreshFailed).with_source(error)
             })?;
+        let protected_session_id = self
+            .protected_session_id(
+                &refresh_data.session_oid,
+                refresh_data.protected_session_id.as_deref(),
+            )
+            .await?;
         if authenticated_client_oid.to_string() != client_id
             || refresh_record.client_oid != authenticated_client_oid
         {
@@ -276,6 +287,7 @@ impl TokenService {
                 &scope,
                 &refresh_data.user_oid,
                 &refresh_data.session_oid,
+                Some(&protected_session_id),
                 None,
             )
             .await?;
@@ -288,7 +300,7 @@ impl TokenService {
             client_id,
             client_id,
             &user_oid,
-            &refresh_data.session_oid,
+            &protected_session_id,
             &scope,
             None,
         )?;
@@ -319,6 +331,7 @@ impl TokenService {
                 &scope,
                 &refresh_data.user_oid,
                 &refresh_data.session_oid,
+                Some(&protected_session_id),
                 refresh_data.auth_time,
                 Some(rotated_from.as_str()),
             )
@@ -333,5 +346,25 @@ impl TokenService {
             expires_in: 3600,
             scope,
         })
+    }
+
+    async fn protected_session_id(
+        &self,
+        session_oid: &str,
+        existing: Option<&str>,
+    ) -> Result<String, AppError> {
+        if let Some(existing) = existing {
+            return Ok(existing.to_string());
+        }
+
+        let session_oid = Uuid::parse_str(session_oid).map_err(|error| {
+            AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
+        })?;
+        self.data_protector
+            .protect("session-id", session_oid.as_bytes())
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
+            })
     }
 }

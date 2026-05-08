@@ -14,7 +14,6 @@ use std::error::Error as StdError;
 use http::HeaderMap;
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::Deserialize;
-use uuid::Uuid;
 
 use super::response::{
     AppResponse, app_state, parse_form, parse_query, redirect_to_response, render_app_error,
@@ -22,7 +21,7 @@ use super::response::{
 };
 use super::shared::{
     append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
-    csrf_token, is_secure_cookie, load_active_sessions,
+    csrf_token, is_secure_cookie, load_active_session_entries, unprotect_session_id,
 };
 use crate::views::auth_ui::{AccountData, IdentifierPageData, OtpPageData, PasswordPageData};
 use crate::{
@@ -87,7 +86,7 @@ struct IdentifierForm {
 
 #[derive(Debug, Deserialize)]
 struct SelectForm {
-    session_id: Uuid,
+    session_id: String,
     login_id: Option<String>,
 }
 
@@ -117,14 +116,14 @@ fn invalid_request_message(ctx: &AppState, headers: &HeaderMap) -> String {
 }
 
 async fn load_account_data(ctx: &AppState, headers: &HeaderMap) -> Vec<AccountData> {
-    load_active_sessions(ctx, headers)
+    load_active_session_entries(ctx, headers)
         .await
         .unwrap_or_else(|_| Vec::new())
         .into_iter()
-        .map(|account| AccountData {
-            id: account.session_oid,
-            name: account.user_name,
-            email: account.user_email,
+        .map(|entry| AccountData {
+            id: entry.protected_session_id,
+            name: entry.session.user_name,
+            email: entry.session.user_email,
         })
         .collect()
 }
@@ -201,13 +200,13 @@ async fn login_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse,
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let q: LoginQuery = parse_query(req)?;
-    let accounts = match load_active_sessions(&ctx, &headers).await {
+    let accounts = match load_active_session_entries(&ctx, &headers).await {
         Ok(list) => list
             .into_iter()
-            .map(|account| AccountData {
-                id: account.session_oid,
-                name: account.user_name,
-                email: account.user_email,
+            .map(|entry| AccountData {
+                id: entry.protected_session_id,
+                name: entry.session.user_name,
+                email: entry.session.user_email,
             })
             .collect(),
         Err(e) => {
@@ -295,38 +294,46 @@ async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse
     let headers = req.headers().clone();
     let body: SelectForm = parse_form(req).await?;
 
-    let response = match ctx
-        .services()
-        .session()
-        .select_session(body.session_id)
-        .await
-    {
-        Ok(session) => {
-            if let Some(login_id) = body.login_id.as_deref() {
-                ctx.services()
-                    .oidc_authorize()
-                    .record_selection_by_login(
-                        login_id,
-                        session.oid,
-                        session.user_oid,
-                        SelectionSource::AccountPicker,
-                    )
-                    .await?;
-            }
+    let session_oid = unprotect_session_id(&ctx, &body.session_id).await;
+    let response = match session_oid {
+        Ok(session_oid) => match ctx.services().session().select_session(session_oid).await {
+            Ok(session) => {
+                let cookie = build_selected_session_cookie(
+                    &ctx,
+                    &headers,
+                    session.oid,
+                    is_secure_cookie(&ctx),
+                )
+                .await?;
+                if let Some(login_id) = body.login_id.as_deref() {
+                    ctx.services()
+                        .oidc_authorize()
+                        .record_selection_by_login(
+                            login_id,
+                            session.oid,
+                            session.user_oid,
+                            Some(cookie.protected_session_id.clone()),
+                            SelectionSource::AccountPicker,
+                        )
+                        .await?;
+                }
 
-            let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-            let target = body
-                .login_id
-                .as_deref()
-                .map(oauth2_continue_url)
-                .unwrap_or_else(|| "/".to_string());
-            let mut response = redirect_to_response(&target);
-            append_set_cookie(&mut response, &cookie);
-            response
-        }
+                let target = body
+                    .login_id
+                    .as_deref()
+                    .map(oauth2_continue_url)
+                    .unwrap_or_else(|| "/".to_string());
+                let mut response = redirect_to_response(&target);
+                append_set_cookie(&mut response, &cookie.header);
+                response
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "select_session failed");
+                redirect_to_response("/login")
+            }
+        },
         Err(e) => {
-            tracing::error!(error = %e, "select_session failed");
+            tracing::error!(error = %e, "unprotect_session_id failed");
             redirect_to_response("/login")
         }
     };
@@ -489,20 +496,21 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         .await
     {
         Ok(ChallengeOutcome::Authenticated { session, .. }) => {
+            let cookie =
+                build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx))
+                    .await?;
             ctx.services()
                 .oidc_authorize()
                 .record_selection_by_login(
                     &body.login_id,
                     session.oid,
                     session.user_oid,
+                    Some(cookie.protected_session_id.clone()),
                     SelectionSource::FreshLogin,
                 )
                 .await?;
-
-            let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
             let mut response = redirect_to_response(&oauth2_continue_url(&body.login_id));
-            append_set_cookie(&mut response, &cookie);
+            append_set_cookie(&mut response, &cookie.header);
             response
         }
         Ok(ChallengeOutcome::MfaRequired { login }) => {
@@ -603,20 +611,21 @@ async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
         .await
     {
         Ok(ChallengeOutcome::Authenticated { session, .. }) => {
+            let cookie =
+                build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx))
+                    .await?;
             ctx.services()
                 .oidc_authorize()
                 .record_selection_by_login(
                     &body.login_id,
                     session.oid,
                     session.user_oid,
+                    Some(cookie.protected_session_id.clone()),
                     SelectionSource::FreshLogin,
                 )
                 .await?;
-
-            let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
             let mut response = redirect_to_response(&oauth2_continue_url(&body.login_id));
-            append_set_cookie(&mut response, &cookie);
+            append_set_cookie(&mut response, &cookie.header);
             response
         }
         Ok(ChallengeOutcome::MfaRequired { .. }) => {

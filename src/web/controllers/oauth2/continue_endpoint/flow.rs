@@ -10,7 +10,7 @@ use crate::{
     },
     controllers::response::AppResponse,
     domain::client_authorization::SelectionSource,
-    web::controllers::shared::load_active_sessions,
+    web::controllers::shared::load_active_session_entries,
 };
 
 use super::super::{finish_authorize_redirect, response_mode_from_value, select_active_session};
@@ -35,7 +35,11 @@ pub(super) async fn handle_continue(
         ));
     }
 
-    let active_sessions = load_active_sessions(ctx, headers).await?;
+    let active_session_entries = load_active_session_entries(ctx, headers).await?;
+    let active_sessions: Vec<_> = active_session_entries
+        .iter()
+        .map(|entry| entry.session.clone())
+        .collect();
     let login = continue_context.login;
     let mut stored = continue_context.stored;
     let client = continue_context.client;
@@ -71,16 +75,22 @@ pub(super) async fn handle_continue(
             && !auto_selection_requires_login
             && let Some(session) = auto_selected_session
         {
+            let protected_session_id = active_session_entries
+                .iter()
+                .find(|entry| entry.session.session_oid == session.session_oid)
+                .map(|entry| entry.protected_session_id.clone());
             ctx.services()
                 .oidc_authorize()
                 .record_authorization_selection(
                     login.client_authorization_oid,
                     session.session_oid,
                     session.user_oid,
+                    protected_session_id.clone(),
                     SelectionSource::Auto,
                 )
                 .await?;
             stored.interaction.selected_session_oid = Some(session.session_oid.to_string());
+            stored.interaction.selected_protected_session_id = protected_session_id;
             stored.interaction.selected_user_oid = Some(session.user_oid.to_string());
             stored.interaction.selection_source = Some(SelectionSource::Auto);
             selected_session = active_sessions.iter().find(|candidate| {
@@ -89,6 +99,13 @@ pub(super) async fn handle_continue(
             });
         }
     }
+
+    let selected_protected_session_id = selected_session.and_then(|session| {
+        active_session_entries
+            .iter()
+            .find(|entry| entry.session.session_oid == session.session_oid)
+            .map(|entry| entry.protected_session_id.clone())
+    });
 
     match determine_continue_action(
         &stored,
@@ -122,7 +139,13 @@ pub(super) async fn handle_continue(
         } => ctx
             .services()
             .oidc_authorize()
-            .approve_authorization_request_by_login(login_id, session_oid, user_oid, auth_time)
+            .approve_authorization_request_by_login(
+                login_id,
+                session_oid,
+                user_oid,
+                selected_protected_session_id,
+                auth_time,
+            )
             .await
             .map(|redirect| {
                 finish_authorize_redirect(

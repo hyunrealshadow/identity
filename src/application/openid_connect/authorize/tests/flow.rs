@@ -335,6 +335,7 @@ async fn record_selected_session_upgrades_auto_to_fresh_login() {
             authorization_oid,
             Uuid::new_v4(),
             Uuid::new_v4(),
+            None,
             SelectionSource::Auto,
         )
         .await
@@ -347,6 +348,7 @@ async fn record_selected_session_upgrades_auto_to_fresh_login() {
             authorization_oid,
             fresh_session,
             fresh_user,
+            None,
             SelectionSource::FreshLogin,
         )
         .await

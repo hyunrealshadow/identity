@@ -12,9 +12,11 @@ use crate::{controllers::shared::build_session_cookie, router::app_router};
 #[tokio::test]
 async fn consent_get_returns_html_by_default() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
+    let session_cookie = build_session_cookie(&state, &[session_oid], false)
+        .await
+        .unwrap();
     let app = app_router(state, &consent_test_config());
     let service = Service::new(app);
-    let session_cookie = build_session_cookie(&[session_oid], false);
 
     let response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
@@ -36,9 +38,11 @@ async fn consent_get_returns_html_by_default() {
 #[tokio::test]
 async fn consent_get_returns_json_when_accept_requests_json() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
+    let session_cookie = build_session_cookie(&state, &[session_oid], false)
+        .await
+        .unwrap();
     let app = app_router(state, &consent_test_config());
     let service = Service::new(app);
-    let session_cookie = build_session_cookie(&[session_oid], false);
 
     let mut response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
@@ -95,9 +99,11 @@ fn consent_post_returns_json_only_when_accept_and_content_type_are_json() {
 #[tokio::test]
 async fn consent_post_redirects_back_to_oauth2_continue_after_approve() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
+    let session_cookie = build_session_cookie(&state, &[session_oid], false)
+        .await
+        .unwrap();
     let app = app_router(state, &consent_test_config());
     let service = Service::new(app);
-    let session_cookie = build_session_cookie(&[session_oid], false);
 
     let mut csrf_page = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
@@ -164,9 +170,11 @@ async fn consent_template_no_longer_auto_submits_for_auto_approve() {
 #[tokio::test]
 async fn consent_page_keeps_inline_script_csp_header() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
+    let session_cookie = build_session_cookie(&state, &[session_oid], false)
+        .await
+        .unwrap();
     let app = app_router(state, &consent_test_config());
     let service = Service::new(app);
-    let session_cookie = build_session_cookie(&[session_oid], false);
 
     let mut response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"

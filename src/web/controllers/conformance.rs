@@ -232,14 +232,15 @@ async fn auto_login(
         &session,
         move |login_id, session_oid, user_oid, source| async move {
             authorize_service
-                .record_selection_by_login(&login_id, session_oid, user_oid, source)
+                .record_selection_by_login(&login_id, session_oid, user_oid, None, source)
                 .await
         },
     )
     .await?;
 
-    let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
-    *res = auto_login_success_response(&body.login_id, &cookie);
+    let cookie =
+        build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx)).await?;
+    *res = auto_login_success_response(&body.login_id, &cookie.header);
     Ok(())
 }
 

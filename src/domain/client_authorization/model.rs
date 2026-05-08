@@ -61,6 +61,8 @@ pub struct AuthorizationCodeData {
     pub code_challenge_method: Option<String>,
     pub user_oid: String,
     pub session_oid: String,
+    #[serde(default)]
+    pub protected_session_id: Option<String>,
     pub acr: Option<String>,
     pub redirect_uri: String,
     pub auth_time: Option<i64>,
@@ -72,6 +74,8 @@ pub struct RefreshTokenData {
     pub scope: String,
     pub user_oid: String,
     pub session_oid: String,
+    #[serde(default)]
+    pub protected_session_id: Option<String>,
     pub auth_time: Option<i64>,
     pub rotated_from: Option<String>,
 }
@@ -81,6 +85,8 @@ pub struct AccessTokenData {
     pub scope: String,
     pub user_oid: String,
     pub session_oid: String,
+    #[serde(default)]
+    pub protected_session_id: Option<String>,
     pub authorization_code_oid: Option<String>,
 }
 
@@ -94,6 +100,8 @@ pub struct StoredAuthorizationRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AuthorizationInteractionState {
     pub selected_session_oid: Option<String>,
+    #[serde(default)]
+    pub selected_protected_session_id: Option<String>,
     pub selected_user_oid: Option<String>,
     pub selection_source: Option<SelectionSource>,
     #[serde(default)]
@@ -163,6 +171,7 @@ mod tests {
             code_challenge_method: Some("S256".to_string()),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: uuid::Uuid::nil().to_string(),
+            protected_session_id: Some("protected-session".to_string()),
             acr: Some("urn:mfa".to_string()),
             redirect_uri: "https://client.example.com/callback".to_string(),
             auth_time: Some(1234567890),
@@ -172,6 +181,10 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let parsed: AuthorizationCodeData = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scope, "openid profile");
+        assert_eq!(
+            parsed.protected_session_id.as_deref(),
+            Some("protected-session")
+        );
     }
 
     #[test]
@@ -180,6 +193,7 @@ mod tests {
             scope: "openid offline_access profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: uuid::Uuid::nil().to_string(),
+            protected_session_id: Some("protected-session".to_string()),
             auth_time: Some(1234567890),
             rotated_from: Some(uuid::Uuid::nil().to_string()),
         };
@@ -188,6 +202,10 @@ mod tests {
         let parsed: RefreshTokenData = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scope, "openid offline_access profile");
         assert_eq!(parsed.auth_time, Some(1234567890));
+        assert_eq!(
+            parsed.protected_session_id.as_deref(),
+            Some("protected-session")
+        );
         let rotated_from = uuid::Uuid::nil().to_string();
         assert_eq!(parsed.rotated_from.as_deref(), Some(rotated_from.as_str()));
     }
@@ -198,6 +216,7 @@ mod tests {
             scope: "openid offline_access".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: uuid::Uuid::nil().to_string(),
+            protected_session_id: None,
             auth_time: None,
             rotated_from: None,
         };
@@ -213,12 +232,17 @@ mod tests {
             scope: "openid profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: uuid::Uuid::nil().to_string(),
+            protected_session_id: Some("protected-session".to_string()),
             authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
         };
 
         let json = serde_json::to_string(&data).unwrap();
         let parsed: AccessTokenData = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scope, "openid profile");
+        assert_eq!(
+            parsed.protected_session_id.as_deref(),
+            Some("protected-session")
+        );
         assert!(parsed.authorization_code_oid.is_some());
     }
 }

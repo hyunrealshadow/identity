@@ -157,6 +157,7 @@ pub async fn determine_authorize_flow(
                 authorization_request_id,
                 session_oid,
                 user_oid,
+                None,
                 source,
             )
         },

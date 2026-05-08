@@ -25,6 +25,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         oid: Uuid,
         session_oid: Uuid,
         user_oid: Uuid,
+        protected_session_id: Option<String>,
         source: SelectionSource,
     ) -> Result<bool, ClientAuthorizationRepositoryError>;
 

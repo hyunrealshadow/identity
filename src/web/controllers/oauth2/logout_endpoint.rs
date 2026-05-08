@@ -1,7 +1,6 @@
 use http::{HeaderValue, StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
 use serde::Deserialize;
-use uuid::Uuid;
 
 use identity_application::openid_connect::logout::{
     FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogoutRequest,
@@ -11,8 +10,8 @@ use crate::controllers::response::render_html;
 use crate::controllers::{
     response::{AppResponse, app_state, parse_form, parse_query, redirect_to_response},
     shared::{
-        append_set_cookie, build_session_cookie, is_secure_cookie, load_active_sessions,
-        parse_session_cookie,
+        append_set_cookie, build_session_cookie_from_protected_ids, is_secure_cookie,
+        load_active_session_entries,
     },
 };
 
@@ -36,17 +35,22 @@ impl From<LogoutParams> for RpInitiatedLogoutRequest {
             state: value.state,
             ui_locales: value.ui_locales,
             session_oid: None,
+            protected_session_id: None,
         }
     }
 }
 
-pub fn session_cookie_without(oids: &[Uuid], revoked: Uuid, secure: bool) -> String {
-    let remaining = oids
+pub fn session_cookie_without(
+    entries: &[crate::controllers::shared::SessionCookieEntry],
+    revoked: uuid::Uuid,
+    secure: bool,
+) -> String {
+    let remaining = entries
         .iter()
-        .copied()
-        .filter(|oid| *oid != revoked)
+        .filter(|entry| entry.session_oid != revoked)
+        .map(|entry| entry.protected_session_id.clone())
         .collect::<Vec<_>>();
-    build_session_cookie(&remaining, secure)
+    build_session_cookie_from_protected_ids(&remaining, secure)
 }
 
 pub fn redirect_or_page_response(outcome: LogoutOutcome, set_cookie: Option<String>) -> Response {
@@ -166,14 +170,18 @@ async fn handle_logout(
 ) -> Result<AppResponse, identity_application::error::AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
-    let session_oids = parse_session_cookie(&headers);
-    let session_to_revoke = load_active_sessions(&ctx, &headers)
-        .await?
-        .first()
-        .map(|session| session.session_oid);
+    let session_entries = crate::controllers::shared::parse_session_cookie(&ctx, &headers).await;
+    let active_entries = load_active_session_entries(&ctx, &headers).await?;
+    let session_to_revoke = active_entries.first().map(|entry| {
+        (
+            entry.session.session_oid,
+            entry.protected_session_id.clone(),
+        )
+    });
 
     let mut request: RpInitiatedLogoutRequest = params.into();
-    request.session_oid = session_to_revoke;
+    request.session_oid = session_to_revoke.as_ref().map(|(oid, _)| *oid);
+    request.protected_session_id = session_to_revoke.as_ref().map(|(_, id)| id.clone());
 
     let outcome = ctx
         .services()
@@ -181,10 +189,10 @@ async fn handle_logout(
         .rp_initiated_logout(request)
         .await?;
 
-    let set_cookie = if let Some(session_oid) = session_to_revoke {
+    let set_cookie = if let Some((session_oid, _)) = session_to_revoke {
         let _ = ctx.services().session().revoke(session_oid).await;
         Some(session_cookie_without(
-            &session_oids,
+            &session_entries,
             session_oid,
             is_secure_cookie(&ctx),
         ))
@@ -222,11 +230,22 @@ mod tests {
     fn remove_session_cookie_entry_keeps_other_sessions() {
         let first = uuid::Uuid::new_v4();
         let second = uuid::Uuid::new_v4();
+        let entries = [
+            crate::controllers::shared::SessionCookieEntry {
+                session_oid: first,
+                protected_session_id: "protected-first".to_string(),
+            },
+            crate::controllers::shared::SessionCookieEntry {
+                session_oid: second,
+                protected_session_id: "protected-second".to_string(),
+            },
+        ];
 
-        let cookie = super::session_cookie_without(&[first, second], first, false);
+        let cookie = super::session_cookie_without(&entries, first, false);
 
         assert!(!cookie.contains(&first.to_string()));
-        assert!(cookie.contains(&second.to_string()));
+        assert!(!cookie.contains("protected-first"));
+        assert!(cookie.contains("protected-second"));
     }
 
     #[tokio::test]

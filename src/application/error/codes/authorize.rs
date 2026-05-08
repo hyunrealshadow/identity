@@ -157,6 +157,8 @@ pub enum AuthorizeErrorCode {
     RequestObjectEncryptionUnsupported,
     /// Authorization request interaction state was already updated or completed.
     AuthzInteractionConflict,
+    /// Stored data-protected session ID could not be decrypted or parsed.
+    StoredSessionIdInvalid,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -225,6 +227,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::IdTokenHintIssuerInvalid => ErrorKind::Validation,
             Self::RequestObjectEncryptionUnsupported => ErrorKind::Validation,
             Self::AuthzInteractionConflict => ErrorKind::Validation,
+            Self::StoredSessionIdInvalid => ErrorKind::Internal,
         }
     }
 
@@ -293,6 +296,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::IdTokenHintIssuerInvalid => 23060,
             Self::RequestObjectEncryptionUnsupported => 23061,
             Self::AuthzInteractionConflict => 23062,
+            Self::StoredSessionIdInvalid => 23063,
         }
     }
 }

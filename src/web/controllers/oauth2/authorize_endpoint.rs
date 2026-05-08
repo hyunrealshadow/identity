@@ -208,10 +208,13 @@ mod tests {
     #[tokio::test]
     async fn authorize_with_reusable_session_redirects_to_oauth2_continue() {
         let (state, session_oid) = authorize_first_hop_state().await;
+        let session_cookie = build_session_cookie(&state, &[session_oid], false)
+            .await
+            .unwrap();
         let response = call_authorize_with_state(
             "/oauth2/authorize?client_id=00000000-0000-0000-0000-000000000000&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state123",
             state,
-            Some(build_session_cookie(&[session_oid], false)),
+            Some(session_cookie),
         )
         .await;
 

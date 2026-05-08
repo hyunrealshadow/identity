@@ -15,7 +15,7 @@ use super::{
     response::{app_state, parse_json, parse_param, render_json},
     shared::{
         append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
-        csrf_token, is_secure_cookie, load_active_sessions,
+        csrf_token, is_secure_cookie, load_active_session_entries, unprotect_session_id,
     },
 };
 use crate::views::auth::{
@@ -50,14 +50,14 @@ async fn active_sessions(
 ) -> Result<(), AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
-    let accounts = load_active_sessions(&ctx, &headers).await?;
+    let accounts = load_active_session_entries(&ctx, &headers).await?;
     let items: Vec<AccountItem> = accounts
         .into_iter()
-        .map(|a| AccountItem {
-            id: a.session_oid,
-            name: a.user_name,
-            email: a.user_email,
-            last_active_at: a.last_active_at,
+        .map(|entry| AccountItem {
+            id: entry.protected_session_id,
+            name: entry.session.user_name,
+            email: entry.session.user_email,
+            last_active_at: entry.session.last_active_at,
         })
         .collect();
 
@@ -123,19 +123,21 @@ async fn select_account(
     let headers: HeaderMap = req.headers().clone();
     let body: SelectAccountRequest = parse_json(req).await?;
 
-    let session = ctx.services().session().select_session(body.id).await?;
-    let cookie = build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+    let session_oid = unprotect_session_id(&ctx, &body.id).await?;
+    let session = ctx.services().session().select_session(session_oid).await?;
+    let cookie =
+        build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx)).await?;
 
     let resp = SelectAccountResponse {
         status: "ok",
         session: SessionInfo {
-            id: session.oid,
+            id: cookie.protected_session_id.clone(),
             expires_at: session.expires_at,
         },
     };
 
     render_json(res, StatusCode::OK, resp);
-    append_set_cookie(res, &cookie);
+    append_set_cookie(res, &cookie.header);
     Ok(())
 }
 
@@ -220,7 +222,8 @@ async fn challenge(
         }
         ChallengeOutcome::Authenticated { session, .. } => {
             let cookie =
-                build_selected_session_cookie(&headers, session.oid, is_secure_cookie(&ctx));
+                build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx))
+                    .await?;
             let acr = session.acr.clone();
 
             render_json(
@@ -229,13 +232,13 @@ async fn challenge(
                 ChallengeResponse {
                     status: "authenticated",
                     session: Some(SessionInfo {
-                        id: session.oid,
+                        id: cookie.protected_session_id.clone(),
                         expires_at: session.expires_at,
                     }),
                     acr,
                 },
             );
-            append_set_cookie(res, &cookie);
+            append_set_cookie(res, &cookie.header);
         }
     }
     Ok(())

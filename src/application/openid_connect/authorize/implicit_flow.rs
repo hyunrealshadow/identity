@@ -8,6 +8,7 @@ impl AuthorizeService {
         &self,
         request: &AuthorizationRequestData,
         session_oid: Uuid,
+        protected_session_id: &str,
         user_oid: Uuid,
         response_type: ResponseType,
         auth_time: Option<i64>,
@@ -56,6 +57,7 @@ impl AuthorizeService {
                         client_id,
                         user_oid,
                         session_oid,
+                        protected_session_id,
                         request,
                         None,
                         &signing_key_id,
@@ -103,7 +105,10 @@ impl AuthorizeService {
         write!(
             fragment,
             "&session_state={}",
-            urlencoding(&session_state_for_authorize_response(request, session_oid)?)
+            urlencoding(&session_state_for_authorize_response(
+                request,
+                protected_session_id
+            )?)
         )
         .unwrap();
 
@@ -117,6 +122,7 @@ impl AuthorizeService {
         &self,
         request: &AuthorizationRequestData,
         session_oid: Uuid,
+        protected_session_id: &str,
         user_oid: Uuid,
         response_type: ResponseType,
         auth_time: Option<i64>,
@@ -128,7 +134,13 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
         })?;
         let (code, authorization_code_oid) = self
-            .create_authorization_code(request, user_oid, session_oid, auth_time)
+            .create_authorization_code(
+                request,
+                user_oid,
+                session_oid,
+                protected_session_id,
+                auth_time,
+            )
             .await?;
 
         let issuer = self.provider_service.issuer()?;
@@ -148,6 +160,7 @@ impl AuthorizeService {
                     client_id,
                     user_oid,
                     session_oid,
+                    protected_session_id,
                     request,
                     Some(authorization_code_oid),
                     &signing_key_id,
@@ -214,7 +227,10 @@ impl AuthorizeService {
         write!(
             fragment,
             "&session_state={}",
-            urlencoding(&session_state_for_authorize_response(request, session_oid)?)
+            urlencoding(&session_state_for_authorize_response(
+                request,
+                protected_session_id
+            )?)
         )
         .unwrap();
 
@@ -229,6 +245,7 @@ impl AuthorizeService {
         client_id: Uuid,
         user_oid: Uuid,
         session_oid: Uuid,
+        protected_session_id: &str,
         request: &AuthorizationRequestData,
         authorization_code_oid: Option<Uuid>,
         signing_key_id: &str,
@@ -247,6 +264,7 @@ impl AuthorizeService {
                     scope: request.scope.clone(),
                     user_oid: user_oid.to_string(),
                     session_oid: session_oid.to_string(),
+                    protected_session_id: Some(protected_session_id.to_string()),
                     authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
                 })
                 .map_err(|error| {
@@ -267,7 +285,7 @@ impl AuthorizeService {
             audience,
             audience,
             &user_oid.to_string(),
-            &session_oid.to_string(),
+            protected_session_id,
             &request.scope,
             &access_token_record.oid.to_string(),
             claims,

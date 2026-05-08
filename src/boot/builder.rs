@@ -255,6 +255,7 @@ async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) 
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "oidc-conformance")]
     use identity_infrastructure::config::{
         AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig,
     };

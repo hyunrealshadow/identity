@@ -296,6 +296,7 @@ impl TokenService {
         scope: &str,
         user_oid: &str,
         session_oid: &str,
+        protected_session_id: Option<&str>,
         auth_time: Option<i64>,
         rotated_from: Option<&str>,
     ) -> Result<String, AppError> {
@@ -303,6 +304,7 @@ impl TokenService {
             scope: scope.to_string(),
             user_oid: user_oid.to_string(),
             session_oid: session_oid.to_string(),
+            protected_session_id: protected_session_id.map(str::to_string),
             auth_time,
             rotated_from: rotated_from.map(str::to_string),
         })
@@ -337,12 +339,14 @@ impl TokenService {
         scope: &str,
         user_oid: &str,
         session_oid: &str,
+        protected_session_id: Option<&str>,
         authorization_code_oid: Option<Uuid>,
     ) -> Result<ClientAuthorization, AppError> {
         let data = serde_json::to_value(AccessTokenData {
             scope: scope.to_string(),
             user_oid: user_oid.to_string(),
             session_oid: session_oid.to_string(),
+            protected_session_id: protected_session_id.map(str::to_string),
             authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
         })
         .map_err(|error| {
