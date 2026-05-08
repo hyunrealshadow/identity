@@ -88,10 +88,8 @@ impl Default for OpenIdProviderCapabilities {
             userinfo_signing_alg_values_supported: vec![],
             userinfo_encryption_alg_values_supported: vec![],
             userinfo_encryption_enc_values_supported: vec![],
-            request_object_signing_alg_values_supported: vec![
-                "none".to_owned(),
-                "RS256".to_owned(),
-            ],
+            request_object_signing_alg_values_supported:
+                supported_request_object_signing_algorithms(),
             request_object_encryption_alg_values_supported: vec![],
             request_object_encryption_enc_values_supported: vec![],
             token_endpoint_auth_methods_supported: vec![
@@ -100,12 +98,8 @@ impl Default for OpenIdProviderCapabilities {
                 TokenEndpointAuthMethod::ClientSecretJwt,
                 TokenEndpointAuthMethod::PrivateKeyJwt,
             ],
-            token_endpoint_auth_signing_alg_values_supported: vec![
-                "HS256".to_owned(),
-                "HS384".to_owned(),
-                "HS512".to_owned(),
-                "RS256".to_owned(),
-            ],
+            token_endpoint_auth_signing_alg_values_supported:
+                supported_token_endpoint_auth_signing_algorithms(),
             display_values_supported: vec!["page".to_owned()],
             claim_types_supported: vec!["normal".to_owned()],
             claims_supported: vec![
@@ -141,6 +135,25 @@ impl Default for OpenIdProviderCapabilities {
             require_request_uri_registration: false,
         }
     }
+}
+
+fn supported_request_object_signing_algorithms() -> Vec<String> {
+    let mut algorithms = vec!["none".to_owned()];
+    algorithms.extend(supported_asymmetric_jws_algorithms());
+    algorithms
+}
+
+fn supported_token_endpoint_auth_signing_algorithms() -> Vec<String> {
+    let mut algorithms = vec!["HS256".to_owned(), "HS384".to_owned(), "HS512".to_owned()];
+    algorithms.extend(supported_asymmetric_jws_algorithms());
+    algorithms
+}
+
+fn supported_asymmetric_jws_algorithms() -> Vec<String> {
+    JwaSigningAlgorithm::all()
+        .iter()
+        .map(|algorithm| algorithm.as_str().to_owned())
+        .collect()
 }
 
 #[derive(Clone)]
@@ -712,6 +725,56 @@ mod tests {
             metadata
                 .subject_types_supported
                 .contains(&"pairwise".to_owned())
+        );
+    }
+
+    #[tokio::test]
+    async fn default_discovery_advertises_request_object_verifier_algorithms() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().await.unwrap();
+        let mut expected = vec!["none".to_owned()];
+        expected.extend(
+            JwaSigningAlgorithm::all()
+                .iter()
+                .map(|algorithm| algorithm.as_str().to_owned()),
+        );
+
+        assert_eq!(
+            metadata.request_object_signing_alg_values_supported,
+            Some(expected)
+        );
+    }
+
+    #[tokio::test]
+    async fn default_discovery_advertises_token_endpoint_auth_verifier_algorithms() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().await.unwrap();
+        let mut expected = vec!["HS256".to_owned(), "HS384".to_owned(), "HS512".to_owned()];
+        expected.extend(
+            JwaSigningAlgorithm::all()
+                .iter()
+                .map(|algorithm| algorithm.as_str().to_owned()),
+        );
+
+        assert_eq!(
+            metadata.token_endpoint_auth_signing_alg_values_supported,
+            Some(expected)
         );
     }
 
