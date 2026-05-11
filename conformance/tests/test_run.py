@@ -63,6 +63,15 @@ class PlanVariantTests(unittest.TestCase):
             },
         )
 
+    def test_backchannel_profile_uses_static_client_response_type_variant(self):
+        self.assertEqual(
+            run.plan_variant_for_profile("backchannel"),
+            {
+                "client_registration": "static_client",
+                "response_type": "code",
+            },
+        )
+
 
 class ProfileConfigurationTests(unittest.TestCase):
     def test_new_formpost_profiles_are_supported(self):
@@ -74,6 +83,9 @@ class ProfileConfigurationTests(unittest.TestCase):
 
     def test_session_profile_is_supported(self):
         self.assertIn("session", run.SUPPORTED_PROFILES)
+
+    def test_backchannel_profile_is_supported(self):
+        self.assertIn("backchannel", run.SUPPORTED_PROFILES)
 
     def test_default_plan_name_for_new_formpost_profiles(self):
         self.assertEqual(
@@ -95,6 +107,12 @@ class ProfileConfigurationTests(unittest.TestCase):
         self.assertEqual(
             run.default_plan_name_for_profile("session"),
             "oidcc-session-management-certification-test-plan",
+        )
+
+    def test_default_plan_name_for_backchannel_profile(self):
+        self.assertEqual(
+            run.default_plan_name_for_profile("backchannel"),
+            "oidcc-backchannel-rp-initiated-logout-certification-test-plan",
         )
 
 
@@ -137,6 +155,20 @@ class PlanFileTests(unittest.TestCase):
         plan = self._load_plan("session")
 
         self.assertEqual(plan["alias"], "identity-session")
+        self.assertEqual(
+            plan["server"]["discoveryUrl"],
+            "https://identity:5150/.well-known/openid-configuration",
+        )
+        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(
+            plan["client"]["client_secret"],
+            "conformance-basic-secret-at-least-32-bytes",
+        )
+
+    def test_backchannel_plan_exists_with_expected_defaults(self):
+        plan = self._load_plan("backchannel")
+
+        self.assertEqual(plan["alias"], "identity-backchannel")
         self.assertEqual(
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",

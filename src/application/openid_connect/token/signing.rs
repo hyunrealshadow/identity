@@ -121,6 +121,7 @@ impl TokenService {
         auth_time: Option<i64>,
         acr: Option<&str>,
         access_token: Option<&str>,
+        protected_session_id: Option<&str>,
         _scope: &str,
     ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
@@ -172,6 +173,16 @@ impl TokenService {
             let at_hash = compute_at_hash(access_token, alg);
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+                })?;
+        }
+        if let Some(protected_session_id) = protected_session_id {
+            payload
+                .set_claim(
+                    JwtClaimNames::SID,
+                    Some(serde_json::json!(protected_session_id)),
+                )
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
                 })?;

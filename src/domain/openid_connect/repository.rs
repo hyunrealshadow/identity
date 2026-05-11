@@ -70,6 +70,13 @@ pub trait OpenIdConnectClientRepository: Send + Sync {
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         Ok(Vec::new())
     }
+
+    async fn find_backchannel_logout_clients_by_session_oid(
+        &self,
+        _session_oid: uuid::Uuid,
+    ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        Ok(Vec::new())
+    }
 }
 
 #[async_trait::async_trait]

@@ -57,5 +57,9 @@ services:
       context: ./nginx
     ports:
       - "8443:8443"
+    networks:
+      default:
+        aliases:
+          - localhost.emobix.co.uk
     depends_on:
       - server

@@ -73,6 +73,7 @@ impl AuthorizeService {
         acr: Option<&str>,
         access_token: Option<&str>,
         code: Option<&str>,
+        protected_session_id: Option<&str>,
         scope: &ScopeSet,
         claims_request: Option<&serde_json::Value>,
     ) -> Result<String, AppError> {
@@ -129,6 +130,16 @@ impl AuthorizeService {
             let c_hash = compute_front_channel_hash(code, alg);
             payload
                 .set_claim(JwtClaimNames::C_HASH, Some(serde_json::json!(c_hash)))
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+                })?;
+        }
+        if let Some(protected_session_id) = protected_session_id {
+            payload
+                .set_claim(
+                    JwtClaimNames::SID,
+                    Some(serde_json::json!(protected_session_id)),
+                )
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;

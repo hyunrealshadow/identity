@@ -1,15 +1,28 @@
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use josekit::{
+    jws::{
+        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+    },
+    jwt::{self, JwtPayload},
+};
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
     application::{
-        error::{AppError, codes::openid_connect::OpenIdConnectErrorCode},
+        error::{
+            AppError,
+            codes::{common::CommonErrorCode, openid_connect::OpenIdConnectErrorCode},
+        },
         openid_connect::provider::OpenIdProviderService,
     },
-    domain::openid_connect::{OpenIdConnectClient, OpenIdConnectClientRepository},
+    domain::{
+        key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
+        openid_connect::{OpenIdConnectClient, OpenIdConnectClientRepository},
+    },
+    openid_connect::provider::SigningAlgorithmDetector,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -28,6 +41,13 @@ pub struct RpInitiatedLogoutRequest {
 pub struct FrontChannelLogoutNotification {
     pub client_id: Uuid,
     pub logout_uri: Url,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackChannelLogoutNotification {
+    pub client_id: Uuid,
+    pub logout_uri: Url,
+    pub logout_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,17 +71,39 @@ struct IdTokenHintClaims {
 pub struct LogoutService {
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     provider_service: Arc<OpenIdProviderService>,
+    key_repo: Arc<dyn KeyRepository>,
+    key_jwk_repo: Arc<dyn KeyJwkRepository>,
+    signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
+    http_client: reqwest::Client,
 }
 
 impl LogoutService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
         provider_service: Arc<OpenIdProviderService>,
+        key_repo: Arc<dyn KeyRepository>,
+        key_jwk_repo: Arc<dyn KeyJwkRepository>,
+        signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     ) -> Self {
         Self {
             client_repo,
             provider_service,
+            key_repo,
+            key_jwk_repo,
+            signing_algorithm_detector,
+            http_client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .expect("back-channel logout HTTP client must build"),
         }
+    }
+
+    #[must_use]
+    pub fn with_http_client(mut self, http_client: reqwest::Client) -> Self {
+        self.http_client = http_client;
+        self
     }
 
     pub async fn rp_initiated_logout(
@@ -135,6 +177,9 @@ impl LogoutService {
         protected_session_id: Option<&str>,
         post_logout_redirect_uri: Option<Url>,
     ) -> Result<LogoutOutcome, AppError> {
+        self.send_backchannel_logout_notifications(session_oid, protected_session_id)
+            .await?;
+
         let notifications = self
             .frontchannel_logout_notifications(session_oid, protected_session_id)
             .await?;
@@ -185,6 +230,181 @@ impl LogoutService {
                 })
             })
             .collect())
+    }
+
+    async fn backchannel_logout_notifications(
+        &self,
+        session_oid: Option<Uuid>,
+        protected_session_id: Option<&str>,
+    ) -> Result<Vec<BackChannelLogoutNotification>, AppError> {
+        let (Some(session_oid), Some(protected_session_id)) = (session_oid, protected_session_id)
+        else {
+            return Ok(Vec::new());
+        };
+
+        let issuer = self.provider_service.issuer()?;
+        let clients = self
+            .client_repo
+            .find_backchannel_logout_clients_by_session_oid(session_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::LogoutClientLookupFailed)
+                    .with_source(error)
+            })?;
+        let candidates = clients
+            .into_iter()
+            .filter_map(|client| {
+                client
+                    .metadata()
+                    .backchannel_logout_uri
+                    .clone()
+                    .map(|logout_uri| (client, logout_uri))
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let (key_id, private_key, alg) = self.load_signing_key().await?;
+
+        candidates
+            .into_iter()
+            .map(|(client, logout_uri)| {
+                let logout_token = self.sign_logout_token(
+                    &key_id,
+                    &private_key,
+                    &alg,
+                    &issuer,
+                    client.client().oid,
+                    protected_session_id,
+                )?;
+                Ok(BackChannelLogoutNotification {
+                    client_id: client.client().oid,
+                    logout_uri,
+                    logout_token,
+                })
+            })
+            .collect()
+    }
+
+    async fn send_backchannel_logout_notifications(
+        &self,
+        session_oid: Option<Uuid>,
+        protected_session_id: Option<&str>,
+    ) -> Result<(), AppError> {
+        let notifications = self
+            .backchannel_logout_notifications(session_oid, protected_session_id)
+            .await?;
+
+        for notification in notifications {
+            match self
+                .http_client
+                .post(notification.logout_uri.clone())
+                .form(&[("logout_token", notification.logout_token.as_str())])
+                .send()
+                .await
+            {
+                Ok(response) if response.status().is_success() => {}
+                Ok(response) => {
+                    tracing::warn!(
+                        client_id = %notification.client_id,
+                        status = %response.status(),
+                        "back-channel logout request returned non-success status"
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        client_id = %notification.client_id,
+                        error = %error,
+                        "back-channel logout request failed"
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
+        let keys = self
+            .key_repo
+            .list_available_asymmetric()
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+
+        for key in keys {
+            if let KeyData::Asymmetric(data) = &key.data {
+                let Some(alg) = self
+                    .signing_algorithm_detector
+                    .detect(&key)
+                    .into_iter()
+                    .next()
+                else {
+                    continue;
+                };
+
+                let Some(binding) = self
+                    .key_jwk_repo
+                    .find_active_by_key_oid_and_algorithm(key.oid, alg.as_str())
+                    .await
+                    .map_err(|error| {
+                        AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+                    })?
+                else {
+                    continue;
+                };
+
+                return Ok((
+                    Uuid::from(binding.oid).to_string(),
+                    data.private_key.clone(),
+                    alg.as_str().to_owned(),
+                ));
+            }
+        }
+
+        Err(AppError::from_code(CommonErrorCode::InternalError))
+    }
+
+    fn sign_logout_token(
+        &self,
+        key_id: &str,
+        private_key_pem: &str,
+        alg: &str,
+        issuer: &Url,
+        audience: Uuid,
+        protected_session_id: &str,
+    ) -> Result<String, AppError> {
+        let mut header = JwsHeader::new();
+        header.set_token_type("logout+jwt");
+        header.set_key_id(key_id);
+
+        let now = std::time::SystemTime::now();
+        let mut payload = JwtPayload::new();
+        payload.set_issuer(issuer.as_str());
+        payload.set_audience(vec![audience.to_string()]);
+        payload.set_issued_at(&now);
+        payload.set_jwt_id(Uuid::new_v4().to_string());
+        payload
+            .set_claim("sid", Some(serde_json::json!(protected_session_id)))
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        payload
+            .set_claim(
+                "events",
+                Some(serde_json::json!({
+                    "http://schemas.openid.net/event/backchannel-logout": {}
+                })),
+            )
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+
+        let signer = build_logout_token_signer(private_key_pem, alg)?;
+        jwt::encode_with_signer(&payload, &header, &*signer)
+            .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
     }
 
     fn validate_id_token_hint_issuer(&self, claims: &IdTokenHintClaims) -> Result<(), AppError> {
@@ -279,6 +499,31 @@ fn parse_id_token_hint_claims(raw: &str) -> Result<IdTokenHintClaims, AppError> 
     Ok(IdTokenHintClaims { issuer, audience })
 }
 
+fn build_logout_token_signer(
+    private_key_pem: &str,
+    alg: &str,
+) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
+    let jwa: JwaSigningAlgorithm = alg
+        .parse()
+        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
+    let pem = private_key_pem.as_bytes();
+    let err =
+        |e: josekit::JoseError| AppError::from_code(CommonErrorCode::InternalError).with_source(e);
+    match jwa {
+        JwaSigningAlgorithm::Rs256 => Ok(Box::new(RS256.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Rs384 => Ok(Box::new(RS384.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Rs512 => Ok(Box::new(RS512.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Ps256 => Ok(Box::new(PS256.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Ps384 => Ok(Box::new(PS384.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Ps512 => Ok(Box::new(PS512.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Es256 => Ok(Box::new(ES256.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Es384 => Ok(Box::new(ES384.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Es512 => Ok(Box::new(ES512.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::Es256k => Ok(Box::new(ES256K.signer_from_pem(pem).map_err(err)?)),
+        JwaSigningAlgorithm::EdDsa => Ok(Box::new(EdDSA.signer_from_pem(pem).map_err(err)?)),
+    }
+}
+
 #[cfg(test)]
 fn signed_like_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
     let payload = serde_json::json!({
@@ -310,6 +555,11 @@ mod tests {
     use crate::{
         domain::{
             client::model::{Client, ClientProtocol},
+            key::{
+                AsymmetricKeyData, CreateKeyJwkInput, JwaSigningAlgorithm, Key, KeyData, KeyJwk,
+                KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, KeyOid, KeyType, PublicJwk,
+                repository::{KeyRepository, KeyRepositoryError},
+            },
             openid_connect::{
                 OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
                 OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
@@ -317,10 +567,12 @@ mod tests {
             },
             setting::installation::{InstallationSetting, InstallationState},
         },
-        openid_connect::provider::OpenIdProviderService,
+        openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     };
     use async_trait::async_trait;
     use chrono::Utc;
+    use josekit::{jws::RS256, jwt};
+    use openssl::rsa::Rsa;
     use std::{collections::HashMap, sync::Arc};
     use url::Url;
     use uuid::Uuid;
@@ -329,6 +581,23 @@ mod tests {
     struct FakeClientRepository {
         clients: HashMap<Uuid, OpenIdConnectClient>,
     }
+
+    #[derive(Clone)]
+    struct SigningMaterial {
+        key: Key,
+        binding: KeyJwk,
+        public_key: String,
+    }
+
+    struct FakeKeyRepository {
+        keys: Vec<Key>,
+    }
+
+    struct FakeKeyJwkRepository {
+        bindings: Vec<KeyJwk>,
+    }
+
+    struct TestSigningAlgorithmDetector;
 
     struct TestInstallationSetting(Arc<InstallationState>);
 
@@ -355,12 +624,96 @@ mod tests {
         ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
             Ok(self.clients.values().cloned().collect())
         }
+
+        async fn find_backchannel_logout_clients_by_session_oid(
+            &self,
+            _session_oid: Uuid,
+        ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+            Ok(self.clients.values().cloned().collect())
+        }
+    }
+
+    #[async_trait]
+    impl KeyRepository for FakeKeyRepository {
+        async fn find_by_oid(&self, oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
+            Ok(self.keys.iter().find(|key| key.oid == oid).cloned())
+        }
+
+        async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
+            Ok(self.keys.clone())
+        }
+
+        async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn create(
+            &self,
+            _key_type: KeyType,
+            _data: &KeyData,
+            _expires_at: Option<chrono::DateTime<Utc>>,
+        ) -> Result<Key, KeyRepositoryError> {
+            unreachable!()
+        }
+
+        async fn update_certificate_by_oid(
+            &self,
+            _oid: KeyOid,
+            _certificate_pem: &str,
+        ) -> Result<Option<Key>, KeyRepositoryError> {
+            unreachable!()
+        }
+
+        async fn revoke_by_oid(
+            &self,
+            _oid: KeyOid,
+            _revoked_at: chrono::DateTime<Utc>,
+        ) -> Result<Option<Key>, KeyRepositoryError> {
+            unreachable!()
+        }
+    }
+
+    #[async_trait]
+    impl KeyJwkRepository for FakeKeyJwkRepository {
+        async fn create_batch(
+            &self,
+            _inputs: Vec<CreateKeyJwkInput>,
+        ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+            unreachable!()
+        }
+
+        async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
+            Ok(self.bindings.clone())
+        }
+
+        async fn find_active_by_key_oid_and_algorithm(
+            &self,
+            key_oid: KeyOid,
+            algorithm: &str,
+        ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
+            Ok(self
+                .bindings
+                .iter()
+                .find(|binding| binding.key_oid == key_oid && binding.algorithm == algorithm)
+                .cloned())
+        }
+
+        async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
+            unreachable!()
+        }
+    }
+
+    impl SigningAlgorithmDetector for TestSigningAlgorithmDetector {
+        fn detect(&self, _key: &Key) -> Vec<JwaSigningAlgorithm> {
+            vec![JwaSigningAlgorithm::Rs256]
+        }
     }
 
     fn test_client(
         client_oid: Uuid,
         post_logout_redirect_uri: Option<&str>,
         frontchannel_logout_uri: Option<&str>,
+        backchannel_logout_uri: Option<&str>,
     ) -> OpenIdConnectClient {
         OpenIdConnectClient::new(
             Client {
@@ -378,6 +731,8 @@ mod tests {
                 frontchannel_logout_uri: frontchannel_logout_uri
                     .map(|uri| Url::parse(uri).unwrap()),
                 frontchannel_logout_session_required: Some(true),
+                backchannel_logout_uri: backchannel_logout_uri.map(|uri| Url::parse(uri).unwrap()),
+                backchannel_logout_session_required: Some(true),
                 response_types: Some(vec!["code".to_owned()]),
                 grant_types: Some(vec!["authorization_code".to_owned()]),
                 contacts: None,
@@ -414,13 +769,58 @@ mod tests {
         .unwrap()
     }
 
-    fn service_with_clients(clients: Vec<OpenIdConnectClient>) -> LogoutService {
+    fn signing_material() -> SigningMaterial {
+        let rsa = Rsa::generate(2048).unwrap();
+        let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
+        let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
+        let key_oid = KeyOid(Uuid::new_v4());
+        let key = Key {
+            oid: key_oid,
+            r#type: KeyType::Asymmetric,
+            data: KeyData::Asymmetric(AsymmetricKeyData {
+                public_key: public_key.clone(),
+                private_key,
+                certificate: None,
+            }),
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        };
+        let binding = KeyJwk {
+            oid: KeyJwkOid(Uuid::new_v4()),
+            key_oid,
+            algorithm: "RS256".to_owned(),
+            jwk: PublicJwk::Rsa {
+                key_use: None,
+                alg: Some("RS256".to_owned()),
+                kid: None,
+                n: "n".to_owned(),
+                e: "e".to_owned(),
+                x5c: None,
+                x5t: None,
+                x5t_s256: None,
+            },
+            created_at: Utc::now(),
+        };
+
+        SigningMaterial {
+            key,
+            binding,
+            public_key,
+        }
+    }
+
+    fn service_with_clients_and_signing(
+        clients: Vec<OpenIdConnectClient>,
+    ) -> (LogoutService, SigningMaterial) {
         let mut client_map = HashMap::new();
         for client in clients {
             client_map.insert(client.client().oid, client);
         }
+        let signing = signing_material();
 
-        LogoutService::new(
+        let service = LogoutService::new(
             Arc::new(FakeClientRepository {
                 clients: client_map,
             }),
@@ -433,7 +833,19 @@ mod tests {
                     initialized_at: None,
                 })),
             ))),
-        )
+            Arc::new(FakeKeyRepository {
+                keys: vec![signing.key.clone()],
+            }),
+            Arc::new(FakeKeyJwkRepository {
+                bindings: vec![signing.binding.clone()],
+            }),
+            Arc::new(TestSigningAlgorithmDetector),
+        );
+        (service, signing)
+    }
+
+    fn service_with_clients(clients: Vec<OpenIdConnectClient>) -> LogoutService {
+        service_with_clients_and_signing(clients).0
     }
 
     fn service_with_client(
@@ -443,6 +855,7 @@ mod tests {
         service_with_clients(vec![test_client(
             client_oid,
             post_logout_redirect_uri,
+            None,
             None,
         )])
     }
@@ -535,6 +948,7 @@ mod tests {
             client_oid,
             None,
             Some("https://rp.example.com/frontchannel_logout?existing=1"),
+            None,
         )]);
 
         let outcome = service
@@ -582,6 +996,7 @@ mod tests {
             client_oid,
             Some("https://rp.example.com/logout/callback"),
             Some("https://rp.example.com/frontchannel_logout"),
+            None,
         )]);
 
         let outcome = service
@@ -613,6 +1028,75 @@ mod tests {
         assert_eq!(
             post_logout_redirect_uri.unwrap().as_str(),
             "https://rp.example.com/logout/callback?state=state-123"
+        );
+    }
+
+    #[tokio::test]
+    async fn builds_backchannel_logout_token_with_protected_sid() {
+        let client_oid = Uuid::new_v4();
+        let session_oid = Uuid::new_v4();
+        let (service, signing) = service_with_clients_and_signing(vec![test_client(
+            client_oid,
+            None,
+            None,
+            Some("https://rp.example.com/backchannel_logout"),
+        )]);
+
+        let notifications = service
+            .backchannel_logout_notifications(Some(session_oid), Some("protected-session"))
+            .await
+            .unwrap();
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].client_id, client_oid);
+        assert_eq!(
+            notifications[0].logout_uri.as_str(),
+            "https://rp.example.com/backchannel_logout"
+        );
+        assert!(
+            !notifications[0]
+                .logout_token
+                .contains(&session_oid.to_string())
+        );
+
+        let payload = jwt::decode_with_verifier(
+            &notifications[0].logout_token,
+            &*RS256
+                .verifier_from_pem(signing.public_key.as_bytes())
+                .unwrap(),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(
+            payload.claim("iss").and_then(|value| value.as_str()),
+            Some("https://identity.example.com/")
+        );
+        assert_eq!(
+            payload.claim("aud").and_then(|value| {
+                value.as_str().or_else(|| {
+                    value
+                        .as_array()
+                        .and_then(|audiences| audiences.first())
+                        .and_then(|audience| audience.as_str())
+                })
+            }),
+            Some(client_oid.to_string().as_str())
+        );
+        assert_eq!(
+            payload.claim("sid").and_then(|value| value.as_str()),
+            Some("protected-session")
+        );
+        assert!(payload.claim("iat").is_some());
+        assert!(payload.claim("jti").is_some());
+        assert!(payload.claim("nonce").is_none());
+        assert_eq!(
+            payload
+                .claim("events")
+                .and_then(|value| value.as_object())
+                .and_then(|events| events.get("http://schemas.openid.net/event/backchannel-logout"))
+                .and_then(|value| value.as_object())
+                .map(serde_json::Map::is_empty),
+            Some(true)
         );
     }
 

@@ -90,6 +90,7 @@ impl AuthorizeService {
                 .and_then(|v| v.first().map(String::as_str)),
             access_token.as_deref(),
             None,
+            Some(protected_session_id),
             &scope,
             claims.as_ref(),
         )?;
@@ -205,6 +206,7 @@ impl AuthorizeService {
                         .and_then(|v| v.first().map(String::as_str)),
                     access_token.as_deref(),
                     Some(&code),
+                    Some(protected_session_id),
                     &scope,
                     claims.as_ref(),
                 )?,

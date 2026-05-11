@@ -204,6 +204,8 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
         post_logout_redirect_uris: None,
         frontchannel_logout_uri: None,
         frontchannel_logout_session_required: None,
+        backchannel_logout_uri: None,
+        backchannel_logout_session_required: None,
         response_types: None,
         grant_types: None,
         contacts: None,

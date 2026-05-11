@@ -371,6 +371,8 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         .unwrap();
 
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (access_payload, _) =
+        jwt::decode_with_verifier(&refreshed.access_token, &verifier).unwrap();
     let (id_payload, _) =
         jwt::decode_with_verifier(refreshed.id_token.as_ref().unwrap(), &verifier).unwrap();
     assert_eq!(
@@ -380,6 +382,10 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     assert_eq!(
         id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
         &serde_json::json!(expected_at_hash(&refreshed.access_token))
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::SID),
+        access_payload.claim(JwtClaimNames::SID)
     );
 
     let refreshed_token = refreshed.refresh_token.unwrap();

@@ -76,6 +76,8 @@ fn to_metadata(
         post_logout_redirect_uris: parse_optional_urls(model.post_logout_redirect_uris.as_ref())?,
         frontchannel_logout_uri: parse_optional_url(model.frontchannel_logout_uri.as_deref())?,
         frontchannel_logout_session_required: model.frontchannel_logout_session_required,
+        backchannel_logout_uri: parse_optional_url(model.backchannel_logout_uri.as_deref())?,
+        backchannel_logout_session_required: model.backchannel_logout_session_required,
         response_types: deserialize_optional_string_vec(model.response_types.as_ref())?,
         grant_types: deserialize_optional_string_vec(model.grant_types.as_ref())?,
         contacts: deserialize_optional_string_vec(model.contacts.as_ref())?,
@@ -188,6 +190,30 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         &self,
         session_oid: uuid::Uuid,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        self.find_logout_clients_by_session_oid(session_oid, LogoutChannel::Front)
+            .await
+    }
+
+    async fn find_backchannel_logout_clients_by_session_oid(
+        &self,
+        session_oid: uuid::Uuid,
+    ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        self.find_logout_clients_by_session_oid(session_oid, LogoutChannel::Back)
+            .await
+    }
+}
+
+enum LogoutChannel {
+    Front,
+    Back,
+}
+
+impl OpenIdConnectClientRepositoryImpl {
+    async fn find_logout_clients_by_session_oid(
+        &self,
+        session_oid: uuid::Uuid,
+        channel: LogoutChannel,
+    ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let Some(session_model) = SessionEntity::find()
             .filter(session::Column::Oid.eq(session_oid))
             .one(&self.db)
@@ -225,7 +251,11 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
                 continue;
             };
 
-            if client.metadata().frontchannel_logout_uri.is_some() {
+            let has_channel = match channel {
+                LogoutChannel::Front => client.metadata().frontchannel_logout_uri.is_some(),
+                LogoutChannel::Back => client.metadata().backchannel_logout_uri.is_some(),
+            };
+            if has_channel {
                 clients.push(client);
             }
         }
@@ -270,13 +300,15 @@ mod tests {
     }
 
     #[test]
-    fn maps_frontchannel_logout_metadata() {
+    fn maps_logout_metadata() {
         let metadata = to_metadata(client_open_id_connect::Model {
             id: 1,
             client_id: 2,
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: Some("https://rp.example.com/frontchannel_logout".to_owned()),
             frontchannel_logout_session_required: Some(true),
+            backchannel_logout_uri: Some("https://rp.example.com/backchannel_logout".to_owned()),
+            backchannel_logout_session_required: Some(true),
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -313,6 +345,11 @@ mod tests {
             "https://rp.example.com/frontchannel_logout"
         );
         assert_eq!(metadata.frontchannel_logout_session_required, Some(true));
+        assert_eq!(
+            metadata.backchannel_logout_uri.unwrap().as_str(),
+            "https://rp.example.com/backchannel_logout"
+        );
+        assert_eq!(metadata.backchannel_logout_session_required, Some(true));
     }
 
     #[test]

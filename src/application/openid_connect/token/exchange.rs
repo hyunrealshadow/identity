@@ -151,6 +151,7 @@ impl TokenService {
                 data.auth_time,
                 data.acr.as_deref(),
                 Some(&access_token),
+                Some(&protected_session_id),
                 &data.scope,
             )?)
         } else {
@@ -316,6 +317,7 @@ impl TokenService {
             refresh_data.auth_time,
             None,
             Some(&access_token),
+            Some(&protected_session_id),
             &scope,
         )?);
         self.client_authorization_repo

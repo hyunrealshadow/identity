@@ -1106,6 +1106,7 @@ fn sign_implicit_id_token_includes_scope_claims() {
             None,
             None,
             None,
+            None,
             &scope,
             None,
         )
@@ -1198,6 +1199,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
             None,
             None,
             None,
+            Some("protected-session"),
             &scope,
             Some(&claims_request),
         )
@@ -1208,6 +1210,10 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     assert_eq!(
         payload.claim("name").and_then(|v| v.as_str()),
         Some("Alice Example")
+    );
+    assert_eq!(
+        payload.claim(JwtClaimNames::SID).unwrap(),
+        &serde_json::json!("protected-session")
     );
     assert_eq!(payload.claim("email"), None);
 }
@@ -1269,6 +1275,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
             Utc::now().timestamp(),
             None,
             Some("access-token"),
+            None,
             None,
             &scope,
             None,
@@ -1340,6 +1347,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
             None,
             None,
             Some("authorization-code"),
+            None,
             &scope,
             None,
         )

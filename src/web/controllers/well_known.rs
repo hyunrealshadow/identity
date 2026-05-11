@@ -123,7 +123,8 @@ mod tests {
         assert!(json.get("registration_endpoint").is_none());
         assert_eq!(json["frontchannel_logout_supported"], true);
         assert_eq!(json["frontchannel_logout_session_supported"], true);
-        assert!(json.get("backchannel_logout_supported").is_none());
+        assert_eq!(json["backchannel_logout_supported"], true);
+        assert_eq!(json["backchannel_logout_session_supported"], true);
         assert_eq!(json["claims_parameter_supported"], true);
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);

@@ -218,6 +218,8 @@ pub(super) async fn continue_state(
         post_logout_redirect_uris: None,
         frontchannel_logout_uri: None,
         frontchannel_logout_session_required: None,
+        backchannel_logout_uri: None,
+        backchannel_logout_session_required: None,
         response_types: None,
         grant_types: None,
         contacts: None,

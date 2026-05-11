@@ -13,6 +13,8 @@ pub struct Model {
     pub post_logout_redirect_uris: Option<Json>,
     pub frontchannel_logout_uri: Option<String>,
     pub frontchannel_logout_session_required: Option<bool>,
+    pub backchannel_logout_uri: Option<String>,
+    pub backchannel_logout_session_required: Option<bool>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub response_types: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]

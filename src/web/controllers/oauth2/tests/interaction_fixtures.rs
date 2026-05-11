@@ -124,6 +124,8 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         post_logout_redirect_uris: None,
         frontchannel_logout_uri: None,
         frontchannel_logout_session_required: None,
+        backchannel_logout_uri: None,
+        backchannel_logout_session_required: None,
         response_types: None,
         grant_types: None,
         contacts: None,

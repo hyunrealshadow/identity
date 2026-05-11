@@ -88,6 +88,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         InMemoryDataProtector::new(),
     );
 
+    let session_oid = Uuid::new_v4();
     let record = repo
         .create(
             Uuid::nil(),
@@ -98,7 +99,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 code_challenge: Some("verifier-123".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: session_oid.to_string(),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -149,6 +150,14 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     assert_eq!(
         id_payload.claim(JwtClaimNames::AMR).unwrap(),
         &serde_json::json!(["pwd"])
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::SID),
+        access_payload.claim(JwtClaimNames::SID)
+    );
+    assert_ne!(
+        id_payload.claim(JwtClaimNames::SID).unwrap(),
+        &serde_json::json!(session_oid.to_string())
     );
     assert!(
         repo.find_by_oid(record.oid)
@@ -805,6 +814,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 None,
                 None,
                 Some(&access_token),
+                None,
                 "openid profile",
             )
             .unwrap();

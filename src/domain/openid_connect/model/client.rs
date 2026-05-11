@@ -64,6 +64,8 @@ pub struct OpenIdConnectClientMetadata {
     pub post_logout_redirect_uris: Option<Vec<Url>>,
     pub frontchannel_logout_uri: Option<Url>,
     pub frontchannel_logout_session_required: Option<bool>,
+    pub backchannel_logout_uri: Option<Url>,
+    pub backchannel_logout_session_required: Option<bool>,
     pub response_types: Option<Vec<String>>,
     pub grant_types: Option<Vec<String>>,
     pub contacts: Option<Vec<String>>,
@@ -222,6 +224,10 @@ mod tests {
                 Url::parse("https://rp.example.com/frontchannel_logout").unwrap(),
             ),
             frontchannel_logout_session_required: Some(true),
+            backchannel_logout_uri: Some(
+                Url::parse("https://rp.example.com/backchannel_logout").unwrap(),
+            ),
+            backchannel_logout_session_required: Some(true),
             response_types: Some(vec!["code".to_string()]),
             grant_types: Some(vec!["authorization_code".to_string()]),
             contacts: None,
@@ -259,6 +265,11 @@ mod tests {
             "https://rp.example.com/frontchannel_logout"
         );
         assert_eq!(metadata.frontchannel_logout_session_required, Some(true));
+        assert_eq!(
+            metadata.backchannel_logout_uri.unwrap().as_str(),
+            "https://rp.example.com/backchannel_logout"
+        );
+        assert_eq!(metadata.backchannel_logout_session_required, Some(true));
     }
 
     #[test]
@@ -330,6 +341,8 @@ mod tests {
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: None,
             frontchannel_logout_session_required: None,
+            backchannel_logout_uri: None,
+            backchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -390,6 +403,8 @@ mod tests {
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: None,
             frontchannel_logout_session_required: None,
+            backchannel_logout_uri: None,
+            backchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -427,6 +442,8 @@ mod tests {
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: None,
             frontchannel_logout_session_required: None,
+            backchannel_logout_uri: None,
+            backchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -467,6 +484,8 @@ mod tests {
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: None,
             frontchannel_logout_session_required: None,
+            backchannel_logout_uri: None,
+            backchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -518,6 +537,8 @@ mod tests {
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: None,
             frontchannel_logout_session_required: None,
+            backchannel_logout_uri: None,
+            backchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,
@@ -587,6 +608,8 @@ mod tests {
             post_logout_redirect_uris: None,
             frontchannel_logout_uri: None,
             frontchannel_logout_session_required: None,
+            backchannel_logout_uri: None,
+            backchannel_logout_session_required: None,
             response_types: None,
             grant_types: None,
             contacts: None,

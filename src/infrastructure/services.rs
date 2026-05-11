@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 
@@ -129,7 +130,11 @@ impl AppServices {
             oidc_logout: LogoutService::new(
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
-            ),
+                Arc::new(KeyRepositoryImpl::new(db.clone())),
+                Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
+                signing_algorithm_detector.clone(),
+            )
+            .with_http_client(backchannel_logout_http_client()),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
@@ -195,6 +200,21 @@ impl AppServices {
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
     }
+}
+
+fn backchannel_logout_http_client() -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5));
+    if std::env::var("APP_ENV")
+        .map(|value| value.eq_ignore_ascii_case("conformance"))
+        .unwrap_or(false)
+    {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    builder
+        .build()
+        .expect("back-channel logout HTTP client must build")
 }
 
 #[cfg(test)]

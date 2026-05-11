@@ -26,6 +26,7 @@ openssl = { workspace = true }
 password-hash = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true }
 salvo = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }

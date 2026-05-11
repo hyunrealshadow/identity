@@ -307,8 +307,8 @@ impl OpenIdProviderService {
             check_session_iframe: Some(endpoint_url(&issuer, "/oauth2/check_session")?),
             frontchannel_logout_supported: Some(true),
             frontchannel_logout_session_supported: Some(true),
-            backchannel_logout_supported: None,
-            backchannel_logout_session_supported: None,
+            backchannel_logout_supported: Some(true),
+            backchannel_logout_session_supported: Some(true),
         })
     }
 
@@ -669,6 +669,8 @@ mod tests {
         );
         assert_eq!(metadata.frontchannel_logout_supported, Some(true));
         assert_eq!(metadata.frontchannel_logout_session_supported, Some(true));
+        assert_eq!(metadata.backchannel_logout_supported, Some(true));
+        assert_eq!(metadata.backchannel_logout_session_supported, Some(true));
         assert_eq!(
             metadata.response_types_supported,
             vec![
