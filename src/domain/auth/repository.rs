@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::auth::model::{ActiveSession, Login, Session};
+use crate::auth::model::{ActiveSession, Login, Session, SessionOid};
 
 #[derive(Debug, Error)]
 pub enum SessionRepositoryError {
@@ -58,14 +58,14 @@ pub enum LoginRepositoryError {
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
     /// Find a session by its OID.
-    async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Session>, SessionRepositoryError>;
+    async fn find_by_oid(&self, oid: SessionOid) -> Result<Option<Session>, SessionRepositoryError>;
 
     /// Find multiple active sessions by their OIDs, joined with user data.
     ///
     /// Returns a flat read model so callers never need a separate user repo.
     async fn find_active_accounts_by_oids(
         &self,
-        oids: &[Uuid],
+        oids: &[SessionOid],
     ) -> Result<Vec<ActiveSession>, SessionRepositoryError>;
 
     /// Create a new session and return it.
@@ -87,11 +87,11 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<Session, SessionRepositoryError>;
 
     /// Update `last_active_at` for a session (identified by OID).
-    async fn touch_by_oid(&self, oid: Uuid) -> Result<(), SessionRepositoryError>;
+    async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError>;
 
     async fn revoke_by_oid(
         &self,
-        oid: Uuid,
+        oid: SessionOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRepositoryError>;
 }
@@ -127,7 +127,7 @@ pub trait LoginRepository: Send + Sync {
         &self,
         login_oid: Uuid,
         status: &str,
-        session_oid: Option<Uuid>,
+        session_oid: Option<SessionOid>,
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError>;
 

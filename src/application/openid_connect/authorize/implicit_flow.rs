@@ -1,13 +1,14 @@
 use super::flow::session_state_for_authorize_response;
 use super::*;
 use std::fmt::Write;
+use identity_domain::auth::SessionOid;
 use uuid::Uuid;
 
 impl AuthorizeService {
     pub(super) async fn approve_implicit_flow(
         &self,
         request: &AuthorizationRequestData,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         protected_session_id: &str,
         user_oid: Uuid,
         response_type: ResponseType,
@@ -122,7 +123,7 @@ impl AuthorizeService {
     pub(super) async fn approve_hybrid_flow(
         &self,
         request: &AuthorizationRequestData,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         protected_session_id: &str,
         user_oid: Uuid,
         response_type: ResponseType,
@@ -246,7 +247,7 @@ impl AuthorizeService {
         &self,
         client_id: Uuid,
         user_oid: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         protected_session_id: &str,
         request: &AuthorizationRequestData,
         authorization_code_oid: Option<Uuid>,
@@ -265,7 +266,7 @@ impl AuthorizeService {
                 serde_json::to_value(identity_domain::client_authorization::AccessTokenData {
                     scope: request.scope.clone(),
                     user_oid: user_oid.to_string(),
-                    session_oid: session_oid.to_string(),
+                    session_oid,
                     protected_session_id: Some(protected_session_id.to_string()),
                     authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
                 })

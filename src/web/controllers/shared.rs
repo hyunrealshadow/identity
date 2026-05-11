@@ -15,7 +15,7 @@ use crate::{
         error::{AppError, codes::common::CommonErrorCode},
     },
     boot::AppState,
-    domain::auth::model::ActiveSession,
+    domain::auth::model::{ActiveSession, SessionOid},
     domain::auth::{SESSION_COOKIE_NAME, SESSION_EXPIRY},
 };
 
@@ -37,7 +37,7 @@ pub struct SelectedSessionCookie {
 
 #[derive(Debug, Clone)]
 pub struct SessionCookieEntry {
-    pub session_oid: Uuid,
+    pub session_oid: SessionOid,
     pub protected_session_id: String,
 }
 
@@ -58,15 +58,18 @@ fn parse_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
         })
 }
 
-pub async fn protect_session_id(ctx: &AppState, session_oid: Uuid) -> Result<String, AppError> {
+pub async fn protect_session_id(ctx: &AppState, session_oid: SessionOid) -> Result<String, AppError> {
     ctx.services()
         .data_protector()
-        .protect(SESSION_ID_PROTECTION_PURPOSE, session_oid.as_bytes())
+        .protect(SESSION_ID_PROTECTION_PURPOSE, Uuid::from(session_oid).as_bytes())
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))
 }
 
-pub async fn unprotect_session_id(ctx: &AppState, protected_id: &str) -> Result<Uuid, AppError> {
+pub async fn unprotect_session_id(
+    ctx: &AppState,
+    protected_id: &str,
+) -> Result<SessionOid, AppError> {
     let bytes = ctx
         .services()
         .data_protector()
@@ -74,8 +77,9 @@ pub async fn unprotect_session_id(ctx: &AppState, protected_id: &str) -> Result<
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
 
-    Uuid::from_slice(&bytes)
-        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))
+    let uuid = Uuid::from_slice(&bytes)
+        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
+    Ok(SessionOid(uuid))
 }
 
 /// Parse the `sessions` cookie from request headers.
@@ -100,7 +104,7 @@ pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<Se
         #[cfg(test)]
         if let Ok(session_oid) = Uuid::parse_str(&protected_session_id) {
             entries.push(SessionCookieEntry {
-                session_oid,
+                session_oid: SessionOid(session_oid),
                 protected_session_id,
             });
         }
@@ -123,13 +127,13 @@ pub fn build_session_cookie_from_protected_ids(protected_ids: &[String], secure:
 
 pub async fn build_session_cookie(
     ctx: &AppState,
-    oids: &[Uuid],
+    oids: &[SessionOid],
     secure: bool,
 ) -> Result<String, AppError> {
     #[cfg(test)]
     {
         let _ = ctx;
-        let ids = oids.iter().map(Uuid::to_string).collect::<Vec<_>>();
+        let ids = oids.iter().map(|oid| Uuid::from(*oid).to_string()).collect::<Vec<_>>();
         Ok(build_session_cookie_from_protected_ids(&ids, secure))
     }
 
@@ -149,7 +153,7 @@ pub async fn build_session_cookie(
 pub async fn build_selected_session_cookie(
     ctx: &AppState,
     headers: &HeaderMap,
-    session_oid: Uuid,
+    session_oid: SessionOid,
     secure: bool,
 ) -> Result<SelectedSessionCookie, AppError> {
     let mut entries = parse_session_cookie(ctx, headers).await;
@@ -183,7 +187,7 @@ pub async fn load_active_session_entries(
         return Ok(Vec::new());
     }
 
-    let session_oids: Vec<Uuid> = entries.iter().map(|entry| entry.session_oid).collect();
+    let session_oids: Vec<SessionOid> = entries.iter().map(|entry| entry.session_oid).collect();
     let active_sessions = ctx
         .services()
         .session()

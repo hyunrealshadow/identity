@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::future::Future;
 use uuid::Uuid;
 
+use identity_domain::auth::SessionOid;
+
 use salvo::Response;
 
 use crate::{
@@ -78,7 +80,7 @@ async fn determine_authorize_flow_with_selection_recorder<F, Fut>(
     mut record_selection: F,
 ) -> Result<FlowDecision, AppError>
 where
-    F: FnMut(Uuid, Uuid, Uuid, SelectionSource) -> Fut,
+    F: FnMut(Uuid, SessionOid, Uuid, SelectionSource) -> Fut,
     Fut: Future<Output = Result<(), AppError>>,
 {
     if sessions.is_empty() {
@@ -207,7 +209,7 @@ mod tests {
 
     fn active_session(created_at: chrono::DateTime<Utc>) -> ActiveSession {
         ActiveSession {
-            session_oid: Uuid::new_v4(),
+            session_oid: SessionOid(Uuid::new_v4()),
             user_oid: Uuid::new_v4(),
             user_name: "alice".to_string(),
             user_email: "alice@example.com".to_string(),
@@ -220,7 +222,7 @@ mod tests {
     #[test]
     fn select_active_session_prefers_matching_login_hint() {
         let matching = ActiveSession {
-            session_oid: Uuid::new_v4(),
+            session_oid: SessionOid(Uuid::new_v4()),
             user_oid: Uuid::new_v4(),
             user_name: "alice".to_string(),
             user_email: "alice@example.com".to_string(),
@@ -229,7 +231,7 @@ mod tests {
             created_at: Utc::now(),
         };
         let other = ActiveSession {
-            session_oid: Uuid::new_v4(),
+            session_oid: SessionOid(Uuid::new_v4()),
             user_oid: Uuid::new_v4(),
             user_name: "bob".to_string(),
             user_email: "bob@example.com".to_string(),

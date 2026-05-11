@@ -189,7 +189,7 @@ impl AuthorizeService {
         audience: &str,
         client_id: &str,
         user_oid: &str,
-        session_oid: &str,
+        protected_session_id: &str,
         scope: &str,
         token_id: &str,
         claims: Option<&serde_json::Value>,
@@ -217,7 +217,7 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::SID, Some(serde_json::json!(session_oid)))
+            .set_claim(JwtClaimNames::SID, Some(serde_json::json!(protected_session_id)))
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;

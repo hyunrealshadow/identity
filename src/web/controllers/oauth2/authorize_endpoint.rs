@@ -130,6 +130,7 @@ mod tests {
     use super::super::tests::interaction_fixtures::authorize_first_hop_state;
     use crate::controllers::oauth2::{authorize_response::redirect_oauth_error_response, routes};
     use crate::controllers::shared::build_session_cookie;
+    use identity_domain::auth::SessionOid;
     use http::{HeaderMap, StatusCode, header};
     use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
@@ -208,7 +209,7 @@ mod tests {
     #[tokio::test]
     async fn authorize_with_reusable_session_redirects_to_oauth2_continue() {
         let (state, session_oid) = authorize_first_hop_state().await;
-        let session_cookie = build_session_cookie(&state, &[session_oid], false)
+        let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
             .await
             .unwrap();
         let response = call_authorize_with_state(

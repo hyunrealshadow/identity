@@ -1,5 +1,6 @@
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use identity_domain::auth::SessionOid;
 
 #[tokio::test]
 async fn exchange_refresh_token_returns_new_access_token() {
@@ -17,7 +18,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
                 code_challenge: Some("verifier-refresh".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -177,7 +178,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 code_challenge: Some("verifier-refresh-es256".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -319,7 +320,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 code_challenge: Some("verifier-auth-time".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: Some(original_auth_time),
@@ -416,7 +417,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
                 code_challenge: Some("verifier-no-auth-time".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use identity_domain::{
     auth::{
-        LoginStatus,
+        LoginStatus, SessionOid,
         model::{ActiveSession, Login},
     },
     client_authorization::{
@@ -59,7 +59,7 @@ fn login(status: &'static str) -> Login {
 
 fn active_session() -> ActiveSession {
     ActiveSession {
-        session_oid: Uuid::new_v4(),
+        session_oid: SessionOid(Uuid::new_v4()),
         user_oid: Uuid::new_v4(),
         user_name: "Ada".to_owned(),
         user_email: "ada@example.com".to_owned(),

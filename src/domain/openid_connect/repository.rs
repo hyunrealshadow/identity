@@ -2,6 +2,7 @@ use super::model::client::OpenIdConnectClient;
 use super::model::credential::{
     OpenIdConnectCredential, OpenIdConnectCredentialOid, OpenIdConnectCredentialType,
 };
+use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
 use thiserror::Error;
 
@@ -66,14 +67,14 @@ pub trait OpenIdConnectClientRepository: Send + Sync {
 
     async fn find_frontchannel_logout_clients_by_session_oid(
         &self,
-        _session_oid: uuid::Uuid,
+        _session_oid: SessionOid,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         Ok(Vec::new())
     }
 
     async fn find_backchannel_logout_clients_by_session_oid(
         &self,
-        _session_oid: uuid::Uuid,
+        _session_oid: SessionOid,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         Ok(Vec::new())
     }

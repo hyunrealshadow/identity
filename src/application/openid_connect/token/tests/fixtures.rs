@@ -1,4 +1,5 @@
 use super::*;
+use identity_domain::auth::SessionOid;
 
 mod clients;
 
@@ -586,7 +587,7 @@ impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
     async fn update_authorization_request_selection(
         &self,
         _oid: Uuid,
-        _session_oid: Uuid,
+        _session_oid: SessionOid,
         _user_oid: Uuid,
         _protected_session_id: Option<String>,
         _source: identity_domain::client_authorization::SelectionSource,

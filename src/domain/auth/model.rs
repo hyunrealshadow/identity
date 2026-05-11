@@ -1,9 +1,25 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SessionOid(pub Uuid);
+
+impl From<Uuid> for SessionOid {
+    fn from(value: Uuid) -> Self {
+        Self(value)
+    }
+}
+
+impl From<SessionOid> for Uuid {
+    fn from(value: SessionOid) -> Self {
+        value.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Session {
-    pub oid: Uuid,
+    pub oid: SessionOid,
     pub user_oid: Uuid,
     pub status: String,
     pub device_name: Option<String>,
@@ -28,7 +44,7 @@ pub struct Session {
 /// Read model for the account picker — one JOIN query, no separate user lookup.
 #[derive(Debug, Clone)]
 pub struct ActiveSession {
-    pub session_oid: Uuid,
+    pub session_oid: SessionOid,
     pub user_oid: Uuid,
     pub user_name: String,
     pub user_email: String,
@@ -42,7 +58,7 @@ pub struct Login {
     pub oid: Uuid,
     pub client_oid: Uuid,
     pub client_authorization_oid: Uuid,
-    pub session_oid: Option<Uuid>,
+    pub session_oid: Option<SessionOid>,
     /// The user this login attempt belongs to.  Set at creation (identifier
     /// step) so that subsequent challenge steps do not need to re-resolve the
     /// identifier string into a user.

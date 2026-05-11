@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
-    auth::{LoginStatus, password::PasswordHashSetting},
+    auth::{LoginStatus, SessionOid, password::PasswordHashSetting},
     client_authorization::{
         AuthorizationInteractionState, ClientAuthorizationType, ConsentState, SelectionSource,
         StoredAuthorizationRequest,
@@ -149,7 +149,7 @@ pub(super) async fn continue_state(
         },
         interaction: match (selected_session_oid, selected_user_oid) {
             (Some(session_oid), Some(user_oid)) => AuthorizationInteractionState {
-                selected_session_oid: Some(session_oid.to_string()),
+                selected_session_oid: Some(SessionOid(session_oid)),
                 selected_protected_session_id: None,
                 selected_user_oid: Some(user_oid.to_string()),
                 selection_source: fixture.selection_source.or(Some(SelectionSource::Auto)),

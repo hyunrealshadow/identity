@@ -333,7 +333,7 @@ async fn record_selected_session_upgrades_auto_to_fresh_login() {
     service
         .record_authorization_selection(
             authorization_oid,
-            Uuid::new_v4(),
+            SessionOid(Uuid::new_v4()),
             Uuid::new_v4(),
             None,
             SelectionSource::Auto,
@@ -341,7 +341,7 @@ async fn record_selected_session_upgrades_auto_to_fresh_login() {
         .await
         .unwrap();
 
-    let fresh_session = Uuid::new_v4();
+    let fresh_session = SessionOid(Uuid::new_v4());
     let fresh_user = Uuid::new_v4();
     service
         .record_authorization_selection(
@@ -360,8 +360,8 @@ async fn record_selected_session_upgrades_auto_to_fresh_login() {
         .unwrap();
 
     assert_eq!(
-        stored.interaction.selected_session_oid.as_deref(),
-        Some(fresh_session.to_string().as_str())
+        stored.interaction.selected_session_oid,
+        Some(fresh_session)
     );
     assert_eq!(
         stored.interaction.selected_user_oid.as_deref(),
@@ -595,7 +595,7 @@ async fn approve_authorization_request_is_single_use_after_completion() {
         .unwrap();
 
     let error = service
-        .approve_authorization_request(authorization_oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .approve_authorization_request(authorization_oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
         .await
         .unwrap_err();
 
@@ -627,7 +627,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
         .await
         .unwrap();
 
@@ -664,7 +664,7 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
     request_repo.set_stored_request_redirect_uri_for_test(oid, "not a uri");
 
     let error = service
-        .approve_authorization_request(oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
         .await
         .unwrap_err();
     assert_eq!(error.code(), 23052);
@@ -674,7 +674,7 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
         .set_stored_request_redirect_uri_for_test(oid, "https://client.example.com/callback");
 
     let redirect = service
-        .approve_authorization_request(oid, Uuid::new_v4(), Uuid::new_v4(), None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
         .await
         .unwrap();
 
@@ -720,7 +720,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, Uuid::new_v4(), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
         .await
         .unwrap();
 
@@ -789,7 +789,7 @@ async fn approve_implicit_flow_returns_session_state() {
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, Uuid::new_v4(), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
         .await
         .unwrap();
 
@@ -838,7 +838,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, Uuid::new_v4(), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
         .await
         .unwrap();
 
@@ -902,7 +902,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, Uuid::new_v4(), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
         .await
         .unwrap();
 

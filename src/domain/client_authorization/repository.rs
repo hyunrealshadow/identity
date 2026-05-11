@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::model::{ClientAuthorization, ClientAuthorizationType, ConsentState, SelectionSource};
+use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
 
 #[async_trait]
@@ -23,7 +24,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
     async fn update_authorization_request_selection(
         &self,
         oid: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         protected_session_id: Option<String>,
         source: SelectionSource,

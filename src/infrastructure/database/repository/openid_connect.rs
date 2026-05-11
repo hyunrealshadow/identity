@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
 use serde_json::Value;
 use url::Url;
+use uuid::Uuid;
 
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_open_id_connect,
@@ -11,6 +12,7 @@ use crate::database::entity::{
     client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
     scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
 };
+use identity_domain::auth::SessionOid;
 use identity_domain::client::model::Client;
 use identity_domain::openid_connect::{
     OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
@@ -188,7 +190,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
 
     async fn find_frontchannel_logout_clients_by_session_oid(
         &self,
-        session_oid: uuid::Uuid,
+        session_oid: SessionOid,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         self.find_logout_clients_by_session_oid(session_oid, LogoutChannel::Front)
             .await
@@ -196,7 +198,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
 
     async fn find_backchannel_logout_clients_by_session_oid(
         &self,
-        session_oid: uuid::Uuid,
+        session_oid: SessionOid,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         self.find_logout_clients_by_session_oid(session_oid, LogoutChannel::Back)
             .await
@@ -211,11 +213,11 @@ enum LogoutChannel {
 impl OpenIdConnectClientRepositoryImpl {
     async fn find_logout_clients_by_session_oid(
         &self,
-        session_oid: uuid::Uuid,
+        session_oid: SessionOid,
         channel: LogoutChannel,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let Some(session_model) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(session_oid))
+            .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
             .one(&self.db)
             .await
             .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?

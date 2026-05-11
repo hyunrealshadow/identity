@@ -1,4 +1,5 @@
 pub mod model;
+pub use model::SessionOid;
 pub mod password;
 pub mod repository;
 pub mod totp;

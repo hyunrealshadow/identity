@@ -1,6 +1,7 @@
 use crate::key::asymmetric::AsymmetricKeyService;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use identity_domain::auth::SessionOid;
 use identity_domain::auth::ACR_PASSWORD;
 use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
 
@@ -99,7 +100,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 code_challenge: Some("verifier-123".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: session_oid.to_string(),
+                session_oid: SessionOid::from(session_oid),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -263,7 +264,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 code_challenge: Some("verifier-123".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: Some(ACR_PASSWORD.to_string()),
                 auth_time: Some(chrono::Utc::now().timestamp()),
@@ -314,7 +315,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
                 code_challenge: Some("expected-verifier".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -438,7 +439,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
                 code_challenge: Some("verifier-789".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -528,7 +529,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
                 code_challenge: Some("verifier-offline".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -594,7 +595,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                     code_challenge: Some(format!("verifier-{alg}")),
                     code_challenge_method: Some("plain".to_string()),
                     user_oid: user_oid.to_string(),
-                    session_oid: Uuid::new_v4().to_string(),
+                    session_oid: SessionOid::from(Uuid::new_v4()),
                     protected_session_id: None,
                     acr: None,
                     auth_time: None,
@@ -706,7 +707,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
                 code_challenge: Some("verifier-rs256".to_string()),
                 code_challenge_method: Some("plain".to_string()),
                 user_oid: user_oid.to_string(),
-                session_oid: Uuid::new_v4().to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
                 auth_time: None,
@@ -774,7 +775,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 Uuid::nil(),
                 "openid profile",
                 &user_oid.to_string(),
-                &Uuid::new_v4().to_string(),
+                SessionOid::from(Uuid::new_v4()),
                 None,
                 None,
             )

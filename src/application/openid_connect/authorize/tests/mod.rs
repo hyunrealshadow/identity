@@ -30,7 +30,7 @@ use crate::{
 };
 use identity_domain::{
     auth::{
-        LoginStatus,
+        LoginStatus, SessionOid,
         model::Login,
         repository::{LoginRepository, LoginRepositoryError},
     },

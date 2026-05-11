@@ -1,4 +1,5 @@
 use super::*;
+use identity_domain::auth::SessionOid;
 
 impl TokenService {
     pub async fn exchange_authorization_code(
@@ -77,7 +78,7 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
             })?;
         let protected_session_id = self
-            .protected_session_id(&data.session_oid, data.protected_session_id.as_deref())
+            .protected_session_id(data.session_oid, data.protected_session_id.as_deref())
             .await?;
 
         let redirect_uri = params
@@ -120,12 +121,12 @@ impl TokenService {
                 record.client_oid,
                 &data.scope,
                 &data.user_oid,
-                &data.session_oid,
+                data.session_oid,
                 Some(&protected_session_id),
                 Some(record.oid),
             )
             .await?;
-        let access_token = self.sign_access_token(
+            let access_token = self.sign_access_token(
             &access_token_record.oid.to_string(),
             &signing_key_id,
             &signing_key_pem,
@@ -167,7 +168,7 @@ impl TokenService {
                     record.client_oid,
                     &data.scope,
                     &data.user_oid,
-                    &data.session_oid,
+                    data.session_oid,
                     Some(&protected_session_id),
                     data.auth_time,
                     None,
@@ -255,7 +256,7 @@ impl TokenService {
             })?;
         let protected_session_id = self
             .protected_session_id(
-                &refresh_data.session_oid,
+                refresh_data.session_oid,
                 refresh_data.protected_session_id.as_deref(),
             )
             .await?;
@@ -287,7 +288,7 @@ impl TokenService {
                 authenticated_client_oid,
                 &scope,
                 &refresh_data.user_oid,
-                &refresh_data.session_oid,
+                refresh_data.session_oid,
                 Some(&protected_session_id),
                 None,
             )
@@ -332,7 +333,7 @@ impl TokenService {
                 authenticated_client_oid,
                 &scope,
                 &refresh_data.user_oid,
-                &refresh_data.session_oid,
+                refresh_data.session_oid,
                 Some(&protected_session_id),
                 refresh_data.auth_time,
                 Some(rotated_from.as_str()),
@@ -352,18 +353,15 @@ impl TokenService {
 
     async fn protected_session_id(
         &self,
-        session_oid: &str,
+        session_oid: SessionOid,
         existing: Option<&str>,
     ) -> Result<String, AppError> {
         if let Some(existing) = existing {
             return Ok(existing.to_string());
         }
 
-        let session_oid = Uuid::parse_str(session_oid).map_err(|error| {
-            AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
-        })?;
         self.data_protector
-            .protect("session-id", session_oid.as_bytes())
+            .protect("session-id", Uuid::from(session_oid).as_bytes())
             .await
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)

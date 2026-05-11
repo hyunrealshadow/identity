@@ -10,6 +10,8 @@ use josekit::{
 use url::Url;
 use uuid::Uuid;
 
+use identity_domain::auth::SessionOid;
+
 use crate::{
     application::{
         error::{
@@ -33,7 +35,7 @@ pub struct RpInitiatedLogoutRequest {
     pub post_logout_redirect_uri: Option<String>,
     pub state: Option<String>,
     pub ui_locales: Option<String>,
-    pub session_oid: Option<Uuid>,
+    pub session_oid: Option<SessionOid>,
     pub protected_session_id: Option<String>,
 }
 
@@ -173,7 +175,7 @@ impl LogoutService {
 
     async fn outcome_with_frontchannel_notifications(
         &self,
-        session_oid: Option<Uuid>,
+        session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
         post_logout_redirect_uri: Option<Url>,
     ) -> Result<LogoutOutcome, AppError> {
@@ -199,7 +201,7 @@ impl LogoutService {
 
     async fn frontchannel_logout_notifications(
         &self,
-        session_oid: Option<Uuid>,
+        session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
     ) -> Result<Vec<FrontChannelLogoutNotification>, AppError> {
         let Some(session_oid) = session_oid else {
@@ -234,7 +236,7 @@ impl LogoutService {
 
     async fn backchannel_logout_notifications(
         &self,
-        session_oid: Option<Uuid>,
+        session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
     ) -> Result<Vec<BackChannelLogoutNotification>, AppError> {
         let (Some(session_oid), Some(protected_session_id)) = (session_oid, protected_session_id)
@@ -289,7 +291,7 @@ impl LogoutService {
 
     async fn send_backchannel_logout_notifications(
         &self,
-        session_oid: Option<Uuid>,
+        session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
     ) -> Result<(), AppError> {
         let notifications = self
@@ -575,6 +577,7 @@ mod tests {
     use openssl::rsa::Rsa;
     use std::{collections::HashMap, sync::Arc};
     use url::Url;
+    use identity_domain::auth::SessionOid;
     use uuid::Uuid;
 
     #[derive(Clone)]
@@ -620,14 +623,14 @@ mod tests {
 
         async fn find_frontchannel_logout_clients_by_session_oid(
             &self,
-            _session_oid: Uuid,
+            _session_oid: SessionOid,
         ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
             Ok(self.clients.values().cloned().collect())
         }
 
         async fn find_backchannel_logout_clients_by_session_oid(
             &self,
-            _session_oid: Uuid,
+            _session_oid: SessionOid,
         ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
             Ok(self.clients.values().cloned().collect())
         }
@@ -943,7 +946,7 @@ mod tests {
     #[tokio::test]
     async fn returns_frontchannel_logout_notifications_for_session_clients() {
         let client_oid = Uuid::new_v4();
-        let session_oid = Uuid::new_v4();
+        let session_oid = SessionOid(Uuid::new_v4());
         let service = service_with_clients(vec![test_client(
             client_oid,
             None,
@@ -984,14 +987,14 @@ mod tests {
             !notifications[0]
                 .logout_uri
                 .as_str()
-                .contains(&session_oid.to_string())
+                .contains(&session_oid.0.to_string())
         );
     }
 
     #[tokio::test]
     async fn frontchannel_logout_preserves_post_logout_redirect_uri() {
         let client_oid = Uuid::new_v4();
-        let session_oid = Uuid::new_v4();
+        let session_oid = SessionOid(Uuid::new_v4());
         let service = service_with_clients(vec![test_client(
             client_oid,
             Some("https://rp.example.com/logout/callback"),
@@ -1034,7 +1037,7 @@ mod tests {
     #[tokio::test]
     async fn builds_backchannel_logout_token_with_protected_sid() {
         let client_oid = Uuid::new_v4();
-        let session_oid = Uuid::new_v4();
+        let session_oid = SessionOid(Uuid::new_v4());
         let (service, signing) = service_with_clients_and_signing(vec![test_client(
             client_oid,
             None,
@@ -1056,7 +1059,7 @@ mod tests {
         assert!(
             !notifications[0]
                 .logout_token
-                .contains(&session_oid.to_string())
+                .contains(&session_oid.0.to_string())
         );
 
         let payload = jwt::decode_with_verifier(

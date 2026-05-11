@@ -1,4 +1,5 @@
 use super::*;
+use identity_domain::auth::SessionOid;
 
 impl TokenService {
     pub(super) async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
@@ -54,7 +55,7 @@ impl TokenService {
         audience: &str,
         client_id: &str,
         user_oid: &Uuid,
-        session_oid: &str,
+        protected_session_id: &str,
         scope: &str,
         claims: Option<&serde_json::Value>,
     ) -> Result<String, AppError> {
@@ -81,7 +82,7 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::SID, Some(serde_json::json!(session_oid)))
+            .set_claim(JwtClaimNames::SID, Some(serde_json::json!(protected_session_id)))
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
@@ -306,7 +307,7 @@ impl TokenService {
         client_oid: Uuid,
         scope: &str,
         user_oid: &str,
-        session_oid: &str,
+        session_oid: SessionOid,
         protected_session_id: Option<&str>,
         auth_time: Option<i64>,
         rotated_from: Option<&str>,
@@ -314,7 +315,7 @@ impl TokenService {
         let data = serde_json::to_value(RefreshTokenData {
             scope: scope.to_string(),
             user_oid: user_oid.to_string(),
-            session_oid: session_oid.to_string(),
+            session_oid,
             protected_session_id: protected_session_id.map(str::to_string),
             auth_time,
             rotated_from: rotated_from.map(str::to_string),
@@ -349,14 +350,14 @@ impl TokenService {
         client_oid: Uuid,
         scope: &str,
         user_oid: &str,
-        session_oid: &str,
+        session_oid: SessionOid,
         protected_session_id: Option<&str>,
         authorization_code_oid: Option<Uuid>,
     ) -> Result<ClientAuthorization, AppError> {
         let data = serde_json::to_value(AccessTokenData {
             scope: scope.to_string(),
             user_oid: user_oid.to_string(),
-            session_oid: session_oid.to_string(),
+            session_oid,
             protected_session_id: protected_session_id.map(str::to_string),
             authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
         })

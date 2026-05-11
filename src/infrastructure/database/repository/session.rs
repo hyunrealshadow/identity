@@ -8,14 +8,14 @@ use crate::database::entity::{
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 use identity_domain::auth::{
-    SessionStatus,
+    SessionOid, SessionStatus,
     model::{ActiveSession, Session},
     repository::{SessionRepository, SessionRepositoryError},
 };
 
 fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
     Session {
-        oid: m.oid,
+        oid: SessionOid(m.oid),
         user_oid,
         status: m.status,
         device_name: m.device_name,
@@ -47,9 +47,9 @@ impl SessionRepositoryImpl {
 
 #[async_trait]
 impl SessionRepository for SessionRepositoryImpl {
-    async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Session>, SessionRepositoryError> {
+    async fn find_by_oid(&self, oid: SessionOid) -> Result<Option<Session>, SessionRepositoryError> {
         let Some((s_model, Some(u_model))) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(oid))
+            .filter(session::Column::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .one(&self.db)
@@ -63,13 +63,14 @@ impl SessionRepository for SessionRepositoryImpl {
 
     async fn find_active_accounts_by_oids(
         &self,
-        oids: &[Uuid],
+        oids: &[SessionOid],
     ) -> Result<Vec<ActiveSession>, SessionRepositoryError> {
         if oids.is_empty() {
             return Ok(Vec::new());
         }
+        let uuids: Vec<Uuid> = oids.iter().map(|oid| Uuid::from(*oid)).collect();
         let rows: Vec<(session::Model, Option<user::Model>)> = SessionEntity::find()
-            .filter(session::Column::Oid.is_in(oids.iter().copied()))
+            .filter(session::Column::Oid.is_in(uuids))
             .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
             .inner_join(UserEntity)
             .select_also(UserEntity)
@@ -82,7 +83,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .filter_map(|(s, u)| {
                 let u = u?; // inner join guarantees Some, but be safe
                 Some(ActiveSession {
-                    session_oid: s.oid,
+                    session_oid: SessionOid(s.oid),
                     user_oid: u.oid,
                     user_name: u.name,
                     user_email: u.email,
@@ -144,9 +145,9 @@ impl SessionRepository for SessionRepositoryImpl {
         Ok(session_to_domain(model, user_oid))
     }
 
-    async fn touch_by_oid(&self, oid: Uuid) -> Result<(), SessionRepositoryError> {
+    async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError> {
         let model = SessionEntity::find()
-            .filter(session::Column::Oid.eq(oid))
+            .filter(session::Column::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
             .map_err(SessionRepositoryError::QueryFailed)?
@@ -163,11 +164,11 @@ impl SessionRepository for SessionRepositoryImpl {
 
     async fn revoke_by_oid(
         &self,
-        oid: Uuid,
+        oid: SessionOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
         let Some((s_model, Some(u_model))) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(oid))
+            .filter(session::Column::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .one(&self.db)

@@ -1,7 +1,7 @@
 use crate::domain::{
     auth::{
         LoginStatus,
-        model::{ActiveSession, Login},
+        model::{ActiveSession, Login, SessionOid},
     },
     client_authorization::{ConsentState, SelectionSource, StoredAuthorizationRequest},
     openid_connect::{AuthorizationRequestData, OAuthErrorCode},
@@ -13,7 +13,7 @@ pub enum ContinueAction {
     OAuthError(OAuthErrorCode),
     Consent,
     Approve {
-        session_oid: uuid::Uuid,
+        session_oid: SessionOid,
         user_oid: uuid::Uuid,
         auth_time: Option<i64>,
     },

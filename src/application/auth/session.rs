@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use uuid::Uuid;
+use identity_domain::auth::SessionOid;
 
 use crate::{
     application::error::{AppError, codes::auth::AuthErrorCode},
@@ -23,7 +23,7 @@ impl SessionService {
     /// Invalid, expired, or revoked sessions are silently filtered out.
     pub async fn get_active_accounts(
         &self,
-        session_oids: &[Uuid],
+        session_oids: &[SessionOid],
     ) -> Result<Vec<ActiveSession>, AppError> {
         if session_oids.is_empty() {
             return Ok(Vec::new());
@@ -40,7 +40,7 @@ impl SessionService {
         views.retain(|v| v.expires_at.is_none_or(|exp| now <= exp));
 
         // Preserve the original cookie order.
-        let oid_order: std::collections::HashMap<Uuid, usize> = session_oids
+        let oid_order: std::collections::HashMap<SessionOid, usize> = session_oids
             .iter()
             .enumerate()
             .map(|(i, oid)| (*oid, i))
@@ -51,14 +51,14 @@ impl SessionService {
     }
 
     /// Select an existing session: validate it and update `last_active_at`.
-    pub async fn select_session(&self, session_oid: Uuid) -> Result<Session, AppError> {
+    pub async fn select_session(&self, session_oid: SessionOid) -> Result<Session, AppError> {
         let session = self
             .session_repo
             .find_by_oid(session_oid)
             .await?
             .ok_or_else(|| {
                 AppError::from_code(AuthErrorCode::SessionNotFound)
-                    .with_param("session_id", session_oid.to_string())
+                    .with_param("session_id", session_oid.0.to_string())
             })?;
 
         if session.status != SessionStatus::ACTIVE {
@@ -84,17 +84,17 @@ impl SessionService {
             .await?
             .ok_or_else(|| {
                 AppError::from_code(AuthErrorCode::SessionNotFound)
-                    .with_param("session_id", session_oid.to_string())
+                    .with_param("session_id", session_oid.0.to_string())
             })
     }
 
-    pub async fn revoke(&self, session_oid: Uuid) -> Result<Session, AppError> {
+    pub async fn revoke(&self, session_oid: SessionOid) -> Result<Session, AppError> {
         self.session_repo
             .revoke_by_oid(session_oid, Utc::now())
             .await?
             .ok_or_else(|| {
                 AppError::from_code(AuthErrorCode::SessionNotFound)
-                    .with_param("session_id", session_oid.to_string())
+                    .with_param("session_id", session_oid.0.to_string())
             })
     }
 }

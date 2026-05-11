@@ -12,6 +12,7 @@ use crate::database::entity::{
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 use identity_domain::auth::{
+    SessionOid,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
 };
@@ -20,7 +21,7 @@ fn to_domain(
     m: login::Model,
     client_oid: Uuid,
     client_authorization_oid: Uuid,
-    session_oid: Option<Uuid>,
+    session_oid: Option<SessionOid>,
     user_oid: Option<Uuid>,
 ) -> Login {
     Login {
@@ -86,7 +87,7 @@ impl LoginRepository for LoginRepositoryImpl {
                 .one(&self.db)
                 .await
                 .map_err(LoginRepositoryError::QueryFailed)?
-                .map(|session| session.oid),
+                .map(|session| SessionOid(session.oid)),
             None => None,
         };
 
@@ -200,7 +201,7 @@ impl LoginRepository for LoginRepositoryImpl {
         &self,
         login_oid: Uuid,
         status: &str,
-        session_oid: Option<Uuid>,
+        session_oid: Option<SessionOid>,
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError> {
         let model = LoginEntity::find()
@@ -212,7 +213,7 @@ impl LoginRepository for LoginRepositoryImpl {
 
         let session_id = if let Some(s_oid) = session_oid {
             let session = SessionEntity::find()
-                .filter(session::Column::Oid.eq(s_oid))
+                .filter(session::Column::Oid.eq(Uuid::from(s_oid)))
                 .one(&self.db)
                 .await
                 .map_err(LoginRepositoryError::QueryFailed)?

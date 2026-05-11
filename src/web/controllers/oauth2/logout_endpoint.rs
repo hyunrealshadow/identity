@@ -5,6 +5,7 @@ use serde::Deserialize;
 use identity_application::openid_connect::logout::{
     FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogoutRequest,
 };
+use identity_domain::auth::SessionOid;
 
 use crate::controllers::response::render_html;
 use crate::controllers::{
@@ -42,7 +43,7 @@ impl From<LogoutParams> for RpInitiatedLogoutRequest {
 
 pub fn session_cookie_without(
     entries: &[crate::controllers::shared::SessionCookieEntry],
-    revoked: uuid::Uuid,
+    revoked: SessionOid,
     secure: bool,
 ) -> String {
     let remaining = entries
@@ -224,6 +225,7 @@ pub async fn logout_post(
 #[cfg(test)]
 mod tests {
     use http::{StatusCode, header};
+    use identity_domain::auth::SessionOid;
     use salvo::{Service, test::TestClient};
 
     #[test]
@@ -232,16 +234,16 @@ mod tests {
         let second = uuid::Uuid::new_v4();
         let entries = [
             crate::controllers::shared::SessionCookieEntry {
-                session_oid: first,
+                session_oid: SessionOid(first),
                 protected_session_id: "protected-first".to_string(),
             },
             crate::controllers::shared::SessionCookieEntry {
-                session_oid: second,
+                session_oid: SessionOid(second),
                 protected_session_id: "protected-second".to_string(),
             },
         ];
 
-        let cookie = super::session_cookie_without(&entries, first, false);
+        let cookie = super::session_cookie_without(&entries, SessionOid(first), false);
 
         assert!(!cookie.contains(&first.to_string()));
         assert!(!cookie.contains("protected-first"));

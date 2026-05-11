@@ -11,6 +11,7 @@ use crate::database::entity::{
     client_authorization::Entity as ClientAuthorizationEntity,
 };
 use identity_domain::{
+    auth::SessionOid,
     client::model::ClientOid,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
@@ -158,7 +159,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
     async fn update_authorization_request_selection(
         &self,
         oid: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         protected_session_id: Option<String>,
         source: SelectionSource,
@@ -183,7 +184,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             return Ok(false);
         }
 
-        stored.interaction.selected_session_oid = Some(session_oid.to_string());
+        stored.interaction.selected_session_oid = Some(session_oid);
         stored.interaction.selected_protected_session_id = protected_session_id;
         stored.interaction.selected_user_oid = Some(user_oid.to_string());
         stored.interaction.selection_source = Some(source);

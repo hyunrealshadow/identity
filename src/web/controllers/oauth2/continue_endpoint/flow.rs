@@ -48,11 +48,10 @@ pub(super) async fn handle_continue(
         stored
             .interaction
             .selected_session_oid
-            .as_deref()
             .and_then(|selected_session_oid| {
                 active_sessions
                     .iter()
-                    .find(|session| session.session_oid.to_string() == selected_session_oid)
+                    .find(|session| session.session_oid == selected_session_oid)
             });
 
     let has_stored_selected_session = stored.interaction.selected_session_oid.is_some();
@@ -89,7 +88,7 @@ pub(super) async fn handle_continue(
                     SelectionSource::Auto,
                 )
                 .await?;
-            stored.interaction.selected_session_oid = Some(session.session_oid.to_string());
+            stored.interaction.selected_session_oid = Some(session.session_oid);
             stored.interaction.selected_protected_session_id = protected_session_id;
             stored.interaction.selected_user_oid = Some(session.user_oid.to_string());
             stored.interaction.selection_source = Some(SelectionSource::Auto);

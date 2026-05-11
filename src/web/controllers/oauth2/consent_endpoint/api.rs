@@ -34,7 +34,7 @@ pub(super) async fn consent_api(
     }
 
     if !has_selected_session(
-        loaded.stored.interaction.selected_session_oid.as_deref(),
+        loaded.stored.interaction.selected_session_oid,
         &loaded.active_sessions,
     ) {
         return Err(AppError::from_code(

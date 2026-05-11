@@ -1,6 +1,7 @@
 use super::*;
 use std::str::FromStr;
 
+use identity_domain::auth::SessionOid;
 use identity_domain::client_authorization::{
     AuthorizationInteractionState, ConsentState, SelectionSource, StoredAuthorizationRequest,
 };
@@ -204,7 +205,7 @@ impl AuthorizeService {
     pub async fn record_selection_by_login(
         &self,
         protected_login_oid: &str,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         protected_session_id: Option<String>,
         source: SelectionSource,
@@ -233,7 +234,7 @@ impl AuthorizeService {
     pub async fn record_authorization_selection(
         &self,
         authorization_request_id: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         protected_session_id: Option<String>,
         source: SelectionSource,
@@ -340,7 +341,7 @@ impl AuthorizeService {
     pub async fn approve_authorization_request(
         &self,
         authorization_request_id: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
@@ -357,7 +358,7 @@ impl AuthorizeService {
     pub async fn approve_authorization_request_with_protected_session_id(
         &self,
         authorization_request_id: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         protected_session_id: Option<String>,
         auth_time: Option<i64>,
@@ -435,7 +436,7 @@ impl AuthorizeService {
         &self,
         request: &AuthorizationRequestData,
         user_oid: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         protected_session_id: &str,
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
@@ -470,7 +471,7 @@ impl AuthorizeService {
         &self,
         request: &AuthorizationRequestData,
         user_oid: Uuid,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         protected_session_id: &str,
         auth_time: Option<i64>,
     ) -> Result<(String, Uuid), AppError> {
@@ -489,7 +490,7 @@ impl AuthorizeService {
                         code_challenge: request.code_challenge.clone(),
                         code_challenge_method: request.code_challenge_method.clone(),
                         user_oid: user_oid.to_string(),
-                        session_oid: session_oid.to_string(),
+                        session_oid,
                         protected_session_id: Some(protected_session_id.to_string()),
                         acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
                         redirect_uri: request.redirect_uri.clone(),
@@ -552,7 +553,7 @@ impl AuthorizeService {
     pub async fn approve_authorization_request_by_login(
         &self,
         protected_login_oid: &str,
-        session_oid: Uuid,
+        session_oid: SessionOid,
         user_oid: Uuid,
         protected_session_id: Option<String>,
         auth_time: Option<i64>,

@@ -4,7 +4,8 @@ use crate::{
     application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
     boot::AppState,
     domain::{
-        auth::model::ActiveSession, client_authorization::StoredAuthorizationRequest,
+        auth::model::ActiveSession, auth::SessionOid,
+        client_authorization::StoredAuthorizationRequest,
         openid_connect::OpenIdConnectClient,
     },
     web::controllers::shared::load_active_sessions,
@@ -48,14 +49,14 @@ pub(super) async fn load_consent_context(
 }
 
 pub(super) fn has_selected_session(
-    selected_session_oid: Option<&str>,
+    selected_session_oid: Option<SessionOid>,
     active_sessions: &[ActiveSession],
 ) -> bool {
     selected_session_oid
         .and_then(|selected_session_oid| {
             active_sessions
                 .iter()
-                .find(|session| session.session_oid.to_string() == selected_session_oid)
+                .find(|session| session.session_oid == selected_session_oid)
         })
         .is_some()
 }

@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
 use crate::openid_connect::AuthorizationRequestData;
 
@@ -60,7 +61,7 @@ pub struct AuthorizationCodeData {
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
     pub user_oid: String,
-    pub session_oid: String,
+    pub session_oid: SessionOid,
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub acr: Option<String>,
@@ -73,7 +74,7 @@ pub struct AuthorizationCodeData {
 pub struct RefreshTokenData {
     pub scope: String,
     pub user_oid: String,
-    pub session_oid: String,
+    pub session_oid: SessionOid,
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub auth_time: Option<i64>,
@@ -84,7 +85,7 @@ pub struct RefreshTokenData {
 pub struct AccessTokenData {
     pub scope: String,
     pub user_oid: String,
-    pub session_oid: String,
+    pub session_oid: SessionOid,
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub authorization_code_oid: Option<String>,
@@ -99,7 +100,7 @@ pub struct StoredAuthorizationRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AuthorizationInteractionState {
-    pub selected_session_oid: Option<String>,
+    pub selected_session_oid: Option<SessionOid>,
     #[serde(default)]
     pub selected_protected_session_id: Option<String>,
     pub selected_user_oid: Option<String>,
@@ -143,6 +144,7 @@ pub struct ClientAuthorization {
 mod tests {
     use super::{
         AccessTokenData, AuthorizationCodeData, ClientAuthorizationType, RefreshTokenData,
+        SessionOid,
     };
     use std::str::FromStr;
 
@@ -170,7 +172,7 @@ mod tests {
             code_challenge: Some("challenge123".to_string()),
             code_challenge_method: Some("S256".to_string()),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: uuid::Uuid::nil().to_string(),
+            session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: Some("protected-session".to_string()),
             acr: Some("urn:mfa".to_string()),
             redirect_uri: "https://client.example.com/callback".to_string(),
@@ -192,7 +194,7 @@ mod tests {
         let data = RefreshTokenData {
             scope: "openid offline_access profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: uuid::Uuid::nil().to_string(),
+            session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: Some("protected-session".to_string()),
             auth_time: Some(1234567890),
             rotated_from: Some(uuid::Uuid::nil().to_string()),
@@ -215,7 +217,7 @@ mod tests {
         let data = RefreshTokenData {
             scope: "openid offline_access".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: uuid::Uuid::nil().to_string(),
+            session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: None,
             auth_time: None,
             rotated_from: None,
@@ -231,7 +233,7 @@ mod tests {
         let data = AccessTokenData {
             scope: "openid profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: uuid::Uuid::nil().to_string(),
+            session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: Some("protected-session".to_string()),
             authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
         };

@@ -44,7 +44,7 @@ pub(super) async fn handle_consent_decision(
     }
 
     if !has_selected_session(
-        loaded.stored.interaction.selected_session_oid.as_deref(),
+        loaded.stored.interaction.selected_session_oid,
         &loaded.active_sessions,
     ) {
         if is_html {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use base64::Engine;
 use chrono::{Duration, Utc};
 use identity_domain::{
-    auth::{LoginStatus, SessionStatus, password::PasswordHashSetting},
+    auth::{LoginStatus, SessionOid, SessionStatus, password::PasswordHashSetting},
     client_authorization::{
         AuthorizationInteractionState, ClientAuthorizationType, ConsentState, SelectionSource,
         StoredAuthorizationRequest,
@@ -163,7 +163,7 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
             claims: None,
         },
         interaction: AuthorizationInteractionState {
-            selected_session_oid: Some(session_oid.to_string()),
+            selected_session_oid: Some(SessionOid(session_oid)),
             selected_protected_session_id: None,
             selected_user_oid: Some(user_oid.to_string()),
             selection_source: Some(SelectionSource::FreshLogin),

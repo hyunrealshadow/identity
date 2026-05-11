@@ -40,7 +40,7 @@ pub(super) async fn consent_page(
     }
 
     if !has_selected_session(
-        loaded.stored.interaction.selected_session_oid.as_deref(),
+        loaded.stored.interaction.selected_session_oid,
         &loaded.active_sessions,
     ) {
         return Ok(redirect_to_response(&format!(
