@@ -1,0 +1,28 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block header %}
+<div class="text-center">
+  <h1 class="text-2xl font-bold tracking-tight text-gray-900">{{ title }}</h1>
+  <p class="mt-2 text-sm text-gray-500">{{ message }}</p>
+</div>
+{% endblock %}
+
+{% block content %}
+<form id="form-post-response" method="post" action="{{ action }}" class="space-y-4">
+  {% for field in fields %}
+  <input type="hidden" name="{{ field.name }}" value="{{ field.value }}" />
+  {% endfor %}
+
+  <noscript>
+    <button type="submit" class="btn-primary-ms w-full">Continue</button>
+  </noscript>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('form-post-response').submit();
+</script>
+{% endblock %}

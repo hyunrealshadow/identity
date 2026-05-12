@@ -65,6 +65,18 @@ pub struct FormPostPageData {
     pub fields: Vec<FormPostField>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct FrontChannelNotificationView {
+    pub logout_uri: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LogoutPageData {
+    pub title: String,
+    pub frontchannel_notifications: Vec<FrontChannelNotificationView>,
+    pub post_logout_redirect_uri: Option<String>,
+}
+
 pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
     let mut scopes = Vec::new();
 

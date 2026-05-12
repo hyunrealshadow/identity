@@ -1,0 +1,23 @@
+{% extends "../layouts/auth.html" %}
+
+{% block title %}Signed out{% endblock %}
+
+{% block header %}
+<div class="text-center">
+  <h1 class="text-2xl font-bold tracking-tight text-gray-900">{{ title }}</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+{% for notification in frontchannel_notifications %}
+<iframe src="{{ notification.logout_uri }}" title="front-channel logout" hidden></iframe>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{% if post_logout_redirect_uri %}
+<script>
+setTimeout(function(){window.location.href="{{ post_logout_redirect_uri | safe }}";}, 300);
+</script>
+{% endif %}
+{% endblock %}

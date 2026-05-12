@@ -1,0 +1,46 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}Authorize{% endblock %}
+
+{% block head_resources %}{% endblock %}
+
+{% block header %}
+<div class="text-center">
+  <h1 class="text-2xl font-bold tracking-tight text-gray-900">Authorize Access</h1>
+  <p class="mt-2 text-sm text-gray-500">{{ client_name }} is requesting access to your account.</p>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  {% if scopes %}
+  <div>
+    <p class="text-[13px] font-semibold text-gray-700 mb-2">Requested permissions:</p>
+    <ul class="space-y-1">
+      {% for scope in scopes %}
+      <li class="text-[13px] text-gray-600">
+        <span class="font-medium">{{ scope.name }}</span>{% if scope.description %}: {{ scope.description }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <form id="consent-form" action="/oauth2/consent" method="POST">
+    <input type="hidden" name="login_id" value="{{ login_id }}" />
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="decision" value="approve" />
+
+    <div class="flex gap-3 mt-4">
+      <button type="submit" class="btn-primary-ms flex-1">
+        Allow
+      </button>
+      <button type="button" class="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+        onclick="document.querySelector('[name=decision]').value='deny'; document.getElementById('consent-form').submit()">
+        Deny
+      </button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

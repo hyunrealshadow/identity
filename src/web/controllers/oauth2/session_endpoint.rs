@@ -1,10 +1,17 @@
 use http::{StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
+use serde::Serialize;
 
 use crate::controllers::{
     response::{app_state, render_html},
     shared::load_active_session_entries,
 };
+
+#[derive(Debug, Serialize)]
+struct CheckSessionPageData {
+    op_browser_state: String,
+    lang: String,
+}
 
 #[handler]
 pub async fn check_session_iframe(
@@ -19,39 +26,28 @@ pub async fn check_session_iframe(
         .map(|entry| entry.protected_session_id.as_str())
         .collect::<Vec<_>>()
         .join(".");
-    let body = format!(
-        r#"<!doctype html><title>OP session iframe</title><script>
-const opBrowserState = {op_browser_state:?};
-function base64url(bytes) {{
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}}
-async function calculateSessionState(clientId, origin, sessionState) {{
-  const dot = sessionState.lastIndexOf(".");
-  if (dot < 1 || dot === sessionState.length - 1) return null;
-  const salt = sessionState.slice(dot + 1);
-  const data = new TextEncoder().encode(`${{clientId}} ${{origin}} ${{opBrowserState}} ${{salt}}`);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
-  return `${{base64url(digest)}}.${{salt}}`;
-}}
-window.addEventListener("message", async (event) => {{
-  const parts = String(event.data || "").split(" ");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {{
-    event.source && event.source.postMessage("error", event.origin);
-    return;
-  }}
-  const expected = await calculateSessionState(parts[0], event.origin, parts[1]);
-  if (expected === null) {{
-    event.source && event.source.postMessage("error", event.origin);
-    return;
-  }}
-  event.source && event.source.postMessage(expected === parts[1] ? "unchanged" : "changed", event.origin);
-}});
-</script>"#
-    );
 
-    render_html(res, StatusCode::OK, body);
+    let data = CheckSessionPageData {
+        op_browser_state,
+        lang: "en".to_owned(),
+    };
+
+    match identity_infrastructure::web::tera::render_view(
+        &ctx,
+        req.headers(),
+        "oauth2/check_session.html",
+        data,
+    ) {
+        Ok(body) => render_html(res, StatusCode::OK, body),
+        Err(_) => {
+            render_html(
+                res,
+                StatusCode::OK,
+                "<!doctype html><title>OP session iframe</title><script></script>".to_owned(),
+            );
+        }
+    }
+
     res.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
         super::inline_script_csp_header_value(),

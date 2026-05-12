@@ -41,7 +41,8 @@ export default defineConfig({
       css: '[contenthash].css',
     },
     copy: [
-      { from: r('src/views/layouts'), to: 'views/layouts' }
+      { from: r('src/views/layouts'), to: 'views/layouts' },
+      { from: r('src/views/oauth2'), to: 'views/oauth2' },
     ],
   },
   tools: {
