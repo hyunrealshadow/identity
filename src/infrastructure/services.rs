@@ -29,6 +29,10 @@ use identity_application::{
         token::TokenService, user_info::UserInfoService,
     },
 };
+use identity_domain::openid_connect::{
+    OpenIdConnectClientRepository,
+    OpenIdConnectCredentialRepository,
+};
 
 use super::settings::AppRuntimeSettings;
 
@@ -60,6 +64,8 @@ pub struct AppServices {
     oidc_token: AppOpenIdTokenService,
     oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
+    oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     data_protector: Arc<dyn DataProtector>,
 }
 
@@ -73,6 +79,8 @@ impl AppServices {
             key_repo.clone(),
             Arc::new(XChaCha20DataProtectionCipher),
         ));
+        let oidc_client_repo = Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
+        let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
 
         Self {
             login: LoginService::new(
@@ -105,8 +113,8 @@ impl AppServices {
                 .with_key_repo(key_repo.clone())
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
             oidc_authorize: AuthorizeService::new(
-                Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
-                Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),
+                oidc_client_repo.clone(),
+                oidc_credential_repo.clone(),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(LoginRepositoryImpl::new(db.clone())),
                 Arc::new(UserRepositoryImpl::new(db.clone())),
@@ -121,14 +129,14 @@ impl AppServices {
                 Arc::new(KeyRepositoryImpl::new(db.clone())),
                 Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 Arc::new(UserRepositoryImpl::new(db.clone())),
-                Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
-                Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone())),
+                oidc_client_repo.clone(),
+                oidc_credential_repo.clone(),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
                 signing_algorithm_detector.clone(),
                 data_protector.clone(),
             ),
             oidc_logout: LogoutService::new(
-                Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
+                oidc_client_repo.clone(),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
                 Arc::new(KeyRepositoryImpl::new(db.clone())),
                 Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
@@ -137,7 +145,7 @@ impl AppServices {
             .with_http_client(backchannel_logout_http_client()),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
-                Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone())),
+                oidc_client_repo.clone(),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(AsymmetricKeyService::new(
                     Arc::new(KeyRepositoryImpl::new(db.clone())),
@@ -147,6 +155,8 @@ impl AppServices {
                 )),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
             ),
+            oidc_client_repo,
+            oidc_credential_repo,
             data_protector,
         }
     }
@@ -197,6 +207,16 @@ impl AppServices {
     }
 
     #[must_use]
+    pub fn oidc_client_repo(&self) -> &Arc<dyn OpenIdConnectClientRepository> {
+        &self.oidc_client_repo
+    }
+
+    #[must_use]
+    pub fn oidc_credential_repo(&self) -> &Arc<dyn OpenIdConnectCredentialRepository> {
+        &self.oidc_credential_repo
+    }
+
+    #[must_use]
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
     }
@@ -234,5 +254,15 @@ mod tests {
     #[test]
     fn exposes_openid_connect_token_service() {
         let _ = AppServices::oidc_token;
+    }
+
+    #[test]
+    fn exposes_oidc_client_repo() {
+        let _ = AppServices::oidc_client_repo;
+    }
+
+    #[test]
+    fn exposes_oidc_credential_repo() {
+        let _ = AppServices::oidc_credential_repo;
     }
 }

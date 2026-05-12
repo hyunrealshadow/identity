@@ -1,5 +1,5 @@
 use http::{HeaderValue, StatusCode, header};
-use salvo::{Depot, Request, Response, handler};
+use salvo::{Depot, Request, Response, handler, writing::Text};
 use serde::Deserialize;
 
 use crate::controllers::response::{AppResponse, app_state, json_response, parse_form};
@@ -96,7 +96,87 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
         Err(error) => return build_error_from_app_error(error),
     };
 
+    // Check if client requires encrypted UserInfo response
+    if let Some(encrypted) = try_encrypt_userinfo(&ctx, &token_claims, &user_claims).await {
+        return encrypted;
+    }
+
     build_success_response(user_claims)
+}
+
+async fn try_encrypt_userinfo(
+    ctx: &AppState,
+    token_claims: &identity_application::openid_connect::user_info::TokenClaims,
+    user_claims: &identity_application::openid_connect::dto::UserInfoClaims,
+) -> Option<Response> {
+    use josekit::jwe::{JweEncrypter, JweHeader, RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW};
+    use josekit::jwk::Jwk;
+
+    // Load the client to check encryption metadata
+    let client = ctx
+        .services()
+        .oidc_client_repo()
+        .find_by_oid(token_claims.client_oid)
+        .await
+        .ok()??;
+
+    let alg = client.metadata().userinfo_encrypted_response_alg.as_deref()?;
+    let enc = client
+        .metadata()
+        .userinfo_encrypted_response_enc
+        .as_deref()
+        .unwrap_or("A128CBC-HS256");
+
+    // Get the client's encryption key
+    let credential = ctx
+        .services()
+        .oidc_credential_repo()
+        .find_first_encryption_key(client.client().oid)
+        .await
+        .ok()??;
+
+    let public_jwk = match &credential.data {
+        identity_domain::openid_connect::OpenIdConnectCredentialData::ClientPublicKey {
+            jwk: Some(jwk),
+            ..
+        } => jwk.clone(),
+        _ => return None,
+    };
+
+    // Build the JWE encrypter from the client's JWK
+    let jwk_value = serde_json::to_value(&public_jwk).ok()?;
+    let jwk_json = jwk_value.to_string();
+    let josekit_jwk = Jwk::from_bytes(jwk_json.as_bytes()).ok()?;
+
+    let encrypter: Box<dyn JweEncrypter> = match alg {
+        "RSA-OAEP" => Box::new(RSA_OAEP.encrypter_from_jwk(&josekit_jwk).ok()?),
+        "RSA-OAEP-256" => Box::new(RSA_OAEP_256.encrypter_from_jwk(&josekit_jwk).ok()?),
+        "ECDH-ES" => Box::new(ECDH_ES.encrypter_from_jwk(&josekit_jwk).ok()?),
+        "ECDH-ES+A128KW" => Box::new(ECDH_ES_A128KW.encrypter_from_jwk(&josekit_jwk).ok()?),
+        "ECDH-ES+A256KW" => Box::new(ECDH_ES_A256KW.encrypter_from_jwk(&josekit_jwk).ok()?),
+        _ => return None,
+    };
+
+    let json_body = serde_json::to_string(user_claims).ok()?;
+
+    let mut header = JweHeader::new();
+    header.set_algorithm(alg);
+    header.set_content_encryption(enc);
+
+    let encrypted = josekit::jwe::serialize_compact(json_body.as_bytes(), &header, &*encrypter).ok()?;
+
+    let mut response = Response::new();
+    response.status_code(StatusCode::OK);
+    response.render(Text::Plain(encrypted));
+    response.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/jose"),
+    );
+    response.headers_mut().insert(
+        http::header::CACHE_CONTROL,
+        http::HeaderValue::from_static("no-store"),
+    );
+    Some(response)
 }
 
 fn build_success_response(

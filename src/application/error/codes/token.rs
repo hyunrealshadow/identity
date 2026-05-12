@@ -123,6 +123,12 @@ pub enum TokenErrorCode {
     PkceMethodUnsupported,
     /// `code_verifier` does not match the stored `code_challenge`.
     PkceVerifierMismatch,
+
+    // --- id token encryption ---
+    /// Client has no encryption key configured.
+    EncryptionKeyNotFound,
+    /// JWE encryption of the token failed.
+    EncryptionFailed,
 }
 
 impl AppErrorCode for TokenErrorCode {
@@ -178,6 +184,8 @@ impl AppErrorCode for TokenErrorCode {
             Self::StoreRefreshFailed => ErrorKind::Internal,
             Self::PkceMethodUnsupported => ErrorKind::Validation,
             Self::PkceVerifierMismatch => ErrorKind::Validation,
+            Self::EncryptionKeyNotFound => ErrorKind::Internal,
+            Self::EncryptionFailed => ErrorKind::Internal,
         }
     }
 
@@ -233,6 +241,8 @@ impl AppErrorCode for TokenErrorCode {
             Self::StoreRefreshFailed => 24047,
             Self::PkceMethodUnsupported => 24048,
             Self::PkceVerifierMismatch => 24049,
+            Self::EncryptionKeyNotFound => 24050,
+            Self::EncryptionFailed => 24051,
         }
     }
 }

@@ -92,4 +92,21 @@ pub trait OpenIdConnectCredentialRepository: Send + Sync {
         client_oid: ClientOid,
         type_: OpenIdConnectCredentialType,
     ) -> Result<Vec<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError>;
+
+    async fn find_first_encryption_key(
+        &self,
+        client_oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError> {
+        let types = vec![
+            OpenIdConnectCredentialType::ClientPublicKey,
+            OpenIdConnectCredentialType::ClientJsonWebKeySet,
+        ];
+        for type_ in types {
+            let results = self.find_by_client_oid_and_type(client_oid, type_).await?;
+            if let Some(credential) = results.into_iter().next() {
+                return Ok(Some(credential));
+            }
+        }
+        Ok(None)
+    }
 }

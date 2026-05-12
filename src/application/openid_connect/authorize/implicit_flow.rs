@@ -27,6 +27,15 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
         })?;
 
+        let client = self
+            .client_repo
+            .find_by_oid(client_id)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+
         let user_oid_obj = UserOid(user_oid);
         let user = self
             .user_repo
@@ -76,7 +85,7 @@ impl AuthorizeService {
             (None, 0)
         };
 
-        let id_token = self.sign_implicit_id_token(
+        let signed_id_token = self.sign_implicit_id_token(
             &signing_key_id,
             &signing_key_pem,
             &signing_alg,
@@ -95,6 +104,15 @@ impl AuthorizeService {
             &scope,
             claims.as_ref(),
         )?;
+
+        let id_token = match client.metadata().id_token_encrypted_response_alg.as_deref() {
+            Some(alg) => {
+                let enc = client.metadata().id_token_encrypted_response_enc
+                    .as_deref().unwrap_or("A128CBC-HS256");
+                self.encrypt_id_token(&signed_id_token, &client, alg, enc).await?
+            }
+            None => signed_id_token,
+        };
 
         let mut fragment = format!("id_token={id_token}");
         if let Some(ref at) = access_token {
@@ -135,6 +153,14 @@ impl AuthorizeService {
         let client_id = Uuid::parse_str(&request.client_id).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
         })?;
+        let client = self
+            .client_repo
+            .find_by_oid(client_id)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
         let (code, authorization_code_oid) = self
             .create_authorization_code(
                 request,
@@ -191,27 +217,33 @@ impl AuthorizeService {
                     AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
                 })?
                 .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
-            Some(
-                self.sign_implicit_id_token(
-                    &signing_key_id,
-                    &signing_key_pem,
-                    &signing_alg,
-                    &issuer,
-                    &audience,
-                    &user,
-                    nonce,
-                    auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp()),
-                    request
-                        .acr_values
-                        .as_ref()
-                        .and_then(|v| v.first().map(String::as_str)),
-                    access_token.as_deref(),
-                    Some(&code),
-                    Some(protected_session_id),
-                    &scope,
-                    claims.as_ref(),
-                )?,
-            )
+            let signed_id_token = self.sign_implicit_id_token(
+                &signing_key_id,
+                &signing_key_pem,
+                &signing_alg,
+                &issuer,
+                &audience,
+                &user,
+                nonce,
+                auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp()),
+                request
+                    .acr_values
+                    .as_ref()
+                    .and_then(|v| v.first().map(String::as_str)),
+                access_token.as_deref(),
+                Some(&code),
+                Some(protected_session_id),
+                &scope,
+                claims.as_ref(),
+            )?;
+            Some(match client.metadata().id_token_encrypted_response_alg.as_deref() {
+                Some(alg) => {
+                    let enc = client.metadata().id_token_encrypted_response_enc
+                        .as_deref().unwrap_or("A128CBC-HS256");
+                    self.encrypt_id_token(&signed_id_token, &client, alg, enc).await?
+                }
+                None => signed_id_token,
+            })
         } else {
             None
         };

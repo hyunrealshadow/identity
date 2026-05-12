@@ -140,7 +140,7 @@ impl TokenService {
             data.claims.as_ref(),
         )?;
         let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
-            Some(self.sign_id_token(
+            let signed = self.sign_id_token(
                 &signing_key_id,
                 &signing_key_pem,
                 &signing_alg,
@@ -154,7 +154,16 @@ impl TokenService {
                 Some(&access_token),
                 Some(&protected_session_id),
                 &data.scope,
-            )?)
+            )?;
+            let id_token = match authenticated_client.metadata().id_token_encrypted_response_alg.as_deref() {
+                Some(alg) => {
+                    let enc = authenticated_client.metadata().id_token_encrypted_response_enc
+                        .as_deref().unwrap_or("A128CBC-HS256");
+                    self.encrypt_token(&signed, &authenticated_client, alg, enc).await?
+                }
+                None => signed,
+            };
+            Some(id_token)
         } else {
             None
         };
@@ -306,7 +315,7 @@ impl TokenService {
             &scope,
             None,
         )?;
-        let id_token = Some(self.sign_id_token(
+        let signed_id_token = self.sign_id_token(
             &signing_key_id,
             &signing_key_pem,
             &signing_alg,
@@ -320,7 +329,15 @@ impl TokenService {
             Some(&access_token),
             Some(&protected_session_id),
             &scope,
-        )?);
+        )?;
+        let id_token = Some(match authenticated_client.metadata().id_token_encrypted_response_alg.as_deref() {
+            Some(alg) => {
+                let enc = authenticated_client.metadata().id_token_encrypted_response_enc
+                    .as_deref().unwrap_or("A128CBC-HS256");
+                self.encrypt_token(&signed_id_token, &authenticated_client, alg, enc).await?
+            }
+            None => signed_id_token,
+        });
         self.client_authorization_repo
             .revoke(refresh_record.oid)
             .await

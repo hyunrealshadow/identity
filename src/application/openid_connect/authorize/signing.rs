@@ -242,6 +242,77 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })
     }
+
+    pub(super) async fn encrypt_id_token(
+        &self,
+        signed_jwt: &str,
+        client: &OpenIdConnectClient,
+        encryption_alg: &str,
+        content_enc: &str,
+    ) -> Result<String, AppError> {
+        let credential = self
+            .credential_repo
+            .find_first_encryption_key(client.client().oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound))?;
+
+        let jwk = match &credential.data {
+            OpenIdConnectCredentialData::ClientPublicKey {
+                jwk: Some(jwk), ..
+            } => jwk.clone(),
+            _ => return Err(AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound)),
+        };
+
+        let josekit_jwk = {
+            let value = serde_json::to_value(jwk)
+                .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?;
+            let json = value.to_string();
+            josekit::jwk::Jwk::from_bytes(json.as_bytes())
+                .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?
+        };
+
+        use josekit::jwe::{
+            JweHeader, RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW,
+        };
+        let encrypter: Box<dyn josekit::jwe::JweEncrypter> = match encryption_alg {
+            "RSA-OAEP" => Box::new(
+                RSA_OAEP
+                    .encrypter_from_jwk(&josekit_jwk)
+                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?,
+            ),
+            "RSA-OAEP-256" => Box::new(
+                RSA_OAEP_256
+                    .encrypter_from_jwk(&josekit_jwk)
+                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?,
+            ),
+            "ECDH-ES" => Box::new(
+                ECDH_ES
+                    .encrypter_from_jwk(&josekit_jwk)
+                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?,
+            ),
+            "ECDH-ES+A128KW" => Box::new(
+                ECDH_ES_A128KW
+                    .encrypter_from_jwk(&josekit_jwk)
+                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?,
+            ),
+            "ECDH-ES+A256KW" => Box::new(
+                ECDH_ES_A256KW
+                    .encrypter_from_jwk(&josekit_jwk)
+                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))?,
+            ),
+            _ => return Err(AppError::from_code(AuthorizeErrorCode::EncryptionFailed)),
+        };
+
+        let mut header = JweHeader::new();
+        header.set_algorithm(encryption_alg);
+        header.set_content_encryption(content_enc);
+
+        josekit::jwe::serialize_compact(signed_jwt.as_bytes(), &header, &*encrypter)
+            .map_err(|_| AppError::from_code(AuthorizeErrorCode::EncryptionFailed))
+    }
 }
 
 fn amr_values(acr: Option<&str>) -> Vec<&'static str> {

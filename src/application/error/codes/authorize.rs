@@ -159,6 +159,10 @@ pub enum AuthorizeErrorCode {
     AuthzInteractionConflict,
     /// Stored data-protected session ID could not be decrypted or parsed.
     StoredSessionIdInvalid,
+    /// Client has no encryption key configured.
+    EncryptionKeyNotFound,
+    /// JWE encryption of the token failed.
+    EncryptionFailed,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -228,6 +232,8 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::RequestObjectEncryptionUnsupported => ErrorKind::Validation,
             Self::AuthzInteractionConflict => ErrorKind::Validation,
             Self::StoredSessionIdInvalid => ErrorKind::Internal,
+            Self::EncryptionKeyNotFound => ErrorKind::Internal,
+            Self::EncryptionFailed => ErrorKind::Internal,
         }
     }
 
@@ -297,6 +303,8 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::RequestObjectEncryptionUnsupported => 23061,
             Self::AuthzInteractionConflict => 23062,
             Self::StoredSessionIdInvalid => 23063,
+            Self::EncryptionKeyNotFound => 23064,
+            Self::EncryptionFailed => 23065,
         }
     }
 }

@@ -129,13 +129,13 @@ impl AuthorizeService {
         client: &OpenIdConnectClient,
         raw: &str,
     ) -> Result<serde_json::Value, AppError> {
-        if raw.split('.').count() == 5 {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
-            ));
-        }
+        let raw = if raw.split('.').count() == 5 {
+            self.decrypt_request_object(raw).await?
+        } else {
+            raw.to_owned()
+        };
 
-        let header = jwt::decode_header(raw).map_err(|error| {
+        let header = jwt::decode_header(&raw).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
         })?;
 
@@ -180,7 +180,7 @@ impl AuthorizeService {
                 jwt_payload
             }
             _ => {
-                self.verify_signed_request_object(client, raw, algorithm)
+                self.verify_signed_request_object(client, &raw, algorithm)
                     .await?
             }
         };
@@ -217,6 +217,48 @@ impl AuthorizeService {
         }
 
         Ok(serde_json::Value::Object(value))
+    }
+
+    async fn decrypt_request_object(&self, raw: &str) -> Result<String, AppError> {
+        use josekit::jwe::{
+            deserialize_compact,
+            RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW,
+        };
+
+        let keys = self
+            .key_repo
+            .list_available_asymmetric()
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+            })?;
+
+        for key in &keys {
+            let KeyData::Asymmetric(data) = &key.data else { continue };
+            let pem = data.private_key.as_bytes();
+
+            macro_rules! try_decrypt {
+                ($alg:expr) => {
+                    if let Ok(decrypter) = $alg.decrypter_from_pem(pem) {
+                        if let Ok((bytes, _header)) = deserialize_compact(raw, &decrypter) {
+                            if let Ok(payload_str) = String::from_utf8(bytes) {
+                                return Ok(payload_str);
+                            }
+                        }
+                    }
+                };
+            }
+
+            try_decrypt!(RSA_OAEP);
+            try_decrypt!(RSA_OAEP_256);
+            try_decrypt!(ECDH_ES);
+            try_decrypt!(ECDH_ES_A128KW);
+            try_decrypt!(ECDH_ES_A256KW);
+        }
+
+        Err(AppError::from_code(
+            AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
+        ))
     }
 
     async fn verify_signed_request_object(
