@@ -371,7 +371,10 @@ pub(super) fn build_token_service(
                     client_oid: Uuid::nil(),
                     r#type: OpenIdConnectCredentialType::ClientPublicKey,
                     hint: "private_key_jwt".to_string(),
-                    data: OpenIdConnectCredentialData::ClientPublicKey { public_key },
+                    data: OpenIdConnectCredentialData::ClientPublicKey {
+                        public_key,
+                        jwk: None,
+                    },
                     expires_at: Utc::now() + chrono::Duration::days(1),
                     revoked_at: None,
                     created_at: Utc::now(),
@@ -446,7 +449,10 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
                     client_oid: Uuid::nil(),
                     r#type: OpenIdConnectCredentialType::ClientPublicKey,
                     hint: "private_key_jwt".to_string(),
-                    data: OpenIdConnectCredentialData::ClientPublicKey { public_key },
+                    data: OpenIdConnectCredentialData::ClientPublicKey {
+                        public_key,
+                        jwk: None,
+                    },
                     expires_at: Utc::now() + chrono::Duration::days(1),
                     revoked_at: None,
                     created_at: Utc::now(),

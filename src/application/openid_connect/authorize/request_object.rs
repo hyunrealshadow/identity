@@ -237,7 +237,7 @@ impl AuthorizeService {
             })?;
 
         for credential in credentials {
-            if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data
+            if let OpenIdConnectCredentialData::ClientPublicKey { public_key, .. } = credential.data
                 && let Ok(payload) = decode_request_object(raw, algorithm, public_key.as_bytes())
             {
                 return Ok(payload);

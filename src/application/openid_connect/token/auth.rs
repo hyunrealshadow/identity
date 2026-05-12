@@ -275,7 +275,7 @@ impl TokenService {
             })?;
 
         for credential in credentials {
-            if let OpenIdConnectCredentialData::ClientPublicKey { public_key } = credential.data
+            if let OpenIdConnectCredentialData::ClientPublicKey { public_key, .. } = credential.data
                 && let Ok(payload) =
                     decode_assertion_with_alg(algorithm, assertion, public_key.as_bytes())
             {

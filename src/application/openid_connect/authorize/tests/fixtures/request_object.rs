@@ -19,6 +19,7 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
             hint: "request_object".to_string(),
             data: OpenIdConnectCredentialData::ClientPublicKey {
                 public_key: String::from_utf8(public_key).unwrap(),
+                jwk: None,
             },
             expires_at: chrono::Utc::now(),
             revoked_at: None,

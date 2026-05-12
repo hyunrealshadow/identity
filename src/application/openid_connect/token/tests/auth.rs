@@ -235,7 +235,6 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
                 email_normalized: "es256@example.com".to_string(),
                 name: "ES256".to_string(),
                 name_normalized: "es256".to_string(),
-                given_name: None,
                 family_name: None,
                 middle_name: None,
                 nickname: None,
@@ -272,6 +271,7 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
                 hint: "private_key_jwt".to_string(),
                 data: OpenIdConnectCredentialData::ClientPublicKey {
                     public_key: key.public_key.clone(),
+                    jwk: None,
                 },
                 expires_at: Utc::now() + chrono::Duration::days(1),
                 revoked_at: None,
@@ -350,6 +350,7 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
                 hint: "private_key_jwt".to_string(),
                 data: OpenIdConnectCredentialData::ClientPublicKey {
                     public_key: key.public_key.clone(),
+                    jwk: None,
                 },
                 expires_at: Utc::now() + chrono::Duration::days(1),
                 revoked_at: None,

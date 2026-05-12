@@ -7,6 +7,7 @@ use url::Url;
 
 use crate::database::entity::{client, client_open_id_connect_credential};
 use identity_domain::client::model::ClientOid;
+use identity_domain::key::PublicJwk;
 use identity_domain::openid_connect::{
     OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,
     OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
@@ -21,6 +22,8 @@ struct RawClientSecretData {
 #[derive(Debug, Deserialize)]
 struct RawClientPublicKeyData {
     public_key: String,
+    #[serde(default)]
+    jwk: Option<PublicJwk>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -29,6 +32,8 @@ struct RawClientJsonWebKeySetData {
     last_updated: String,
     expires_at: String,
     public_keys: Vec<String>,
+    #[serde(default)]
+    jwks: Vec<PublicJwk>,
 }
 
 fn deserialize_data(
@@ -47,6 +52,7 @@ fn deserialize_data(
             serde_json::from_value::<RawClientPublicKeyData>(raw.clone())
                 .map(|data| OpenIdConnectCredentialData::ClientPublicKey {
                     public_key: data.public_key,
+                    jwk: data.jwk,
                 })
                 .map_err(OpenIdConnectCredentialRepositoryError::DeserializeData)
         }
@@ -67,6 +73,7 @@ fn deserialize_data(
                         last_updated,
                         expires_at,
                         public_keys: data.public_keys,
+                        jwks: data.jwks,
                     })
                 })
         }

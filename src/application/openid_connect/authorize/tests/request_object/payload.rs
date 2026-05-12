@@ -109,6 +109,7 @@ async fn parse_rs256_request_object_extracts_payload() {
             hint: "request_object".to_string(),
             data: OpenIdConnectCredentialData::ClientPublicKey {
                 public_key: String::from_utf8(public_key).unwrap(),
+                jwk: None,
             },
             expires_at: chrono::Utc::now(),
             revoked_at: None,
@@ -166,6 +167,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
             hint: "request_object".to_string(),
             data: OpenIdConnectCredentialData::ClientPublicKey {
                 public_key: String::from_utf8(public_key).unwrap(),
+                jwk: None,
             },
             expires_at: chrono::Utc::now(),
             revoked_at: None,

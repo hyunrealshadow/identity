@@ -5,6 +5,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::client::model::ClientOid;
+use crate::key::PublicJwk;
 
 pub type OpenIdConnectCredentialOid = uuid::Uuid;
 
@@ -53,12 +54,14 @@ pub enum OpenIdConnectCredentialData {
     },
     ClientPublicKey {
         public_key: String,
+        jwk: Option<PublicJwk>,
     },
     ClientJsonWebKeySet {
         jwks_uri: Url,
         last_updated: DateTime<Utc>,
         expires_at: DateTime<Utc>,
         public_keys: Vec<String>,
+        jwks: Vec<PublicJwk>,
     },
 }
 
@@ -100,6 +103,7 @@ mod tests {
             last_updated: Utc::now(),
             expires_at: Utc::now(),
             public_keys: vec!["-----BEGIN PUBLIC KEY-----".to_string()],
+            jwks: vec![],
         };
 
         match data {
