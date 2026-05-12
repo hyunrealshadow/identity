@@ -1,6 +1,6 @@
 use josekit::jwk::{
     Jwk, KeyPair,
-    alg::{ec::EcCurve, ed::EdCurve},
+    alg::{ec::EcCurve, ecx::EcxCurve, ed::EdCurve},
 };
 use josekit::jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512};
 use openssl::{
@@ -71,9 +71,8 @@ impl AsymmetricKeyGenerator for AsymmetricKeyGeneratorImpl {
             AsymmetricKeyAlgorithm::EcdsaSecp256k1 => generate_k256_key(),
             AsymmetricKeyAlgorithm::Ed25519 => generate_ed25519_key(),
             AsymmetricKeyAlgorithm::Ed448 => generate_ed448_key(),
-            AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448 => {
-                todo!("X25519/X448 key generation")
-            }
+            AsymmetricKeyAlgorithm::X25519 => generate_x25519_key(),
+            AsymmetricKeyAlgorithm::X448 => generate_x448_key(),
         }
     }
 }
@@ -119,6 +118,16 @@ fn generate_ed448_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
     build_key_data(&jwk)
 }
 
+fn generate_x25519_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
+    let jwk = Jwk::generate_ecx_key(EcxCurve::X25519).map_err(internal)?;
+    build_key_data(&jwk)
+}
+
+fn generate_x448_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
+    let jwk = Jwk::generate_ecx_key(EcxCurve::X448).map_err(internal)?;
+    build_key_data(&jwk)
+}
+
 fn build_key_data(jwk: &Jwk) -> Result<AsymmetricKeyData, KeyMaterialError> {
     let private_key = export_private_pem(jwk)?;
     let public_key = export_public_pem(jwk)?;
@@ -153,6 +162,13 @@ pub fn infer_algorithm_from_private_key_pem(
         return Ok(match key_pair.curve() {
             EdCurve::Ed25519 => AsymmetricKeyAlgorithm::Ed25519,
             EdCurve::Ed448 => AsymmetricKeyAlgorithm::Ed448,
+        });
+    }
+
+    if let Ok(key_pair) = josekit::jwk::alg::ecx::EcxKeyPair::from_pem(private_key_pem) {
+        return Ok(match key_pair.curve() {
+            EcxCurve::X25519 => AsymmetricKeyAlgorithm::X25519,
+            EcxCurve::X448 => AsymmetricKeyAlgorithm::X448,
         });
     }
 
@@ -274,6 +290,10 @@ fn public_jwk_from_private_key_pem_without_alg(
         return Ok(key_pair.to_jwk_public_key());
     }
 
+    if let Ok(key_pair) = josekit::jwk::alg::ecx::EcxKeyPair::from_pem(private_key_pem) {
+        return Ok(key_pair.to_jwk_public_key());
+    }
+
     Err(KeyMaterialError::InvalidInput(
         "unsupported private key format".to_owned(),
     ))
@@ -314,6 +334,15 @@ fn export_pem(jwk: &Jwk, private: bool) -> Result<String, KeyMaterialError> {
                 "Ed25519" | "Ed448" => {
                     let key_pair =
                         josekit::jwk::alg::ed::EdKeyPair::from_jwk(jwk).map_err(internal)?;
+                    if private {
+                        key_pair.to_pem_private_key()
+                    } else {
+                        key_pair.to_pem_public_key()
+                    }
+                }
+                "X25519" | "X448" => {
+                    let key_pair =
+                        josekit::jwk::alg::ecx::EcxKeyPair::from_jwk(jwk).map_err(internal)?;
                     if private {
                         key_pair.to_pem_private_key()
                     } else {
