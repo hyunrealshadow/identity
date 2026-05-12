@@ -71,6 +71,9 @@ impl AsymmetricKeyGenerator for AsymmetricKeyGeneratorImpl {
             AsymmetricKeyAlgorithm::EcdsaSecp256k1 => generate_k256_key(),
             AsymmetricKeyAlgorithm::Ed25519 => generate_ed25519_key(),
             AsymmetricKeyAlgorithm::Ed448 => generate_ed448_key(),
+            AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448 => {
+                todo!("X25519/X448 key generation")
+            }
         }
     }
 }

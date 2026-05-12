@@ -12,6 +12,8 @@ pub enum AsymmetricKeyAlgorithm {
     EcdsaSecp256k1,
     Ed25519,
     Ed448,
+    X25519,
+    X448,
 }
 
 impl AsymmetricKeyAlgorithm {
@@ -98,6 +100,7 @@ impl JwaSigningAlgorithm {
             AsymmetricKeyAlgorithm::EcdsaP521 => &[Self::Es512],
             AsymmetricKeyAlgorithm::EcdsaSecp256k1 => &[Self::Es256k],
             AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => &[Self::EdDsa],
+            AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448 => &[],
         }
     }
 
@@ -112,6 +115,7 @@ impl JwaSigningAlgorithm {
             AsymmetricKeyAlgorithm::EcdsaP521 => Self::Es512,
             AsymmetricKeyAlgorithm::EcdsaSecp256k1 => Self::Es256k,
             AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => Self::EdDsa,
+            AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448 => Self::EdDsa,
         }
     }
 
