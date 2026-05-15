@@ -13,9 +13,11 @@ use crate::{
     web::controllers::shared::load_active_session_entries,
 };
 
-use super::super::{finish_authorize_redirect, response_mode_from_value, select_active_session};
 use super::response::{
     continue_consent_redirect, continue_login_redirect, continue_oauth_error_response,
+};
+use crate::controllers::oauth2::{
+    finish_authorize_redirect, response_mode_from_value, select_active_session,
 };
 
 pub(super) async fn handle_continue(

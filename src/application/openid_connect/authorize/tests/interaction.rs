@@ -11,7 +11,7 @@ use identity_domain::{
 };
 use uuid::Uuid;
 
-use super::super::{ContinueAction, determine_continue_action};
+use crate::openid_connect::authorize::{ContinueAction, determine_continue_action};
 
 fn request() -> AuthorizationRequestData {
     AuthorizationRequestData {

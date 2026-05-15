@@ -137,7 +137,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::interaction_fixtures::authorize_first_hop_state;
+    use crate::controllers::oauth2::tests::interaction_fixtures::authorize_first_hop_state;
     use crate::controllers::oauth2::{redirect_oauth_error_response, routes};
     use crate::controllers::shared::build_session_cookie;
     use http::{HeaderMap, StatusCode, header};

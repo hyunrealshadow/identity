@@ -34,7 +34,7 @@ async fn call_continue_with_state(
     state: identity_infrastructure::AppState,
     session_cookie: Option<String>,
 ) -> salvo::Response {
-    let app = super::super::routes().hoop(salvo::affix_state::inject(state));
+    let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state));
     let service = Service::new(app);
 
     let request = TestClient::get(format!(

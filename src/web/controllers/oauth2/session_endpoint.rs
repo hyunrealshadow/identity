@@ -65,7 +65,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_session_iframe_renders_post_message_script() {
-        let app = super::super::routes().hoop(salvo::affix_state::inject(
+        let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);

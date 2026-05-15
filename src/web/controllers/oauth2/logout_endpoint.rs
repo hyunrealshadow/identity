@@ -259,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_route_renders_logged_out_page_without_redirect() {
-        let app = super::super::routes().hoop(salvo::affix_state::inject(
+        let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
