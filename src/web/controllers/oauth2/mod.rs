@@ -3,9 +3,6 @@ use salvo::Router;
 use super::shared::csrf_middleware;
 
 mod authorize_endpoint;
-mod authorize_extractor;
-mod authorize_interaction;
-mod authorize_response;
 mod consent_endpoint;
 mod continue_endpoint;
 mod logout_endpoint;
@@ -16,13 +13,10 @@ mod user_info_endpoint;
 #[cfg(test)]
 mod tests;
 
-pub use authorize_extractor::{
-    AuthorizeRequestExtractor, RawAuthorizeRequest, authorize_input_error,
-};
-pub use authorize_interaction::{FlowDecision, select_active_session};
-pub use authorize_response::{
+pub use authorize_endpoint::{
+    AuthorizeRequestExtractor, FlowDecision, RawAuthorizeRequest, authorize_input_error,
     finish_authorize_redirect, inline_script_csp_header_value, redirect_oauth_error_response,
-    response_mode_from_value,
+    response_mode_from_value, select_active_session,
 };
 
 pub fn routes() -> Router {

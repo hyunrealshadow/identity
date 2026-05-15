@@ -11,7 +11,7 @@ use crate::{
     web::views::oauth2::{AuthorizeErrorPageData, FormPostField, FormPostPageData},
 };
 
-use super::authorize_extractor::{RawAuthorizeRequest, missing_required_authorize_parameters};
+use super::extractor::{RawAuthorizeRequest, missing_required_authorize_parameters};
 use crate::controllers::response::{redirect_to_response, render_app_error, render_html};
 
 pub fn redirect_oauth_error_response(

@@ -9,16 +9,26 @@ use identity_application::error::AppError;
 use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
 use identity_infrastructure::AppState;
 
-use super::{
-    authorize_extractor::{authorize_input_error, extract_authorize_request},
-    authorize_interaction::determine_authorize_flow,
-    authorize_response::{render_authorize_error_page, render_form_post_response},
+mod extractor;
+mod interaction;
+mod response;
+
+pub use extractor::{AuthorizeRequestExtractor, RawAuthorizeRequest, authorize_input_error};
+pub use interaction::{FlowDecision, select_active_session};
+pub(super) use response::render_form_post_response;
+pub use response::{
+    finish_authorize_redirect, inline_script_csp_header_value, redirect_oauth_error_response,
+    response_mode_from_value,
 };
+
+use extractor::extract_authorize_request;
+use interaction::determine_authorize_flow;
+use response::render_authorize_error_page;
 
 fn render_error(
     ctx: &AppState,
     headers: &HeaderMap,
-    raw: &super::authorize_extractor::RawAuthorizeRequest,
+    raw: &RawAuthorizeRequest,
     error: AppError,
 ) -> Response {
     tracing::warn!(error_code = error.code(), error = %error, "authorize validation error");
@@ -128,10 +138,10 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 #[cfg(test)]
 mod tests {
     use super::super::tests::interaction_fixtures::authorize_first_hop_state;
-    use crate::controllers::oauth2::{authorize_response::redirect_oauth_error_response, routes};
+    use crate::controllers::oauth2::{redirect_oauth_error_response, routes};
     use crate::controllers::shared::build_session_cookie;
-    use identity_domain::auth::SessionOid;
     use http::{HeaderMap, StatusCode, header};
+    use identity_domain::auth::SessionOid;
     use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
     };

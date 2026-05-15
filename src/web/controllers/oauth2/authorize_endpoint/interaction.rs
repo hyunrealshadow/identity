@@ -44,9 +44,7 @@ impl FlowDecision {
                 ))
             }
             FlowDecision::OAuthError { request, error } => {
-                super::authorize_response::redirect_oauth_error_response(
-                    ctx, headers, &request, error,
-                )
+                super::response::redirect_oauth_error_response(ctx, headers, &request, error)
             }
         }
     }

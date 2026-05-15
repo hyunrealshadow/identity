@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-use super::super::authorize_response::{render_form_post_response, response_mode_from_value};
+use super::super::authorize_endpoint::{render_form_post_response, response_mode_from_value};
 
 pub(super) fn continue_login_redirect(login_id: &str) -> salvo::Response {
     redirect_to_response(&format!(
