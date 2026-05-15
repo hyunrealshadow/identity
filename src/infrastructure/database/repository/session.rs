@@ -47,7 +47,10 @@ impl SessionRepositoryImpl {
 
 #[async_trait]
 impl SessionRepository for SessionRepositoryImpl {
-    async fn find_by_oid(&self, oid: SessionOid) -> Result<Option<Session>, SessionRepositoryError> {
+    async fn find_by_oid(
+        &self,
+        oid: SessionOid,
+    ) -> Result<Option<Session>, SessionRepositoryError> {
         let Some((s_model, Some(u_model))) = SessionEntity::find()
             .filter(session::Column::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)

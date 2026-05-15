@@ -83,7 +83,10 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::SID, Some(serde_json::json!(protected_session_id)))
+            .set_claim(
+                JwtClaimNames::SID,
+                Some(serde_json::json!(protected_session_id)),
+            )
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
@@ -203,7 +206,9 @@ impl TokenService {
         encryption_alg: &str,
         content_enc: &str,
     ) -> Result<String, AppError> {
-        use josekit::jwe::{JweEncrypter, RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW};
+        use josekit::jwe::{
+            ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweEncrypter, RSA_OAEP, RSA_OAEP_256,
+        };
         use josekit::jwk::Jwk;
 
         let credential = self
@@ -230,31 +235,23 @@ impl TokenService {
             .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?;
 
         let encrypter: Box<dyn JweEncrypter> = match encryption_alg {
-            "RSA-OAEP" => Box::new(
-                RSA_OAEP
-                    .encrypter_from_jwk(&josekit_jwk)
-                    .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?,
-            ),
-            "RSA-OAEP-256" => Box::new(
-                RSA_OAEP_256
-                    .encrypter_from_jwk(&josekit_jwk)
-                    .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?,
-            ),
-            "ECDH-ES" => Box::new(
-                ECDH_ES
-                    .encrypter_from_jwk(&josekit_jwk)
-                    .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?,
-            ),
-            "ECDH-ES+A128KW" => Box::new(
-                ECDH_ES_A128KW
-                    .encrypter_from_jwk(&josekit_jwk)
-                    .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?,
-            ),
-            "ECDH-ES+A256KW" => Box::new(
-                ECDH_ES_A256KW
-                    .encrypter_from_jwk(&josekit_jwk)
-                    .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?,
-            ),
+            "RSA-OAEP" => Box::new(RSA_OAEP.encrypter_from_jwk(&josekit_jwk).map_err(|e| {
+                AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e)
+            })?),
+            "RSA-OAEP-256" => {
+                Box::new(RSA_OAEP_256.encrypter_from_jwk(&josekit_jwk).map_err(|e| {
+                    AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e)
+                })?)
+            }
+            "ECDH-ES" => Box::new(ECDH_ES.encrypter_from_jwk(&josekit_jwk).map_err(|e| {
+                AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e)
+            })?),
+            "ECDH-ES+A128KW" => Box::new(ECDH_ES_A128KW.encrypter_from_jwk(&josekit_jwk).map_err(
+                |e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e),
+            )?),
+            "ECDH-ES+A256KW" => Box::new(ECDH_ES_A256KW.encrypter_from_jwk(&josekit_jwk).map_err(
+                |e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e),
+            )?),
             _ => return Err(AppError::from_code(TokenErrorCode::EncryptionFailed)),
         };
 

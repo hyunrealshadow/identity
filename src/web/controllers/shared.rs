@@ -58,10 +58,16 @@ fn parse_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
         })
 }
 
-pub async fn protect_session_id(ctx: &AppState, session_oid: SessionOid) -> Result<String, AppError> {
+pub async fn protect_session_id(
+    ctx: &AppState,
+    session_oid: SessionOid,
+) -> Result<String, AppError> {
     ctx.services()
         .data_protector()
-        .protect(SESSION_ID_PROTECTION_PURPOSE, Uuid::from(session_oid).as_bytes())
+        .protect(
+            SESSION_ID_PROTECTION_PURPOSE,
+            Uuid::from(session_oid).as_bytes(),
+        )
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))
 }
@@ -133,7 +139,10 @@ pub async fn build_session_cookie(
     #[cfg(test)]
     {
         let _ = ctx;
-        let ids = oids.iter().map(|oid| Uuid::from(*oid).to_string()).collect::<Vec<_>>();
+        let ids = oids
+            .iter()
+            .map(|oid| Uuid::from(*oid).to_string())
+            .collect::<Vec<_>>();
         Ok(build_session_cookie_from_protected_ids(&ids, secure))
     }
 

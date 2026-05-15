@@ -217,7 +217,10 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::SID, Some(serde_json::json!(protected_session_id)))
+            .set_claim(
+                JwtClaimNames::SID,
+                Some(serde_json::json!(protected_session_id)),
+            )
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
@@ -260,10 +263,12 @@ impl AuthorizeService {
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound))?;
 
         let jwk = match &credential.data {
-            OpenIdConnectCredentialData::ClientPublicKey {
-                jwk: Some(jwk), ..
-            } => jwk.clone(),
-            _ => return Err(AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound)),
+            OpenIdConnectCredentialData::ClientPublicKey { jwk: Some(jwk), .. } => jwk.clone(),
+            _ => {
+                return Err(AppError::from_code(
+                    AuthorizeErrorCode::EncryptionKeyNotFound,
+                ));
+            }
         };
 
         let josekit_jwk = {
@@ -275,7 +280,7 @@ impl AuthorizeService {
         };
 
         use josekit::jwe::{
-            JweHeader, RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW,
+            ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweHeader, RSA_OAEP, RSA_OAEP_256,
         };
         let encrypter: Box<dyn josekit::jwe::JweEncrypter> = match encryption_alg {
             "RSA-OAEP" => Box::new(

@@ -109,7 +109,9 @@ async fn try_encrypt_userinfo(
     token_claims: &identity_application::openid_connect::user_info::TokenClaims,
     user_claims: &identity_application::openid_connect::dto::UserInfoClaims,
 ) -> Option<Response> {
-    use josekit::jwe::{JweEncrypter, JweHeader, RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW};
+    use josekit::jwe::{
+        ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweEncrypter, JweHeader, RSA_OAEP, RSA_OAEP_256,
+    };
     use josekit::jwk::Jwk;
 
     // Load the client to check encryption metadata
@@ -120,7 +122,10 @@ async fn try_encrypt_userinfo(
         .await
         .ok()??;
 
-    let alg = client.metadata().userinfo_encrypted_response_alg.as_deref()?;
+    let alg = client
+        .metadata()
+        .userinfo_encrypted_response_alg
+        .as_deref()?;
     let enc = client
         .metadata()
         .userinfo_encrypted_response_enc
@@ -163,7 +168,8 @@ async fn try_encrypt_userinfo(
     header.set_algorithm(alg);
     header.set_content_encryption(enc);
 
-    let encrypted = josekit::jwe::serialize_compact(json_body.as_bytes(), &header, &*encrypter).ok()?;
+    let encrypted =
+        josekit::jwe::serialize_compact(json_body.as_bytes(), &header, &*encrypter).ok()?;
 
     let mut response = Response::new();
     response.status_code(StatusCode::OK);

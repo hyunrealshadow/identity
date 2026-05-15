@@ -30,8 +30,7 @@ use identity_application::{
     },
 };
 use identity_domain::openid_connect::{
-    OpenIdConnectClientRepository,
-    OpenIdConnectCredentialRepository,
+    OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
 };
 
 use super::settings::AppRuntimeSettings;

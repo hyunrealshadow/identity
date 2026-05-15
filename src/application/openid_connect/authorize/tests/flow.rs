@@ -359,10 +359,7 @@ async fn record_selected_session_upgrades_auto_to_fresh_login() {
         .await
         .unwrap();
 
-    assert_eq!(
-        stored.interaction.selected_session_oid,
-        Some(fresh_session)
-    );
+    assert_eq!(stored.interaction.selected_session_oid, Some(fresh_session));
     assert_eq!(
         stored.interaction.selected_user_oid.as_deref(),
         Some(fresh_user.to_string().as_str())
@@ -595,7 +592,12 @@ async fn approve_authorization_request_is_single_use_after_completion() {
         .unwrap();
 
     let error = service
-        .approve_authorization_request(authorization_oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
+        .approve_authorization_request(
+            authorization_oid,
+            SessionOid(Uuid::new_v4()),
+            Uuid::new_v4(),
+            None,
+        )
         .await
         .unwrap_err();
 

@@ -126,7 +126,7 @@ impl TokenService {
                 Some(record.oid),
             )
             .await?;
-            let access_token = self.sign_access_token(
+        let access_token = self.sign_access_token(
             &access_token_record.oid.to_string(),
             &signing_key_id,
             &signing_key_pem,
@@ -155,11 +155,19 @@ impl TokenService {
                 Some(&protected_session_id),
                 &data.scope,
             )?;
-            let id_token = match authenticated_client.metadata().id_token_encrypted_response_alg.as_deref() {
+            let id_token = match authenticated_client
+                .metadata()
+                .id_token_encrypted_response_alg
+                .as_deref()
+            {
                 Some(alg) => {
-                    let enc = authenticated_client.metadata().id_token_encrypted_response_enc
-                        .as_deref().unwrap_or("A128CBC-HS256");
-                    self.encrypt_token(&signed, &authenticated_client, alg, enc).await?
+                    let enc = authenticated_client
+                        .metadata()
+                        .id_token_encrypted_response_enc
+                        .as_deref()
+                        .unwrap_or("A128CBC-HS256");
+                    self.encrypt_token(&signed, &authenticated_client, alg, enc)
+                        .await?
                 }
                 None => signed,
             };
@@ -330,14 +338,24 @@ impl TokenService {
             Some(&protected_session_id),
             &scope,
         )?;
-        let id_token = Some(match authenticated_client.metadata().id_token_encrypted_response_alg.as_deref() {
-            Some(alg) => {
-                let enc = authenticated_client.metadata().id_token_encrypted_response_enc
-                    .as_deref().unwrap_or("A128CBC-HS256");
-                self.encrypt_token(&signed_id_token, &authenticated_client, alg, enc).await?
-            }
-            None => signed_id_token,
-        });
+        let id_token = Some(
+            match authenticated_client
+                .metadata()
+                .id_token_encrypted_response_alg
+                .as_deref()
+            {
+                Some(alg) => {
+                    let enc = authenticated_client
+                        .metadata()
+                        .id_token_encrypted_response_enc
+                        .as_deref()
+                        .unwrap_or("A128CBC-HS256");
+                    self.encrypt_token(&signed_id_token, &authenticated_client, alg, enc)
+                        .await?
+                }
+                None => signed_id_token,
+            },
+        );
         self.client_authorization_repo
             .revoke(refresh_record.oid)
             .await

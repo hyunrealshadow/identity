@@ -4,9 +4,8 @@ use crate::{
     application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
     boot::AppState,
     domain::{
-        auth::model::ActiveSession, auth::SessionOid,
-        client_authorization::StoredAuthorizationRequest,
-        openid_connect::OpenIdConnectClient,
+        auth::SessionOid, auth::model::ActiveSession,
+        client_authorization::StoredAuthorizationRequest, openid_connect::OpenIdConnectClient,
     },
     web::controllers::shared::load_active_sessions,
 };

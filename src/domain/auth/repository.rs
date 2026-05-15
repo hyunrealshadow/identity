@@ -58,7 +58,8 @@ pub enum LoginRepositoryError {
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
     /// Find a session by its OID.
-    async fn find_by_oid(&self, oid: SessionOid) -> Result<Option<Session>, SessionRepositoryError>;
+    async fn find_by_oid(&self, oid: SessionOid)
+    -> Result<Option<Session>, SessionRepositoryError>;
 
     /// Find multiple active sessions by their OIDs, joined with user data.
     ///

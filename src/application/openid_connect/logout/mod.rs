@@ -573,11 +573,11 @@ mod tests {
     };
     use async_trait::async_trait;
     use chrono::Utc;
+    use identity_domain::auth::SessionOid;
     use josekit::{jws::RS256, jwt};
     use openssl::rsa::Rsa;
     use std::{collections::HashMap, sync::Arc};
     use url::Url;
-    use identity_domain::auth::SessionOid;
     use uuid::Uuid;
 
     #[derive(Clone)]

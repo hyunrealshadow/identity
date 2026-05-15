@@ -1,8 +1,8 @@
 use crate::key::asymmetric::AsymmetricKeyService;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use identity_domain::auth::SessionOid;
 use identity_domain::auth::ACR_PASSWORD;
+use identity_domain::auth::SessionOid;
 use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
 
 #[tokio::test]

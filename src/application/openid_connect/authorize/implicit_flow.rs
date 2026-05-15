@@ -1,7 +1,7 @@
 use super::flow::session_state_for_authorize_response;
 use super::*;
-use std::fmt::Write;
 use identity_domain::auth::SessionOid;
+use std::fmt::Write;
 use uuid::Uuid;
 
 impl AuthorizeService {
@@ -107,9 +107,13 @@ impl AuthorizeService {
 
         let id_token = match client.metadata().id_token_encrypted_response_alg.as_deref() {
             Some(alg) => {
-                let enc = client.metadata().id_token_encrypted_response_enc
-                    .as_deref().unwrap_or("A128CBC-HS256");
-                self.encrypt_id_token(&signed_id_token, &client, alg, enc).await?
+                let enc = client
+                    .metadata()
+                    .id_token_encrypted_response_enc
+                    .as_deref()
+                    .unwrap_or("A128CBC-HS256");
+                self.encrypt_id_token(&signed_id_token, &client, alg, enc)
+                    .await?
             }
             None => signed_id_token,
         };
@@ -236,14 +240,20 @@ impl AuthorizeService {
                 &scope,
                 claims.as_ref(),
             )?;
-            Some(match client.metadata().id_token_encrypted_response_alg.as_deref() {
-                Some(alg) => {
-                    let enc = client.metadata().id_token_encrypted_response_enc
-                        .as_deref().unwrap_or("A128CBC-HS256");
-                    self.encrypt_id_token(&signed_id_token, &client, alg, enc).await?
-                }
-                None => signed_id_token,
-            })
+            Some(
+                match client.metadata().id_token_encrypted_response_alg.as_deref() {
+                    Some(alg) => {
+                        let enc = client
+                            .metadata()
+                            .id_token_encrypted_response_enc
+                            .as_deref()
+                            .unwrap_or("A128CBC-HS256");
+                        self.encrypt_id_token(&signed_id_token, &client, alg, enc)
+                            .await?
+                    }
+                    None => signed_id_token,
+                },
+            )
         } else {
             None
         };

@@ -34,7 +34,10 @@ impl AuthorizeService {
             })
     }
 
-    pub async fn decrypt_session_id(&self, protected_session_id: &str) -> Result<SessionOid, AppError> {
+    pub async fn decrypt_session_id(
+        &self,
+        protected_session_id: &str,
+    ) -> Result<SessionOid, AppError> {
         if let Ok(session_oid) = Uuid::parse_str(protected_session_id) {
             return Ok(SessionOid(session_oid));
         }

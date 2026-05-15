@@ -221,8 +221,7 @@ impl AuthorizeService {
 
     async fn decrypt_request_object(&self, raw: &str) -> Result<String, AppError> {
         use josekit::jwe::{
-            deserialize_compact,
-            RSA_OAEP, RSA_OAEP_256, ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW,
+            ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, RSA_OAEP, RSA_OAEP_256, deserialize_compact,
         };
 
         let keys = self
@@ -234,7 +233,9 @@ impl AuthorizeService {
             })?;
 
         for key in &keys {
-            let KeyData::Asymmetric(data) = &key.data else { continue };
+            let KeyData::Asymmetric(data) = &key.data else {
+                continue;
+            };
             let pem = data.private_key.as_bytes();
 
             macro_rules! try_decrypt {

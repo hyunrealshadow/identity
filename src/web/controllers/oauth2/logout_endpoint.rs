@@ -7,8 +7,8 @@ use identity_application::openid_connect::logout::{
 };
 use identity_domain::auth::SessionOid;
 
-use identity_infrastructure::web::tera;
 use identity_infrastructure::AppState;
+use identity_infrastructure::web::tera;
 
 use crate::controllers::response::render_html;
 use crate::controllers::{
