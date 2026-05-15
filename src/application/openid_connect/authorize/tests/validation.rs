@@ -3,17 +3,10 @@ use super::*;
 
 #[tokio::test]
 async fn validate_request_rejects_missing_openid_scope() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(MissingClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let result = service.validate_request(params("profile email")).await;
@@ -23,17 +16,10 @@ async fn validate_request_rejects_missing_openid_scope() {
 
 #[tokio::test]
 async fn validate_request_rejects_unknown_scope() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(MissingClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let result = service
@@ -45,17 +31,10 @@ async fn validate_request_rejects_unknown_scope() {
 
 #[tokio::test]
 async fn validate_request_reports_missing_required_fields() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(MissingClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let params = AuthorizationRequestParams {
@@ -94,17 +73,10 @@ async fn validate_request_reports_missing_required_fields() {
 async fn validate_request_rejects_id_token_hint_from_other_issuer() {
     let mut params = params("openid profile");
     params.id_token_hint = Some(unsigned_id_token_hint("https://other.example.com/"));
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let result = service.validate_request(params).await;
@@ -125,17 +97,10 @@ fn unsigned_id_token_hint(issuer: &str) -> String {
 
 #[tokio::test]
 async fn validate_request_rejects_request_and_request_uri_together() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
     let params = AuthorizationRequestParams {
         request: Some("header.payload.signature".to_string()),
@@ -150,17 +115,10 @@ async fn validate_request_rejects_request_and_request_uri_together() {
 
 #[tokio::test]
 async fn validate_request_accepts_registered_redirect_uri() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let result = service.validate_request(params("openid profile")).await;
@@ -170,19 +128,12 @@ async fn validate_request_accepts_registered_redirect_uri() {
 
 #[tokio::test]
 async fn validate_request_rejects_scope_not_assigned_to_client() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(ScopedClientRepository {
             assigned_scopes: vec!["openid".to_string()],
         }),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let error = service
@@ -195,17 +146,10 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
 
 #[tokio::test]
 async fn prompt_none_combined_with_other_value_rejects() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let error = service
@@ -221,17 +165,10 @@ async fn prompt_none_combined_with_other_value_rejects() {
 
 #[tokio::test]
 async fn prompt_none_alone_is_accepted() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(FoundClientRepository),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let result = service
@@ -246,19 +183,12 @@ async fn prompt_none_alone_is_accepted() {
 
 #[tokio::test]
 async fn validate_request_rejects_unassigned_openid_scope() {
-    let service = AuthorizeService::new(
+    let service = build_test_service(
         Arc::new(ScopedClientRepository {
             assigned_scopes: vec!["profile".to_string()],
         }),
         Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
         Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
     );
 
     let error = service

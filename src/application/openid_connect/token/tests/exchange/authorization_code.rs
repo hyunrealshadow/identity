@@ -5,89 +5,25 @@ use identity_domain::auth::ACR_PASSWORD;
 use identity_domain::auth::SessionOid;
 use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
 
+fn rs256_token_service_with_public_key(
+    repo: Arc<InMemoryClientAuthorizationRepository>,
+    user_oid: Uuid,
+) -> (TokenService, Vec<u8>) {
+    let key = key_for_algorithm("RS256");
+    let public_key = match &key.data {
+        KeyData::Asymmetric(data) => data.public_key.as_bytes().to_vec(),
+        KeyData::Symmetric(_) => unreachable!("test signing key must be asymmetric"),
+    };
+    let service = build_token_service_with_key(repo, key, user_oid);
+
+    (service, public_key)
+}
+
 #[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
-    let rsa = Rsa::generate(2048).unwrap();
-    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
-    let public_key = rsa.public_key_to_pem().unwrap();
-    let public_key_string = String::from_utf8(public_key.clone()).unwrap();
-    let key = Key {
-        oid: KeyOid(Uuid::new_v4()),
-        r#type: KeyType::Asymmetric,
-        data: KeyData::Asymmetric(AsymmetricKeyData {
-            public_key: public_key_string.clone(),
-            private_key,
-            certificate: None,
-        }),
-        expires_at: None,
-        revoked_at: None,
-        created_at: Utc::now(),
-        updated_at: None,
-    };
-    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    let key_repo = Arc::new(InMemoryKeyRepository { keys: vec![key] });
-    let user = User {
-        oid: UserOid(user_oid),
-        email: "alice@example.com".to_string(),
-        email_normalized: "alice@example.com".to_string(),
-        name: "Alice".to_string(),
-        name_normalized: "alice".to_string(),
-        given_name: None,
-        family_name: None,
-        middle_name: None,
-        nickname: None,
-        profile: None,
-        picture: None,
-        website: None,
-        gender: None,
-        birthdate: None,
-        zoneinfo: None,
-        locale: None,
-        email_verified: true,
-        phone_number: None,
-        phone_number_verified: None,
-        address_formatted: None,
-        address_street_address: None,
-        address_locality: None,
-        address_region: None,
-        address_postal_code: None,
-        address_country: None,
-        failed_attempts: 0,
-        enabled: true,
-        locked: false,
-        locked_until: None,
-        created_at: Utc::now(),
-        updated_at: None,
-    };
-    let service = TokenService::new(
-        repo.clone(),
-        key_repo.clone(),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
-        Arc::new(InMemoryUserRepository { user: user.clone() }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientSecret,
-                hint: "token".to_string(),
-                data: OpenIdConnectCredentialData::ClientSecret {
-                    secret: "secret-123".to_string(),
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+    let (service, public_key) = rs256_token_service_with_public_key(repo.clone(), user_oid);
 
     let session_oid = Uuid::new_v4();
     let record = repo
@@ -174,85 +110,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
 async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
-    let rsa = Rsa::generate(2048).unwrap();
-    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
-    let public_key = rsa.public_key_to_pem().unwrap();
-    let public_key_string = String::from_utf8(public_key.clone()).unwrap();
-    let key = Key {
-        oid: KeyOid(Uuid::new_v4()),
-        r#type: KeyType::Asymmetric,
-        data: KeyData::Asymmetric(AsymmetricKeyData {
-            public_key: public_key_string,
-            private_key,
-            certificate: None,
-        }),
-        expires_at: None,
-        revoked_at: None,
-        created_at: Utc::now(),
-        updated_at: None,
-    };
-    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    let key_repo = Arc::new(InMemoryKeyRepository { keys: vec![key] });
-    let user = User {
-        oid: UserOid(user_oid),
-        email: "alice@example.com".to_string(),
-        email_normalized: "alice@example.com".to_string(),
-        name: "Alice".to_string(),
-        name_normalized: "alice".to_string(),
-        given_name: None,
-        family_name: None,
-        middle_name: None,
-        nickname: None,
-        profile: None,
-        picture: None,
-        website: None,
-        gender: None,
-        birthdate: None,
-        zoneinfo: None,
-        locale: None,
-        email_verified: true,
-        phone_number: None,
-        phone_number_verified: None,
-        address_formatted: None,
-        address_street_address: None,
-        address_locality: None,
-        address_region: None,
-        address_postal_code: None,
-        address_country: None,
-        failed_attempts: 0,
-        enabled: true,
-        locked: false,
-        locked_until: None,
-        created_at: Utc::now(),
-        updated_at: None,
-    };
-    let service = TokenService::new(
-        repo.clone(),
-        key_repo.clone(),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
-        Arc::new(InMemoryUserRepository { user: user.clone() }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientSecret,
-                hint: "token".to_string(),
-                data: OpenIdConnectCredentialData::ClientSecret {
-                    secret: "secret-123".to_string(),
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+    let (service, public_key) = rs256_token_service_with_public_key(repo.clone(), user_oid);
 
     let record = repo
         .create(
@@ -349,58 +207,16 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
 async fn exchange_authorization_code_rejects_reused_code() {
     let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
     let user_oid = Uuid::new_v4();
-    let rsa = Rsa::generate(2048).unwrap();
-    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
-    let public_key = rsa.public_key_to_pem().unwrap();
-    let public_key_string = String::from_utf8(public_key.clone()).unwrap();
-    let key = Key {
-        oid: KeyOid(Uuid::new_v4()),
-        r#type: KeyType::Asymmetric,
-        data: KeyData::Asymmetric(AsymmetricKeyData {
-            public_key: public_key_string,
-            private_key,
-            certificate: None,
-        }),
-        expires_at: None,
-        revoked_at: None,
-        created_at: Utc::now(),
-        updated_at: None,
+    let key = key_for_algorithm("RS256");
+    let public_key = match &key.data {
+        KeyData::Asymmetric(data) => data.public_key.as_bytes().to_vec(),
+        KeyData::Symmetric(_) => unreachable!("test signing key must be asymmetric"),
     };
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    let key_repo = Arc::new(InMemoryKeyRepository { keys: vec![key] });
-    let user = User {
-        oid: UserOid(user_oid),
-        email: "alice@example.com".to_string(),
-        email_normalized: "alice@example.com".to_string(),
-        name: "Alice".to_string(),
-        name_normalized: "alice".to_string(),
-        given_name: None,
-        family_name: None,
-        middle_name: None,
-        nickname: None,
-        profile: None,
-        picture: None,
-        website: None,
-        gender: None,
-        birthdate: None,
-        zoneinfo: None,
-        locale: None,
-        email_verified: true,
-        phone_number: None,
-        phone_number_verified: None,
-        address_formatted: None,
-        address_street_address: None,
-        address_locality: None,
-        address_region: None,
-        address_postal_code: None,
-        address_country: None,
-        failed_attempts: 0,
-        enabled: true,
-        locked: false,
-        locked_until: None,
-        created_at: Utc::now(),
-        updated_at: None,
-    };
+    let key_repo = Arc::new(InMemoryKeyRepository {
+        keys: vec![key.clone()],
+    });
+    let user = test_user(user_oid);
     let service = TokenService::new(
         repo.clone(),
         key_repo.clone(),
