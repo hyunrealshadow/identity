@@ -14,6 +14,7 @@ use identity_domain::{
     },
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
     setting::{
+        dynamic_registration::DynamicClientRegistrationSetting,
         installation::{InstallationSetting, InstallationState},
         model::SettingDefinition,
     },
@@ -117,6 +118,14 @@ pub(super) async fn continue_state(
             initialized_at: Some(now),
         })
         .unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let dynamic_registration_setting = setting::Model {
+        id: 3,
+        oid: uuid::Uuid::new_v4(),
+        key: DynamicClientRegistrationSetting::KEY.to_string(),
+        value: serde_json::to_value(DynamicClientRegistrationSetting::default_value()).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -407,6 +416,7 @@ pub(super) async fn continue_state(
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[password_setting]])
         .append_query_results([[installation_setting]])
+        .append_query_results([[dynamic_registration_setting]])
         .append_query_results([[symmetric_key.clone()]]);
 
     let db = db

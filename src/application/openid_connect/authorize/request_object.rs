@@ -32,12 +32,6 @@ impl AuthorizeService {
             return Err(AppError::from_code(AuthorizeErrorCode::RequestUriNotHttps));
         }
 
-        if request_uri.fragment().is_some() {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestUriHasFragment,
-            ));
-        }
-
         let is_unsafe_target = match request_uri.host() {
             Some(url::Host::Ipv4(address)) => {
                 let octets = address.octets();
@@ -90,7 +84,7 @@ impl AuthorizeService {
 
         let mut response = self
             .http_client
-            .get(request_uri.clone())
+            .get(fetchable_request_uri(request_uri))
             .send()
             .await
             .map_err(|error| {
@@ -280,10 +274,17 @@ impl AuthorizeService {
             })?;
 
         for credential in credentials {
-            if let OpenIdConnectCredentialData::ClientPublicKey { public_key, .. } = credential.data
-                && let Ok(payload) = decode_request_object(raw, algorithm, public_key.as_bytes())
+            if let OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } =
+                credential.data
             {
-                return Ok(payload);
+                if let Some(jwk) = jwk
+                    && let Ok(payload) = decode_request_object_with_jwk(raw, algorithm, &jwk)
+                {
+                    return Ok(payload);
+                }
+                if let Ok(payload) = decode_request_object(raw, algorithm, public_key.as_bytes()) {
+                    return Ok(payload);
+                }
             }
         }
 
@@ -299,9 +300,15 @@ impl AuthorizeService {
             })?;
 
         for credential in jwks_credentials {
-            if let OpenIdConnectCredentialData::ClientJsonWebKeySet { public_keys, .. } =
-                credential.data
+            if let OpenIdConnectCredentialData::ClientJsonWebKeySet {
+                public_keys, jwks, ..
+            } = credential.data
             {
+                for jwk in jwks {
+                    if let Ok(payload) = decode_request_object_with_jwk(raw, algorithm, &jwk) {
+                        return Ok(payload);
+                    }
+                }
                 for public_key in public_keys {
                     if let Ok(payload) =
                         decode_request_object(raw, algorithm, public_key.as_bytes())
@@ -669,6 +676,42 @@ impl AuthorizeService {
         serde_json::from_slice::<serde_json::Value>(&payload).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid).with_source(error)
         })
+    }
+}
+
+pub(in crate::openid_connect::authorize) fn fetchable_request_uri(request_uri: &Url) -> Url {
+    let mut fetch_uri = request_uri.clone();
+    fetch_uri.set_fragment(None);
+    fetch_uri
+}
+
+fn decode_request_object_with_jwk(
+    raw: &str,
+    alg: &str,
+    jwk: &identity_domain::key::PublicJwk,
+) -> Result<jwt::JwtPayload, AppError> {
+    let jwk_json = serde_json::to_vec(jwk).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid).with_source(error)
+    })?;
+    let jwk = josekit::jwk::Jwk::from_bytes(&jwk_json).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid).with_source(error)
+    })?;
+
+    match alg {
+        "RS256" => decode_with_verifier(raw, RS256.verifier_from_jwk(&jwk)),
+        "RS384" => decode_with_verifier(raw, RS384.verifier_from_jwk(&jwk)),
+        "RS512" => decode_with_verifier(raw, RS512.verifier_from_jwk(&jwk)),
+        "PS256" => decode_with_verifier(raw, PS256.verifier_from_jwk(&jwk)),
+        "PS384" => decode_with_verifier(raw, PS384.verifier_from_jwk(&jwk)),
+        "PS512" => decode_with_verifier(raw, PS512.verifier_from_jwk(&jwk)),
+        "ES256" => decode_with_verifier(raw, ES256.verifier_from_jwk(&jwk)),
+        "ES384" => decode_with_verifier(raw, ES384.verifier_from_jwk(&jwk)),
+        "ES512" => decode_with_verifier(raw, ES512.verifier_from_jwk(&jwk)),
+        "ES256K" => decode_with_verifier(raw, ES256K.verifier_from_jwk(&jwk)),
+        "EdDSA" => decode_with_verifier(raw, EdDSA.verifier_from_jwk(&jwk)),
+        _ => Err(AppError::from_code(
+            AuthorizeErrorCode::RequestObjectAlgUnsupported,
+        )),
     }
 }
 

@@ -108,11 +108,15 @@ impl TokenService {
 
 mod auth;
 mod exchange;
+
+pub(crate) use exchange::resolve_id_token_alg;
+
 mod helpers;
 mod signing;
 
 use helpers::{
-    constant_time_compare, decode_assertion_with_alg, decode_assertion_with_hmac_alg, verify_pkce,
+    client_id_from_assertion, constant_time_compare, decode_assertion_with_alg,
+    decode_assertion_with_hmac_alg, decode_assertion_with_jwk, verify_pkce,
 };
 
 #[cfg(test)]

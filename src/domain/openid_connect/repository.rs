@@ -1,8 +1,12 @@
-use super::model::client::OpenIdConnectClient;
+use super::model::client::{
+    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+};
 use super::model::credential::{
-    OpenIdConnectCredential, OpenIdConnectCredentialOid, OpenIdConnectCredentialType,
+    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,
+    OpenIdConnectCredentialType,
 };
 use crate::auth::model::SessionOid;
+use crate::client::model::Client;
 use crate::client::model::ClientOid;
 use thiserror::Error;
 
@@ -33,6 +37,20 @@ pub enum OpenIdConnectClientRepositoryError {
 
     #[error("failed to parse client protocol")]
     ParseClientProtocol(#[source] crate::client::model::ParseClientProtocolError),
+
+    #[error("openid connect client not found")]
+    ClientNotFound,
+}
+
+#[derive(Debug, Clone)]
+pub struct OpenIdConnectClientRegistration {
+    pub client: Client,
+    pub metadata: OpenIdConnectClientMetadata,
+    pub platforms: Vec<OpenIdConnectClientPlatform>,
+    pub assigned_scopes: Vec<String>,
+    pub client_secret: Option<String>,
+    pub credentials: Vec<OpenIdConnectCredentialData>,
+    pub registration_access_token: String,
 }
 
 #[derive(Debug, Error)]
@@ -78,6 +96,25 @@ pub trait OpenIdConnectClientRepository: Send + Sync {
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         Ok(Vec::new())
     }
+}
+
+#[async_trait::async_trait]
+pub trait OpenIdConnectClientRegistrationRepository: Send + Sync {
+    async fn create(
+        &self,
+        registration: OpenIdConnectClientRegistration,
+    ) -> Result<ClientOid, OpenIdConnectClientRepositoryError>;
+
+    async fn find_by_registration_access_token(
+        &self,
+        client_oid: ClientOid,
+        token: &str,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError>;
+
+    async fn delete_by_oid(
+        &self,
+        client_oid: ClientOid,
+    ) -> Result<(), OpenIdConnectClientRepositoryError>;
 }
 
 #[async_trait::async_trait]

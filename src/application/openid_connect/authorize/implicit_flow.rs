@@ -1,5 +1,6 @@
 use super::flow::session_state_for_authorize_response;
 use super::*;
+use crate::openid_connect::token::resolve_id_token_alg;
 use identity_domain::auth::SessionOid;
 use std::fmt::Write;
 use uuid::Uuid;
@@ -48,6 +49,10 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
+        let id_token_alg = resolve_id_token_alg(
+            &signing_alg,
+            client.metadata().id_token_signed_response_alg.as_deref(),
+        );
         let audience = client_id.to_string();
         let auth_time_val = auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp());
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
@@ -88,7 +93,7 @@ impl AuthorizeService {
         let signed_id_token = self.sign_implicit_id_token(
             &signing_key_id,
             &signing_key_pem,
-            &signing_alg,
+            &id_token_alg,
             &issuer,
             &audience,
             &user,
@@ -177,6 +182,10 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
+        let id_token_alg = resolve_id_token_alg(
+            &signing_alg,
+            client.metadata().id_token_signed_response_alg.as_deref(),
+        );
         let audience = client_id.to_string();
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
@@ -224,7 +233,7 @@ impl AuthorizeService {
             let signed_id_token = self.sign_implicit_id_token(
                 &signing_key_id,
                 &signing_key_pem,
-                &signing_alg,
+                &id_token_alg,
                 &issuer,
                 &audience,
                 &user,

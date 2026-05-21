@@ -30,6 +30,7 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
     use identity_domain::{
         auth::password::PasswordHashSetting,
         setting::{
+            dynamic_registration::DynamicClientRegistrationSetting,
             installation::{InstallationSetting, InstallationState},
             model::SettingDefinition,
         },
@@ -67,9 +68,21 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
+    let dynamic_registration_setting = setting::Model {
+        id: 3,
+        oid: uuid::Uuid::new_v4(),
+        key: DynamicClientRegistrationSetting::KEY.to_string(),
+        value: serde_json::to_value(DynamicClientRegistrationSetting::default_value()).unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
-        .append_query_results([[password_setting], [installation_setting]])
+        .append_query_results(vec![
+            vec![password_setting],
+            vec![installation_setting],
+            vec![dynamic_registration_setting],
+        ])
         .into_connection();
     let i18n = build_i18n().unwrap();
     let tera = build_tera(i18n.loader()).unwrap();

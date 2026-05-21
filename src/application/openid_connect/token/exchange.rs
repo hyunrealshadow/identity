@@ -1,3 +1,4 @@
+use super::signing::StoreRefreshTokenParams;
 use super::*;
 use identity_domain::auth::SessionOid;
 
@@ -10,13 +11,14 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType));
         }
 
-        let client_id = params
-            .client_id
-            .as_deref()
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientIdRequired))?;
+        let client_id = resolve_client_id(
+            params.client_id,
+            params.client_assertion_type.as_deref(),
+            params.client_assertion.as_deref(),
+        )?;
         let authenticated_client_oid = self
             .authenticate_client(
-                client_id,
+                &client_id,
                 params.client_secret.as_deref(),
                 params.client_assertion_type.as_deref(),
                 params.client_assertion.as_deref(),
@@ -111,10 +113,14 @@ impl TokenService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
-        let audience = params
-            .client_id
-            .clone()
-            .unwrap_or_else(|| record.client_oid.to_string());
+        let id_token_alg = resolve_id_token_alg(
+            &signing_alg,
+            authenticated_client
+                .metadata()
+                .id_token_signed_response_alg
+                .as_deref(),
+        );
+        let audience = client_id.clone();
         let client_id_str = record.client_oid.to_string();
         let access_token_record = self
             .create_access_token_record(
@@ -143,7 +149,7 @@ impl TokenService {
             let signed = self.sign_id_token(
                 &signing_key_id,
                 &signing_key_pem,
-                &signing_alg,
+                &id_token_alg,
                 &issuer,
                 &audience,
                 &authenticated_client,
@@ -181,15 +187,15 @@ impl TokenService {
             .any(|scope| scope == "offline_access")
         {
             Some(
-                self.store_refresh_token(
-                    record.client_oid,
-                    &data.scope,
-                    &data.user_oid,
-                    data.session_oid,
-                    Some(&protected_session_id),
-                    data.auth_time,
-                    None,
-                )
+                self.store_refresh_token(StoreRefreshTokenParams {
+                    client_oid: record.client_oid,
+                    scope: &data.scope,
+                    user_oid: &data.user_oid,
+                    session_oid: data.session_oid,
+                    protected_session_id: Some(&protected_session_id),
+                    auth_time: data.auth_time,
+                    rotated_from: None,
+                })
                 .await?,
             )
         } else {
@@ -221,13 +227,14 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType));
         }
 
-        let client_id = params
-            .client_id
-            .as_deref()
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientIdRequired))?;
+        let client_id = resolve_client_id(
+            params.client_id,
+            params.client_assertion_type.as_deref(),
+            params.client_assertion.as_deref(),
+        )?;
         let authenticated_client_oid = self
             .authenticate_client(
-                client_id,
+                &client_id,
                 params.client_secret.as_deref(),
                 params.client_assertion_type.as_deref(),
                 params.client_assertion.as_deref(),
@@ -316,8 +323,8 @@ impl TokenService {
             &signing_key_pem,
             &signing_alg,
             &issuer,
-            client_id,
-            client_id,
+            &client_id,
+            &client_id,
             &user_oid,
             &protected_session_id,
             &scope,
@@ -328,7 +335,7 @@ impl TokenService {
             &signing_key_pem,
             &signing_alg,
             &issuer,
-            client_id,
+            &client_id,
             &authenticated_client,
             &user,
             None,
@@ -364,15 +371,15 @@ impl TokenService {
             })?;
         let rotated_from = refresh_record.oid.to_string();
         let refresh_token = Some(
-            self.store_refresh_token(
-                authenticated_client_oid,
-                &scope,
-                &refresh_data.user_oid,
-                refresh_data.session_oid,
-                Some(&protected_session_id),
-                refresh_data.auth_time,
-                Some(rotated_from.as_str()),
-            )
+            self.store_refresh_token(StoreRefreshTokenParams {
+                client_oid: authenticated_client_oid,
+                scope: &scope,
+                user_oid: &refresh_data.user_oid,
+                session_oid: refresh_data.session_oid,
+                protected_session_id: Some(&protected_session_id),
+                auth_time: refresh_data.auth_time,
+                rotated_from: Some(rotated_from.as_str()),
+            })
             .await?,
         );
 
@@ -401,5 +408,79 @@ impl TokenService {
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
             })
+    }
+}
+
+fn resolve_client_id(
+    client_id: Option<String>,
+    client_assertion_type: Option<&str>,
+    client_assertion: Option<&str>,
+) -> Result<String, AppError> {
+    if let Some(client_id) = client_id {
+        return Ok(client_id);
+    }
+
+    if client_assertion_type == Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
+        && let Some(assertion) = client_assertion
+    {
+        return client_id_from_assertion(assertion);
+    }
+
+    Err(AppError::from_code(TokenErrorCode::ClientIdRequired))
+}
+
+pub(crate) fn resolve_id_token_alg(fallback: &str, client_alg: Option<&str>) -> String {
+    #[cfg(feature = "oidc-conformance")]
+    if client_alg == Some("none") {
+        return "none".to_owned();
+    }
+
+    #[cfg(not(feature = "oidc-conformance"))]
+    if client_alg == Some("none") {
+        return fallback.to_owned();
+    }
+
+    fallback.to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unsigned_assertion(payload: serde_json::Value) -> String {
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(payload.to_string());
+        format!("{header}.{payload}.")
+    }
+
+    #[test]
+    fn resolve_client_id_uses_request_client_id_first() {
+        let assertion = unsigned_assertion(serde_json::json!({"sub": "assertion-client"}));
+
+        let client_id = resolve_client_id(
+            Some("request-client".to_owned()),
+            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(&assertion),
+        )
+        .unwrap();
+
+        assert_eq!(client_id, "request-client");
+    }
+
+    #[test]
+    fn resolve_client_id_extracts_jwt_bearer_assertion_subject() {
+        let assertion = unsigned_assertion(serde_json::json!({
+            "iss": "assertion-client",
+            "sub": "assertion-client"
+        }));
+
+        let client_id = resolve_client_id(
+            None,
+            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(&assertion),
+        )
+        .unwrap();
+
+        assert_eq!(client_id, "assertion-client");
     }
 }

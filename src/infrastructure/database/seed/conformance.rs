@@ -20,9 +20,10 @@ use crate::{
     application::error::codes::common::CommonErrorCode,
     infrastructure::database::entity::{
         client, client_open_id_connect, client_open_id_connect_credential, client_platform,
-        client_scope, scope, user, user_credential,
+        client_scope, scope, setting, user, user_credential,
     },
 };
+use identity_domain::setting::{DynamicClientRegistrationSetting, SettingDefinition};
 
 use super::Seed;
 
@@ -111,6 +112,8 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
 
     let now = Utc::now();
 
+    ensure_dynamic_registration_enabled(&txn, now).await?;
+
     // ── Test user ──────────────────────────────────────────────────────────
 
     let existing_user = user::Entity::find()
@@ -193,6 +196,44 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     txn.commit()
         .await
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+
+    Ok(())
+}
+
+async fn ensure_dynamic_registration_enabled(
+    db: &impl sea_orm::ConnectionTrait,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let existing = setting::Entity::find()
+        .filter(setting::Column::Key.eq(DynamicClientRegistrationSetting::KEY))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+    let enabled = serde_json::json!(true);
+    if let Some(row) = existing {
+        if row.value != enabled {
+            let mut am: setting::ActiveModel = row.into();
+            am.value = Set(enabled);
+            am.updated_at = Set(Some(now.naive_utc()));
+            am.update(db).await.map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+        return Ok(());
+    }
+
+    setting::ActiveModel {
+        oid: Set(Uuid::new_v4()),
+        key: Set(DynamicClientRegistrationSetting::KEY.to_owned()),
+        value: Set(enabled),
+        created_at: Set(now.naive_utc()),
+        updated_at: Set(Some(now.naive_utc())),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
     Ok(())
 }

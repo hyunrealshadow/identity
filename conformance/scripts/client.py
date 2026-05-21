@@ -40,7 +40,14 @@ class ConformanceClient:
     ) -> str:
         with open(config_path, "r") as f:
             config = json.load(f)
+        return self.create_plan_from_dict(config, plan_name, variant)
 
+    def create_plan_from_dict(
+        self,
+        config: dict,
+        plan_name: str = "oidcc-basic-certification-test-plan",
+        variant: Optional[dict] | object = DEFAULT_VARIANT,
+    ) -> str:
         if variant is DEFAULT_VARIANT:
             variant = {"server_metadata": "discovery", "client_registration": "static_client"}
 
@@ -92,6 +99,12 @@ class ConformanceClient:
         resp = self.session.post(url)
         resp.raise_for_status()
         return resp.json()["id"]
+
+    def start_test_run(self, run_id: str) -> None:
+        """Start a test that is in CONFIGURED state via POST /api/runner/{run_id}."""
+        url = f"{self.suite_url}/api/runner/{run_id}"
+        resp = self.session.post(url)
+        resp.raise_for_status()
 
     def get_test_info(self, run_id: str) -> TestInfo:
         resp = self.session.get(f"{self.suite_url}/api/info/{run_id}")

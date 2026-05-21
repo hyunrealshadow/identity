@@ -6,6 +6,7 @@ mod authorize_endpoint;
 mod consent_endpoint;
 mod continue_endpoint;
 mod logout_endpoint;
+mod registration_endpoint;
 mod session_endpoint;
 mod token_endpoint;
 mod user_info_endpoint;
@@ -28,6 +29,12 @@ pub fn routes() -> Router {
                 .post(authorize_endpoint::authorize),
         )
         .push(Router::with_path("oauth2/token").post(token_endpoint::token))
+        .push(Router::with_path("oauth2/register").post(registration_endpoint::register))
+        .push(
+            Router::with_path("oauth2/register/{client_id}")
+                .get(registration_endpoint::read)
+                .delete(registration_endpoint::delete),
+        )
         .push(Router::with_path("oauth2/check_session").get(session_endpoint::check_session_iframe))
         .push(
             Router::with_path("oauth2/logout")

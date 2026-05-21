@@ -101,6 +101,15 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
         return encrypted;
     }
 
+    match service
+        .sign_user_info(token_claims.client_oid, &user_claims)
+        .await
+    {
+        Ok(Some(signed)) => return build_jwt_response(signed),
+        Ok(None) => {}
+        Err(error) => return build_error_from_app_error(error),
+    }
+
     build_success_response(user_claims)
 }
 
@@ -189,6 +198,24 @@ fn build_success_response(
     claims: identity_application::openid_connect::dto::UserInfoClaims,
 ) -> Response {
     let mut response = json_response(StatusCode::OK, claims);
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
+    response
+        .headers_mut()
+        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    response
+}
+
+fn build_jwt_response(token: String) -> Response {
+    let mut response = Response::new();
+    response.status_code(StatusCode::OK);
+    response.render(Text::Plain(token));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/jwt"),
+    );
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("no-store, no-cache, must-revalidate"),

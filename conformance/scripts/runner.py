@@ -1,9 +1,8 @@
 import time
-import sys
 from typing import Optional
 from dataclasses import dataclass
 
-from .client import ConformanceClient, TestModule
+from .client import ConformanceClient
 from .browser_auth import BrowserAuthHandler as AutoLoginHandler
 
 
@@ -15,6 +14,8 @@ class TestResult:
     run_id: str
 
 
+ROTATE_KEYS_TEST = "oidcc-server-rotate-keys"
+
 SPECIAL_TIMEOUT_TESTS = {
     "oidcc-prompt-login": 120,
     "oidcc-max-age-1": 120,
@@ -22,6 +23,11 @@ SPECIAL_TIMEOUT_TESTS = {
     "oidcc-id-token-hint": 120,
     "oidcc-prompt-none-logged-in": 120,
     "oidcc-codereuse-30seconds": 90,
+}
+
+# Tests with longer idle wait tolerance (e.g. have forced delays)
+SPECIAL_IDLE_TESTS = {
+    "oidcc-refresh-token-rp-key-rotation": 35,
 }
 
 STOP_PLAN_STATUSES = {
@@ -44,6 +50,22 @@ class TestRunner:
         self.auto_login = auto_login
         self.timeout_per_test = timeout_per_test
         self.poll_interval = poll_interval
+
+    def _rotate_keys(self) -> bool:
+        import urllib3
+        urllib3.disable_warnings()
+        try:
+            import requests
+            url = f"{self.auto_login.identity_url}/conformance/rotate-keys"
+            resp = requests.post(url, verify=False, timeout=30)
+            if resp.status_code == 200:
+                print("    [rotate-keys] new key generated")
+                return True
+            print(f"    [rotate-keys] failed: {resp.status_code}")
+            return False
+        except Exception as exc:
+            print(f"    [rotate-keys] error: {exc}")
+            return False
 
     @staticmethod
     def _is_active_status(status: str) -> bool:
@@ -94,10 +116,23 @@ class TestRunner:
         self.auto_login.reset_session()
         if run_id is None:
             run_id = self.client.start_test(plan_id, test_name, variant)
+
+        # Handle OP key rotation: wait for CONFIGURED, rotate keys, then start
+        if test_name == ROTATE_KEYS_TEST:
+            for _ in range(30):
+                info = self.client.get_test_info(run_id)
+                if info.status == "CONFIGURED":
+                    break
+                time.sleep(self.poll_interval)
+            if info.status == "CONFIGURED":
+                self._rotate_keys()
+                self.client.start_test_run(run_id)
+
         processed_urls = set()
         idle_cycles = 0
 
         timeout = SPECIAL_TIMEOUT_TESTS.get(test_name, self.timeout_per_test)
+        max_idle = SPECIAL_IDLE_TESTS.get(test_name, 15)
         elapsed = 0
         while elapsed < timeout:
             time.sleep(self.poll_interval)
@@ -162,7 +197,7 @@ class TestRunner:
                         continue
 
                     idle_cycles += 1
-                    if idle_cycles >= 15:
+                    if idle_cycles >= max_idle:
                         return TestResult(
                             test_name=test_name,
                             status="WAITING_NO_PROGRESS",

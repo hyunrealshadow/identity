@@ -1,17 +1,14 @@
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
 
-#[tokio::test]
-async fn validate_request_uri_rejects_fragment() {
-    let service =
-        authorize_service_with_request_uri("https://client.example.com/request.jwt#fragment");
-    let params = AuthorizationRequestParams {
-        request_uri: Some("https://client.example.com/request.jwt#fragment".to_string()),
-        ..params("openid profile")
-    };
+#[test]
+fn fetchable_request_uri_strips_fragment_before_http_fetch() {
+    let request_uri = Url::parse("https://client.example.com/request.jwt#fragment").unwrap();
 
-    let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 23016); // RequestUriHasFragment
+    let fetch_uri =
+        crate::openid_connect::authorize::request_object::fetchable_request_uri(&request_uri);
+
+    assert_eq!(fetch_uri.as_str(), "https://client.example.com/request.jwt");
 }
 
 #[tokio::test]

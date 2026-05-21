@@ -13,7 +13,10 @@ use crate::{
             OpenIdProviderMetadata, ResponseMode, SubjectType, TokenEndpointAuthMethod,
             model::claim::{JwtClaimNames, StandardScopes},
         },
-        setting::installation::{InstallationSetting, InstallationState},
+        setting::{
+            dynamic_registration::DynamicClientRegistrationSetting,
+            installation::{InstallationSetting, InstallationState},
+        },
     },
 };
 
@@ -125,12 +128,7 @@ impl Default for OpenIdProviderCapabilities {
                 "A128GCM".to_owned(),
                 "A256GCM".to_owned(),
             ],
-            token_endpoint_auth_methods_supported: vec![
-                TokenEndpointAuthMethod::ClientSecretBasic,
-                TokenEndpointAuthMethod::ClientSecretPost,
-                TokenEndpointAuthMethod::ClientSecretJwt,
-                TokenEndpointAuthMethod::PrivateKeyJwt,
-            ],
+            token_endpoint_auth_methods_supported: supported_token_endpoint_auth_methods(),
             token_endpoint_auth_signing_alg_values_supported:
                 supported_token_endpoint_auth_signing_algorithms(),
             display_values_supported: vec!["page".to_owned()],
@@ -182,6 +180,29 @@ fn supported_token_endpoint_auth_signing_algorithms() -> Vec<String> {
     algorithms
 }
 
+fn supported_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
+    let mut methods = default_token_endpoint_auth_methods();
+    append_conformance_token_endpoint_auth_methods(&mut methods);
+    methods
+}
+
+fn default_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
+    vec![
+        TokenEndpointAuthMethod::ClientSecretBasic,
+        TokenEndpointAuthMethod::ClientSecretPost,
+        TokenEndpointAuthMethod::ClientSecretJwt,
+        TokenEndpointAuthMethod::PrivateKeyJwt,
+    ]
+}
+
+#[cfg(feature = "oidc-conformance")]
+fn append_conformance_token_endpoint_auth_methods(methods: &mut Vec<TokenEndpointAuthMethod>) {
+    methods.push(TokenEndpointAuthMethod::None);
+}
+
+#[cfg(not(feature = "oidc-conformance"))]
+fn append_conformance_token_endpoint_auth_methods(_methods: &mut Vec<TokenEndpointAuthMethod>) {}
+
 fn supported_asymmetric_jws_algorithms() -> Vec<String> {
     JwaSigningAlgorithm::all()
         .iter()
@@ -192,6 +213,8 @@ fn supported_asymmetric_jws_algorithms() -> Vec<String> {
 #[derive(Clone)]
 pub struct OpenIdProviderService {
     installation_setting: Arc<dyn SettingProvider<InstallationSetting>>,
+    dynamic_registration_setting:
+        Option<Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>>,
     capabilities: OpenIdProviderCapabilities,
     key_repo: Option<Arc<dyn KeyRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
@@ -219,6 +242,7 @@ impl OpenIdProviderService {
     pub fn new(installation_setting: Arc<dyn SettingProvider<InstallationSetting>>) -> Self {
         Self {
             installation_setting,
+            dynamic_registration_setting: None,
             capabilities: OpenIdProviderCapabilities::default(),
             key_repo: None,
             signing_algorithm_detector: None,
@@ -231,6 +255,7 @@ impl OpenIdProviderService {
     ) -> Self {
         Self {
             installation_setting,
+            dynamic_registration_setting: None,
             capabilities,
             key_repo: None,
             signing_algorithm_detector: None,
@@ -239,6 +264,14 @@ impl OpenIdProviderService {
 
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
         self.key_repo = Some(key_repo);
+        self
+    }
+
+    pub fn with_dynamic_registration_setting(
+        mut self,
+        setting: Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>,
+    ) -> Self {
+        self.dynamic_registration_setting = Some(setting);
         self
     }
 
@@ -266,7 +299,7 @@ impl OpenIdProviderService {
             token_endpoint: Some(endpoint_url(&issuer, "/oauth2/token")?),
             userinfo_endpoint: Some(endpoint_url(&issuer, "/oauth2/userinfo")?),
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,
-            registration_endpoint: None,
+            registration_endpoint: self.registration_endpoint(&issuer)?,
             scopes_supported: non_empty(self.capabilities.scopes_supported.clone()),
             response_types_supported: self.capabilities.response_types_supported.clone(),
             response_modes_supported: non_empty(to_string_values(
@@ -275,7 +308,7 @@ impl OpenIdProviderService {
             grant_types_supported: non_empty(self.capabilities.grant_types_supported.clone()),
             acr_values_supported: non_empty(self.capabilities.acr_values_supported.clone()),
             subject_types_supported: to_string_values(&self.capabilities.subject_types_supported),
-            id_token_signing_alg_values_supported: id_token_algos,
+            id_token_signing_alg_values_supported: id_token_algos.clone(),
             id_token_encryption_alg_values_supported: non_empty(
                 self.capabilities
                     .id_token_encryption_alg_values_supported
@@ -286,11 +319,7 @@ impl OpenIdProviderService {
                     .id_token_encryption_enc_values_supported
                     .clone(),
             ),
-            userinfo_signing_alg_values_supported: non_empty(
-                self.capabilities
-                    .userinfo_signing_alg_values_supported
-                    .clone(),
-            ),
+            userinfo_signing_alg_values_supported: non_empty(id_token_algos),
             userinfo_encryption_alg_values_supported: non_empty(
                 self.capabilities
                     .userinfo_encryption_alg_values_supported
@@ -346,7 +375,7 @@ impl OpenIdProviderService {
     }
 
     async fn compute_id_token_signing_algos(&self) -> Result<Vec<String>, AppError> {
-        match self.key_repo {
+        let values = match self.key_repo {
             Some(ref key_repo) => {
                 let keys = key_repo
                     .list_available_asymmetric()
@@ -359,20 +388,47 @@ impl OpenIdProviderService {
                     .as_ref()
                     .map(|detector| detect_id_token_signing_algorithms(&keys, detector.as_ref()))
                     .unwrap_or_default();
-                Ok(if detected.is_empty() {
+                if detected.is_empty() {
                     self.capabilities
                         .id_token_signing_alg_values_supported
                         .clone()
                 } else {
                     detected
-                })
+                }
             }
-            None => Ok(self
+            None => self
                 .capabilities
                 .id_token_signing_alg_values_supported
-                .clone()),
+                .clone(),
+        };
+        Ok(append_conformance_none_alg(values))
+    }
+
+    fn registration_endpoint(&self, issuer: &Url) -> Result<Option<Url>, AppError> {
+        let enabled = self
+            .dynamic_registration_setting
+            .as_ref()
+            .map(|setting| *setting.current_value())
+            .unwrap_or(false);
+        if enabled {
+            endpoint_url(issuer, "/oauth2/register").map(Some)
+        } else {
+            Ok(None)
         }
     }
+}
+
+#[cfg(feature = "oidc-conformance")]
+fn append_conformance_none_alg(mut values: Vec<String>) -> Vec<String> {
+    if !values.contains(&"none".to_owned()) {
+        values.push("none".to_owned());
+    }
+    values
+}
+
+#[cfg(not(feature = "oidc-conformance"))]
+fn append_conformance_none_alg(values: Vec<String>) -> Vec<String> {
+    values
 }
 
 fn non_empty(values: Vec<String>) -> Option<Vec<String>> {
@@ -453,6 +509,7 @@ mod tests {
                 repository::{KeyRepository, KeyRepositoryError},
             },
             setting::{
+                dynamic_registration::DynamicClientRegistrationSetting,
                 installation::{InstallationSetting, InstallationState},
                 model::{SettingDefinition, SettingEntry},
                 repository::{SettingRepository, SettingRepositoryError},
@@ -463,6 +520,31 @@ mod tests {
     #[derive(Clone)]
     struct TestSettingRepo {
         value: Arc<RwLock<serde_json::Value>>,
+    }
+
+    struct StaticDynamicRegistrationSetting(bool);
+
+    impl crate::application::setting::runtime::SettingProvider<DynamicClientRegistrationSetting>
+        for StaticDynamicRegistrationSetting
+    {
+        fn current_value(&self) -> Arc<bool> {
+            Arc::new(self.0)
+        }
+    }
+
+    #[cfg(feature = "oidc-conformance")]
+    fn expected_id_token_algorithms(values: &[&str]) -> Vec<String> {
+        values
+            .iter()
+            .copied()
+            .chain(std::iter::once("none"))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    #[cfg(not(feature = "oidc-conformance"))]
+    fn expected_id_token_algorithms(values: &[&str]) -> Vec<String> {
+        values.iter().copied().map(str::to_owned).collect()
     }
 
     #[async_trait]
@@ -791,6 +873,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn discovery_advertises_registration_endpoint_when_enabled() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await
+        .with_dynamic_registration_setting(Arc::new(StaticDynamicRegistrationSetting(true)));
+
+        let metadata = service.discovery_metadata().await.unwrap();
+
+        assert_eq!(
+            metadata.registration_endpoint.unwrap().as_str(),
+            "https://identity.example.com/oauth2/register"
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_advertises_none_token_auth_only_in_conformance() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().await.unwrap();
+        let methods = metadata.token_endpoint_auth_methods_supported.unwrap();
+
+        assert_eq!(
+            methods.iter().any(|method| method == "none"),
+            cfg!(feature = "oidc-conformance")
+        );
+    }
+
+    #[tokio::test]
     async fn default_discovery_advertises_token_endpoint_auth_verifier_algorithms() {
         let service = OpenIdProviderService::for_test(InstallationState {
             initialized: true,
@@ -834,7 +956,7 @@ mod tests {
 
         assert_eq!(
             metadata.id_token_signing_alg_values_supported,
-            vec!["RS256".to_owned(), "RS384".to_owned(), "RS512".to_owned()]
+            expected_id_token_algorithms(&["RS256", "RS384", "RS512"])
         );
     }
 
@@ -859,7 +981,7 @@ mod tests {
 
         assert_eq!(
             metadata.id_token_signing_alg_values_supported,
-            vec!["PS256".to_owned(), "PS384".to_owned(), "PS512".to_owned()]
+            expected_id_token_algorithms(&["PS256", "PS384", "PS512"])
         );
     }
 
@@ -882,7 +1004,7 @@ mod tests {
 
         assert_eq!(
             metadata.id_token_signing_alg_values_supported,
-            vec!["ES256".to_owned()]
+            expected_id_token_algorithms(&["ES256"])
         );
     }
 
@@ -913,19 +1035,10 @@ mod tests {
 
         assert_eq!(
             metadata.id_token_signing_alg_values_supported,
-            vec![
-                "ES256".to_owned(),
-                "ES256K".to_owned(),
-                "ES384".to_owned(),
-                "ES512".to_owned(),
-                "EdDSA".to_owned(),
-                "PS256".to_owned(),
-                "PS384".to_owned(),
-                "PS512".to_owned(),
-                "RS256".to_owned(),
-                "RS384".to_owned(),
-                "RS512".to_owned()
-            ]
+            expected_id_token_algorithms(&[
+                "ES256", "ES256K", "ES384", "ES512", "EdDSA", "PS256", "PS384", "PS512", "RS256",
+                "RS384", "RS512",
+            ])
         );
     }
 
@@ -945,7 +1058,7 @@ mod tests {
 
         assert_eq!(
             metadata.id_token_signing_alg_values_supported,
-            vec!["ES256".to_owned()]
+            expected_id_token_algorithms(&["ES256"])
         );
     }
 

@@ -136,7 +136,7 @@ mod tests {
         );
         assert_eq!(
             json["id_token_signing_alg_values_supported"],
-            serde_json::json!(["ES256"])
+            serde_json::json!(["ES256", "none"])
         );
     }
 }

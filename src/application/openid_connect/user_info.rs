@@ -11,7 +11,7 @@ use crate::{
     },
     domain::{
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
-        key::KeyData,
+        key::{JwaSigningAlgorithm, KeyData},
         openid_connect::{
             OpenIdConnectClientRepository, ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
@@ -22,8 +22,8 @@ use crate::{
 use josekit::{
     JoseError,
     jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, JwsVerifier, PS256, PS384, PS512, RS256,
-        RS384, RS512,
+        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, JwsSigner, JwsVerifier, PS256, PS384, PS512,
+        RS256, RS384, RS512,
     },
     jwt,
 };
@@ -87,6 +87,47 @@ impl UserInfoService {
         claims.sub = client.subject_identifier(Uuid::from(user.oid), &issuer);
         claims.apply_scope_filter(scope, claims_request);
         Ok(claims)
+    }
+
+    pub async fn sign_user_info(
+        &self,
+        client_oid: Uuid,
+        claims: &UserInfoClaims,
+    ) -> Result<Option<String>, AppError> {
+        let client = self
+            .client_repo
+            .find_by_oid(client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+
+        let Some(alg) = client.metadata().userinfo_signed_response_alg.as_deref() else {
+            return Ok(None);
+        };
+        if alg == "none" {
+            return Err(AppError::from_code(CommonErrorCode::InternalError));
+        }
+
+        let (key_id, private_key) = self.load_signing_key_for_alg(alg).await?;
+        let mut header = JwsHeader::new();
+        header.set_token_type("JWT");
+        header.set_key_id(&key_id);
+
+        let mut payload = user_info_payload(claims)?;
+        let issuer = self.provider_service.issuer()?;
+        let now = std::time::SystemTime::now();
+        payload.set_issuer(issuer.as_str());
+        payload.set_audience(vec![client.client().oid.to_string()]);
+        payload.set_issued_at(&now);
+
+        let signer = build_user_info_signer(&private_key, alg)?;
+        let token = jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?;
+
+        Ok(Some(token))
     }
 
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {
@@ -257,6 +298,121 @@ impl UserInfoService {
             result.map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         Ok((payload, header))
+    }
+
+    async fn load_signing_key_for_alg(&self, alg: &str) -> Result<(String, String), AppError> {
+        let keys = self.key_service.list_available().await?;
+        let bindings = self.key_service.list_available_jwks().await?;
+
+        for binding in bindings.iter().filter(|binding| binding.algorithm == alg) {
+            let Some(key) = keys.iter().find(|key| key.oid == binding.key_oid) else {
+                continue;
+            };
+            let KeyData::Asymmetric(data) = &key.data else {
+                continue;
+            };
+            let key_id = binding
+                .jwk
+                .key_id()
+                .map(str::to_owned)
+                .unwrap_or_else(|| Uuid::from(binding.oid).to_string());
+            return Ok((key_id, data.private_key.clone()));
+        }
+
+        for key in keys {
+            let KeyData::Asymmetric(data) = key.data else {
+                continue;
+            };
+            if build_user_info_signer(&data.private_key, alg).is_ok() {
+                return Ok((Uuid::from(key.oid).to_string(), data.private_key));
+            }
+        }
+
+        Err(AppError::from_code(CommonErrorCode::InternalError))
+    }
+}
+
+fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppError> {
+    let value = serde_json::to_value(claims)
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+    let mut payload = jwt::JwtPayload::new();
+    for (name, value) in object {
+        payload
+            .set_claim(name, Some(value.clone()))
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+    }
+    Ok(payload)
+}
+
+fn build_user_info_signer(
+    private_key_pem: &str,
+    alg: &str,
+) -> Result<Box<dyn JwsSigner>, AppError> {
+    let jwa: JwaSigningAlgorithm = alg
+        .parse()
+        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
+    let pem = private_key_pem.as_bytes();
+    match jwa {
+        JwaSigningAlgorithm::Rs256 => {
+            Ok(Box::new(RS256.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Rs384 => {
+            Ok(Box::new(RS384.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Rs512 => {
+            Ok(Box::new(RS512.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Ps256 => {
+            Ok(Box::new(PS256.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Ps384 => {
+            Ok(Box::new(PS384.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Ps512 => {
+            Ok(Box::new(PS512.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es256 => {
+            Ok(Box::new(ES256.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es384 => {
+            Ok(Box::new(ES384.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es512 => {
+            Ok(Box::new(ES512.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::Es256k => {
+            Ok(Box::new(ES256K.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
+        JwaSigningAlgorithm::EdDsa => {
+            Ok(Box::new(EdDSA.signer_from_pem(pem).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?))
+        }
     }
 }
 

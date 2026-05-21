@@ -46,6 +46,34 @@ pub(super) fn decode_assertion_with_alg(
     }
 }
 
+pub(super) fn decode_assertion_with_jwk(
+    alg: &str,
+    assertion: &str,
+    jwk: &identity_domain::key::PublicJwk,
+) -> Result<JwtPayload, AppError> {
+    let jwk_json = serde_json::to_vec(jwk).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionKeyInvalid).with_source(error)
+    })?;
+    let jwk = josekit::jwk::Jwk::from_bytes(&jwk_json).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionKeyInvalid).with_source(error)
+    })?;
+
+    match alg {
+        "RS256" => decode_with_verifier(assertion, RS256.verifier_from_jwk(&jwk)),
+        "RS384" => decode_with_verifier(assertion, RS384.verifier_from_jwk(&jwk)),
+        "RS512" => decode_with_verifier(assertion, RS512.verifier_from_jwk(&jwk)),
+        "PS256" => decode_with_verifier(assertion, PS256.verifier_from_jwk(&jwk)),
+        "PS384" => decode_with_verifier(assertion, PS384.verifier_from_jwk(&jwk)),
+        "PS512" => decode_with_verifier(assertion, PS512.verifier_from_jwk(&jwk)),
+        "ES256" => decode_with_verifier(assertion, ES256.verifier_from_jwk(&jwk)),
+        "ES384" => decode_with_verifier(assertion, ES384.verifier_from_jwk(&jwk)),
+        "ES512" => decode_with_verifier(assertion, ES512.verifier_from_jwk(&jwk)),
+        "ES256K" => decode_with_verifier(assertion, ES256K.verifier_from_jwk(&jwk)),
+        "EdDSA" => decode_with_verifier(assertion, EdDSA.verifier_from_jwk(&jwk)),
+        _ => Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)),
+    }
+}
+
 pub(super) fn decode_assertion_with_hmac_alg(
     alg: &str,
     assertion: &str,
@@ -57,6 +85,28 @@ pub(super) fn decode_assertion_with_hmac_alg(
         "HS512" => decode_with_verifier(assertion, HS512.verifier_from_bytes(secret)),
         _ => Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)),
     }
+}
+
+pub(super) fn client_id_from_assertion(assertion: &str) -> Result<String, AppError> {
+    let payload_segment = assertion
+        .split('.')
+        .nth(1)
+        .ok_or_else(|| AppError::from_code(TokenErrorCode::AssertionVerifyFailed))?;
+
+    let payload = URL_SAFE_NO_PAD.decode(payload_segment).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })?;
+
+    let payload: serde_json::Value = serde_json::from_slice(&payload).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })?;
+
+    payload
+        .get("sub")
+        .or_else(|| payload.get("iss"))
+        .and_then(|value| value.as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| AppError::from_code(TokenErrorCode::AssertionSubMissing))
 }
 
 fn decode_with_verifier<V>(

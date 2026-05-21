@@ -28,7 +28,7 @@ openssl = { version = "0.10" }
 password-hash = { version = "0.5" }
 rand = { version = "0.8" }
 regex = { version = "1.11" }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 rstest = { version = "0.25" }
 salvo = { version = "0.92.1", features = ["affix-state", "csrf", "serve-static", "test", "rustls"] }
 sea-orm = { version = "2.0.0-rc.37", features = [
@@ -101,6 +101,7 @@ uuid = { workspace = true }
 
 [features]
 oidc-conformance = [
+  "identity-application/oidc-conformance",
   "identity-boot/oidc-conformance",
   "identity-infrastructure/oidc-conformance",
   "identity-web/oidc-conformance",

@@ -91,13 +91,27 @@ impl AuthorizeService {
             key_jwk_repo,
             provider_service,
             signing_algorithm_detector,
-            http_client: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(5))
+            http_client: request_uri_http_client()
                 .build()
                 .expect("request_uri HTTP client must build"),
             data_protector,
         }
+    }
+}
+
+fn request_uri_http_client() -> reqwest::ClientBuilder {
+    let builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5));
+
+    #[cfg(feature = "oidc-conformance")]
+    {
+        builder.danger_accept_invalid_certs(true)
+    }
+
+    #[cfg(not(feature = "oidc-conformance"))]
+    {
+        builder
     }
 }
 

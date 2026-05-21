@@ -205,18 +205,21 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::AssertionIssSubMismatch));
         }
 
+        let issuer_base = issuer.as_str().trim_end_matches('/');
+        let token_endpoint = format!("{issuer_base}/oauth2/token");
+        let valid_audiences = [issuer.as_str(), issuer_base, token_endpoint.as_str()];
         let audience_matches = payload
             .claim(JwtClaimNames::AUD)
             .and_then(|value| {
                 value
                     .as_str()
-                    .map(|aud| aud == issuer.as_str())
+                    .map(|aud| valid_audiences.contains(&aud))
                     .or_else(|| {
                         value.as_array().map(|items| {
                             items
                                 .iter()
                                 .filter_map(|item| item.as_str())
-                                .any(|aud| aud == issuer.as_str())
+                                .any(|aud| valid_audiences.contains(&aud))
                         })
                     })
             })
@@ -275,11 +278,19 @@ impl TokenService {
             })?;
 
         for credential in credentials {
-            if let OpenIdConnectCredentialData::ClientPublicKey { public_key, .. } = credential.data
-                && let Ok(payload) =
-                    decode_assertion_with_alg(algorithm, assertion, public_key.as_bytes())
+            if let OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } =
+                credential.data
             {
-                return Ok(payload);
+                if let Some(jwk) = jwk
+                    && let Ok(payload) = decode_assertion_with_jwk(algorithm, assertion, &jwk)
+                {
+                    return Ok(payload);
+                }
+                if let Ok(payload) =
+                    decode_assertion_with_alg(algorithm, assertion, public_key.as_bytes())
+                {
+                    return Ok(payload);
+                }
             }
         }
 
@@ -294,15 +305,29 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::CredentialLookupFailed).with_source(error)
             })?;
         for credential in jwks_credentials {
-            if let OpenIdConnectCredentialData::ClientJsonWebKeySet { public_keys, .. } =
-                credential.data
+            if let OpenIdConnectCredentialData::ClientJsonWebKeySet {
+                public_keys,
+                jwks,
+                jwks_uri,
+                ..
+            } = credential.data
             {
+                for jwk in jwks {
+                    if let Ok(payload) = decode_assertion_with_jwk(algorithm, assertion, &jwk) {
+                        return Ok(payload);
+                    }
+                }
                 for public_key in public_keys {
                     if let Ok(payload) =
                         decode_assertion_with_alg(algorithm, assertion, public_key.as_bytes())
                     {
                         return Ok(payload);
                     }
+                }
+                if let Some(payload) =
+                    fetch_and_verify_jwks_uri(&jwks_uri, algorithm, assertion).await?
+                {
+                    return Ok(payload);
                 }
             }
         }
@@ -351,4 +376,50 @@ impl TokenService {
 
         Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed))
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RemoteJwks {
+    keys: Vec<identity_domain::key::PublicJwk>,
+}
+
+async fn fetch_and_verify_jwks_uri(
+    jwks_uri: &url::Url,
+    algorithm: &str,
+    assertion: &str,
+) -> Result<Option<JwtPayload>, AppError> {
+    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
+    if std::env::var("APP_ENV")
+        .map(|value| value.eq_ignore_ascii_case("conformance"))
+        .unwrap_or(false)
+    {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+
+    let response = builder
+        .build()
+        .map_err(|error| {
+            AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+        })?
+        .get(jwks_uri.clone())
+        .send()
+        .await
+        .map_err(|error| {
+            AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+        })?;
+
+    if !response.status().is_success() {
+        return Ok(None);
+    }
+
+    let jwks = response.json::<RemoteJwks>().await.map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })?;
+    for jwk in jwks.keys {
+        if let Ok(payload) = decode_assertion_with_jwk(algorithm, assertion, &jwk) {
+            return Ok(Some(payload));
+        }
+    }
+
+    Ok(None)
 }

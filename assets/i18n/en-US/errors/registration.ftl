@@ -1,0 +1,10 @@
+E25000 = Dynamic client registration is disabled.
+E25001 = At least one redirect_uri is required.
+E25002 = The application_type is not supported.
+E25003 = The subject_type is not supported.
+E25004 = Failed to create the dynamic client registration.
+E25005 = The registration access token is invalid.
+E25006 = Failed to look up the dynamic client registration.
+E25007 = { $field } does not support none.
+E25008 = Invalid redirect URI.
+E25009 = Invalid client metadata.

@@ -1,14 +1,19 @@
 use async_trait::async_trait;
+use chrono::Duration;
 use chrono::{DateTime, Utc};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
+    TransactionTrait,
+};
 use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
 use crate::database::entity::{
-    client, client::Entity as ClientEntity, client_open_id_connect,
-    client_open_id_connect::Entity as OpenIdConnectClientEntity, client_platform,
-    client_platform::Entity as ClientPlatformEntity, client_scope,
+    client, client::Entity as ClientEntity, client_authorization,
+    client_authorization::Entity as ClientAuthorizationEntity, client_open_id_connect,
+    client_open_id_connect::Entity as OpenIdConnectClientEntity, client_open_id_connect_credential,
+    client_platform, client_platform::Entity as ClientPlatformEntity, client_scope,
     client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
     scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
 };
@@ -16,8 +21,9 @@ use identity_domain::auth::SessionOid;
 use identity_domain::client::model::Client;
 use identity_domain::openid_connect::{
     OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-    OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
-    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
+    OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
+    OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
+    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings, OpenIdConnectCredentialData,
 };
 
 fn deserialize_optional_string_vec(
@@ -134,6 +140,331 @@ impl OpenIdConnectClientRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
+}
+
+fn optional_urls_to_json(value: Option<Vec<Url>>) -> Option<Value> {
+    value.map(|urls| {
+        Value::Array(
+            urls.into_iter()
+                .map(|url| Value::String(url.to_string()))
+                .collect(),
+        )
+    })
+}
+
+fn optional_strings_to_json(value: Option<Vec<String>>) -> Option<Value> {
+    value.map(|items| Value::Array(items.into_iter().map(Value::String).collect()))
+}
+
+fn urls_to_json(value: Vec<Url>) -> Option<Value> {
+    (!value.is_empty()).then(|| {
+        Value::Array(
+            value
+                .into_iter()
+                .map(|url| Value::String(url.to_string()))
+                .collect(),
+        )
+    })
+}
+
+#[async_trait]
+impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepositoryImpl {
+    async fn create(
+        &self,
+        registration: OpenIdConnectClientRegistration,
+    ) -> Result<identity_domain::client::model::ClientOid, OpenIdConnectClientRepositoryError> {
+        let client_oid = registration.client.oid;
+        let now = Utc::now();
+
+        self.db
+            .transaction::<_, _, sea_orm::DbErr>(|txn| {
+                Box::pin(async move {
+                    let client_model = client::ActiveModel {
+                        oid: Set(registration.client.oid),
+                        protocol: Set(registration.client.protocol.to_string()),
+                        name: Set(registration.client.name),
+                        names: Set(optional_strings_to_json(Some(registration.client.names))),
+                        description: Set(registration.client.description),
+                        created_at: Set(registration.client.created_at.naive_utc()),
+                        updated_at: Set(registration
+                            .client
+                            .updated_at
+                            .map(|value| value.naive_utc())),
+                        ..Default::default()
+                    }
+                    .insert(txn)
+                    .await?;
+
+                    let metadata = registration.metadata;
+                    let settings = serde_json::to_value(metadata.settings)
+                        .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
+                    client_open_id_connect::ActiveModel {
+                        client_id: Set(client_model.id),
+                        post_logout_redirect_uris: Set(optional_urls_to_json(
+                            metadata.post_logout_redirect_uris,
+                        )),
+                        frontchannel_logout_uri: Set(metadata
+                            .frontchannel_logout_uri
+                            .map(|value| value.to_string())),
+                        frontchannel_logout_session_required: Set(
+                            metadata.frontchannel_logout_session_required
+                        ),
+                        backchannel_logout_uri: Set(metadata
+                            .backchannel_logout_uri
+                            .map(|value| value.to_string())),
+                        backchannel_logout_session_required: Set(
+                            metadata.backchannel_logout_session_required
+                        ),
+                        response_types: Set(optional_strings_to_json(metadata.response_types)),
+                        grant_types: Set(optional_strings_to_json(metadata.grant_types)),
+                        contacts: Set(optional_strings_to_json(metadata.contacts)),
+                        logo_uri: Set(metadata.logo_uri.map(|value| value.to_string())),
+                        client_uri: Set(metadata.client_uri.map(|value| value.to_string())),
+                        policy_uri: Set(metadata.policy_uri.map(|value| value.to_string())),
+                        tos_uri: Set(metadata.tos_uri.map(|value| value.to_string())),
+                        sector_identifier_uri: Set(metadata
+                            .sector_identifier_uri
+                            .map(|value| value.to_string())),
+                        subject_type: Set(metadata.subject_type.map(|value| value.to_string())),
+                        id_token_signed_response_alg: Set(metadata.id_token_signed_response_alg),
+                        id_token_encrypted_response_alg: Set(
+                            metadata.id_token_encrypted_response_alg
+                        ),
+                        id_token_encrypted_response_enc: Set(
+                            metadata.id_token_encrypted_response_enc
+                        ),
+                        userinfo_signed_response_alg: Set(metadata.userinfo_signed_response_alg),
+                        userinfo_encrypted_response_alg: Set(
+                            metadata.userinfo_encrypted_response_alg
+                        ),
+                        userinfo_encrypted_response_enc: Set(
+                            metadata.userinfo_encrypted_response_enc
+                        ),
+                        request_object_signing_alg: Set(metadata.request_object_signing_alg),
+                        request_object_encryption_alg: Set(metadata.request_object_encryption_alg),
+                        request_object_encryption_enc: Set(metadata.request_object_encryption_enc),
+                        token_endpoint_auth_method: Set(metadata.token_endpoint_auth_method),
+                        token_endpoint_auth_signing_alg: Set(
+                            metadata.token_endpoint_auth_signing_alg
+                        ),
+                        default_max_age: Set(metadata.default_max_age),
+                        require_auth_time: Set(metadata.require_auth_time),
+                        default_acr_values: Set(optional_strings_to_json(
+                            metadata.default_acr_values,
+                        )),
+                        initiate_login_uri: Set(metadata
+                            .initiate_login_uri
+                            .map(|value| value.to_string())),
+                        request_uris: Set(optional_urls_to_json(metadata.request_uris)),
+                        settings: Set(settings),
+                        created_at: Set(now.into()),
+                        updated_at: Set(None),
+                        ..Default::default()
+                    }
+                    .insert(txn)
+                    .await?;
+
+                    for platform in registration.platforms {
+                        client_platform::ActiveModel {
+                            client_id: Set(client_model.id),
+                            platform: Set(platform.platform.to_string()),
+                            redirect_uris: Set(urls_to_json(platform.redirect_uris)),
+                            created_at: Set(now.into()),
+                            updated_at: Set(None),
+                            ..Default::default()
+                        }
+                        .insert(txn)
+                        .await?;
+                    }
+
+                    if !registration.assigned_scopes.is_empty() {
+                        let scope_models = ScopeEntity::find()
+                            .filter(scope::Column::Protocol.eq("openid_connect"))
+                            .filter(scope::Column::Name.is_in(registration.assigned_scopes))
+                            .all(txn)
+                            .await?;
+                        for scope_model in scope_models {
+                            client_scope::ActiveModel {
+                                client_id: Set(client_model.id),
+                                scope_id: Set(scope_model.id),
+                                created_at: Set(now.into()),
+                                ..Default::default()
+                            }
+                            .insert(txn)
+                            .await?;
+                        }
+                    }
+
+                    if let Some(secret) = registration.client_secret {
+                        client_open_id_connect_credential::ActiveModel {
+                            oid: Set(Uuid::new_v4()),
+                            client_id: Set(client_model.id),
+                            r#type: Set("client_secret".to_owned()),
+                            data: Set(serde_json::json!({ "secret": secret })),
+                            hint: Set(secret),
+                            expires_at: Set((now + Duration::days(365)).into()),
+                            revoked_at: Set(None),
+                            created_at: Set(now.into()),
+                            updated_at: Set(None),
+                            ..Default::default()
+                        }
+                        .insert(txn)
+                        .await?;
+                    }
+
+                    for credential in registration.credentials {
+                        let (type_, hint, data) = match credential {
+                            OpenIdConnectCredentialData::ClientSecret { secret } => (
+                                "client_secret".to_owned(),
+                                secret.clone(),
+                                serde_json::json!({ "secret": secret }),
+                            ),
+                            OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } => (
+                                "client_public_key".to_owned(),
+                                jwk.as_ref()
+                                    .and_then(|value| value.key_id())
+                                    .or_else(|| jwk.as_ref().and_then(|value| value.algorithm()))
+                                    .unwrap_or("client_public_key")
+                                    .to_owned(),
+                                serde_json::json!({
+                                    "public_key": public_key,
+                                    "jwk": jwk,
+                                }),
+                            ),
+                            OpenIdConnectCredentialData::ClientJsonWebKeySet {
+                                jwks_uri,
+                                last_updated,
+                                expires_at,
+                                public_keys,
+                                jwks,
+                            } => (
+                                "client_json_web_key_set".to_owned(),
+                                jwks_uri.to_string(),
+                                serde_json::json!({
+                                    "jwks_uri": jwks_uri,
+                                    "last_updated": last_updated,
+                                    "expires_at": expires_at,
+                                    "public_keys": public_keys,
+                                    "jwks": jwks,
+                                }),
+                            ),
+                        };
+
+                        client_open_id_connect_credential::ActiveModel {
+                            oid: Set(Uuid::new_v4()),
+                            client_id: Set(client_model.id),
+                            r#type: Set(type_),
+                            data: Set(data),
+                            hint: Set(hint),
+                            expires_at: Set((now + Duration::days(365)).into()),
+                            revoked_at: Set(None),
+                            created_at: Set(now.into()),
+                            updated_at: Set(None),
+                            ..Default::default()
+                        }
+                        .insert(txn)
+                        .await?;
+                    }
+
+                    let registration_access_token = registration.registration_access_token;
+                    client_authorization::ActiveModel {
+                        oid: Set(Uuid::new_v4()),
+                        client_id: Set(client_model.id),
+                        r#type: Set("registration_access_token".to_owned()),
+                        data: Set(serde_json::json!({ "token": registration_access_token })),
+                        expires_at: Set((now + Duration::days(365)).into()),
+                        completed_at: Set(None),
+                        revoked_at: Set(None),
+                        created_at: Set(now.into()),
+                        updated_at: Set(Some(now.into())),
+                        ..Default::default()
+                    }
+                    .insert(txn)
+                    .await?;
+
+                    Ok(())
+                })
+            })
+            .await
+            .map_err(|error| {
+                OpenIdConnectClientRepositoryError::QueryFailed(sea_orm::DbErr::Custom(
+                    error.to_string(),
+                ))
+            })?;
+
+        Ok(client_oid)
+    }
+
+    async fn find_by_registration_access_token(
+        &self,
+        client_oid: identity_domain::client::model::ClientOid,
+        token: &str,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let Some(client_model) = ClientEntity::find()
+            .filter(client::Column::Oid.eq(client_oid))
+            .filter(client::Column::Protocol.eq("openid_connect"))
+            .one(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+        else {
+            return Ok(None);
+        };
+
+        let auth_rows = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::ClientId.eq(client_model.id))
+            .filter(client_authorization::Column::Type.eq("registration_access_token"))
+            .filter(client_authorization::Column::RevokedAt.is_null())
+            .filter(client_authorization::Column::ExpiresAt.gt(Utc::now()))
+            .all(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+
+        let valid = auth_rows.into_iter().any(|row| {
+            row.data
+                .get("token")
+                .and_then(|value| value.as_str())
+                .is_some_and(|stored| constant_time_compare(stored.as_bytes(), token.as_bytes()))
+        });
+
+        if valid {
+            self.find_by_oid(client_oid).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn delete_by_oid(
+        &self,
+        client_oid: identity_domain::client::model::ClientOid,
+    ) -> Result<(), OpenIdConnectClientRepositoryError> {
+        let Some(client_model) = ClientEntity::find()
+            .filter(client::Column::Oid.eq(client_oid))
+            .filter(client::Column::Protocol.eq("openid_connect"))
+            .one(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+        else {
+            return Err(OpenIdConnectClientRepositoryError::ClientNotFound);
+        };
+
+        ClientEntity::delete_by_id(client_model.id)
+            .exec(&self.db)
+            .await
+            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+
+        Ok(())
+    }
+}
+
+fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        result |= x ^ y;
+    }
+    result == 0
 }
 
 #[async_trait]

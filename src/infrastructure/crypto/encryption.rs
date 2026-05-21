@@ -65,27 +65,27 @@ pub fn build_decrypter(
         "RSA-OAEP" => Ok(Box::new(
             RSA_OAEP
                 .decrypter_from_pem(pem)
-                .map_err(|e| JweError::DecryptFailed(e))?,
+                .map_err(JweError::DecryptFailed)?,
         )),
         "RSA-OAEP-256" => Ok(Box::new(
             RSA_OAEP_256
                 .decrypter_from_pem(pem)
-                .map_err(|e| JweError::DecryptFailed(e))?,
+                .map_err(JweError::DecryptFailed)?,
         )),
         "ECDH-ES" => Ok(Box::new(
             ECDH_ES
                 .decrypter_from_pem(pem)
-                .map_err(|e| JweError::DecryptFailed(e))?,
+                .map_err(JweError::DecryptFailed)?,
         )),
         "ECDH-ES+A128KW" => Ok(Box::new(
             ECDH_ES_A128KW
                 .decrypter_from_pem(pem)
-                .map_err(|e| JweError::DecryptFailed(e))?,
+                .map_err(JweError::DecryptFailed)?,
         )),
         "ECDH-ES+A256KW" => Ok(Box::new(
             ECDH_ES_A256KW
                 .decrypter_from_pem(pem)
-                .map_err(|e| JweError::DecryptFailed(e))?,
+                .map_err(JweError::DecryptFailed)?,
         )),
         _ => Err(JweError::UnsupportedAlgorithm(alg.to_owned())),
     }

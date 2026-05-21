@@ -2,6 +2,16 @@ use super::*;
 use identity_domain::auth::SessionOid;
 use josekit::jwe::JweHeader;
 
+pub(super) struct StoreRefreshTokenParams<'a> {
+    pub client_oid: Uuid,
+    pub scope: &'a str,
+    pub user_oid: &'a str,
+    pub session_oid: SessionOid,
+    pub protected_session_id: Option<&'a str>,
+    pub auth_time: Option<i64>,
+    pub rotated_from: Option<&'a str>,
+}
+
 impl TokenService {
     pub(super) async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
         let keys = self
@@ -193,8 +203,26 @@ impl TokenService {
                 })?;
         }
 
+        if alg == "none" {
+            #[cfg(feature = "oidc-conformance")]
+            return Self::sign_unsigned_id_token(&header, &payload);
+
+            #[cfg(not(feature = "oidc-conformance"))]
+            return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
+        }
+
         let signer: Box<dyn josekit::jws::JwsSigner> = build_id_token_signer(private_key_pem, alg)?;
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
+            AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+        })
+    }
+
+    #[cfg(feature = "oidc-conformance")]
+    fn sign_unsigned_id_token(
+        header: &JwsHeader,
+        payload: &JwtPayload,
+    ) -> Result<String, AppError> {
+        jwt::encode_unsecured(payload, header).map_err(|error| {
             AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
         })
     }
@@ -372,21 +400,15 @@ fn compute_at_hash(access_token: &str, alg: &str) -> String {
 impl TokenService {
     pub(super) async fn store_refresh_token(
         &self,
-        client_oid: Uuid,
-        scope: &str,
-        user_oid: &str,
-        session_oid: SessionOid,
-        protected_session_id: Option<&str>,
-        auth_time: Option<i64>,
-        rotated_from: Option<&str>,
+        params: StoreRefreshTokenParams<'_>,
     ) -> Result<String, AppError> {
         let data = serde_json::to_value(RefreshTokenData {
-            scope: scope.to_string(),
-            user_oid: user_oid.to_string(),
-            session_oid,
-            protected_session_id: protected_session_id.map(str::to_string),
-            auth_time,
-            rotated_from: rotated_from.map(str::to_string),
+            scope: params.scope.to_string(),
+            user_oid: params.user_oid.to_string(),
+            session_oid: params.session_oid,
+            protected_session_id: params.protected_session_id.map(str::to_string),
+            auth_time: params.auth_time,
+            rotated_from: params.rotated_from.map(str::to_string),
         })
         .map_err(|error| {
             AppError::from_code(TokenErrorCode::SerializeRefreshFailed).with_source(error)
@@ -395,7 +417,7 @@ impl TokenService {
         let record = self
             .client_authorization_repo
             .create(
-                client_oid,
+                params.client_oid,
                 ClientAuthorizationType::RefreshToken,
                 data,
                 chrono::Utc::now() + chrono::Duration::days(30),

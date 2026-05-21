@@ -1,16 +1,11 @@
 import os
 import sys
 import unittest
-import json
-from pathlib import Path
-
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import run
-
-
-PLANS_DIR = Path(__file__).resolve().parent.parent / "plans"
+from plans import get_plan
 DEFAULT_VARIANT = {
     "server_metadata": "discovery",
     "client_registration": "static_client",
@@ -31,6 +26,12 @@ class PlanVariantTests(unittest.TestCase):
         self.assertEqual(
             run.plan_variant_for_profile("basic"),
             DEFAULT_VARIANT,
+        )
+
+    def test_dynamic_certification_plan_uses_response_type_variant(self):
+        self.assertEqual(
+            run.plan_variant_for_profile("basic", "oidcc-dynamic-certification-test-plan"),
+            {"response_type": "code"},
         )
 
     def test_formpost_implicit_profile_uses_default_variant(self):
@@ -118,7 +119,7 @@ class ProfileConfigurationTests(unittest.TestCase):
 
 class PlanFileTests(unittest.TestCase):
     def test_formpost_implicit_plan_exists_with_expected_defaults(self):
-        plan = self._load_plan("formpost-implicit")
+        plan = get_plan("formpost-implicit")
 
         self.assertEqual(plan["alias"], "identity-formpost-implicit")
         self.assertEqual(
@@ -128,7 +129,7 @@ class PlanFileTests(unittest.TestCase):
         self.assertEqual(plan["client"]["client_id"], "00000003-0000-0000-0000-000000000001")
 
     def test_formpost_hybrid_plan_exists_with_expected_defaults(self):
-        plan = self._load_plan("formpost-hybrid")
+        plan = get_plan("formpost-hybrid")
 
         self.assertEqual(plan["alias"], "identity-formpost-hybrid")
         self.assertEqual(
@@ -138,7 +139,7 @@ class PlanFileTests(unittest.TestCase):
         self.assertEqual(plan["client"]["client_id"], "00000005-0000-0000-0000-000000000001")
 
     def test_rp_init_logout_plan_exists_with_expected_defaults(self):
-        plan = self._load_plan("rp-init-logout")
+        plan = get_plan("rp-init-logout")
 
         self.assertEqual(plan["alias"], "identity-rp-init-logout")
         self.assertEqual(
@@ -152,7 +153,7 @@ class PlanFileTests(unittest.TestCase):
         )
 
     def test_session_plan_exists_with_expected_defaults(self):
-        plan = self._load_plan("session")
+        plan = get_plan("session")
 
         self.assertEqual(plan["alias"], "identity-session")
         self.assertEqual(
@@ -166,7 +167,7 @@ class PlanFileTests(unittest.TestCase):
         )
 
     def test_backchannel_plan_exists_with_expected_defaults(self):
-        plan = self._load_plan("backchannel")
+        plan = get_plan("backchannel")
 
         self.assertEqual(plan["alias"], "identity-backchannel")
         self.assertEqual(
@@ -178,11 +179,6 @@ class PlanFileTests(unittest.TestCase):
             plan["client"]["client_secret"],
             "conformance-basic-secret-at-least-32-bytes",
         )
-
-    def _load_plan(self, profile: str):
-        plan_path = PLANS_DIR / f"{profile}.json"
-        self.assertTrue(plan_path.exists(), f"missing plan file: {plan_path.name}")
-        return json.loads(plan_path.read_text())
 
 
 if __name__ == "__main__":

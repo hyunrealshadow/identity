@@ -51,6 +51,7 @@ pub enum TokenEndpointAuthMethod {
     ClientSecretPost,
     ClientSecretJwt,
     PrivateKeyJwt,
+    None,
 }
 
 impl fmt::Display for TokenEndpointAuthMethod {
@@ -60,6 +61,7 @@ impl fmt::Display for TokenEndpointAuthMethod {
             Self::ClientSecretPost => "client_secret_post",
             Self::ClientSecretJwt => "client_secret_jwt",
             Self::PrivateKeyJwt => "private_key_jwt",
+            Self::None => "none",
         })
     }
 }

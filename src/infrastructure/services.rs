@@ -26,11 +26,13 @@ use identity_application::{
     key::asymmetric::AsymmetricKeyService,
     openid_connect::{
         authorize::AuthorizeService, logout::LogoutService, provider::OpenIdProviderService,
-        token::TokenService, user_info::UserInfoService,
+        registration::DynamicClientRegistrationService, token::TokenService,
+        user_info::UserInfoService,
     },
 };
 use identity_domain::openid_connect::{
-    OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
+    OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
+    OpenIdConnectCredentialRepository,
 };
 
 use super::settings::AppRuntimeSettings;
@@ -53,6 +55,8 @@ pub type AppOpenIdLogoutService = LogoutService;
 
 pub type AppOpenIdUserInfoService = UserInfoService;
 
+pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
+
 pub struct AppServices {
     login: AppLoginService,
     session: AppSessionService,
@@ -63,6 +67,7 @@ pub struct AppServices {
     oidc_token: AppOpenIdTokenService,
     oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
+    dynamic_client_registration: AppDynamicClientRegistrationService,
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
     oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     data_protector: Arc<dyn DataProtector>,
@@ -79,6 +84,8 @@ impl AppServices {
             Arc::new(XChaCha20DataProtectionCipher),
         ));
         let oidc_client_repo = Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
+        let oidc_client_registration_repo: Arc<dyn OpenIdConnectClientRegistrationRepository> =
+            Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
         let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
 
         Self {
@@ -109,6 +116,7 @@ impl AppServices {
                 persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
             },
             oidc: OpenIdProviderService::new(settings.installation())
+                .with_dynamic_registration_setting(settings.dynamic_client_registration())
                 .with_key_repo(key_repo.clone())
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
             oidc_authorize: AuthorizeService::new(
@@ -150,9 +158,13 @@ impl AppServices {
                     Arc::new(KeyRepositoryImpl::new(db.clone())),
                     Arc::new(AsymmetricKeyGeneratorImpl),
                     key_jwk_generator,
-                    None,
+                    Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
                 )),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
+            ),
+            dynamic_client_registration: DynamicClientRegistrationService::new(
+                settings.dynamic_client_registration(),
+                oidc_client_registration_repo.clone(),
             ),
             oidc_client_repo,
             oidc_credential_repo,
@@ -203,6 +215,11 @@ impl AppServices {
     #[must_use]
     pub fn user_info(&self) -> &AppOpenIdUserInfoService {
         &self.user_info
+    }
+
+    #[must_use]
+    pub fn dynamic_client_registration(&self) -> &AppDynamicClientRegistrationService {
+        &self.dynamic_client_registration
     }
 
     #[must_use]

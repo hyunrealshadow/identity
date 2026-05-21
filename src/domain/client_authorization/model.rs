@@ -16,6 +16,7 @@ pub enum ClientAuthorizationType {
     AuthorizationCode,
     AccessToken,
     RefreshToken,
+    RegistrationAccessToken,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,7 @@ impl fmt::Display for ClientAuthorizationType {
             Self::AuthorizationCode => "authorization_code",
             Self::AccessToken => "access_token",
             Self::RefreshToken => "refresh_token",
+            Self::RegistrationAccessToken => "registration_access_token",
         })
     }
 }
@@ -49,6 +51,7 @@ impl FromStr for ClientAuthorizationType {
             "authorization_code" => Self::AuthorizationCode,
             "access_token" => Self::AccessToken,
             "refresh_token" => Self::RefreshToken,
+            "registration_access_token" => Self::RegistrationAccessToken,
             _ => return Err(ParseClientAuthorizationTypeError),
         })
     }
@@ -89,6 +92,11 @@ pub struct AccessTokenData {
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub authorization_code_oid: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RegistrationAccessTokenData {
+    pub token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

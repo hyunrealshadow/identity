@@ -14,10 +14,13 @@ use salvo::{Depot, Request, Response, Router, handler};
 use serde::{Deserialize, Serialize};
 
 use identity_application::error::{AppError, codes::common::CommonErrorCode};
+use identity_application::key::asymmetric::GenerateAsymmetricKeyInput;
+use identity_domain::key::model::AsymmetricKeyAlgorithm;
 
 use crate::{
     application::auth::login::ChallengeOutcome,
     boot::AppState,
+    domain::auth::SessionOid,
     domain::client_authorization::SelectionSource,
     infrastructure::{
         database::seed::conformance::{CONFORMANCE_PASSWORD, CONFORMANCE_USERNAME},
@@ -37,9 +40,13 @@ use super::{
 };
 
 pub fn routes() -> Router {
-    Router::with_path("conformance/auto-login")
-        .get(auto_login_page)
-        .post(auto_login)
+    Router::new()
+        .push(
+            Router::with_path("conformance/auto-login")
+                .get(auto_login_page)
+                .post(auto_login),
+        )
+        .push(Router::with_path("conformance/rotate-keys").post(rotate_keys))
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,7 +126,7 @@ where
 {
     record_selection(
         login_id.to_owned(),
-        session.oid,
+        session.oid.into(),
         session.user_oid,
         SelectionSource::FreshLogin,
     )
@@ -232,7 +239,13 @@ async fn auto_login(
         &session,
         move |login_id, session_oid, user_oid, source| async move {
             authorize_service
-                .record_selection_by_login(&login_id, session_oid, user_oid, None, source)
+                .record_selection_by_login(
+                    &login_id,
+                    SessionOid(session_oid),
+                    user_oid,
+                    None,
+                    source,
+                )
                 .await
         },
     )
@@ -244,13 +257,47 @@ async fn auto_login(
     Ok(())
 }
 
+#[derive(Debug, Serialize)]
+struct RotateKeysResponse {
+    key_oid: String,
+    algorithm: String,
+}
+
+#[handler]
+async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
+    let ctx = app_state(depot)?;
+    let key = ctx
+        .services()
+        .key()
+        .generate_and_store(GenerateAsymmetricKeyInput {
+            algorithm: AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
+            expires_at: None,
+            certificate: None,
+        })
+        .await?;
+
+    let key_oid = uuid::Uuid::from(key.oid).to_string();
+    render_json(
+        res,
+        StatusCode::OK,
+        RotateKeysResponse {
+            key_oid,
+            algorithm: "RS256".to_owned(),
+        },
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
 
     use chrono::Utc;
     use http::{StatusCode, header};
-    use identity_domain::{auth::model::Session, client_authorization::SelectionSource};
+    use identity_domain::{
+        auth::{SessionOid, model::Session},
+        client_authorization::SelectionSource,
+    };
     use salvo::{
         Service,
         test::{ResponseExt, TestClient},
@@ -319,7 +366,7 @@ mod tests {
     #[tokio::test]
     async fn record_auto_login_selection_records_fresh_login_source() {
         let session = Session {
-            oid: uuid::Uuid::new_v4(),
+            oid: SessionOid(uuid::Uuid::new_v4()),
             user_oid: uuid::Uuid::new_v4(),
             status: "active".to_owned(),
             device_name: None,
@@ -357,7 +404,7 @@ mod tests {
             *recorded.lock().unwrap(),
             Some((
                 "login-123".to_owned(),
-                session.oid,
+                session.oid.0,
                 session.user_oid,
                 SelectionSource::FreshLogin,
             ))

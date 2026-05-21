@@ -18,6 +18,7 @@ pub use model::oauth_error::{OAuthErrorCode, OAuthErrorResponse};
 pub use model::provider::{OpenIdProviderMetadata, SubjectType, TokenEndpointAuthMethod};
 pub use model::scope::{ScopeParseError, ScopeSet};
 pub use repository::{
+    OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
     OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
     OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
 };

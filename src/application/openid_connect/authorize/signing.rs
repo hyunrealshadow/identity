@@ -173,8 +173,26 @@ impl AuthorizeService {
             }
         }
 
+        if alg == "none" {
+            #[cfg(feature = "oidc-conformance")]
+            return Self::sign_unsigned_implicit_id_token(&header, &payload);
+
+            #[cfg(not(feature = "oidc-conformance"))]
+            return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
+        }
+
         let signer: Box<dyn josekit::jws::JwsSigner> = build_signer_for_alg(private_key_pem, alg)?;
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+        })
+    }
+
+    #[cfg(feature = "oidc-conformance")]
+    fn sign_unsigned_implicit_id_token(
+        header: &JwsHeader,
+        payload: &JwtPayload,
+    ) -> Result<String, AppError> {
+        jwt::encode_unsecured(payload, header).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })
     }

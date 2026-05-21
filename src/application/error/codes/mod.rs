@@ -7,6 +7,7 @@ pub mod install;
 pub mod key;
 pub mod openid_connect;
 pub mod provider;
+pub mod registration;
 pub mod token;
 
 #[cfg(test)]
@@ -38,6 +39,11 @@ mod tests {
         ),
         ("authorize", include_str!("authorize.rs"), 23000..=23099),
         ("token", include_str!("token.rs"), 24000..=24099),
+        (
+            "registration",
+            include_str!("registration.rs"),
+            25000..=25099,
+        ),
     ];
 
     #[test]

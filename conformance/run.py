@@ -19,15 +19,13 @@ Environment variables:
 
 import argparse
 import os
+import signal
+import subprocess
 import sys
+import time
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)
-
-import subprocess
-import time
-import json
-import signal
 
 try:
     import requests
@@ -35,15 +33,16 @@ except ImportError:
     print("ERROR: requests module not installed. Run: pip install requests")
     sys.exit(1)
 
-from scripts.client import ConformanceClient
-from scripts.browser_auth import BrowserAuthHandler
-from scripts.runner import TestRunner
-
+from scripts.browser_auth import BrowserAuthHandler  # noqa: E402
+from scripts.client import ConformanceClient  # noqa: E402
+from scripts.runner import TestRunner  # noqa: E402
+from plans import get_plan  # noqa: E402
 
 DEFAULT_PLAN_VARIANT = {
     "server_metadata": "discovery",
     "client_registration": "static_client",
 }
+DYNAMIC_CERTIFICATION_PLAN_NAME = "oidcc-dynamic-certification-test-plan"
 
 SUPPORTED_PROFILES = (
     "basic",
@@ -76,15 +75,20 @@ def default_plan_name_for_profile(profile: str):
     return PLAN_NAMES[profile]
 
 
-def plan_variant_for_profile(profile: str):
+def plan_variant_for_profile(profile: str, plan_name: str | None = None):
+    client_registration = os.environ.get("CLIENT_REGISTRATION", "static_client")
+    if plan_name == DYNAMIC_CERTIFICATION_PLAN_NAME:
+        return {"response_type": "code"}
     if profile == "config":
         return None
     if profile in ("rp-init-logout", "session", "backchannel"):
         return {
-            "client_registration": "static_client",
+            "client_registration": client_registration,
             "response_type": "code",
         }
-    return DEFAULT_PLAN_VARIANT.copy()
+    variant = DEFAULT_PLAN_VARIANT.copy()
+    variant["client_registration"] = client_registration
+    return variant
 
 
 def wait_for_service(url: str, timeout: int = 120, name: str = "service") -> bool:
@@ -120,11 +124,15 @@ def start_docker_stack(compose_file: str) -> bool:
 
 def stop_docker_stack(compose_file: str):
     print("Stopping Docker stack...")
-    subprocess.run(["docker", "compose", "-f", compose_file, "down"], capture_output=True)
+    subprocess.run(
+        ["docker", "compose", "-f", compose_file, "down"], capture_output=True
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(description="OpenID Connect Conformance Test Runner")
+    parser = argparse.ArgumentParser(
+        description="OpenID Connect Conformance Test Runner"
+    )
     parser.add_argument("--plan-id", help="Existing plan ID to run tests on")
     parser.add_argument("--check", help="Check status of plan ID only")
     parser.add_argument(
@@ -136,12 +144,18 @@ def main():
     parser.add_argument(
         "--config",
         default=os.environ.get("CONFIG_PATH"),
-        help="Plan config JSON path. Defaults to conformance/plans/<profile>.json",
+        help="(deprecated) Plan config JSON path. Use --profile instead.",
     )
     parser.add_argument(
         "--plan-name",
         default=os.environ.get("PLAN_NAME"),
         help="Conformance suite plan name. Defaults from --profile",
+    )
+    parser.add_argument(
+        "--client-registration",
+        choices=("static_client", "dynamic_client"),
+        default=os.environ.get("CLIENT_REGISTRATION", "static_client"),
+        help="Conformance client registration variant",
     )
     parser.add_argument(
         "--no-docker",
@@ -174,7 +188,7 @@ def main():
     compose_file = os.path.join(script_dir, "docker-compose.yml")
     if args.profile not in PLAN_NAMES:
         parser.error(f"--profile must be one of: {', '.join(SUPPORTED_PROFILES)}")
-    config_path = args.config or os.path.join(script_dir, "plans", f"{args.profile}.json")
+    os.environ["CLIENT_REGISTRATION"] = args.client_registration
     plan_name = args.plan_name or default_plan_name_for_profile(args.profile)
 
     if args.check:
@@ -196,7 +210,9 @@ def main():
         signal.signal(signal.SIGINT, cleanup)
         signal.signal(signal.SIGTERM, cleanup)
 
-        if not wait_for_service(args.identity_url + "/health", timeout=60, name="Identity"):
+        if not wait_for_service(
+            args.identity_url + "/health", timeout=60, name="Identity"
+        ):
             stop_docker_stack(compose_file)
             return 1
         if not wait_for_service(args.suite_url, timeout=120, name="Conformance Suite"):
@@ -211,14 +227,15 @@ def main():
         plan_id = args.plan_id
     else:
         print(f"Creating {args.profile} test plan...")
-        plan_id = client.create_plan(
-            config_path,
+        plan_config = get_plan(args.profile)
+        plan_id = client.create_plan_from_dict(
+            plan_config,
             plan_name=plan_name,
-            variant=plan_variant_for_profile(args.profile),
+            variant=plan_variant_for_profile(args.profile, plan_name),
         )
         print(f"Plan ID: {plan_id}")
 
-    print(f"\nRunning tests...")
+    print("\nRunning tests...")
     results = runner.run_all_tests(plan_id)
     runner.print_summary(results)
 
@@ -226,7 +243,11 @@ def main():
         stop_docker_stack(compose_file)
 
     if args.exit_on_failure:
-        failures = [r for r in results if r.result not in ("PASSED", "WARNING", "SKIPPED", "REVIEW")]
+        failures = [
+            r
+            for r in results
+            if r.result not in ("PASSED", "WARNING", "SKIPPED", "REVIEW")
+        ]
         if failures:
             return 1
 
