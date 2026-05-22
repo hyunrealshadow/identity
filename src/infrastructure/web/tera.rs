@@ -194,6 +194,61 @@ mod tests {
     }
 
     #[test]
+    fn registration_errors_include_unsupported_values() {
+        let i18n = build_i18n().expect("i18n should load from assets/i18n");
+        let application_type_params =
+            ErrorParams::new().insert("application_type", "browser_extension");
+        let subject_type_params = ErrorParams::new().insert("subject_type", "sector");
+
+        assert_eq!(
+            i18n.t_code_with_params(&langid!("zh-CN"), 25002, &application_type_params),
+            "不支持 application_type：browser_extension。"
+        );
+        assert_eq!(
+            i18n.t_code_with_params(&langid!("en-US"), 25003, &subject_type_params),
+            "Unsupported subject_type: sector."
+        );
+    }
+
+    #[test]
+    fn unsupported_error_messages_include_input_values() {
+        let i18n = build_i18n().expect("i18n should load from assets/i18n");
+
+        assert_eq!(
+            i18n.t_code_with_params(
+                &langid!("zh-CN"),
+                24000,
+                &ErrorParams::new().insert("grant_type", "device_code")
+            ),
+            "不支持 grant_type：device_code。"
+        );
+        assert_eq!(
+            i18n.t_code_with_params(
+                &langid!("en-US"),
+                23011,
+                &ErrorParams::new().insert("code_challenge_method", "S512")
+            ),
+            "Unsupported code_challenge_method: S512."
+        );
+        assert_eq!(
+            i18n.t_code_with_params(
+                &langid!("zh-CN"),
+                22001,
+                &ErrorParams::new().insert("method", "PUT")
+            ),
+            "不支持请求方法：PUT，请使用 GET 或 POST。"
+        );
+        assert_eq!(
+            i18n.t_code_with_params(
+                &langid!("en-US"),
+                12002,
+                &ErrorParams::new().insert("algorithm", "rsa(1024)")
+            ),
+            "Unsupported key algorithm: rsa(1024)."
+        );
+    }
+
+    #[test]
     fn template_uses_context_lang_when_t_lang_is_omitted() {
         let i18n = build_i18n().expect("i18n should load from assets/i18n");
         let tera = build_tera(i18n.loader()).expect("tera should build from assets/views");

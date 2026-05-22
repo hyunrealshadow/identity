@@ -27,6 +27,7 @@ impl From<UserCredentialRepositoryError> for AppError {
         match error {
             UserCredentialRepositoryError::CredentialNotFound => {
                 AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
+                    .with_param("credential_type", "unknown")
             }
             other => AppError::from_code(CommonErrorCode::InternalError).with_source(other),
         }

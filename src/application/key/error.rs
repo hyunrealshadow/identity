@@ -12,7 +12,8 @@ impl From<KeyMaterialError> for AppError {
     fn from(error: KeyMaterialError) -> Self {
         match error {
             KeyMaterialError::InvalidInput(_) => {
-                AppError::from_code(KeyErrorCode::AlgorithmInvalid)
+                AppError::from_code(KeyErrorCode::UnsupportedAlgorithm)
+                    .with_param("algorithm", "unknown")
             }
             other => AppError::from_code(CommonErrorCode::InternalError).with_source(other),
         }

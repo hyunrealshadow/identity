@@ -8,7 +8,8 @@ impl TokenService {
         params: AuthorizationCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
         if params.grant_type != "authorization_code" {
-            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType));
+            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
+                .with_param("grant_type", params.grant_type));
         }
 
         let client_id = resolve_client_id(
@@ -224,7 +225,8 @@ impl TokenService {
         params: RefreshTokenGrantParams,
     ) -> Result<TokenResponse, AppError> {
         if params.grant_type != "refresh_token" {
-            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType));
+            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
+                .with_param("grant_type", params.grant_type));
         }
 
         let client_id = resolve_client_id(

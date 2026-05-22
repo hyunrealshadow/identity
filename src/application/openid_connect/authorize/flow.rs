@@ -392,7 +392,9 @@ impl AuthorizeService {
         };
 
         let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                .with_param("response_type", request.response_type.as_str())
+                .with_source(error)
         })?;
 
         let redirect = if response_type.is_implicit() {
@@ -535,7 +537,9 @@ impl AuthorizeService {
         let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied).with_state(request.state);
 
         let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                .with_param("response_type", request.response_type.as_str())
+                .with_source(error)
         })?;
 
         let redirect = if response_type.uses_front_channel_response() {

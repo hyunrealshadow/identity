@@ -5,7 +5,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 pub enum KeyErrorCode {
     NotFound,
     Revoked,
-    AlgorithmInvalid,
+    UnsupportedAlgorithm,
     InvalidCertificatePem,
     InvalidKeyType,
     CertificateRequiresAsymmetricKey,
@@ -18,7 +18,7 @@ impl AppErrorCode for KeyErrorCode {
         match self {
             Self::NotFound => ErrorKind::NotFound,
             Self::Revoked => ErrorKind::Unauthorized,
-            Self::AlgorithmInvalid => ErrorKind::Validation,
+            Self::UnsupportedAlgorithm => ErrorKind::Validation,
             Self::InvalidCertificatePem => ErrorKind::Validation,
             Self::InvalidKeyType => ErrorKind::Validation,
             Self::CertificateRequiresAsymmetricKey => ErrorKind::Validation,
@@ -31,7 +31,7 @@ impl AppErrorCode for KeyErrorCode {
         match self {
             Self::NotFound => 12000,
             Self::Revoked => 12001,
-            Self::AlgorithmInvalid => 12002,
+            Self::UnsupportedAlgorithm => 12002,
             Self::InvalidCertificatePem => 12003,
             Self::InvalidKeyType => 12004,
             Self::CertificateRequiresAsymmetricKey => 12005,

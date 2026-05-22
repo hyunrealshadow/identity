@@ -85,7 +85,12 @@ impl DynamicClientRegistrationService {
             .map(str::parse::<SubjectType>)
             .transpose()
             .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::InvalidSubjectType).with_source(error)
+                AppError::from_code(RegistrationErrorCode::UnsupportedSubjectType)
+                    .with_param(
+                        "subject_type",
+                        request.subject_type.as_deref().unwrap_or_default(),
+                    )
+                    .with_source(error)
             })?;
         validate_sector_identifier_uri(
             request.sector_identifier_uri.as_ref(),

@@ -39,7 +39,9 @@ pub(super) fn continue_oauth_error_response(
         .response_type
         .parse::<ResponseType>()
         .map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                .with_param("response_type", request.response_type.as_str())
+                .with_source(error)
         })?;
     let error_response = OAuthErrorResponse::new(error).with_state(request.state.clone());
 

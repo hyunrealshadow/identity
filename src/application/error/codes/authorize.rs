@@ -15,6 +15,8 @@ pub enum AuthorizeErrorCode {
     // --- basic parameter validation ---
     /// `response_type` value could not be parsed.
     ResponseTypeInvalid,
+    /// `response_mode` value could not be parsed.
+    ResponseModeInvalid,
     /// `redirect_uri` is not a valid URL.
     RedirectUriInvalid,
     /// `scope` value could not be parsed.
@@ -172,6 +174,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::ClientNotFound => ErrorKind::Validation,
             Self::ClientLookupFailed => ErrorKind::Internal,
             Self::ResponseTypeInvalid => ErrorKind::Validation,
+            Self::ResponseModeInvalid => ErrorKind::Validation,
             Self::RedirectUriInvalid => ErrorKind::Validation,
             Self::ScopeInvalid => ErrorKind::Validation,
             Self::OpenidScopeRequired => ErrorKind::Validation,
@@ -243,6 +246,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::ClientNotFound => 23001,
             Self::ClientLookupFailed => 23002,
             Self::ResponseTypeInvalid => 23003,
+            Self::ResponseModeInvalid => 23066,
             Self::RedirectUriInvalid => 23004,
             Self::ScopeInvalid => 23005,
             Self::OpenidScopeRequired => 23006,

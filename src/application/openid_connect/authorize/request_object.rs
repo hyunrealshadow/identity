@@ -709,9 +709,10 @@ fn decode_request_object_with_jwk(
         "ES512" => decode_with_verifier(raw, ES512.verifier_from_jwk(&jwk)),
         "ES256K" => decode_with_verifier(raw, ES256K.verifier_from_jwk(&jwk)),
         "EdDSA" => decode_with_verifier(raw, EdDSA.verifier_from_jwk(&jwk)),
-        _ => Err(AppError::from_code(
-            AuthorizeErrorCode::RequestObjectAlgUnsupported,
-        )),
+        _ => Err(
+            AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported)
+                .with_param("alg", alg),
+        ),
     }
 }
 
@@ -721,9 +722,9 @@ fn decode_request_object(
     public_key_pem: &[u8],
 ) -> Result<jwt::JwtPayload, AppError> {
     use identity_domain::key::JwaSigningAlgorithm;
-    let jwa: JwaSigningAlgorithm = alg
-        .parse()
-        .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported))?;
+    let jwa: JwaSigningAlgorithm = alg.parse().map_err(|_| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported).with_param("alg", alg)
+    })?;
     match jwa {
         JwaSigningAlgorithm::Rs256 => {
             decode_with_verifier(raw, RS256.verifier_from_pem(public_key_pem))

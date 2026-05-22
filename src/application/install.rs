@@ -74,10 +74,10 @@ impl InstallService {
         let password = normalize_required(&input.password, "password")?;
         let domain = normalize_domain(&input.domain)?;
 
-        input
-            .key_algorithm
-            .validate()
-            .map_err(|_| AppError::from_code(InstallErrorCode::AlgorithmInvalid))?;
+        input.key_algorithm.validate().map_err(|_| {
+            AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
+                .with_param("algorithm", asymmetric_algorithm_name(&input.key_algorithm))
+        })?;
 
         let hash_options = self.password_hash_options.current_value();
         let password = self
@@ -149,4 +149,18 @@ fn normalize_email(email: &str) -> Result<String, AppError> {
             AppError::from_code(InstallErrorCode::EmailInvalid)
         }
     })
+}
+
+fn asymmetric_algorithm_name(algorithm: &AsymmetricKeyAlgorithm) -> String {
+    match algorithm {
+        AsymmetricKeyAlgorithm::Rsa { bits } => format!("rsa({bits})"),
+        AsymmetricKeyAlgorithm::EcdsaP256 => "ecdsa_p256".to_owned(),
+        AsymmetricKeyAlgorithm::EcdsaP384 => "ecdsa_p384".to_owned(),
+        AsymmetricKeyAlgorithm::EcdsaP521 => "ecdsa_p521".to_owned(),
+        AsymmetricKeyAlgorithm::EcdsaSecp256k1 => "ecdsa_secp256k1".to_owned(),
+        AsymmetricKeyAlgorithm::Ed25519 => "ed25519".to_owned(),
+        AsymmetricKeyAlgorithm::Ed448 => "ed448".to_owned(),
+        AsymmetricKeyAlgorithm::X25519 => "x25519".to_owned(),
+        AsymmetricKeyAlgorithm::X448 => "x448".to_owned(),
+    }
 }

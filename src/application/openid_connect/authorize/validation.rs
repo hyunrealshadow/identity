@@ -53,20 +53,23 @@ impl AuthorizeService {
             .response_type
             .parse::<ResponseType>()
             .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
+                AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", params.response_type.as_str())
+                    .with_source(error)
             })?;
 
         let redirect_uri = Url::parse(&params.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::RedirectUriInvalid).with_source(error)
         })?;
 
-        let response_mode = params
-            .response_mode
-            .map(|value| value.parse::<ResponseMode>())
-            .transpose()
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid).with_source(error)
-            })?;
+        let response_mode = match params.response_mode {
+            Some(value) => Some(value.parse::<ResponseMode>().map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::ResponseModeInvalid)
+                    .with_param("response_mode", value)
+                    .with_source(error)
+            })?),
+            None => None,
+        };
 
         let scope = ScopeSet::parse(&params.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
@@ -77,26 +80,30 @@ impl AuthorizeService {
         }
         Self::validate_client_scope_assignment(&client, &scope)?;
 
-        let display = params
-            .display
-            .map(|value| value.parse::<Display>())
-            .transpose()
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::DisplayValueInvalid).with_source(error)
-            })?;
+        let display = match params.display {
+            Some(value) => Some(value.parse::<Display>().map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::DisplayValueInvalid)
+                    .with_param("display", value)
+                    .with_source(error)
+            })?),
+            None => None,
+        };
 
-        let prompt = params
-            .prompt
-            .map(|value| {
+        let prompt = match params.prompt {
+            Some(value) => Some(
                 value
                     .split_whitespace()
-                    .map(|item| item.parse::<PromptValue>())
-                    .collect::<Result<std::collections::HashSet<_>, _>>()
-            })
-            .transpose()
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::PromptValueInvalid).with_source(error)
-            })?;
+                    .map(|item| {
+                        item.parse::<PromptValue>().map_err(|error| {
+                            AppError::from_code(AuthorizeErrorCode::PromptValueInvalid)
+                                .with_param("prompt", item)
+                                .with_source(error)
+                        })
+                    })
+                    .collect::<Result<std::collections::HashSet<_>, _>>()?,
+            ),
+            None => None,
+        };
 
         if let Some(ref prompt_set) = prompt
             && prompt_set.contains(&PromptValue::None)
@@ -121,14 +128,14 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::RequestUriInvalid).with_source(error)
             })?;
 
-        let code_challenge_method = params
-            .code_challenge_method
-            .map(|value| value.parse::<CodeChallengeMethod>())
-            .transpose()
-            .map_err(|error| {
+        let code_challenge_method = match params.code_challenge_method {
+            Some(value) => Some(value.parse::<CodeChallengeMethod>().map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
+                    .with_param("code_challenge_method", value)
                     .with_source(error)
-            })?;
+            })?),
+            None => None,
+        };
 
         let claims = params
             .claims

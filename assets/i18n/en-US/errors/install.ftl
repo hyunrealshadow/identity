@@ -8,4 +8,4 @@ E13005 = The domain is invalid. It must not contain spaces and must include at l
 E13006 = The email address is invalid.
 E13007 = That username is already taken.
 E13008 = That email address is already registered.
-E13009 = The key algorithm is not supported.
+E13009 = Unsupported key algorithm: { $algorithm }.

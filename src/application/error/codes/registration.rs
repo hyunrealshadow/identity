@@ -5,8 +5,8 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 pub enum RegistrationErrorCode {
     DynamicRegistrationDisabled,
     RedirectUrisRequired,
-    InvalidApplicationType,
-    InvalidSubjectType,
+    UnsupportedApplicationType,
+    UnsupportedSubjectType,
     ClientCreateFailed,
     InvalidRegistrationAccessToken,
     ClientLookupFailed,
@@ -21,8 +21,8 @@ impl AppErrorCode for RegistrationErrorCode {
         match self {
             Self::DynamicRegistrationDisabled => ErrorKind::Validation,
             Self::RedirectUrisRequired => ErrorKind::Validation,
-            Self::InvalidApplicationType => ErrorKind::Validation,
-            Self::InvalidSubjectType => ErrorKind::Validation,
+            Self::UnsupportedApplicationType => ErrorKind::Validation,
+            Self::UnsupportedSubjectType => ErrorKind::Validation,
             Self::ClientCreateFailed => ErrorKind::Internal,
             Self::InvalidRegistrationAccessToken => ErrorKind::Unauthorized,
             Self::ClientLookupFailed => ErrorKind::Internal,
@@ -37,8 +37,8 @@ impl AppErrorCode for RegistrationErrorCode {
         match self {
             Self::DynamicRegistrationDisabled => 25000,
             Self::RedirectUrisRequired => 25001,
-            Self::InvalidApplicationType => 25002,
-            Self::InvalidSubjectType => 25003,
+            Self::UnsupportedApplicationType => 25002,
+            Self::UnsupportedSubjectType => 25003,
             Self::ClientCreateFailed => 25004,
             Self::InvalidRegistrationAccessToken => 25005,
             Self::ClientLookupFailed => 25006,

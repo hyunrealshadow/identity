@@ -12,7 +12,7 @@ pub enum InstallErrorCode {
     EmailInvalid,
     UsernameExists,
     EmailExists,
-    AlgorithmInvalid,
+    UnsupportedAlgorithm,
 }
 
 impl AppErrorCode for InstallErrorCode {
@@ -27,7 +27,7 @@ impl AppErrorCode for InstallErrorCode {
             Self::EmailInvalid => ErrorKind::Validation,
             Self::UsernameExists => ErrorKind::Conflict,
             Self::EmailExists => ErrorKind::Conflict,
-            Self::AlgorithmInvalid => ErrorKind::Validation,
+            Self::UnsupportedAlgorithm => ErrorKind::Validation,
         }
     }
 
@@ -42,7 +42,7 @@ impl AppErrorCode for InstallErrorCode {
             Self::EmailInvalid => 13006,
             Self::UsernameExists => 13007,
             Self::EmailExists => 13008,
-            Self::AlgorithmInvalid => 13009,
+            Self::UnsupportedAlgorithm => 13009,
         }
     }
 }

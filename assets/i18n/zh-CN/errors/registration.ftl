@@ -1,10 +1,11 @@
 E25000 = 动态客户端注册已关闭。
 E25001 = 至少需要一个 redirect_uri。
-E25002 = 不支持该 application_type。
-E25003 = 不支持该 subject_type。
+E25002 = 不支持 application_type：{ $application_type }。
+E25003 = 不支持 subject_type：{ $subject_type }。
 E25004 = 创建动态客户端注册失败。
 E25005 = registration access token 无效。
 E25006 = 查询动态客户端注册失败。
 E25007 = { $field } 不支持 none。
 E25008 = redirect URI 无效。
 E25009 = client metadata 无效。
+E25010 = 删除动态客户端注册失败。

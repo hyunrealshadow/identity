@@ -1,5 +1,5 @@
 # Token service errors (24000-24099)
-E24000 = The grant_type is not supported.
+E24000 = Unsupported grant_type: { $grant_type }.
 E24001 = The client_id is required.
 E24002 = An unexpected error occurred while looking up the authorization code.
 E24003 = The authorization code was not found.
@@ -39,7 +39,7 @@ E24036 = The client assertion has expired.
 E24037 = The client assertion is not yet valid.
 E24038 = The client assertion JWT header is invalid.
 E24039 = The client assertion signature could not be verified.
-E24040 = The client assertion algorithm is not supported.
+E24040 = Unsupported client assertion algorithm: { $alg }.
 E24041 = The client assertion key is invalid.
 E24042 = The refresh token signature could not be verified.
 E24043 = An unexpected error occurred while signing the access token.
@@ -47,5 +47,5 @@ E24044 = An unexpected error occurred while signing the ID token.
 E24045 = An unexpected error occurred while signing the refresh token.
 E24046 = An unexpected error occurred while saving the refresh token.
 E24047 = An unexpected error occurred while saving the refresh token.
-E24048 = The code_challenge_method is not supported.
+E24048 = Unsupported code_challenge_method: { $code_challenge_method }.
 E24049 = The code_verifier does not match the code_challenge.

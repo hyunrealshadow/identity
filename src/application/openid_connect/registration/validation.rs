@@ -8,8 +8,11 @@ use crate::{
 pub(super) fn parse_application_type(
     value: Option<&str>,
 ) -> Result<OpenIdConnectClientPlatformType, AppError> {
-    value.unwrap_or("web").parse().map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::InvalidApplicationType).with_source(error)
+    let application_type = value.unwrap_or("web");
+    application_type.parse().map_err(|error| {
+        AppError::from_code(RegistrationErrorCode::UnsupportedApplicationType)
+            .with_param("application_type", application_type)
+            .with_source(error)
     })
 }
 

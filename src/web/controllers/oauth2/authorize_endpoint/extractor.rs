@@ -133,9 +133,10 @@ pub async fn extract_authorize_request(
             parse_authorize_pairs(body)
         }
         _ => {
-            return Err(AppError::from_code(
-                AuthorizeHttpErrorCode::MethodNotAllowed,
-            ));
+            return Err(
+                AppError::from_code(AuthorizeHttpErrorCode::MethodNotAllowed)
+                    .with_param("method", request.method().as_str()),
+            );
         }
     };
 

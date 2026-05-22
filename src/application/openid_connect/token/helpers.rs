@@ -6,9 +6,9 @@ pub(super) fn decode_assertion_with_alg(
     public_key_pem: &[u8],
 ) -> Result<JwtPayload, AppError> {
     use identity_domain::key::JwaSigningAlgorithm;
-    let jwa: JwaSigningAlgorithm = alg
-        .parse()
-        .map_err(|_| AppError::from_code(TokenErrorCode::AssertionAlgUnsupported))?;
+    let jwa: JwaSigningAlgorithm = alg.parse().map_err(|_| {
+        AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_param("alg", alg)
+    })?;
     match jwa {
         JwaSigningAlgorithm::Rs256 => {
             decode_with_verifier(assertion, RS256.verifier_from_pem(public_key_pem))
@@ -70,7 +70,9 @@ pub(super) fn decode_assertion_with_jwk(
         "ES512" => decode_with_verifier(assertion, ES512.verifier_from_jwk(&jwk)),
         "ES256K" => decode_with_verifier(assertion, ES256K.verifier_from_jwk(&jwk)),
         "EdDSA" => decode_with_verifier(assertion, EdDSA.verifier_from_jwk(&jwk)),
-        _ => Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)),
+        _ => {
+            Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_param("alg", alg))
+        }
     }
 }
 
@@ -83,7 +85,9 @@ pub(super) fn decode_assertion_with_hmac_alg(
         "HS256" => decode_with_verifier(assertion, HS256.verifier_from_bytes(secret)),
         "HS384" => decode_with_verifier(assertion, HS384.verifier_from_bytes(secret)),
         "HS512" => decode_with_verifier(assertion, HS512.verifier_from_bytes(secret)),
-        _ => Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)),
+        _ => {
+            Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_param("alg", alg))
+        }
     }
 }
 
@@ -146,7 +150,8 @@ pub(super) fn verify_pkce(
             URL_SAFE_NO_PAD.encode(digest)
         }
         _ => {
-            return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported));
+            return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
+                .with_param("code_challenge_method", method));
         }
     };
 

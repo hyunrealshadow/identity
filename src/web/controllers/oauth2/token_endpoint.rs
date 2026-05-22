@@ -144,7 +144,8 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
                 })
                 .await
         }
-        _ => Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)),
+        _ => Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
+            .with_param("grant_type", form.grant_type)),
     };
 
     Ok(AppResponse(match result {

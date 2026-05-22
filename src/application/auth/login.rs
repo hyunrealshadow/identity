@@ -284,17 +284,18 @@ impl LoginService {
             .find_by_user_oid_and_type(user.oid, CredentialType::Password)
             .await?;
 
-        let password_cred = credentials
-            .into_iter()
-            .next()
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?;
+        let password_cred = credentials.into_iter().next().ok_or_else(|| {
+            AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
+                .with_param("credential_type", "password")
+        })?;
 
         let stored_password: Password = match password_cred.data {
             CredentialData::Password(p) => p,
             _ => {
-                return Err(AppError::from_code(
-                    AuthErrorCode::CredentialTypeUnsupported,
-                ));
+                return Err(
+                    AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
+                        .with_param("credential_type", "password"),
+                );
             }
         };
 
@@ -433,14 +434,18 @@ impl LoginService {
         let otp_cred = otp_credentials
             .into_iter()
             .find(|c| c.r#type == CredentialType::Otp)
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?;
+            .ok_or_else(|| {
+                AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
+                    .with_param("credential_type", "otp")
+            })?;
 
         let otp_data: OtpCredentialData = match otp_cred.data {
             CredentialData::Otp(o) => o,
             _ => {
-                return Err(AppError::from_code(
-                    AuthErrorCode::CredentialTypeUnsupported,
-                ));
+                return Err(
+                    AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
+                        .with_param("credential_type", "otp"),
+                );
             }
         };
 
