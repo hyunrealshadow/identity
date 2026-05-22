@@ -205,6 +205,10 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
     );
     assert_eq!(response.client_name.as_deref(), Some("Example RP"));
     assert_eq!(
+        response.initiate_login_uri.as_ref().unwrap().as_str(),
+        "https://rp.example.com/login"
+    );
+    assert_eq!(
         response.token_endpoint_auth_method.as_deref(),
         Some("client_secret_post")
     );
@@ -226,6 +230,10 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
     assert_eq!(
         captured.metadata.post_logout_redirect_uris.unwrap()[0].as_str(),
         "https://rp.example.com/logout"
+    );
+    assert_eq!(
+        captured.metadata.initiate_login_uri.unwrap().as_str(),
+        "https://rp.example.com/login"
     );
     assert_eq!(captured.assigned_scopes, vec!["openid", "profile", "email"]);
     assert!(captured.client_secret.is_some());
@@ -272,6 +280,30 @@ async fn register_defaults_to_supported_oidc_scopes_when_scope_is_omitted() {
             "offline_access"
         ]
     );
+}
+
+#[tokio::test]
+async fn register_rejects_non_https_initiate_login_uri() {
+    let repo = Arc::new(CapturingRegistrationRepository::default());
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        repo.clone(),
+    );
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                initiate_login_uri: Some(Url::parse("http://rp.example.com/login").unwrap()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25009);
+    assert!(repo.captured.lock().unwrap().is_none());
 }
 
 #[tokio::test]

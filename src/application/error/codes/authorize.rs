@@ -165,6 +165,8 @@ pub enum AuthorizeErrorCode {
     EncryptionKeyNotFound,
     /// JWE encryption of the token failed.
     EncryptionFailed,
+    /// Client does not have an `initiate_login_uri`.
+    InitiateLoginUriNotRegistered,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -237,6 +239,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::StoredSessionIdInvalid => ErrorKind::Internal,
             Self::EncryptionKeyNotFound => ErrorKind::Internal,
             Self::EncryptionFailed => ErrorKind::Internal,
+            Self::InitiateLoginUriNotRegistered => ErrorKind::Validation,
         }
     }
 
@@ -309,6 +312,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::StoredSessionIdInvalid => 23063,
             Self::EncryptionKeyNotFound => 23064,
             Self::EncryptionFailed => 23065,
+            Self::InitiateLoginUriNotRegistered => 23067,
         }
     }
 }

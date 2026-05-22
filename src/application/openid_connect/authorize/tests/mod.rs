@@ -60,4 +60,5 @@ mod fixtures;
 mod flow;
 mod interaction;
 mod request_object;
+mod third_party_initiated;
 mod validation;

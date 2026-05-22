@@ -61,3 +61,4 @@ E23061 = 暂不支持加密请求对象。
 E23062 = 授权交互已不再处于待处理状态。
 E23063 = 存储的 session_id 无效，导致发生意外错误。
 E23066 = 不支持 response_mode：{ $response_mode }。
+E23067 = 客户端未注册 initiate_login_uri。

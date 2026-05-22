@@ -36,7 +36,7 @@ use response::{registration_client_uri, response_from_client};
 use token::{default_skip_consent, generate_client_secret, generate_registration_access_token};
 use validation::{
     parse_application_type, reject_none_outside_conformance, split_scope,
-    validate_sector_identifier_uri,
+    validate_initiate_login_uri, validate_sector_identifier_uri,
 };
 
 pub struct DynamicClientRegistrationService {
@@ -97,6 +97,7 @@ impl DynamicClientRegistrationService {
             &request.redirect_uris,
         )
         .await?;
+        validate_initiate_login_uri(request.initiate_login_uri.as_ref())?;
         let token_auth_method = request
             .token_endpoint_auth_method
             .clone()

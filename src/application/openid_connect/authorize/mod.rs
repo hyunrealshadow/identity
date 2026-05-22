@@ -121,12 +121,14 @@ mod interaction;
 mod protection;
 mod request_object;
 mod signing;
+mod third_party_initiated;
 mod validation;
 
 pub use interaction::{
     ContinueAction, determine_continue_action, selected_session_exceeds_max_age,
     stored_request_has_prompt,
 };
+pub use third_party_initiated::ThirdPartyInitiatedLoginRequest;
 
 #[cfg(test)]
 mod tests;

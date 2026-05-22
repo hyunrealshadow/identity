@@ -6,8 +6,8 @@ mod request_object;
 mod services;
 
 pub(super) use clients::{
-    FoundClientRepository, MissingClientRepository, RequestUriClientRepository,
-    ScopedClientRepository, TEST_CLIENT_ID,
+    FoundClientRepository, InitiateLoginClientRepository, MissingClientRepository,
+    RequestUriClientRepository, ScopedClientRepository, TEST_CLIENT_ID,
 };
 pub(super) use repositories::{
     InMemoryClientAuthorizationRepository, InMemoryCredentialRepository, InMemoryLoginRepository,

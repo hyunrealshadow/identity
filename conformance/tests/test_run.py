@@ -73,6 +73,12 @@ class PlanVariantTests(unittest.TestCase):
             },
         )
 
+    def test_third_party_init_profile_uses_response_type_variant(self):
+        self.assertEqual(
+            run.plan_variant_for_profile("third-party-init"),
+            {"response_type": "code id_token"},
+        )
+
 
 class ProfileConfigurationTests(unittest.TestCase):
     def test_new_formpost_profiles_are_supported(self):
@@ -87,6 +93,9 @@ class ProfileConfigurationTests(unittest.TestCase):
 
     def test_backchannel_profile_is_supported(self):
         self.assertIn("backchannel", run.SUPPORTED_PROFILES)
+
+    def test_third_party_init_profile_is_supported(self):
+        self.assertIn("third-party-init", run.SUPPORTED_PROFILES)
 
     def test_default_plan_name_for_new_formpost_profiles(self):
         self.assertEqual(
@@ -114,6 +123,12 @@ class ProfileConfigurationTests(unittest.TestCase):
         self.assertEqual(
             run.default_plan_name_for_profile("backchannel"),
             "oidcc-backchannel-rp-initiated-logout-certification-test-plan",
+        )
+
+    def test_default_plan_name_for_third_party_init_profile(self):
+        self.assertEqual(
+            run.default_plan_name_for_profile("third-party-init"),
+            "oidcc-3rdparty-init-login-certification-test-plan",
         )
 
 
@@ -170,6 +185,20 @@ class PlanFileTests(unittest.TestCase):
         plan = get_plan("backchannel")
 
         self.assertEqual(plan["alias"], "identity-backchannel")
+        self.assertEqual(
+            plan["server"]["discoveryUrl"],
+            "https://identity:5150/.well-known/openid-configuration",
+        )
+        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(
+            plan["client"]["client_secret"],
+            "conformance-basic-secret-at-least-32-bytes",
+        )
+
+    def test_third_party_init_plan_exists_with_expected_defaults(self):
+        plan = get_plan("third-party-init")
+
+        self.assertEqual(plan["alias"], "identity-3rdparty-init-login")
         self.assertEqual(
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",

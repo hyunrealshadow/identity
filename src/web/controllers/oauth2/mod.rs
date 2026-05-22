@@ -8,6 +8,7 @@ mod continue_endpoint;
 mod logout_endpoint;
 mod registration_endpoint;
 mod session_endpoint;
+mod third_party_initiated_endpoint;
 mod token_endpoint;
 mod user_info_endpoint;
 
@@ -34,6 +35,10 @@ pub fn routes() -> Router {
             Router::with_path("oauth2/register/{client_id}")
                 .get(registration_endpoint::read)
                 .delete(registration_endpoint::delete),
+        )
+        .push(
+            Router::with_path("oauth2/initiate_login")
+                .get(third_party_initiated_endpoint::initiate_login),
         )
         .push(Router::with_path("oauth2/check_session").get(session_endpoint::check_session_iframe))
         .push(

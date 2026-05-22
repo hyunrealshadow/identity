@@ -34,6 +34,20 @@ pub(super) fn reject_none_outside_conformance(
     Ok(())
 }
 
+pub(super) fn validate_initiate_login_uri(value: Option<&Url>) -> Result<(), AppError> {
+    let Some(uri) = value else {
+        return Ok(());
+    };
+
+    if uri.scheme() != "https" {
+        return Err(AppError::from_code(
+            RegistrationErrorCode::InvalidClientMetadata,
+        ));
+    }
+
+    Ok(())
+}
+
 pub(super) async fn validate_sector_identifier_uri(
     sector_identifier_uri: Option<&Url>,
     redirect_uris: &[Url],

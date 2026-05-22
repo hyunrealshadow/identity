@@ -122,6 +122,15 @@ PLANS = {
             "client_secret": "conformance-hybrid-secret-2",
         },
     },
+    "third-party-init": {
+        "alias": "identity-3rdparty-init-login",
+        "description": "Identity server 3rd Party-Init OP conformance",
+        "server": {"discoveryUrl": DISCOVERY_URL},
+        "client": {
+            "client_id": "00000001-0000-0000-0000-000000000001",
+            "client_secret": "conformance-basic-secret-at-least-32-bytes",
+        },
+    },
     "rp-init-logout": {
         "alias": "identity-rp-init-logout",
         "description": "Identity server RP-Initiated Logout OP conformance",

@@ -11,6 +11,10 @@ pub(in crate::openid_connect) struct RequestUriClientRepository {
     pub(in crate::openid_connect) request_uris: Vec<Url>,
 }
 
+pub(in crate::openid_connect) struct InitiateLoginClientRepository {
+    pub(in crate::openid_connect) initiate_login_uri: Url,
+}
+
 pub(in crate::openid_connect) struct ScopedClientRepository {
     pub(in crate::openid_connect) assigned_scopes: Vec<String>,
 }
@@ -77,6 +81,21 @@ impl OpenIdConnectClientRepository for RequestUriClientRepository {
                 test_scopes(),
             )
             .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for InitiateLoginClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: Uuid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, None);
+        metadata.initiate_login_uri = Some(self.initiate_login_uri.clone());
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
         ))
     }
 }
