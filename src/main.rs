@@ -9,10 +9,9 @@ async fn main() -> AppResult<()> {
         .init_tracing()
         .connect_database()
         .await?
+        .maybe_auto_install()
+        .await?
         .init_i18n_and_templates()?;
-
-    #[cfg(feature = "oidc-conformance")]
-    let builder = builder.conformance_autosetup().await?;
 
     let (state, config) = builder
         .load_runtime_settings()

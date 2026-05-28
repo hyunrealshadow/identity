@@ -1,16 +1,24 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 
 use crate::{
     application::{
         error::{AppError, codes::install::InstallErrorCode},
-        setting::runtime::{RefreshableSettingProvider, SettingProvider},
+        setting::runtime::{CachedSetting, SettingProvider},
     },
     domain::{
         auth::password::{PasswordHashSetting, PasswordHasher},
         key::{AsymmetricKeyAlgorithm, generator::AsymmetricKeyGenerator},
-        setting::installation::{InstallationSetting, InstallationState},
+        setting::{
+            installation::{
+                InstallationDomainSetting, InstallationFirstKeyOidSetting,
+                InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
+                InstallationInitializedSetting, InstallationState,
+            },
+            repository::SettingRepository,
+        },
         user::model::Password,
     },
 };
@@ -24,10 +32,14 @@ pub struct InstallInput {
     pub key_algorithm: AsymmetricKeyAlgorithm,
 }
 
-pub struct InstallService {
+pub struct InstallService<R: SettingRepository> {
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub password_hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
-    pub installation_setting: Arc<dyn RefreshableSettingProvider<InstallationSetting>>,
+    pub installation_initialized: Arc<CachedSetting<InstallationInitializedSetting, R>>,
+    pub installation_domain: Arc<CachedSetting<InstallationDomainSetting, R>>,
+    pub installation_first_user_oid: Arc<CachedSetting<InstallationFirstUserOidSetting, R>>,
+    pub installation_first_key_oid: Arc<CachedSetting<InstallationFirstKeyOidSetting, R>>,
+    pub installation_initialized_at: Arc<CachedSetting<InstallationInitializedAtSetting, R>>,
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
     pub certificate_generator: Arc<dyn CertificateGenerator>,
     pub persistence: Arc<dyn InstallPersistence>,
@@ -59,12 +71,12 @@ pub trait InstallPersistence: Send + Sync {
     ) -> Result<InstallationState, AppError>;
 }
 
-impl InstallService {
+impl<R: SettingRepository> InstallService<R> {
     pub fn is_initialized(&self) -> bool {
-        self.installation_setting.current_value().initialized
+        *self.installation_initialized.current_value()
     }
 
-    pub async fn install(&self, input: InstallInput) -> Result<InstallationState, AppError> {
+    pub async fn install(&self, input: InstallInput) -> Result<(), AppError> {
         if self.is_initialized() {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
@@ -106,8 +118,21 @@ impl InstallService {
             })
             .await?;
 
-        self.installation_setting.refresh_value().await?;
-        Ok(installation_state)
+        self.installation_initialized.set(true).await?;
+        self.installation_domain
+            .set(installation_state.domain.clone())
+            .await?;
+        self.installation_first_user_oid
+            .set(installation_state.first_user_oid)
+            .await?;
+        self.installation_first_key_oid
+            .set(installation_state.first_key_oid)
+            .await?;
+        self.installation_initialized_at
+            .set(Some(Utc::now()))
+            .await?;
+
+        Ok(())
     }
 }
 

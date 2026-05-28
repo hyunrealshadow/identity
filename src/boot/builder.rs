@@ -3,17 +3,13 @@ use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 use tera::Tera;
-#[cfg(feature = "oidc-conformance")]
-use url::Url;
 
-#[cfg(feature = "oidc-conformance")]
 use identity_application::install::{InstallInput, InstallService};
-#[cfg(feature = "oidc-conformance")]
 use identity_domain::key::AsymmetricKeyAlgorithm;
-#[cfg(feature = "oidc-conformance")]
 use identity_infrastructure::auth::password::PasswordHasherImpl;
-#[cfg(feature = "oidc-conformance")]
+use identity_infrastructure::crypto::certificate_generator::CertificateGeneratorImpl;
 use identity_infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
+use identity_infrastructure::database::repository::install::InstallPersistenceImpl;
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
     config::{AppConfig, AppEnvironment},
@@ -25,43 +21,9 @@ use identity_infrastructure::{
     settings::AppRuntimeSettings,
     web,
 };
-#[cfg(feature = "oidc-conformance")]
-use identity_infrastructure::{
-    crypto::certificate_generator::CertificateGeneratorImpl,
-    database::repository::install::InstallPersistenceImpl,
-};
 
 use super::AppResult;
 use super::install_guard::ensure_install_startup_guard;
-
-#[cfg(feature = "oidc-conformance")]
-fn conformance_install_domain(config: &AppConfig) -> String {
-    let host = config
-        .server
-        .host
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("https://identity:5150");
-
-    if let Ok(mut url) = Url::parse(host) {
-        let _ = url.set_username("");
-        let _ = url.set_password(None);
-        url.set_query(None);
-        url.set_fragment(None);
-
-        let normalized_path = url.path().trim_end_matches('/').to_owned();
-        url.set_path(if normalized_path.is_empty() {
-            "/"
-        } else {
-            &normalized_path
-        });
-
-        return url.to_string();
-    }
-
-    format!("https://{}", host.trim_end_matches('/'))
-}
 
 /// Application builder that orchestrates the startup pipeline.
 ///
@@ -143,53 +105,52 @@ impl AppBuilder {
     }
 
     /// When `APP_ENV=conformance`: ensure the system is installed and seed the
-    /// conformance test user and OIDC client.
+    /// Attempt system installation from config.
     ///
-    /// This is a no-op for every other environment.
+    /// If the system is not yet installed AND the `install` config section
+    /// provides `domain` + `username` + `password`, performs installation
+    /// automatically.  Otherwise this is a no-op (web installation remains
+    /// available).
     ///
-    /// Must be called after `connect_database` and before `load_runtime_settings`.
-    #[cfg(feature = "oidc-conformance")]
-    pub async fn conformance_autosetup(self) -> AppResult<Self> {
-        if !matches!(self.environment, AppEnvironment::Conformance) {
+    /// Must be called after `connect_database` and before
+    /// `load_runtime_settings`.
+    pub async fn maybe_auto_install(self) -> AppResult<Self> {
+        if self.config.install.domain.is_none()
+            || self.config.install.username.is_none()
+            || self.config.install.password.is_none()
+        {
             return Ok(self);
         }
 
         let db = self.db.as_ref().expect("database must be connected first");
 
-        // ── Step 1: auto-install if the system has not been initialized yet ──
-        //
-        // We query the DB directly because runtime settings have not been
-        // loaded yet at this point in the startup pipeline.
-
-        if !conformance_installation_initialized(db).await? {
-            tracing::info!("conformance autosetup: system not initialized – running install");
-
-            // Construct a minimal InstallService without pre-loaded settings.
-            // We load settings in-line here just for the install call.
-            let bootstrap_settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
-
-            let install_service = InstallService {
-                password_hasher: Arc::new(PasswordHasherImpl::new()),
-                password_hash_options: bootstrap_settings.password_hash_options(),
-                installation_setting: bootstrap_settings.installation(),
-                key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
-                certificate_generator: Arc::new(CertificateGeneratorImpl),
-                persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
-            };
-
-            install_service
-                .install(InstallInput {
-                    username: "admin".to_owned(),
-                    email: "admin@conformance.local".to_owned(),
-                    password: "ConformanceAdmin1!".to_owned(),
-                    domain: conformance_install_domain(&self.config),
-                    key_algorithm: AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
-                })
-                .await?;
-
-            tracing::info!("conformance auto setup: install complete");
+        if is_installed(db).await? {
+            return Ok(self);
         }
 
+        tracing::info!("auto install: running from config");
+
+        let cfg = &self.config.install;
+        let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
+        let key_algorithm = parse_install_algorithm(cfg.key_algorithm.as_str())
+            .unwrap_or(AsymmetricKeyAlgorithm::EcdsaP256);
+        let svc = build_install_service(&settings, db.clone());
+
+        svc.install(InstallInput {
+            username: cfg.username.clone().unwrap_or_default(),
+            email: cfg.email.clone().unwrap_or_else(|| {
+                format!(
+                    "{}@install.local",
+                    cfg.username.as_deref().unwrap_or("admin")
+                )
+            }),
+            password: cfg.password.clone().unwrap_or_default(),
+            domain: cfg.domain.clone().unwrap_or_default(),
+            key_algorithm,
+        })
+        .await?;
+
+        tracing::info!("auto install: complete");
         Ok(self)
     }
 
@@ -228,18 +189,16 @@ impl AppBuilder {
     }
 }
 
-/// Query the database directly to determine whether installation has been
-/// completed.  Used during conformance autosetup, before runtime settings are
-/// loaded.
-#[cfg(feature = "oidc-conformance")]
-async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
+async fn is_installed(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-    use identity_domain::setting::{installation::InstallationSetting, model::SettingDefinition};
+    use identity_domain::setting::{
+        installation::InstallationInitializedSetting, model::SettingDefinition,
+    };
     use identity_infrastructure::database::entity::setting;
 
     let row = setting::Entity::find()
-        .filter(setting::Column::Key.eq(InstallationSetting::KEY))
+        .filter(setting::Column::Key.eq(InstallationInitializedSetting::KEY))
         .one(db)
         .await?;
 
@@ -247,53 +206,42 @@ async fn conformance_installation_initialized(db: &sea_orm::DatabaseConnection) 
         return Ok(false);
     };
 
-    let state: identity_domain::setting::installation::InstallationState =
-        serde_json::from_value(row.value)?;
+    serde_json::from_value(row.value).map_err(Into::into)
+}
 
-    Ok(state.initialized)
+fn build_install_service(
+    settings: &AppRuntimeSettings,
+    db: DatabaseConnection,
+) -> InstallService<identity_infrastructure::database::repository::setting::SettingRepositoryImpl> {
+    InstallService {
+        password_hasher: Arc::new(PasswordHasherImpl::new()),
+        password_hash_options: settings.password_hash_options(),
+        installation_initialized: settings.installation_initialized(),
+        installation_domain: settings.installation_domain(),
+        installation_first_user_oid: settings.installation_first_user_oid(),
+        installation_first_key_oid: settings.installation_first_key_oid(),
+        installation_initialized_at: settings.installation_initialized_at(),
+        key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
+        certificate_generator: Arc::new(CertificateGeneratorImpl),
+        persistence: Arc::new(InstallPersistenceImpl::new(db)),
+    }
+}
+
+fn parse_install_algorithm(raw: &str) -> Option<AsymmetricKeyAlgorithm> {
+    match raw {
+        "ecdsa-p256" => Some(AsymmetricKeyAlgorithm::EcdsaP256),
+        "ecdsa-p384" => Some(AsymmetricKeyAlgorithm::EcdsaP384),
+        "ecdsa-p521" => Some(AsymmetricKeyAlgorithm::EcdsaP521),
+        "ecdsa-secp256k1" => Some(AsymmetricKeyAlgorithm::EcdsaSecp256k1),
+        "ed25519" => Some(AsymmetricKeyAlgorithm::Ed25519),
+        "ed448" => Some(AsymmetricKeyAlgorithm::Ed448),
+        "rsa-2048" => Some(AsymmetricKeyAlgorithm::Rsa { bits: 2048 }),
+        "rsa-3072" => Some(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
+        "rsa-4096" => Some(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "oidc-conformance")]
-    use identity_infrastructure::config::{
-        AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig,
-    };
-
-    #[cfg(feature = "oidc-conformance")]
-    use super::conformance_install_domain;
-
-    #[cfg(feature = "oidc-conformance")]
-    #[test]
-    fn conformance_install_domain_uses_https_host_from_config() {
-        let mut config = app_config();
-        config.server.host = Some("https://identity:5150/base/".to_owned());
-
-        assert_eq!(
-            conformance_install_domain(&config),
-            "https://identity:5150/base"
-        );
-    }
-
-    #[cfg(feature = "oidc-conformance")]
-    #[test]
-    fn conformance_install_domain_defaults_to_identity_https_origin() {
-        let config = app_config();
-
-        assert_eq!(
-            conformance_install_domain(&config),
-            "https://identity:5150/"
-        );
-    }
-
-    #[cfg(feature = "oidc-conformance")]
-    fn app_config() -> AppConfig {
-        AppConfig {
-            logger: LoggerConfig::default(),
-            server: ServerConfig::default(),
-            database: DatabaseConfig::default(),
-            health: HealthConfig::default(),
-            settings: SettingsConfig::default(),
-        }
-    }
 }

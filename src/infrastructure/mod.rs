@@ -31,7 +31,11 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         auth::password::PasswordHashSetting,
         setting::{
             dynamic_registration::DynamicClientRegistrationSetting,
-            installation::{InstallationSetting, InstallationState},
+            installation::{
+                InstallationDomainSetting, InstallationFirstKeyOidSetting,
+                InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
+                InstallationInitializedSetting,
+            },
             model::SettingDefinition,
         },
     };
@@ -53,23 +57,48 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
-    let installation_setting = setting::Model {
+    let installation_initialized_setting = setting::Model {
         id: 2,
         oid: uuid::Uuid::new_v4(),
-        key: InstallationSetting::KEY.to_string(),
-        value: serde_json::to_value(InstallationState {
-            initialized: true,
-            domain: Some("identity.example.com".to_owned()),
-            first_user_oid: Some(uuid::Uuid::new_v4()),
-            first_key_oid: Some(uuid::Uuid::new_v4()),
-            initialized_at: Some(Utc::now()),
-        })
-        .unwrap(),
+        key: InstallationInitializedSetting::KEY.to_string(),
+        value: serde_json::to_value(true).unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
+    let installation_domain_setting = setting::Model {
+        id: 3,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationDomainSetting::KEY.to_string(),
+        value: serde_json::to_value("identity.example.com").unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
+    let installation_first_user_oid_setting = setting::Model {
+        id: 4,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationFirstUserOidSetting::KEY.to_string(),
+        value: serde_json::to_value(uuid::Uuid::new_v4()).unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
+    let installation_first_key_oid_setting = setting::Model {
+        id: 5,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationFirstKeyOidSetting::KEY.to_string(),
+        value: serde_json::to_value(uuid::Uuid::new_v4()).unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
+    let installation_initialized_at_setting = setting::Model {
+        id: 6,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationInitializedAtSetting::KEY.to_string(),
+        value: serde_json::to_value(Utc::now()).unwrap(),
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
     let dynamic_registration_setting = setting::Model {
-        id: 3,
+        id: 7,
         oid: uuid::Uuid::new_v4(),
         key: DynamicClientRegistrationSetting::KEY.to_string(),
         value: serde_json::to_value(DynamicClientRegistrationSetting::default_value()).unwrap(),
@@ -79,8 +108,12 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results(vec![
+            vec![installation_initialized_setting],
+            vec![installation_domain_setting],
+            vec![installation_first_user_oid_setting],
+            vec![installation_first_key_oid_setting],
+            vec![installation_initialized_at_setting],
             vec![password_setting],
-            vec![installation_setting],
             vec![dynamic_registration_setting],
         ])
         .into_connection();

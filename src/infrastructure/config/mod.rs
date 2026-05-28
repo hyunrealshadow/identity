@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub health: HealthConfig,
     #[serde(default)]
     pub settings: SettingsConfig,
+    #[serde(default)]
+    pub install: InstallConfig,
 }
 
 impl AppConfig {
@@ -155,6 +157,32 @@ impl Default for SettingsConfig {
             refresh_interval_secs: default_settings_refresh_interval_secs(),
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct InstallConfig {
+    pub domain: Option<String>,
+    pub username: Option<String>,
+    pub email: Option<String>,
+    pub password: Option<String>,
+    #[serde(default = "default_key_algorithm")]
+    pub key_algorithm: String,
+}
+
+impl Default for InstallConfig {
+    fn default() -> Self {
+        Self {
+            domain: None,
+            username: None,
+            email: None,
+            password: None,
+            key_algorithm: default_key_algorithm(),
+        }
+    }
+}
+
+fn default_key_algorithm() -> String {
+    "ecdsa-p256".to_owned()
 }
 
 #[derive(Clone, Debug, Deserialize)]

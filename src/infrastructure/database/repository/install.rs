@@ -20,7 +20,11 @@ use crate::{
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
         setting::{
-            installation::{InstallationSetting, InstallationState},
+            installation::{
+                InstallationDomainSetting, InstallationFirstKeyOidSetting,
+                InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
+                InstallationInitializedSetting, InstallationState,
+            },
             model::SettingDefinition,
         },
     },
@@ -73,10 +77,6 @@ impl InstallPersistence for InstallPersistenceImpl {
             first_key_oid: Some(key_oid),
             initialized_at: Some(now),
         };
-
-        let state_json = serde_json::to_value(&installation_state).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
 
         let txn = self.db.begin().await.map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -208,7 +208,7 @@ impl InstallPersistence for InstallPersistenceImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        upsert_installation_state(&txn, state_json).await?;
+        upsert_installation_state(&txn, &installation_state).await?;
 
         txn.commit().await.map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -223,7 +223,7 @@ where
     C: sea_orm::ConnectionTrait,
 {
     let state = setting::Entity::find()
-        .filter(setting::Column::Key.eq(InstallationSetting::KEY))
+        .filter(setting::Column::Key.eq(InstallationInitializedSetting::KEY))
         .one(db)
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
@@ -232,18 +232,66 @@ where
         return Ok(false);
     };
 
-    let value: InstallationState = serde_json::from_value(state.value)
+    let value: bool = serde_json::from_value(state.value)
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-    Ok(value.initialized)
+    Ok(value)
 }
 
-async fn upsert_installation_state<C>(db: &C, value: Value) -> Result<(), AppError>
+async fn upsert_installation_state<C>(db: &C, state: &InstallationState) -> Result<(), AppError>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    upsert_setting(
+        db,
+        InstallationInitializedSetting::KEY,
+        serde_json::to_value(state.initialized).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?,
+    )
+    .await?;
+    upsert_setting(
+        db,
+        InstallationDomainSetting::KEY,
+        serde_json::to_value(&state.domain).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?,
+    )
+    .await?;
+    upsert_setting(
+        db,
+        InstallationFirstUserOidSetting::KEY,
+        serde_json::to_value(state.first_user_oid).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?,
+    )
+    .await?;
+    upsert_setting(
+        db,
+        InstallationFirstKeyOidSetting::KEY,
+        serde_json::to_value(state.first_key_oid).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?,
+    )
+    .await?;
+    upsert_setting(
+        db,
+        InstallationInitializedAtSetting::KEY,
+        serde_json::to_value(state.initialized_at).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn upsert_setting<C>(db: &C, key: &str, value: Value) -> Result<(), AppError>
 where
     C: sea_orm::ConnectionTrait,
 {
     let now = Utc::now().naive_utc();
     if let Some(existing) = setting::Entity::find()
-        .filter(setting::Column::Key.eq(InstallationSetting::KEY))
+        .filter(setting::Column::Key.eq(key))
         .one(db)
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
@@ -257,7 +305,7 @@ where
     } else {
         setting::ActiveModel {
             oid: Set(Uuid::new_v4()),
-            key: Set(InstallationSetting::KEY.to_owned()),
+            key: Set(key.to_owned()),
             value: Set(value),
             created_at: Set(now),
             updated_at: Set(Some(now)),

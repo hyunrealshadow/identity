@@ -15,7 +15,11 @@ use identity_domain::{
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
     setting::{
         dynamic_registration::DynamicClientRegistrationSetting,
-        installation::{InstallationSetting, InstallationState},
+        installation::{
+            InstallationDomainSetting, InstallationFirstKeyOidSetting,
+            InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
+            InstallationInitializedSetting,
+        },
         model::SettingDefinition,
     },
 };
@@ -106,23 +110,48 @@ pub(super) async fn continue_state(
         created_at: now.naive_utc(),
         updated_at: None,
     };
-    let installation_setting = setting::Model {
+    let installation_initialized_setting = setting::Model {
         id: 2,
         oid: uuid::Uuid::new_v4(),
-        key: InstallationSetting::KEY.to_string(),
-        value: serde_json::to_value(InstallationState {
-            initialized: true,
-            domain: Some("identity.example.com".to_owned()),
-            first_user_oid: Some(selected_user_oid.unwrap_or_else(uuid::Uuid::new_v4)),
-            first_key_oid: Some(symmetric_key_oid),
-            initialized_at: Some(now),
-        })
-        .unwrap(),
+        key: InstallationInitializedSetting::KEY.to_string(),
+        value: serde_json::to_value(true).unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let installation_domain_setting = setting::Model {
+        id: 3,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationDomainSetting::KEY.to_string(),
+        value: serde_json::to_value("identity.example.com").unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let installation_first_user_oid_setting = setting::Model {
+        id: 4,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationFirstUserOidSetting::KEY.to_string(),
+        value: serde_json::to_value(selected_user_oid.unwrap_or_else(uuid::Uuid::new_v4)).unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let installation_first_key_oid_setting = setting::Model {
+        id: 5,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationFirstKeyOidSetting::KEY.to_string(),
+        value: serde_json::to_value(symmetric_key_oid).unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let installation_initialized_at_setting = setting::Model {
+        id: 6,
+        oid: uuid::Uuid::new_v4(),
+        key: InstallationInitializedAtSetting::KEY.to_string(),
+        value: serde_json::to_value(now).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
     let dynamic_registration_setting = setting::Model {
-        id: 3,
+        id: 7,
         oid: uuid::Uuid::new_v4(),
         key: DynamicClientRegistrationSetting::KEY.to_string(),
         value: serde_json::to_value(DynamicClientRegistrationSetting::default_value()).unwrap(),
@@ -414,8 +443,12 @@ pub(super) async fn continue_state(
     }
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
+        .append_query_results([[installation_initialized_setting]])
+        .append_query_results([[installation_domain_setting]])
+        .append_query_results([[installation_first_user_oid_setting]])
+        .append_query_results([[installation_first_key_oid_setting]])
+        .append_query_results([[installation_initialized_at_setting]])
         .append_query_results([[password_setting]])
-        .append_query_results([[installation_setting]])
         .append_query_results([[dynamic_registration_setting]])
         .append_query_results([[symmetric_key.clone()]]);
 

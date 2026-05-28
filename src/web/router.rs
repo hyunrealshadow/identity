@@ -18,7 +18,7 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
                 .get(StaticDir::new(["assets/static"]).fallback("404.html")),
         );
 
-    if state.settings().installation().current_value().initialized {
+    if *state.settings().installation_initialized().current_value() {
         router = router
             .push(Router::new().get(root_redirect))
             .push(controllers::oauth2::routes())

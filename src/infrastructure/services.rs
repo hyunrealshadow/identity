@@ -15,7 +15,7 @@ use crate::{
         key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
-        session::SessionRepositoryImpl, user::UserRepositoryImpl,
+        session::SessionRepositoryImpl, setting::SettingRepositoryImpl, user::UserRepositoryImpl,
         user_credential::UserCredentialRepositoryImpl,
     },
 };
@@ -43,7 +43,7 @@ pub type AppSessionService = SessionService;
 
 pub type AppKeyService = AsymmetricKeyService;
 
-pub type AppInstallService = InstallService;
+pub type AppInstallService = InstallService<SettingRepositoryImpl>;
 
 pub type AppOpenIdProviderService = OpenIdProviderService;
 
@@ -110,7 +110,11 @@ impl AppServices {
             install: InstallService {
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 password_hash_options: settings.password_hash_options(),
-                installation_setting: settings.installation(),
+                installation_initialized: settings.installation_initialized(),
+                installation_domain: settings.installation_domain(),
+                installation_first_user_oid: settings.installation_first_user_oid(),
+                installation_first_key_oid: settings.installation_first_key_oid(),
+                installation_initialized_at: settings.installation_initialized_at(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
                 certificate_generator: Arc::new(CertificateGeneratorImpl),
                 persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),

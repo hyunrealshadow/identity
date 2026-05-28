@@ -14,7 +14,7 @@ pub async fn ensure_install_startup_guard(
     db: &DatabaseConnection,
     settings: &AppRuntimeSettings,
 ) -> AppResult<()> {
-    if settings.installation().current_value().initialized {
+    if *settings.installation_initialized().current_value() {
         return Ok(());
     }
 
@@ -24,7 +24,7 @@ pub async fn ensure_install_startup_guard(
     }
 
     settings.installation().refresh().await?;
-    if settings.installation().current_value().initialized {
+    if *settings.installation_initialized().current_value() {
         return Ok(());
     }
 

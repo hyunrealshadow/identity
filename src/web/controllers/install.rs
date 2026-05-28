@@ -119,7 +119,7 @@ async fn install_page(
 ) -> Result<(), identity_application::error::AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
-    if ctx.settings().installation().current_value().initialized {
+    if *ctx.settings().installation_initialized().current_value() {
         redirect_to(res, "/login");
         return Ok(());
     }
@@ -146,7 +146,7 @@ async fn install_submit(
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let form: InstallForm = parse_form(req).await?;
-    if ctx.settings().installation().current_value().initialized {
+    if *ctx.settings().installation_initialized().current_value() {
         redirect_to(res, "/login");
         return Ok(());
     }

@@ -13,7 +13,7 @@ server:
     auto_generate: true
     cert_path: config/tls/server.crt
     key_path: config/tls/server.key
-    domain: {{ get_env(name="TLS_DOMAIN", default="identity") }}
+    domain: {{ get_env(name="DOMAIN", default="identity") }}
 
 database:
   uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}
@@ -37,3 +37,10 @@ health:
 
 settings:
   refresh_interval_secs: {{ get_env(name="SETTINGS_REFRESH_INTERVAL_SECS", default="30") }}
+
+install:
+  domain: {{ get_env(name="DOMAIN", default="identity") }}
+  username: "admin"
+  password: "ConformanceAdmin1!"
+  email: "admin@conformance.local"
+  key_algorithm: "rsa-2048"

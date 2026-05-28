@@ -234,6 +234,7 @@ mod tests {
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
             settings: SettingsConfig::default(),
+            install: Default::default(),
         };
         config.server.tls.enable = tls_enabled;
         config
