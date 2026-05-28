@@ -28,7 +28,8 @@ uuid = { workspace = true }
 validator = { workspace = true }
 
 [features]
-oidc-conformance = []
+allow-none-alg = []
+oidc-conformance = ["allow-none-alg"]
 
 [dev-dependencies]
 openssl = { workspace = true }

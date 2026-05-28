@@ -324,7 +324,7 @@ async fn delete_removes_client_found_by_registration_access_token() {
     assert_eq!(repo.deleted.lock().unwrap().as_slice(), &[client_oid]);
 }
 
-#[cfg(not(feature = "oidc-conformance"))]
+#[cfg(not(feature = "allow-none-alg"))]
 #[tokio::test]
 async fn register_rejects_none_token_auth_method_outside_conformance() {
     let repo = Arc::new(CapturingRegistrationRepository::default());
@@ -349,7 +349,7 @@ async fn register_rejects_none_token_auth_method_outside_conformance() {
     assert!(repo.captured.lock().unwrap().is_none());
 }
 
-#[cfg(not(feature = "oidc-conformance"))]
+#[cfg(not(feature = "allow-none-alg"))]
 #[tokio::test]
 async fn register_rejects_none_id_token_signing_alg_outside_conformance() {
     let repo = Arc::new(CapturingRegistrationRepository::default());
@@ -387,7 +387,7 @@ fn sector_identifier_uris_must_include_registered_redirects() {
     );
 }
 
-#[cfg(feature = "oidc-conformance")]
+#[cfg(feature = "allow-none-alg")]
 #[tokio::test]
 async fn register_allows_public_client_none_auth_in_conformance() {
     let repo = Arc::new(CapturingRegistrationRepository::default());

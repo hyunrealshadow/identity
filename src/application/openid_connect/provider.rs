@@ -195,12 +195,12 @@ fn default_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
     ]
 }
 
-#[cfg(feature = "oidc-conformance")]
+#[cfg(feature = "allow-none-alg")]
 fn append_conformance_token_endpoint_auth_methods(methods: &mut Vec<TokenEndpointAuthMethod>) {
     methods.push(TokenEndpointAuthMethod::None);
 }
 
-#[cfg(not(feature = "oidc-conformance"))]
+#[cfg(not(feature = "allow-none-alg"))]
 fn append_conformance_token_endpoint_auth_methods(_methods: &mut Vec<TokenEndpointAuthMethod>) {}
 
 fn supported_asymmetric_jws_algorithms() -> Vec<String> {
@@ -418,7 +418,7 @@ impl OpenIdProviderService {
     }
 }
 
-#[cfg(feature = "oidc-conformance")]
+#[cfg(feature = "allow-none-alg")]
 fn append_conformance_none_alg(mut values: Vec<String>) -> Vec<String> {
     if !values.contains(&"none".to_owned()) {
         values.push("none".to_owned());
@@ -426,7 +426,7 @@ fn append_conformance_none_alg(mut values: Vec<String>) -> Vec<String> {
     values
 }
 
-#[cfg(not(feature = "oidc-conformance"))]
+#[cfg(not(feature = "allow-none-alg"))]
 fn append_conformance_none_alg(values: Vec<String>) -> Vec<String> {
     values
 }
@@ -532,7 +532,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "oidc-conformance")]
+    #[cfg(feature = "allow-none-alg")]
     fn expected_id_token_algorithms(values: &[&str]) -> Vec<String> {
         values
             .iter()
@@ -542,7 +542,7 @@ mod tests {
             .collect()
     }
 
-    #[cfg(not(feature = "oidc-conformance"))]
+    #[cfg(not(feature = "allow-none-alg"))]
     fn expected_id_token_algorithms(values: &[&str]) -> Vec<String> {
         values.iter().copied().map(str::to_owned).collect()
     }
@@ -908,7 +908,7 @@ mod tests {
 
         assert_eq!(
             methods.iter().any(|method| method == "none"),
-            cfg!(feature = "oidc-conformance")
+            cfg!(feature = "allow-none-alg")
         );
     }
 

@@ -26,7 +26,7 @@ pub(super) fn reject_none_outside_conformance(
     field: &'static str,
     value: Option<&str>,
 ) -> Result<(), AppError> {
-    if value == Some("none") && !cfg!(feature = "oidc-conformance") {
+    if value == Some("none") && !cfg!(feature = "allow-none-alg") {
         return Err(
             AppError::from_code(RegistrationErrorCode::NoneNotSupported).with_param("field", field)
         );

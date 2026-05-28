@@ -204,10 +204,10 @@ impl TokenService {
         }
 
         if alg == "none" {
-            #[cfg(feature = "oidc-conformance")]
+            #[cfg(feature = "allow-none-alg")]
             return Self::sign_unsigned_id_token(&header, &payload);
 
-            #[cfg(not(feature = "oidc-conformance"))]
+            #[cfg(not(feature = "allow-none-alg"))]
             return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
         }
 
@@ -217,7 +217,7 @@ impl TokenService {
         })
     }
 
-    #[cfg(feature = "oidc-conformance")]
+    #[cfg(feature = "allow-none-alg")]
     fn sign_unsigned_id_token(
         header: &JwsHeader,
         payload: &JwtPayload,

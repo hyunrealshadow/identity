@@ -432,12 +432,12 @@ fn resolve_client_id(
 }
 
 pub(crate) fn resolve_id_token_alg(fallback: &str, client_alg: Option<&str>) -> String {
-    #[cfg(feature = "oidc-conformance")]
+    #[cfg(feature = "allow-none-alg")]
     if client_alg == Some("none") {
         return "none".to_owned();
     }
 
-    #[cfg(not(feature = "oidc-conformance"))]
+    #[cfg(not(feature = "allow-none-alg"))]
     if client_alg == Some("none") {
         return fallback.to_owned();
     }

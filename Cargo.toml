@@ -106,6 +106,7 @@ oidc-conformance = [
   "identity-infrastructure/oidc-conformance",
   "identity-web/oidc-conformance",
 ]
+allow-none-alg = ["identity-application/allow-none-alg"]
 
 [[bin]]
 name = "identity"
