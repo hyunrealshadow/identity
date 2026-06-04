@@ -558,9 +558,8 @@ mod tests {
         domain::{
             client::model::{Client, ClientProtocol},
             key::{
-                AsymmetricKeyData, CreateKeyJwkInput, JwaSigningAlgorithm, Key, KeyData, KeyJwk,
-                KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, KeyOid, KeyType, PublicJwk,
-                repository::{KeyRepository, KeyRepositoryError},
+                AsymmetricKeyData, JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid,
+                KeyType, PublicJwk,
             },
             openid_connect::{
                 OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
@@ -569,7 +568,10 @@ mod tests {
             },
             setting::installation::{InstallationSetting, InstallationState},
         },
-        openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
+        openid_connect::{
+            provider::{OpenIdProviderService, SigningAlgorithmDetector},
+            tests::fixtures::mocks::{MockKeyJwkRepository, MockKeyRepository},
+        },
     };
     use async_trait::async_trait;
     use chrono::Utc;
@@ -590,14 +592,6 @@ mod tests {
         key: Key,
         binding: KeyJwk,
         public_key: String,
-    }
-
-    struct FakeKeyRepository {
-        keys: Vec<Key>,
-    }
-
-    struct FakeKeyJwkRepository {
-        bindings: Vec<KeyJwk>,
     }
 
     struct TestSigningAlgorithmDetector;
@@ -633,76 +627,6 @@ mod tests {
             _session_oid: SessionOid,
         ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
             Ok(self.clients.values().cloned().collect())
-        }
-    }
-
-    #[async_trait]
-    impl KeyRepository for FakeKeyRepository {
-        async fn find_by_oid(&self, oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-            Ok(self.keys.iter().find(|key| key.oid == oid).cloned())
-        }
-
-        async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            Ok(self.keys.clone())
-        }
-
-        async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            Ok(Vec::new())
-        }
-
-        async fn create(
-            &self,
-            _key_type: KeyType,
-            _data: &KeyData,
-            _expires_at: Option<chrono::DateTime<Utc>>,
-        ) -> Result<Key, KeyRepositoryError> {
-            unreachable!()
-        }
-
-        async fn update_certificate_by_oid(
-            &self,
-            _oid: KeyOid,
-            _certificate_pem: &str,
-        ) -> Result<Option<Key>, KeyRepositoryError> {
-            unreachable!()
-        }
-
-        async fn revoke_by_oid(
-            &self,
-            _oid: KeyOid,
-            _revoked_at: chrono::DateTime<Utc>,
-        ) -> Result<Option<Key>, KeyRepositoryError> {
-            unreachable!()
-        }
-    }
-
-    #[async_trait]
-    impl KeyJwkRepository for FakeKeyJwkRepository {
-        async fn create_batch(
-            &self,
-            _inputs: Vec<CreateKeyJwkInput>,
-        ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-            unreachable!()
-        }
-
-        async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-            Ok(self.bindings.clone())
-        }
-
-        async fn find_active_by_key_oid_and_algorithm(
-            &self,
-            key_oid: KeyOid,
-            algorithm: &str,
-        ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
-            Ok(self
-                .bindings
-                .iter()
-                .find(|binding| binding.key_oid == key_oid && binding.algorithm == algorithm)
-                .cloned())
-        }
-
-        async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
-            unreachable!()
         }
     }
 
@@ -823,6 +747,34 @@ mod tests {
         }
         let signing = signing_material();
 
+        let mut key_repo = MockKeyRepository::new();
+        let k = signing.key.clone();
+        key_repo
+            .expect_find_by_oid()
+            .returning(move |oid| Ok((oid == k.oid).then(|| k.clone())));
+        let k = signing.key.clone();
+        key_repo
+            .expect_list_available_asymmetric()
+            .returning(move || Ok(vec![k.clone()]));
+        key_repo
+            .expect_list_available_symmetric()
+            .returning(|| Ok(vec![]));
+
+        let mut jwk_repo = MockKeyJwkRepository::new();
+        let b = vec![signing.binding.clone()];
+        let b2 = b.clone();
+        jwk_repo
+            .expect_list_active()
+            .returning(move || Ok(b.clone()));
+        jwk_repo
+            .expect_find_active_by_key_oid_and_algorithm()
+            .returning(move |oid, alg| {
+                Ok(b2
+                    .iter()
+                    .find(|b| b.key_oid == oid && b.algorithm == alg)
+                    .cloned())
+            });
+
         let service = LogoutService::new(
             Arc::new(FakeClientRepository {
                 clients: client_map,
@@ -836,12 +788,8 @@ mod tests {
                     initialized_at: None,
                 })),
             ))),
-            Arc::new(FakeKeyRepository {
-                keys: vec![signing.key.clone()],
-            }),
-            Arc::new(FakeKeyJwkRepository {
-                bindings: vec![signing.binding.clone()],
-            }),
+            Arc::new(key_repo),
+            Arc::new(jwk_repo),
             Arc::new(TestSigningAlgorithmDetector),
         );
         (service, signing)

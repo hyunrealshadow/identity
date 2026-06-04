@@ -38,16 +38,15 @@ use crate::{
             ClientAuthorizationType, RefreshTokenData,
         },
         key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
-        key::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError},
         key::{
             JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, PublicJwk,
-            material::AsymmetricKeyData, repository::KeyRepository,
+            material::AsymmetricKeyData,
         },
+        key::{KeyJwk, KeyJwkOid},
         openid_connect::{
             OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
-            OpenIdConnectCredential, OpenIdConnectCredentialData,
-            OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
-            OpenIdConnectCredentialType, model::claim::JwtClaimNames,
+            OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialType,
+            model::claim::JwtClaimNames,
         },
         setting::installation::{InstallationSetting, InstallationState},
         user::{
@@ -63,9 +62,9 @@ mod fixtures;
 mod helpers;
 
 use self::fixtures::{
-    InMemoryClientAuthorizationRepository, InMemoryClientRepository, InMemoryCredentialRepository,
-    InMemoryDataProtector, InMemoryKeyJwkRepository, InMemoryKeyRepository, InMemoryUserRepository,
-    provider_service, signing_algorithm_detector,
+    InMemoryClientRepository, InMemoryDataProtector, InMemoryUserRepository,
+    MockClientAuthorizationRepository, cred_repo_with, jwk_repo_with_bindings, key_repo_with_keys,
+    mock_client_auth_repo, provider_service, signing_algorithm_detector,
 };
 
 fn expected_at_hash(access_token: &str) -> String {
@@ -262,38 +261,32 @@ fn decode_jwt_with_alg(token: &str, public_key_pem: &str, alg: &str) -> JwtPaylo
 }
 
 fn build_token_service_with_key(
-    repo: Arc<InMemoryClientAuthorizationRepository>,
+    repo: Arc<MockClientAuthorizationRepository>,
     key: Key,
     user_oid: Uuid,
 ) -> TokenService {
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
     TokenService::new(
         repo,
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![key.clone()],
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
+        Arc::new(key_repo_with_keys(vec![key.clone()])),
+        Arc::new(jwk_repo_with_bindings(vec![binding])),
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
         Arc::new(InMemoryClientRepository),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientSecret,
-                hint: "token".to_string(),
-                data: OpenIdConnectCredentialData::ClientSecret {
-                    secret: "secret-123".to_string(),
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
+        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+            oid: Uuid::new_v4(),
+            client_oid: Uuid::nil(),
+            r#type: OpenIdConnectCredentialType::ClientSecret,
+            hint: "token".to_string(),
+            data: OpenIdConnectCredentialData::ClientSecret {
+                secret: "secret-123".to_string(),
+            },
+            expires_at: Utc::now() + chrono::Duration::days(1),
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }])),
         provider_service(),
         signing_algorithm_detector(),
         InMemoryDataProtector::new(),
@@ -311,7 +304,7 @@ fn key_data_algorithm(key: &Key) -> String {
 }
 
 fn user_info_service_with_key(
-    repo: Arc<InMemoryClientAuthorizationRepository>,
+    repo: Arc<MockClientAuthorizationRepository>,
     key: Key,
     user_oid: Uuid,
 ) -> crate::openid_connect::user_info::UserInfoService {
@@ -322,7 +315,7 @@ fn user_info_service_with_key(
         Arc::new(InMemoryClientRepository),
         repo,
         Arc::new(AsymmetricKeyService::new(
-            Arc::new(InMemoryKeyRepository { keys: vec![key] }),
+            Arc::new(key_repo_with_keys(vec![key])),
             Arc::new(TestAsymmetricKeyGenerator),
             test_key_jwk_generator(),
             None,

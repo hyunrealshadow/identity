@@ -12,8 +12,8 @@ async fn third_party_initiated_login_redirects_to_registered_initiate_login_uri(
         Arc::new(InitiateLoginClientRepository {
             initiate_login_uri: Url::parse("https://rp.example.com/initiate?foo=bar").unwrap(),
         }),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let redirect = service
@@ -48,8 +48,8 @@ async fn third_party_initiated_login_redirects_to_registered_initiate_login_uri(
 async fn third_party_initiated_login_requires_registered_initiate_login_uri() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let error = service

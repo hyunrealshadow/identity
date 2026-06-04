@@ -13,7 +13,7 @@ server:
     auto_generate: true
     cert_path: config/tls/server.crt
     key_path: config/tls/server.key
-    domain: {{ get_env(name="DOMAIN", default="identity") }}
+  domain: {{ get_env(name="HOST", default="https://identity:5150") }}
 
 database:
   uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}

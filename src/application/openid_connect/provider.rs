@@ -504,9 +504,8 @@ mod tests {
         application::setting::runtime::CachedSetting,
         domain::{
             key::{
-                JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType,
-                material::AsymmetricKeyData,
-                repository::{KeyRepository, KeyRepositoryError},
+                JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
+                repository::KeyRepositoryError,
             },
             setting::{
                 dynamic_registration::DynamicClientRegistrationSetting,
@@ -515,6 +514,7 @@ mod tests {
                 repository::{SettingRepository, SettingRepositoryError},
             },
         },
+        openid_connect::tests::fixtures::mocks::MockKeyRepository,
     };
 
     #[derive(Clone)]
@@ -586,71 +586,30 @@ mod tests {
         }
     }
 
-    struct StaticKeyRepository {
-        keys: Vec<Key>,
-        fail_list: bool,
+    fn key_repo_with_keys(keys: Vec<Key>) -> MockKeyRepository {
+        let mut mock = MockKeyRepository::new();
+        let k = keys.clone();
+        mock.expect_find_by_oid()
+            .returning(move |oid| Ok(k.iter().find(|key| key.oid == oid).cloned()));
+        let k = keys;
+        mock.expect_list_available_asymmetric()
+            .returning(move || Ok(k.clone()));
+        mock.expect_list_available_symmetric()
+            .returning(|| Ok(vec![]));
+        mock
     }
 
-    impl StaticKeyRepository {
-        fn with_keys(keys: Vec<Key>) -> Arc<Self> {
-            Arc::new(Self {
-                keys,
-                fail_list: false,
-            })
-        }
-
-        fn failing() -> Arc<Self> {
-            Arc::new(Self {
-                keys: vec![],
-                fail_list: true,
-            })
-        }
-    }
-
-    #[async_trait]
-    impl KeyRepository for StaticKeyRepository {
-        async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-            Ok(None)
-        }
-
-        async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            if self.fail_list {
-                return Err(KeyRepositoryError::ListAvailableFailed(
-                    sea_orm::DbErr::Custom("boom".to_owned()),
-                ));
-            }
-
-            Ok(self.keys.clone())
-        }
-
-        async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            Ok(vec![])
-        }
-
-        async fn create(
-            &self,
-            _key_type: KeyType,
-            _data: &KeyData,
-            _expires_at: Option<chrono::DateTime<Utc>>,
-        ) -> Result<Key, KeyRepositoryError> {
-            unimplemented!()
-        }
-
-        async fn update_certificate_by_oid(
-            &self,
-            _oid: KeyOid,
-            _certificate_pem: &str,
-        ) -> Result<Option<Key>, KeyRepositoryError> {
-            unimplemented!()
-        }
-
-        async fn revoke_by_oid(
-            &self,
-            _oid: KeyOid,
-            _revoked_at: chrono::DateTime<Utc>,
-        ) -> Result<Option<Key>, KeyRepositoryError> {
-            unimplemented!()
-        }
+    fn key_repo_failing() -> MockKeyRepository {
+        let mut mock = MockKeyRepository::new();
+        mock.expect_find_by_oid().returning(|_| Ok(None));
+        mock.expect_list_available_asymmetric().returning(|| {
+            Err(KeyRepositoryError::ListAvailableFailed(
+                sea_orm::DbErr::Custom("boom".to_owned()),
+            ))
+        });
+        mock.expect_list_available_symmetric()
+            .returning(|| Ok(vec![]));
+        mock
     }
 
     struct TestSigningAlgorithmDetector;
@@ -947,9 +906,9 @@ mod tests {
             initialized_at: None,
         })
         .await
-        .with_key_repo(StaticKeyRepository::with_keys(vec![make_asymmetric_key(
+        .with_key_repo(Arc::new(key_repo_with_keys(vec![make_asymmetric_key(
             generate_rsa_pem(),
-        )]))
+        )])))
         .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -970,11 +929,11 @@ mod tests {
             initialized_at: None,
         })
         .await
-        .with_key_repo(StaticKeyRepository::with_keys(vec![
+        .with_key_repo(Arc::new(key_repo_with_keys(vec![
             make_asymmetric_key(generate_rsa_pss_pem("PS256")),
             make_asymmetric_key(generate_rsa_pss_pem("PS384")),
             make_asymmetric_key(generate_rsa_pss_pem("PS512")),
-        ]))
+        ])))
         .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -995,9 +954,9 @@ mod tests {
             initialized_at: None,
         })
         .await
-        .with_key_repo(StaticKeyRepository::with_keys(vec![make_asymmetric_key(
+        .with_key_repo(Arc::new(key_repo_with_keys(vec![make_asymmetric_key(
             generate_ec_p256_pem(),
-        )]))
+        )])))
         .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -1018,7 +977,7 @@ mod tests {
             initialized_at: None,
         })
         .await
-        .with_key_repo(StaticKeyRepository::with_keys(vec![
+        .with_key_repo(Arc::new(key_repo_with_keys(vec![
             make_asymmetric_key(generate_rsa_pem()),
             make_asymmetric_key(generate_rsa_pss_pem("PS256")),
             make_asymmetric_key(generate_rsa_pss_pem("PS384")),
@@ -1028,7 +987,7 @@ mod tests {
             make_asymmetric_key(generate_ec_p521_pem()),
             make_asymmetric_key(generate_ec_secp256k1_pem()),
             make_asymmetric_key(generate_ed25519_pem()),
-        ]))
+        ])))
         .with_signing_algorithm_detector(test_signing_algorithm_detector());
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -1052,7 +1011,7 @@ mod tests {
             initialized_at: None,
         })
         .await
-        .with_key_repo(StaticKeyRepository::with_keys(vec![]));
+        .with_key_repo(Arc::new(key_repo_with_keys(vec![])));
 
         let metadata = service.discovery_metadata().await.unwrap();
 
@@ -1072,7 +1031,7 @@ mod tests {
             initialized_at: None,
         })
         .await
-        .with_key_repo(StaticKeyRepository::failing());
+        .with_key_repo(Arc::new(key_repo_failing()));
 
         let error = service.discovery_metadata().await.unwrap_err();
 

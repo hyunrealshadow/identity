@@ -1,4 +1,10 @@
 use super::*;
+pub(super) use crate::openid_connect::tests::fixtures::mocks::{
+    MockClientAuthorizationRepository, mock_client_auth_repo,
+};
+use crate::openid_connect::tests::fixtures::mocks::{
+    MockKeyJwkRepository, MockKeyRepository, MockOpenIdConnectCredentialRepository,
+};
 use identity_domain::auth::SessionOid;
 
 mod clients;
@@ -115,42 +121,6 @@ impl crate::data_protection::DataProtector for InMemoryDataProtector {
     }
 }
 
-#[derive(Default)]
-pub(super) struct InMemoryClientAuthorizationRepository {
-    pub(super) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
-}
-
-pub(super) struct InMemoryCredentialRepository {
-    pub(super) credentials: Vec<OpenIdConnectCredential>,
-}
-
-#[async_trait]
-impl OpenIdConnectCredentialRepository for InMemoryCredentialRepository {
-    async fn find_by_oid(
-        &self,
-        oid: Uuid,
-    ) -> Result<Option<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError> {
-        Ok(self
-            .credentials
-            .iter()
-            .find(|item| item.oid == oid)
-            .cloned())
-    }
-
-    async fn find_by_client_oid_and_type(
-        &self,
-        client_oid: ClientOid,
-        type_: OpenIdConnectCredentialType,
-    ) -> Result<Vec<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError> {
-        Ok(self
-            .credentials
-            .iter()
-            .filter(|item| item.client_oid == client_oid && item.r#type == type_)
-            .cloned()
-            .collect())
-    }
-}
-
 pub(super) struct StaticInstallationProvider {
     pub(super) value: Arc<InstallationState>,
 }
@@ -175,89 +145,32 @@ pub(super) fn provider_service() -> Arc<OpenIdProviderService> {
     )))
 }
 
-pub(super) struct InMemoryKeyRepository {
-    pub(super) keys: Vec<Key>,
+pub(super) fn key_repo_with_keys(keys: Vec<Key>) -> MockKeyRepository {
+    let mut mock = MockKeyRepository::new();
+    let k = keys.clone();
+    mock.expect_find_by_oid()
+        .returning(move |oid| Ok(k.iter().find(|key| key.oid == oid).cloned()));
+    let k = keys.clone();
+    mock.expect_list_available_asymmetric()
+        .returning(move || Ok(k.clone()));
+    let k = keys;
+    mock.expect_list_available_symmetric()
+        .returning(move || Ok(k.clone()));
+    mock
 }
 
-pub(super) struct InMemoryKeyJwkRepository {
-    pub(super) bindings: Vec<KeyJwk>,
-}
-
-#[async_trait]
-impl KeyRepository for InMemoryKeyRepository {
-    async fn find_by_oid(
-        &self,
-        oid: KeyOid,
-    ) -> Result<Option<Key>, identity_domain::key::repository::KeyRepositoryError> {
-        Ok(self.keys.iter().find(|key| key.oid == oid).cloned())
-    }
-
-    async fn list_available_asymmetric(
-        &self,
-    ) -> Result<Vec<Key>, identity_domain::key::repository::KeyRepositoryError> {
-        Ok(self.keys.clone())
-    }
-
-    async fn list_available_symmetric(
-        &self,
-    ) -> Result<Vec<Key>, identity_domain::key::repository::KeyRepositoryError> {
-        Ok(self.keys.clone())
-    }
-
-    async fn create(
-        &self,
-        _key_type: KeyType,
-        _data: &KeyData,
-        _expires_at: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<Key, identity_domain::key::repository::KeyRepositoryError> {
-        unreachable!()
-    }
-
-    async fn update_certificate_by_oid(
-        &self,
-        _oid: KeyOid,
-        _certificate_pem: &str,
-    ) -> Result<Option<Key>, identity_domain::key::repository::KeyRepositoryError> {
-        unreachable!()
-    }
-
-    async fn revoke_by_oid(
-        &self,
-        _oid: KeyOid,
-        _revoked_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Option<Key>, identity_domain::key::repository::KeyRepositoryError> {
-        unreachable!()
-    }
-}
-
-#[async_trait]
-impl KeyJwkRepository for InMemoryKeyJwkRepository {
-    async fn create_batch(
-        &self,
-        _inputs: Vec<CreateKeyJwkInput>,
-    ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        unreachable!()
-    }
-
-    async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        Ok(self.bindings.clone())
-    }
-
-    async fn find_active_by_key_oid_and_algorithm(
-        &self,
-        key_oid: KeyOid,
-        algorithm: &str,
-    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
-        Ok(self
-            .bindings
-            .iter()
-            .find(|binding| binding.key_oid == key_oid && binding.algorithm == algorithm)
-            .cloned())
-    }
-
-    async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
-        unreachable!()
-    }
+pub(super) fn jwk_repo_with_bindings(bindings: Vec<KeyJwk>) -> MockKeyJwkRepository {
+    let mut mock = MockKeyJwkRepository::new();
+    let b = bindings.clone();
+    mock.expect_list_active().returning(move || Ok(b.clone()));
+    let b = bindings;
+    mock.expect_find_active_by_key_oid_and_algorithm()
+        .returning(move |oid, alg| {
+            Ok(b.iter()
+                .find(|b| b.key_oid == oid && b.algorithm == alg)
+                .cloned())
+        });
+    mock
 }
 
 pub(super) struct InMemoryUserRepository {
@@ -287,8 +200,17 @@ impl UserRepository for InMemoryUserRepository {
     }
 }
 
+pub(super) fn cred_repo_with(
+    credentials: Vec<OpenIdConnectCredential>,
+) -> MockOpenIdConnectCredentialRepository {
+    let mut mock = MockOpenIdConnectCredentialRepository::new();
+    mock.expect_find_by_client_oid_and_type()
+        .returning(move |_, _| Ok(credentials.clone()));
+    mock
+}
+
 pub(super) fn build_token_service(
-    repo: Arc<InMemoryClientAuthorizationRepository>,
+    repo: Arc<MockClientAuthorizationRepository>,
     user_oid: Uuid,
 ) -> TokenService {
     let rsa = Rsa::generate(2048).unwrap();
@@ -311,10 +233,8 @@ pub(super) fn build_token_service(
 
     TokenService::new(
         repo,
-        Arc::new(InMemoryKeyRepository { keys: vec![key] }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
+        Arc::new(key_repo_with_keys(vec![key.clone()])),
+        Arc::new(jwk_repo_with_bindings(vec![binding])),
         Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
@@ -351,37 +271,35 @@ pub(super) fn build_token_service(
             },
         }),
         Arc::new(InMemoryClientRepository),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![
-                OpenIdConnectCredential {
-                    oid: Uuid::new_v4(),
-                    client_oid: Uuid::nil(),
-                    r#type: OpenIdConnectCredentialType::ClientSecret,
-                    hint: "token".to_string(),
-                    data: OpenIdConnectCredentialData::ClientSecret {
-                        secret: "secret-123".to_string(),
-                    },
-                    expires_at: Utc::now() + chrono::Duration::days(1),
-                    revoked_at: None,
-                    created_at: Utc::now(),
-                    updated_at: None,
+        Arc::new(cred_repo_with(vec![
+            OpenIdConnectCredential {
+                oid: Uuid::new_v4(),
+                client_oid: Uuid::nil(),
+                r#type: OpenIdConnectCredentialType::ClientSecret,
+                hint: "token".to_string(),
+                data: OpenIdConnectCredentialData::ClientSecret {
+                    secret: "secret-123".to_string(),
                 },
-                OpenIdConnectCredential {
-                    oid: Uuid::new_v4(),
-                    client_oid: Uuid::nil(),
-                    r#type: OpenIdConnectCredentialType::ClientPublicKey,
-                    hint: "private_key_jwt".to_string(),
-                    data: OpenIdConnectCredentialData::ClientPublicKey {
-                        public_key,
-                        jwk: None,
-                    },
-                    expires_at: Utc::now() + chrono::Duration::days(1),
-                    revoked_at: None,
-                    created_at: Utc::now(),
-                    updated_at: None,
+                expires_at: Utc::now() + chrono::Duration::days(1),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            },
+            OpenIdConnectCredential {
+                oid: Uuid::new_v4(),
+                client_oid: Uuid::nil(),
+                r#type: OpenIdConnectCredentialType::ClientPublicKey,
+                hint: "private_key_jwt".to_string(),
+                data: OpenIdConnectCredentialData::ClientPublicKey {
+                    public_key,
+                    jwk: None,
                 },
-            ],
-        }),
+                expires_at: Utc::now() + chrono::Duration::days(1),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            },
+        ])),
         provider_service(),
         signing_algorithm_detector(),
         InMemoryDataProtector::new(),
@@ -396,7 +314,7 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
     method: &'static str,
     signing_alg: Option<&'static str>,
 ) -> TokenService {
-    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
@@ -418,10 +336,8 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
 
     TokenService::new(
         repo,
-        Arc::new(InMemoryKeyRepository { keys: vec![key] }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
+        Arc::new(key_repo_with_keys(vec![key])),
+        Arc::new(jwk_repo_with_bindings(vec![binding])),
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
@@ -429,37 +345,35 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
             method,
             signing_alg,
         }),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![
-                OpenIdConnectCredential {
-                    oid: Uuid::new_v4(),
-                    client_oid: Uuid::nil(),
-                    r#type: OpenIdConnectCredentialType::ClientSecret,
-                    hint: "token".to_string(),
-                    data: OpenIdConnectCredentialData::ClientSecret {
-                        secret: CLIENT_SECRET_JWT_SECRET.to_string(),
-                    },
-                    expires_at: Utc::now() + chrono::Duration::days(1),
-                    revoked_at: None,
-                    created_at: Utc::now(),
-                    updated_at: None,
+        Arc::new(cred_repo_with(vec![
+            OpenIdConnectCredential {
+                oid: Uuid::new_v4(),
+                client_oid: Uuid::nil(),
+                r#type: OpenIdConnectCredentialType::ClientSecret,
+                hint: "token".to_string(),
+                data: OpenIdConnectCredentialData::ClientSecret {
+                    secret: CLIENT_SECRET_JWT_SECRET.to_string(),
                 },
-                OpenIdConnectCredential {
-                    oid: Uuid::new_v4(),
-                    client_oid: Uuid::nil(),
-                    r#type: OpenIdConnectCredentialType::ClientPublicKey,
-                    hint: "private_key_jwt".to_string(),
-                    data: OpenIdConnectCredentialData::ClientPublicKey {
-                        public_key,
-                        jwk: None,
-                    },
-                    expires_at: Utc::now() + chrono::Duration::days(1),
-                    revoked_at: None,
-                    created_at: Utc::now(),
-                    updated_at: None,
+                expires_at: Utc::now() + chrono::Duration::days(1),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            },
+            OpenIdConnectCredential {
+                oid: Uuid::new_v4(),
+                client_oid: Uuid::nil(),
+                r#type: OpenIdConnectCredentialType::ClientPublicKey,
+                hint: "private_key_jwt".to_string(),
+                data: OpenIdConnectCredentialData::ClientPublicKey {
+                    public_key,
+                    jwk: None,
                 },
-            ],
-        }),
+                expires_at: Utc::now() + chrono::Duration::days(1),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            },
+        ])),
         provider_service(),
         signing_algorithm_detector(),
         InMemoryDataProtector::new(),
@@ -553,95 +467,5 @@ pub(super) fn build_client_secret_assertion_with_algorithm(
         )
         .unwrap(),
         other => panic!("unsupported test alg: {other}"),
-    }
-}
-
-#[async_trait]
-impl ClientAuthorizationRepository for InMemoryClientAuthorizationRepository {
-    async fn create(
-        &self,
-        client_oid: ClientOid,
-        type_: ClientAuthorizationType,
-        data: serde_json::Value,
-        expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
-        let record = ClientAuthorization {
-            oid: Uuid::new_v4(),
-            client_oid,
-            type_,
-            data,
-            expires_at,
-            completed_at: None,
-            revoked_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-        };
-        self.records
-            .lock()
-            .unwrap()
-            .insert(record.oid, record.clone());
-        Ok(record)
-    }
-
-    async fn find_by_oid(
-        &self,
-        oid: Uuid,
-    ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
-        Ok(self.records.lock().unwrap().get(&oid).cloned())
-    }
-
-    async fn update_authorization_request_selection(
-        &self,
-        _oid: Uuid,
-        _session_oid: SessionOid,
-        _user_oid: Uuid,
-        _protected_session_id: Option<String>,
-        _source: identity_domain::client_authorization::SelectionSource,
-    ) -> Result<bool, ClientAuthorizationRepositoryError> {
-        Ok(false)
-    }
-
-    async fn record_authorization_request_consent(
-        &self,
-        _oid: Uuid,
-        _consent_state: identity_domain::client_authorization::ConsentState,
-        _decided_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<bool, ClientAuthorizationRepositoryError> {
-        Ok(false)
-    }
-
-    async fn mark_authorization_request_completed(
-        &self,
-        _oid: Uuid,
-        _completed_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<bool, ClientAuthorizationRepositoryError> {
-        Ok(false)
-    }
-
-    async fn revoke_access_tokens_for_authorization_code(
-        &self,
-        authorization_code_oid: Uuid,
-    ) -> Result<(), ClientAuthorizationRepositoryError> {
-        let authorization_code_oid = authorization_code_oid.to_string();
-        for record in self.records.lock().unwrap().values_mut() {
-            let should_revoke = record.type_ == ClientAuthorizationType::AccessToken
-                && serde_json::from_value::<AccessTokenData>(record.data.clone())
-                    .map(|data| {
-                        data.authorization_code_oid.as_deref()
-                            == Some(authorization_code_oid.as_str())
-                    })
-                    .unwrap_or(false);
-            if should_revoke {
-                record.revoked_at = Some(Utc::now());
-            }
-        }
-        Ok(())
-    }
-
-    async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {
-        if let Some(record) = self.records.lock().unwrap().get_mut(&oid) {
-            record.revoked_at = Some(Utc::now());
-        }
-        Ok(())
     }
 }

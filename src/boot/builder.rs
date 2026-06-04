@@ -12,7 +12,7 @@ use identity_infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
 use identity_infrastructure::database::repository::install::InstallPersistenceImpl;
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
-    config::{AppConfig, AppEnvironment},
+    config::{AppConfig, AppEnvironment, InstallConfig},
     database,
     database::seed,
     i18n::{I18n, init_error_i18n},
@@ -131,10 +131,17 @@ impl AppBuilder {
         tracing::info!("auto install: running from config");
 
         let cfg = &self.config.install;
+        tracing::info!(
+            domain = %cfg.domain.as_deref().unwrap_or("<none>"),
+            username = %cfg.username.as_deref().unwrap_or("<none>"),
+            "auto install: config values"
+        );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         let key_algorithm = parse_install_algorithm(cfg.key_algorithm.as_str())
             .unwrap_or(AsymmetricKeyAlgorithm::EcdsaP256);
         let svc = build_install_service(&settings, db.clone());
+
+        let domain = install_domain(cfg, &self.config);
 
         svc.install(InstallInput {
             username: cfg.username.clone().unwrap_or_default(),
@@ -145,7 +152,7 @@ impl AppBuilder {
                 )
             }),
             password: cfg.password.clone().unwrap_or_default(),
-            domain: cfg.domain.clone().unwrap_or_default(),
+            domain,
             key_algorithm,
         })
         .await?;
@@ -242,6 +249,24 @@ fn parse_install_algorithm(raw: &str) -> Option<AsymmetricKeyAlgorithm> {
     }
 }
 
-#[cfg(test)]
-mod tests {
+fn install_domain(cfg: &InstallConfig, config: &AppConfig) -> String {
+    let from_cfg = cfg.domain.as_deref().filter(|v| !v.trim().is_empty());
+    if let Some(domain) = from_cfg {
+        let is_url = domain.contains("://");
+        let has_dot = domain.contains('.');
+        if is_url || has_dot {
+            return domain.to_owned();
+        }
+    }
+    // Fall back to server host (same behaviour as old conformance_autosetup)
+    config
+        .server
+        .host
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or("https://localhost:5150")
+        .to_owned()
 }
+
+#[cfg(test)]
+mod tests {}

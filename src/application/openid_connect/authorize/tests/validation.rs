@@ -5,8 +5,8 @@ use super::*;
 async fn validate_request_rejects_missing_openid_scope() {
     let service = build_test_service(
         Arc::new(MissingClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let result = service.validate_request(params("profile email")).await;
@@ -18,8 +18,8 @@ async fn validate_request_rejects_missing_openid_scope() {
 async fn validate_request_rejects_unknown_scope() {
     let service = build_test_service(
         Arc::new(MissingClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let result = service
@@ -33,8 +33,8 @@ async fn validate_request_rejects_unknown_scope() {
 async fn validate_request_reports_missing_required_fields() {
     let service = build_test_service(
         Arc::new(MissingClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let params = AuthorizationRequestParams {
@@ -75,8 +75,8 @@ async fn validate_request_rejects_id_token_hint_from_other_issuer() {
     params.id_token_hint = Some(unsigned_id_token_hint("https://other.example.com/"));
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let result = service.validate_request(params).await;
@@ -99,8 +99,8 @@ fn unsigned_id_token_hint(issuer: &str) -> String {
 async fn validate_request_rejects_request_and_request_uri_together() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
     let params = AuthorizationRequestParams {
         request: Some("header.payload.signature".to_string()),
@@ -117,8 +117,8 @@ async fn validate_request_rejects_request_and_request_uri_together() {
 async fn validate_request_accepts_registered_redirect_uri() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let result = service.validate_request(params("openid profile")).await;
@@ -132,8 +132,8 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
         Arc::new(ScopedClientRepository {
             assigned_scopes: vec!["openid".to_string()],
         }),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let error = service
@@ -148,8 +148,8 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
 async fn prompt_none_combined_with_other_value_rejects() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let error = service
@@ -167,8 +167,8 @@ async fn prompt_none_combined_with_other_value_rejects() {
 async fn prompt_none_alone_is_accepted() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let result = service
@@ -187,8 +187,8 @@ async fn validate_request_rejects_unassigned_openid_scope() {
         Arc::new(ScopedClientRepository {
             assigned_scopes: vec!["profile".to_string()],
         }),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
 
     let error = service

@@ -32,6 +32,7 @@ allow-none-alg = []
 oidc-conformance = ["allow-none-alg"]
 
 [dev-dependencies]
+mockall = { workspace = true }
 openssl = { workspace = true }
 regex = { workspace = true }
 rstest = { workspace = true }

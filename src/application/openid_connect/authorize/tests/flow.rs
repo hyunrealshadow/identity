@@ -1,97 +1,19 @@
 use super::fixtures::*;
 use super::*;
+use crate::openid_connect::authorize::tests::fixtures::repositories::{
+    ClientAuthorizationState, completed_at_for_test, insert_legacy_authorization_request_for_test,
+    mock_client_auth_repo_with_state, set_stored_request_redirect_uri_for_test,
+};
+use crate::openid_connect::tests::fixtures::mocks::{
+    MockKeyJwkRepository, MockKeyRepository, user_repo_with,
+};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use identity_domain::client_authorization::{ConsentState, SelectionSource};
 use identity_domain::key::material::AsymmetricKeyData;
 use identity_domain::openid_connect::model::claim::JwtClaimNames;
 use sha2::{Digest, Sha256};
 
-struct HybridUserRepository {
-    user: User,
-}
-
-#[async_trait]
-impl UserRepository for HybridUserRepository {
-    async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
-        Ok((self.user.oid == oid).then_some(self.user.clone()))
-    }
-
-    async fn find_by_identifier(&self, _identifier: &str) -> Result<User, UserRepositoryError> {
-        Err(UserRepositoryError::UserNotFound)
-    }
-
-    async fn increment_failed_attempts(
-        &self,
-        _user_oid: UserOid,
-        _lock_until: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<(), UserRepositoryError> {
-        Ok(())
-    }
-
-    async fn reset_failed_attempts(&self, _user_oid: UserOid) -> Result<(), UserRepositoryError> {
-        Ok(())
-    }
-}
-
-struct HybridKeyRepository {
-    oid: KeyOid,
-    private_key: String,
-}
-
-type AuthorizeServiceWithRequestRepo =
-    (AuthorizeService, Arc<InMemoryClientAuthorizationRepository>);
-
-#[async_trait]
-impl KeyRepository for HybridKeyRepository {
-    async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-        Ok(None)
-    }
-
-    async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-        Ok(vec![Key {
-            oid: self.oid,
-            r#type: KeyType::Asymmetric,
-            data: KeyData::Asymmetric(AsymmetricKeyData {
-                public_key: String::new(),
-                private_key: self.private_key.clone(),
-                certificate: None,
-            }),
-            expires_at: None,
-            revoked_at: None,
-            created_at: Utc::now(),
-            updated_at: None,
-        }])
-    }
-
-    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn create(
-        &self,
-        _key_type: KeyType,
-        _data: &KeyData,
-        _expires_at: Option<chrono::DateTime<Utc>>,
-    ) -> Result<Key, KeyRepositoryError> {
-        unreachable!()
-    }
-
-    async fn update_certificate_by_oid(
-        &self,
-        _oid: KeyOid,
-        _certificate_pem: &str,
-    ) -> Result<Option<Key>, KeyRepositoryError> {
-        unreachable!()
-    }
-
-    async fn revoke_by_oid(
-        &self,
-        _oid: KeyOid,
-        _revoked_at: chrono::DateTime<Utc>,
-    ) -> Result<Option<Key>, KeyRepositoryError> {
-        unreachable!()
-    }
-}
+type AuthorizeServiceWithRequestRepo = (AuthorizeService, Arc<ClientAuthorizationState>);
 
 fn hybrid_user(user_oid: Uuid) -> User {
     User {
@@ -190,21 +112,70 @@ fn hybrid_binding(key_oid: KeyOid, binding_oid: Uuid) -> KeyJwk {
 }
 
 fn default_authorize_service_with_request_repo() -> AuthorizeServiceWithRequestRepo {
-    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let state = Arc::new(ClientAuthorizationState::default());
+    let mock_repo = Arc::new(mock_client_auth_repo_with_state(state.clone()));
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        request_repo.clone(),
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(empty_cred_repo()),
+        mock_repo,
+        Arc::new(mock_login_repo()),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
     );
 
-    (service, request_repo)
+    (service, state)
+}
+
+fn hybrid_key_repos(
+    private_key: &[u8],
+    key_oid: KeyOid,
+    binding_oid: Uuid,
+) -> (MockKeyRepository, MockKeyJwkRepository) {
+    let key = Key {
+        oid: key_oid,
+        r#type: KeyType::Asymmetric,
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            public_key: String::new(),
+            private_key: std::str::from_utf8(private_key).unwrap().to_string(),
+            certificate: None,
+        }),
+        expires_at: None,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let binding = hybrid_binding(key_oid, binding_oid);
+
+    let mut key_repo = MockKeyRepository::new();
+    let k = key.clone();
+    key_repo.expect_find_by_oid().returning(move |_| Ok(None));
+    key_repo
+        .expect_list_available_asymmetric()
+        .returning(move || Ok(vec![k.clone()]));
+    key_repo
+        .expect_list_available_symmetric()
+        .returning(|| Ok(vec![]));
+
+    let mut jwk_repo = MockKeyJwkRepository::new();
+    let b = vec![binding];
+    let b2 = b.clone();
+    jwk_repo
+        .expect_list_active()
+        .returning(move || Ok(b.clone()));
+    jwk_repo
+        .expect_find_active_by_key_oid_and_algorithm()
+        .returning(move |oid, alg| {
+            Ok(b2
+                .iter()
+                .find(|b| b.key_oid == oid && b.algorithm == alg)
+                .cloned())
+        });
+
+    (key_repo, jwk_repo)
 }
 
 #[tokio::test]
@@ -291,7 +262,7 @@ async fn load_stored_authorization_request_supports_legacy_plain_request_rows() 
         .validate_request(params("openid profile"))
         .await
         .unwrap();
-    let oid = request_repo.insert_legacy_authorization_request_for_test(&request);
+    let oid = insert_legacy_authorization_request_for_test(&request_repo, &request);
     let stored = service
         .load_stored_authorization_request(oid)
         .await
@@ -552,17 +523,20 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
         .create_authorization_request(&request)
         .await
         .unwrap();
-    request_repo.set_stored_request_redirect_uri_for_test(oid, "not a uri");
+    set_stored_request_redirect_uri_for_test(&request_repo, oid, "not a uri");
 
     let error = service
         .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
         .await
         .unwrap_err();
     assert_eq!(error.code(), 23052);
-    assert_eq!(request_repo.completed_at_for_test(oid), None);
+    assert_eq!(completed_at_for_test(&request_repo, oid), None);
 
-    request_repo
-        .set_stored_request_redirect_uri_for_test(oid, "https://client.example.com/callback");
+    set_stored_request_redirect_uri_for_test(
+        &request_repo,
+        oid,
+        "https://client.example.com/callback",
+    );
 
     let redirect = service
         .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
@@ -572,35 +546,33 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
     let query = redirect.query().unwrap();
     assert!(query.contains("code="));
     assert!(query.contains("state=state123"));
-    assert!(request_repo.completed_at_for_test(oid).is_some());
+    assert!(completed_at_for_test(&request_repo, oid).is_some());
 }
 
 #[tokio::test]
 async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_hash() {
-    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let request_repo = Arc::new(mock_client_auth_repo_with_state(Arc::new(
+        ClientAuthorizationState::default(),
+    )));
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
     let key_oid = KeyOid::from(Uuid::new_v4());
     let binding_oid = Uuid::new_v4();
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        request_repo,
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(HybridUserRepository {
-            user: hybrid_user(user_oid),
-        }),
-        Arc::new(HybridKeyRepository {
-            oid: key_oid,
-            private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![hybrid_binding(key_oid, binding_oid)],
-        }),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+    let service = {
+        let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
+        AuthorizeService::new(
+            Arc::new(FoundClientRepository),
+            Arc::new(empty_cred_repo()),
+            request_repo,
+            Arc::new(mock_login_repo()),
+            Arc::new(user_repo_with(hybrid_user(user_oid))),
+            Arc::new(key_repo),
+            Arc::new(jwk_repo),
+            provider_service(),
+            test_signing_algorithm_detector(),
+            test_data_protector(),
+        )
+    };
 
     let mut request_params = params("openid profile");
     request_params.response_type = "code id_token".to_string();
@@ -647,29 +619,28 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
 
 #[tokio::test]
 async fn approve_implicit_flow_returns_session_state() {
-    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let request_repo = Arc::new(mock_client_auth_repo_with_state(Arc::new(
+        ClientAuthorizationState::default(),
+    )));
     let (private_key, _public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
     let key_oid = KeyOid::from(Uuid::new_v4());
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        request_repo,
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(HybridUserRepository {
-            user: hybrid_user(user_oid),
-        }),
-        Arc::new(HybridKeyRepository {
-            oid: key_oid,
-            private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![hybrid_binding(key_oid, Uuid::new_v4())],
-        }),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+    let service = {
+        let binding_oid = Uuid::new_v4();
+        let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
+        AuthorizeService::new(
+            Arc::new(FoundClientRepository),
+            Arc::new(empty_cred_repo()),
+            request_repo,
+            Arc::new(mock_login_repo()),
+            Arc::new(user_repo_with(hybrid_user(user_oid))),
+            Arc::new(key_repo),
+            Arc::new(jwk_repo),
+            provider_service(),
+            test_signing_algorithm_detector(),
+            test_data_protector(),
+        )
+    };
 
     let mut request_params = params("openid profile");
     request_params.response_type = "id_token".to_string();
@@ -696,29 +667,28 @@ async fn approve_implicit_flow_returns_session_state() {
 
 #[tokio::test]
 async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
-    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let request_repo = Arc::new(mock_client_auth_repo_with_state(Arc::new(
+        ClientAuthorizationState::default(),
+    )));
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
     let key_oid = KeyOid::from(Uuid::new_v4());
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        request_repo,
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(HybridUserRepository {
-            user: hybrid_user(user_oid),
-        }),
-        Arc::new(HybridKeyRepository {
-            oid: key_oid,
-            private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![hybrid_binding(key_oid, Uuid::new_v4())],
-        }),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+    let service = {
+        let binding_oid = Uuid::new_v4();
+        let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
+        AuthorizeService::new(
+            Arc::new(FoundClientRepository),
+            Arc::new(empty_cred_repo()),
+            request_repo,
+            Arc::new(mock_login_repo()),
+            Arc::new(user_repo_with(hybrid_user(user_oid))),
+            Arc::new(key_repo),
+            Arc::new(jwk_repo),
+            provider_service(),
+            test_signing_algorithm_detector(),
+            test_data_protector(),
+        )
+    };
 
     let mut request_params = params("openid profile");
     request_params.response_type = "code id_token token".to_string();
@@ -761,29 +731,28 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
 
 #[tokio::test]
 async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce() {
-    let request_repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let request_repo = Arc::new(mock_client_auth_repo_with_state(Arc::new(
+        ClientAuthorizationState::default(),
+    )));
     let (private_key, _public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
     let key_oid = KeyOid::from(Uuid::new_v4());
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        request_repo,
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(HybridUserRepository {
-            user: hybrid_user(user_oid),
-        }),
-        Arc::new(HybridKeyRepository {
-            oid: key_oid,
-            private_key: std::str::from_utf8(&private_key).unwrap().to_string(),
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![hybrid_binding(key_oid, Uuid::new_v4())],
-        }),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+    let service = {
+        let binding_oid = Uuid::new_v4();
+        let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
+        AuthorizeService::new(
+            Arc::new(FoundClientRepository),
+            Arc::new(empty_cred_repo()),
+            request_repo,
+            Arc::new(mock_login_repo()),
+            Arc::new(user_repo_with(hybrid_user(user_oid))),
+            Arc::new(key_repo),
+            Arc::new(jwk_repo),
+            provider_service(),
+            test_signing_algorithm_detector(),
+            test_data_protector(),
+        )
+    };
 
     let mut request_params = params("openid profile");
     request_params.response_type = "code token".to_string();
@@ -874,29 +843,32 @@ async fn deny_authorization_request_failure_does_not_burn_interaction() {
         .create_authorization_request(&request)
         .await
         .unwrap();
-    request_repo.set_stored_request_redirect_uri_for_test(oid, "not a uri");
+    set_stored_request_redirect_uri_for_test(&request_repo, oid, "not a uri");
 
     let error = service.deny_authorization_request(oid).await.unwrap_err();
     assert_eq!(error.code(), 23052);
-    assert_eq!(request_repo.completed_at_for_test(oid), None);
+    assert_eq!(completed_at_for_test(&request_repo, oid), None);
 
-    request_repo
-        .set_stored_request_redirect_uri_for_test(oid, "https://client.example.com/callback");
+    set_stored_request_redirect_uri_for_test(
+        &request_repo,
+        oid,
+        "https://client.example.com/callback",
+    );
 
     let redirect = service.deny_authorization_request(oid).await.unwrap();
 
     let query = redirect.query().unwrap();
     assert!(query.contains("error=access_denied"));
     assert!(query.contains("state=state123"));
-    assert!(request_repo.completed_at_for_test(oid).is_some());
+    assert!(completed_at_for_test(&request_repo, oid).is_some());
 }
 
 #[test]
 fn sign_implicit_id_token_includes_scope_claims() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
@@ -958,8 +930,8 @@ fn sign_implicit_id_token_includes_scope_claims() {
 fn sign_implicit_id_token_includes_id_token_essential_claims() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
@@ -1008,8 +980,8 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
 fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();
@@ -1047,8 +1019,8 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
 fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryLoginRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
     );
     let (private_key, public_key) = signing_keypair();
     let user_oid = Uuid::new_v4();

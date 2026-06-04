@@ -5,7 +5,7 @@ pub mod provider;
 pub mod registration;
 pub mod session;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 pub mod token;
 pub mod user_info;
 

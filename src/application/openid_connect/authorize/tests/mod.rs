@@ -39,15 +39,14 @@ use identity_domain::{
         ClientAuthorizationType,
     },
     key::{
-        CreateKeyJwkInput, JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyJwkRepository,
-        KeyJwkRepositoryError, KeyOid, KeyType, PublicJwk,
+        JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid, KeyType, PublicJwk,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
         repository::{KeyRepository, KeyRepositoryError},
     },
     openid_connect::{
         OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
         OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
-        OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
+        OpenIdConnectCredentialType,
     },
     setting::installation::{InstallationSetting, InstallationState},
     user::{

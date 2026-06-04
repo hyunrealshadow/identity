@@ -1,4 +1,11 @@
 use super::*;
+use crate::openid_connect::authorize::tests::fixtures::repositories::{
+    ClientAuthorizationState, mock_client_auth_repo_with_state,
+};
+use crate::openid_connect::tests::fixtures::mocks::{
+    MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
+    MockOpenIdConnectCredentialRepository, MockUserRepository,
+};
 
 pub(in crate::openid_connect) struct StaticInstallationProvider {
     pub(in crate::openid_connect) value: Arc<InstallationState>,
@@ -22,196 +29,6 @@ pub(in crate::openid_connect) fn provider_service() -> Arc<OpenIdProviderService
             }),
         },
     )))
-}
-
-pub(in crate::openid_connect) struct MockKeyRepository;
-
-#[async_trait]
-impl KeyRepository for MockKeyRepository {
-    async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-        Ok(None)
-    }
-
-    async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-        let raw_key = base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]);
-        Ok(vec![Key {
-            oid: KeyOid::from(Uuid::new_v4()),
-            r#type: KeyType::Symmetric,
-            data: KeyData::Symmetric(SymmetricKeyData {
-                key: raw_key,
-                algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
-            }),
-            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
-            revoked_at: None,
-            created_at: Utc::now(),
-            updated_at: None,
-        }])
-    }
-
-    async fn create(
-        &self,
-        _key_type: KeyType,
-        _data: &KeyData,
-        _expires_at: Option<chrono::DateTime<Utc>>,
-    ) -> Result<Key, KeyRepositoryError> {
-        unimplemented!()
-    }
-
-    async fn update_certificate_by_oid(
-        &self,
-        _oid: KeyOid,
-        _certificate_pem: &str,
-    ) -> Result<Option<Key>, KeyRepositoryError> {
-        unimplemented!()
-    }
-
-    async fn revoke_by_oid(
-        &self,
-        _oid: KeyOid,
-        _revoked_at: chrono::DateTime<Utc>,
-    ) -> Result<Option<Key>, KeyRepositoryError> {
-        unimplemented!()
-    }
-}
-
-pub(in crate::openid_connect) struct StubUserRepository;
-
-#[async_trait]
-impl UserRepository for StubUserRepository {
-    async fn find_by_oid(&self, _oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
-        Ok(None)
-    }
-
-    async fn find_by_identifier(&self, _identifier: &str) -> Result<User, UserRepositoryError> {
-        Err(UserRepositoryError::UserNotFound)
-    }
-
-    async fn increment_failed_attempts(
-        &self,
-        _user_oid: UserOid,
-        _lock_until: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<(), UserRepositoryError> {
-        Ok(())
-    }
-
-    async fn reset_failed_attempts(&self, _user_oid: UserOid) -> Result<(), UserRepositoryError> {
-        Ok(())
-    }
-}
-
-pub(in crate::openid_connect) struct StubKeyRepository;
-
-pub(in crate::openid_connect) struct EmptyKeyJwkRepository;
-
-pub(in crate::openid_connect) struct InMemoryKeyJwkRepository {
-    pub(in crate::openid_connect) bindings: Vec<KeyJwk>,
-}
-
-#[async_trait]
-impl KeyRepository for StubKeyRepository {
-    async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-        Ok(None)
-    }
-
-    async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn create(
-        &self,
-        _key_type: KeyType,
-        _data: &KeyData,
-        _expires_at: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<Key, KeyRepositoryError> {
-        unimplemented!()
-    }
-
-    async fn update_certificate_by_oid(
-        &self,
-        _oid: KeyOid,
-        _certificate_pem: &str,
-    ) -> Result<Option<Key>, KeyRepositoryError> {
-        unimplemented!()
-    }
-
-    async fn revoke_by_oid(
-        &self,
-        _oid: KeyOid,
-        _revoked_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Option<Key>, KeyRepositoryError> {
-        unimplemented!()
-    }
-}
-
-#[async_trait]
-impl KeyJwkRepository for EmptyKeyJwkRepository {
-    async fn create_batch(
-        &self,
-        _inputs: Vec<CreateKeyJwkInput>,
-    ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        unreachable!()
-    }
-
-    async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn find_active_by_key_oid_and_algorithm(
-        &self,
-        _key_oid: KeyOid,
-        _algorithm: &str,
-    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
-        Ok(None)
-    }
-
-    async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
-        unreachable!()
-    }
-}
-
-#[async_trait]
-impl KeyJwkRepository for InMemoryKeyJwkRepository {
-    async fn create_batch(
-        &self,
-        _inputs: Vec<CreateKeyJwkInput>,
-    ) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        unreachable!()
-    }
-
-    async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        Ok(self.bindings.clone())
-    }
-
-    async fn find_active_by_key_oid_and_algorithm(
-        &self,
-        key_oid: KeyOid,
-        algorithm: &str,
-    ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
-        Ok(self
-            .bindings
-            .iter()
-            .find(|binding| binding.key_oid == key_oid && binding.algorithm == algorithm)
-            .cloned())
-    }
-
-    async fn delete_by_key_oid(&self, _key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
-        unreachable!()
-    }
-}
-
-pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector> {
-    Arc::new(DataProtectorImpl::new(
-        Arc::new(MockKeyRepository),
-        Arc::new(TestCipher),
-    ))
 }
 
 struct TestCipher;
@@ -242,6 +59,42 @@ pub(in crate::openid_connect) fn test_signing_algorithm_detector()
     Arc::new(TestSigningAlgorithmDetector)
 }
 
+pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector> {
+    let mut key_repo = MockallKeyRepository::new();
+    key_repo.expect_find_by_oid().returning(|_| Ok(None));
+    key_repo
+        .expect_list_available_asymmetric()
+        .returning(|| Ok(vec![]));
+    key_repo.expect_list_available_symmetric().returning(|| {
+        let raw_key = base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]);
+        Ok(vec![Key {
+            oid: KeyOid::from(Uuid::new_v4()),
+            r#type: KeyType::Symmetric,
+            data: KeyData::Symmetric(SymmetricKeyData {
+                key: raw_key,
+                algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
+            }),
+            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }])
+    });
+    key_repo
+        .expect_create()
+        .returning(|_, _, _| unimplemented!());
+    key_repo
+        .expect_update_certificate_by_oid()
+        .returning(|_, _| unimplemented!());
+    key_repo
+        .expect_revoke_by_oid()
+        .returning(|_, _| unimplemented!());
+    Arc::new(DataProtectorImpl::new(
+        Arc::new(key_repo),
+        Arc::new(TestCipher),
+    ))
+}
+
 struct TestSigningAlgorithmDetector;
 
 impl SigningAlgorithmDetector for TestSigningAlgorithmDetector {
@@ -258,16 +111,43 @@ pub(in crate::openid_connect) fn build_test_service(
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     login_repo: Arc<dyn LoginRepository>,
 ) -> AuthorizeService {
+    let state = Arc::new(ClientAuthorizationState::default());
+    let auth_repo = Arc::new(mock_client_auth_repo_with_state(state));
     AuthorizeService::new(
         client_repo,
         credential_repo,
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
+        auth_repo,
         login_repo,
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
     )
+}
+
+pub(in crate::openid_connect) fn stub_key_repo() -> MockallKeyRepository {
+    let mut mock = MockallKeyRepository::new();
+    mock.expect_find_by_oid().returning(|_| Ok(None));
+    mock.expect_list_available_asymmetric()
+        .returning(|| Ok(vec![]));
+    mock.expect_list_available_symmetric()
+        .returning(|| Ok(vec![]));
+    mock
+}
+
+pub(in crate::openid_connect) fn stub_user_repo() -> MockUserRepository {
+    let mut mock = MockUserRepository::new();
+    mock.expect_find_by_oid().returning(|_| Ok(None));
+    mock.expect_find_by_identifier()
+        .returning(|_| Err(UserRepositoryError::UserNotFound));
+    mock
+}
+
+pub(in crate::openid_connect) fn empty_cred_repo() -> MockOpenIdConnectCredentialRepository {
+    let mut mock = MockOpenIdConnectCredentialRepository::new();
+    mock.expect_find_by_client_oid_and_type()
+        .returning(|_, _| Ok(vec![]));
+    mock
 }

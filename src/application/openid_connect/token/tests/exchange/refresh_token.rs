@@ -4,7 +4,7 @@ use identity_domain::auth::SessionOid;
 
 #[tokio::test]
 async fn exchange_refresh_token_returns_new_access_token() {
-    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
     let service = build_token_service(repo.clone(), user_oid);
 
@@ -83,7 +83,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
 #[tokio::test]
 async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signing_key() {
-    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
     let key = key_data_for_algorithm("ES256");
     let signing_key = Key {
@@ -106,12 +106,8 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
     );
     let service = TokenService::new(
         repo.clone(),
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![signing_key],
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
+        Arc::new(key_repo_with_keys(vec![signing_key])),
+        Arc::new(jwk_repo_with_bindings(vec![binding])),
         Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
@@ -148,21 +144,19 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             },
         }),
         Arc::new(InMemoryClientRepository),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientSecret,
-                hint: "token".to_string(),
-                data: OpenIdConnectCredentialData::ClientSecret {
-                    secret: "secret-123".to_string(),
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
+        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+            oid: Uuid::new_v4(),
+            client_oid: Uuid::nil(),
+            r#type: OpenIdConnectCredentialType::ClientSecret,
+            hint: "token".to_string(),
+            data: OpenIdConnectCredentialData::ClientSecret {
+                secret: "secret-123".to_string(),
+            },
+            expires_at: Utc::now() + chrono::Duration::days(1),
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }])),
         provider_service(),
         signing_algorithm_detector(),
         InMemoryDataProtector::new(),
@@ -221,7 +215,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
 
 #[tokio::test]
 async fn refresh_token_preserves_auth_time_from_original_authentication() {
-    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
@@ -247,12 +241,8 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     );
     let service = TokenService::new(
         repo.clone(),
-        Arc::new(InMemoryKeyRepository {
-            keys: vec![signing_key],
-        }),
-        Arc::new(InMemoryKeyJwkRepository {
-            bindings: vec![binding],
-        }),
+        Arc::new(key_repo_with_keys(vec![signing_key])),
+        Arc::new(jwk_repo_with_bindings(vec![binding])),
         Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
@@ -289,21 +279,19 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             },
         }),
         Arc::new(InMemoryClientRepository),
-        Arc::new(InMemoryCredentialRepository {
-            credentials: vec![OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientSecret,
-                hint: "token".to_string(),
-                data: OpenIdConnectCredentialData::ClientSecret {
-                    secret: "secret-123".to_string(),
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            }],
-        }),
+        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+            oid: Uuid::new_v4(),
+            client_oid: Uuid::nil(),
+            r#type: OpenIdConnectCredentialType::ClientSecret,
+            hint: "token".to_string(),
+            data: OpenIdConnectCredentialData::ClientSecret {
+                secret: "secret-123".to_string(),
+            },
+            expires_at: Utc::now() + chrono::Duration::days(1),
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }])),
         provider_service(),
         signing_algorithm_detector(),
         InMemoryDataProtector::new(),
@@ -403,7 +391,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
 
 #[tokio::test]
 async fn refresh_token_stores_none_auth_time_when_code_has_none() {
-    let repo = Arc::new(InMemoryClientAuthorizationRepository::default());
+    let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
     let service = build_token_service(repo.clone(), user_oid);
 

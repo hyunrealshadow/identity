@@ -1,4 +1,10 @@
 use super::*;
+use crate::openid_connect::authorize::tests::fixtures::repositories::{
+    ClientAuthorizationState, mock_client_auth_repo_with_state,
+};
+use crate::openid_connect::tests::fixtures::mocks::{
+    MockKeyJwkRepository, MockOpenIdConnectCredentialRepository,
+};
 
 pub(in crate::openid_connect) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
     let rsa = Rsa::generate(2048).unwrap();
@@ -11,31 +17,35 @@ pub(in crate::openid_connect) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
 pub(in crate::openid_connect) fn authorize_service_with_public_key(
     public_key: Vec<u8>,
 ) -> AuthorizeService {
-    let credential_repo = InMemoryCredentialRepository {
-        credentials: Mutex::new(vec![OpenIdConnectCredential {
-            oid: Uuid::new_v4(),
-            client_oid: TEST_CLIENT_ID,
-            r#type: OpenIdConnectCredentialType::ClientPublicKey,
-            hint: "request_object".to_string(),
-            data: OpenIdConnectCredentialData::ClientPublicKey {
-                public_key: String::from_utf8(public_key).unwrap(),
-                jwk: None,
-            },
-            expires_at: chrono::Utc::now(),
-            revoked_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-        }]),
-    };
+    let creds = vec![OpenIdConnectCredential {
+        oid: Uuid::new_v4(),
+        client_oid: TEST_CLIENT_ID,
+        r#type: OpenIdConnectCredentialType::ClientPublicKey,
+        hint: "request_object".to_string(),
+        data: OpenIdConnectCredentialData::ClientPublicKey {
+            public_key: String::from_utf8(public_key).unwrap(),
+            jwk: None,
+        },
+        expires_at: chrono::Utc::now(),
+        revoked_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    }];
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_by_client_oid_and_type()
+        .returning(move |_, _| Ok(creds.clone()));
 
     AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(credential_repo),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+            ClientAuthorizationState::default(),
+        ))),
+        Arc::new(mock_login_repo()),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -49,12 +59,14 @@ pub(in crate::openid_connect) fn authorize_service_with_request_uri(
         Arc::new(RequestUriClientRepository {
             request_uris: vec![Url::parse(request_uri).unwrap()],
         }),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+            ClientAuthorizationState::default(),
+        ))),
+        Arc::new(mock_login_repo()),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),

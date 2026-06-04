@@ -1,7 +1,13 @@
+use crate::openid_connect::authorize::tests::fixtures::repositories::{
+    ClientAuthorizationState, mock_client_auth_repo_with_state,
+};
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
 use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
+};
+use crate::openid_connect::tests::fixtures::mocks::{
+    MockKeyJwkRepository, MockOpenIdConnectCredentialRepository,
 };
 
 #[tokio::test]
@@ -43,12 +49,14 @@ async fn parse_request_object_payload_preserves_registered_claims() {
 async fn parse_unsecured_request_object_is_accepted() {
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
-        Arc::new(InMemoryCredentialRepository::default()),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+            ClientAuthorizationState::default(),
+        ))),
+        Arc::new(mock_login_repo()),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -101,31 +109,35 @@ async fn parse_rs256_request_object_extracts_payload() {
     let private_key = rsa.private_key_to_pem().unwrap();
     let public_key = rsa.public_key_to_pem().unwrap();
 
-    let credential_repo = InMemoryCredentialRepository {
-        credentials: Mutex::new(vec![OpenIdConnectCredential {
-            oid: Uuid::new_v4(),
-            client_oid: Uuid::nil(),
-            r#type: OpenIdConnectCredentialType::ClientPublicKey,
-            hint: "request_object".to_string(),
-            data: OpenIdConnectCredentialData::ClientPublicKey {
-                public_key: String::from_utf8(public_key).unwrap(),
-                jwk: None,
-            },
-            expires_at: chrono::Utc::now(),
-            revoked_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-        }]),
-    };
+    let creds = vec![OpenIdConnectCredential {
+        oid: Uuid::new_v4(),
+        client_oid: Uuid::nil(),
+        r#type: OpenIdConnectCredentialType::ClientPublicKey,
+        hint: "request_object".to_string(),
+        data: OpenIdConnectCredentialData::ClientPublicKey {
+            public_key: String::from_utf8(public_key).unwrap(),
+            jwk: None,
+        },
+        expires_at: chrono::Utc::now(),
+        revoked_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    }];
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_by_client_oid_and_type()
+        .returning(move |_, _| Ok(creds.clone()));
 
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(credential_repo),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+            ClientAuthorizationState::default(),
+        ))),
+        Arc::new(mock_login_repo()),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),
@@ -159,30 +171,34 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
     let private_key = rsa.private_key_to_pem().unwrap();
     let public_key = rsa.public_key_to_pem().unwrap();
 
-    let credential_repo = InMemoryCredentialRepository {
-        credentials: Mutex::new(vec![OpenIdConnectCredential {
-            oid: Uuid::new_v4(),
-            client_oid: TEST_CLIENT_ID,
-            r#type: OpenIdConnectCredentialType::ClientPublicKey,
-            hint: "request_object".to_string(),
-            data: OpenIdConnectCredentialData::ClientPublicKey {
-                public_key: String::from_utf8(public_key).unwrap(),
-                jwk: None,
-            },
-            expires_at: chrono::Utc::now(),
-            revoked_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-        }]),
-    };
+    let creds = vec![OpenIdConnectCredential {
+        oid: Uuid::new_v4(),
+        client_oid: TEST_CLIENT_ID,
+        r#type: OpenIdConnectCredentialType::ClientPublicKey,
+        hint: "request_object".to_string(),
+        data: OpenIdConnectCredentialData::ClientPublicKey {
+            public_key: String::from_utf8(public_key).unwrap(),
+            jwk: None,
+        },
+        expires_at: chrono::Utc::now(),
+        revoked_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    }];
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_by_client_oid_and_type()
+        .returning(move |_, _| Ok(creds.clone()));
     let service = AuthorizeService::new(
         Arc::new(FoundClientRepository),
         Arc::new(credential_repo),
-        Arc::new(InMemoryClientAuthorizationRepository::default()),
-        Arc::new(InMemoryLoginRepository),
-        Arc::new(StubUserRepository),
-        Arc::new(StubKeyRepository),
-        Arc::new(EmptyKeyJwkRepository),
+        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+            ClientAuthorizationState::default(),
+        ))),
+        Arc::new(mock_login_repo()),
+        Arc::new(stub_user_repo()),
+        Arc::new(stub_key_repo()),
+        Arc::new(MockKeyJwkRepository::new()),
         provider_service(),
         test_signing_algorithm_detector(),
         test_data_protector(),

@@ -77,6 +77,7 @@ impl<R: SettingRepository> InstallService<R> {
     }
 
     pub async fn install(&self, input: InstallInput) -> Result<(), AppError> {
+        tracing::info!("install: starting");
         if self.is_initialized() {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
@@ -85,6 +86,7 @@ impl<R: SettingRepository> InstallService<R> {
         let email = normalize_email(&input.email)?;
         let password = normalize_required(&input.password, "password")?;
         let domain = normalize_domain(&input.domain)?;
+        tracing::info!("install: validations passed, persisting");
 
         input.key_algorithm.validate().map_err(|_| {
             AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
@@ -118,6 +120,7 @@ impl<R: SettingRepository> InstallService<R> {
             })
             .await?;
 
+        tracing::info!("install: persistence done, writing settings");
         self.installation_initialized.set(true).await?;
         self.installation_domain
             .set(installation_state.domain.clone())

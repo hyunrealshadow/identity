@@ -24,6 +24,7 @@ include_dir = { version = "0.7" }
 insta = { version = "1.34", features = ["redactions", "yaml", "filters"] }
 josekit = { version = "0.10.3" }
 migration = { path = "migration" }
+mockall = { version = "0.14" }
 openssl = { version = "0.10" }
 password-hash = { version = "0.5" }
 rand = { version = "0.8" }
