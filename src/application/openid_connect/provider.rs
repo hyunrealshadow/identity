@@ -603,9 +603,9 @@ mod tests {
         let mut mock = MockKeyRepository::new();
         mock.expect_find_by_oid().returning(|_| Ok(None));
         mock.expect_list_available_asymmetric().returning(|| {
-            Err(KeyRepositoryError::ListAvailableFailed(
+            Err(KeyRepositoryError::ListAvailableFailed(Box::new(
                 sea_orm::DbErr::Custom("boom".to_owned()),
-            ))
+            )))
         });
         mock.expect_list_available_symmetric()
             .returning(|| Ok(vec![]));

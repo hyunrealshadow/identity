@@ -7,10 +7,10 @@ use crate::key::{Key, KeyData, KeyOid, KeyType};
 #[derive(Debug, Error)]
 pub enum KeyRepositoryError {
     #[error("failed to query key")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to list available keys")]
-    ListAvailableFailed(#[source] sea_orm::DbErr),
+    ListAvailableFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to serialize key data")]
     Serialize(#[source] serde_json::Error),
@@ -25,10 +25,10 @@ pub enum KeyRepositoryError {
     CertificateRequiresAsymmetricKey,
 
     #[error("failed to create key")]
-    CreateFailed(#[source] sea_orm::DbErr),
+    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to update key")]
-    UpdateFailed(#[source] sea_orm::DbErr),
+    UpdateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[async_trait]

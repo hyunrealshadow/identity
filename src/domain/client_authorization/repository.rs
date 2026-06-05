@@ -54,5 +54,5 @@ pub trait ClientAuthorizationRepository: Send + Sync {
 #[derive(Debug, thiserror::Error)]
 pub enum ClientAuthorizationRepositoryError {
     #[error("failed to query client authorization")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

@@ -55,7 +55,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .filter(login::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(None);
         };
@@ -63,21 +63,21 @@ impl LoginRepository for LoginRepositoryImpl {
         let client_model = ClientEntity::find_by_id(model.client_id)
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let client_authorization_model =
             ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
                 .one(&self.db)
                 .await
-                .map_err(LoginRepositoryError::QueryFailed)?
+                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         let user_oid = match model.user_id {
             Some(user_id) => UserEntity::find_by_id(user_id)
                 .one(&self.db)
                 .await
-                .map_err(LoginRepositoryError::QueryFailed)?
+                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .map(|user| user.oid),
             None => None,
         };
@@ -86,7 +86,7 @@ impl LoginRepository for LoginRepositoryImpl {
             Some(session_id) => SessionEntity::find_by_id(session_id)
                 .one(&self.db)
                 .await
-                .map_err(LoginRepositoryError::QueryFailed)?
+                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .map(|session| SessionOid(session.oid)),
             None => None,
         };
@@ -110,14 +110,14 @@ impl LoginRepository for LoginRepositoryImpl {
             .filter(client::Column::Oid.eq(client_oid))
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let client_authorization_model = ClientAuthorizationEntity::find()
             .filter(client_authorization::Column::Oid.eq(client_authorization_oid))
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let now = Utc::now();
@@ -135,7 +135,7 @@ impl LoginRepository for LoginRepositoryImpl {
         let model = active
             .insert(&self.db)
             .await
-            .map_err(LoginRepositoryError::CreateFailed)?;
+            .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
         Ok(to_domain(
             model,
             client_oid,
@@ -155,14 +155,14 @@ impl LoginRepository for LoginRepositoryImpl {
             .filter(user::Column::Oid.eq(user_oid))
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let model = LoginEntity::find()
             .filter(login::Column::Oid.eq(login_oid))
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         let mut active: login::ActiveModel = model.into();
@@ -173,19 +173,19 @@ impl LoginRepository for LoginRepositoryImpl {
         let model = active
             .update(&self.db)
             .await
-            .map_err(LoginRepositoryError::UpdateFailed)?;
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
 
         let client_model = ClientEntity::find_by_id(model.client_id)
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let client_authorization_model =
             ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
                 .one(&self.db)
                 .await
-                .map_err(LoginRepositoryError::QueryFailed)?
+                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         Ok(to_domain(
@@ -208,7 +208,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .filter(login::Column::Oid.eq(login_oid))
             .one(&self.db)
             .await
-            .map_err(LoginRepositoryError::QueryFailed)?
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         let session_id = if let Some(s_oid) = session_oid {
@@ -216,7 +216,7 @@ impl LoginRepository for LoginRepositoryImpl {
                 .filter(session::Column::Oid.eq(Uuid::from(s_oid)))
                 .one(&self.db)
                 .await
-                .map_err(LoginRepositoryError::QueryFailed)?
+                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::SessionNotFound)?;
             Some(session.id)
         } else {
@@ -235,7 +235,7 @@ impl LoginRepository for LoginRepositoryImpl {
         active
             .update(&self.db)
             .await
-            .map_err(LoginRepositoryError::UpdateFailed)?;
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         Ok(())
     }
 
@@ -266,7 +266,7 @@ impl LoginRepository for LoginRepositoryImpl {
         update
             .exec(&self.db)
             .await
-            .map_err(LoginRepositoryError::IncrementFailedAttempts)?;
+            .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
         Ok(())
     }
 }

@@ -33,9 +33,9 @@ fn parse_stored_authorization_request(
             })
         })
         .map_err(|_| {
-            ClientAuthorizationRepositoryError::QueryFailed(sea_orm::DbErr::Type(
+            ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
                 "invalid authorization_request payload".into(),
-            ))
+            )))
         })
 }
 
@@ -75,9 +75,9 @@ fn to_domain(
             .r#type
             .parse::<ClientAuthorizationType>()
             .map_err(|_| {
-                ClientAuthorizationRepositoryError::QueryFailed(sea_orm::DbErr::Type(
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
                     "invalid client_authorization.type".into(),
-                ))
+                )))
             })?,
         data: model.data,
         expires_at: model.expires_at.with_timezone(&Utc),
@@ -111,11 +111,11 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client::Column::Oid.eq(client_oid))
             .one(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or_else(|| {
-                ClientAuthorizationRepositoryError::QueryFailed(sea_orm::DbErr::RecordNotFound(
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::RecordNotFound(
                     format!("client {client_oid} not found"),
-                ))
+                )))
             })?;
 
         let now = Utc::now();
@@ -133,7 +133,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         }
         .insert(&self.db)
         .await
-        .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+        .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         to_domain(model, client_oid)
     }
@@ -148,7 +148,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .select_also(ClientEntity)
             .one(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(None);
         };
@@ -168,7 +168,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(false);
         };
@@ -202,7 +202,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(selection_update_condition(&model))
             .exec(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(result.rows_affected == 1)
     }
@@ -217,7 +217,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(false);
         };
@@ -249,7 +249,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(selection_update_condition(&model))
             .exec(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(result.rows_affected == 1)
     }
@@ -276,7 +276,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             )
             .exec(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(result.rows_affected == 1)
     }
@@ -309,7 +309,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             )
             .exec(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(())
     }
@@ -319,7 +319,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(());
         };
@@ -330,7 +330,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         active
             .update(&self.db)
             .await
-            .map_err(ClientAuthorizationRepositoryError::QueryFailed)?;
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(())
     }

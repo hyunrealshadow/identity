@@ -59,7 +59,7 @@ impl SettingRepository for SettingRepositoryImpl {
             .filter(setting::Column::Key.eq(S::KEY))
             .one(&self.db)
             .await
-            .map_err(SettingRepositoryError::QueryFailed)?
+            .map_err(|e| SettingRepositoryError::QueryFailed(Box::new(e)))?
             .map(to_domain::<S>)
             .transpose()
     }
@@ -81,7 +81,7 @@ impl SettingRepository for SettingRepositoryImpl {
             .filter(setting::Column::Key.eq(S::KEY))
             .one(&self.db)
             .await
-            .map_err(SettingRepositoryError::QueryFailed)?
+            .map_err(|e| SettingRepositoryError::QueryFailed(Box::new(e)))?
         {
             let mut active: setting::ActiveModel = model.into();
             active.value = Set(serialized);
@@ -91,7 +91,7 @@ impl SettingRepository for SettingRepositoryImpl {
                 active
                     .update(&self.db)
                     .await
-                    .map_err(SettingRepositoryError::UpdateFailed)?,
+                    .map_err(|e| SettingRepositoryError::UpdateFailed(Box::new(e)))?,
             )
         } else {
             let active = setting::ActiveModel {
@@ -107,7 +107,7 @@ impl SettingRepository for SettingRepositoryImpl {
                 active
                     .insert(&self.db)
                     .await
-                    .map_err(SettingRepositoryError::CreateFailed)?,
+                    .map_err(|e| SettingRepositoryError::CreateFailed(Box::new(e)))?,
             )
         }
     }

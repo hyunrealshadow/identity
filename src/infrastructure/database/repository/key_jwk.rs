@@ -70,7 +70,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
         let results = KeyJwkEntity::insert_many(models)
             .exec_with_returning(&self.db)
             .await
-            .map_err(KeyJwkRepositoryError::CreateBatchFailed)?;
+            .map_err(|e| KeyJwkRepositoryError::CreateBatchFailed(Box::new(e)))?;
 
         Ok(results
             .into_iter()
@@ -85,7 +85,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .filter(key::Column::RevokedAt.is_null())
             .all(&self.db)
             .await
-            .map_err(KeyJwkRepositoryError::ListActiveFailed)?
+            .map_err(|e| KeyJwkRepositoryError::ListActiveFailed(Box::new(e)))?
             .into_iter()
             .map(to_domain)
             .collect()
@@ -105,7 +105,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .filter(key_jwk::Column::Algorithm.eq(algorithm))
             .one(&self.db)
             .await
-            .map_err(KeyJwkRepositoryError::ListByKeyFailed)?
+            .map_err(|e| KeyJwkRepositoryError::ListByKeyFailed(Box::new(e)))?
             .map(to_domain)
             .transpose()
     }
@@ -115,7 +115,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))
             .exec(&self.db)
             .await
-            .map_err(KeyJwkRepositoryError::DeleteByKeyFailed)?;
+            .map_err(|e| KeyJwkRepositoryError::DeleteByKeyFailed(Box::new(e)))?;
         Ok(())
     }
 }

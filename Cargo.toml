@@ -15,22 +15,14 @@ async-trait = { version = "0.1" }
 base64 = { version = "0.22" }
 chacha20poly1305 = { version = "0.10" }
 chrono = { version = "0.4" }
-fluent-templates = { version = "0.13", features = ["tera"] }
-hex = { version = "0.4" }
-hkdf = { version = "0.12" }
 http = "1"
 idna = { version = "1" }
-include_dir = { version = "0.7" }
-insta = { version = "1.34", features = ["redactions", "yaml", "filters"] }
 josekit = { version = "0.10.3" }
 migration = { path = "migration" }
-mockall = { version = "0.14" }
 openssl = { version = "0.10" }
-password-hash = { version = "0.5" }
 rand = { version = "0.8" }
 regex = { version = "1.11" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-rstest = { version = "0.25" }
 salvo = { version = "0.92.1", features = ["affix-state", "csrf", "serve-static", "test", "rustls"] }
 sea-orm = { version = "2.0.0-rc.37", features = [
   "sqlx-postgres",
@@ -40,9 +32,9 @@ sea-orm = { version = "2.0.0-rc.37", features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-serde_yml = { version = "0.0.12" }
 serial_test = { version = "3.1.1" }
 sha2 = { version = "0.10" }
+subtle = { version = "2" }
 tera = { version = "1.20" }
 thiserror = { version = "1" }
 tokio = { version = "1.45", default-features = false, features = [
@@ -53,15 +45,10 @@ tokio = { version = "1.45", default-features = false, features = [
   "sync",
   "time",
 ] }
-subtle = { version = "2" }
-totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 tracing = { version = "0.1" }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 unic-langid = { version = "0.9" }
 url = { version = "2", features = ["serde"] }
-urlencoding = { version = "2.1" }
 uuid = { version = "1.6", features = ["v4"] }
-validator = { version = "0.20" }
 woothee = { version = "0.13" }
 
 [workspace.dependencies.identity-application]

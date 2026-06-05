@@ -8,37 +8,37 @@ use crate::auth::model::{ActiveSession, Login, Session, SessionOid};
 #[derive(Debug, Error)]
 pub enum SessionRepositoryError {
     #[error("failed to query session")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to query active sessions")]
-    ListActiveFailed(#[source] sea_orm::DbErr),
+    ListActiveFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("user not found while creating session")]
     UserNotFound,
 
     #[error("failed to create session")]
-    CreateFailed(#[source] sea_orm::DbErr),
+    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("session not found for touch")]
     SessionNotFound,
 
     #[error("failed to update session activity")]
-    TouchFailed(#[source] sea_orm::DbErr),
+    TouchFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to revoke session")]
-    RevokeFailed(#[source] sea_orm::DbErr),
+    RevokeFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Debug, Error)]
 pub enum LoginRepositoryError {
     #[error("failed to query login")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("user not found while creating login")]
     UserNotFound,
 
     #[error("failed to create login")]
-    CreateFailed(#[source] sea_orm::DbErr),
+    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("login not found")]
     LoginNotFound,
@@ -47,10 +47,10 @@ pub enum LoginRepositoryError {
     SessionNotFound,
 
     #[error("failed to update login")]
-    UpdateFailed(#[source] sea_orm::DbErr),
+    UpdateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to increment login failed attempts")]
-    IncrementFailedAttempts(#[source] sea_orm::DbErr),
+    IncrementFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 // ─── SessionRepository ───────────────────────────────────────────────────────

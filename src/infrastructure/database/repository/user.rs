@@ -70,7 +70,7 @@ impl UserRepository for UserRepositoryImpl {
             )
             .one(&self.db)
             .await
-            .map_err(UserRepositoryError::QueryFailed)?;
+            .map_err(|e| UserRepositoryError::QueryFailed(Box::new(e)))?;
         model
             .map(to_domain)
             .ok_or(UserRepositoryError::UserNotFound)
@@ -81,7 +81,7 @@ impl UserRepository for UserRepositoryImpl {
             .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
             .one(&self.db)
             .await
-            .map_err(UserRepositoryError::QueryFailed)?;
+            .map_err(|e| UserRepositoryError::QueryFailed(Box::new(e)))?;
         Ok(model.map(to_domain))
     }
 
@@ -115,7 +115,7 @@ impl UserRepository for UserRepositoryImpl {
         update
             .exec(&self.db)
             .await
-            .map_err(UserRepositoryError::UpdateFailedAttempts)?;
+            .map_err(|e| UserRepositoryError::UpdateFailedAttempts(Box::new(e)))?;
         Ok(())
     }
 
@@ -137,7 +137,7 @@ impl UserRepository for UserRepositoryImpl {
             .filter(user::Column::Oid.eq(oid))
             .exec(&self.db)
             .await
-            .map_err(UserRepositoryError::ResetFailedAttempts)?;
+            .map_err(|e| UserRepositoryError::ResetFailedAttempts(Box::new(e)))?;
         Ok(())
     }
 }

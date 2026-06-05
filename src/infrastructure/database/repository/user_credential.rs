@@ -52,7 +52,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .into_model::<user_credential::Model>()
             .all(&self.db)
             .await
-            .map_err(UserCredentialRepositoryError::QueryFailed)?;
+            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?;
 
         // Deserialize only the requested credential type.
         let credentials = rows
@@ -121,7 +121,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
             .one(&self.db)
             .await
-            .map_err(UserCredentialRepositoryError::QueryFailed)?
+            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
 
         let new_data =
@@ -133,7 +133,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         active
             .update(&self.db)
             .await
-            .map_err(UserCredentialRepositoryError::UpdatePasswordFailed)?;
+            .map_err(|e| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(e)))?;
         Ok(())
     }
 }

@@ -123,7 +123,7 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
             .filter(client_open_id_connect_credential::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(OpenIdConnectCredentialRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectCredentialRepositoryError::QueryFailed(Box::new(e)))?;
 
         let Some((model, client)) = row else {
             return Ok(None);
@@ -162,7 +162,7 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
             .into_model::<client_open_id_connect_credential::Model>()
             .all(&self.db)
             .await
-            .map_err(OpenIdConnectCredentialRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectCredentialRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(rows
             .into_iter()

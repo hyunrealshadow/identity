@@ -57,7 +57,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .select_also(UserEntity)
             .one(&self.db)
             .await
-            .map_err(SessionRepositoryError::QueryFailed)?
+            .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(None);
         };
@@ -79,7 +79,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .select_also(UserEntity)
             .all(&self.db)
             .await
-            .map_err(SessionRepositoryError::ListActiveFailed)?;
+            .map_err(|e| SessionRepositoryError::ListActiveFailed(Box::new(e)))?;
 
         Ok(rows
             .into_iter()
@@ -117,7 +117,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .filter(user::Column::Oid.eq(user_oid))
             .one(&self.db)
             .await
-            .map_err(SessionRepositoryError::QueryFailed)?
+            .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(SessionRepositoryError::UserNotFound)?;
 
         let now = Utc::now();
@@ -144,7 +144,7 @@ impl SessionRepository for SessionRepositoryImpl {
         let model = active
             .insert(&self.db)
             .await
-            .map_err(SessionRepositoryError::CreateFailed)?;
+            .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         Ok(session_to_domain(model, user_oid))
     }
 
@@ -153,7 +153,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .filter(session::Column::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
-            .map_err(SessionRepositoryError::QueryFailed)?
+            .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(SessionRepositoryError::SessionNotFound)?;
 
         let mut active: session::ActiveModel = model.into();
@@ -161,7 +161,7 @@ impl SessionRepository for SessionRepositoryImpl {
         active
             .update(&self.db)
             .await
-            .map_err(SessionRepositoryError::TouchFailed)?;
+            .map_err(|e| SessionRepositoryError::TouchFailed(Box::new(e)))?;
         Ok(())
     }
 
@@ -176,7 +176,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .select_also(UserEntity)
             .one(&self.db)
             .await
-            .map_err(SessionRepositoryError::QueryFailed)?
+            .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(None);
         };
@@ -186,7 +186,7 @@ impl SessionRepository for SessionRepositoryImpl {
         let model = active
             .update(&self.db)
             .await
-            .map_err(SessionRepositoryError::RevokeFailed)?;
+            .map_err(|e| SessionRepositoryError::RevokeFailed(Box::new(e)))?;
         Ok(Some(session_to_domain(model, u_model.oid)))
     }
 }

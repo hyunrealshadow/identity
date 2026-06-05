@@ -3,10 +3,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
+use hkdf::Hkdf;
+use sha2::Sha256;
 use tracing::warn;
 
 use identity_domain::data_protection::DataProtectionError;
-use identity_domain::data_protection::{KeyRing, ProtectedPayload, Purpose, derive_subkey};
+use identity_domain::data_protection::{KeyRing, ProtectedPayload, Purpose};
 use identity_domain::key::repository::KeyRepository;
 
 pub const DATA_PROTECTION_KEY_SIZE: usize = 32;
@@ -145,6 +147,14 @@ fn decode_master_key(
     let mut out = [0u8; DATA_PROTECTION_KEY_SIZE];
     out.copy_from_slice(&raw);
     Ok(out)
+}
+
+pub fn derive_subkey(master_key: &[u8], info: &[u8]) -> [u8; 32] {
+    let hkdf = Hkdf::<Sha256>::new(None, master_key);
+    let mut out = [0u8; 32];
+    hkdf.expand(info, &mut out)
+        .expect("32-byte HKDF expand never fails");
+    out
 }
 
 #[cfg(test)]

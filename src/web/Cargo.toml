@@ -25,7 +25,7 @@ tera = { workspace = true }
 tracing = { workspace = true }
 unic-langid = { workspace = true }
 url = { workspace = true }
-urlencoding = { workspace = true }
+urlencoding = { version = "2.1" }
 uuid = { workspace = true }
 woothee = { workspace = true }
 

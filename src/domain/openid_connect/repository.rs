@@ -13,7 +13,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum OpenIdConnectClientRepositoryError {
     #[error("failed to query openid connect client")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("openid connect metadata row is missing for client {0}")]
     MissingMetadata(ClientOid),
@@ -56,7 +56,7 @@ pub struct OpenIdConnectClientRegistration {
 #[derive(Debug, Error)]
 pub enum OpenIdConnectCredentialRepositoryError {
     #[error("failed to query openid connect credentials")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("openid connect credential owner is missing")]
     MissingClient,

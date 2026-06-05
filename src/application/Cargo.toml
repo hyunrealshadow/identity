@@ -11,6 +11,7 @@ path = "mod.rs"
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+hkdf = { version = "0.12" }
 http = { workspace = true }
 identity-domain = { workspace = true }
 josekit = { workspace = true }
@@ -26,15 +27,15 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
-validator = { workspace = true }
+validator = { version = "0.20" }
 
 [features]
 allow-none-alg = []
 oidc-conformance = ["allow-none-alg"]
 
 [dev-dependencies]
-mockall = { workspace = true }
+mockall = { version = "0.14" }
 openssl = { workspace = true }
 regex = { workspace = true }
-rstest = { workspace = true }
+rstest = { version = "0.25" }
 sea-orm = { workspace = true }

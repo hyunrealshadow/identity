@@ -28,7 +28,7 @@ impl KeyRepositoryImpl {
             .filter(key::Column::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
-            .map_err(KeyRepositoryError::QueryFailed)
+            .map_err(|e| KeyRepositoryError::QueryFailed(Box::new(e)))
     }
 }
 
@@ -71,7 +71,7 @@ impl KeyRepository for KeyRepositoryImpl {
             .filter(key::Column::RevokedAt.is_null())
             .all(&self.db)
             .await
-            .map_err(KeyRepositoryError::ListAvailableFailed)?
+            .map_err(|e| KeyRepositoryError::ListAvailableFailed(Box::new(e)))?
             .into_iter()
             .map(to_domain)
             .collect()
@@ -83,7 +83,7 @@ impl KeyRepository for KeyRepositoryImpl {
             .filter(key::Column::RevokedAt.is_null())
             .all(&self.db)
             .await
-            .map_err(KeyRepositoryError::ListAvailableFailed)?
+            .map_err(|e| KeyRepositoryError::ListAvailableFailed(Box::new(e)))?
             .into_iter()
             .map(to_domain)
             .collect()
@@ -111,7 +111,7 @@ impl KeyRepository for KeyRepositoryImpl {
             active
                 .insert(&self.db)
                 .await
-                .map_err(KeyRepositoryError::CreateFailed)?,
+                .map_err(|e| KeyRepositoryError::CreateFailed(Box::new(e)))?,
         )
     }
 
@@ -141,7 +141,7 @@ impl KeyRepository for KeyRepositoryImpl {
             active
                 .update(&self.db)
                 .await
-                .map_err(KeyRepositoryError::UpdateFailed)?,
+                .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?,
         )
         .map(Some)
     }
@@ -162,7 +162,7 @@ impl KeyRepository for KeyRepositoryImpl {
             active
                 .update(&self.db)
                 .await
-                .map_err(KeyRepositoryError::UpdateFailed)?,
+                .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?,
         )
         .map(Some)
     }

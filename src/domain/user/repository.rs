@@ -7,22 +7,22 @@ use crate::user::{CredentialType, Password, User, UserCredential, UserCredential
 #[derive(Debug, Error)]
 pub enum UserRepositoryError {
     #[error("failed to query user")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("user not found")]
     UserNotFound,
 
     #[error("failed to update failed attempts")]
-    UpdateFailedAttempts(#[source] sea_orm::DbErr),
+    UpdateFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to reset failed attempts")]
-    ResetFailedAttempts(#[source] sea_orm::DbErr),
+    ResetFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Debug, Error)]
 pub enum UserCredentialRepositoryError {
     #[error("failed to query credentials")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("credential not found")]
     CredentialNotFound,
@@ -31,7 +31,7 @@ pub enum UserCredentialRepositoryError {
     Serialization(#[source] serde_json::Error),
 
     #[error("failed to update password credential")]
-    UpdatePasswordFailed(#[source] sea_orm::DbErr),
+    UpdatePasswordFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 // ─── UserRepository ──────────────────────────────────────────────────────────

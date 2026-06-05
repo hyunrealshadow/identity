@@ -1,5 +1,4 @@
-use hkdf::Hkdf;
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 
 const PROTOCOL_INFO_PREFIX: &[u8] = b"app:data-protection:v1\0";
 
@@ -23,36 +22,9 @@ impl Purpose {
     }
 }
 
-pub fn derive_subkey(master_key: &[u8], info: &[u8]) -> [u8; 32] {
-    let hkdf = Hkdf::<Sha256>::new(None, master_key);
-    let mut out = [0u8; 32];
-    hkdf.expand(info, &mut out)
-        .expect("32-byte HKDF expand never fails");
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn same_purpose_produces_same_subkey() {
-        let master = [0x42u8; 32];
-        let purpose = Purpose::new("session");
-        let key1 = derive_subkey(&master, &purpose.hkdf_info());
-        let key2 = derive_subkey(&master, &purpose.hkdf_info());
-        assert_eq!(key1, key2);
-    }
-
-    #[test]
-    fn different_purposes_produce_different_subkeys() {
-        let master = [0x42u8; 32];
-        let p1 = Purpose::new("session");
-        let p2 = Purpose::new("csrf");
-        let k1 = derive_subkey(&master, &p1.hkdf_info());
-        let k2 = derive_subkey(&master, &p2.hkdf_info());
-        assert_ne!(k1, k2);
-    }
 
     #[test]
     fn hash_prefix_is_deterministic() {

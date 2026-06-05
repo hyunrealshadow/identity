@@ -111,16 +111,16 @@ impl PublicJwk {
 #[derive(Debug, thiserror::Error)]
 pub enum KeyJwkRepositoryError {
     #[error("failed to create jwk bindings")]
-    CreateBatchFailed(#[source] sea_orm::DbErr),
+    CreateBatchFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to list jwk bindings by key")]
-    ListByKeyFailed(#[source] sea_orm::DbErr),
+    ListByKeyFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to list active jwk bindings")]
-    ListActiveFailed(#[source] sea_orm::DbErr),
+    ListActiveFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to delete jwk bindings")]
-    DeleteByKeyFailed(#[source] sea_orm::DbErr),
+    DeleteByKeyFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("invalid public jwk: {0}")]
     InvalidPublicJwk(String),

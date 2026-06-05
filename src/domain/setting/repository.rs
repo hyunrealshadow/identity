@@ -6,7 +6,7 @@ use crate::setting::{SettingDefinition, SettingEntry};
 #[derive(Debug, Error)]
 pub enum SettingRepositoryError {
     #[error("failed to query setting")]
-    QueryFailed(#[source] sea_orm::DbErr),
+    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to serialize setting value")]
     Serialize(#[source] serde_json::Error),
@@ -18,10 +18,10 @@ pub enum SettingRepositoryError {
     Validation(String),
 
     #[error("failed to update setting")]
-    UpdateFailed(#[source] sea_orm::DbErr),
+    UpdateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("failed to create setting")]
-    CreateFailed(#[source] sea_orm::DbErr),
+    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[async_trait]

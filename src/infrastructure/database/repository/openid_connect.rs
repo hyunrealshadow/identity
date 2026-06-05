@@ -387,9 +387,9 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             })
             .await
             .map_err(|error| {
-                OpenIdConnectClientRepositoryError::QueryFailed(sea_orm::DbErr::Custom(
+                OpenIdConnectClientRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Custom(
                     error.to_string(),
-                ))
+                )))
             })?;
 
         Ok(client_oid)
@@ -405,7 +405,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             .filter(client::Column::Protocol.eq("openid_connect"))
             .one(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(None);
         };
@@ -417,7 +417,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             .filter(client_authorization::Column::ExpiresAt.gt(Utc::now()))
             .all(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         let valid = auth_rows.into_iter().any(|row| {
             row.data
@@ -442,7 +442,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             .filter(client::Column::Protocol.eq("openid_connect"))
             .one(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Err(OpenIdConnectClientRepositoryError::ClientNotFound);
         };
@@ -450,7 +450,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         ClientEntity::delete_by_id(client_model.id)
             .exec(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(())
     }
@@ -468,7 +468,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
             .find_also_related(OpenIdConnectClientEntity)
             .one(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         let Some((client_model, metadata_model)) = row else {
             return Ok(None);
@@ -483,7 +483,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
             .filter(client_platform::Column::ClientId.eq(client_id))
             .all(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
         let platforms = platform_models
             .into_iter()
             .map(to_platform)
@@ -498,7 +498,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
             .into_tuple::<String>()
             .all(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         let client = to_client(client_model)?;
         let metadata = to_metadata(metadata_model)?;
@@ -540,7 +540,7 @@ impl OpenIdConnectClientRepositoryImpl {
             .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
             .one(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
         else {
             return Ok(Vec::new());
         };
@@ -552,7 +552,7 @@ impl OpenIdConnectClientRepositoryImpl {
             .into_tuple::<i64>()
             .all(&self.db)
             .await
-            .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?;
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         let mut clients = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
@@ -564,7 +564,7 @@ impl OpenIdConnectClientRepositoryImpl {
             let Some(client_model) = ClientEntity::find_by_id(client_id)
                 .one(&self.db)
                 .await
-                .map_err(OpenIdConnectClientRepositoryError::QueryFailed)?
+                .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
             else {
                 continue;
             };
