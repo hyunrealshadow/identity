@@ -2235,6 +2235,7 @@ dependencies = [
  "identity-domain",
  "identity-infrastructure",
  "josekit",
+ "rand 0.8.5",
  "salvo",
  "sea-orm",
  "serde",

@@ -170,7 +170,7 @@ async fn consent_template_no_longer_auto_submits_for_auto_approve() {
 }
 
 #[tokio::test]
-async fn consent_page_keeps_inline_script_csp_header() {
+async fn consent_page_sets_nonce_based_csp_header() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
     let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
         .await
@@ -188,11 +188,16 @@ async fn consent_page_keeps_inline_script_csp_header() {
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let body = response.take_string().await.unwrap();
     assert!(body.contains("consent-form"), "{body}");
-    assert_eq!(
+    assert!(
+        response
+            .headers()
+            .get("content-security-policy")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|v| v.contains("script-src 'nonce-")),
+        "expected nonce-based CSP, got: {:?}",
         response
             .headers()
             .get("content-security-policy")
             .and_then(|value| value.to_str().ok()),
-        Some("default-src 'self'; script-src 'unsafe-inline'"),
     );
 }

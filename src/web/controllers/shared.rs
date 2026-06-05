@@ -3,6 +3,7 @@
 //! behave identically for cookie handling, etc.
 
 use http::{HeaderMap, HeaderValue, header};
+use rand::Rng;
 use salvo::{
     Depot, Response,
     csrf::{CsrfDepotExt, FormFinder, HeaderFinder, JsonFinder, bcrypt_cookie_csrf},
@@ -125,9 +126,8 @@ pub fn build_session_cookie_from_protected_ids(protected_ids: &[String], secure:
     let json = serde_json::to_string(protected_ids).unwrap_or_else(|_| "[]".to_owned());
     let max_age = SESSION_EXPIRY.as_secs();
     let secure_flag = if secure { "; Secure" } else { "" };
-    let same_site = if secure { "None" } else { "Lax" };
     format!(
-        "{SESSION_COOKIE_NAME}={json}; HttpOnly{secure_flag}; SameSite={same_site}; Path=/; Max-Age={max_age}"
+        "{SESSION_COOKIE_NAME}={json}; HttpOnly{secure_flag}; SameSite=Lax; Path=/; Max-Age={max_age}"
     )
 }
 
@@ -259,6 +259,11 @@ pub fn csrf_token(depot: &Depot) -> String {
     depot.csrf_token().unwrap_or_default().to_owned()
 }
 
+pub fn generate_csp_nonce() -> String {
+    let bytes: [u8; 16] = rand::thread_rng().r#gen();
+    base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;
@@ -273,11 +278,11 @@ mod tests {
     }
 
     #[test]
-    fn build_session_cookie_uses_none_when_secure_for_iframe_session_checks() {
+    fn build_session_cookie_uses_lax_when_secure() {
         let cookie =
             super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], true);
 
-        assert!(cookie.contains("; HttpOnly; Secure; SameSite=None;"));
+        assert!(cookie.contains("; HttpOnly; Secure; SameSite=Lax;"));
     }
 }
 

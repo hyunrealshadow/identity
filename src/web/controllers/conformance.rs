@@ -28,7 +28,8 @@ use crate::{
     },
     views::oauth2::{FormPostField, FormPostPageData},
     web::controllers::shared::{
-        append_set_cookie, build_selected_session_cookie, build_session_context, is_secure_cookie,
+        append_set_cookie, build_selected_session_cookie, build_session_context, generate_csp_nonce,
+        is_secure_cookie,
     },
 };
 
@@ -66,7 +67,7 @@ struct AutoLoginError {
     error: String,
 }
 
-fn auto_login_form_data(login_id: &str) -> FormPostPageData {
+fn auto_login_form_data(login_id: &str, nonce: &str) -> FormPostPageData {
     FormPostPageData {
         title: "Completing sign-in".to_owned(),
         message: "Continuing the conformance browser flow.".to_owned(),
@@ -85,11 +86,13 @@ fn auto_login_form_data(login_id: &str) -> FormPostPageData {
                 value: CONFORMANCE_PASSWORD.to_owned(),
             },
         ],
+        nonce: nonce.to_owned(),
     }
 }
 
 fn auto_login_page_response(ctx: &AppState, headers: &HeaderMap, login_id: &str) -> Response {
-    let data = auto_login_form_data(login_id);
+    let nonce = generate_csp_nonce();
+    let data = auto_login_form_data(login_id, &nonce);
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "oauth2/form_post.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
@@ -97,7 +100,7 @@ fn auto_login_page_response(ctx: &AppState, headers: &HeaderMap, login_id: &str)
     }
     response.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
-        inline_script_csp_header_value(),
+        inline_script_csp_header_value(&nonce),
     );
     response
 }

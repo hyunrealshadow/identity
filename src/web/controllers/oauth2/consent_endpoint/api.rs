@@ -57,6 +57,7 @@ pub(super) async fn consent_api(
                 &ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default(),
             ),
             csrf_token: csrf_token(depot),
+            nonce: String::new(),
         },
     )
     .into())

@@ -8,6 +8,7 @@ use crate::controllers::{
 use identity_application::error::AppError;
 use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
 use identity_infrastructure::AppState;
+use uuid::Uuid;
 
 mod extractor;
 mod interaction;
@@ -25,24 +26,40 @@ use extractor::extract_authorize_request;
 use interaction::determine_authorize_flow;
 use response::render_authorize_error_page;
 
-fn render_error(
+async fn render_error(
     ctx: &AppState,
     headers: &HeaderMap,
     raw: &RawAuthorizeRequest,
     error: AppError,
 ) -> Response {
     tracing::warn!(error_code = error.code(), error = %error, "authorize validation error");
-    // Non-redirectable error codes (client/redirect_uri issues)
-    const NON_REDIRECTABLE: &[u32] = &[23000, 23001, 23002, 23004, 23014];
 
-    let can_redirect = !NON_REDIRECTABLE.contains(&error.code())
-        && raw.redirect_uri.as_deref().is_some_and(|u| !u.is_empty())
+    let can_redirect = raw.redirect_uri.as_deref().is_some_and(|u| !u.is_empty())
         && raw.client_id.as_deref().is_some_and(|c| !c.is_empty());
 
     if can_redirect
         && let Some(redirect_uri) = raw.redirect_uri.as_deref()
         && let Ok(uri) = url::Url::parse(redirect_uri)
     {
+        let client_oid = raw
+            .client_id
+            .as_deref()
+            .and_then(|cid| Uuid::parse_str(cid).ok());
+
+        if let Some(client_oid) = client_oid {
+            let client = ctx
+                .services()
+                .oidc_client_repo()
+                .find_by_oid(client_oid)
+                .await
+                .unwrap_or(None);
+            if !client.map_or(false, |c| c.has_redirect_uri(&uri)) {
+                return render_authorize_error_page(ctx, headers, raw, error);
+            }
+        } else {
+            return render_authorize_error_page(ctx, headers, raw, error);
+        }
+
         let error_response = OAuthErrorResponse::new(OAuthErrorCode::InvalidRequest);
         let error_response = if let Some(s) = raw.state.clone() {
             error_response.with_state(s)
@@ -88,19 +105,19 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).into()),
+        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
     };
 
     let active_sessions = match load_active_sessions(&ctx, &headers).await {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).into()),
+        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
     };
     let authorization_request_id = match authorize_service
         .create_authorization_request(&request)
         .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).into()),
+        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
     };
     let login_id = match authorize_service
         .create_login_flow(
@@ -115,7 +132,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).into()),
+        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
     };
 
     let flow = match determine_authorize_flow(
@@ -129,7 +146,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
     .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).into()),
+        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
     };
 
     Ok(flow.into_response(&ctx, &headers).into())

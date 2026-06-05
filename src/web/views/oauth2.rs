@@ -23,6 +23,7 @@ pub struct ConsentPageData {
     pub client_uri: Option<String>,
     pub scopes: Vec<ScopeDisplay>,
     pub csrf_token: String,
+    pub nonce: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -63,6 +64,7 @@ pub struct FormPostPageData {
     pub message: String,
     pub action: String,
     pub fields: Vec<FormPostField>,
+    pub nonce: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +77,7 @@ pub struct LogoutPageData {
     pub title: String,
     pub frontchannel_notifications: Vec<FrontChannelNotificationView>,
     pub post_logout_redirect_uri: Option<String>,
+    pub nonce: String,
 }
 
 pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {

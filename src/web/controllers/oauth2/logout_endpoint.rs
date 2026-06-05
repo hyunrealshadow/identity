@@ -14,8 +14,8 @@ use crate::controllers::response::render_html;
 use crate::controllers::{
     response::{AppResponse, app_state, parse_form, parse_query, redirect_to_response},
     shared::{
-        append_set_cookie, build_session_cookie_from_protected_ids, is_secure_cookie,
-        load_active_session_entries,
+        append_set_cookie, build_session_cookie_from_protected_ids, generate_csp_nonce,
+        is_secure_cookie, load_active_session_entries,
     },
 };
 
@@ -84,6 +84,7 @@ pub(super) async fn render_logout_page(
     outcome: LogoutOutcome,
     set_cookie: Option<String>,
 ) -> Response {
+    let nonce = generate_csp_nonce();
     let (data, csp) = match outcome {
         LogoutOutcome::FrontChannel {
             notifications,
@@ -98,8 +99,9 @@ pub(super) async fn render_logout_page(
                     })
                     .collect(),
                 post_logout_redirect_uri: post_logout_redirect_uri.map(|u| u.to_string()),
+                nonce: nonce.clone(),
             };
-            let csp = frontchannel_logout_content_security_policy(&notifications);
+            let csp = frontchannel_logout_content_security_policy(&notifications, &nonce);
             (data, Some(csp))
         }
         LogoutOutcome::LoggedOut => (
@@ -107,6 +109,7 @@ pub(super) async fn render_logout_page(
                 title: "Signed out".to_owned(),
                 frontchannel_notifications: vec![],
                 post_logout_redirect_uri: None,
+                nonce,
             },
             None,
         ),
@@ -138,6 +141,7 @@ pub(super) async fn render_logout_page(
 
 fn frontchannel_logout_content_security_policy(
     notifications: &[FrontChannelLogoutNotification],
+    nonce: &str,
 ) -> HeaderValue {
     let frame_sources = notifications
         .iter()
@@ -151,7 +155,7 @@ fn frontchannel_logout_content_security_policy(
     };
 
     HeaderValue::from_str(&format!(
-        "default-src 'none'; frame-src {frame_src}; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+        "default-src 'none'; frame-src {frame_src}; script-src 'nonce-{nonce}'; base-uri 'none'; form-action 'none'"
     ))
     .unwrap_or_else(|_| HeaderValue::from_static("default-src 'none'"))
 }
@@ -317,7 +321,7 @@ mod tests {
             .unwrap();
 
         assert!(csp.contains("frame-src https://localhost.emobix.co.uk:8443"));
-        assert!(csp.contains("script-src 'unsafe-inline'"));
+        assert!(csp.contains("script-src 'nonce-"));
     }
 
     #[tokio::test]

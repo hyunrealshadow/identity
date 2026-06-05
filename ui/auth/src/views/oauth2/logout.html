@@ -16,7 +16,7 @@
 
 {% block scripts %}
 {% if post_logout_redirect_uri %}
-<script>
+<script nonce="{{ nonce }}">
 setTimeout(function(){window.location.href="{{ post_logout_redirect_uri | safe }}";}, 300);
 </script>
 {% endif %}

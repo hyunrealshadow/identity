@@ -204,29 +204,21 @@ async fn ensure_dynamic_registration_enabled(
     db: &impl sea_orm::ConnectionTrait,
     now: chrono::DateTime<Utc>,
 ) -> Result<(), AppError> {
-    let existing = setting::Entity::find()
+    let exists = setting::Entity::find()
         .filter(setting::Column::Key.eq(DynamicClientRegistrationSetting::KEY))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .is_some();
 
-    let enabled = serde_json::json!(true);
-    if let Some(row) = existing {
-        if row.value != enabled {
-            let mut am: setting::ActiveModel = row.into();
-            am.value = Set(enabled);
-            am.updated_at = Set(Some(now.naive_utc()));
-            am.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
-        }
+    if exists {
         return Ok(());
     }
 
     setting::ActiveModel {
         oid: Set(Uuid::new_v4()),
         key: Set(DynamicClientRegistrationSetting::KEY.to_owned()),
-        value: Set(enabled),
+        value: Set(serde_json::json!(true)),
         created_at: Set(now.naive_utc()),
         updated_at: Set(Some(now.naive_utc())),
         ..Default::default()
@@ -315,15 +307,6 @@ async fn ensure_conformance_client(
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
     let client_id = if let Some(row) = existing_client {
-        if row.protocol != "openid_connect" || row.name != spec.name {
-            let mut am: client::ActiveModel = row.clone().into();
-            am.protocol = Set("openid_connect".to_owned());
-            am.name = Set(spec.name.to_owned());
-            am.updated_at = Set(Some(now.naive_utc()));
-            am.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
-        }
         row.id
     } else {
         client::ActiveModel {
@@ -356,42 +339,14 @@ async fn ensure_conformance_oidc_metadata(
 ) -> Result<(), AppError> {
     let values = conformance_oidc_metadata_values(spec);
 
-    let existing = client_open_id_connect::Entity::find()
+    let exists = client_open_id_connect::Entity::find()
         .filter(client_open_id_connect::Column::ClientId.eq(client_id))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .is_some();
 
-    if let Some(row) = existing {
-        if row.grant_types.as_ref() != Some(&values.grant_types)
-            || row.response_types.as_ref() != Some(&values.response_types)
-            || row.token_endpoint_auth_method != values.token_endpoint_auth_method
-            || row.post_logout_redirect_uris != values.post_logout_redirect_uris
-            || row.frontchannel_logout_uri != values.frontchannel_logout_uri
-            || row.frontchannel_logout_session_required
-                != values.frontchannel_logout_session_required
-            || row.backchannel_logout_uri != values.backchannel_logout_uri
-            || row.backchannel_logout_session_required != values.backchannel_logout_session_required
-            || row.settings != values.settings
-        {
-            let mut am: client_open_id_connect::ActiveModel = row.into();
-            am.grant_types = Set(Some(values.grant_types));
-            am.response_types = Set(Some(values.response_types));
-            am.token_endpoint_auth_method = Set(values.token_endpoint_auth_method);
-            am.post_logout_redirect_uris = Set(values.post_logout_redirect_uris);
-            am.frontchannel_logout_uri = Set(values.frontchannel_logout_uri);
-            am.frontchannel_logout_session_required =
-                Set(values.frontchannel_logout_session_required);
-            am.backchannel_logout_uri = Set(values.backchannel_logout_uri);
-            am.backchannel_logout_session_required =
-                Set(values.backchannel_logout_session_required);
-            am.settings = Set(values.settings);
-            am.updated_at = Set(Some(now.into()));
-            am.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
-        }
-
+    if exists {
         return Ok(());
     }
 
@@ -442,33 +397,14 @@ async fn ensure_conformance_client_secret(
     let expires_at = chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
         .expect("non-expiring timestamp literal is valid");
 
-    let existing = client_open_id_connect_credential::Entity::find()
+    let exists = client_open_id_connect_credential::Entity::find()
         .filter(client_open_id_connect_credential::Column::Oid.eq(credential_oid))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .is_some();
 
-    if let Some(row) = existing {
-        if row.client_id != client_id
-            || row.r#type != "client_secret"
-            || row.data != secret_json
-            || row.hint != secret
-            || row.expires_at != expires_at
-            || row.revoked_at.is_some()
-        {
-            let mut am: client_open_id_connect_credential::ActiveModel = row.into();
-            am.client_id = Set(client_id);
-            am.r#type = Set("client_secret".to_owned());
-            am.data = Set(secret_json);
-            am.hint = Set(secret.to_owned());
-            am.expires_at = Set(expires_at);
-            am.revoked_at = Set(None);
-            am.updated_at = Set(Some(now.into()));
-            am.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
-        }
-
+    if exists {
         return Ok(());
     }
 
@@ -477,7 +413,7 @@ async fn ensure_conformance_client_secret(
         client_id: Set(client_id),
         r#type: Set("client_secret".to_owned()),
         data: Set(secret_json),
-        hint: Set(secret.to_owned()),
+        hint: Set("client_secret".to_owned()),
         expires_at: Set(expires_at),
         revoked_at: Set(None),
         created_at: Set(now.into()),
@@ -533,22 +469,15 @@ async fn ensure_web_platform_redirect_uri(
     db: &impl sea_orm::ConnectionTrait,
     client_id: i64,
 ) -> Result<(), AppError> {
-    let existing = client_platform::Entity::find()
+    let exists = client_platform::Entity::find()
         .filter(client_platform::Column::ClientId.eq(client_id))
         .filter(client_platform::Column::Platform.eq("web"))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .is_some();
 
-    if let Some(row) = existing {
-        if row.redirect_uris.as_ref() != Some(&conformance_redirect_uris()) {
-            let mut am: client_platform::ActiveModel = row.into();
-            am.redirect_uris = Set(Some(conformance_redirect_uris()));
-            am.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
-        }
-
+    if exists {
         return Ok(());
     }
 

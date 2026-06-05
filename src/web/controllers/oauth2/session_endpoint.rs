@@ -4,13 +4,14 @@ use serde::Serialize;
 
 use crate::controllers::{
     response::{app_state, render_html},
-    shared::load_active_session_entries,
+    shared::{generate_csp_nonce, load_active_session_entries},
 };
 
 #[derive(Debug, Serialize)]
 struct CheckSessionPageData {
     op_browser_state: String,
     lang: String,
+    nonce: String,
 }
 
 #[handler]
@@ -20,6 +21,7 @@ pub async fn check_session_iframe(
     res: &mut Response,
 ) -> Result<(), identity_application::error::AppError> {
     let ctx = app_state(depot)?;
+    let nonce = generate_csp_nonce();
     let active_sessions = load_active_session_entries(&ctx, req.headers()).await?;
     let op_browser_state = active_sessions
         .iter()
@@ -30,6 +32,7 @@ pub async fn check_session_iframe(
     let data = CheckSessionPageData {
         op_browser_state,
         lang: "en".to_owned(),
+        nonce: nonce.clone(),
     };
 
     match identity_infrastructure::web::tera::render_view(
@@ -43,14 +46,14 @@ pub async fn check_session_iframe(
             render_html(
                 res,
                 StatusCode::OK,
-                "<!doctype html><title>OP session iframe</title><script></script>".to_owned(),
+                format!("<!doctype html><title>OP session iframe</title><script nonce=\"{nonce}\"></script>"),
             );
         }
     }
 
     res.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
-        super::inline_script_csp_header_value(),
+        super::inline_script_csp_header_value(&nonce),
     );
     Ok(())
 }
@@ -75,12 +78,13 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
-        assert_eq!(
+        assert!(
             response
                 .headers()
                 .get(header::HeaderName::from_static("content-security-policy"))
-                .and_then(|value| value.to_str().ok()),
-            Some("default-src 'self'; script-src 'unsafe-inline'")
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|v| v.contains("script-src 'nonce-")),
+            "CSP header should use nonce-based script-src"
         );
         let body = response.take_string().await.unwrap();
         assert!(

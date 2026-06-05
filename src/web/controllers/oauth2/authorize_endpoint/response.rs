@@ -13,6 +13,7 @@ use crate::{
 
 use super::extractor::{RawAuthorizeRequest, missing_required_authorize_parameters};
 use crate::controllers::response::{redirect_to_response, render_app_error, render_html};
+use crate::controllers::shared::generate_csp_nonce;
 
 pub fn redirect_oauth_error_response(
     ctx: &AppState,
@@ -85,8 +86,11 @@ pub fn finish_authorize_redirect(
     }
 }
 
-pub fn inline_script_csp_header_value() -> HeaderValue {
-    HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'")
+pub fn inline_script_csp_header_value(nonce: &str) -> HeaderValue {
+    HeaderValue::from_str(&format!(
+        "default-src 'self'; script-src 'nonce-{nonce}'"
+    ))
+    .unwrap_or_else(|_| HeaderValue::from_static("default-src 'self'"))
 }
 
 fn render_form_post_page(
@@ -95,11 +99,13 @@ fn render_form_post_page(
     action: String,
     fields: Vec<FormPostField>,
 ) -> Response {
+    let nonce = generate_csp_nonce();
     let data = FormPostPageData {
         title: "Completing sign-in".to_owned(),
         message: "Submitting the authorization response to the application.".to_owned(),
         action,
         fields,
+        nonce: nonce.clone(),
     };
 
     let mut response = Response::new();
@@ -109,7 +115,7 @@ fn render_form_post_page(
     }
     response.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
-        inline_script_csp_header_value(),
+        inline_script_csp_header_value(&nonce),
     );
     response
 }
@@ -202,6 +208,7 @@ pub fn render_authorize_error_page(
 
 #[cfg(test)]
 mod tests {
+    use http::HeaderValue;
     use identity_application::error::AppError;
     use identity_application::error::codes::common::CommonErrorCode;
     use identity_application::error::kind::ErrorKind;
@@ -309,9 +316,10 @@ mod tests {
 
     #[test]
     fn inline_script_csp_header_value_allows_inline_scripts() {
+        let nonce = "test-nonce-123";
         assert_eq!(
-            super::inline_script_csp_header_value(),
-            http::HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'"),
+            super::inline_script_csp_header_value(nonce),
+            HeaderValue::from_static("default-src 'self'; script-src 'nonce-test-nonce-123'")
         );
     }
 }

@@ -10,7 +10,7 @@ use crate::{
             AppResponse, app_state, parse_query, redirect_to_response, render_app_error,
             render_html,
         },
-        shared::csrf_token,
+        shared::{csrf_token, generate_csp_nonce},
     },
     web::views::oauth2::{ConsentPageData, build_scope_display},
 };
@@ -50,6 +50,7 @@ pub(super) async fn consent_page(
         .into());
     }
 
+    let nonce = generate_csp_nonce();
     let data = ConsentPageData {
         login_id: query.login_id,
         client_name: loaded.client.client().name.clone(),
@@ -63,6 +64,7 @@ pub(super) async fn consent_page(
             &ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default(),
         ),
         csrf_token: csrf_token(depot),
+        nonce: nonce.clone(),
     };
 
     let mut response = Response::new();
@@ -72,7 +74,7 @@ pub(super) async fn consent_page(
     }
     response.headers_mut().insert(
         http::header::HeaderName::from_static("content-security-policy"),
-        inline_script_csp_header_value(),
+        inline_script_csp_header_value(&nonce),
     );
     Ok(response.into())
 }

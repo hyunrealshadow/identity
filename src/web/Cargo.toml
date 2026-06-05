@@ -16,6 +16,7 @@ identity-application = { workspace = true }
 identity-domain = { workspace = true }
 identity-infrastructure = { workspace = true }
 josekit = { workspace = true }
+rand = { workspace = true }
 salvo = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
