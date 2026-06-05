@@ -115,7 +115,7 @@ mod helpers;
 mod signing;
 
 use helpers::{
-    client_id_from_assertion, constant_time_compare, decode_assertion_with_alg,
+    client_id_from_assertion, decode_assertion_with_alg,
     decode_assertion_with_hmac_alg, decode_assertion_with_jwk, verify_pkce,
 };
 

@@ -423,7 +423,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             row.data
                 .get("token")
                 .and_then(|value| value.as_str())
-                .is_some_and(|stored| constant_time_compare(stored.as_bytes(), token.as_bytes()))
+                .is_some_and(|stored| bool::from(subtle::ConstantTimeEq::ct_eq(stored.as_bytes(), token.as_bytes())))
         });
 
         if valid {
@@ -454,17 +454,6 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
 
         Ok(())
     }
-}
-
-fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut result = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        result |= x ^ y;
-    }
-    result == 0
 }
 
 #[async_trait]

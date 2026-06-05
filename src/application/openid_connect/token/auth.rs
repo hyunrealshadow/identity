@@ -49,7 +49,7 @@ impl TokenService {
 
         let valid = credentials.into_iter().any(|credential| {
             if let OpenIdConnectCredentialData::ClientSecret { secret } = &credential.data {
-                constant_time_compare(secret.as_bytes(), client_secret.as_bytes())
+                subtle::ConstantTimeEq::ct_eq(secret.as_bytes(), client_secret.as_bytes()).into()
             } else {
                 false
             }

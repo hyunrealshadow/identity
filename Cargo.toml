@@ -53,6 +53,7 @@ tokio = { version = "1.45", default-features = false, features = [
   "sync",
   "time",
 ] }
+subtle = { version = "2" }
 totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
