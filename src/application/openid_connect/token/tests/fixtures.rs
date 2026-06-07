@@ -5,7 +5,6 @@ pub(super) use crate::openid_connect::tests::fixtures::mocks::{
 use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository, MockOpenIdConnectCredentialRepository,
 };
-use identity_domain::auth::SessionOid;
 
 mod clients;
 
@@ -231,11 +230,11 @@ pub(super) fn build_token_service(
     };
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
 
-    TokenService::new(
-        repo,
-        Arc::new(key_repo_with_keys(vec![key.clone()])),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository {
+    TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo,
+        key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
                 email: "a@example.com".to_string(),
@@ -270,8 +269,8 @@ pub(super) fn build_token_service(
                 updated_at: None,
             },
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![
             OpenIdConnectCredential {
                 oid: Uuid::new_v4(),
                 client_oid: Uuid::nil(),
@@ -300,10 +299,10 @@ pub(super) fn build_token_service(
                 updated_at: None,
             },
         ])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    )
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    })
 }
 
 pub(super) fn build_token_service_with_auth_method(method: &'static str) -> TokenService {
@@ -334,18 +333,18 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
     };
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
 
-    TokenService::new(
-        repo,
-        Arc::new(key_repo_with_keys(vec![key])),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository {
+    TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo,
+        key_repo: Arc::new(key_repo_with_keys(vec![key])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
-        Arc::new(AuthMethodClientRepository {
+        client_repo: Arc::new(AuthMethodClientRepository {
             method,
             signing_alg,
         }),
-        Arc::new(cred_repo_with(vec![
+        credential_repo: Arc::new(cred_repo_with(vec![
             OpenIdConnectCredential {
                 oid: Uuid::new_v4(),
                 client_oid: Uuid::nil(),
@@ -374,10 +373,10 @@ pub(super) fn build_token_service_with_auth_method_and_alg(
                 updated_at: None,
             },
         ])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    )
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    })
 }
 
 pub(super) fn build_client_assertion_with_algorithm(

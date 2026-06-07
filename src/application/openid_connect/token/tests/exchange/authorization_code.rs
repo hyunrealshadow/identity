@@ -1,4 +1,5 @@
 use crate::key::asymmetric::AsymmetricKeyService;
+use crate::openid_connect::token::signing::{SignAccessTokenInput, SignIdTokenInput};
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
 use identity_domain::auth::ACR_PASSWORD;
@@ -215,13 +216,13 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
     let key_repo = Arc::new(key_repo_with_keys(vec![key.clone()]));
     let user = test_user(user_oid);
-    let service = TokenService::new(
-        repo.clone(),
-        key_repo.clone(),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository { user: user.clone() }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo.clone(),
+        key_repo: key_repo.clone(),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository { user: user.clone() }),
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientSecret,
@@ -234,10 +235,10 @@ async fn exchange_authorization_code_rejects_reused_code() {
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
 
     let record = repo
         .create(
@@ -475,15 +476,15 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
         KeyData::Symmetric(_) => unreachable!(),
     };
 
-    let service = TokenService::new(
-        repo.clone(),
-        Arc::new(key_repo_with_keys(vec![key.clone()])),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo.clone(),
+        key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientSecret,
@@ -496,10 +497,10 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
 
     let record = repo
         .create(
@@ -586,19 +587,19 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             .await
             .unwrap();
         let access_token = service
-            .sign_access_token(
-                &access_record.oid.to_string(),
-                &key_id,
-                &private_key,
+            .sign_access_token(SignAccessTokenInput {
+                token_id: &access_record.oid.to_string(),
+                key_id: &key_id,
+                private_key_pem: &private_key,
                 alg,
-                &issuer,
-                &Uuid::nil().to_string(),
-                &Uuid::nil().to_string(),
-                &user_oid,
-                &Uuid::new_v4().to_string(),
-                "openid profile",
-                None,
-            )
+                issuer: &issuer,
+                audience: &Uuid::nil().to_string(),
+                client_id: &Uuid::nil().to_string(),
+                user_oid: &user_oid,
+                protected_session_id: &Uuid::new_v4().to_string(),
+                scope: "openid profile",
+                claims: None,
+            })
             .unwrap();
         let client = service
             .client_repo
@@ -607,21 +608,20 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             .unwrap()
             .unwrap();
         let id_token = service
-            .sign_id_token(
-                &key_id,
-                &private_key,
+            .sign_id_token(SignIdTokenInput {
+                key_id: &key_id,
+                private_key_pem: &private_key,
                 alg,
-                &issuer,
-                &Uuid::nil().to_string(),
-                &client,
-                &test_user(user_oid),
-                None,
-                None,
-                None,
-                Some(&access_token),
-                None,
-                "openid profile",
-            )
+                issuer: &issuer,
+                audience: &Uuid::nil().to_string(),
+                client: &client,
+                user: &test_user(user_oid),
+                nonce: None,
+                auth_time: None,
+                acr: None,
+                access_token: Some(&access_token),
+                protected_session_id: None,
+            })
             .unwrap();
 
         let access_payload = decode_jwt_with_alg(&access_token, &public_key, alg);

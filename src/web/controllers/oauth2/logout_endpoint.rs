@@ -10,9 +10,11 @@ use identity_domain::auth::SessionOid;
 use identity_infrastructure::AppState;
 use identity_infrastructure::web::tera;
 
-use crate::controllers::response::render_html;
 use crate::controllers::{
-    response::{AppResponse, app_state, parse_form, parse_query, redirect_to_response},
+    response::{
+        AppResponse, app_state, parse_form, parse_query, redirect_to_response, render_app_error,
+        render_html,
+    },
     shared::{
         append_set_cookie, build_session_cookie_from_protected_ids, generate_csp_nonce,
         is_secure_cookie, load_active_session_entries,
@@ -57,18 +59,15 @@ pub fn session_cookie_without(
     build_session_cookie_from_protected_ids(&remaining, secure)
 }
 
-pub fn redirect_or_page_response(outcome: LogoutOutcome, set_cookie: Option<String>) -> Response {
+pub async fn redirect_or_page_response(
+    ctx: &AppState,
+    headers: &HeaderMap,
+    outcome: LogoutOutcome,
+    set_cookie: Option<String>,
+) -> Response {
     let mut response = match outcome {
         LogoutOutcome::Redirect { redirect_uri } => redirect_to_response(redirect_uri.as_str()),
-        _ => {
-            let mut response = Response::new();
-            render_html(
-                &mut response,
-                StatusCode::OK,
-                "<!doctype html><title>Signed out</title><h1>Signed out</h1>".to_owned(),
-            );
-            response
-        }
+        _ => render_logout_page(ctx, headers, outcome, None).await,
     };
 
     if let Some(cookie) = set_cookie {
@@ -119,13 +118,7 @@ pub(super) async fn render_logout_page(
     let mut response = Response::new();
     match tera::render_view(ctx, headers, "oauth2/logout.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
-        Err(_) => {
-            render_html(
-                &mut response,
-                StatusCode::OK,
-                "<!doctype html><title>Signed out</title><h1>Signed out</h1>".to_owned(),
-            );
-        }
+        Err(error) => render_app_error(&mut response, error),
     }
     if let Some(csp) = csp {
         response.headers_mut().insert(
@@ -208,7 +201,9 @@ async fn handle_logout(
     };
 
     let response = match &outcome {
-        LogoutOutcome::Redirect { .. } => redirect_or_page_response(outcome, set_cookie),
+        LogoutOutcome::Redirect { .. } => {
+            redirect_or_page_response(&ctx, &headers, outcome, set_cookie).await
+        }
         _ => render_logout_page(&ctx, &headers, outcome, set_cookie).await,
     };
 
@@ -275,14 +270,19 @@ mod tests {
         assert_eq!(response.status_code, Some(StatusCode::OK));
     }
 
-    #[test]
-    fn redirect_response_preserves_set_cookie_header() {
+    #[tokio::test]
+    async fn redirect_response_preserves_set_cookie_header() {
+        let state = identity_infrastructure::test_app_state_with_mock_settings().await;
+        let headers = http::HeaderMap::new();
         let response = super::redirect_or_page_response(
+            &state,
+            &headers,
             identity_application::openid_connect::logout::LogoutOutcome::Redirect {
                 redirect_uri: url::Url::parse("https://rp.example.com/logout?state=abc").unwrap(),
             },
             Some("sessions=[]; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600".to_owned()),
-        );
+        )
+        .await;
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         assert_eq!(

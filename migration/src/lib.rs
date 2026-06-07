@@ -1,6 +1,7 @@
 #![allow(elided_lifetimes_in_paths)]
-#![allow(clippy::wildcard_imports)]
-pub use sea_orm_migration::prelude::*;
+use sea_orm_migration::async_trait;
+use sea_orm_migration::prelude::MigrationTrait;
+pub use sea_orm_migration::prelude::{DbErr, MigratorTrait};
 mod m20260305_071904_create_user;
 mod m20260306_022501_create_user_credential;
 mod m20260306_031058_create_client;

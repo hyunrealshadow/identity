@@ -6,7 +6,6 @@ use identity_domain::{
     openid_connect::{
         OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
         OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
-        OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepositoryError,
     },
     setting::DynamicClientRegistrationSetting,
 };
@@ -311,12 +310,61 @@ async fn register_rejects_non_https_initiate_login_uri() {
 }
 
 #[tokio::test]
+async fn register_rejects_unsafe_sector_identifier_uri_before_fetch() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        repo.clone(),
+    );
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                sector_identifier_uri: Some(Url::parse("https://localhost/sector.json").unwrap()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25009);
+    assert!(captured.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn register_rejects_unsafe_jwks_uri_before_fetch() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        repo.clone(),
+    );
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                jwks_uri: Some(Url::parse("https://127.0.0.1/jwks.json").unwrap()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25004);
+    assert!(captured.lock().unwrap().is_none());
+}
+
+#[tokio::test]
 async fn delete_removes_client_found_by_registration_access_token() {
     let client_oid = Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
     let found_client = Arc::new(std::sync::Mutex::new(Some(registered_client(client_oid))));
-    let captured = Arc::new(std::sync::Mutex::new(
-        None::<OpenIdConnectClientRegistration>,
-    ));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
     let fc = found_client.clone();

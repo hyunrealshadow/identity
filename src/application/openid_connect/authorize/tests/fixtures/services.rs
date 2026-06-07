@@ -6,6 +6,7 @@ use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
     MockOpenIdConnectCredentialRepository, MockUserRepository,
 };
+use identity_domain::user::repository::UserRepositoryError;
 
 pub(in crate::openid_connect) struct StaticInstallationProvider {
     pub(in crate::openid_connect) value: Arc<InstallationState>,
@@ -113,18 +114,18 @@ pub(in crate::openid_connect) fn build_test_service(
 ) -> AuthorizeService {
     let state = Arc::new(ClientAuthorizationState::default());
     let auth_repo = Arc::new(mock_client_auth_repo_with_state(state));
-    AuthorizeService::new(
+    AuthorizeService::new(AuthorizeServiceDependencies {
         client_repo,
         credential_repo,
-        auth_repo,
+        client_authorization_repo: auth_repo,
         login_repo,
-        Arc::new(stub_user_repo()),
-        Arc::new(stub_key_repo()),
-        Arc::new(MockKeyJwkRepository::new()),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    )
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(stub_key_repo()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+    })
 }
 
 pub(in crate::openid_connect) fn stub_key_repo() -> MockallKeyRepository {

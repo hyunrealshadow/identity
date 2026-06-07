@@ -1,12 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use josekit::{
-    jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, JwsHeader, PS256, PS384, PS512,
-        RS256, RS384, RS512,
-    },
-    jwt,
-    jwt::JwtPayload,
-};
+use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -79,29 +72,30 @@ pub struct TokenService {
     data_protector: Arc<dyn DataProtector>,
 }
 
+pub struct TokenServiceDependencies {
+    pub client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
+    pub key_repo: Arc<dyn KeyRepository>,
+    pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
+    pub user_repo: Arc<dyn UserRepository>,
+    pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    pub credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
+    pub provider_service: Arc<OpenIdProviderService>,
+    pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
+    pub data_protector: Arc<dyn DataProtector>,
+}
+
 impl TokenService {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
-        key_repo: Arc<dyn KeyRepository>,
-        key_jwk_repo: Arc<dyn KeyJwkRepository>,
-        user_repo: Arc<dyn UserRepository>,
-        client_repo: Arc<dyn OpenIdConnectClientRepository>,
-        credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
-        provider_service: Arc<OpenIdProviderService>,
-        signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-        data_protector: Arc<dyn DataProtector>,
-    ) -> Self {
+    pub fn new(deps: TokenServiceDependencies) -> Self {
         Self {
-            client_authorization_repo,
-            key_repo,
-            key_jwk_repo,
-            user_repo,
-            client_repo,
-            credential_repo,
-            provider_service,
-            signing_algorithm_detector,
-            data_protector,
+            client_authorization_repo: deps.client_authorization_repo,
+            key_repo: deps.key_repo,
+            key_jwk_repo: deps.key_jwk_repo,
+            user_repo: deps.user_repo,
+            client_repo: deps.client_repo,
+            credential_repo: deps.credential_repo,
+            provider_service: deps.provider_service,
+            signing_algorithm_detector: deps.signing_algorithm_detector,
+            data_protector: deps.data_protector,
         }
     }
 }
@@ -115,8 +109,8 @@ mod helpers;
 mod signing;
 
 use helpers::{
-    client_id_from_assertion, decode_assertion_with_alg,
-    decode_assertion_with_hmac_alg, decode_assertion_with_jwk, verify_pkce,
+    client_id_from_assertion, decode_assertion_with_alg, decode_assertion_with_hmac_alg,
+    decode_assertion_with_jwk, verify_pkce,
 };
 
 #[cfg(test)]

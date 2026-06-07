@@ -30,7 +30,10 @@ uuid = { workspace = true }
 woothee = { workspace = true }
 
 [features]
+allow-none-alg = ["identity-application/allow-none-alg"]
 oidc-conformance = [
+  "allow-none-alg",
+  "identity-application/oidc-conformance",
   "identity-infrastructure/oidc-conformance",
   "identity-infrastructure/test-support",
 ]

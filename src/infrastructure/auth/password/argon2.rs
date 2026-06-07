@@ -78,7 +78,10 @@ pub(super) fn verify(
         .ok_or_else(|| PasswordHashError::HashFailed("missing hash output".to_owned()))?
         .to_string();
 
-    if !bool::from(subtle::ConstantTimeEq::ct_eq(actual_hash.as_bytes(), stored.hash.as_bytes())) {
+    if !bool::from(subtle::ConstantTimeEq::ct_eq(
+        actual_hash.as_bytes(),
+        stored.hash.as_bytes(),
+    )) {
         return Ok(VerifyResult::Failure);
     }
 

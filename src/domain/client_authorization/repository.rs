@@ -48,6 +48,13 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         authorization_code_oid: Uuid,
     ) -> Result<(), ClientAuthorizationRepositoryError>;
 
+    async fn revoke_if_active(
+        &self,
+        oid: Uuid,
+        type_: ClientAuthorizationType,
+        now: DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError>;
+
     async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError>;
 }
 

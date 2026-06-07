@@ -41,10 +41,7 @@ pub fn routes() -> Router {
                 .get(third_party_initiated_endpoint::initiate_login),
         )
         .push(Router::with_path("oauth2/check_session").get(session_endpoint::check_session_iframe))
-        .push(
-            Router::with_path("oauth2/logout")
-                .get(logout_endpoint::logout_get),
-        )
+        .push(Router::with_path("oauth2/logout").get(logout_endpoint::logout_get))
         .push(
             Router::with_path("oauth2/logout")
                 .hoop(csrf_middleware())

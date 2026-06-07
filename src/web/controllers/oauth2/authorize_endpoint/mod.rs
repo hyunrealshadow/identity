@@ -53,7 +53,7 @@ async fn render_error(
                 .find_by_oid(client_oid)
                 .await
                 .unwrap_or(None);
-            if !client.map_or(false, |c| c.has_redirect_uri(&uri)) {
+            if !client.is_some_and(|c| c.has_redirect_uri(&uri)) {
                 return render_authorize_error_page(ctx, headers, raw, error);
             }
         } else {
@@ -105,19 +105,31 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
+        Err(error) => {
+            return Ok(render_error(&ctx, &headers, &raw_request, error)
+                .await
+                .into());
+        }
     };
 
     let active_sessions = match load_active_sessions(&ctx, &headers).await {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
+        Err(error) => {
+            return Ok(render_error(&ctx, &headers, &raw_request, error)
+                .await
+                .into());
+        }
     };
     let authorization_request_id = match authorize_service
         .create_authorization_request(&request)
         .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
+        Err(error) => {
+            return Ok(render_error(&ctx, &headers, &raw_request, error)
+                .await
+                .into());
+        }
     };
     let login_id = match authorize_service
         .create_login_flow(
@@ -132,7 +144,11 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
         .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
+        Err(error) => {
+            return Ok(render_error(&ctx, &headers, &raw_request, error)
+                .await
+                .into());
+        }
     };
 
     let flow = match determine_authorize_flow(
@@ -146,7 +162,11 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
     .await
     {
         Ok(value) => value,
-        Err(error) => return Ok(render_error(&ctx, &headers, &raw_request, error).await.into()),
+        Err(error) => {
+            return Ok(render_error(&ctx, &headers, &raw_request, error)
+                .await
+                .into());
+        }
     };
 
     Ok(flow.into_response(&ctx, &headers).into())

@@ -34,8 +34,6 @@ struct InstallForm {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InstallFailureLogContext {
-    username: String,
-    email: String,
     domain: String,
     key_algorithm: String,
 }
@@ -43,8 +41,6 @@ struct InstallFailureLogContext {
 impl InstallFailureLogContext {
     fn from_form(form: &InstallForm) -> Self {
         Self {
-            username: form.username.clone(),
-            email: form.email.clone(),
             domain: form.domain.clone(),
             key_algorithm: form.key_algorithm.clone(),
         }
@@ -63,8 +59,6 @@ fn log_install_failure(error: &identity_application::error::AppError, form: &Ins
             error = %error,
             source = ?error.source(),
             code = error.code(),
-            username = %context.username,
-            email = %context.email,
             domain = %context.domain,
             key_algorithm = %context.key_algorithm,
             "install submission failed"
@@ -73,8 +67,6 @@ fn log_install_failure(error: &identity_application::error::AppError, form: &Ins
         tracing::warn!(
             error = %error,
             code = error.code(),
-            username = %context.username,
-            email = %context.email,
             domain = %context.domain,
             key_algorithm = %context.key_algorithm,
             "install submission rejected"
@@ -258,8 +250,6 @@ mod tests {
         let context = InstallFailureLogContext::from_form(&form);
 
         assert!(should_log_install_failure_as_error(&error));
-        assert_eq!(context.username, "admin");
-        assert_eq!(context.email, "admin@example.com");
         assert_eq!(context.domain, "identity.example.com");
         assert_eq!(context.key_algorithm, "ed25519");
     }

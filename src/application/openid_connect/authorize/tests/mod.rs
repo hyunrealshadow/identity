@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -20,7 +17,7 @@ use tokio::{
 use url::Url;
 use uuid::Uuid;
 
-use super::{AuthorizationRequestParams, AuthorizeService};
+use super::{AuthorizationRequestParams, AuthorizeService, AuthorizeServiceDependencies};
 use crate::{
     data_protection::{
         DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl,
@@ -29,19 +26,11 @@ use crate::{
     setting::runtime::SettingProvider,
 };
 use identity_domain::{
-    auth::{
-        LoginStatus, SessionOid,
-        model::Login,
-        repository::{LoginRepository, LoginRepositoryError},
-    },
-    client_authorization::{
-        ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
-        ClientAuthorizationType,
-    },
+    auth::{SessionOid, repository::LoginRepository},
+    client_authorization::{ClientAuthorization, ClientAuthorizationType},
     key::{
         JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid, KeyType, PublicJwk,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
-        repository::{KeyRepository, KeyRepositoryError},
     },
     openid_connect::{
         OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
@@ -49,10 +38,7 @@ use identity_domain::{
         OpenIdConnectCredentialType,
     },
     setting::installation::{InstallationSetting, InstallationState},
-    user::{
-        User, UserOid,
-        repository::{UserRepository, UserRepositoryError},
-    },
+    user::{User, UserOid},
 };
 
 mod fixtures;

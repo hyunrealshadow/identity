@@ -80,6 +80,13 @@ pub struct LogoutPageData {
     pub nonce: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CheckSessionPageData {
+    pub op_browser_state: String,
+    pub lang: String,
+    pub nonce: String,
+}
+
 pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
     let mut scopes = Vec::new();
 

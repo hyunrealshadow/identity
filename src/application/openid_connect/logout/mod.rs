@@ -79,21 +79,22 @@ pub struct LogoutService {
     http_client: reqwest::Client,
 }
 
+pub struct LogoutServiceDependencies {
+    pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    pub provider_service: Arc<OpenIdProviderService>,
+    pub key_repo: Arc<dyn KeyRepository>,
+    pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
+    pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
+}
+
 impl LogoutService {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        client_repo: Arc<dyn OpenIdConnectClientRepository>,
-        provider_service: Arc<OpenIdProviderService>,
-        key_repo: Arc<dyn KeyRepository>,
-        key_jwk_repo: Arc<dyn KeyJwkRepository>,
-        signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    ) -> Self {
+    pub fn new(deps: LogoutServiceDependencies) -> Self {
         Self {
-            client_repo,
-            provider_service,
-            key_repo,
-            key_jwk_repo,
-            signing_algorithm_detector,
+            client_repo: deps.client_repo,
+            provider_service: deps.provider_service,
+            key_repo: deps.key_repo,
+            key_jwk_repo: deps.key_jwk_repo,
+            signing_algorithm_detector: deps.signing_algorithm_detector,
             http_client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(std::time::Duration::from_secs(5))
@@ -551,8 +552,8 @@ fn unsigned_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        LogoutOutcome, LogoutService, RpInitiatedLogoutRequest, signed_like_id_token_hint_for_test,
-        unsigned_id_token_hint_for_test,
+        LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
+        signed_like_id_token_hint_for_test, unsigned_id_token_hint_for_test,
     };
     use crate::{
         domain::{
@@ -775,11 +776,11 @@ mod tests {
                     .cloned())
             });
 
-        let service = LogoutService::new(
-            Arc::new(FakeClientRepository {
+        let service = LogoutService::new(LogoutServiceDependencies {
+            client_repo: Arc::new(FakeClientRepository {
                 clients: client_map,
             }),
-            Arc::new(OpenIdProviderService::new(Arc::new(
+            provider_service: Arc::new(OpenIdProviderService::new(Arc::new(
                 TestInstallationSetting(Arc::new(InstallationState {
                     initialized: true,
                     domain: Some("https://identity.example.com".to_owned()),
@@ -788,10 +789,10 @@ mod tests {
                     initialized_at: None,
                 })),
             ))),
-            Arc::new(key_repo),
-            Arc::new(jwk_repo),
-            Arc::new(TestSigningAlgorithmDetector),
-        );
+            key_repo: Arc::new(key_repo),
+            key_jwk_repo: Arc::new(jwk_repo),
+            signing_algorithm_detector: Arc::new(TestSigningAlgorithmDetector),
+        });
         (service, signing)
     }
 

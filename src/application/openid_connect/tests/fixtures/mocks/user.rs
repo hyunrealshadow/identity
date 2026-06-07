@@ -34,13 +34,3 @@ pub fn user_repo_with(user: User) -> MockUserRepository {
         .returning(|_user_oid| Ok(()));
     mock
 }
-
-/// Creates a MockUserRepository that returns NotFound for find_by_identifier
-/// and None for find_by_oid.
-pub fn stub_user_repo() -> MockUserRepository {
-    let mut mock = MockUserRepository::new();
-    mock.expect_find_by_oid().returning(|_| Ok(None));
-    mock.expect_find_by_identifier()
-        .returning(|_| Err(UserRepositoryError::UserNotFound));
-    mock
-}

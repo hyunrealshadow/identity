@@ -10,7 +10,7 @@ use crate::database::entity::{
 use identity_domain::auth::{
     SessionOid, SessionStatus,
     model::{ActiveSession, Session},
-    repository::{SessionRepository, SessionRepositoryError},
+    repository::{CreateSessionInput, SessionRepository, SessionRepositoryError},
 };
 
 fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
@@ -98,23 +98,9 @@ impl SessionRepository for SessionRepositoryImpl {
             .collect())
     }
 
-    async fn create(
-        &self,
-        user_oid: Uuid,
-        device_name: Option<String>,
-        device_type: Option<String>,
-        os_name: Option<String>,
-        os_version: Option<String>,
-        browser_name: Option<String>,
-        browser_version: Option<String>,
-        user_agent: Option<String>,
-        ip_address: Option<String>,
-        expires_at: Option<DateTime<Utc>>,
-        acr: Option<String>,
-        acr_expires_at: Option<DateTime<Utc>>,
-    ) -> Result<Session, SessionRepositoryError> {
+    async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError> {
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(user_oid))
+            .filter(user::Column::Oid.eq(input.user_oid))
             .one(&self.db)
             .await
             .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
@@ -125,27 +111,27 @@ impl SessionRepository for SessionRepositoryImpl {
             oid: Set(Uuid::new_v4()),
             user_id: Set(user.id),
             status: Set(SessionStatus::ACTIVE.to_owned()),
-            device_name: Set(device_name),
-            device_type: Set(device_type),
-            os_name: Set(os_name),
-            os_version: Set(os_version),
-            browser_name: Set(browser_name),
-            browser_version: Set(browser_version),
-            user_agent: Set(user_agent),
-            ip_address: Set(ip_address),
+            device_name: Set(input.device_name),
+            device_type: Set(input.device_type),
+            os_name: Set(input.os_name),
+            os_version: Set(input.os_version),
+            browser_name: Set(input.browser_name),
+            browser_version: Set(input.browser_version),
+            user_agent: Set(input.user_agent),
+            ip_address: Set(input.ip_address),
             last_active_at: Set(now.into()),
-            expires_at: Set(encode_nonnullable_expiry(expires_at)),
+            expires_at: Set(encode_nonnullable_expiry(input.expires_at)),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
-            acr: Set(acr),
-            acr_expires_at: Set(acr_expires_at.map(Into::into)),
+            acr: Set(input.acr),
+            acr_expires_at: Set(input.acr_expires_at.map(Into::into)),
             ..Default::default()
         };
         let model = active
             .insert(&self.db)
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
-        Ok(session_to_domain(model, user_oid))
+        Ok(session_to_domain(model, input.user_oid))
     }
 
     async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError> {

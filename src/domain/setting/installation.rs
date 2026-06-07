@@ -50,12 +50,12 @@ impl SettingDefinition for InstallationInitializedAtSetting {
         None
     }
     fn validate(value: &Self::Value) -> Result<(), SettingValidationError> {
-        if let Some(v) = value {
-            if v.timestamp() < 0 {
-                return Err(SettingValidationError::new(
-                    "installation timestamp is invalid",
-                ));
-            }
+        if let Some(v) = value
+            && v.timestamp() < 0
+        {
+            return Err(SettingValidationError::new(
+                "installation timestamp is invalid",
+            ));
         }
         Ok(())
     }

@@ -4,6 +4,10 @@ use url::Url;
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
     domain::{key::PublicJwk, openid_connect::OpenIdConnectCredentialData},
+    openid_connect::remote::{
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
+        fetch_https_public_document, remote_http_client,
+    },
 };
 
 use super::request::DynamicClientJwks;
@@ -51,33 +55,22 @@ pub(super) async fn client_credentials_from_jwks_uri(
 }
 
 async fn fetch_jwks(jwks_uri: &Url) -> Result<DynamicClientJwks, AppError> {
-    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
-    if std::env::var("APP_ENV")
-        .map(|value| value.eq_ignore_ascii_case("conformance"))
-        .unwrap_or(false)
-    {
-        builder = builder.danger_accept_invalid_certs(true);
-    }
+    let client = remote_http_client(RemoteFetchPolicy::new(
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        std::time::Duration::from_secs(5),
+        conformance_allows_invalid_certs(),
+    ))
+    .map_err(|error| {
+        AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
+    })?;
 
-    let response = builder
-        .build()
-        .map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
-        })?
-        .get(jwks_uri.clone())
-        .send()
+    let body = fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
         .await
         .map_err(|error| {
             AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
         })?;
 
-    if !response.status().is_success() {
-        return Err(AppError::from_code(
-            RegistrationErrorCode::ClientCreateFailed,
-        ));
-    }
-
-    response.json::<DynamicClientJwks>().await.map_err(|error| {
+    serde_json::from_slice::<DynamicClientJwks>(&body).map_err(|error| {
         AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
     })
 }

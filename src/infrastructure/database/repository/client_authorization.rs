@@ -113,9 +113,9 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .await
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or_else(|| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::RecordNotFound(
-                    format!("client {client_oid} not found"),
-                )))
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                    sea_orm::DbErr::RecordNotFound(format!("client {client_oid} not found")),
+                ))
             })?;
 
         let now = Utc::now();
@@ -190,10 +190,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         stored.interaction.selection_source = Some(source);
 
         let now = Utc::now();
+        let stored_data = serde_json::to_value(stored)
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::Data,
-                SimpleExpr::Value(serde_json::to_value(stored).unwrap().into()),
+                SimpleExpr::Value(stored_data.into()),
             )
             .col_expr(
                 client_authorization::Column::UpdatedAt,
@@ -237,10 +239,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
 
         let now = Utc::now();
+        let stored_data = serde_json::to_value(stored)
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::Data,
-                SimpleExpr::Value(serde_json::to_value(stored).unwrap().into()),
+                SimpleExpr::Value(stored_data.into()),
             )
             .col_expr(
                 client_authorization::Column::UpdatedAt,
@@ -312,6 +316,35 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(())
+    }
+
+    async fn revoke_if_active(
+        &self,
+        oid: Uuid,
+        type_: ClientAuthorizationType,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let result = ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::RevokedAt,
+                SimpleExpr::Value(Some(now).into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(Some(now).into()),
+            )
+            .filter(
+                Condition::all()
+                    .add(client_authorization::Column::Oid.eq(oid))
+                    .add(client_authorization::Column::Type.eq(type_.to_string()))
+                    .add(client_authorization::Column::RevokedAt.is_null())
+                    .add(client_authorization::Column::ExpiresAt.gt(now)),
+            )
+            .exec(&self.db)
+            .await
+            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+
+        Ok(result.rows_affected == 1)
     }
 
     async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {

@@ -1,18 +1,13 @@
 use http::{StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
-use serde::Serialize;
 
-use crate::controllers::{
-    response::{app_state, render_html},
-    shared::{generate_csp_nonce, load_active_session_entries},
+use crate::{
+    controllers::{
+        response::{app_state, render_app_error, render_html},
+        shared::{generate_csp_nonce, load_active_session_entries},
+    },
+    views::oauth2::CheckSessionPageData,
 };
-
-#[derive(Debug, Serialize)]
-struct CheckSessionPageData {
-    op_browser_state: String,
-    lang: String,
-    nonce: String,
-}
 
 #[handler]
 pub async fn check_session_iframe(
@@ -42,13 +37,7 @@ pub async fn check_session_iframe(
         data,
     ) {
         Ok(body) => render_html(res, StatusCode::OK, body),
-        Err(_) => {
-            render_html(
-                res,
-                StatusCode::OK,
-                format!("<!doctype html><title>OP session iframe</title><script nonce=\"{nonce}\"></script>"),
-            );
-        }
+        Err(error) => render_app_error(res, error),
     }
 
     res.headers_mut().insert(

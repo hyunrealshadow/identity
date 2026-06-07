@@ -1,5 +1,13 @@
 use super::*;
-use josekit::{JoseError, jws::JwsVerifier};
+use crate::openid_connect::jose::{
+    asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
+};
+#[cfg(test)]
+use crate::openid_connect::remote::fetchable_url;
+use crate::openid_connect::remote::{
+    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
+    fetch_document_after_url_validation, validate_https_public_url,
+};
 
 impl AuthorizeService {
     pub(super) async fn resolve_request_object(
@@ -28,40 +36,12 @@ impl AuthorizeService {
         client: &OpenIdConnectClient,
         request_uri: &Url,
     ) -> Result<(), AppError> {
-        if request_uri.scheme() != "https" {
-            return Err(AppError::from_code(AuthorizeErrorCode::RequestUriNotHttps));
-        }
-
-        let is_unsafe_target = match request_uri.host() {
-            Some(url::Host::Ipv4(address)) => {
-                let octets = address.octets();
-                address.is_loopback()
-                    // RFC 1918 Class A: 10.0.0.0/8
-                    || octets[0] == 10
-                    // RFC 1918 Class B: 172.16.0.0/12
-                    || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-                    // RFC 1918 Class C: 192.168.0.0/16
-                    || (octets[0] == 192 && octets[1] == 168)
-                    // Link-local: 169.254.0.0/16
-                    || (octets[0] == 169 && octets[1] == 254)
+        validate_https_public_url(request_uri).map_err(|error| match error {
+            RemoteUrlError::NotHttps => AppError::from_code(AuthorizeErrorCode::RequestUriNotHttps),
+            RemoteUrlError::UnsafeHost => {
+                AppError::from_code(AuthorizeErrorCode::RequestUriUnsafeHost)
             }
-            Some(url::Host::Ipv6(address)) => {
-                let segments = address.segments();
-                address.is_loopback()
-                    // ULA: fc00::/7 (fc00:: through fdff::)
-                    || (segments[0] & 0xfe00) == 0xfc00
-                    // Link-local: fe80::/10
-                    || (segments[0] & 0xffc0) == 0xfe80
-            }
-            Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
-            None => true,
-        };
-
-        if is_unsafe_target {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestUriUnsafeHost,
-            ));
-        }
+        })?;
 
         let registered = client
             .metadata()
@@ -80,38 +60,13 @@ impl AuthorizeService {
     }
 
     pub(super) async fn fetch_request_object(&self, request_uri: &Url) -> Result<String, AppError> {
-        const MAX_REQUEST_OBJECT_BYTES: usize = 1024 * 1024;
-
-        let mut response = self
-            .http_client
-            .get(fetchable_request_uri(request_uri))
-            .send()
-            .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::RequestUriFetchFailed).with_source(error)
-            })?;
-
-        if response.status() != reqwest::StatusCode::OK {
-            return Err(AppError::from_code(AuthorizeErrorCode::RequestUriNot200));
-        }
-
-        if response
-            .content_length()
-            .is_some_and(|length| length > MAX_REQUEST_OBJECT_BYTES as u64)
-        {
-            return Err(AppError::from_code(AuthorizeErrorCode::RequestUriTooLarge));
-        }
-
-        let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestUriReadFailed).with_source(error)
-        })? {
-            if body.len() + chunk.len() > MAX_REQUEST_OBJECT_BYTES {
-                return Err(AppError::from_code(AuthorizeErrorCode::RequestUriTooLarge));
-            }
-
-            body.extend_from_slice(&chunk);
-        }
+        let body = fetch_document_after_url_validation(
+            &self.http_client,
+            request_uri,
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        )
+        .await
+        .map_err(map_request_uri_fetch_error)?;
 
         String::from_utf8(body).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::RequestUriReadFailed).with_source(error)
@@ -679,10 +634,26 @@ impl AuthorizeService {
     }
 }
 
+#[cfg(test)]
 pub(in crate::openid_connect::authorize) fn fetchable_request_uri(request_uri: &Url) -> Url {
-    let mut fetch_uri = request_uri.clone();
-    fetch_uri.set_fragment(None);
-    fetch_uri
+    fetchable_url(request_uri)
+}
+
+fn map_request_uri_fetch_error(error: RemoteFetchError) -> AppError {
+    match error {
+        RemoteFetchError::NotHttps => AppError::from_code(AuthorizeErrorCode::RequestUriNotHttps),
+        RemoteFetchError::UnsafeHost => {
+            AppError::from_code(AuthorizeErrorCode::RequestUriUnsafeHost)
+        }
+        RemoteFetchError::FetchFailed(error) => {
+            AppError::from_code(AuthorizeErrorCode::RequestUriFetchFailed).with_source(error)
+        }
+        RemoteFetchError::NotOk => AppError::from_code(AuthorizeErrorCode::RequestUriNot200),
+        RemoteFetchError::TooLarge => AppError::from_code(AuthorizeErrorCode::RequestUriTooLarge),
+        RemoteFetchError::ReadFailed(error) => {
+            AppError::from_code(AuthorizeErrorCode::RequestUriReadFailed).with_source(error)
+        }
+    }
 }
 
 fn decode_request_object_with_jwk(
@@ -690,30 +661,14 @@ fn decode_request_object_with_jwk(
     alg: &str,
     jwk: &identity_domain::key::PublicJwk,
 ) -> Result<jwt::JwtPayload, AppError> {
-    let jwk_json = serde_json::to_vec(jwk).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid).with_source(error)
+    let verifier = asymmetric_verifier_from_public_jwk(alg, jwk).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
+            .with_param("alg", alg)
+            .with_source(error)
     })?;
-    let jwk = josekit::jwk::Jwk::from_bytes(&jwk_json).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid).with_source(error)
-    })?;
-
-    match alg {
-        "RS256" => decode_with_verifier(raw, RS256.verifier_from_jwk(&jwk)),
-        "RS384" => decode_with_verifier(raw, RS384.verifier_from_jwk(&jwk)),
-        "RS512" => decode_with_verifier(raw, RS512.verifier_from_jwk(&jwk)),
-        "PS256" => decode_with_verifier(raw, PS256.verifier_from_jwk(&jwk)),
-        "PS384" => decode_with_verifier(raw, PS384.verifier_from_jwk(&jwk)),
-        "PS512" => decode_with_verifier(raw, PS512.verifier_from_jwk(&jwk)),
-        "ES256" => decode_with_verifier(raw, ES256.verifier_from_jwk(&jwk)),
-        "ES384" => decode_with_verifier(raw, ES384.verifier_from_jwk(&jwk)),
-        "ES512" => decode_with_verifier(raw, ES512.verifier_from_jwk(&jwk)),
-        "ES256K" => decode_with_verifier(raw, ES256K.verifier_from_jwk(&jwk)),
-        "EdDSA" => decode_with_verifier(raw, EdDSA.verifier_from_jwk(&jwk)),
-        _ => Err(
-            AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported)
-                .with_param("alg", alg),
-        ),
-    }
+    decode_with_verifier(raw, verifier.as_ref()).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed).with_source(error)
+    })
 }
 
 fn decode_request_object(
@@ -721,56 +676,12 @@ fn decode_request_object(
     alg: &str,
     public_key_pem: &[u8],
 ) -> Result<jwt::JwtPayload, AppError> {
-    use identity_domain::key::JwaSigningAlgorithm;
-    let jwa: JwaSigningAlgorithm = alg.parse().map_err(|_| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectAlgUnsupported).with_param("alg", alg)
+    let verifier = asymmetric_verifier_from_pem(alg, public_key_pem).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
+            .with_param("alg", alg)
+            .with_source(error)
     })?;
-    match jwa {
-        JwaSigningAlgorithm::Rs256 => {
-            decode_with_verifier(raw, RS256.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Rs384 => {
-            decode_with_verifier(raw, RS384.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Rs512 => {
-            decode_with_verifier(raw, RS512.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Ps256 => {
-            decode_with_verifier(raw, PS256.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Ps384 => {
-            decode_with_verifier(raw, PS384.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Ps512 => {
-            decode_with_verifier(raw, PS512.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es256 => {
-            decode_with_verifier(raw, ES256.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es384 => {
-            decode_with_verifier(raw, ES384.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es512 => {
-            decode_with_verifier(raw, ES512.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es256k => {
-            decode_with_verifier(raw, ES256K.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::EdDsa => {
-            decode_with_verifier(raw, EdDSA.verifier_from_pem(public_key_pem))
-        }
-    }
-}
-
-fn decode_with_verifier<V: JwsVerifier>(
-    raw: &str,
-    verifier: Result<V, JoseError>,
-) -> Result<jwt::JwtPayload, AppError> {
-    let verifier = verifier.map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid).with_source(error)
-    })?;
-    let (payload, _) = jwt::decode_with_verifier(raw, &verifier).map_err(|error| {
+    decode_with_verifier(raw, verifier.as_ref()).map_err(|error| {
         AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed).with_source(error)
-    })?;
-    Ok(payload)
+    })
 }

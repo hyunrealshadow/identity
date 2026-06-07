@@ -10,10 +10,6 @@ pub(super) use clients::{
     FoundClientRepository, InitiateLoginClientRepository, MissingClientRepository,
     RequestUriClientRepository, ScopedClientRepository, TEST_CLIENT_ID,
 };
-pub(super) use repositories::{
-    ClientAuthorizationState, completed_at_for_test, insert_legacy_authorization_request_for_test,
-    mock_client_auth_repo_with_state, set_stored_request_redirect_uri_for_test,
-};
 pub(super) use request_object::{
     authorize_service_with_public_key, authorize_service_with_request_uri, signed_request_object,
     signing_keypair, spawn_chunked_response_server, spawn_redirect_response_server,

@@ -5,6 +5,8 @@ use identity_domain::auth::repository::{LoginRepository, LoginRepositoryError};
 
 // ─── LoginRepository test double (mockall can't handle &str lifetime params) ───
 
+type UpdateStatusCall = (uuid::Uuid, String, Option<SessionOid>, Option<String>);
+
 /// Simple test double for LoginRepository.  mockall's `mock!` macro cannot
 /// generate a mock for this trait because the methods use `Option<&str>` and
 /// `&str` parameters with elided lifetimes.
@@ -14,8 +16,7 @@ pub struct MockLoginRepository {
     pub create_pending_error: std::sync::Mutex<Option<LoginRepositoryError>>,
     pub bind_user_login: std::sync::Mutex<Option<Login>>,
     pub bind_user_error: std::sync::Mutex<Option<LoginRepositoryError>>,
-    pub update_status_calls:
-        std::sync::Mutex<Vec<(uuid::Uuid, String, Option<SessionOid>, Option<String>)>>,
+    pub update_status_calls: std::sync::Mutex<Vec<UpdateStatusCall>>,
     pub increment_failed_attempts_calls: std::sync::Mutex<Vec<(uuid::Uuid, Option<String>)>>,
 }
 

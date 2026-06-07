@@ -104,11 +104,11 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         &key_data_algorithm(&signing_key),
         Uuid::new_v4(),
     );
-    let service = TokenService::new(
-        repo.clone(),
-        Arc::new(key_repo_with_keys(vec![signing_key])),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo.clone(),
+        key_repo: Arc::new(key_repo_with_keys(vec![signing_key])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
                 email: "es256-refresh@example.com".to_string(),
@@ -143,8 +143,8 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 updated_at: None,
             },
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientSecret,
@@ -157,10 +157,10 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
 
     let refresh_record = repo
         .create(
@@ -239,11 +239,11 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         &key_data_algorithm(&signing_key),
         Uuid::new_v4(),
     );
-    let service = TokenService::new(
-        repo.clone(),
-        Arc::new(key_repo_with_keys(vec![signing_key])),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo.clone(),
+        key_repo: Arc::new(key_repo_with_keys(vec![signing_key])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
                 email: "auth-time@example.com".to_string(),
@@ -278,8 +278,8 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 updated_at: None,
             },
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientSecret,
@@ -292,10 +292,10 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
     let original_auth_time: i64 = 1713500000;
 
     let refresh_record = repo

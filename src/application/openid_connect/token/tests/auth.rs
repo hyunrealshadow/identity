@@ -165,6 +165,63 @@ async fn authenticate_private_key_jwt_rejects_wrong_subject() {
 }
 
 #[tokio::test]
+async fn authenticate_private_key_jwt_rejects_missing_exp() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let rsa = Rsa::generate(2048).unwrap();
+    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
+    let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo,
+        key_repo: Arc::new(key_repo_with_keys(vec![key_for_algorithm("RS256")])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![])),
+        user_repo: Arc::new(InMemoryUserRepository {
+            user: test_user(user_oid),
+        }),
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+            oid: Uuid::new_v4(),
+            client_oid: Uuid::nil(),
+            r#type: OpenIdConnectCredentialType::ClientPublicKey,
+            hint: "private_key_jwt".to_owned(),
+            data: OpenIdConnectCredentialData::ClientPublicKey {
+                public_key,
+                jwk: None,
+            },
+            expires_at: Utc::now() + chrono::Duration::days(1),
+            revoked_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }])),
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
+
+    let mut header = JwsHeader::new();
+    header.set_token_type("JWT");
+    let mut payload = JwtPayload::new();
+    let now = std::time::SystemTime::now();
+    payload.set_issuer(Uuid::nil().to_string());
+    payload.set_subject(Uuid::nil().to_string());
+    payload.set_audience(vec!["https://identity.example.com/oauth2/token"]);
+    payload.set_issued_at(&now);
+    payload.set_jwt_id(Uuid::new_v4().to_string());
+    let assertion = jwt::encode_with_signer(
+        &payload,
+        &header,
+        &*RS256.signer_from_pem(private_key.as_bytes()).unwrap(),
+    )
+    .unwrap();
+
+    let result = service
+        .authenticate_private_key_jwt(&Uuid::nil().to_string(), &assertion)
+        .await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
 async fn authenticate_client_rejects_public_flow_by_default() {
     let service = build_token_service(Arc::new(mock_client_auth_repo()), Uuid::new_v4());
 
@@ -178,19 +235,19 @@ async fn authenticate_client_rejects_public_flow_by_default() {
 
 #[tokio::test]
 async fn authenticate_client_accepts_public_flow_when_enabled() {
-    let service = TokenService::new(
-        Arc::new(mock_client_auth_repo()),
-        Arc::new(key_repo_with_keys(vec![])),
-        Arc::new(jwk_repo_with_bindings(vec![])),
-        Arc::new(InMemoryUserRepository {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: Arc::new(mock_client_auth_repo()),
+        key_repo: Arc::new(key_repo_with_keys(vec![])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: default_user("public@example.com"),
         }),
-        Arc::new(PublicFlowClientRepository),
-        Arc::new(cred_repo_with(vec![])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        client_repo: Arc::new(PublicFlowClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![])),
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
 
     let client_oid = service
         .authenticate_client("00000000-0000-0000-0000-000000000000", None, None, None)
@@ -204,15 +261,15 @@ async fn authenticate_client_accepts_public_flow_when_enabled() {
 async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
     let repo = Arc::new(mock_client_auth_repo());
     let key = key_data_for_algorithm("ES256");
-    let service = TokenService::new(
-        repo,
-        Arc::new(key_repo_with_keys(vec![])),
-        Arc::new(jwk_repo_with_bindings(vec![])),
-        Arc::new(InMemoryUserRepository {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo,
+        key_repo: Arc::new(key_repo_with_keys(vec![])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: default_user("es256@example.com"),
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientPublicKey,
@@ -226,10 +283,10 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
 
     let assertion = build_client_assertion_with_algorithm(
         &key.private_key,
@@ -249,15 +306,15 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
 async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
     let repo = Arc::new(mock_client_auth_repo());
     let key = key_data_for_algorithm("EdDSA");
-    let service = TokenService::new(
-        repo,
-        Arc::new(key_repo_with_keys(vec![])),
-        Arc::new(jwk_repo_with_bindings(vec![])),
-        Arc::new(InMemoryUserRepository {
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo,
+        key_repo: Arc::new(key_repo_with_keys(vec![])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: default_user("eddsa@example.com"),
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientPublicKey,
@@ -271,10 +328,10 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    );
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    });
 
     let assertion = build_client_assertion_with_algorithm(
         &key.private_key,

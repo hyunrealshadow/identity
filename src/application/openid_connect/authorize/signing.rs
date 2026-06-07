@@ -1,19 +1,44 @@
 use super::*;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use josekit::{
-    jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
-    },
-    jwt,
-    jwt::JwtPayload,
-};
+use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::error::codes::common::CommonErrorCode;
 use crate::openid_connect::dto::UserInfoClaims;
+use crate::openid_connect::jose::asymmetric_signer_from_pem;
 use identity_domain::openid_connect::model::claim::{JwtTokenType, TokenUseValues};
+
+pub(super) struct SignImplicitIdTokenInput<'a> {
+    pub key_id: &'a str,
+    pub private_key_pem: &'a str,
+    pub alg: &'a str,
+    pub issuer: &'a Url,
+    pub audience: &'a str,
+    pub user: &'a identity_domain::user::User,
+    pub nonce: &'a str,
+    pub auth_time: i64,
+    pub acr: Option<&'a str>,
+    pub access_token: Option<&'a str>,
+    pub code: Option<&'a str>,
+    pub protected_session_id: Option<&'a str>,
+    pub scope: &'a ScopeSet,
+    pub claims_request: Option<&'a serde_json::Value>,
+}
+
+pub(super) struct SignImplicitAccessTokenInput<'a> {
+    pub key_id: &'a str,
+    pub private_key_pem: &'a str,
+    pub alg: &'a str,
+    pub issuer: &'a Url,
+    pub audience: &'a str,
+    pub client_id: &'a str,
+    pub user_oid: &'a str,
+    pub protected_session_id: &'a str,
+    pub scope: &'a str,
+    pub token_id: &'a str,
+    pub claims: Option<&'a serde_json::Value>,
+}
 
 impl AuthorizeService {
     pub(super) async fn load_signing_key_impl(&self) -> Result<(String, String, String), AppError> {
@@ -59,58 +84,50 @@ impl AuthorizeService {
         Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn sign_implicit_id_token(
         &self,
-        key_id: &str,
-        private_key_pem: &str,
-        alg: &str,
-        issuer: &Url,
-        audience: &str,
-        user: &identity_domain::user::User,
-        nonce: &str,
-        auth_time: i64,
-        acr: Option<&str>,
-        access_token: Option<&str>,
-        code: Option<&str>,
-        protected_session_id: Option<&str>,
-        scope: &ScopeSet,
-        claims_request: Option<&serde_json::Value>,
+        input: SignImplicitIdTokenInput<'_>,
     ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
         header.set_token_type("JWT");
-        header.set_key_id(key_id);
+        header.set_key_id(input.key_id);
 
         let mut payload = JwtPayload::new();
         let now = std::time::SystemTime::now();
-        payload.set_issuer(issuer.as_str());
-        payload.set_subject(Uuid::from(user.oid).to_string());
-        payload.set_audience(vec![audience]);
+        payload.set_issuer(input.issuer.as_str());
+        payload.set_subject(Uuid::from(input.user.oid).to_string());
+        payload.set_audience(vec![input.audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload
-            .set_claim(JwtClaimNames::AZP, Some(serde_json::json!(audience)))
+            .set_claim(JwtClaimNames::AZP, Some(serde_json::json!(input.audience)))
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(amr_values(acr))))
+            .set_claim(
+                JwtClaimNames::AMR,
+                Some(serde_json::json!(amr_values(input.acr))),
+            )
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
 
         payload
-            .set_claim(JwtClaimNames::NONCE, Some(serde_json::json!(nonce)))
+            .set_claim(JwtClaimNames::NONCE, Some(serde_json::json!(input.nonce)))
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::AUTH_TIME, Some(serde_json::json!(auth_time)))
+            .set_claim(
+                JwtClaimNames::AUTH_TIME,
+                Some(serde_json::json!(input.auth_time)),
+            )
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
 
-        if let Some(acr) = acr {
+        if let Some(acr) = input.acr {
             payload
                 .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
                 .map_err(|error| {
@@ -118,23 +135,23 @@ impl AuthorizeService {
                 })?;
         }
 
-        if let Some(access_token) = access_token {
-            let at_hash = compute_front_channel_hash(access_token, alg);
+        if let Some(access_token) = input.access_token {
+            let at_hash = compute_front_channel_hash(access_token, input.alg);
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;
         }
-        if let Some(code) = code {
-            let c_hash = compute_front_channel_hash(code, alg);
+        if let Some(code) = input.code {
+            let c_hash = compute_front_channel_hash(code, input.alg);
             payload
                 .set_claim(JwtClaimNames::C_HASH, Some(serde_json::json!(c_hash)))
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;
         }
-        if let Some(protected_session_id) = protected_session_id {
+        if let Some(protected_session_id) = input.protected_session_id {
             payload
                 .set_claim(
                     JwtClaimNames::SID,
@@ -145,17 +162,17 @@ impl AuthorizeService {
                 })?;
         }
 
-        let id_token_scope = if access_token.is_some() || code.is_some() {
+        let id_token_scope = if input.access_token.is_some() || input.code.is_some() {
             ScopeSet {
                 openid: true,
                 ..Default::default()
             }
         } else {
-            scope.clone()
+            input.scope.clone()
         };
         let mut standard_claims =
-            UserInfoClaims::from_user_with_profile_base(user, issuer.as_str());
-        standard_claims.apply_scope_filter_for_id_token(&id_token_scope, claims_request);
+            UserInfoClaims::from_user_with_profile_base(input.user, input.issuer.as_str());
+        standard_claims.apply_scope_filter_for_id_token(&id_token_scope, input.claims_request);
         let standard_claims_value = serde_json::to_value(standard_claims).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })?;
@@ -173,7 +190,7 @@ impl AuthorizeService {
             }
         }
 
-        if alg == "none" {
+        if input.alg == "none" {
             #[cfg(feature = "allow-none-alg")]
             return Self::sign_unsigned_implicit_id_token(&header, &payload);
 
@@ -181,7 +198,8 @@ impl AuthorizeService {
             return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
         }
 
-        let signer: Box<dyn josekit::jws::JwsSigner> = build_signer_for_alg(private_key_pem, alg)?;
+        let signer: Box<dyn josekit::jws::JwsSigner> =
+            build_signer_for_alg(input.private_key_pem, input.alg)?;
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })
@@ -197,47 +215,39 @@ impl AuthorizeService {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn sign_implicit_access_token(
         &self,
-        key_id: &str,
-        private_key_pem: &str,
-        alg: &str,
-        issuer: &Url,
-        audience: &str,
-        client_id: &str,
-        user_oid: &str,
-        protected_session_id: &str,
-        scope: &str,
-        token_id: &str,
-        claims: Option<&serde_json::Value>,
+        input: SignImplicitAccessTokenInput<'_>,
     ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
         header.set_token_type(JwtTokenType::ACCESS_TOKEN);
-        header.set_key_id(key_id);
+        header.set_key_id(input.key_id);
 
         let mut payload = JwtPayload::new();
         let now = std::time::SystemTime::now();
-        payload.set_issuer(issuer.as_str());
-        payload.set_subject(user_oid);
-        payload.set_audience(vec![audience]);
+        payload.set_issuer(input.issuer.as_str());
+        payload.set_subject(input.user_oid);
+        payload.set_audience(vec![input.audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
-        payload.set_jwt_id(token_id);
+        payload.set_jwt_id(input.token_id);
         payload
-            .set_claim(JwtClaimNames::CLIENT_ID, Some(serde_json::json!(client_id)))
+            .set_claim(
+                JwtClaimNames::CLIENT_ID,
+                Some(serde_json::json!(input.client_id)),
+            )
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
-            .set_claim(JwtClaimNames::SCOPE, Some(serde_json::json!(scope)))
+            .set_claim(JwtClaimNames::SCOPE, Some(serde_json::json!(input.scope)))
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
             .set_claim(
                 JwtClaimNames::SID,
-                Some(serde_json::json!(protected_session_id)),
+                Some(serde_json::json!(input.protected_session_id)),
             )
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
@@ -250,7 +260,7 @@ impl AuthorizeService {
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
-        if let Some(claims_value) = claims {
+        if let Some(claims_value) = input.claims {
             payload
                 .set_claim("claims", Some(claims_value.clone()))
                 .map_err(|error| {
@@ -258,7 +268,8 @@ impl AuthorizeService {
                 })?;
         }
 
-        let signer: Box<dyn josekit::jws::JwsSigner> = build_signer_for_alg(private_key_pem, alg)?;
+        let signer: Box<dyn josekit::jws::JwsSigner> =
+            build_signer_for_alg(input.private_key_pem, input.alg)?;
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })
@@ -349,25 +360,9 @@ fn build_signer_for_alg(
     private_key_pem: &str,
     alg: &str,
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
-    let jwa: JwaSigningAlgorithm = alg
-        .parse()
-        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
-    let pem = private_key_pem.as_bytes();
-    let err =
-        |e: josekit::JoseError| AppError::from_code(CommonErrorCode::InternalError).with_source(e);
-    match jwa {
-        JwaSigningAlgorithm::Rs256 => Ok(Box::new(RS256.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Rs384 => Ok(Box::new(RS384.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Rs512 => Ok(Box::new(RS512.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Ps256 => Ok(Box::new(PS256.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Ps384 => Ok(Box::new(PS384.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Ps512 => Ok(Box::new(PS512.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Es256 => Ok(Box::new(ES256.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Es384 => Ok(Box::new(ES384.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Es512 => Ok(Box::new(ES512.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::Es256k => Ok(Box::new(ES256K.signer_from_pem(pem).map_err(err)?)),
-        JwaSigningAlgorithm::EdDsa => Ok(Box::new(EdDSA.signer_from_pem(pem).map_err(err)?)),
-    }
+    asymmetric_signer_from_pem(alg, private_key_pem.as_bytes()).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+    })
 }
 
 fn compute_front_channel_hash(value: &str, alg: &str) -> String {

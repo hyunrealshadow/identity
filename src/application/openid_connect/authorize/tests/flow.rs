@@ -1,5 +1,6 @@
 use super::fixtures::*;
 use super::*;
+use crate::openid_connect::authorize::signing::SignImplicitIdTokenInput;
 use crate::openid_connect::authorize::tests::fixtures::repositories::{
     ClientAuthorizationState, completed_at_for_test, insert_legacy_authorization_request_for_test,
     mock_client_auth_repo_with_state, set_stored_request_redirect_uri_for_test,
@@ -114,18 +115,18 @@ fn hybrid_binding(key_oid: KeyOid, binding_oid: Uuid) -> KeyJwk {
 fn default_authorize_service_with_request_repo() -> AuthorizeServiceWithRequestRepo {
     let state = Arc::new(ClientAuthorizationState::default());
     let mock_repo = Arc::new(mock_client_auth_repo_with_state(state.clone()));
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(empty_cred_repo()),
-        mock_repo,
-        Arc::new(mock_login_repo()),
-        Arc::new(stub_user_repo()),
-        Arc::new(stub_key_repo()),
-        Arc::new(MockKeyJwkRepository::new()),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+    let service = AuthorizeService::new(AuthorizeServiceDependencies {
+        client_repo: Arc::new(FoundClientRepository),
+        credential_repo: Arc::new(empty_cred_repo()),
+        client_authorization_repo: mock_repo,
+        login_repo: Arc::new(mock_login_repo()),
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(stub_key_repo()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+    });
 
     (service, state)
 }
@@ -560,18 +561,18 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
     let binding_oid = Uuid::new_v4();
     let service = {
         let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
-        AuthorizeService::new(
-            Arc::new(FoundClientRepository),
-            Arc::new(empty_cred_repo()),
-            request_repo,
-            Arc::new(mock_login_repo()),
-            Arc::new(user_repo_with(hybrid_user(user_oid))),
-            Arc::new(key_repo),
-            Arc::new(jwk_repo),
-            provider_service(),
-            test_signing_algorithm_detector(),
-            test_data_protector(),
-        )
+        AuthorizeService::new(AuthorizeServiceDependencies {
+            client_repo: Arc::new(FoundClientRepository),
+            credential_repo: Arc::new(empty_cred_repo()),
+            client_authorization_repo: request_repo,
+            login_repo: Arc::new(mock_login_repo()),
+            user_repo: Arc::new(user_repo_with(hybrid_user(user_oid))),
+            key_repo: Arc::new(key_repo),
+            key_jwk_repo: Arc::new(jwk_repo),
+            provider_service: provider_service(),
+            signing_algorithm_detector: test_signing_algorithm_detector(),
+            data_protector: test_data_protector(),
+        })
     };
 
     let mut request_params = params("openid profile");
@@ -628,18 +629,18 @@ async fn approve_implicit_flow_returns_session_state() {
     let service = {
         let binding_oid = Uuid::new_v4();
         let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
-        AuthorizeService::new(
-            Arc::new(FoundClientRepository),
-            Arc::new(empty_cred_repo()),
-            request_repo,
-            Arc::new(mock_login_repo()),
-            Arc::new(user_repo_with(hybrid_user(user_oid))),
-            Arc::new(key_repo),
-            Arc::new(jwk_repo),
-            provider_service(),
-            test_signing_algorithm_detector(),
-            test_data_protector(),
-        )
+        AuthorizeService::new(AuthorizeServiceDependencies {
+            client_repo: Arc::new(FoundClientRepository),
+            credential_repo: Arc::new(empty_cred_repo()),
+            client_authorization_repo: request_repo,
+            login_repo: Arc::new(mock_login_repo()),
+            user_repo: Arc::new(user_repo_with(hybrid_user(user_oid))),
+            key_repo: Arc::new(key_repo),
+            key_jwk_repo: Arc::new(jwk_repo),
+            provider_service: provider_service(),
+            signing_algorithm_detector: test_signing_algorithm_detector(),
+            data_protector: test_data_protector(),
+        })
     };
 
     let mut request_params = params("openid profile");
@@ -676,18 +677,18 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
     let service = {
         let binding_oid = Uuid::new_v4();
         let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
-        AuthorizeService::new(
-            Arc::new(FoundClientRepository),
-            Arc::new(empty_cred_repo()),
-            request_repo,
-            Arc::new(mock_login_repo()),
-            Arc::new(user_repo_with(hybrid_user(user_oid))),
-            Arc::new(key_repo),
-            Arc::new(jwk_repo),
-            provider_service(),
-            test_signing_algorithm_detector(),
-            test_data_protector(),
-        )
+        AuthorizeService::new(AuthorizeServiceDependencies {
+            client_repo: Arc::new(FoundClientRepository),
+            credential_repo: Arc::new(empty_cred_repo()),
+            client_authorization_repo: request_repo,
+            login_repo: Arc::new(mock_login_repo()),
+            user_repo: Arc::new(user_repo_with(hybrid_user(user_oid))),
+            key_repo: Arc::new(key_repo),
+            key_jwk_repo: Arc::new(jwk_repo),
+            provider_service: provider_service(),
+            signing_algorithm_detector: test_signing_algorithm_detector(),
+            data_protector: test_data_protector(),
+        })
     };
 
     let mut request_params = params("openid profile");
@@ -740,18 +741,18 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
     let service = {
         let binding_oid = Uuid::new_v4();
         let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
-        AuthorizeService::new(
-            Arc::new(FoundClientRepository),
-            Arc::new(empty_cred_repo()),
-            request_repo,
-            Arc::new(mock_login_repo()),
-            Arc::new(user_repo_with(hybrid_user(user_oid))),
-            Arc::new(key_repo),
-            Arc::new(jwk_repo),
-            provider_service(),
-            test_signing_algorithm_detector(),
-            test_data_protector(),
-        )
+        AuthorizeService::new(AuthorizeServiceDependencies {
+            client_repo: Arc::new(FoundClientRepository),
+            credential_repo: Arc::new(empty_cred_repo()),
+            client_authorization_repo: request_repo,
+            login_repo: Arc::new(mock_login_repo()),
+            user_repo: Arc::new(user_repo_with(hybrid_user(user_oid))),
+            key_repo: Arc::new(key_repo),
+            key_jwk_repo: Arc::new(jwk_repo),
+            provider_service: provider_service(),
+            signing_algorithm_detector: test_signing_algorithm_detector(),
+            data_protector: test_data_protector(),
+        })
     };
 
     let mut request_params = params("openid profile");
@@ -884,22 +885,22 @@ fn sign_implicit_id_token_includes_scope_claims() {
     let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
-        .sign_implicit_id_token(
-            "kid",
-            std::str::from_utf8(&private_key).unwrap(),
-            "RS256",
-            &issuer,
-            "client-1",
-            &user,
-            "nonce-1",
-            Utc::now().timestamp(),
-            None,
-            None,
-            None,
-            None,
-            &scope,
-            None,
-        )
+        .sign_implicit_id_token(SignImplicitIdTokenInput {
+            key_id: "kid",
+            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            alg: "RS256",
+            issuer: &issuer,
+            audience: "client-1",
+            user: &user,
+            nonce: "nonce-1",
+            auth_time: Utc::now().timestamp(),
+            acr: None,
+            access_token: None,
+            code: None,
+            protected_session_id: None,
+            scope: &scope,
+            claims_request: None,
+        })
         .unwrap();
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (payload, _) = jwt::decode_with_verifier(&token, &verifier).unwrap();
@@ -945,22 +946,22 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     });
 
     let token = service
-        .sign_implicit_id_token(
-            "kid",
-            std::str::from_utf8(&private_key).unwrap(),
-            "RS256",
-            &issuer,
-            "client-1",
-            &user,
-            "nonce-1",
-            Utc::now().timestamp(),
-            None,
-            None,
-            None,
-            Some("protected-session"),
-            &scope,
-            Some(&claims_request),
-        )
+        .sign_implicit_id_token(SignImplicitIdTokenInput {
+            key_id: "kid",
+            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            alg: "RS256",
+            issuer: &issuer,
+            audience: "client-1",
+            user: &user,
+            nonce: "nonce-1",
+            auth_time: Utc::now().timestamp(),
+            acr: None,
+            access_token: None,
+            code: None,
+            protected_session_id: Some("protected-session"),
+            scope: &scope,
+            claims_request: Some(&claims_request),
+        })
         .unwrap();
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (payload, _) = jwt::decode_with_verifier(&token, &verifier).unwrap();
@@ -990,22 +991,22 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
     let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
-        .sign_implicit_id_token(
-            "kid",
-            std::str::from_utf8(&private_key).unwrap(),
-            "RS256",
-            &issuer,
-            "client-1",
-            &user,
-            "nonce-1",
-            Utc::now().timestamp(),
-            None,
-            Some("access-token"),
-            None,
-            None,
-            &scope,
-            None,
-        )
+        .sign_implicit_id_token(SignImplicitIdTokenInput {
+            key_id: "kid",
+            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            alg: "RS256",
+            issuer: &issuer,
+            audience: "client-1",
+            user: &user,
+            nonce: "nonce-1",
+            auth_time: Utc::now().timestamp(),
+            acr: None,
+            access_token: Some("access-token"),
+            code: None,
+            protected_session_id: None,
+            scope: &scope,
+            claims_request: None,
+        })
         .unwrap();
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (payload, _) = jwt::decode_with_verifier(&token, &verifier).unwrap();
@@ -1029,22 +1030,22 @@ fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
     let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
-        .sign_implicit_id_token(
-            "kid",
-            std::str::from_utf8(&private_key).unwrap(),
-            "RS256",
-            &issuer,
-            "client-1",
-            &user,
-            "nonce-1",
-            Utc::now().timestamp(),
-            None,
-            None,
-            Some("authorization-code"),
-            None,
-            &scope,
-            None,
-        )
+        .sign_implicit_id_token(SignImplicitIdTokenInput {
+            key_id: "kid",
+            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            alg: "RS256",
+            issuer: &issuer,
+            audience: "client-1",
+            user: &user,
+            nonce: "nonce-1",
+            auth_time: Utc::now().timestamp(),
+            acr: None,
+            access_token: None,
+            code: Some("authorization-code"),
+            protected_session_id: None,
+            scope: &scope,
+            claims_request: None,
+        })
         .unwrap();
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (payload, _) = jwt::decode_with_verifier(&token, &verifier).unwrap();

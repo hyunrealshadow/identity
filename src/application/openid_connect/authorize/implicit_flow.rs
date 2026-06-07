@@ -1,9 +1,25 @@
 use super::flow::session_state_for_authorize_response;
+use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
 use super::*;
 use crate::openid_connect::token::resolve_id_token_alg;
 use identity_domain::auth::SessionOid;
 use std::fmt::Write;
 use uuid::Uuid;
+
+struct CreateFrontChannelAccessTokenInput<'a> {
+    client_id: Uuid,
+    user_oid: Uuid,
+    session_oid: SessionOid,
+    protected_session_id: &'a str,
+    request: &'a AuthorizationRequestData,
+    authorization_code_oid: Option<Uuid>,
+    signing_key_id: &'a str,
+    signing_key_pem: &'a str,
+    signing_alg: &'a str,
+    issuer: &'a Url,
+    audience: &'a str,
+    claims: Option<&'a serde_json::Value>,
+}
 
 impl AuthorizeService {
     pub(super) async fn approve_implicit_flow(
@@ -68,20 +84,20 @@ impl AuthorizeService {
         let (access_token, expires_in) = if include_access_token {
             (
                 Some(
-                    self.create_front_channel_access_token(
+                    self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
                         client_id,
                         user_oid,
                         session_oid,
                         protected_session_id,
                         request,
-                        None,
-                        &signing_key_id,
-                        &signing_key_pem,
-                        &signing_alg,
-                        &issuer,
-                        &audience,
-                        claims.as_ref(),
-                    )
+                        authorization_code_oid: None,
+                        signing_key_id: &signing_key_id,
+                        signing_key_pem: &signing_key_pem,
+                        signing_alg: &signing_alg,
+                        issuer: &issuer,
+                        audience: &audience,
+                        claims: claims.as_ref(),
+                    })
                     .await?,
                 ),
                 3600u64,
@@ -90,25 +106,25 @@ impl AuthorizeService {
             (None, 0)
         };
 
-        let signed_id_token = self.sign_implicit_id_token(
-            &signing_key_id,
-            &signing_key_pem,
-            &id_token_alg,
-            &issuer,
-            &audience,
-            &user,
+        let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
+            key_id: &signing_key_id,
+            private_key_pem: &signing_key_pem,
+            alg: &id_token_alg,
+            issuer: &issuer,
+            audience: &audience,
+            user: &user,
             nonce,
-            auth_time_val,
-            request
+            auth_time: auth_time_val,
+            acr: request
                 .acr_values
                 .as_ref()
                 .and_then(|v| v.first().map(String::as_str)),
-            access_token.as_deref(),
-            None,
-            Some(protected_session_id),
-            &scope,
-            claims.as_ref(),
-        )?;
+            access_token: access_token.as_deref(),
+            code: None,
+            protected_session_id: Some(protected_session_id),
+            scope: &scope,
+            claims_request: claims.as_ref(),
+        })?;
 
         let id_token = match client.metadata().id_token_encrypted_response_alg.as_deref() {
             Some(alg) => {
@@ -197,20 +213,20 @@ impl AuthorizeService {
 
         let access_token = if response_type.includes_access_token() {
             Some(
-                self.create_front_channel_access_token(
+                self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
                     client_id,
                     user_oid,
                     session_oid,
                     protected_session_id,
                     request,
-                    Some(authorization_code_oid),
-                    &signing_key_id,
-                    &signing_key_pem,
-                    &signing_alg,
-                    &issuer,
-                    &audience,
-                    claims.as_ref(),
-                )
+                    authorization_code_oid: Some(authorization_code_oid),
+                    signing_key_id: &signing_key_id,
+                    signing_key_pem: &signing_key_pem,
+                    signing_alg: &signing_alg,
+                    issuer: &issuer,
+                    audience: &audience,
+                    claims: claims.as_ref(),
+                })
                 .await?,
             )
         } else {
@@ -230,25 +246,25 @@ impl AuthorizeService {
                     AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
                 })?
                 .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
-            let signed_id_token = self.sign_implicit_id_token(
-                &signing_key_id,
-                &signing_key_pem,
-                &id_token_alg,
-                &issuer,
-                &audience,
-                &user,
+            let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
+                key_id: &signing_key_id,
+                private_key_pem: &signing_key_pem,
+                alg: &id_token_alg,
+                issuer: &issuer,
+                audience: &audience,
+                user: &user,
                 nonce,
-                auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp()),
-                request
+                auth_time: auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp()),
+                acr: request
                     .acr_values
                     .as_ref()
                     .and_then(|v| v.first().map(String::as_str)),
-                access_token.as_deref(),
-                Some(&code),
-                Some(protected_session_id),
-                &scope,
-                claims.as_ref(),
-            )?;
+                access_token: access_token.as_deref(),
+                code: Some(&code),
+                protected_session_id: Some(protected_session_id),
+                scope: &scope,
+                claims_request: claims.as_ref(),
+            })?;
             Some(
                 match client.metadata().id_token_encrypted_response_alg.as_deref() {
                     Some(alg) => {
@@ -293,33 +309,21 @@ impl AuthorizeService {
         Ok(url)
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn create_front_channel_access_token(
         &self,
-        client_id: Uuid,
-        user_oid: Uuid,
-        session_oid: SessionOid,
-        protected_session_id: &str,
-        request: &AuthorizationRequestData,
-        authorization_code_oid: Option<Uuid>,
-        signing_key_id: &str,
-        signing_key_pem: &str,
-        signing_alg: &str,
-        issuer: &Url,
-        audience: &str,
-        claims: Option<&serde_json::Value>,
+        input: CreateFrontChannelAccessTokenInput<'_>,
     ) -> Result<String, AppError> {
         let access_token_record = self
             .client_authorization_repo
             .create(
-                client_id,
+                input.client_id,
                 ClientAuthorizationType::AccessToken,
                 serde_json::to_value(identity_domain::client_authorization::AccessTokenData {
-                    scope: request.scope.clone(),
-                    user_oid: user_oid.to_string(),
-                    session_oid,
-                    protected_session_id: Some(protected_session_id.to_string()),
-                    authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
+                    scope: input.request.scope.clone(),
+                    user_oid: input.user_oid.to_string(),
+                    session_oid: input.session_oid,
+                    protected_session_id: Some(input.protected_session_id.to_string()),
+                    authorization_code_oid: input.authorization_code_oid.map(|oid| oid.to_string()),
                 })
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
@@ -331,19 +335,19 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
             })?;
 
-        self.sign_implicit_access_token(
-            signing_key_id,
-            signing_key_pem,
-            signing_alg,
-            issuer,
-            audience,
-            audience,
-            &user_oid.to_string(),
-            protected_session_id,
-            &request.scope,
-            &access_token_record.oid.to_string(),
-            claims,
-        )
+        self.sign_implicit_access_token(SignImplicitAccessTokenInput {
+            key_id: input.signing_key_id,
+            private_key_pem: input.signing_key_pem,
+            alg: input.signing_alg,
+            issuer: input.issuer,
+            audience: input.audience,
+            client_id: input.audience,
+            user_oid: &input.user_oid.to_string(),
+            protected_session_id: input.protected_session_id,
+            scope: &input.request.scope,
+            token_id: &access_token_record.oid.to_string(),
+            claims: input.claims,
+        })
     }
 }
 

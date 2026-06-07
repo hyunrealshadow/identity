@@ -1,5 +1,12 @@
 use crate::{m20260306_031058_create_client::Client, m20260426_000001_create_scope::Scope};
-use sea_orm_migration::{prelude::*, schema::*};
+use sea_orm_migration::{async_trait, sea_orm};
+use sea_orm_migration::{
+    prelude::{
+        DbErr, DeriveIden, DeriveMigrationName, Expr, ForeignKey, ForeignKeyAction, Index,
+        MigrationTrait, SchemaManager, Table,
+    },
+    schema::{big_integer, pk_auto, timestamp_with_time_zone},
+};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

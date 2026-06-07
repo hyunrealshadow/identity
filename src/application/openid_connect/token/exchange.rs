@@ -1,4 +1,5 @@
 use super::signing::StoreRefreshTokenParams;
+use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
 use identity_domain::auth::SessionOid;
 
@@ -62,6 +63,7 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::CodeClientMismatch));
         }
 
+        let now = chrono::Utc::now();
         if record.revoked_at.is_some() {
             self.client_authorization_repo
                 .revoke_access_tokens_for_authorization_code(record.oid)
@@ -72,7 +74,7 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
         }
 
-        if record.expires_at <= chrono::Utc::now() {
+        if record.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
         }
 
@@ -99,6 +101,23 @@ impl TokenService {
             data.code_challenge_method.as_deref(),
             verifier,
         )?;
+
+        let claimed = self
+            .client_authorization_repo
+            .revoke_if_active(record.oid, ClientAuthorizationType::AuthorizationCode, now)
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
+            })?;
+        if !claimed {
+            self.client_authorization_repo
+                .revoke_access_tokens_for_authorization_code(record.oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
+                })?;
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+        }
 
         let user_oid = Uuid::parse_str(&data.user_oid).map_err(|error| {
             AppError::from_code(TokenErrorCode::StoredUserOidInvalid).with_source(error)
@@ -133,35 +152,34 @@ impl TokenService {
                 Some(record.oid),
             )
             .await?;
-        let access_token = self.sign_access_token(
-            &access_token_record.oid.to_string(),
-            &signing_key_id,
-            &signing_key_pem,
-            &signing_alg,
-            &issuer,
-            &audience,
-            &client_id_str,
-            &user_oid,
-            &protected_session_id,
-            &data.scope,
-            data.claims.as_ref(),
-        )?;
+        let access_token = self.sign_access_token(SignAccessTokenInput {
+            token_id: &access_token_record.oid.to_string(),
+            key_id: &signing_key_id,
+            private_key_pem: &signing_key_pem,
+            alg: &signing_alg,
+            issuer: &issuer,
+            audience: &audience,
+            client_id: &client_id_str,
+            user_oid: &user_oid,
+            protected_session_id: &protected_session_id,
+            scope: &data.scope,
+            claims: data.claims.as_ref(),
+        })?;
         let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
-            let signed = self.sign_id_token(
-                &signing_key_id,
-                &signing_key_pem,
-                &id_token_alg,
-                &issuer,
-                &audience,
-                &authenticated_client,
-                &user,
-                data.nonce.as_deref(),
-                data.auth_time,
-                data.acr.as_deref(),
-                Some(&access_token),
-                Some(&protected_session_id),
-                &data.scope,
-            )?;
+            let signed = self.sign_id_token(SignIdTokenInput {
+                key_id: &signing_key_id,
+                private_key_pem: &signing_key_pem,
+                alg: &id_token_alg,
+                issuer: &issuer,
+                audience: &audience,
+                client: &authenticated_client,
+                user: &user,
+                nonce: data.nonce.as_deref(),
+                auth_time: data.auth_time,
+                acr: data.acr.as_deref(),
+                access_token: Some(&access_token),
+                protected_session_id: Some(&protected_session_id),
+            })?;
             let id_token = match authenticated_client
                 .metadata()
                 .id_token_encrypted_response_alg
@@ -202,13 +220,6 @@ impl TokenService {
         } else {
             None
         };
-
-        self.client_authorization_repo
-            .revoke(record.oid)
-            .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
-            })?;
 
         Ok(TokenResponse {
             access_token,
@@ -273,7 +284,8 @@ impl TokenService {
         if refresh_record.type_ != ClientAuthorizationType::RefreshToken {
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenNotFound));
         }
-        if refresh_record.revoked_at.is_some() || refresh_record.expires_at <= chrono::Utc::now() {
+        let now = chrono::Utc::now();
+        if refresh_record.revoked_at.is_some() || refresh_record.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
         let refresh_data: RefreshTokenData = serde_json::from_value(refresh_record.data.clone())
@@ -292,6 +304,21 @@ impl TokenService {
             return Err(AppError::from_code(
                 TokenErrorCode::RefreshTokenClientMismatch,
             ));
+        }
+
+        let claimed = self
+            .client_authorization_repo
+            .revoke_if_active(
+                refresh_record.oid,
+                ClientAuthorizationType::RefreshToken,
+                now,
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
+            })?;
+        if !claimed {
+            return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
 
         let user_oid = Uuid::parse_str(&refresh_data.user_oid).map_err(|error| {
@@ -319,34 +346,33 @@ impl TokenService {
                 None,
             )
             .await?;
-        let access_token = self.sign_access_token(
-            &access_token_record.oid.to_string(),
-            &signing_key_id,
-            &signing_key_pem,
-            &signing_alg,
-            &issuer,
-            &client_id,
-            &client_id,
-            &user_oid,
-            &protected_session_id,
-            &scope,
-            None,
-        )?;
-        let signed_id_token = self.sign_id_token(
-            &signing_key_id,
-            &signing_key_pem,
-            &signing_alg,
-            &issuer,
-            &client_id,
-            &authenticated_client,
-            &user,
-            None,
-            refresh_data.auth_time,
-            None,
-            Some(&access_token),
-            Some(&protected_session_id),
-            &scope,
-        )?;
+        let access_token = self.sign_access_token(SignAccessTokenInput {
+            token_id: &access_token_record.oid.to_string(),
+            key_id: &signing_key_id,
+            private_key_pem: &signing_key_pem,
+            alg: &signing_alg,
+            issuer: &issuer,
+            audience: &client_id,
+            client_id: &client_id,
+            user_oid: &user_oid,
+            protected_session_id: &protected_session_id,
+            scope: &scope,
+            claims: None,
+        })?;
+        let signed_id_token = self.sign_id_token(SignIdTokenInput {
+            key_id: &signing_key_id,
+            private_key_pem: &signing_key_pem,
+            alg: &signing_alg,
+            issuer: &issuer,
+            audience: &client_id,
+            client: &authenticated_client,
+            user: &user,
+            nonce: None,
+            auth_time: refresh_data.auth_time,
+            acr: None,
+            access_token: Some(&access_token),
+            protected_session_id: Some(&protected_session_id),
+        })?;
         let id_token = Some(
             match authenticated_client
                 .metadata()
@@ -365,12 +391,6 @@ impl TokenService {
                 None => signed_id_token,
             },
         );
-        self.client_authorization_repo
-            .revoke(refresh_record.oid)
-            .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-            })?;
         let rotated_from = refresh_record.oid.to_string();
         let refresh_token = Some(
             self.store_refresh_token(StoreRefreshTokenParams {

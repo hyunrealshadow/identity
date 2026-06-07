@@ -53,6 +53,22 @@ pub enum LoginRepositoryError {
     IncrementFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
+#[derive(Debug)]
+pub struct CreateSessionInput {
+    pub user_oid: Uuid,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_name: Option<String>,
+    pub os_version: Option<String>,
+    pub browser_name: Option<String>,
+    pub browser_version: Option<String>,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub acr: Option<String>,
+    pub acr_expires_at: Option<DateTime<Utc>>,
+}
+
 // ─── SessionRepository ───────────────────────────────────────────────────────
 
 #[async_trait]
@@ -70,22 +86,7 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<Vec<ActiveSession>, SessionRepositoryError>;
 
     /// Create a new session and return it.
-    #[allow(clippy::too_many_arguments)]
-    async fn create(
-        &self,
-        user_oid: Uuid,
-        device_name: Option<String>,
-        device_type: Option<String>,
-        os_name: Option<String>,
-        os_version: Option<String>,
-        browser_name: Option<String>,
-        browser_version: Option<String>,
-        user_agent: Option<String>,
-        ip_address: Option<String>,
-        expires_at: Option<DateTime<Utc>>,
-        acr: Option<String>,
-        acr_expires_at: Option<DateTime<Utc>>,
-    ) -> Result<Session, SessionRepositoryError>;
+    async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError>;
 
     /// Update `last_active_at` for a session (identified by OID).
     async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError>;

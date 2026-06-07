@@ -1,4 +1,11 @@
-use sea_orm_migration::{prelude::*, schema::*};
+use sea_orm_migration::{async_trait, sea_orm};
+use sea_orm_migration::{
+    prelude::{
+        DbErr, DeriveIden, DeriveMigrationName, ForeignKey, ForeignKeyAction, MigrationTrait,
+        SchemaManager, Table,
+    },
+    schema::{json_binary, pk_auto, string, timestamp, timestamp_null, uuid, uuid_uniq},
+};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

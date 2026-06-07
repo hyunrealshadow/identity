@@ -87,10 +87,8 @@ pub fn finish_authorize_redirect(
 }
 
 pub fn inline_script_csp_header_value(nonce: &str) -> HeaderValue {
-    HeaderValue::from_str(&format!(
-        "default-src 'self'; script-src 'nonce-{nonce}'"
-    ))
-    .unwrap_or_else(|_| HeaderValue::from_static("default-src 'self'"))
+    HeaderValue::from_str(&format!("default-src 'self'; script-src 'nonce-{nonce}'"))
+        .unwrap_or_else(|_| HeaderValue::from_static("default-src 'self'"))
 }
 
 fn render_form_post_page(

@@ -47,20 +47,20 @@ async fn parse_request_object_payload_preserves_registered_claims() {
 
 #[tokio::test]
 async fn parse_unsecured_request_object_is_accepted() {
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(empty_cred_repo()),
-        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+    let service = AuthorizeService::new(AuthorizeServiceDependencies {
+        client_repo: Arc::new(FoundClientRepository),
+        credential_repo: Arc::new(empty_cred_repo()),
+        client_authorization_repo: Arc::new(mock_client_auth_repo_with_state(Arc::new(
             ClientAuthorizationState::default(),
         ))),
-        Arc::new(mock_login_repo()),
-        Arc::new(stub_user_repo()),
-        Arc::new(stub_key_repo()),
-        Arc::new(MockKeyJwkRepository::new()),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+        login_repo: Arc::new(mock_login_repo()),
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(stub_key_repo()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+    });
     let client = FoundClientRepository
         .find_by_oid(Uuid::nil())
         .await
@@ -128,20 +128,20 @@ async fn parse_rs256_request_object_extracts_payload() {
         .expect_find_by_client_oid_and_type()
         .returning(move |_, _| Ok(creds.clone()));
 
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(credential_repo),
-        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+    let service = AuthorizeService::new(AuthorizeServiceDependencies {
+        client_repo: Arc::new(FoundClientRepository),
+        credential_repo: Arc::new(credential_repo),
+        client_authorization_repo: Arc::new(mock_client_auth_repo_with_state(Arc::new(
             ClientAuthorizationState::default(),
         ))),
-        Arc::new(mock_login_repo()),
-        Arc::new(stub_user_repo()),
-        Arc::new(stub_key_repo()),
-        Arc::new(MockKeyJwkRepository::new()),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+        login_repo: Arc::new(mock_login_repo()),
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(stub_key_repo()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+    });
 
     let client = FoundClientRepository
         .find_by_oid(Uuid::nil())
@@ -189,20 +189,20 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
     credential_repo
         .expect_find_by_client_oid_and_type()
         .returning(move |_, _| Ok(creds.clone()));
-    let service = AuthorizeService::new(
-        Arc::new(FoundClientRepository),
-        Arc::new(credential_repo),
-        Arc::new(mock_client_auth_repo_with_state(Arc::new(
+    let service = AuthorizeService::new(AuthorizeServiceDependencies {
+        client_repo: Arc::new(FoundClientRepository),
+        credential_repo: Arc::new(credential_repo),
+        client_authorization_repo: Arc::new(mock_client_auth_repo_with_state(Arc::new(
             ClientAuthorizationState::default(),
         ))),
-        Arc::new(mock_login_repo()),
-        Arc::new(stub_user_repo()),
-        Arc::new(stub_key_repo()),
-        Arc::new(MockKeyJwkRepository::new()),
-        provider_service(),
-        test_signing_algorithm_detector(),
-        test_data_protector(),
-    );
+        login_repo: Arc::new(mock_login_repo()),
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(stub_key_repo()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+    });
     let mut metadata = test_metadata(None, None);
     metadata.request_object_signing_alg = Some("RS384".to_owned());
     let client = OpenIdConnectClient::new(

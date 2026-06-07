@@ -264,28 +264,6 @@ pub fn generate_csp_nonce() -> String {
     base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes)
 }
 
-#[cfg(test)]
-mod tests {
-    use uuid::Uuid;
-
-    #[test]
-    fn build_session_cookie_uses_lax_without_secure_flag() {
-        let cookie =
-            super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], false);
-
-        assert!(cookie.contains("; HttpOnly; SameSite=Lax;"));
-        assert!(!cookie.contains("; Secure;"));
-    }
-
-    #[test]
-    fn build_session_cookie_uses_lax_when_secure() {
-        let cookie =
-            super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], true);
-
-        assert!(cookie.contains("; HttpOnly; Secure; SameSite=Lax;"));
-    }
-}
-
 // ─── Request helpers ──────────────────────────────────────────────────────────
 
 /// Parse a `User-Agent` header with `woothee` and return device/browser/OS
@@ -364,4 +342,26 @@ pub fn extract_ip(headers: &HeaderMap) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    #[test]
+    fn build_session_cookie_uses_lax_without_secure_flag() {
+        let cookie =
+            super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], false);
+
+        assert!(cookie.contains("; HttpOnly; SameSite=Lax;"));
+        assert!(!cookie.contains("; Secure;"));
+    }
+
+    #[test]
+    fn build_session_cookie_uses_lax_when_secure() {
+        let cookie =
+            super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], true);
+
+        assert!(cookie.contains("; HttpOnly; Secure; SameSite=Lax;"));
+    }
 }

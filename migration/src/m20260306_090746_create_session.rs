@@ -1,5 +1,15 @@
 use crate::m20260305_071904_create_user::User;
-use sea_orm_migration::{prelude::*, schema::*};
+use sea_orm_migration::{async_trait, sea_orm};
+use sea_orm_migration::{
+    prelude::{
+        DbErr, DeriveIden, DeriveMigrationName, Expr, ForeignKey, ForeignKeyAction, Index,
+        MigrationTrait, SchemaManager, Table,
+    },
+    schema::{
+        big_integer, pk_auto, string, string_null, timestamp_with_time_zone,
+        timestamp_with_time_zone_null, uuid_uniq,
+    },
+};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

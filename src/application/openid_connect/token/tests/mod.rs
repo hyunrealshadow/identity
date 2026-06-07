@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use base64::{
@@ -22,7 +19,10 @@ use openssl::rsa::Rsa;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use uuid::Uuid;
 
-use super::{AuthorizationCodeGrantParams, RefreshTokenGrantParams, TokenService, verify_pkce};
+use super::{
+    AuthorizationCodeGrantParams, RefreshTokenGrantParams, TokenService, TokenServiceDependencies,
+    verify_pkce,
+};
 use crate::{
     application::{
         error::AppError,
@@ -33,9 +33,8 @@ use crate::{
     domain::{
         client::model::ClientOid,
         client_authorization::{
-            AccessTokenData, AuthorizationCodeData, ClientAuthorization,
-            ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
-            ClientAuthorizationType, RefreshTokenData,
+            AuthorizationCodeData, ClientAuthorizationRepository, ClientAuthorizationType,
+            RefreshTokenData,
         },
         key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
         key::{
@@ -64,7 +63,7 @@ mod helpers;
 use self::fixtures::{
     InMemoryClientRepository, InMemoryDataProtector, InMemoryUserRepository,
     MockClientAuthorizationRepository, cred_repo_with, jwk_repo_with_bindings, key_repo_with_keys,
-    mock_client_auth_repo, provider_service, signing_algorithm_detector,
+    provider_service, signing_algorithm_detector,
 };
 
 fn expected_at_hash(access_token: &str) -> String {
@@ -266,15 +265,15 @@ fn build_token_service_with_key(
     user_oid: Uuid,
 ) -> TokenService {
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-    TokenService::new(
-        repo,
-        Arc::new(key_repo_with_keys(vec![key.clone()])),
-        Arc::new(jwk_repo_with_bindings(vec![binding])),
-        Arc::new(InMemoryUserRepository {
+    TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: repo,
+        key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
+        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+        user_repo: Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),
-        Arc::new(InMemoryClientRepository),
-        Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
             r#type: OpenIdConnectCredentialType::ClientSecret,
@@ -287,10 +286,10 @@ fn build_token_service_with_key(
             created_at: Utc::now(),
             updated_at: None,
         }])),
-        provider_service(),
-        signing_algorithm_detector(),
-        InMemoryDataProtector::new(),
-    )
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    })
 }
 
 fn key_data_algorithm(key: &Key) -> String {

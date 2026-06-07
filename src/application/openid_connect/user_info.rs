@@ -7,11 +7,15 @@ use crate::{
             codes::{common::CommonErrorCode, openid_connect::OpenIdConnectErrorCode},
         },
         key::asymmetric::AsymmetricKeyService,
-        openid_connect::{dto::UserInfoClaims, provider::OpenIdProviderService},
+        openid_connect::{
+            dto::UserInfoClaims,
+            jose::{asymmetric_signer_from_pem, asymmetric_verifier_from_pem},
+            provider::OpenIdProviderService,
+        },
     },
     domain::{
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
-        key::{JwaSigningAlgorithm, KeyData},
+        key::KeyData,
         openid_connect::{
             OpenIdConnectClientRepository, ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
@@ -20,11 +24,7 @@ use crate::{
     },
 };
 use josekit::{
-    JoseError,
-    jws::{
-        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, JwsSigner, JwsVerifier, PS256, PS384, PS512,
-        RS256, RS384, RS512,
-    },
+    jws::{JwsHeader, JwsSigner},
     jwt,
 };
 use uuid::Uuid;
@@ -249,53 +249,15 @@ impl UserInfoService {
         key: &identity_domain::key::Key,
         alg: &str,
     ) -> Result<(jwt::JwtPayload, JwsHeader), AppError> {
-        use identity_domain::key::JwaSigningAlgorithm;
-        let jwa: JwaSigningAlgorithm = alg
-            .parse()
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
         let public_key = match &key.data {
             KeyData::Asymmetric(data) => data.public_key.as_bytes(),
             _ => return Err(AppError::from_code(CommonErrorCode::InternalError)),
         };
 
-        let result = match jwa {
-            JwaSigningAlgorithm::Rs256 => {
-                decode_jwt_with_verifier(token, RS256.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Rs384 => {
-                decode_jwt_with_verifier(token, RS384.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Rs512 => {
-                decode_jwt_with_verifier(token, RS512.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Ps256 => {
-                decode_jwt_with_verifier(token, PS256.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Ps384 => {
-                decode_jwt_with_verifier(token, PS384.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Ps512 => {
-                decode_jwt_with_verifier(token, PS512.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Es256 => {
-                decode_jwt_with_verifier(token, ES256.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Es384 => {
-                decode_jwt_with_verifier(token, ES384.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Es512 => {
-                decode_jwt_with_verifier(token, ES512.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::Es256k => {
-                decode_jwt_with_verifier(token, ES256K.verifier_from_pem(public_key))
-            }
-            JwaSigningAlgorithm::EdDsa => {
-                decode_jwt_with_verifier(token, EdDSA.verifier_from_pem(public_key))
-            }
-        };
-
-        let (payload, header) =
-            result.map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let verifier = asymmetric_verifier_from_pem(alg, public_key)
+            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let (payload, header) = jwt::decode_with_verifier(token, verifier.as_ref())
+            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         Ok((payload, header))
     }
@@ -353,73 +315,6 @@ fn build_user_info_signer(
     private_key_pem: &str,
     alg: &str,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
-    let jwa: JwaSigningAlgorithm = alg
-        .parse()
-        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
-    let pem = private_key_pem.as_bytes();
-    match jwa {
-        JwaSigningAlgorithm::Rs256 => {
-            Ok(Box::new(RS256.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Rs384 => {
-            Ok(Box::new(RS384.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Rs512 => {
-            Ok(Box::new(RS512.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Ps256 => {
-            Ok(Box::new(PS256.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Ps384 => {
-            Ok(Box::new(PS384.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Ps512 => {
-            Ok(Box::new(PS512.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Es256 => {
-            Ok(Box::new(ES256.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Es384 => {
-            Ok(Box::new(ES384.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Es512 => {
-            Ok(Box::new(ES512.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::Es256k => {
-            Ok(Box::new(ES256K.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-        JwaSigningAlgorithm::EdDsa => {
-            Ok(Box::new(EdDSA.signer_from_pem(pem).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?))
-        }
-    }
-}
-
-fn decode_jwt_with_verifier<V: JwsVerifier>(
-    token: &str,
-    verifier: Result<V, JoseError>,
-) -> Result<(jwt::JwtPayload, JwsHeader), JoseError> {
-    let v = verifier?;
-    jwt::decode_with_verifier(token, &v)
+    asymmetric_signer_from_pem(alg, private_key_pem.as_bytes())
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
 }

@@ -28,8 +28,8 @@ use crate::{
     },
     views::oauth2::{FormPostField, FormPostPageData},
     web::controllers::shared::{
-        append_set_cookie, build_selected_session_cookie, build_session_context, generate_csp_nonce,
-        is_secure_cookie,
+        append_set_cookie, build_selected_session_cookie, build_session_context,
+        generate_csp_nonce, is_secure_cookie,
     },
 };
 
@@ -324,7 +324,14 @@ mod tests {
                 .headers()
                 .get("content-security-policy")
                 .and_then(|value| value.to_str().ok()),
-            Some("default-src 'self'; script-src 'unsafe-inline'"),
+            response
+                .headers()
+                .get("content-security-policy")
+                .and_then(|value| value.to_str().ok())
+                .filter(|value| {
+                    value.starts_with("default-src 'self'; script-src 'nonce-")
+                        && value.ends_with("'")
+                }),
         );
 
         let body = response.take_string().await.unwrap();

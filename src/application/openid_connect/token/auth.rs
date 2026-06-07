@@ -1,4 +1,12 @@
 use super::*;
+use crate::openid_connect::jwt_checks::{
+    JwtTimeValidationError, audience_matches, validate_required_exp_and_optional_window,
+};
+use crate::openid_connect::remote::{
+    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
+    fetch_https_public_document, remote_http_client,
+};
+use std::time::Duration;
 
 impl TokenService {
     pub(super) async fn authenticate_client_secret_basic(
@@ -208,41 +216,19 @@ impl TokenService {
         let issuer_base = issuer.as_str().trim_end_matches('/');
         let token_endpoint = format!("{issuer_base}/oauth2/token");
         let valid_audiences = [issuer.as_str(), issuer_base, token_endpoint.as_str()];
-        let audience_matches = payload
-            .claim(JwtClaimNames::AUD)
-            .and_then(|value| {
-                value
-                    .as_str()
-                    .map(|aud| valid_audiences.contains(&aud))
-                    .or_else(|| {
-                        value.as_array().map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str())
-                                .any(|aud| valid_audiences.contains(&aud))
-                        })
-                    })
-            })
-            .unwrap_or(false);
-        if !audience_matches {
+        if !audience_matches(payload, &valid_audiences) {
             return Err(AppError::from_code(TokenErrorCode::AssertionAudMismatch));
         }
 
         let now = chrono::Utc::now().timestamp();
-        if let Some(exp) = payload
-            .claim(JwtClaimNames::EXP)
-            .and_then(|value| value.as_i64())
-            && exp <= now
-        {
-            return Err(AppError::from_code(TokenErrorCode::AssertionExpired));
-        }
-        if let Some(nbf) = payload
-            .claim(JwtClaimNames::NBF)
-            .and_then(|value| value.as_i64())
-            && nbf > now
-        {
-            return Err(AppError::from_code(TokenErrorCode::AssertionNotYetValid));
-        }
+        validate_required_exp_and_optional_window(payload, now).map_err(|error| match error {
+            JwtTimeValidationError::ExpMissing | JwtTimeValidationError::Expired => {
+                AppError::from_code(TokenErrorCode::AssertionExpired)
+            }
+            JwtTimeValidationError::NotYetValid | JwtTimeValidationError::IssuedInFuture => {
+                AppError::from_code(TokenErrorCode::AssertionNotYetValid)
+            }
+        })?;
 
         Ok(())
     }
@@ -388,31 +374,28 @@ async fn fetch_and_verify_jwks_uri(
     algorithm: &str,
     assertion: &str,
 ) -> Result<Option<JwtPayload>, AppError> {
-    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
-    if std::env::var("APP_ENV")
-        .map(|value| value.eq_ignore_ascii_case("conformance"))
-        .unwrap_or(false)
-    {
-        builder = builder.danger_accept_invalid_certs(true);
-    }
+    let client = remote_http_client(RemoteFetchPolicy::new(
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        Duration::from_secs(5),
+        conformance_allows_invalid_certs(),
+    ))
+    .map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })?;
+    let body =
+        match fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+            .await
+        {
+            Ok(body) => body,
+            Err(crate::openid_connect::remote::RemoteFetchError::NotOk) => return Ok(None),
+            Err(error) => {
+                return Err(
+                    AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+                );
+            }
+        };
 
-    let response = builder
-        .build()
-        .map_err(|error| {
-            AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
-        })?
-        .get(jwks_uri.clone())
-        .send()
-        .await
-        .map_err(|error| {
-            AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
-        })?;
-
-    if !response.status().is_success() {
-        return Ok(None);
-    }
-
-    let jwks = response.json::<RemoteJwks>().await.map_err(|error| {
+    let jwks = serde_json::from_slice::<RemoteJwks>(&body).map_err(|error| {
         AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
     })?;
     for jwk in jwks.keys {

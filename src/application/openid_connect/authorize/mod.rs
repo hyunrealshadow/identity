@@ -1,10 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use josekit::{
-    jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512},
-    jwt,
-};
+use josekit::jwt;
 use url::Url;
 use uuid::Uuid;
 
@@ -13,6 +10,10 @@ use crate::{
         data_protection::DataProtector,
         error::{AppError, codes::authorize::AuthorizeErrorCode},
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
+        openid_connect::remote::{
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
+            remote_http_client,
+        },
     },
     domain::{
         auth::repository::LoginRepository,
@@ -67,52 +68,43 @@ pub struct AuthorizeService {
     data_protector: Arc<dyn DataProtector>,
 }
 
+pub struct AuthorizeServiceDependencies {
+    pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    pub credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
+    pub client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
+    pub login_repo: Arc<dyn LoginRepository>,
+    pub user_repo: Arc<dyn UserRepository>,
+    pub key_repo: Arc<dyn KeyRepository>,
+    pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
+    pub provider_service: Arc<OpenIdProviderService>,
+    pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
+    pub data_protector: Arc<dyn DataProtector>,
+}
+
 impl AuthorizeService {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        client_repo: Arc<dyn OpenIdConnectClientRepository>,
-        credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
-        client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
-        login_repo: Arc<dyn LoginRepository>,
-        user_repo: Arc<dyn UserRepository>,
-        key_repo: Arc<dyn KeyRepository>,
-        key_jwk_repo: Arc<dyn KeyJwkRepository>,
-        provider_service: Arc<OpenIdProviderService>,
-        signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-        data_protector: Arc<dyn DataProtector>,
-    ) -> Self {
+    pub fn new(deps: AuthorizeServiceDependencies) -> Self {
         Self {
-            client_repo,
-            credential_repo,
-            client_authorization_repo,
-            login_repo,
-            user_repo,
-            key_repo,
-            key_jwk_repo,
-            provider_service,
-            signing_algorithm_detector,
-            http_client: request_uri_http_client()
-                .build()
-                .expect("request_uri HTTP client must build"),
-            data_protector,
+            client_repo: deps.client_repo,
+            credential_repo: deps.credential_repo,
+            client_authorization_repo: deps.client_authorization_repo,
+            login_repo: deps.login_repo,
+            user_repo: deps.user_repo,
+            key_repo: deps.key_repo,
+            key_jwk_repo: deps.key_jwk_repo,
+            provider_service: deps.provider_service,
+            signing_algorithm_detector: deps.signing_algorithm_detector,
+            http_client: request_uri_http_client().expect("request_uri HTTP client must build"),
+            data_protector: deps.data_protector,
         }
     }
 }
 
-fn request_uri_http_client() -> reqwest::ClientBuilder {
-    let builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(5));
-
-    #[cfg(feature = "oidc-conformance")]
-    {
-        builder.danger_accept_invalid_certs(true)
-    }
-
-    #[cfg(not(feature = "oidc-conformance"))]
-    {
-        builder
-    }
+fn request_uri_http_client() -> Result<reqwest::Client, reqwest::Error> {
+    remote_http_client(RemoteFetchPolicy::new(
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        Duration::from_secs(5),
+        conformance_allows_invalid_certs(),
+    ))
 }
 
 mod flow;

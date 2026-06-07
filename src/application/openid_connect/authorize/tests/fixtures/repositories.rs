@@ -1,8 +1,4 @@
 use super::*;
-use identity_domain::auth::SessionOid;
-use identity_domain::client_authorization::repository::{
-    ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
-};
 use identity_domain::client_authorization::{
     ConsentState, SelectionSource, StoredAuthorizationRequest,
 };
@@ -203,9 +199,25 @@ pub fn mock_client_auth_repo_with_state(
         });
 
     // revoke_access_tokens_for_authorization_code
-    let s = state.clone();
     mock.expect_revoke_access_tokens_for_authorization_code()
         .returning(move |_authorization_code_oid| Ok(()));
+
+    // revoke_if_active
+    let s = state.clone();
+    mock.expect_revoke_if_active()
+        .returning(move |oid, type_, now| {
+            let mut records = s.records.lock().unwrap();
+            let Some(record) = records.get_mut(&oid) else {
+                return Ok(false);
+            };
+            if record.type_ != type_ || record.revoked_at.is_some() || record.expires_at <= now {
+                return Ok(false);
+            }
+
+            record.revoked_at = Some(now);
+            record.updated_at = Some(now);
+            Ok(true)
+        });
 
     // revoke
     let s = state;

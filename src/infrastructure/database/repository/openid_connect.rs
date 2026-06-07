@@ -423,7 +423,12 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             row.data
                 .get("token")
                 .and_then(|value| value.as_str())
-                .is_some_and(|stored| bool::from(subtle::ConstantTimeEq::ct_eq(stored.as_bytes(), token.as_bytes())))
+                .is_some_and(|stored| {
+                    bool::from(subtle::ConstantTimeEq::ct_eq(
+                        stored.as_bytes(),
+                        token.as_bytes(),
+                    ))
+                })
         });
 
         if valid {

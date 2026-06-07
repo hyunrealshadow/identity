@@ -25,8 +25,11 @@ use identity_application::{
     install::InstallService,
     key::asymmetric::AsymmetricKeyService,
     openid_connect::{
-        authorize::AuthorizeService, logout::LogoutService, provider::OpenIdProviderService,
-        registration::DynamicClientRegistrationService, token::TokenService,
+        authorize::{AuthorizeService, AuthorizeServiceDependencies},
+        logout::{LogoutService, LogoutServiceDependencies},
+        provider::OpenIdProviderService,
+        registration::DynamicClientRegistrationService,
+        token::{TokenService, TokenServiceDependencies},
         user_info::UserInfoService,
     },
 };
@@ -123,36 +126,40 @@ impl AppServices {
                 .with_dynamic_registration_setting(settings.dynamic_client_registration())
                 .with_key_repo(key_repo.clone())
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
-            oidc_authorize: AuthorizeService::new(
-                oidc_client_repo.clone(),
-                oidc_credential_repo.clone(),
-                Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
-                Arc::new(LoginRepositoryImpl::new(db.clone())),
-                Arc::new(UserRepositoryImpl::new(db.clone())),
-                Arc::new(KeyRepositoryImpl::new(db.clone())),
-                Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
-                Arc::new(OpenIdProviderService::new(settings.installation())),
-                signing_algorithm_detector.clone(),
-                data_protector.clone(),
-            ),
-            oidc_token: TokenService::new(
-                Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
-                Arc::new(KeyRepositoryImpl::new(db.clone())),
-                Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
-                Arc::new(UserRepositoryImpl::new(db.clone())),
-                oidc_client_repo.clone(),
-                oidc_credential_repo.clone(),
-                Arc::new(OpenIdProviderService::new(settings.installation())),
-                signing_algorithm_detector.clone(),
-                data_protector.clone(),
-            ),
-            oidc_logout: LogoutService::new(
-                oidc_client_repo.clone(),
-                Arc::new(OpenIdProviderService::new(settings.installation())),
-                Arc::new(KeyRepositoryImpl::new(db.clone())),
-                Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
-                signing_algorithm_detector.clone(),
-            )
+            oidc_authorize: AuthorizeService::new(AuthorizeServiceDependencies {
+                client_repo: oidc_client_repo.clone(),
+                credential_repo: oidc_credential_repo.clone(),
+                client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
+                    db.clone(),
+                )),
+                login_repo: Arc::new(LoginRepositoryImpl::new(db.clone())),
+                user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
+                key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
+                key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
+                provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                signing_algorithm_detector: signing_algorithm_detector.clone(),
+                data_protector: data_protector.clone(),
+            }),
+            oidc_token: TokenService::new(TokenServiceDependencies {
+                client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
+                    db.clone(),
+                )),
+                key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
+                key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
+                user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
+                client_repo: oidc_client_repo.clone(),
+                credential_repo: oidc_credential_repo.clone(),
+                provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                signing_algorithm_detector: signing_algorithm_detector.clone(),
+                data_protector: data_protector.clone(),
+            }),
+            oidc_logout: LogoutService::new(LogoutServiceDependencies {
+                client_repo: oidc_client_repo.clone(),
+                provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
+                key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
+                signing_algorithm_detector: signing_algorithm_detector.clone(),
+            })
             .with_http_client(backchannel_logout_http_client()),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),

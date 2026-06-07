@@ -13,7 +13,7 @@ use identity_domain::{
         MAX_FAILED_ATTEMPTS, SESSION_EXPIRY,
         model::{Login, Session},
         password::{HashOptions, PasswordHashSetting, PasswordHasher, VerifyResult},
-        repository::{LoginRepository, SessionRepository},
+        repository::{CreateSessionInput, LoginRepository, SessionRepository},
         totp::TotpVerifier,
     },
     user::{
@@ -517,20 +517,20 @@ impl LoginService {
 
         Ok(self
             .session_repo
-            .create(
+            .create(CreateSessionInput {
                 user_oid,
-                ctx.device_name,
-                ctx.device_type,
-                ctx.os_name,
-                ctx.os_version,
-                ctx.browser_name,
-                ctx.browser_version,
-                ctx.user_agent,
-                ctx.ip_address,
-                Some(expires_at),
-                Some(acr.to_owned()),
+                device_name: ctx.device_name,
+                device_type: ctx.device_type,
+                os_name: ctx.os_name,
+                os_version: ctx.os_version,
+                browser_name: ctx.browser_name,
+                browser_version: ctx.browser_version,
+                user_agent: ctx.user_agent,
+                ip_address: ctx.ip_address,
+                expires_at: Some(expires_at),
+                acr: Some(acr.to_owned()),
                 acr_expires_at,
-            )
+            })
             .await?)
     }
 }

@@ -1,49 +1,19 @@
 use super::*;
+use crate::openid_connect::jose::{
+    asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
+    hmac_verifier_from_bytes,
+};
 
 pub(super) fn decode_assertion_with_alg(
     alg: &str,
     assertion: &str,
     public_key_pem: &[u8],
 ) -> Result<JwtPayload, AppError> {
-    use identity_domain::key::JwaSigningAlgorithm;
-    let jwa: JwaSigningAlgorithm = alg.parse().map_err(|_| {
-        AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_param("alg", alg)
-    })?;
-    match jwa {
-        JwaSigningAlgorithm::Rs256 => {
-            decode_with_verifier(assertion, RS256.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Rs384 => {
-            decode_with_verifier(assertion, RS384.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Rs512 => {
-            decode_with_verifier(assertion, RS512.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Ps256 => {
-            decode_with_verifier(assertion, PS256.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Ps384 => {
-            decode_with_verifier(assertion, PS384.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Ps512 => {
-            decode_with_verifier(assertion, PS512.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es256 => {
-            decode_with_verifier(assertion, ES256.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es384 => {
-            decode_with_verifier(assertion, ES384.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es512 => {
-            decode_with_verifier(assertion, ES512.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::Es256k => {
-            decode_with_verifier(assertion, ES256K.verifier_from_pem(public_key_pem))
-        }
-        JwaSigningAlgorithm::EdDsa => {
-            decode_with_verifier(assertion, EdDSA.verifier_from_pem(public_key_pem))
-        }
-    }
+    let verifier = asymmetric_verifier_from_pem(alg, public_key_pem)
+        .map_err(|error| assertion_key_error(error, alg))?;
+    decode_with_verifier(assertion, verifier.as_ref()).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })
 }
 
 pub(super) fn decode_assertion_with_jwk(
@@ -51,29 +21,11 @@ pub(super) fn decode_assertion_with_jwk(
     assertion: &str,
     jwk: &identity_domain::key::PublicJwk,
 ) -> Result<JwtPayload, AppError> {
-    let jwk_json = serde_json::to_vec(jwk).map_err(|error| {
-        AppError::from_code(TokenErrorCode::AssertionKeyInvalid).with_source(error)
-    })?;
-    let jwk = josekit::jwk::Jwk::from_bytes(&jwk_json).map_err(|error| {
-        AppError::from_code(TokenErrorCode::AssertionKeyInvalid).with_source(error)
-    })?;
-
-    match alg {
-        "RS256" => decode_with_verifier(assertion, RS256.verifier_from_jwk(&jwk)),
-        "RS384" => decode_with_verifier(assertion, RS384.verifier_from_jwk(&jwk)),
-        "RS512" => decode_with_verifier(assertion, RS512.verifier_from_jwk(&jwk)),
-        "PS256" => decode_with_verifier(assertion, PS256.verifier_from_jwk(&jwk)),
-        "PS384" => decode_with_verifier(assertion, PS384.verifier_from_jwk(&jwk)),
-        "PS512" => decode_with_verifier(assertion, PS512.verifier_from_jwk(&jwk)),
-        "ES256" => decode_with_verifier(assertion, ES256.verifier_from_jwk(&jwk)),
-        "ES384" => decode_with_verifier(assertion, ES384.verifier_from_jwk(&jwk)),
-        "ES512" => decode_with_verifier(assertion, ES512.verifier_from_jwk(&jwk)),
-        "ES256K" => decode_with_verifier(assertion, ES256K.verifier_from_jwk(&jwk)),
-        "EdDSA" => decode_with_verifier(assertion, EdDSA.verifier_from_jwk(&jwk)),
-        _ => {
-            Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_param("alg", alg))
-        }
-    }
+    let verifier = asymmetric_verifier_from_public_jwk(alg, jwk)
+        .map_err(|error| assertion_key_error(error, alg))?;
+    decode_with_verifier(assertion, verifier.as_ref()).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })
 }
 
 pub(super) fn decode_assertion_with_hmac_alg(
@@ -81,14 +33,11 @@ pub(super) fn decode_assertion_with_hmac_alg(
     assertion: &str,
     secret: &[u8],
 ) -> Result<JwtPayload, AppError> {
-    match alg {
-        "HS256" => decode_with_verifier(assertion, HS256.verifier_from_bytes(secret)),
-        "HS384" => decode_with_verifier(assertion, HS384.verifier_from_bytes(secret)),
-        "HS512" => decode_with_verifier(assertion, HS512.verifier_from_bytes(secret)),
-        _ => {
-            Err(AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_param("alg", alg))
-        }
-    }
+    let verifier =
+        hmac_verifier_from_bytes(alg, secret).map_err(|error| assertion_alg_error(error, alg))?;
+    decode_with_verifier(assertion, verifier.as_ref()).map_err(|error| {
+        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
+    })
 }
 
 pub(super) fn client_id_from_assertion(assertion: &str) -> Result<String, AppError> {
@@ -113,20 +62,16 @@ pub(super) fn client_id_from_assertion(assertion: &str) -> Result<String, AppErr
         .ok_or_else(|| AppError::from_code(TokenErrorCode::AssertionSubMissing))
 }
 
-fn decode_with_verifier<V>(
-    assertion: &str,
-    verifier: Result<V, josekit::JoseError>,
-) -> Result<JwtPayload, AppError>
-where
-    V: josekit::jws::JwsVerifier,
-{
-    let verifier = verifier.map_err(|error| {
-        AppError::from_code(TokenErrorCode::AssertionKeyInvalid).with_source(error)
-    })?;
-    let (payload, _) = jwt::decode_with_verifier(assertion, &verifier).map_err(|error| {
-        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
-    })?;
-    Ok(payload)
+fn assertion_key_error(error: josekit::JoseError, alg: &str) -> AppError {
+    AppError::from_code(TokenErrorCode::AssertionKeyInvalid)
+        .with_param("alg", alg)
+        .with_source(error)
+}
+
+fn assertion_alg_error(error: josekit::JoseError, alg: &str) -> AppError {
+    AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)
+        .with_param("alg", alg)
+        .with_source(error)
 }
 
 pub(super) fn verify_pkce(
@@ -155,7 +100,10 @@ pub(super) fn verify_pkce(
         }
     };
 
-    if !bool::from(subtle::ConstantTimeEq::ct_eq(computed.as_bytes(), code_challenge.as_bytes())) {
+    if !bool::from(subtle::ConstantTimeEq::ct_eq(
+        computed.as_bytes(),
+        code_challenge.as_bytes(),
+    )) {
         return Err(AppError::from_code(TokenErrorCode::PkceVerifierMismatch));
     }
 

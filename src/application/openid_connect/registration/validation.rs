@@ -3,6 +3,10 @@ use url::Url;
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
     domain::openid_connect::{OpenIdConnectClientPlatformType, model::claim::StandardScopes},
+    openid_connect::remote::{
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
+        fetch_https_public_document, remote_http_client,
+    },
 };
 
 pub(super) fn parse_application_type(
@@ -67,33 +71,26 @@ pub(super) async fn validate_sector_identifier_uri(
 }
 
 async fn fetch_sector_redirect_uris(sector_identifier_uri: &Url) -> Result<Vec<String>, AppError> {
-    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
-    if std::env::var("APP_ENV")
-        .map(|value| value.eq_ignore_ascii_case("conformance"))
-        .unwrap_or(false)
-    {
-        builder = builder.danger_accept_invalid_certs(true);
-    }
+    let client = remote_http_client(RemoteFetchPolicy::new(
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        std::time::Duration::from_secs(5),
+        conformance_allows_invalid_certs(),
+    ))
+    .map_err(|error| {
+        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
+    })?;
 
-    let response = builder
-        .build()
-        .map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
-        })?
-        .get(sector_identifier_uri.clone())
-        .send()
-        .await
-        .map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
-        })?;
+    let body = fetch_https_public_document(
+        &client,
+        sector_identifier_uri,
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+    )
+    .await
+    .map_err(|error| {
+        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
+    })?;
 
-    if !response.status().is_success() {
-        return Err(AppError::from_code(
-            RegistrationErrorCode::InvalidClientMetadata,
-        ));
-    }
-
-    response.json::<Vec<String>>().await.map_err(|error| {
+    serde_json::from_slice::<Vec<String>>(&body).map_err(|error| {
         AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
     })
 }
