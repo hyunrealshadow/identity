@@ -2,8 +2,9 @@ pub mod model;
 pub mod repository;
 
 pub use model::authorization_request::{
-    AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display, PromptValue,
-    ResponseMode, ResponseType,
+    AuthorizationRequest, AuthorizationRequestData, ClaimRequestMap, ClaimRequestSpec,
+    ClaimsRequest, ClaimsRequestSection, CodeChallengeMethod, Display, PromptValue, ResponseMode,
+    ResponseType,
 };
 pub use model::client::{
     InvalidOpenIdConnectClientError, OpenIdConnectClient, OpenIdConnectClientMetadata,

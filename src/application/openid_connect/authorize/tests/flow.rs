@@ -11,6 +11,7 @@ use crate::openid_connect::tests::fixtures::mocks::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use identity_domain::client_authorization::{ConsentState, SelectionSource};
 use identity_domain::key::material::AsymmetricKeyData;
+use identity_domain::openid_connect::ClaimsRequest;
 use identity_domain::openid_connect::model::claim::JwtClaimNames;
 use sha2::{Digest, Sha256};
 
@@ -939,11 +940,12 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     let user = id_token_user(user_oid);
     let issuer = Url::parse("https://identity.example.com").unwrap();
     let scope = identity_domain::openid_connect::ScopeSet::parse("openid").unwrap();
-    let claims_request = serde_json::json!({
+    let claims_request: ClaimsRequest = serde_json::from_value(serde_json::json!({
         "id_token": {
             "name": {"essential": true}
         }
-    });
+    }))
+    .unwrap();
 
     let token = service
         .sign_implicit_id_token(SignImplicitIdTokenInput {

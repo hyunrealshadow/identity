@@ -1,4 +1,8 @@
-use std::{collections::HashSet, fmt, str::FromStr};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt,
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -241,9 +245,76 @@ impl FromStr for CodeChallengeMethod {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct ClaimRequestSpec {
+    value: serde_json::Value,
+}
+
+impl ClaimRequestSpec {
+    #[must_use]
+    pub fn from_json(value: serde_json::Value) -> Self {
+        Self { value }
+    }
+
+    #[must_use]
+    pub fn is_essential(&self) -> bool {
+        self.value
+            .as_object()
+            .and_then(|spec| spec.get("essential"))
+            .and_then(|value| value.as_bool())
+            == Some(true)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct ClaimRequestMap {
+    claims: BTreeMap<String, ClaimRequestSpec>,
+}
+
+impl ClaimRequestMap {
+    #[must_use]
+    pub fn from_json_map(map: serde_json::Map<String, serde_json::Value>) -> Self {
+        Self {
+            claims: map
+                .into_iter()
+                .map(|(name, spec)| (name, ClaimRequestSpec::from_json(spec)))
+                .collect(),
+        }
+    }
+
+    pub fn essential_claim_names(&self) -> impl Iterator<Item = &str> {
+        self.claims
+            .iter()
+            .filter(|(_, spec)| spec.is_essential())
+            .map(|(name, _)| name.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaimsRequestSection {
+    IdToken,
+    UserInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClaimsRequest {
-    pub id_token: Option<serde_json::Map<String, serde_json::Value>>,
-    pub userinfo: Option<serde_json::Map<String, serde_json::Value>>,
+    pub id_token: Option<ClaimRequestMap>,
+    pub userinfo: Option<ClaimRequestMap>,
+}
+
+impl ClaimsRequest {
+    #[must_use]
+    pub fn essential_claim_names(&self, sections: &[ClaimsRequestSection]) -> Vec<&str> {
+        sections
+            .iter()
+            .filter_map(|section| match section {
+                ClaimsRequestSection::IdToken => self.id_token.as_ref(),
+                ClaimsRequestSection::UserInfo => self.userinfo.as_ref(),
+            })
+            .flat_map(ClaimRequestMap::essential_claim_names)
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone)]

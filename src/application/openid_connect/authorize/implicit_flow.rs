@@ -17,7 +17,7 @@ struct CreateFrontChannelAccessTokenInput<'a> {
     signing_alg: &'a str,
     issuer: &'a Url,
     audience: &'a str,
-    claims: Option<&'a serde_json::Value>,
+    claims: Option<&'a ClaimsRequest>,
 }
 
 impl AuthorizeService {
@@ -75,8 +75,9 @@ impl AuthorizeService {
         })?;
         let claims = request
             .claims
-            .as_ref()
-            .and_then(|claims| serde_json::from_str::<serde_json::Value>(claims).ok());
+            .as_deref()
+            .map(Self::parse_claims_request)
+            .transpose()?;
 
         let include_access_token = response_type.includes_access_token();
 
@@ -203,8 +204,9 @@ impl AuthorizeService {
         })?;
         let claims = request
             .claims
-            .as_ref()
-            .and_then(|claims| serde_json::from_str::<serde_json::Value>(claims).ok());
+            .as_deref()
+            .map(Self::parse_claims_request)
+            .transpose()?;
 
         let access_token = if response_type.includes_access_token() {
             Some(

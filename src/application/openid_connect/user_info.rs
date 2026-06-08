@@ -20,7 +20,8 @@ use crate::{
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
         key::KeyData,
         openid_connect::{
-            OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, ScopeSet,
+            ClaimsRequest, OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
+            ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
             model::credential::OpenIdConnectCredentialData,
         },
@@ -46,7 +47,7 @@ pub struct TokenClaims {
     pub user_oid: UserOid,
     pub client_oid: Uuid,
     pub scope: ScopeSet,
-    pub claims: Option<serde_json::Value>,
+    pub claims: Option<ClaimsRequest>,
 }
 
 impl UserInfoService {
@@ -73,7 +74,7 @@ impl UserInfoService {
         user_oid: UserOid,
         client_oid: Uuid,
         scope: &ScopeSet,
-        claims_request: Option<&serde_json::Value>,
+        claims_request: Option<&ClaimsRequest>,
     ) -> Result<UserInfoClaims, AppError> {
         let user = self
             .user_repo
@@ -288,7 +289,12 @@ impl UserInfoService {
             ));
         }
 
-        let claims = payload.claim("claims").cloned();
+        let claims = payload
+            .claim("claims")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         Ok(TokenClaims {
             user_oid: UserOid::from(user_oid),

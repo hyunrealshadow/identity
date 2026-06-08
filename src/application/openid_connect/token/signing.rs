@@ -1,6 +1,7 @@
 use super::*;
 use crate::openid_connect::jose::{asymmetric_signer_from_pem, encrypt_compact_with_public_jwk};
 use identity_domain::auth::SessionOid;
+use identity_domain::openid_connect::ClaimsRequest;
 #[cfg(test)]
 use josekit::jws::RS256;
 
@@ -25,7 +26,7 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub user_oid: &'a Uuid,
     pub protected_session_id: &'a str,
     pub scope: &'a str,
-    pub claims: Option<&'a serde_json::Value>,
+    pub claims: Option<&'a ClaimsRequest>,
 }
 
 pub(super) struct SignIdTokenInput<'a> {
@@ -133,7 +134,13 @@ impl TokenService {
             })?;
         if let Some(claims_value) = input.claims {
             payload
-                .set_claim("claims", Some(claims_value.clone()))
+                .set_claim(
+                    "claims",
+                    Some(serde_json::to_value(claims_value).map_err(|error| {
+                        AppError::from_code(TokenErrorCode::SignAccessTokenFailed)
+                            .with_source(error)
+                    })?),
+                )
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
                 })?;

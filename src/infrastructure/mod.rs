@@ -9,7 +9,6 @@ pub mod crypto;
 pub mod database;
 pub mod i18n;
 pub mod lifecycle;
-pub mod mailers;
 pub mod observability;
 pub mod resources;
 pub mod services;

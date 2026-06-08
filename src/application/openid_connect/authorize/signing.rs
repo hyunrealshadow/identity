@@ -7,7 +7,10 @@ use uuid::Uuid;
 
 use crate::openid_connect::dto::UserInfoClaims;
 use crate::openid_connect::jose::{asymmetric_signer_from_pem, encrypt_compact_with_public_jwk};
-use identity_domain::openid_connect::model::claim::{JwtTokenType, TokenUseValues};
+use identity_domain::openid_connect::{
+    ClaimsRequest,
+    model::claim::{JwtTokenType, TokenUseValues},
+};
 
 pub(super) struct SignImplicitIdTokenInput<'a> {
     pub key_id: &'a str,
@@ -23,7 +26,7 @@ pub(super) struct SignImplicitIdTokenInput<'a> {
     pub code: Option<&'a str>,
     pub protected_session_id: Option<&'a str>,
     pub scope: &'a ScopeSet,
-    pub claims_request: Option<&'a serde_json::Value>,
+    pub claims_request: Option<&'a ClaimsRequest>,
 }
 
 pub(super) struct SignImplicitAccessTokenInput<'a> {
@@ -37,7 +40,7 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
     pub protected_session_id: &'a str,
     pub scope: &'a str,
     pub token_id: &'a str,
-    pub claims: Option<&'a serde_json::Value>,
+    pub claims: Option<&'a ClaimsRequest>,
 }
 
 impl AuthorizeService {
@@ -262,7 +265,13 @@ impl AuthorizeService {
             })?;
         if let Some(claims_value) = input.claims {
             payload
-                .set_claim("claims", Some(claims_value.clone()))
+                .set_claim(
+                    "claims",
+                    Some(serde_json::to_value(claims_value).map_err(|error| {
+                        AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed)
+                            .with_source(error)
+                    })?),
+                )
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;

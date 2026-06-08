@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
-use crate::openid_connect::AuthorizationRequestData;
+use crate::openid_connect::{AuthorizationRequestData, ClaimsRequest};
 
 pub type ClientAuthorizationOid = Uuid;
 
@@ -70,7 +70,7 @@ pub struct AuthorizationCodeData {
     pub acr: Option<String>,
     pub redirect_uri: String,
     pub auth_time: Option<i64>,
-    pub claims: Option<serde_json::Value>,
+    pub claims: Option<ClaimsRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

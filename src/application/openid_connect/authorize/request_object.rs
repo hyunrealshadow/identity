@@ -593,16 +593,20 @@ impl AuthorizeService {
             .as_object()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClaimsNotObject))?;
 
-        let map_field =
-            |field: &str| -> Result<Option<serde_json::Map<String, serde_json::Value>>, AppError> {
-                match object.get(field) {
-                    None => Ok(None),
-                    Some(value) => value.as_object().cloned().map(Some).ok_or_else(|| {
+        let map_field = |field: &str| -> Result<Option<ClaimRequestMap>, AppError> {
+            match object.get(field) {
+                None => Ok(None),
+                Some(value) => value
+                    .as_object()
+                    .cloned()
+                    .map(ClaimRequestMap::from_json_map)
+                    .map(Some)
+                    .ok_or_else(|| {
                         AppError::from_code(AuthorizeErrorCode::ClaimsFieldNotObject)
                             .with_param("field", field)
                     }),
-                }
-            };
+            }
+        };
 
         Ok(ClaimsRequest {
             id_token: map_field("id_token")?,

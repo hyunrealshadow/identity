@@ -490,8 +490,9 @@ impl AuthorizeService {
                         auth_time,
                         claims: request
                             .claims
-                            .as_ref()
-                            .and_then(|c| serde_json::from_str(c).ok()),
+                            .as_deref()
+                            .map(Self::parse_claims_request)
+                            .transpose()?,
                     },
                 ),
                 chrono::Utc::now() + chrono::Duration::minutes(10),

@@ -6,7 +6,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
-use identity_domain::openid_connect::model::claim::JwtClaimNames;
+use identity_domain::openid_connect::{
+    ClaimsRequest, ClaimsRequestSection, model::claim::JwtClaimNames,
+};
 
 fn serialize_datetime_as_unix<S>(
     dt: &Option<DateTime<Utc>>,
@@ -222,24 +224,32 @@ impl UserInfoClaims {
     pub fn apply_scope_filter(
         &mut self,
         scope: &identity_domain::openid_connect::ScopeSet,
-        claims_request: Option<&serde_json::Value>,
+        claims_request: Option<&ClaimsRequest>,
     ) {
-        self.apply_scope_filter_for_claim_sections(scope, claims_request, &["userinfo"]);
+        self.apply_scope_filter_for_claim_sections(
+            scope,
+            claims_request,
+            &[ClaimsRequestSection::UserInfo],
+        );
     }
 
     pub fn apply_scope_filter_for_id_token(
         &mut self,
         scope: &identity_domain::openid_connect::ScopeSet,
-        claims_request: Option<&serde_json::Value>,
+        claims_request: Option<&ClaimsRequest>,
     ) {
-        self.apply_scope_filter_for_claim_sections(scope, claims_request, &["id_token"]);
+        self.apply_scope_filter_for_claim_sections(
+            scope,
+            claims_request,
+            &[ClaimsRequestSection::IdToken],
+        );
     }
 
     fn apply_scope_filter_for_claim_sections(
         &mut self,
         scope: &identity_domain::openid_connect::ScopeSet,
-        claims_request: Option<&serde_json::Value>,
-        claim_sections: &[&str],
+        claims_request: Option<&ClaimsRequest>,
+        claim_sections: &[ClaimsRequestSection],
     ) {
         let essential_claims = Self::extract_essential_claims(claims_request, claim_sections);
 
@@ -302,62 +312,41 @@ impl UserInfoClaims {
     }
 
     fn extract_essential_claims(
-        claims_request: Option<&serde_json::Value>,
-        claim_sections: &[&str],
+        claims_request: Option<&ClaimsRequest>,
+        claim_sections: &[ClaimsRequestSection],
     ) -> Vec<&'static str> {
-        let Some(cr) = claims_request else {
+        let Some(claims_request) = claims_request else {
             return Vec::new();
         };
-        let mut essential = Vec::new();
-        for section in claim_sections {
-            let Some(claims_section) = cr.get(section) else {
-                continue;
-            };
-            let Some(obj) = claims_section.as_object() else {
-                continue;
-            };
-            for (claim_name, claim_spec) in obj {
-                let Some(spec_obj) = claim_spec.as_object() else {
-                    continue;
-                };
-                if spec_obj.get("essential").and_then(|v| v.as_bool()) != Some(true) {
-                    continue;
-                }
-                match claim_name.as_str() {
-                    n if n == JwtClaimNames::NAME => essential.push(JwtClaimNames::NAME),
-                    n if n == JwtClaimNames::GIVEN_NAME => {
-                        essential.push(JwtClaimNames::GIVEN_NAME)
-                    }
-                    n if n == JwtClaimNames::FAMILY_NAME => {
-                        essential.push(JwtClaimNames::FAMILY_NAME)
-                    }
-                    n if n == JwtClaimNames::MIDDLE_NAME => {
-                        essential.push(JwtClaimNames::MIDDLE_NAME)
-                    }
-                    n if n == JwtClaimNames::NICKNAME => essential.push(JwtClaimNames::NICKNAME),
-                    n if n == JwtClaimNames::PROFILE => essential.push(JwtClaimNames::PROFILE),
-                    n if n == JwtClaimNames::PICTURE => essential.push(JwtClaimNames::PICTURE),
-                    n if n == JwtClaimNames::WEBSITE => essential.push(JwtClaimNames::WEBSITE),
-                    n if n == JwtClaimNames::GENDER => essential.push(JwtClaimNames::GENDER),
-                    n if n == JwtClaimNames::BIRTHDATE => essential.push(JwtClaimNames::BIRTHDATE),
-                    n if n == JwtClaimNames::ZONEINFO => essential.push(JwtClaimNames::ZONEINFO),
-                    n if n == JwtClaimNames::LOCALE => essential.push(JwtClaimNames::LOCALE),
-                    n if n == JwtClaimNames::PREFERRED_USERNAME => {
-                        essential.push(JwtClaimNames::PREFERRED_USERNAME)
-                    }
-                    n if n == JwtClaimNames::EMAIL => essential.push(JwtClaimNames::EMAIL),
-                    n if n == JwtClaimNames::PHONE_NUMBER => {
-                        essential.push(JwtClaimNames::PHONE_NUMBER)
-                    }
-                    n if n == JwtClaimNames::ADDRESS => essential.push(JwtClaimNames::ADDRESS),
-                    n if n == JwtClaimNames::UPDATED_AT => {
-                        essential.push(JwtClaimNames::UPDATED_AT)
-                    }
-                    _ => {}
-                }
-            }
-        }
-        essential
+
+        claims_request
+            .essential_claim_names(claim_sections)
+            .into_iter()
+            .filter_map(known_claim_name)
+            .collect()
+    }
+}
+
+fn known_claim_name(name: &str) -> Option<&'static str> {
+    match name {
+        n if n == JwtClaimNames::NAME => Some(JwtClaimNames::NAME),
+        n if n == JwtClaimNames::GIVEN_NAME => Some(JwtClaimNames::GIVEN_NAME),
+        n if n == JwtClaimNames::FAMILY_NAME => Some(JwtClaimNames::FAMILY_NAME),
+        n if n == JwtClaimNames::MIDDLE_NAME => Some(JwtClaimNames::MIDDLE_NAME),
+        n if n == JwtClaimNames::NICKNAME => Some(JwtClaimNames::NICKNAME),
+        n if n == JwtClaimNames::PROFILE => Some(JwtClaimNames::PROFILE),
+        n if n == JwtClaimNames::PICTURE => Some(JwtClaimNames::PICTURE),
+        n if n == JwtClaimNames::WEBSITE => Some(JwtClaimNames::WEBSITE),
+        n if n == JwtClaimNames::GENDER => Some(JwtClaimNames::GENDER),
+        n if n == JwtClaimNames::BIRTHDATE => Some(JwtClaimNames::BIRTHDATE),
+        n if n == JwtClaimNames::ZONEINFO => Some(JwtClaimNames::ZONEINFO),
+        n if n == JwtClaimNames::LOCALE => Some(JwtClaimNames::LOCALE),
+        n if n == JwtClaimNames::PREFERRED_USERNAME => Some(JwtClaimNames::PREFERRED_USERNAME),
+        n if n == JwtClaimNames::EMAIL => Some(JwtClaimNames::EMAIL),
+        n if n == JwtClaimNames::PHONE_NUMBER => Some(JwtClaimNames::PHONE_NUMBER),
+        n if n == JwtClaimNames::ADDRESS => Some(JwtClaimNames::ADDRESS),
+        n if n == JwtClaimNames::UPDATED_AT => Some(JwtClaimNames::UPDATED_AT),
+        _ => None,
     }
 }
 
@@ -376,6 +365,10 @@ fn absolute_profile_url(profile_base_url: &str, value: Option<&str>) -> Option<S
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    fn claims_request(value: serde_json::Value) -> ClaimsRequest {
+        serde_json::from_value(value).unwrap()
+    }
 
     #[test]
     fn new_creates_claims_with_sub_only() {
@@ -588,11 +581,11 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = serde_json::json!({
+        let claims_request = claims_request(serde_json::json!({
             "userinfo": {
                 "name": {"essential": true}
             }
-        });
+        }));
         filtered.apply_scope_filter(&scope, Some(&claims_request));
 
         assert_eq!(filtered.name, Some("John Doe".to_string()));
@@ -607,11 +600,11 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = serde_json::json!({
+        let claims_request = claims_request(serde_json::json!({
             "id_token": {
                 "name": {"essential": true}
             }
-        });
+        }));
         filtered.apply_scope_filter_for_id_token(&scope, Some(&claims_request));
 
         assert_eq!(filtered.name, Some("John Doe".to_string()));
@@ -626,11 +619,11 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = serde_json::json!({
+        let claims_request = claims_request(serde_json::json!({
             "id_token": {
                 "name": {"essential": true}
             }
-        });
+        }));
         filtered.apply_scope_filter(&scope, Some(&claims_request));
 
         assert_eq!(filtered.name, None);
@@ -645,11 +638,11 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = serde_json::json!({
+        let claims_request = claims_request(serde_json::json!({
             "userinfo": {
                 "name": {"essential": false}
             }
-        });
+        }));
         filtered.apply_scope_filter(&scope, Some(&claims_request));
 
         assert_eq!(filtered.name, None);
