@@ -6,7 +6,7 @@ use crate::openid_connect::jose::{
 use crate::openid_connect::remote::fetchable_url;
 use crate::openid_connect::remote::{
     DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
-    fetch_document_after_url_validation, validate_https_public_url,
+    fetch_https_public_document, validate_https_public_url,
 };
 
 impl AuthorizeService {
@@ -60,7 +60,7 @@ impl AuthorizeService {
     }
 
     pub(super) async fn fetch_request_object(&self, request_uri: &Url) -> Result<String, AppError> {
-        let body = fetch_document_after_url_validation(
+        let body = fetch_https_public_document(
             &self.http_client,
             request_uri,
             DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
@@ -647,6 +647,9 @@ fn map_request_uri_fetch_error(error: RemoteFetchError) -> AppError {
         }
         RemoteFetchError::FetchFailed(error) => {
             AppError::from_code(AuthorizeErrorCode::RequestUriFetchFailed).with_source(error)
+        }
+        RemoteFetchError::ResolveFailed(error) => {
+            AppError::from_code(AuthorizeErrorCode::RequestUriUnsafeHost).with_source(error)
         }
         RemoteFetchError::NotOk => AppError::from_code(AuthorizeErrorCode::RequestUriNot200),
         RemoteFetchError::TooLarge => AppError::from_code(AuthorizeErrorCode::RequestUriTooLarge),

@@ -4,4 +4,4 @@ pub mod codes;
 pub mod kind;
 pub mod params;
 
-pub use app_error::{AppError, init_error_message_resolver};
+pub use app_error::AppError;

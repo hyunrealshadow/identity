@@ -2,7 +2,9 @@ use http::{HeaderValue, StatusCode, header};
 use salvo::{Depot, Request, Response, handler, writing::Text};
 use serde::Deserialize;
 
-use crate::controllers::response::{AppResponse, app_state, json_response, parse_form};
+use crate::controllers::response::{
+    WebResult, app_state, insert_no_store_headers, json_response, parse_form,
+};
 use crate::{
     application::error::{AppError, kind::ErrorKind},
     boot::AppState,
@@ -14,7 +16,7 @@ struct UserInfoForm {
 }
 
 #[handler]
-pub async fn userinfo(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn userinfo(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let auth_header = headers.get("Authorization").and_then(|v| v.to_str().ok());
@@ -43,7 +45,7 @@ pub async fn userinfo(depot: &mut Depot, req: &mut Request) -> Result<AppRespons
 }
 
 #[handler]
-pub async fn userinfo_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn userinfo_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let form: UserInfoForm = parse_form(req).await?;
@@ -96,9 +98,13 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
         Err(error) => return build_error_from_app_error(error),
     };
 
-    // Check if client requires encrypted UserInfo response
-    if let Some(encrypted) = try_encrypt_userinfo(&ctx, &token_claims, &user_claims).await {
-        return encrypted;
+    match service
+        .encrypt_user_info(token_claims.client_oid, &user_claims)
+        .await
+    {
+        Ok(Some(encrypted)) => return build_jose_response(encrypted),
+        Ok(None) => {}
+        Err(error) => return build_error_from_app_error(error),
     }
 
     match service
@@ -113,109 +119,29 @@ async fn handle_userinfo_request(ctx: AppState, token: &str) -> Response {
     build_success_response(user_claims)
 }
 
-async fn try_encrypt_userinfo(
-    ctx: &AppState,
-    token_claims: &identity_application::openid_connect::user_info::TokenClaims,
-    user_claims: &identity_application::openid_connect::dto::UserInfoClaims,
-) -> Option<Response> {
-    use josekit::jwe::{
-        ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweEncrypter, JweHeader, RSA_OAEP, RSA_OAEP_256,
-    };
-    use josekit::jwk::Jwk;
-
-    // Load the client to check encryption metadata
-    let client = ctx
-        .services()
-        .oidc_client_repo()
-        .find_by_oid(token_claims.client_oid)
-        .await
-        .ok()??;
-
-    let alg = client
-        .metadata()
-        .userinfo_encrypted_response_alg
-        .as_deref()?;
-    let enc = client
-        .metadata()
-        .userinfo_encrypted_response_enc
-        .as_deref()
-        .unwrap_or("A128CBC-HS256");
-
-    // Get the client's encryption key
-    let credential = ctx
-        .services()
-        .oidc_credential_repo()
-        .find_first_encryption_key(client.client().oid)
-        .await
-        .ok()??;
-
-    let public_jwk = match &credential.data {
-        identity_domain::openid_connect::OpenIdConnectCredentialData::ClientPublicKey {
-            jwk: Some(jwk),
-            ..
-        } => jwk.clone(),
-        _ => return None,
-    };
-
-    // Build the JWE encrypter from the client's JWK
-    let jwk_value = serde_json::to_value(&public_jwk).ok()?;
-    let jwk_json = jwk_value.to_string();
-    let josekit_jwk = Jwk::from_bytes(jwk_json.as_bytes()).ok()?;
-
-    let encrypter: Box<dyn JweEncrypter> = match alg {
-        "RSA-OAEP" => Box::new(RSA_OAEP.encrypter_from_jwk(&josekit_jwk).ok()?),
-        "RSA-OAEP-256" => Box::new(RSA_OAEP_256.encrypter_from_jwk(&josekit_jwk).ok()?),
-        "ECDH-ES" => Box::new(ECDH_ES.encrypter_from_jwk(&josekit_jwk).ok()?),
-        "ECDH-ES+A128KW" => Box::new(ECDH_ES_A128KW.encrypter_from_jwk(&josekit_jwk).ok()?),
-        "ECDH-ES+A256KW" => Box::new(ECDH_ES_A256KW.encrypter_from_jwk(&josekit_jwk).ok()?),
-        _ => return None,
-    };
-
-    let json_body = serde_json::to_string(user_claims).ok()?;
-
-    let mut header = JweHeader::new();
-    header.set_algorithm(alg);
-    header.set_content_encryption(enc);
-
-    let encrypted =
-        josekit::jwe::serialize_compact(json_body.as_bytes(), &header, &*encrypter).ok()?;
-
-    let mut response = Response::new();
-    response.status_code(StatusCode::OK);
-    response.render(Text::Plain(encrypted));
-    response.headers_mut().insert(
-        http::header::CONTENT_TYPE,
-        http::HeaderValue::from_static("application/jose"),
-    );
-    response.headers_mut().insert(
-        http::header::CACHE_CONTROL,
-        http::HeaderValue::from_static("no-store"),
-    );
-    Some(response)
-}
-
 fn build_success_response(
     claims: identity_application::openid_connect::dto::UserInfoClaims,
 ) -> Response {
     let mut response = json_response(StatusCode::OK, claims);
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
-    );
-    response
-        .headers_mut()
-        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    insert_no_store_headers(&mut response);
     response
 }
 
+fn build_jose_response(token: String) -> Response {
+    build_token_response(token, "application/jose")
+}
+
 fn build_jwt_response(token: String) -> Response {
+    build_token_response(token, "application/jwt")
+}
+
+fn build_token_response(token: String, content_type: &'static str) -> Response {
     let mut response = Response::new();
     response.status_code(StatusCode::OK);
     response.render(Text::Plain(token));
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/jwt"),
-    );
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("no-store, no-cache, must-revalidate"),

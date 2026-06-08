@@ -164,6 +164,7 @@ impl AppServices {
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 oidc_client_repo.clone(),
+                oidc_credential_repo.clone(),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
                 Arc::new(AsymmetricKeyService::new(
                     Arc::new(KeyRepositoryImpl::new(db.clone())),

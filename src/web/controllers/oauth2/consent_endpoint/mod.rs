@@ -2,7 +2,7 @@ use http::header;
 use salvo::{Depot, Request, handler};
 use serde::Deserialize;
 
-use crate::{application::error::AppError, web::controllers::response::AppResponse};
+use crate::web::controllers::response::WebResult;
 
 mod api;
 mod context;
@@ -50,20 +50,20 @@ fn expects_json_post(accept: Option<&str>, content_type: Option<&str>) -> bool {
 }
 
 #[handler]
-pub async fn consent_get(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
     if accepts_json(
         req.headers()
             .get(header::ACCEPT)
             .and_then(|value| value.to_str().ok()),
     ) {
-        return api::consent_api(depot, req).await;
+        return Ok(api::consent_api(depot, req).await?);
     }
 
-    page::consent_page(depot, req).await
+    Ok(page::consent_page(depot, req).await?)
 }
 
 #[handler]
-pub async fn consent_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn consent_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let accept = req
         .headers()
         .get(header::ACCEPT)
@@ -74,8 +74,8 @@ pub async fn consent_post(depot: &mut Depot, req: &mut Request) -> Result<AppRes
         .and_then(|value| value.to_str().ok());
 
     if expects_json_post(accept, content_type) {
-        return api::consent_api_submit(depot, req).await;
+        return Ok(api::consent_api_submit(depot, req).await?);
     }
 
-    decision::consent_submit(depot, req).await
+    Ok(decision::consent_submit(depot, req).await?)
 }

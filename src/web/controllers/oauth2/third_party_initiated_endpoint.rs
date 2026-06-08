@@ -2,11 +2,11 @@ use salvo::{Depot, Request, handler};
 use serde::Deserialize;
 use url::Url;
 
-use identity_application::{
-    error::AppError, openid_connect::authorize::ThirdPartyInitiatedLoginRequest,
-};
+use identity_application::openid_connect::authorize::ThirdPartyInitiatedLoginRequest;
 
-use crate::controllers::response::{AppResponse, app_state, parse_query, redirect_to_response};
+use crate::controllers::response::{
+    AppResponse, WebResult, app_state, parse_query, redirect_to_response,
+};
 
 #[derive(Debug, Deserialize)]
 struct ThirdPartyInitiatedLoginQuery {
@@ -16,7 +16,7 @@ struct ThirdPartyInitiatedLoginQuery {
 }
 
 #[handler]
-pub async fn initiate_login(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn initiate_login(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let query: ThirdPartyInitiatedLoginQuery = parse_query(req)?;
     let redirect_uri = ctx

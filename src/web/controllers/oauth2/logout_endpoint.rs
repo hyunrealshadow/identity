@@ -12,8 +12,8 @@ use identity_infrastructure::web::tera;
 
 use crate::controllers::{
     response::{
-        AppResponse, app_state, parse_form, parse_query, redirect_to_response, render_app_error,
-        render_html,
+        AppResponse, WebResult, app_state, parse_form, parse_query, redirect_to_response,
+        render_app_error, render_html,
     },
     shared::{
         append_set_cookie, build_session_cookie_from_protected_ids, generate_csp_nonce,
@@ -211,21 +211,15 @@ async fn handle_logout(
 }
 
 #[handler]
-pub async fn logout_get(
-    depot: &mut Depot,
-    req: &mut Request,
-) -> Result<AppResponse, identity_application::error::AppError> {
+pub async fn logout_get(depot: &mut Depot, req: &mut Request) -> WebResult {
     let params: LogoutParams = parse_query(req)?;
-    handle_logout(depot, req, params).await
+    Ok(handle_logout(depot, req, params).await?)
 }
 
 #[handler]
-pub async fn logout_post(
-    depot: &mut Depot,
-    req: &mut Request,
-) -> Result<AppResponse, identity_application::error::AppError> {
+pub async fn logout_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let params: LogoutParams = parse_form(req).await?;
-    handle_logout(depot, req, params).await
+    Ok(handle_logout(depot, req, params).await?)
 }
 
 #[cfg(test)]

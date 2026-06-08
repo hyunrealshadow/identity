@@ -16,8 +16,8 @@ use salvo::{Depot, Request, Response, Router, handler};
 use serde::Deserialize;
 
 use super::response::{
-    AppResponse, app_state, parse_form, parse_query, redirect_to_response, render_app_error,
-    render_html,
+    AppResponse, WebResult, app_state, parse_form, parse_query, redirect_to_response,
+    render_app_error, render_html,
 };
 use super::shared::{
     append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
@@ -196,7 +196,7 @@ fn oauth2_continue_url(login_id: &str) -> String {
 /// Renders the account picker when active sessions exist, or the identifier
 /// entry form when the user has no existing sessions.
 #[handler]
-async fn login_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn login_page(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let q: LoginQuery = parse_query(req)?;
@@ -237,7 +237,7 @@ async fn login_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse,
 /// Renders the password entry form. Requires `login_id` and `identifier`
 /// query parameters. Redirects back to `/login` if either is missing.
 #[handler]
-async fn password_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn password_page(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let q: PasswordQuery = parse_query(req)?;
@@ -262,7 +262,7 @@ async fn password_page(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 /// Renders the OTP/TOTP entry form. Requires `login_id` and `identifier`
 /// query parameters. Redirects back to `/login` if either is missing.
 #[handler]
-async fn otp_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn otp_page(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let q: OtpQuery = parse_query(req)?;
@@ -289,7 +289,7 @@ async fn otp_page(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, A
 /// Select an existing session from the account picker. Reorders the sessions
 /// cookie so the chosen account is first, then redirects to `/`.
 #[handler]
-async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn select_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: SelectForm = parse_form(req).await?;
@@ -346,7 +346,7 @@ async fn select_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse
 /// Validate the identifier. On success, redirect to the password page.
 /// On failure, re-render the login page with an inline error.
 #[handler]
-async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn identifier_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: IdentifierForm = parse_form(req).await?;
@@ -456,7 +456,7 @@ async fn identifier_post(depot: &mut Depot, req: &mut Request) -> Result<AppResp
 /// - MFA required   → redirect to `/login/otp?...`
 /// - Error          → re-render password page with inline error
 #[handler]
-async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn password_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: PasswordForm = parse_form(req).await?;
@@ -571,7 +571,7 @@ async fn password_post(depot: &mut Depot, req: &mut Request) -> Result<AppRespon
 /// - Authenticated → set cookie, redirect to `/`
 /// - Error         → re-render OTP page with inline error
 #[handler]
-async fn otp_post(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+async fn otp_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: OtpForm = parse_form(req).await?;

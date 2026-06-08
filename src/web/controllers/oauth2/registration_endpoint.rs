@@ -1,4 +1,4 @@
-use http::{HeaderValue, StatusCode, header};
+use http::{StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
 
 use identity_application::{
@@ -6,14 +6,12 @@ use identity_application::{
     openid_connect::registration::DynamicClientRegistrationRequest,
 };
 
-use crate::controllers::response::{app_state, parse_json, parse_param, render_json};
+use crate::controllers::response::{
+    WebResult, app_state, insert_no_store_headers, parse_json, parse_param, render_json,
+};
 
 #[handler]
-pub async fn register(
-    depot: &mut Depot,
-    req: &mut Request,
-    res: &mut Response,
-) -> Result<(), AppError> {
+pub async fn register(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let request: DynamicClientRegistrationRequest = parse_json(req).await?;
     let response = match ctx
@@ -46,23 +44,16 @@ pub async fn register(
             );
             return Ok(());
         }
-        Err(error) => return Err(error),
+        Err(error) => return Err(error.into()),
     };
 
-    res.headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    res.headers_mut()
-        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    insert_no_store_headers(res);
     render_json(res, StatusCode::CREATED, response);
     Ok(())
 }
 
 #[handler]
-pub async fn read(
-    depot: &mut Depot,
-    req: &mut Request,
-    res: &mut Response,
-) -> Result<(), AppError> {
+pub async fn read(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let client_id: String = parse_param(req, "client_id")?;
     let registration_access_token = bearer_token(req)?;
@@ -76,20 +67,13 @@ pub async fn read(
         )
         .await?;
 
-    res.headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    res.headers_mut()
-        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    insert_no_store_headers(res);
     render_json(res, StatusCode::OK, response);
     Ok(())
 }
 
 #[handler]
-pub async fn delete(
-    depot: &mut Depot,
-    req: &mut Request,
-    res: &mut Response,
-) -> Result<(), AppError> {
+pub async fn delete(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let client_id: String = parse_param(req, "client_id")?;
     let registration_access_token = bearer_token(req)?;
@@ -98,10 +82,7 @@ pub async fn delete(
         .delete(&client_id, registration_access_token)
         .await?;
 
-    res.headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    res.headers_mut()
-        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    insert_no_store_headers(res);
     render_json(res, StatusCode::NO_CONTENT, ());
     Ok(())
 }

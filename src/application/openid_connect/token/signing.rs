@@ -1,7 +1,6 @@
 use super::*;
-use crate::openid_connect::jose::asymmetric_signer_from_pem;
+use crate::openid_connect::jose::{asymmetric_signer_from_pem, encrypt_compact_with_public_jwk};
 use identity_domain::auth::SessionOid;
-use josekit::jwe::JweHeader;
 #[cfg(test)]
 use josekit::jws::RS256;
 
@@ -250,11 +249,6 @@ impl TokenService {
         encryption_alg: &str,
         content_enc: &str,
     ) -> Result<String, AppError> {
-        use josekit::jwe::{
-            ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweEncrypter, RSA_OAEP, RSA_OAEP_256,
-        };
-        use josekit::jwk::Jwk;
-
         let credential = self
             .credential_repo
             .find_first_encryption_key(client.client().oid)
@@ -268,43 +262,17 @@ impl TokenService {
             identity_domain::openid_connect::OpenIdConnectCredentialData::ClientPublicKey {
                 jwk: Some(jwk),
                 ..
-            } => jwk.clone(),
+            } => jwk,
             _ => return Err(AppError::from_code(TokenErrorCode::EncryptionKeyNotFound)),
         };
 
-        let jwk_value = serde_json::to_value(&public_jwk)
-            .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?;
-        let jwk_json = jwk_value.to_string();
-        let josekit_jwk = Jwk::from_bytes(jwk_json.as_bytes())
-            .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))?;
-
-        let encrypter: Box<dyn JweEncrypter> = match encryption_alg {
-            "RSA-OAEP" => Box::new(RSA_OAEP.encrypter_from_jwk(&josekit_jwk).map_err(|e| {
-                AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e)
-            })?),
-            "RSA-OAEP-256" => {
-                Box::new(RSA_OAEP_256.encrypter_from_jwk(&josekit_jwk).map_err(|e| {
-                    AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e)
-                })?)
-            }
-            "ECDH-ES" => Box::new(ECDH_ES.encrypter_from_jwk(&josekit_jwk).map_err(|e| {
-                AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e)
-            })?),
-            "ECDH-ES+A128KW" => Box::new(ECDH_ES_A128KW.encrypter_from_jwk(&josekit_jwk).map_err(
-                |e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e),
-            )?),
-            "ECDH-ES+A256KW" => Box::new(ECDH_ES_A256KW.encrypter_from_jwk(&josekit_jwk).map_err(
-                |e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e),
-            )?),
-            _ => return Err(AppError::from_code(TokenErrorCode::EncryptionFailed)),
-        };
-
-        let mut header = JweHeader::new();
-        header.set_algorithm(encryption_alg);
-        header.set_content_encryption(content_enc);
-
-        josekit::jwe::serialize_compact(signed_jwt.as_bytes(), &header, &*encrypter)
-            .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))
+        encrypt_compact_with_public_jwk(
+            signed_jwt.as_bytes(),
+            public_jwk,
+            encryption_alg,
+            content_enc,
+        )
+        .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))
     }
 }
 
@@ -361,17 +329,14 @@ impl TokenService {
         &self,
         params: StoreRefreshTokenParams<'_>,
     ) -> Result<String, AppError> {
-        let data = serde_json::to_value(RefreshTokenData {
+        let data = ClientAuthorizationData::RefreshToken(RefreshTokenData {
             scope: params.scope.to_string(),
             user_oid: params.user_oid.to_string(),
             session_oid: params.session_oid,
             protected_session_id: params.protected_session_id.map(str::to_string),
             auth_time: params.auth_time,
             rotated_from: params.rotated_from.map(str::to_string),
-        })
-        .map_err(|error| {
-            AppError::from_code(TokenErrorCode::SerializeRefreshFailed).with_source(error)
-        })?;
+        });
 
         let record = self
             .client_authorization_repo
@@ -403,16 +368,13 @@ impl TokenService {
         protected_session_id: Option<&str>,
         authorization_code_oid: Option<Uuid>,
     ) -> Result<ClientAuthorization, AppError> {
-        let data = serde_json::to_value(AccessTokenData {
+        let data = ClientAuthorizationData::AccessToken(AccessTokenData {
             scope: scope.to_string(),
             user_oid: user_oid.to_string(),
             session_oid,
             protected_session_id: protected_session_id.map(str::to_string),
             authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
-        })
-        .map_err(|error| {
-            AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-        })?;
+        });
 
         self.client_authorization_repo
             .create(

@@ -1,6 +1,6 @@
 use super::*;
 use identity_domain::client_authorization::{
-    ConsentState, SelectionSource, StoredAuthorizationRequest,
+    ClientAuthorizationData, ConsentState, SelectionSource, StoredAuthorizationRequest,
 };
 use identity_domain::openid_connect::AuthorizationRequest;
 use identity_domain::openid_connect::AuthorizationRequestData;
@@ -50,7 +50,10 @@ pub(in crate::openid_connect) fn insert_legacy_authorization_request_for_test(
             oid,
             client_oid: request.client_id,
             type_: ClientAuthorizationType::AuthorizationRequest,
-            data: serde_json::to_value(AuthorizationRequestData::from(request)).unwrap(),
+            data: ClientAuthorizationData::AuthorizationRequest(StoredAuthorizationRequest {
+                request: AuthorizationRequestData::from(request),
+                interaction: Default::default(),
+            }),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(10),
             completed_at: None,
             revoked_at: None,
@@ -69,10 +72,10 @@ pub(in crate::openid_connect) fn set_stored_request_redirect_uri_for_test(
 ) {
     let mut records = state.records.lock().unwrap();
     let record = records.get_mut(&oid).unwrap();
-    let mut stored =
-        serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone()).unwrap();
+    let ClientAuthorizationData::AuthorizationRequest(stored) = &mut record.data else {
+        panic!("test record should be authorization request");
+    };
     stored.request.redirect_uri = redirect_uri.to_string();
-    record.data = serde_json::to_value(stored).unwrap();
     record.updated_at = Some(chrono::Utc::now());
 }
 
@@ -135,9 +138,7 @@ pub fn mock_client_auth_repo_with_state(
                     return Ok(false);
                 }
 
-                let Ok(mut stored) =
-                    serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone())
-                else {
+                let ClientAuthorizationData::AuthorizationRequest(stored) = &mut record.data else {
                     return Ok(false);
                 };
                 if !can_overwrite_selection(stored.interaction.selection_source, source) {
@@ -148,7 +149,6 @@ pub fn mock_client_auth_repo_with_state(
                 stored.interaction.selected_protected_session_id = protected_session_id;
                 stored.interaction.selected_user_oid = Some(user_oid.to_string());
                 stored.interaction.selection_source = Some(source);
-                record.data = serde_json::to_value(stored).unwrap();
                 record.updated_at = Some(chrono::Utc::now());
                 Ok(true)
             },
@@ -166,9 +166,7 @@ pub fn mock_client_auth_repo_with_state(
                 return Ok(false);
             }
 
-            let Ok(mut stored) =
-                serde_json::from_value::<StoredAuthorizationRequest>(record.data.clone())
-            else {
+            let ClientAuthorizationData::AuthorizationRequest(stored) = &mut record.data else {
                 return Ok(false);
             };
             if stored.interaction.consent_state != ConsentState::Pending {
@@ -177,7 +175,6 @@ pub fn mock_client_auth_repo_with_state(
 
             stored.interaction.consent_state = consent_state;
             stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
-            record.data = serde_json::to_value(stored).unwrap();
             record.updated_at = Some(chrono::Utc::now());
             Ok(true)
         });

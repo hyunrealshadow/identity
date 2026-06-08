@@ -1,5 +1,8 @@
 use josekit::{
     JoseError,
+    jwe::{
+        ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweEncrypter, JweHeader, RSA_OAEP, RSA_OAEP_256,
+    },
     jws::{
         ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, JwsSigner, JwsVerifier, PS256,
         PS384, PS512, RS256, RS384, RS512,
@@ -174,4 +177,45 @@ pub fn public_jwk_to_jose(jwk: &PublicJwk) -> Result<josekit::jwk::Jwk, JoseErro
     let jwk_json =
         serde_json::to_vec(jwk).map_err(|error| JoseError::InvalidJwkFormat(error.into()))?;
     josekit::jwk::Jwk::from_bytes(&jwk_json)
+}
+
+pub fn encrypt_compact_with_public_jwk(
+    plaintext: &[u8],
+    public_jwk: &PublicJwk,
+    encryption_alg: &str,
+    content_enc: &str,
+) -> Result<String, JoseError> {
+    let jwk = public_jwk_to_jose(public_jwk)?;
+    let encrypter = jwe_encrypter_from_public_jwk(encryption_alg, &jwk)?;
+    let mut header = JweHeader::new();
+    header.set_algorithm(encryption_alg);
+    header.set_content_encryption(content_enc);
+
+    josekit::jwe::serialize_compact(plaintext, &header, &*encrypter)
+}
+
+fn jwe_encrypter_from_public_jwk(
+    alg: &str,
+    jwk: &josekit::jwk::Jwk,
+) -> Result<Box<dyn JweEncrypter>, JoseError> {
+    match alg {
+        "RSA-OAEP" => RSA_OAEP
+            .encrypter_from_jwk(jwk)
+            .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
+        "RSA-OAEP-256" => RSA_OAEP_256
+            .encrypter_from_jwk(jwk)
+            .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
+        "ECDH-ES" => ECDH_ES
+            .encrypter_from_jwk(jwk)
+            .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
+        "ECDH-ES+A128KW" => ECDH_ES_A128KW
+            .encrypter_from_jwk(jwk)
+            .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
+        "ECDH-ES+A256KW" => ECDH_ES_A256KW
+            .encrypter_from_jwk(jwk)
+            .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
+        _ => Err(JoseError::InvalidJweFormat(anyhow::anyhow!(
+            "unsupported JWE alg: {alg}"
+        ))),
+    }
 }

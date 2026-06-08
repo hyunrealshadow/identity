@@ -78,10 +78,10 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
         }
 
-        let data: AuthorizationCodeData =
-            serde_json::from_value(record.data.clone()).map_err(|error| {
-                AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
-            })?;
+        let data = match record.data {
+            ClientAuthorizationData::AuthorizationCode(data) => data,
+            _ => return Err(AppError::from_code(TokenErrorCode::DeserializeCodeFailed)),
+        };
         let protected_session_id = self
             .protected_session_id(data.session_oid, data.protected_session_id.as_deref())
             .await?;
@@ -288,10 +288,14 @@ impl TokenService {
         if refresh_record.revoked_at.is_some() || refresh_record.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
-        let refresh_data: RefreshTokenData = serde_json::from_value(refresh_record.data.clone())
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::DeserializeRefreshFailed).with_source(error)
-            })?;
+        let refresh_data = match refresh_record.data {
+            ClientAuthorizationData::RefreshToken(data) => data,
+            _ => {
+                return Err(AppError::from_code(
+                    TokenErrorCode::DeserializeRefreshFailed,
+                ));
+            }
+        };
         let protected_session_id = self
             .protected_session_id(
                 refresh_data.session_oid,

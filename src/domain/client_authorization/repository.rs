@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::model::{ClientAuthorization, ClientAuthorizationType, ConsentState, SelectionSource};
+use super::model::{
+    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
+    SelectionSource,
+};
 use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
 
@@ -12,7 +15,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         &self,
         client_oid: ClientOid,
         type_: ClientAuthorizationType,
-        data: serde_json::Value,
+        data: ClientAuthorizationData,
         expires_at: DateTime<Utc>,
     ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError>;
 

@@ -14,8 +14,10 @@ use identity_domain::{
     auth::SessionOid,
     client::model::ClientOid,
     client_authorization::{
-        ClientAuthorization, ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
-        ClientAuthorizationType, ConsentState, SelectionSource, StoredAuthorizationRequest,
+        AccessTokenData, AuthorizationCodeData, ClientAuthorization, ClientAuthorizationData,
+        ClientAuthorizationRepository, ClientAuthorizationRepositoryError, ClientAuthorizationType,
+        ConsentState, RefreshTokenData, RegistrationAccessTokenData, SelectionSource,
+        StoredAuthorizationRequest,
     },
     openid_connect::AuthorizationRequestData,
 };
@@ -37,6 +39,45 @@ fn parse_stored_authorization_request(
                 "invalid authorization_request payload".into(),
             )))
         })
+}
+
+fn serialize_data(
+    data: &ClientAuthorizationData,
+) -> Result<serde_json::Value, ClientAuthorizationRepositoryError> {
+    match data {
+        ClientAuthorizationData::AuthorizationRequest(value) => serde_json::to_value(value),
+        ClientAuthorizationData::AuthorizationCode(value) => serde_json::to_value(value),
+        ClientAuthorizationData::AccessToken(value) => serde_json::to_value(value),
+        ClientAuthorizationData::RefreshToken(value) => serde_json::to_value(value),
+        ClientAuthorizationData::RegistrationAccessToken(value) => serde_json::to_value(value),
+    }
+    .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+}
+
+fn parse_data(
+    type_: &ClientAuthorizationType,
+    data: serde_json::Value,
+) -> Result<ClientAuthorizationData, ClientAuthorizationRepositoryError> {
+    match type_ {
+        ClientAuthorizationType::AuthorizationRequest => parse_stored_authorization_request(data)
+            .map(ClientAuthorizationData::AuthorizationRequest),
+        ClientAuthorizationType::AuthorizationCode => {
+            serde_json::from_value::<AuthorizationCodeData>(data)
+                .map(ClientAuthorizationData::AuthorizationCode)
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+        }
+        ClientAuthorizationType::AccessToken => serde_json::from_value::<AccessTokenData>(data)
+            .map(ClientAuthorizationData::AccessToken)
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))),
+        ClientAuthorizationType::RefreshToken => serde_json::from_value::<RefreshTokenData>(data)
+            .map(ClientAuthorizationData::RefreshToken)
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))),
+        ClientAuthorizationType::RegistrationAccessToken => {
+            serde_json::from_value::<RegistrationAccessTokenData>(data)
+                .map(ClientAuthorizationData::RegistrationAccessToken)
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+        }
+    }
 }
 
 fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSource) -> bool {
@@ -68,18 +109,21 @@ fn to_domain(
     model: client_authorization::Model,
     client_oid: ClientOid,
 ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
+    let type_ = model
+        .r#type
+        .parse::<ClientAuthorizationType>()
+        .map_err(|_| {
+            ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
+                "invalid client_authorization.type".into(),
+            )))
+        })?;
+    let data = parse_data(&type_, model.data)?;
+
     Ok(ClientAuthorization {
         oid: model.oid,
         client_oid,
-        type_: model
-            .r#type
-            .parse::<ClientAuthorizationType>()
-            .map_err(|_| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
-                    "invalid client_authorization.type".into(),
-                )))
-            })?,
-        data: model.data,
+        type_,
+        data,
         expires_at: model.expires_at.with_timezone(&Utc),
         completed_at: model.completed_at.map(|value| value.with_timezone(&Utc)),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
@@ -104,7 +148,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         client_oid: ClientOid,
         type_: ClientAuthorizationType,
-        data: serde_json::Value,
+        data: ClientAuthorizationData,
         expires_at: chrono::DateTime<Utc>,
     ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
         let client_model = ClientEntity::find()
@@ -119,6 +163,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             })?;
 
         let now = Utc::now();
+        let data = serialize_data(&data)?;
         let model = client_authorization::ActiveModel {
             id: Default::default(),
             oid: Set(Uuid::new_v4()),

@@ -106,6 +106,15 @@ pub struct StoredAuthorizationRequest {
     pub interaction: AuthorizationInteractionState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClientAuthorizationData {
+    AuthorizationRequest(StoredAuthorizationRequest),
+    AuthorizationCode(AuthorizationCodeData),
+    AccessToken(AccessTokenData),
+    RefreshToken(RefreshTokenData),
+    RegistrationAccessToken(RegistrationAccessTokenData),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AuthorizationInteractionState {
     pub selected_session_oid: Option<SessionOid>,
@@ -140,7 +149,7 @@ pub struct ClientAuthorization {
     pub oid: ClientAuthorizationOid,
     pub client_oid: ClientOid,
     pub type_: ClientAuthorizationType,
-    pub data: serde_json::Value,
+    pub data: ClientAuthorizationData,
     pub expires_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,

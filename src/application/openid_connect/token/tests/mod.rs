@@ -33,8 +33,8 @@ use crate::{
     domain::{
         client::model::ClientOid,
         client_authorization::{
-            AuthorizationCodeData, ClientAuthorizationRepository, ClientAuthorizationType,
-            RefreshTokenData,
+            AuthorizationCodeData, ClientAuthorizationData, ClientAuthorizationRepository,
+            ClientAuthorizationType, RefreshTokenData,
         },
         key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
         key::{
@@ -312,6 +312,7 @@ fn user_info_service_with_key(
             user: test_user(user_oid),
         }),
         Arc::new(InMemoryClientRepository),
+        Arc::new(cred_repo_with(vec![])),
         repo,
         Arc::new(AsymmetricKeyService::new(
             Arc::new(key_repo_with_keys(vec![key])),

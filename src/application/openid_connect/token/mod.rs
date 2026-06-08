@@ -13,7 +13,7 @@ use crate::{
     },
     domain::{
         client_authorization::{
-            AccessTokenData, AuthorizationCodeData, ClientAuthorization,
+            AccessTokenData, ClientAuthorization, ClientAuthorizationData,
             ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
         },
         key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},

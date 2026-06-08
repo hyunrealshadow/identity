@@ -36,7 +36,8 @@ use crate::{
 use super::{
     oauth2::inline_script_csp_header_value,
     response::{
-        app_state, parse_query, redirect_to_response, render_app_error, render_html, render_json,
+        WebResult, app_state, parse_query, redirect_to_response, render_app_error, render_html,
+        render_json,
     },
 };
 
@@ -141,7 +142,7 @@ async fn auto_login_page(
     depot: &mut Depot,
     req: &mut Request,
     res: &mut Response,
-) -> Result<(), AppError> {
+) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let query: AutoLoginPageQuery = parse_query(req)?;
@@ -150,11 +151,7 @@ async fn auto_login_page(
 }
 
 #[handler]
-async fn auto_login(
-    depot: &mut Depot,
-    req: &mut Request,
-    res: &mut Response,
-) -> Result<(), AppError> {
+async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: AutoLoginRequest = req
@@ -267,7 +264,7 @@ struct RotateKeysResponse {
 }
 
 #[handler]
-async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> Result<(), AppError> {
+async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let key = ctx
         .services()

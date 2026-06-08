@@ -2,7 +2,7 @@ use http::HeaderMap;
 use salvo::{Depot, Request, Response, handler};
 
 use crate::controllers::{
-    response::{AppResponse, app_state, redirect_to_response},
+    response::{WebResult, app_state, redirect_to_response},
     shared::load_active_sessions,
 };
 use identity_application::error::AppError;
@@ -87,7 +87,7 @@ async fn render_error(
 }
 
 #[handler]
-pub async fn authorize(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let authorize_request = extract_authorize_request(req).await?;

@@ -3,7 +3,6 @@ use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
 use super::*;
 use crate::openid_connect::token::resolve_id_token_alg;
 use identity_domain::auth::SessionOid;
-use std::fmt::Write;
 use uuid::Uuid;
 
 struct CreateFrontChannelAccessTokenInput<'a> {
@@ -139,26 +138,22 @@ impl AuthorizeService {
             None => signed_id_token,
         };
 
-        let mut fragment = format!("id_token={id_token}");
+        let mut fragment = url::form_urlencoded::Serializer::new(String::new());
+        fragment.append_pair("id_token", &id_token);
         if let Some(ref at) = access_token {
-            write!(fragment, "&access_token={at}").unwrap();
-            write!(fragment, "&token_type=Bearer").unwrap();
-            write!(fragment, "&expires_in={expires_in}").unwrap();
-            write!(fragment, "&scope={}", urlencoding(&request.scope)).unwrap();
+            fragment.append_pair("access_token", at);
+            fragment.append_pair("token_type", "Bearer");
+            fragment.append_pair("expires_in", &expires_in.to_string());
+            fragment.append_pair("scope", &request.scope);
         }
-        write!(fragment, "&state={}", urlencoding(&request.state)).unwrap();
-        write!(
-            fragment,
-            "&session_state={}",
-            urlencoding(&session_state_for_authorize_response(
-                request,
-                protected_session_id
-            )?)
-        )
-        .unwrap();
+        fragment.append_pair("state", &request.state);
+        fragment.append_pair(
+            "session_state",
+            &session_state_for_authorize_response(request, protected_session_id)?,
+        );
 
         let mut url = redirect_uri;
-        url.set_fragment(Some(&fragment));
+        url.set_fragment(Some(&fragment.finish()));
 
         Ok(url)
     }
@@ -283,29 +278,25 @@ impl AuthorizeService {
             None
         };
 
-        let mut fragment = format!("code={}", urlencoding(&code));
+        let mut fragment = url::form_urlencoded::Serializer::new(String::new());
+        fragment.append_pair("code", &code);
         if let Some(ref id_token) = id_token {
-            write!(fragment, "&id_token={}", urlencoding(id_token)).unwrap();
+            fragment.append_pair("id_token", id_token);
         }
         if let Some(ref access_token) = access_token {
-            write!(fragment, "&access_token={}", urlencoding(access_token)).unwrap();
-            write!(fragment, "&token_type=Bearer").unwrap();
-            write!(fragment, "&expires_in=3600").unwrap();
-            write!(fragment, "&scope={}", urlencoding(&request.scope)).unwrap();
+            fragment.append_pair("access_token", access_token);
+            fragment.append_pair("token_type", "Bearer");
+            fragment.append_pair("expires_in", "3600");
+            fragment.append_pair("scope", &request.scope);
         }
-        write!(fragment, "&state={}", urlencoding(&request.state)).unwrap();
-        write!(
-            fragment,
-            "&session_state={}",
-            urlencoding(&session_state_for_authorize_response(
-                request,
-                protected_session_id
-            )?)
-        )
-        .unwrap();
+        fragment.append_pair("state", &request.state);
+        fragment.append_pair(
+            "session_state",
+            &session_state_for_authorize_response(request, protected_session_id)?,
+        );
 
         let mut url = redirect_uri;
-        url.set_fragment(Some(&fragment));
+        url.set_fragment(Some(&fragment.finish()));
         Ok(url)
     }
 
@@ -318,16 +309,17 @@ impl AuthorizeService {
             .create(
                 input.client_id,
                 ClientAuthorizationType::AccessToken,
-                serde_json::to_value(identity_domain::client_authorization::AccessTokenData {
-                    scope: input.request.scope.clone(),
-                    user_oid: input.user_oid.to_string(),
-                    session_oid: input.session_oid,
-                    protected_session_id: Some(input.protected_session_id.to_string()),
-                    authorization_code_oid: input.authorization_code_oid.map(|oid| oid.to_string()),
-                })
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
-                })?,
+                identity_domain::client_authorization::ClientAuthorizationData::AccessToken(
+                    identity_domain::client_authorization::AccessTokenData {
+                        scope: input.request.scope.clone(),
+                        user_oid: input.user_oid.to_string(),
+                        session_oid: input.session_oid,
+                        protected_session_id: Some(input.protected_session_id.to_string()),
+                        authorization_code_oid: input
+                            .authorization_code_oid
+                            .map(|oid| oid.to_string()),
+                    },
+                ),
                 chrono::Utc::now() + chrono::Duration::hours(1),
             )
             .await
@@ -349,21 +341,4 @@ impl AuthorizeService {
             claims: input.claims,
         })
     }
-}
-
-fn urlencoding(s: &str) -> String {
-    let mut result = String::new();
-    for &b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                result.push(b as char);
-            }
-            b' ' => result.push_str("%20"),
-            _ => {
-                use std::fmt::Write;
-                write!(result, "%{:02X}", b).unwrap();
-            }
-        }
-    }
-    result
 }

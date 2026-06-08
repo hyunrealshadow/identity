@@ -2,6 +2,15 @@ use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
 use identity_domain::auth::SessionOid;
 
+fn refresh_token_data(
+    record: identity_domain::client_authorization::ClientAuthorization,
+) -> RefreshTokenData {
+    match record.data {
+        ClientAuthorizationData::RefreshToken(data) => data,
+        _ => panic!("expected refresh token data"),
+    }
+}
+
 #[tokio::test]
 async fn exchange_refresh_token_returns_new_access_token() {
     let repo = Arc::new(mock_client_auth_repo());
@@ -12,7 +21,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
                 code_challenge: Some("verifier-refresh".to_string()),
@@ -24,8 +33,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -73,7 +81,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
     let rotated = repo.find_by_oid(rotated_oid).await.unwrap();
     let rotated = rotated.unwrap();
     assert_eq!(rotated.type_, ClientAuthorizationType::RefreshToken);
-    let rotated_data: RefreshTokenData = serde_json::from_value(rotated.data).unwrap();
+    let rotated_data = refresh_token_data(rotated);
     let expected_rotated_from = initial_refresh_oid.to_string();
     assert_eq!(
         rotated_data.rotated_from.as_deref(),
@@ -166,7 +174,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh-es256".to_string()),
                 code_challenge: Some("verifier-refresh-es256".to_string()),
@@ -178,8 +186,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -302,7 +309,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-auth-time".to_string()),
                 code_challenge: Some("verifier-auth-time".to_string()),
@@ -314,8 +321,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 auth_time: Some(original_auth_time),
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -343,8 +349,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         .await
         .unwrap()
         .unwrap();
-    let initial_data: RefreshTokenData =
-        serde_json::from_value(initial_stored.data.clone()).unwrap();
+    let initial_data = refresh_token_data(initial_stored);
     assert_eq!(initial_data.auth_time, Some(original_auth_time));
 
     let refreshed = service
@@ -380,8 +385,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     let refreshed_token = refreshed.refresh_token.unwrap();
     let refreshed_oid = Uuid::from_slice(&STANDARD.decode(&refreshed_token).unwrap()).unwrap();
     let refreshed_stored = repo.find_by_oid(refreshed_oid).await.unwrap().unwrap();
-    let refreshed_data: RefreshTokenData =
-        serde_json::from_value(refreshed_stored.data.clone()).unwrap();
+    let refreshed_data = refresh_token_data(refreshed_stored);
     assert_eq!(
         refreshed_data.auth_time,
         Some(original_auth_time),
@@ -399,7 +403,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access".to_string(),
                 nonce: None,
                 code_challenge: Some("verifier-no-auth-time".to_string()),
@@ -411,8 +415,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -435,6 +438,6 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
     let refresh_token = initial.refresh_token.unwrap();
     let refresh_oid = Uuid::from_slice(&STANDARD.decode(&refresh_token).unwrap()).unwrap();
     let stored = repo.find_by_oid(refresh_oid).await.unwrap().unwrap();
-    let data: RefreshTokenData = serde_json::from_value(stored.data).unwrap();
+    let data = refresh_token_data(stored);
     assert_eq!(data.auth_time, None);
 }

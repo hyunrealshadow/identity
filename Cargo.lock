@@ -2132,7 +2132,6 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "rstest",
- "salvo",
  "sea-orm",
  "serde",
  "serde_json",

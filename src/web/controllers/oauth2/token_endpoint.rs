@@ -1,5 +1,5 @@
 use base64::Engine;
-use http::{HeaderMap, HeaderValue, StatusCode, header};
+use http::{HeaderMap, StatusCode, header};
 use salvo::{Depot, Request, Response, handler};
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +8,9 @@ use identity_application::{
     openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
 };
 
-use crate::controllers::response::{AppResponse, app_state, json_response, parse_form};
+use crate::controllers::response::{
+    AppResponse, WebResult, app_state, insert_no_store_headers, json_response, parse_form,
+};
 
 #[derive(Debug, Deserialize)]
 struct TokenForm {
@@ -80,12 +82,7 @@ fn token_error_response(error: AppError) -> Response {
     };
 
     let mut response = json_response(status, body);
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response
-        .headers_mut()
-        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    insert_no_store_headers(&mut response);
     response
 }
 
@@ -101,7 +98,7 @@ fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
 }
 
 #[handler]
-pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, AppError> {
+pub async fn token(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let form: TokenForm = parse_form(req).await?;
@@ -151,12 +148,7 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
     Ok(AppResponse(match result {
         Ok(response) => {
             let mut response = json_response(StatusCode::OK, response);
-            response
-                .headers_mut()
-                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-            response
-                .headers_mut()
-                .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+            insert_no_store_headers(&mut response);
             response
         }
         Err(error) => token_error_response(error),

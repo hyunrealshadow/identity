@@ -9,7 +9,10 @@ use crate::{
         key::asymmetric::AsymmetricKeyService,
         openid_connect::{
             dto::UserInfoClaims,
-            jose::{asymmetric_signer_from_pem, asymmetric_verifier_from_pem},
+            jose::{
+                asymmetric_signer_from_pem, asymmetric_verifier_from_pem,
+                encrypt_compact_with_public_jwk,
+            },
             provider::OpenIdProviderService,
         },
     },
@@ -17,8 +20,9 @@ use crate::{
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
         key::KeyData,
         openid_connect::{
-            OpenIdConnectClientRepository, ScopeSet,
+            OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
+            model::credential::OpenIdConnectCredentialData,
         },
         user::{UserOid, repository::UserRepository},
     },
@@ -32,6 +36,7 @@ use uuid::Uuid;
 pub struct UserInfoService {
     user_repo: Arc<dyn UserRepository>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_service: Arc<AsymmetricKeyService>,
     provider_service: Arc<OpenIdProviderService>,
@@ -48,6 +53,7 @@ impl UserInfoService {
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
         client_repo: Arc<dyn OpenIdConnectClientRepository>,
+        credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
         client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
         key_service: Arc<AsymmetricKeyService>,
         provider_service: Arc<OpenIdProviderService>,
@@ -55,6 +61,7 @@ impl UserInfoService {
         Self {
             user_repo,
             client_repo,
+            credential_repo,
             client_authorization_repo,
             key_service,
             provider_service,
@@ -128,6 +135,54 @@ impl UserInfoService {
         })?;
 
         Ok(Some(token))
+    }
+
+    pub async fn encrypt_user_info(
+        &self,
+        client_oid: Uuid,
+        claims: &UserInfoClaims,
+    ) -> Result<Option<String>, AppError> {
+        let client = self
+            .client_repo
+            .find_by_oid(client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+
+        let Some(alg) = client.metadata().userinfo_encrypted_response_alg.as_deref() else {
+            return Ok(None);
+        };
+        let enc = client
+            .metadata()
+            .userinfo_encrypted_response_enc
+            .as_deref()
+            .unwrap_or("A128CBC-HS256");
+
+        let credential = self
+            .credential_repo
+            .find_first_encryption_key(client.client().oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+
+        let public_jwk = match &credential.data {
+            OpenIdConnectCredentialData::ClientPublicKey { jwk: Some(jwk), .. } => jwk,
+            _ => return Err(AppError::from_code(CommonErrorCode::InternalError)),
+        };
+
+        let json_body = serde_json::to_string(claims).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        })?;
+        let encrypted = encrypt_compact_with_public_jwk(json_body.as_bytes(), public_jwk, alg, enc)
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+
+        Ok(Some(encrypted))
     }
 
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {

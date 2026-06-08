@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use identity_domain::auth::SessionOid;
 use identity_domain::client_authorization::{
-    AuthorizationInteractionState, ConsentState, SelectionSource, StoredAuthorizationRequest,
+    ClientAuthorizationData, ConsentState, SelectionSource, StoredAuthorizationRequest,
 };
 
 #[derive(Debug)]
@@ -47,34 +47,25 @@ impl AuthorizeService {
         Ok(record)
     }
 
-    fn deserialize_stored_authorization_request(
-        data: serde_json::Value,
+    fn stored_authorization_request(
+        data: ClientAuthorizationData,
     ) -> Result<StoredAuthorizationRequest, AppError> {
-        serde_json::from_value::<StoredAuthorizationRequest>(data.clone())
-            .or_else(|_| {
-                serde_json::from_value::<AuthorizationRequestData>(data).map(|request| {
-                    StoredAuthorizationRequest {
-                        request,
-                        interaction: AuthorizationInteractionState::default(),
-                    }
-                })
-            })
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::DeserializeRequestFailed).with_source(error)
-            })
+        match data {
+            ClientAuthorizationData::AuthorizationRequest(stored) => Ok(stored),
+            _ => Err(AppError::from_code(
+                AuthorizeErrorCode::DeserializeRequestFailed,
+            )),
+        }
     }
 
     pub async fn create_authorization_request(
         &self,
         request: &AuthorizationRequest,
     ) -> Result<Uuid, AppError> {
-        let data = serde_json::to_value(StoredAuthorizationRequest {
+        let data = ClientAuthorizationData::AuthorizationRequest(StoredAuthorizationRequest {
             request: AuthorizationRequestData::from(request),
-            interaction: AuthorizationInteractionState::default(),
-        })
-        .map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::SerializeRequestFailed).with_source(error)
-        })?;
+            interaction: Default::default(),
+        });
 
         let record = self
             .client_authorization_repo
@@ -127,7 +118,7 @@ impl AuthorizeService {
             .load_authorization_request_record(authorization_request_id)
             .await?;
 
-        Self::deserialize_stored_authorization_request(record.data)
+        Self::stored_authorization_request(record.data)
     }
 
     pub async fn load_consent_context(
@@ -180,7 +171,7 @@ impl AuthorizeService {
             .await?;
         let expires_at = record.expires_at;
         let completed_at = record.completed_at;
-        let stored = Self::deserialize_stored_authorization_request(record.data)?;
+        let stored = Self::stored_authorization_request(record.data)?;
         let client_id = Uuid::parse_str(&stored.request.client_id).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
         })?;
@@ -485,7 +476,7 @@ impl AuthorizeService {
                         .with_source(error)
                 })?,
                 ClientAuthorizationType::AuthorizationCode,
-                serde_json::to_value(
+                ClientAuthorizationData::AuthorizationCode(
                     identity_domain::client_authorization::AuthorizationCodeData {
                         scope: request.scope.clone(),
                         nonce: request.nonce.clone(),
@@ -502,10 +493,7 @@ impl AuthorizeService {
                             .as_ref()
                             .and_then(|c| serde_json::from_str(c).ok()),
                     },
-                )
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
-                })?,
+                ),
                 chrono::Utc::now() + chrono::Duration::minutes(10),
             )
             .await

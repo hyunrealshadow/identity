@@ -5,7 +5,7 @@ use salvo::{Depot, Request, Response, Router, handler};
 use serde::Deserialize;
 
 use super::{
-    response::{app_state, parse_form, redirect_to, render_app_error, render_html},
+    response::{WebResult, app_state, parse_form, redirect_to, render_app_error, render_html},
     shared::{csrf_middleware, csrf_token},
 };
 use crate::{
@@ -104,11 +104,7 @@ fn render_install_page(input: InstallPageRenderInput<'_>) -> Response {
 }
 
 #[handler]
-async fn install_page(
-    depot: &mut Depot,
-    req: &mut Request,
-    res: &mut Response,
-) -> Result<(), identity_application::error::AppError> {
+async fn install_page(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     if *ctx.settings().installation_initialized().current_value() {
@@ -130,11 +126,7 @@ async fn install_page(
 }
 
 #[handler]
-async fn install_submit(
-    depot: &mut Depot,
-    req: &mut Request,
-    res: &mut Response,
-) -> Result<(), identity_application::error::AppError> {
+async fn install_submit(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let form: InstallForm = parse_form(req).await?;

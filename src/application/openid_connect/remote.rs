@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    time::Duration,
+};
 
 use url::Url;
 
@@ -16,6 +19,8 @@ pub enum RemoteFetchError {
     UnsafeHost,
     #[error("failed to fetch remote document")]
     FetchFailed(#[source] reqwest::Error),
+    #[error("failed to resolve remote host")]
+    ResolveFailed(#[source] std::io::Error),
     #[error("remote document did not return 200 OK")]
     NotOk,
     #[error("remote document is too large")]
@@ -66,25 +71,47 @@ pub fn validate_https_public_url(url: &Url) -> Result<(), RemoteUrlError> {
 
 fn is_unsafe_host(url: &Url) -> bool {
     match url.host() {
-        Some(url::Host::Ipv4(address)) => {
-            let octets = address.octets();
-            address.is_loopback()
-                || address.is_unspecified()
-                || octets[0] == 10
-                || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-                || (octets[0] == 192 && octets[1] == 168)
-                || (octets[0] == 169 && octets[1] == 254)
+        Some(url::Host::Ipv4(address)) => is_unsafe_ipv4(address),
+        Some(url::Host::Ipv6(address)) => is_unsafe_ipv6(address),
+        Some(url::Host::Domain(domain)) => {
+            let domain = domain.trim_end_matches('.');
+            domain.eq_ignore_ascii_case("localhost")
+                || domain
+                    .rsplit_once('.')
+                    .is_some_and(|(_, suffix)| suffix.eq_ignore_ascii_case("localhost"))
         }
-        Some(url::Host::Ipv6(address)) => {
-            let segments = address.segments();
-            address.is_loopback()
-                || address.is_unspecified()
-                || (segments[0] & 0xfe00) == 0xfc00
-                || (segments[0] & 0xffc0) == 0xfe80
-        }
-        Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
         None => true,
     }
+}
+
+fn is_unsafe_ip(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => is_unsafe_ipv4(address),
+        IpAddr::V6(address) => is_unsafe_ipv6(address),
+    }
+}
+
+fn is_unsafe_ipv4(address: Ipv4Addr) -> bool {
+    let octets = address.octets();
+    address.is_loopback()
+        || address.is_unspecified()
+        || address.is_private()
+        || address.is_link_local()
+        || address.is_broadcast()
+        || address.is_documentation()
+        || address.is_multicast()
+        || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+        || (octets[0] == 198 && (18..=19).contains(&octets[1]))
+}
+
+fn is_unsafe_ipv6(address: Ipv6Addr) -> bool {
+    let segments = address.segments();
+    address.is_loopback()
+        || address.is_unspecified()
+        || address.is_unique_local()
+        || address.is_unicast_link_local()
+        || address.is_multicast()
+        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
 }
 
 pub async fn fetch_https_public_document(
@@ -92,12 +119,41 @@ pub async fn fetch_https_public_document(
     url: &Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, RemoteFetchError> {
+    validate_resolved_https_public_url(url).await?;
+
+    fetch_document_after_url_validation(client, url, max_bytes).await
+}
+
+pub async fn validate_resolved_https_public_url(url: &Url) -> Result<(), RemoteFetchError> {
     validate_https_public_url(url).map_err(|error| match error {
         RemoteUrlError::NotHttps => RemoteFetchError::NotHttps,
         RemoteUrlError::UnsafeHost => RemoteFetchError::UnsafeHost,
     })?;
 
-    fetch_document_after_url_validation(client, url, max_bytes).await
+    let Some(url::Host::Domain(host)) = url.host() else {
+        return Ok(());
+    };
+
+    let port = url
+        .port_or_known_default()
+        .ok_or(RemoteFetchError::UnsafeHost)?;
+    let mut addresses = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(RemoteFetchError::ResolveFailed)?;
+    let mut has_address = false;
+
+    for address in addresses.by_ref() {
+        has_address = true;
+        if is_unsafe_ip(address.ip()) {
+            return Err(RemoteFetchError::UnsafeHost);
+        }
+    }
+
+    if !has_address {
+        return Err(RemoteFetchError::UnsafeHost);
+    }
+
+    Ok(())
 }
 
 pub async fn fetch_document_after_url_validation(
@@ -155,7 +211,9 @@ pub fn fetchable_url(url: &Url) -> Url {
 
 #[cfg(test)]
 mod tests {
-    use super::{RemoteUrlError, fetchable_url, validate_https_public_url};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    use super::{RemoteUrlError, fetchable_url, is_unsafe_ip, validate_https_public_url};
     use url::Url;
 
     #[test]
@@ -176,10 +234,16 @@ mod tests {
             "https://172.16.0.5/jwks.json",
             "https://192.168.1.5/jwks.json",
             "https://169.254.1.5/jwks.json",
+            "https://100.64.0.1/jwks.json",
+            "https://198.18.0.1/jwks.json",
+            "https://224.0.0.1/jwks.json",
+            "https://192.0.2.1/jwks.json",
             "https://[::1]/jwks.json",
             "https://[fc00::1]/jwks.json",
             "https://[fe80::1]/jwks.json",
+            "https://[2001:db8::1]/jwks.json",
             "https://localhost/jwks.json",
+            "https://app.localhost/jwks.json",
         ] {
             let url = Url::parse(raw).unwrap();
 
@@ -196,6 +260,22 @@ mod tests {
         let url = Url::parse("https://rp.example.com/jwks.json").unwrap();
 
         assert_eq!(validate_https_public_url(&url), Ok(()));
+    }
+
+    #[test]
+    fn resolved_address_policy_rejects_non_public_addresses() {
+        for address in [
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+            IpAddr::V4(Ipv4Addr::new(100, 64, 0, 1)),
+            IpAddr::V4(Ipv4Addr::new(198, 18, 0, 1)),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+            IpAddr::V6("fc00::1".parse().unwrap()),
+            IpAddr::V6("fe80::1".parse().unwrap()),
+            IpAddr::V6("2001:db8::1".parse().unwrap()),
+        ] {
+            assert!(is_unsafe_ip(address), "{address} should be rejected");
+        }
     }
 
     #[test]

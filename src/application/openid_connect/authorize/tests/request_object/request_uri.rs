@@ -1,5 +1,8 @@
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
+use crate::openid_connect::remote::{
+    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, fetch_document_after_url_validation,
+};
 
 #[test]
 fn fetchable_request_uri_strips_fragment_before_http_fetch() {
@@ -113,34 +116,49 @@ async fn validate_request_uri_rejects_ipv6_link_local() {
 
 #[tokio::test]
 async fn fetch_request_object_rejects_oversized_chunked_response_before_completion() {
-    let service = authorize_service_with_request_uri("https://client.example.com/request.jwt");
     let request_uri = spawn_chunked_response_server(
         vec![vec![b'a'; 1024 * 1024], vec![b'b'; 1]],
         Duration::from_secs(6),
     )
     .await;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
 
     let result = timeout(
         Duration::from_secs(2),
-        service.fetch_request_object(&request_uri),
+        fetch_document_after_url_validation(
+            &client,
+            &request_uri,
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        ),
     )
     .await;
 
     let error = result
         .expect("oversized response should be rejected before server finishes")
         .unwrap_err();
-    assert_eq!(error.code(), 23021); // RequestUriTooLarge
+    assert!(matches!(error, RemoteFetchError::TooLarge));
 }
 
 #[tokio::test]
 async fn fetch_request_object_rejects_redirect_response() {
-    let service = authorize_service_with_request_uri("https://client.example.com/request.jwt");
     let request_uri = spawn_redirect_response_server("http://127.0.0.1/final.jwt").await;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
 
-    let error = service
-        .fetch_request_object(&request_uri)
-        .await
-        .unwrap_err();
+    let error = fetch_document_after_url_validation(
+        &client,
+        &request_uri,
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+    )
+    .await
+    .unwrap_err();
 
-    assert_eq!(error.code(), 23020); // RequestUriNot200
+    assert!(matches!(error, RemoteFetchError::NotOk));
 }

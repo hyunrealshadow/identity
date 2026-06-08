@@ -8,7 +8,7 @@ use unic_langid::LanguageIdentifier;
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
     boot::AppState,
-    infrastructure::i18n::{I18n, error_i18n},
+    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
     web::views::auth::BusinessErrorResponse,
 };
 
@@ -83,6 +83,16 @@ impl From<Response> for AppResponse {
     }
 }
 
+pub struct WebError(pub AppError);
+
+pub type WebResult<T = AppResponse> = Result<T, WebError>;
+
+impl From<AppError> for WebError {
+    fn from(error: AppError) -> Self {
+        Self(error)
+    }
+}
+
 #[async_trait]
 impl Writer for AppResponse {
     async fn write(self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
@@ -97,6 +107,18 @@ impl Writer for AppResponse {
             }
         }
         *res.body_mut() = std::mem::take(response.body_mut());
+    }
+}
+
+#[async_trait]
+impl Writer for WebError {
+    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+        if let Some(i18n) = error_i18n() {
+            let locale = resolve_locale_from_headers(req.headers());
+            write_error_response(res, i18n, &locale, self.0);
+        } else {
+            render_unlocalized_app_error(res, self.0);
+        }
     }
 }
 
@@ -115,6 +137,13 @@ pub fn append_set_cookie(res: &mut Response, cookie: &str) {
     if let Ok(value) = HeaderValue::from_str(cookie) {
         append_header(res, header::SET_COOKIE, value);
     }
+}
+
+pub fn insert_no_store_headers(res: &mut Response) {
+    res.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    res.headers_mut()
+        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
 }
 
 pub async fn parse_json<T: DeserializeOwned>(req: &mut Request) -> Result<T, AppError> {
@@ -168,10 +197,20 @@ pub fn render_app_error(res: &mut Response, error: AppError) {
         let locale = i18n.fallback_locale().clone();
         write_error_response(res, i18n, &locale, error);
     } else {
-        let status = error.kind().http_status();
-        let body = BusinessErrorResponse::new(error.code(), error.code().to_string());
-        render_json(res, status, body);
+        render_unlocalized_app_error(res, error);
     }
+}
+
+fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
+    let status = error.kind().http_status();
+    let message = error
+        .params()
+        .get("message")
+        .filter(|message| !message.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| error.code().to_string());
+    let body = BusinessErrorResponse::new(error.code(), message);
+    render_json(res, status, body);
 }
 
 #[cfg(test)]
@@ -182,16 +221,16 @@ mod tests {
         test::{ResponseExt, TestClient},
     };
 
+    use super::WebResult;
+
     use crate::{
         application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
         infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
     };
 
     #[handler]
-    async fn direct_app_error() -> Result<(), AppError> {
-        Err(AppError::from_code(
-            AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
-        ))
+    async fn direct_app_error() -> WebResult<()> {
+        Err(AppError::from_code(AuthorizeHttpErrorCode::ContinueInteractionUnavailable).into())
     }
 
     #[tokio::test]

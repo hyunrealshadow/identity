@@ -31,7 +31,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some("verifier-123".to_string()),
@@ -43,8 +43,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -117,7 +116,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "email openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some("verifier-123".to_string()),
@@ -129,8 +128,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 auth_time: Some(chrono::Utc::now().timestamp()),
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -168,7 +166,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
                 code_challenge: Some("expected-verifier".to_string()),
@@ -180,8 +178,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -244,7 +241,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
                 code_challenge: Some("verifier-789".to_string()),
@@ -256,8 +253,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -307,6 +303,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let user_info_service = crate::openid_connect::user_info::UserInfoService::new(
         Arc::new(InMemoryUserRepository { user }),
         Arc::new(InMemoryClientRepository),
+        Arc::new(cred_repo_with(vec![])),
         repo.clone(),
         Arc::new(AsymmetricKeyService::new(
             key_repo,
@@ -334,7 +331,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-offline".to_string()),
                 code_challenge: Some("verifier-offline".to_string()),
@@ -346,8 +343,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await
@@ -400,7 +396,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
             .create(
                 Uuid::nil(),
                 ClientAuthorizationType::AuthorizationCode,
-                serde_json::to_value(AuthorizationCodeData {
+                ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                     scope: "openid profile".to_string(),
                     nonce: Some(format!("nonce-{alg}")),
                     code_challenge: Some(format!("verifier-{alg}")),
@@ -412,8 +408,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
                     claims: None,
-                })
-                .unwrap(),
+                }),
                 Utc::now() + chrono::Duration::minutes(10),
             )
             .await
@@ -506,7 +501,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
         .create(
             Uuid::nil(),
             ClientAuthorizationType::AuthorizationCode,
-            serde_json::to_value(AuthorizationCodeData {
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-rs256".to_string()),
                 code_challenge: Some("verifier-rs256".to_string()),
@@ -518,8 +513,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
-            })
-            .unwrap(),
+            }),
             Utc::now() + chrono::Duration::minutes(10),
         )
         .await

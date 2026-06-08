@@ -6,7 +6,8 @@ pub use identity_domain::client_authorization::repository::{
     ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
 };
 use identity_domain::client_authorization::{
-    ClientAuthorization, ClientAuthorizationType, ConsentState, SelectionSource,
+    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
+    SelectionSource,
 };
 
 mockall::mock! {
@@ -18,7 +19,7 @@ mockall::mock! {
             &self,
             client_oid: ClientOid,
             type_: ClientAuthorizationType,
-            data: serde_json::Value,
+            data: ClientAuthorizationData,
             expires_at: DateTime<Utc>,
         ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError>;
         async fn find_by_oid(
@@ -107,14 +108,13 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
             let authorization_code_oid = authorization_code_oid.to_string();
             for record in r.lock().unwrap().values_mut() {
                 let should_revoke = record.type_ == ClientAuthorizationType::AccessToken
-                    && serde_json::from_value::<
-                        identity_domain::client_authorization::AccessTokenData,
-                    >(record.data.clone())
-                    .map(|data| {
-                        data.authorization_code_oid.as_deref()
-                            == Some(authorization_code_oid.as_str())
-                    })
-                    .unwrap_or(false);
+                    && match &record.data {
+                        ClientAuthorizationData::AccessToken(data) => {
+                            data.authorization_code_oid.as_deref()
+                                == Some(authorization_code_oid.as_str())
+                        }
+                        _ => false,
+                    };
                 if should_revoke {
                     record.revoked_at = Some(Utc::now());
                 }
