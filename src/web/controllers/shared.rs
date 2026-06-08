@@ -2,6 +2,8 @@
 //! controllers. Keeping them here avoids duplication and ensures both surfaces
 //! behave identically for cookie handling, etc.
 
+use std::net::IpAddr;
+
 use http::{HeaderMap, HeaderValue, header};
 use rand::Rng;
 use salvo::{
@@ -328,24 +330,32 @@ pub fn build_session_context(headers: &HeaderMap) -> SessionContext {
 /// peer address.
 pub fn extract_ip(headers: &HeaderMap) -> Option<String> {
     // X-Forwarded-For: client, proxy1, proxy2 — take the first.
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        let ip = xff.split(',').next().unwrap_or_default().trim();
-        if !ip.is_empty() {
-            return Some(ip.to_owned());
-        }
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok())
+        && let Some(ip) = xff.split(',').next().and_then(parse_forwarded_ip)
+    {
+        return Some(ip);
     }
     // X-Real-Ip
-    if let Some(xri) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
-        let ip = xri.trim();
-        if !ip.is_empty() {
-            return Some(ip.to_owned());
-        }
+    if let Some(xri) = headers.get("x-real-ip").and_then(|v| v.to_str().ok())
+        && let Some(ip) = parse_forwarded_ip(xri)
+    {
+        return Some(ip);
     }
     None
 }
 
+fn parse_forwarded_ip(value: &str) -> Option<String> {
+    let value = value.trim().trim_matches('"');
+    let value = value
+        .strip_prefix('[')
+        .and_then(|v| v.strip_suffix(']'))
+        .unwrap_or(value);
+    value.parse::<IpAddr>().ok().map(|ip| ip.to_string())
+}
+
 #[cfg(test)]
 mod tests {
+    use http::{HeaderMap, HeaderValue};
     use uuid::Uuid;
 
     #[test]
@@ -363,5 +373,36 @@ mod tests {
             super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], true);
 
         assert!(cookie.contains("; HttpOnly; Secure; SameSite=Lax;"));
+    }
+
+    #[test]
+    fn extract_ip_accepts_first_forwarded_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.10, 10.0.0.1"),
+        );
+
+        assert_eq!(super::extract_ip(&headers).as_deref(), Some("203.0.113.10"));
+    }
+
+    #[test]
+    fn extract_ip_rejects_non_ip_header_values() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("unknown, attacker controlled"),
+        );
+        headers.insert("x-real-ip", HeaderValue::from_static("not-an-ip"));
+
+        assert_eq!(super::extract_ip(&headers), None);
+    }
+
+    #[test]
+    fn extract_ip_normalizes_bracketed_ipv6() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", HeaderValue::from_static("[2001:db8::1]"));
+
+        assert_eq!(super::extract_ip(&headers).as_deref(), Some("2001:db8::1"));
     }
 }

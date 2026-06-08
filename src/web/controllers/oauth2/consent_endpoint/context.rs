@@ -1,11 +1,16 @@
 use http::HeaderMap;
 
 use crate::{
-    application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
+    application::error::{
+        AppError,
+        codes::{authorize::AuthorizeErrorCode, authorize_http::AuthorizeHttpErrorCode},
+    },
     boot::AppState,
     domain::{
-        auth::SessionOid, auth::model::ActiveSession,
-        client_authorization::StoredAuthorizationRequest, openid_connect::OpenIdConnectClient,
+        auth::SessionOid,
+        auth::model::ActiveSession,
+        client_authorization::StoredAuthorizationRequest,
+        openid_connect::{OpenIdConnectClient, ScopeSet},
     },
     web::controllers::shared::load_active_sessions,
 };
@@ -13,6 +18,7 @@ use crate::{
 pub(super) struct LoadedConsentContext {
     pub(super) stored: StoredAuthorizationRequest,
     pub(super) client: OpenIdConnectClient,
+    pub(super) scope: ScopeSet,
     pub(super) active_sessions: Vec<ActiveSession>,
     pub(super) continue_uri: String,
 }
@@ -36,6 +42,10 @@ pub(super) async fn load_consent_context(
         ));
     }
 
+    let scope = ScopeSet::parse(&continue_context.stored.request.scope).map_err(|error| {
+        AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
+    })?;
+
     Ok(LoadedConsentContext {
         continue_uri: format!(
             "/oauth2/continue?login_id={}",
@@ -43,6 +53,7 @@ pub(super) async fn load_consent_context(
         ),
         stored: continue_context.stored,
         client: continue_context.client,
+        scope,
         active_sessions,
     })
 }

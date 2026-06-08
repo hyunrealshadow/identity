@@ -1,3 +1,4 @@
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::{
     JoseError,
     jwe::{
@@ -9,6 +10,7 @@ use josekit::{
     },
     jwt::{self, JwtPayload},
 };
+use sha2::{Digest, Sha256, Sha384, Sha512};
 
 use crate::domain::key::{JwaSigningAlgorithm, PublicJwk};
 
@@ -192,6 +194,27 @@ pub fn encrypt_compact_with_public_jwk(
     header.set_content_encryption(content_enc);
 
     josekit::jwe::serialize_compact(plaintext, &header, &*encrypter)
+}
+
+pub fn front_channel_hash(value: &str, alg: &str) -> Result<String, JoseError> {
+    let jwa: JwaSigningAlgorithm = alg
+        .parse()
+        .map_err(|_| JoseError::InvalidJwsFormat(anyhow::anyhow!("unsupported JWS alg: {alg}")))?;
+
+    Ok(match jwa.at_hash_bits() {
+        384 => {
+            let digest = Sha384::digest(value.as_bytes());
+            URL_SAFE_NO_PAD.encode(&digest[..24])
+        }
+        512 => {
+            let digest = Sha512::digest(value.as_bytes());
+            URL_SAFE_NO_PAD.encode(&digest[..32])
+        }
+        _ => {
+            let digest = Sha256::digest(value.as_bytes());
+            URL_SAFE_NO_PAD.encode(&digest[..16])
+        }
+    })
 }
 
 fn jwe_encrypter_from_public_jwk(

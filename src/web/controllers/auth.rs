@@ -91,7 +91,8 @@ async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) 
             .map(|user| UserDisplayInfo {
                 email: mask_email(&user.email),
                 name: user.name,
-            }),
+            })
+            .map(Some)?,
         None => None,
     };
 

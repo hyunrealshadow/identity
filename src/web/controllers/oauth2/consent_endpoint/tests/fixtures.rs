@@ -52,6 +52,10 @@ pub(super) fn consent_test_config() -> AppConfig {
 }
 
 pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
+    consent_test_state_with_scope("openid profile").await
+}
+
+pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, String, uuid::Uuid) {
     let now = Utc::now();
     let client_oid = uuid::Uuid::new_v4();
     let authorization_oid = uuid::Uuid::new_v4();
@@ -190,7 +194,7 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
             response_mode: None,
             client_id: client_oid.to_string(),
             redirect_uri: "https://client.example.com/callback".to_owned(),
-            scope: "openid profile".to_owned(),
+            scope: scope.to_owned(),
             state: "state-123".to_owned(),
             nonce: None,
             prompt: None,

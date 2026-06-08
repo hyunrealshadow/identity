@@ -1,6 +1,6 @@
 mod fixtures;
 
-use fixtures::{consent_test_config, consent_test_state};
+use fixtures::{consent_test_config, consent_test_state, consent_test_state_with_scope};
 use http::{StatusCode, header};
 use salvo::{
     Service,
@@ -58,6 +58,26 @@ async fn consent_get_returns_json_when_accept_requests_json() {
     let body = response.take_string().await.unwrap();
     assert!(body.contains("\"login_id\""), "{body}");
     assert!(body.contains("\"client_name\""), "{body}");
+}
+
+#[tokio::test]
+async fn consent_get_rejects_invalid_stored_scope() {
+    let (state, protected_login_id, session_oid) =
+        consent_test_state_with_scope("openid unknown_scope").await;
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+        .await
+        .unwrap();
+    let app = app_router(state, &consent_test_config());
+    let service = Service::new(app);
+
+    let response = TestClient::get(format!(
+        "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
+    ))
+    .add_header(header::COOKIE, session_cookie, true)
+    .send(&service)
+    .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
 }
 
 #[test]

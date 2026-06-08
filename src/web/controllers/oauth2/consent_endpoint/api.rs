@@ -3,7 +3,7 @@ use salvo::{Depot, Request};
 
 use crate::{
     application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
-    domain::{client_authorization::ConsentState, openid_connect::ScopeSet},
+    domain::client_authorization::ConsentState,
     web::controllers::{
         response::{AppResponse, app_state, json_response, parse_json, parse_query},
         shared::csrf_token,
@@ -53,9 +53,7 @@ pub(super) async fn consent_api(
                 .client_uri
                 .as_ref()
                 .map(url::Url::to_string),
-            scopes: build_scope_display(
-                &ScopeSet::parse(&loaded.stored.request.scope).unwrap_or_default(),
-            ),
+            scopes: build_scope_display(&loaded.scope),
             csrf_token: csrf_token(depot),
             nonce: String::new(),
         },

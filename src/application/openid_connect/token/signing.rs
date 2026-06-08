@@ -1,5 +1,7 @@
 use super::*;
-use crate::openid_connect::jose::{asymmetric_signer_from_pem, encrypt_compact_with_public_jwk};
+use crate::openid_connect::jose::{
+    asymmetric_signer_from_pem, encrypt_compact_with_public_jwk, front_channel_hash,
+};
 use identity_domain::auth::SessionOid;
 use identity_domain::openid_connect::ClaimsRequest;
 #[cfg(test)]
@@ -206,7 +208,9 @@ impl TokenService {
                 })?;
         }
         if let Some(access_token) = input.access_token {
-            let at_hash = compute_at_hash(access_token, input.alg);
+            let at_hash = front_channel_hash(access_token, input.alg).map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+            })?;
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
                 .map_err(|error| {
@@ -311,24 +315,6 @@ fn build_jws_signer(
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
     asymmetric_signer_from_pem(alg, private_key_pem.as_bytes())
         .map_err(|error| AppError::from_code(error_code).with_source(error))
-}
-
-fn compute_at_hash(access_token: &str, alg: &str) -> String {
-    let jwa: JwaSigningAlgorithm = alg.parse().unwrap_or(JwaSigningAlgorithm::Rs256);
-    match jwa.at_hash_bits() {
-        384 => {
-            let digest = Sha384::digest(access_token.as_bytes());
-            URL_SAFE_NO_PAD.encode(&digest[..24])
-        }
-        512 => {
-            let digest = Sha512::digest(access_token.as_bytes());
-            URL_SAFE_NO_PAD.encode(&digest[..32])
-        }
-        _ => {
-            let digest = Sha256::digest(access_token.as_bytes());
-            URL_SAFE_NO_PAD.encode(&digest[..16])
-        }
-    }
 }
 
 impl TokenService {

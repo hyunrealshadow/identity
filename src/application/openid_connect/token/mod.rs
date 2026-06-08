@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
-use sha2::{Digest, Sha256, Sha384, Sha512};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -16,7 +16,7 @@ use crate::{
             AccessTokenData, ClientAuthorization, ClientAuthorizationData,
             ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
         },
-        key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
+        key::{KeyData, KeyJwkRepository, repository::KeyRepository},
         openid_connect::{
             OpenIdConnectClientRepository, OpenIdConnectCredentialData,
             OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,

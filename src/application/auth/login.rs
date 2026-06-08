@@ -95,8 +95,14 @@ impl LoginService {
     }
 
     /// Fetch the user associated with a login by their OID.
-    pub async fn get_user(&self, user_oid: identity_domain::user::UserOid) -> Option<User> {
-        self.user_repo.find_by_oid(user_oid).await.ok().flatten()
+    pub async fn get_user(
+        &self,
+        user_oid: identity_domain::user::UserOid,
+    ) -> Result<User, AppError> {
+        self.user_repo
+            .find_by_oid(user_oid)
+            .await?
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))
     }
 
     /// Step 1: Verify the identifier (email or username) and bind the

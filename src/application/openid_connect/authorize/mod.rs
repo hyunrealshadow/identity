@@ -18,7 +18,7 @@ use crate::{
     domain::{
         auth::repository::LoginRepository,
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
-        key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
+        key::{KeyData, KeyJwkRepository, repository::KeyRepository},
         openid_connect::{
             AuthorizationRequest, AuthorizationRequestData, ClaimRequestMap, CodeChallengeMethod,
             Display, OAuthErrorCode, OAuthErrorResponse, OpenIdConnectClient,
