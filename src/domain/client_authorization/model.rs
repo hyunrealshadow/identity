@@ -2,6 +2,7 @@ use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use uuid::Uuid;
 
 use crate::auth::model::SessionOid;
@@ -10,7 +11,8 @@ use crate::openid_connect::{AuthorizationRequestData, ClaimsRequest};
 
 pub type ClientAuthorizationOid = Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum ClientAuthorizationType {
     AuthorizationRequest,
     AuthorizationCode,
@@ -30,30 +32,13 @@ impl fmt::Display for ParseClientAuthorizationTypeError {
 
 impl std::error::Error for ParseClientAuthorizationTypeError {}
 
-impl fmt::Display for ClientAuthorizationType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::AuthorizationRequest => "authorization_request",
-            Self::AuthorizationCode => "authorization_code",
-            Self::AccessToken => "access_token",
-            Self::RefreshToken => "refresh_token",
-            Self::RegistrationAccessToken => "registration_access_token",
-        })
-    }
-}
-
 impl FromStr for ClientAuthorizationType {
     type Err = ParseClientAuthorizationTypeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "authorization_request" => Self::AuthorizationRequest,
-            "authorization_code" => Self::AuthorizationCode,
-            "access_token" => Self::AccessToken,
-            "refresh_token" => Self::RefreshToken,
-            "registration_access_token" => Self::RegistrationAccessToken,
-            _ => return Err(ParseClientAuthorizationTypeError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or(ParseClientAuthorizationTypeError)
     }
 }
 
@@ -127,16 +112,18 @@ pub struct AuthorizationInteractionState {
     pub consent_decided_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, AsRefStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum SelectionSource {
     Auto,
     AccountPicker,
     FreshLogin,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, Display, AsRefStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum ConsentState {
     #[default]
     Pending,

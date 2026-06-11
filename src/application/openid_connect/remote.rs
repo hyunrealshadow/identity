@@ -202,6 +202,40 @@ pub fn remote_http_client(policy: RemoteFetchPolicy) -> Result<reqwest::Client, 
         .build()
 }
 
+/// HTTP client for `request_uri` and other remote OIDC document fetches.
+pub fn request_uri_http_client() -> Result<reqwest::Client, reqwest::Error> {
+    remote_http_client(RemoteFetchPolicy::new(
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        Duration::from_secs(5),
+        conformance_allows_invalid_certs(),
+    ))
+}
+
+/// HTTP client for back-channel logout notifications.
+pub fn backchannel_logout_http_client() -> Result<reqwest::Client, reqwest::Error> {
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5));
+    if conformance_allows_invalid_certs() {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    builder.build()
+}
+
+/// Builds the shared HTTP client used by OIDC unit tests.
+#[cfg(test)]
+#[must_use]
+pub fn test_http_client() -> reqwest::Client {
+    request_uri_http_client().expect("test HTTP client should build")
+}
+
+/// Builds the back-channel logout HTTP client used by OIDC unit tests.
+#[cfg(test)]
+#[must_use]
+pub fn test_backchannel_logout_http_client() -> reqwest::Client {
+    backchannel_logout_http_client().expect("test backchannel logout HTTP client should build")
+}
+
 #[must_use]
 pub fn fetchable_url(url: &Url) -> Url {
     let mut fetch_url = url.clone();

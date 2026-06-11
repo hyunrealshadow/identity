@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
+use strum::{AsRefStr, Display};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, Display, AsRefStr)]
 #[serde(rename_all = "UPPERCASE")]
-#[derive(Default)]
+#[strum(serialize_all = "UPPERCASE")]
 pub enum OtpAlgorithm {
     #[default]
     Sha1,

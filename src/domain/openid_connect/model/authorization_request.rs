@@ -5,18 +5,25 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 use uuid::Uuid;
 
 use crate::openid_connect::ScopeSet;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr)]
 pub enum ResponseType {
+    #[strum(serialize = "code")]
     Code,
+    #[strum(serialize = "id_token")]
     IdToken,
+    #[strum(serialize = "id_token token")]
     TokenIdToken,
+    #[strum(serialize = "code id_token")]
     CodeIdToken,
+    #[strum(serialize = "code token")]
     CodeToken,
+    #[strum(serialize = "code id_token token")]
     CodeTokenIdToken,
 }
 
@@ -51,19 +58,6 @@ impl ResponseType {
     }
 }
 
-impl fmt::Display for ResponseType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Code => "code",
-            Self::IdToken => "id_token",
-            Self::TokenIdToken => "id_token token",
-            Self::CodeIdToken => "code id_token",
-            Self::CodeToken => "code token",
-            Self::CodeTokenIdToken => "code id_token token",
-        })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseResponseTypeError;
 
@@ -82,38 +76,26 @@ impl FromStr for ResponseType {
         Ok(match s {
             "code" => Self::Code,
             "id_token" => Self::IdToken,
-            "id_token token" => Self::TokenIdToken,
-            "token id_token" => Self::TokenIdToken,
-            "code id_token" => Self::CodeIdToken,
-            "id_token code" => Self::CodeIdToken,
-            "code token" => Self::CodeToken,
-            "token code" => Self::CodeToken,
-            "code id_token token" => Self::CodeTokenIdToken,
-            "code token id_token" => Self::CodeTokenIdToken,
-            "id_token code token" => Self::CodeTokenIdToken,
-            "id_token token code" => Self::CodeTokenIdToken,
-            "token code id_token" => Self::CodeTokenIdToken,
-            "token id_token code" => Self::CodeTokenIdToken,
+            "id_token token" | "token id_token" => Self::TokenIdToken,
+            "code id_token" | "id_token code" => Self::CodeIdToken,
+            "code token" | "token code" => Self::CodeToken,
+            "code id_token token"
+            | "code token id_token"
+            | "id_token code token"
+            | "id_token token code"
+            | "token code id_token"
+            | "token id_token code" => Self::CodeTokenIdToken,
             _ => return Err(ParseResponseTypeError),
         })
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum ResponseMode {
     Query,
     Fragment,
     FormPost,
-}
-
-impl fmt::Display for ResponseMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Query => "query",
-            Self::Fragment => "fragment",
-            Self::FormPost => "form_post",
-        })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,16 +113,14 @@ impl FromStr for ResponseMode {
     type Err = ParseResponseModeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "query" => Self::Query,
-            "fragment" => Self::Fragment,
-            "form_post" => Self::FormPost,
-            _ => return Err(ParseResponseModeError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or(ParseResponseModeError)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum PromptValue {
     None,
     Login,
@@ -163,17 +143,14 @@ impl FromStr for PromptValue {
     type Err = ParsePromptValueError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "none" => Self::None,
-            "login" => Self::Login,
-            "consent" => Self::Consent,
-            "select_account" => Self::SelectAccount,
-            _ => return Err(ParsePromptValueError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or(ParsePromptValueError)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum Display {
     Page,
     Popup,
@@ -196,29 +173,18 @@ impl FromStr for Display {
     type Err = ParseDisplayError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "page" => Self::Page,
-            "popup" => Self::Popup,
-            "touch" => Self::Touch,
-            "wap" => Self::Wap,
-            _ => return Err(ParseDisplayError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or(ParseDisplayError)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
 pub enum CodeChallengeMethod {
+    #[strum(serialize = "S256")]
     S256,
+    #[strum(serialize = "plain")]
     Plain,
-}
-
-impl fmt::Display for CodeChallengeMethod {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::S256 => "S256",
-            Self::Plain => "plain",
-        })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -236,11 +202,9 @@ impl FromStr for CodeChallengeMethod {
     type Err = ParseCodeChallengeMethodError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "S256" => Self::S256,
-            "plain" => Self::Plain,
-            _ => return Err(ParseCodeChallengeMethodError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or(ParseCodeChallengeMethodError)
     }
 }
 
@@ -372,15 +336,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             state: value.state.clone(),
             nonce: value.nonce.clone(),
             prompt: value.prompt.as_ref().map(|items| {
-                let mut items = items
-                    .iter()
-                    .map(|item| match item {
-                        PromptValue::None => "none",
-                        PromptValue::Login => "login",
-                        PromptValue::Consent => "consent",
-                        PromptValue::SelectAccount => "select_account",
-                    })
-                    .collect::<Vec<_>>();
+                let mut items = items.iter().map(AsRef::as_ref).collect::<Vec<_>>();
                 items.sort();
                 items.join(" ")
             }),

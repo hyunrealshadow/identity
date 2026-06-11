@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::jwt;
@@ -10,10 +10,6 @@ use crate::{
         data_protection::DataProtector,
         error::{AppError, codes::authorize::AuthorizeErrorCode},
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
-        openid_connect::remote::{
-            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
-            remote_http_client,
-        },
     },
     domain::{
         auth::repository::LoginRepository,
@@ -80,6 +76,7 @@ pub struct AuthorizeServiceDependencies {
     pub provider_service: Arc<OpenIdProviderService>,
     pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     pub data_protector: Arc<dyn DataProtector>,
+    pub http_client: reqwest::Client,
 }
 
 impl AuthorizeService {
@@ -94,18 +91,10 @@ impl AuthorizeService {
             key_jwk_repo: deps.key_jwk_repo,
             provider_service: deps.provider_service,
             signing_algorithm_detector: deps.signing_algorithm_detector,
-            http_client: request_uri_http_client().expect("request_uri HTTP client must build"),
+            http_client: deps.http_client,
             data_protector: deps.data_protector,
         }
     }
-}
-
-fn request_uri_http_client() -> Result<reqwest::Client, reqwest::Error> {
-    remote_http_client(RemoteFetchPolicy::new(
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        Duration::from_secs(5),
-        conformance_allows_invalid_certs(),
-    ))
 }
 
 mod flow;

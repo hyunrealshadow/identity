@@ -226,11 +226,11 @@ mod tests {
     #[async_trait]
     impl KeyRepository for MockKeyRepo {
         async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-            unimplemented!()
+            Ok(None)
         }
 
         async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            unimplemented!()
+            Ok(vec![])
         }
 
         async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
@@ -243,7 +243,9 @@ mod tests {
             _data: &KeyData,
             _expires_at: Option<DateTime<Utc>>,
         ) -> Result<Key, KeyRepositoryError> {
-            unimplemented!()
+            Err(KeyRepositoryError::CreateFailed(
+                "not implemented in protector tests".into(),
+            ))
         }
 
         async fn update_certificate_by_oid(
@@ -251,7 +253,9 @@ mod tests {
             _oid: KeyOid,
             _certificate_pem: &str,
         ) -> Result<Option<Key>, KeyRepositoryError> {
-            unimplemented!()
+            Err(KeyRepositoryError::UpdateFailed(
+                "not implemented in protector tests".into(),
+            ))
         }
 
         async fn revoke_by_oid(
@@ -259,7 +263,9 @@ mod tests {
             _oid: KeyOid,
             _revoked_at: DateTime<Utc>,
         ) -> Result<Option<Key>, KeyRepositoryError> {
-            unimplemented!()
+            Err(KeyRepositoryError::UpdateFailed(
+                "not implemented in protector tests".into(),
+            ))
         }
     }
 

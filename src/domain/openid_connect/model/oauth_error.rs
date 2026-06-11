@@ -1,6 +1,9 @@
 use std::{fmt, str::FromStr};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
+
+#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum OAuthErrorCode {
     InvalidRequest,
     UnauthorizedClient,
@@ -20,29 +23,6 @@ pub enum OAuthErrorCode {
     RegistrationNotSupported,
 }
 
-impl fmt::Display for OAuthErrorCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::InvalidRequest => "invalid_request",
-            Self::UnauthorizedClient => "unauthorized_client",
-            Self::AccessDenied => "access_denied",
-            Self::UnsupportedResponseType => "unsupported_response_type",
-            Self::InvalidScope => "invalid_scope",
-            Self::ServerError => "server_error",
-            Self::TemporarilyUnavailable => "temporarily_unavailable",
-            Self::LoginRequired => "login_required",
-            Self::ConsentRequired => "consent_required",
-            Self::InteractionRequired => "interaction_required",
-            Self::AccountSelectionRequired => "account_selection_required",
-            Self::InvalidRequestUri => "invalid_request_uri",
-            Self::InvalidRequestObject => "invalid_request_object",
-            Self::RequestNotSupported => "request_not_supported",
-            Self::RequestUriNotSupported => "request_uri_not_supported",
-            Self::RegistrationNotSupported => "registration_not_supported",
-        })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseOAuthErrorCodeError;
 
@@ -58,25 +38,9 @@ impl FromStr for OAuthErrorCode {
     type Err = ParseOAuthErrorCodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "invalid_request" => Self::InvalidRequest,
-            "unauthorized_client" => Self::UnauthorizedClient,
-            "access_denied" => Self::AccessDenied,
-            "unsupported_response_type" => Self::UnsupportedResponseType,
-            "invalid_scope" => Self::InvalidScope,
-            "server_error" => Self::ServerError,
-            "temporarily_unavailable" => Self::TemporarilyUnavailable,
-            "login_required" => Self::LoginRequired,
-            "consent_required" => Self::ConsentRequired,
-            "interaction_required" => Self::InteractionRequired,
-            "account_selection_required" => Self::AccountSelectionRequired,
-            "invalid_request_uri" => Self::InvalidRequestUri,
-            "invalid_request_object" => Self::InvalidRequestObject,
-            "request_not_supported" => Self::RequestNotSupported,
-            "request_uri_not_supported" => Self::RequestUriNotSupported,
-            "registration_not_supported" => Self::RegistrationNotSupported,
-            _ => return Err(ParseOAuthErrorCodeError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or(ParseOAuthErrorCodeError)
     }
 }
 
@@ -107,7 +71,7 @@ impl OAuthErrorResponse {
         let mut url = redirect_uri.clone();
         {
             let mut query = url.query_pairs_mut();
-            query.append_pair("error", &self.error.to_string());
+            query.append_pair("error", self.error.as_ref());
             if let Some(state) = &self.state {
                 query.append_pair("state", state);
             }

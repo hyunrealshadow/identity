@@ -334,7 +334,9 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     let i18n = build_i18n().unwrap();
     let tera = build_tera(i18n.loader()).unwrap();
     let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
-    let services = Arc::new(AppServices::from_db(db.clone(), settings.as_ref()));
+    let services = Arc::new(
+        AppServices::from_db(db.clone(), settings.as_ref()).expect("services should build"),
+    );
 
     (
         AppState::new(

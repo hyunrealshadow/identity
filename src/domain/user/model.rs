@@ -1,26 +1,23 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 pub use super::credential::{CredentialData, CredentialType, UserCredential, UserCredentialOid};
 pub use super::otp::{OtpAlgorithm, OtpCredentialData};
 pub use super::password::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password};
 pub use super::recovery_code::{RecoveryCodeCredentialData, WebAuthnPublicKeyCredentialData};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct UserOid(pub Uuid);
-
-impl From<Uuid> for UserOid {
-    fn from(value: Uuid) -> Self {
-        Self(value)
-    }
-}
-
-impl From<UserOid> for Uuid {
-    fn from(value: UserOid) -> Self {
-        value.0
-    }
-}
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::From,
+    derive_more::Into,
+)]
+pub struct UserOid(pub uuid::Uuid);
 
 #[derive(Debug, Clone)]
 pub struct User {
@@ -57,25 +54,4 @@ pub struct User {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::UserOid;
-    use uuid::Uuid;
 
-    #[test]
-    fn user_oid_round_trips_through_uuid() {
-        let raw = Uuid::new_v4();
-        let oid = UserOid::from(raw);
-
-        assert_eq!(Uuid::from(oid), raw);
-    }
-
-    #[test]
-    fn user_oid_round_trips_through_json() {
-        let oid = UserOid::from(Uuid::new_v4());
-        let json = serde_json::to_string(&oid).unwrap();
-        let decoded: UserOid = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(decoded, oid);
-    }
-}

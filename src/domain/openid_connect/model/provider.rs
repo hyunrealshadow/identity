@@ -1,25 +1,18 @@
 use std::{fmt, str::FromStr};
 
 use serde::Serialize;
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 
 fn is_empty<T>(value: &Option<Vec<T>>) -> bool {
     value.as_ref().is_none_or(Vec::is_empty)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum SubjectType {
     Public,
     Pairwise,
-}
-
-impl fmt::Display for SubjectType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Public => "public",
-            Self::Pairwise => "pairwise",
-        })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,33 +30,20 @@ impl FromStr for SubjectType {
     type Err = ParseSubjectTypeError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(match value {
-            "public" => Self::Public,
-            "pairwise" => Self::Pairwise,
-            _ => return Err(ParseSubjectTypeError),
-        })
+        Self::iter()
+            .find(|variant| variant.as_ref() == value)
+            .ok_or(ParseSubjectTypeError)
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum TokenEndpointAuthMethod {
     ClientSecretBasic,
     ClientSecretPost,
     ClientSecretJwt,
     PrivateKeyJwt,
     None,
-}
-
-impl fmt::Display for TokenEndpointAuthMethod {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::ClientSecretBasic => "client_secret_basic",
-            Self::ClientSecretPost => "client_secret_post",
-            Self::ClientSecretJwt => "client_secret_jwt",
-            Self::PrivateKeyJwt => "private_key_jwt",
-            Self::None => "none",
-        })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

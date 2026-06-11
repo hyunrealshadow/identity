@@ -16,7 +16,7 @@ async fn main() -> AppResult<()> {
     let (state, config) = builder
         .load_runtime_settings()
         .await?
-        .build_services()
+        .build_services()?
         .build();
 
     let app = web::router::app_router(state.clone(), &config);

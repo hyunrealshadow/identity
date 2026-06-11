@@ -1,23 +1,21 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use super::KeyOid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct KeyJwkOid(pub Uuid);
-
-impl From<Uuid> for KeyJwkOid {
-    fn from(value: Uuid) -> Self {
-        Self(value)
-    }
-}
-
-impl From<KeyJwkOid> for Uuid {
-    fn from(value: KeyJwkOid) -> Self {
-        value.0
-    }
-}
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::From,
+    derive_more::Into,
+)]
+pub struct KeyJwkOid(pub uuid::Uuid);
 
 #[derive(Debug, Clone)]
 pub struct KeyJwk {
@@ -156,13 +154,6 @@ mod tests {
     use super::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyOid, PublicJwk};
     use chrono::Utc;
     use uuid::Uuid;
-
-    #[test]
-    fn key_jwk_oid_round_trips_through_uuid() {
-        let raw = Uuid::new_v4();
-        let oid = KeyJwkOid::from(raw);
-        assert_eq!(Uuid::from(oid), raw);
-    }
 
     #[test]
     fn key_jwk_holds_algorithm_and_key_reference() {

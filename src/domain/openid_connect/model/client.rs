@@ -1,6 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use sha2::{Digest, Sha256};
 use url::Url;
 
@@ -15,19 +16,11 @@ pub struct OpenIdConnectClientSettings {
     pub allow_public_client_flow: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum OpenIdConnectClientPlatformType {
     Web,
     Native,
-}
-
-impl fmt::Display for OpenIdConnectClientPlatformType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Web => f.write_str("web"),
-            Self::Native => f.write_str("native"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,11 +38,9 @@ impl FromStr for OpenIdConnectClientPlatformType {
     type Err = ParseOpenIdConnectClientPlatformKindError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "web" => Ok(Self::Web),
-            "native" => Ok(Self::Native),
-            _ => Err(ParseOpenIdConnectClientPlatformKindError),
-        }
+        Self::iter()
+            .find(|variant| variant.as_ref() == value)
+            .ok_or(ParseOpenIdConnectClientPlatformKindError)
     }
 }
 

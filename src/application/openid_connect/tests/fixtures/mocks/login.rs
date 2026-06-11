@@ -18,6 +18,7 @@ pub struct MockLoginRepository {
     pub bind_user_error: std::sync::Mutex<Option<LoginRepositoryError>>,
     pub update_status_calls: std::sync::Mutex<Vec<UpdateStatusCall>>,
     pub increment_failed_attempts_calls: std::sync::Mutex<Vec<(uuid::Uuid, Option<String>)>>,
+    pub reset_failed_attempts_calls: std::sync::Mutex<Vec<uuid::Uuid>>,
 }
 
 impl Default for MockLoginRepository {
@@ -30,6 +31,7 @@ impl Default for MockLoginRepository {
             bind_user_error: std::sync::Mutex::new(None),
             update_status_calls: std::sync::Mutex::new(Vec::new()),
             increment_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
+            reset_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
@@ -109,6 +111,14 @@ impl LoginRepository for MockLoginRepository {
             .push((login_oid, failure_reason.map(str::to_owned)));
         Ok(())
     }
+
+    async fn reset_failed_attempts(&self, login_oid: uuid::Uuid) -> Result<(), LoginRepositoryError> {
+        self.reset_failed_attempts_calls
+            .lock()
+            .unwrap()
+            .push(login_oid);
+        Ok(())
+    }
 }
 
 /// Creates a MockLoginRepository with default behaviors matching the
@@ -144,5 +154,6 @@ pub fn mock_login_repo() -> MockLoginRepository {
         bind_user_error: std::sync::Mutex::new(None),
         update_status_calls: std::sync::Mutex::new(Vec::new()),
         increment_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
+        reset_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
     }
 }

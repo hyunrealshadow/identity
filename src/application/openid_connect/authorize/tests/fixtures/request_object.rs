@@ -49,6 +49,7 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
     })
 }
 
@@ -70,6 +71,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_uri(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
     })
 }
 

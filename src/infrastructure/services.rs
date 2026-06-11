@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use sea_orm::DatabaseConnection;
 
@@ -29,6 +28,7 @@ use identity_application::{
         logout::{LogoutService, LogoutServiceDependencies},
         provider::OpenIdProviderService,
         registration::DynamicClientRegistrationService,
+        remote::{backchannel_logout_http_client, request_uri_http_client},
         token::{TokenService, TokenServiceDependencies},
         user_info::UserInfoService,
     },
@@ -77,8 +77,12 @@ pub struct AppServices {
 }
 
 impl AppServices {
-    #[must_use]
-    pub fn from_db(db: DatabaseConnection, settings: &AppRuntimeSettings) -> Self {
+    pub fn from_db(
+        db: DatabaseConnection,
+        settings: &AppRuntimeSettings,
+    ) -> Result<Self, reqwest::Error> {
+        let request_uri_http_client = request_uri_http_client()?;
+        let backchannel_logout_http_client = backchannel_logout_http_client()?;
         let key_repo = Arc::new(KeyRepositoryImpl::new(db.clone()));
         let signing_algorithm_detector = Arc::new(SigningAlgorithmDetectorImpl);
         let key_jwk_generator = Arc::new(KeyJwkGeneratorImpl);
@@ -91,7 +95,7 @@ impl AppServices {
             Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
         let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
 
-        Self {
+        Ok(Self {
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 Arc::new(UserCredentialRepositoryImpl::new(db.clone())),
@@ -139,6 +143,7 @@ impl AppServices {
                 provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
+                http_client: request_uri_http_client.clone(),
             }),
             oidc_token: TokenService::new(TokenServiceDependencies {
                 client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
@@ -159,8 +164,8 @@ impl AppServices {
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
-            })
-            .with_http_client(backchannel_logout_http_client()),
+                http_client: backchannel_logout_http_client,
+            }),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 oidc_client_repo.clone(),
@@ -181,7 +186,7 @@ impl AppServices {
             oidc_client_repo,
             oidc_credential_repo,
             data_protector,
-        }
+        })
     }
 
     #[must_use]
@@ -248,21 +253,6 @@ impl AppServices {
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
     }
-}
-
-fn backchannel_logout_http_client() -> reqwest::Client {
-    let mut builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(5));
-    if std::env::var("APP_ENV")
-        .map(|value| value.eq_ignore_ascii_case("conformance"))
-        .unwrap_or(false)
-    {
-        builder = builder.danger_accept_invalid_certs(true);
-    }
-    builder
-        .build()
-        .expect("back-channel logout HTTP client must build")
 }
 
 #[cfg(test)]

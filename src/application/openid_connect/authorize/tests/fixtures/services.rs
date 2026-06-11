@@ -81,15 +81,23 @@ pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector>
             updated_at: None,
         }])
     });
-    key_repo
-        .expect_create()
-        .returning(|_, _, _| unimplemented!());
+    key_repo.expect_create().returning(|_, _, _| {
+        Err(identity_domain::key::repository::KeyRepositoryError::CreateFailed(
+            "not implemented in test fixture".into(),
+        ))
+    });
     key_repo
         .expect_update_certificate_by_oid()
-        .returning(|_, _| unimplemented!());
-    key_repo
-        .expect_revoke_by_oid()
-        .returning(|_, _| unimplemented!());
+        .returning(|_, _| {
+            Err(identity_domain::key::repository::KeyRepositoryError::UpdateFailed(
+                "not implemented in test fixture".into(),
+            ))
+        });
+    key_repo.expect_revoke_by_oid().returning(|_, _| {
+        Err(identity_domain::key::repository::KeyRepositoryError::UpdateFailed(
+            "not implemented in test fixture".into(),
+        ))
+    });
     Arc::new(DataProtectorImpl::new(
         Arc::new(key_repo),
         Arc::new(TestCipher),
@@ -125,6 +133,7 @@ pub(in crate::openid_connect) fn build_test_service(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
     })
 }
 

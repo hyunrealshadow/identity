@@ -48,6 +48,9 @@ pub const ACR_MFA: &str = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtec
 /// Maximum consecutive failed password attempts before locking.
 pub const MAX_FAILED_ATTEMPTS: i32 = 5;
 
+/// Maximum OTP attempts allowed per login flow before the flow is invalidated.
+pub const MAX_OTP_ATTEMPTS: i32 = MAX_FAILED_ATTEMPTS;
+
 /// Duration for which an account remains locked after exceeding the failure
 /// threshold.
 pub const LOCK_DURATION: Duration = Duration::from_secs(15 * 60);

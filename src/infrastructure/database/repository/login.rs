@@ -269,4 +269,19 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
         Ok(())
     }
+
+    async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
+        let now = Utc::now().naive_utc();
+        LoginEntity::update_many()
+            .col_expr(login::Column::FailedAttempts, Expr::value(0))
+            .col_expr(
+                login::Column::UpdatedAt,
+                Expr::value(Option::<chrono::NaiveDateTime>::Some(now)),
+            )
+            .filter(login::Column::Oid.eq(login_oid))
+            .exec(&self.db)
+            .await
+            .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
+        Ok(())
+    }
 }

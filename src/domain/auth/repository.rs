@@ -51,6 +51,9 @@ pub enum LoginRepositoryError {
 
     #[error("failed to increment login failed attempts")]
     IncrementFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("failed to reset login failed attempts")]
+    ResetFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Debug)]
@@ -139,4 +142,7 @@ pub trait LoginRepository: Send + Sync {
         login_oid: Uuid,
         failure_reason: Option<&str>,
     ) -> Result<(), LoginRepositoryError>;
+
+    /// Reset login `failed_attempts` to zero.
+    async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError>;
 }

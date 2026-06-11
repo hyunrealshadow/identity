@@ -162,16 +162,15 @@ impl AppBuilder {
     }
 
     /// Construct application services (login, session, key, install).
-    #[must_use]
-    pub fn build_services(mut self) -> Self {
+    pub fn build_services(mut self) -> AppResult<Self> {
         let db = self.db.clone().expect("database must be connected first");
         let settings = self
             .runtime_settings
             .as_ref()
             .expect("runtime settings must be loaded first");
 
-        self.services = Some(Arc::new(AppServices::from_db(db, settings.as_ref())));
-        self
+        self.services = Some(Arc::new(AppServices::from_db(db, settings.as_ref())?));
+        Ok(self)
     }
 
     /// Assemble the final `AppState` and return it together with the config.

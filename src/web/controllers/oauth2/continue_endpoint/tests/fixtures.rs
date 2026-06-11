@@ -502,7 +502,9 @@ pub(super) async fn continue_state(
     let i18n = build_i18n().unwrap();
     let tera = build_tera(i18n.loader()).unwrap();
     let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
-    let services = Arc::new(AppServices::from_db(db.clone(), settings.as_ref()));
+    let services = Arc::new(
+        AppServices::from_db(db.clone(), settings.as_ref()).expect("services should build"),
+    );
 
     let state = AppState::new(
         Arc::new(AppContext::new(

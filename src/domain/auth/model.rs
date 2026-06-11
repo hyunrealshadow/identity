@@ -1,21 +1,19 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::From,
+    derive_more::Into,
+)]
 pub struct SessionOid(pub Uuid);
-
-impl From<Uuid> for SessionOid {
-    fn from(value: Uuid) -> Self {
-        Self(value)
-    }
-}
-
-impl From<SessionOid> for Uuid {
-    fn from(value: SessionOid) -> Self {
-        value.0
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Session {

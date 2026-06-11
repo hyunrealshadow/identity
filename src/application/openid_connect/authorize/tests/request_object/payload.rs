@@ -60,6 +60,7 @@ async fn parse_unsecured_request_object_is_accepted() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
     });
     let client = FoundClientRepository
         .find_by_oid(Uuid::nil())
@@ -141,6 +142,7 @@ async fn parse_rs256_request_object_extracts_payload() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
     });
 
     let client = FoundClientRepository
@@ -202,6 +204,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
     });
     let mut metadata = test_metadata(None, None);
     metadata.request_object_signing_alg = Some("RS384".to_owned());

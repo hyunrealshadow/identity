@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use std::fmt::Display;
 use std::str::FromStr;
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use url::Url;
 
@@ -9,7 +9,8 @@ use crate::key::PublicJwk;
 
 pub type OpenIdConnectCredentialOid = uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
 pub enum OpenIdConnectCredentialType {
     ClientSecret,
     ClientPublicKey,
@@ -22,28 +23,15 @@ pub struct ParseOpenIdConnectCredentialTypeError {
     value: String,
 }
 
-impl Display for OpenIdConnectCredentialType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ClientSecret => write!(f, "client_secret"),
-            Self::ClientPublicKey => write!(f, "client_public_key"),
-            Self::ClientJsonWebKeySet => write!(f, "client_json_web_key_set"),
-        }
-    }
-}
-
 impl FromStr for OpenIdConnectCredentialType {
     type Err = ParseOpenIdConnectCredentialTypeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "client_secret" => Ok(Self::ClientSecret),
-            "client_public_key" => Ok(Self::ClientPublicKey),
-            "client_json_web_key_set" => Ok(Self::ClientJsonWebKeySet),
-            _ => Err(ParseOpenIdConnectCredentialTypeError {
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or_else(|| ParseOpenIdConnectCredentialTypeError {
                 value: s.to_string(),
-            }),
-        }
+            })
     }
 }
 

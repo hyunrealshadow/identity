@@ -1,6 +1,9 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+use strum::{
+    AsRefStr, Display, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -25,18 +28,31 @@ impl AsymmetricKeyAlgorithm {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Display, AsRefStr, IntoStaticStr, EnumIter, VariantArray,
+)]
 pub enum JwaSigningAlgorithm {
+    #[strum(serialize = "RS256")]
     Rs256,
+    #[strum(serialize = "RS384")]
     Rs384,
+    #[strum(serialize = "RS512")]
     Rs512,
+    #[strum(serialize = "PS256")]
     Ps256,
+    #[strum(serialize = "PS384")]
     Ps384,
+    #[strum(serialize = "PS512")]
     Ps512,
+    #[strum(serialize = "ES256")]
     Es256,
+    #[strum(serialize = "ES384")]
     Es384,
+    #[strum(serialize = "ES512")]
     Es512,
+    #[strum(serialize = "ES256K")]
     Es256k,
+    #[strum(serialize = "EdDSA")]
     EdDsa,
 }
 
@@ -51,35 +67,11 @@ impl std::fmt::Display for JwaAlgorithmParseError {
 
 impl JwaSigningAlgorithm {
     pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Rs256 => "RS256",
-            Self::Rs384 => "RS384",
-            Self::Rs512 => "RS512",
-            Self::Ps256 => "PS256",
-            Self::Ps384 => "PS384",
-            Self::Ps512 => "PS512",
-            Self::Es256 => "ES256",
-            Self::Es384 => "ES384",
-            Self::Es512 => "ES512",
-            Self::Es256k => "ES256K",
-            Self::EdDsa => "EdDSA",
-        }
+        self.into()
     }
 
     pub fn all() -> &'static [Self] {
-        &[
-            Self::Rs256,
-            Self::Rs384,
-            Self::Rs512,
-            Self::Ps256,
-            Self::Ps384,
-            Self::Ps512,
-            Self::Es256,
-            Self::Es384,
-            Self::Es512,
-            Self::Es256k,
-            Self::EdDsa,
-        ]
+        Self::VARIANTS
     }
 
     /// Returns algorithm labels that should be trialed for a given key type.
@@ -132,26 +124,9 @@ impl FromStr for JwaSigningAlgorithm {
     type Err = JwaAlgorithmParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "RS256" => Ok(Self::Rs256),
-            "RS384" => Ok(Self::Rs384),
-            "RS512" => Ok(Self::Rs512),
-            "PS256" => Ok(Self::Ps256),
-            "PS384" => Ok(Self::Ps384),
-            "PS512" => Ok(Self::Ps512),
-            "ES256" => Ok(Self::Es256),
-            "ES384" => Ok(Self::Es384),
-            "ES512" => Ok(Self::Es512),
-            "ES256K" => Ok(Self::Es256k),
-            "EdDSA" => Ok(Self::EdDsa),
-            _ => Err(JwaAlgorithmParseError(s.to_owned())),
-        }
-    }
-}
-
-impl std::fmt::Display for JwaSigningAlgorithm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
+        Self::iter()
+            .find(|variant| variant.as_ref() == s)
+            .ok_or_else(|| JwaAlgorithmParseError(s.to_owned()))
     }
 }
 

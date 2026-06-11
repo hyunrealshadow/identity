@@ -85,6 +85,7 @@ pub struct LogoutServiceDependencies {
     pub key_repo: Arc<dyn KeyRepository>,
     pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
     pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
+    pub http_client: reqwest::Client,
 }
 
 impl LogoutService {
@@ -95,11 +96,7 @@ impl LogoutService {
             key_repo: deps.key_repo,
             key_jwk_repo: deps.key_jwk_repo,
             signing_algorithm_detector: deps.signing_algorithm_detector,
-            http_client: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(std::time::Duration::from_secs(5))
-                .build()
-                .expect("back-channel logout HTTP client must build"),
+            http_client: deps.http_client,
         }
     }
 
@@ -792,6 +789,7 @@ mod tests {
             key_repo: Arc::new(key_repo),
             key_jwk_repo: Arc::new(jwk_repo),
             signing_algorithm_detector: Arc::new(TestSigningAlgorithmDetector),
+            http_client: crate::openid_connect::remote::test_backchannel_logout_http_client(),
         });
         (service, signing)
     }

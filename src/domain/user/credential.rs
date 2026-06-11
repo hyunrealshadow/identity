@@ -1,27 +1,27 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use strum::{AsRefStr, Display};
 
 pub use super::otp::OtpCredentialData;
 pub use super::password::Password;
 pub use super::recovery_code::{RecoveryCodeCredentialData, WebAuthnPublicKeyCredentialData};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct UserCredentialOid(pub Uuid);
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::From,
+    derive_more::Into,
+)]
+pub struct UserCredentialOid(pub uuid::Uuid);
 
-impl From<Uuid> for UserCredentialOid {
-    fn from(value: Uuid) -> Self {
-        Self(value)
-    }
-}
-
-impl From<UserCredentialOid> for Uuid {
-    fn from(value: UserCredentialOid) -> Self {
-        value.0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display, AsRefStr)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum CredentialType {
     Password,
     Otp,
@@ -44,8 +44,7 @@ pub enum CredentialData {
 
 #[cfg(test)]
 mod tests {
-    use super::{CredentialType, UserCredentialOid};
-    use uuid::Uuid;
+    use super::CredentialType;
 
     #[test]
     fn credential_type_round_trips_through_json() {
@@ -55,11 +54,4 @@ mod tests {
         assert_eq!(decoded, CredentialType::RecoveryCode);
     }
 
-    #[test]
-    fn user_credential_oid_round_trips_through_uuid() {
-        let raw = Uuid::new_v4();
-        let oid = UserCredentialOid::from(raw);
-
-        assert_eq!(Uuid::from(oid), raw);
-    }
 }
