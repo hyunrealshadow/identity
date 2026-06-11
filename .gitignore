@@ -19,7 +19,6 @@ target/
 *.sqlite
 *.sqlite-*
 
-.opencode
 .idea
 .worktrees
 node_modules
@@ -30,8 +29,8 @@ assets/views
 **/dist/**
 
 ref
-docs/superpowers
-.trellis
+
+.trellis/workspace
 
 # Conformance suite GitLab clone (built inside Docker image)
 conformance/suite/
