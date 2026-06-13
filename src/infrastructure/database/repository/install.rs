@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use base64::Engine as _;
 use chrono::Utc;
-use rand::RngCore;
+use rand::RngExt;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
     TransactionTrait,
@@ -187,7 +187,7 @@ impl InstallPersistence for InstallPersistenceImpl {
             })?;
 
         let mut sym_key_bytes = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut sym_key_bytes);
+        rand::rng().fill(&mut sym_key_bytes[..]);
         let sym_key_b64 = base64::engine::general_purpose::STANDARD.encode(sym_key_bytes);
         let sym_key_json = serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
             key: sym_key_b64,

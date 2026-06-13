@@ -5,7 +5,6 @@
 use std::net::IpAddr;
 
 use http::{HeaderMap, HeaderValue, header};
-use rand::Rng;
 use salvo::{
     Depot, Response,
     csrf::{CsrfDepotExt, FormFinder, HeaderFinder, JsonFinder, bcrypt_cookie_csrf},
@@ -262,7 +261,9 @@ pub fn csrf_token(depot: &Depot) -> String {
 }
 
 pub fn generate_csp_nonce() -> String {
-    let bytes: [u8; 16] = rand::thread_rng().r#gen();
+    use rand::RngExt;
+    let mut bytes = [0u8; 16];
+    rand::rng().fill(&mut bytes);
     base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes)
 }
 

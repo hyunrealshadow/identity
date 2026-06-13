@@ -2,7 +2,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
     aead::{Aead, AeadCore, KeyInit, Payload},
 };
-use rand::rngs::OsRng;
+use rand_core::OsRng;
 
 pub const KEY_SIZE: usize = 32;
 

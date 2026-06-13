@@ -499,13 +499,11 @@ async fn ensure_web_platform_redirect_uri(
 /// Hash `CONFORMANCE_PASSWORD` with the same Argon2id defaults the app uses,
 /// and return the serialised `Password` JSON value ready for the DB.
 fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
-    use argon2::{
-        Argon2, PasswordHasher,
-        password_hash::{SaltString, rand_core::OsRng},
-    };
+    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
     use identity_domain::user::password::{
         Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
     };
+    use rand_core::OsRng;
 
     let salt = SaltString::generate(&mut OsRng);
     let params = argon2::Params::new(4_096, 1, 1, None).map_err(|e| {

@@ -7,7 +7,7 @@ use argon2::{
     Algorithm, Argon2, Params, Version,
     password_hash::{PasswordHasher as _, SaltString},
 };
-use password_hash::rand_core::OsRng;
+use rand_core::OsRng;
 
 use identity_domain::{
     auth::password::{HashOptions, PasswordHashError, VerifyResult},
