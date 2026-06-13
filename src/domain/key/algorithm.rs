@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use strum::{
-    AsRefStr, Display, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray,
-};
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -29,7 +27,17 @@ impl AsymmetricKeyAlgorithm {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Display, AsRefStr, IntoStaticStr, EnumIter, VariantArray,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    AsRefStr,
+    IntoStaticStr,
+    EnumIter,
+    VariantArray,
 )]
 pub enum JwaSigningAlgorithm {
     #[strum(serialize = "RS256")]

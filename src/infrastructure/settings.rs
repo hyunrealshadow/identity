@@ -13,6 +13,7 @@ use identity_domain::{
     auth::password::PasswordHashSetting,
     setting::model::SettingDefinition,
     setting::{
+        auth_ui::AuthUiEnabledSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
@@ -36,6 +37,8 @@ pub type AppInstallationInitializedAtSettingService =
 pub type AppInstallationSettingService = GroupedInstallationSettingProvider<SettingRepositoryImpl>;
 pub type AppDynamicClientRegistrationSettingService =
     CachedSetting<DynamicClientRegistrationSetting, SettingRepositoryImpl>;
+pub type AppAuthUiEnabledSettingService =
+    CachedSetting<AuthUiEnabledSetting, SettingRepositoryImpl>;
 
 #[derive(Clone)]
 pub struct GroupedInstallationSettingProvider<R> {
@@ -120,6 +123,7 @@ pub struct AppRuntimeSettings {
     installation_first_key_oid_setting: Arc<AppInstallationFirstKeyOidSettingService>,
     installation_initialized_at_setting: Arc<AppInstallationInitializedAtSettingService>,
     dynamic_client_registration_setting: Arc<AppDynamicClientRegistrationSettingService>,
+    auth_ui_enabled_setting: Arc<AppAuthUiEnabledSettingService>,
 }
 
 impl AppRuntimeSettings {
@@ -162,8 +166,13 @@ impl AppRuntimeSettings {
             installation_first_key_oid_setting: first_key_oid,
             installation_initialized_at_setting: initialized_at,
             dynamic_client_registration_setting: Arc::new(
-                AppDynamicClientRegistrationSettingService::new(SettingRepositoryImpl::new(db))
-                    .await?,
+                AppDynamicClientRegistrationSettingService::new(SettingRepositoryImpl::new(
+                    db.clone(),
+                ))
+                .await?,
+            ),
+            auth_ui_enabled_setting: Arc::new(
+                AppAuthUiEnabledSettingService::new(SettingRepositoryImpl::new(db)).await?,
             ),
         })
     }
@@ -177,6 +186,7 @@ impl AppRuntimeSettings {
         refresher.register(Arc::clone(&self.installation_first_key_oid_setting));
         refresher.register(Arc::clone(&self.installation_initialized_at_setting));
         refresher.register(Arc::clone(&self.dynamic_client_registration_setting));
+        refresher.register(Arc::clone(&self.auth_ui_enabled_setting));
         refresher.spawn_detached();
     }
 
@@ -218,5 +228,10 @@ impl AppRuntimeSettings {
     #[must_use]
     pub fn dynamic_client_registration(&self) -> Arc<AppDynamicClientRegistrationSettingService> {
         Arc::clone(&self.dynamic_client_registration_setting)
+    }
+
+    #[must_use]
+    pub fn auth_ui_enabled(&self) -> Arc<AppAuthUiEnabledSettingService> {
+        Arc::clone(&self.auth_ui_enabled_setting)
     }
 }

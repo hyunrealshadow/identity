@@ -112,7 +112,10 @@ impl LoginRepository for MockLoginRepository {
         Ok(())
     }
 
-    async fn reset_failed_attempts(&self, login_oid: uuid::Uuid) -> Result<(), LoginRepositoryError> {
+    async fn reset_failed_attempts(
+        &self,
+        login_oid: uuid::Uuid,
+    ) -> Result<(), LoginRepositoryError> {
         self.reset_failed_attempts_calls
             .lock()
             .unwrap()

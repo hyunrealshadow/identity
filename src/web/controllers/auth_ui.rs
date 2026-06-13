@@ -11,8 +11,8 @@
 
 use std::error::Error as StdError;
 
-use http::HeaderMap;
-use salvo::{Depot, Request, Response, Router, handler};
+use http::{HeaderMap, StatusCode};
+use salvo::{Depot, FlowCtrl, Request, Response, Router, handler};
 use serde::Deserialize;
 
 use super::response::{
@@ -28,6 +28,7 @@ use crate::{
     application::{
         auth::login::ChallengeOutcome,
         error::{AppError, codes::common::CommonErrorCode},
+        setting::runtime::SettingProvider,
     },
     boot::AppState,
     domain::client_authorization::SelectionSource,
@@ -39,6 +40,7 @@ use crate::{
 pub fn routes() -> Router {
     Router::new()
         .hoop(csrf_middleware())
+        .hoop(auth_ui_enabled_guard)
         .push(
             Router::with_path("login")
                 .get(login_page)
@@ -51,6 +53,27 @@ pub fn routes() -> Router {
                 .post(password_post),
         )
         .push(Router::with_path("login/otp").get(otp_page).post(otp_post))
+}
+
+// ─── Guard ────────────────────────────────────────────────────────────────────
+
+#[handler]
+async fn auth_ui_enabled_guard(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let Ok(ctx) = app_state(depot) else {
+        ctrl.call_next(req, depot, res).await;
+        return;
+    };
+    if *ctx.settings().auth_ui_enabled().current_value() {
+        ctrl.call_next(req, depot, res).await;
+    } else {
+        res.status_code(StatusCode::NOT_FOUND);
+        ctrl.skip_rest();
+    }
 }
 
 // ─── Query param structs ──────────────────────────────────────────────────────

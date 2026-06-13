@@ -53,5 +53,4 @@ mod tests {
 
         assert_eq!(decoded, CredentialType::RecoveryCode);
     }
-
 }

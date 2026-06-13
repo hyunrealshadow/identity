@@ -1,8 +1,8 @@
 use std::{fmt, str::FromStr};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use sha2::{Digest, Sha256};
+use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 
 use crate::client::model::Client;

@@ -574,7 +574,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: crate::openid_connect::remote::test_http_client(),
         })
     };
 
@@ -643,7 +643,7 @@ async fn approve_implicit_flow_returns_session_state() {
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: crate::openid_connect::remote::test_http_client(),
         })
     };
 
@@ -692,7 +692,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: crate::openid_connect::remote::test_http_client(),
         })
     };
 
@@ -757,7 +757,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: crate::openid_connect::remote::test_http_client(),
         })
     };
 

@@ -25,5 +25,3 @@ pub struct SettingEntry<T> {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
 }
-
-

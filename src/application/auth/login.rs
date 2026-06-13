@@ -574,7 +574,6 @@ mod tests {
 
     use async_trait::async_trait;
     use chrono::Utc;
-    use uuid::Uuid;
     use identity_domain::{
         auth::{
             LoginStatus, MAX_OTP_ATTEMPTS,
@@ -587,12 +586,16 @@ mod tests {
             totp::TotpVerifier,
         },
         user::{
-            CredentialData, CredentialType, OtpCredentialData, User, UserCredential, UserCredentialOid,
-            UserOid,
+            CredentialData, CredentialType, OtpCredentialData, User, UserCredential,
+            UserCredentialOid, UserOid,
             model::{Argon2Options, Argon2Variant, Argon2Version, Password},
-            repository::{UserCredentialRepository, UserCredentialRepositoryError, UserRepository, UserRepositoryError},
+            repository::{
+                UserCredentialRepository, UserCredentialRepositoryError, UserRepository,
+                UserRepositoryError,
+            },
         },
     };
+    use uuid::Uuid;
 
     use super::{LoginService, SessionContext};
     use crate::{
@@ -628,9 +631,11 @@ mod tests {
             _password: &str,
             _options: &HashOptions,
         ) -> Result<Password, identity_domain::auth::password::PasswordHashError> {
-            Err(identity_domain::auth::password::PasswordHashError::HashFailed(
-                "not used in OTP tests".to_owned(),
-            ))
+            Err(
+                identity_domain::auth::password::PasswordHashError::HashFailed(
+                    "not used in OTP tests".to_owned(),
+                ),
+            )
         }
 
         fn verify(
@@ -639,9 +644,11 @@ mod tests {
             _stored: &Password,
             _options: &HashOptions,
         ) -> Result<VerifyResult, identity_domain::auth::password::PasswordHashError> {
-            Err(identity_domain::auth::password::PasswordHashError::HashFailed(
-                "not used in OTP tests".to_owned(),
-            ))
+            Err(
+                identity_domain::auth::password::PasswordHashError::HashFailed(
+                    "not used in OTP tests".to_owned(),
+                ),
+            )
         }
     }
 
@@ -667,7 +674,10 @@ mod tests {
             Ok(())
         }
 
-        async fn reset_failed_attempts(&self, _user_oid: UserOid) -> Result<(), UserRepositoryError> {
+        async fn reset_failed_attempts(
+            &self,
+            _user_oid: UserOid,
+        ) -> Result<(), UserRepositoryError> {
             Ok(())
         }
     }
@@ -714,11 +724,15 @@ mod tests {
         async fn find_active_accounts_by_oids(
             &self,
             _oids: &[SessionOid],
-        ) -> Result<Vec<identity_domain::auth::model::ActiveSession>, SessionRepositoryError> {
+        ) -> Result<Vec<identity_domain::auth::model::ActiveSession>, SessionRepositoryError>
+        {
             Ok(Vec::new())
         }
 
-        async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError> {
+        async fn create(
+            &self,
+            input: CreateSessionInput,
+        ) -> Result<Session, SessionRepositoryError> {
             Ok(Session {
                 oid: SessionOid(Uuid::new_v4()),
                 user_oid: input.user_oid,
@@ -896,13 +910,15 @@ mod tests {
             login_repo,
             Arc::new(StubPasswordHasher),
             Arc::new(AlwaysInvalidTotp),
-            Arc::new(FixedHashOptions(Arc::new(HashOptions::Argon2(Argon2Options {
-                variant: Argon2Variant::Argon2id,
-                version: Argon2Version::Argon2013,
-                time_cost: 3,
-                memory_cost: 65_536,
-                parallelism: 4,
-            })))),
+            Arc::new(FixedHashOptions(Arc::new(HashOptions::Argon2(
+                Argon2Options {
+                    variant: Argon2Variant::Argon2id,
+                    version: Argon2Version::Argon2013,
+                    time_cost: 3,
+                    memory_cost: 65_536,
+                    parallelism: 4,
+                },
+            )))),
         )
     }
 
@@ -924,16 +940,21 @@ mod tests {
         let service = otp_service(Arc::clone(&login_repo), user);
 
         let error = service
-            .challenge(login_oid, "otp", "000000", SessionContext {
-                device_name: None,
-                device_type: None,
-                os_name: None,
-                os_version: None,
-                browser_name: None,
-                browser_version: None,
-                user_agent: None,
-                ip_address: None,
-            })
+            .challenge(
+                login_oid,
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
             .await
             .expect_err("expected too many attempts");
 
@@ -957,16 +978,21 @@ mod tests {
         let service = otp_service(Arc::clone(&login_repo), user);
 
         let error = service
-            .challenge(login_oid, "otp", "000000", SessionContext {
-                device_name: None,
-                device_type: None,
-                os_name: None,
-                os_version: None,
-                browser_name: None,
-                browser_version: None,
-                user_agent: None,
-                ip_address: None,
-            })
+            .challenge(
+                login_oid,
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
             .await
             .expect_err("expected invalid otp");
 
@@ -991,16 +1017,21 @@ mod tests {
         let service = otp_service(login_repo.clone(), user);
 
         let error = service
-            .challenge(login_oid, "otp", "000000", SessionContext {
-                device_name: None,
-                device_type: None,
-                os_name: None,
-                os_version: None,
-                browser_name: None,
-                browser_version: None,
-                user_agent: None,
-                ip_address: None,
-            })
+            .challenge(
+                login_oid,
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
             .await
             .expect_err("expected too many attempts");
 

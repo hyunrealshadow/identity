@@ -15,6 +15,7 @@ use identity_domain::{
     },
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
     setting::{
+        auth_ui::AuthUiEnabledSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
@@ -117,6 +118,14 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         oid: uuid::Uuid::new_v4(),
         key: DynamicClientRegistrationSetting::KEY.to_string(),
         value: serde_json::to_value(DynamicClientRegistrationSetting::default_value()).unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let auth_ui_enabled_setting = setting::Model {
+        id: 8,
+        oid: uuid::Uuid::new_v4(),
+        key: AuthUiEnabledSetting::KEY.to_string(),
+        value: serde_json::to_value(AuthUiEnabledSetting::default_value()).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -304,6 +313,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[installation_initialized_at_setting]])
         .append_query_results([[password_setting]])
         .append_query_results([[dynamic_registration_setting]])
+        .append_query_results([[auth_ui_enabled_setting]])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[(active_session.clone(), active_user.clone())]])
         .append_query_results([[symmetric_key.clone()]])
