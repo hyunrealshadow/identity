@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 
-use http::{HeaderName, HeaderValue, StatusCode, header};
-use salvo::{Depot, Request, Response, Writer, async_trait, prelude::Json, writing::Text};
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
+use salvo::{Depot, Request, Response, Writer, async_trait, handler, prelude::Json, writing::Text};
 use serde::{Serialize, de::DeserializeOwned};
 use unic_langid::LanguageIdentifier;
 
@@ -9,7 +9,8 @@ use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
     boot::AppState,
     infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
-    web::views::auth::BusinessErrorResponse,
+    infrastructure::web,
+    web::views::{auth::BusinessErrorResponse, oauth2::ErrorPageData},
 };
 
 pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> String {
@@ -26,6 +27,14 @@ pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError)
     } else {
         i18n.t_code_with_params(locale, error.code(), error.params())
     }
+}
+
+pub fn accepts_html(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(header::ACCEPT)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .any(|v| v.contains("text/html"))
 }
 
 pub fn app_state(depot: &Depot) -> Result<AppState, AppError> {
@@ -112,7 +121,14 @@ impl Writer for AppResponse {
 
 #[async_trait]
 impl Writer for WebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
+        if accepts_html(req.headers())
+            && let Ok(ctx) = app_state(depot)
+        {
+            render_error_page(res, req.headers(), &ctx, self.0);
+            return;
+        }
+
         if let Some(i18n) = error_i18n() {
             let locale = resolve_locale_from_headers(req.headers());
             write_error_response(res, i18n, &locale, self.0);
@@ -192,12 +208,50 @@ pub fn write_error_response(
     render_json(res, status, body);
 }
 
-pub fn render_app_error(res: &mut Response, error: AppError) {
+pub fn render_app_error(res: &mut Response, headers: &HeaderMap, ctx: &AppState, error: AppError) {
+    if accepts_html(headers) {
+        render_error_page(res, headers, ctx, error);
+        return;
+    }
+
     if let Some(i18n) = error_i18n() {
         let locale = i18n.fallback_locale().clone();
         write_error_response(res, i18n, &locale, error);
     } else {
         render_unlocalized_app_error(res, error);
+    }
+}
+
+pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState, error: AppError) {
+    let status = error.kind().http_status();
+
+    if status.is_server_error() {
+        tracing::error!(
+            error = %error,
+            source = ?error.source(),
+            code = error.code(),
+            "internal error rendered as html"
+        );
+    }
+
+    let i18n = ctx.resources().i18n();
+    let locale = resolve_locale_from_headers(headers);
+    let message = error_message(i18n, &locale, &error);
+
+    let data = ErrorPageData {
+        status_code: status.as_u16(),
+        title: status.canonical_reason().unwrap_or("Error").to_owned(),
+        message,
+        details: Vec::new(),
+    };
+
+    match web::tera::render_view(ctx, headers, "error.html", data) {
+        Ok(body) => render_html(res, status, body),
+        Err(e) => {
+            tracing::error!(error = %e, "render_error_page: template render failed");
+            let body = BusinessErrorResponse::new(error.code(), error.to_string());
+            render_json(res, StatusCode::INTERNAL_SERVER_ERROR, body);
+        }
     }
 }
 
@@ -210,6 +264,49 @@ fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
         .map(str::to_owned)
         .unwrap_or_else(|| error.code().to_string());
     let body = BusinessErrorResponse::new(error.code(), message);
+    render_json(res, status, body);
+}
+
+pub fn render_app_error_json(res: &mut Response, error: AppError) {
+    if let Some(i18n) = error_i18n() {
+        let locale = i18n.fallback_locale().clone();
+        write_error_response(res, i18n, &locale, error);
+    } else {
+        render_unlocalized_app_error(res, error);
+    }
+}
+
+#[handler]
+pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let status = StatusCode::NOT_FOUND;
+
+    if accepts_html(req.headers())
+        && let Ok(ctx) = app_state(depot)
+    {
+        let i18n = ctx.resources().i18n();
+        let locale = resolve_locale_from_headers(req.headers());
+        let message = i18n.t(&locale, "error-404-message");
+
+        let data = ErrorPageData {
+            status_code: status.as_u16(),
+            title: i18n.t(&locale, "error-404-title"),
+            message,
+            details: Vec::new(),
+        };
+
+        match web::tera::render_view(&ctx, req.headers(), "error.html", data) {
+            Ok(body) => {
+                render_html(res, status, body);
+                return;
+            }
+            Err(e) => tracing::error!(error = %e, "handle_404: template render failed"),
+        }
+    }
+
+    let body = BusinessErrorResponse::new(
+        status.as_u16().into(),
+        status.canonical_reason().unwrap_or("Not Found"),
+    );
     render_json(res, status, body);
 }
 

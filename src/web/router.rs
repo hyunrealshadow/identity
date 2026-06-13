@@ -1,6 +1,6 @@
 use salvo::{Response, Router, handler, serve_static::StaticDir};
 
-use crate::controllers::response::redirect_to;
+use crate::controllers::response::{handle_404, redirect_to};
 use crate::health;
 use identity_application::setting::runtime::SettingProvider;
 use identity_infrastructure::AppState;
@@ -39,6 +39,8 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     if config.health.enable && shared_health_listener {
         router = router.push(health::router(&config.health));
     }
+
+    router = router.goal(handle_404);
 
     router
 }

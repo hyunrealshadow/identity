@@ -109,7 +109,7 @@ fn render_form_post_page(
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "oauth2/form_post.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     response.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
@@ -199,7 +199,7 @@ pub fn render_authorize_error_page(
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "oauth2/authorize_error.html", data) {
         Ok(body) => render_html(&mut response, status, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     response
 }

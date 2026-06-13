@@ -98,7 +98,7 @@ fn render_install_page(input: InstallPageRenderInput<'_>) -> Response {
     let mut response = Response::new();
     match web::tera::render_view(input.ctx, input.headers, "install/index.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, input.headers, input.ctx, error),
     }
     response
 }

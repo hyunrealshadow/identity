@@ -118,7 +118,7 @@ pub(super) async fn render_logout_page(
     let mut response = Response::new();
     match tera::render_view(ctx, headers, "oauth2/logout.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     if let Some(csp) = csp {
         response.headers_mut().insert(

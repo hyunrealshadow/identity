@@ -37,7 +37,7 @@ pub async fn check_session_iframe(
         data,
     ) {
         Ok(body) => render_html(res, StatusCode::OK, body),
-        Err(error) => render_app_error(res, error),
+        Err(error) => render_app_error(res, req.headers(), &ctx, error),
     }
 
     res.headers_mut().insert(

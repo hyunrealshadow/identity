@@ -170,7 +170,7 @@ fn render_identifier_page(
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "auth/login.html", data) {
         Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     response
 }
@@ -185,7 +185,7 @@ fn render_password_page(
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "auth/password.html", data) {
         Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     response
 }
@@ -200,7 +200,7 @@ fn render_otp_page(
     let mut response = Response::new();
     match web::tera::render_view(ctx, headers, "auth/otp.html", data) {
         Ok(body) => render_html(&mut response, http::StatusCode::OK, body),
-        Err(error) => render_app_error(&mut response, error),
+        Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     response
 }

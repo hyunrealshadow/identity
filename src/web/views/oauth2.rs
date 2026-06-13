@@ -87,6 +87,14 @@ pub struct CheckSessionPageData {
     pub nonce: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorPageData {
+    pub status_code: u16,
+    pub title: String,
+    pub message: String,
+    pub details: Vec<String>,
+}
+
 pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
     let mut scopes = Vec::new();
 

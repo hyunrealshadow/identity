@@ -15,3 +15,7 @@ btn-verify = 验证
 btn-change = 更改
 btn-back = 返回
 btn-sign-up = 注册
+
+# 错误页面
+error-404-title = 页面未找到
+error-404-message = 您查找的页面不存在或已被移动。

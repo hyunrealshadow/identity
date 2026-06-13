@@ -1,0 +1,27 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block header %}
+<div class="text-center">
+  <p class="text-5xl font-bold tracking-tight text-gray-200 mb-2">{{ status_code }}</p>
+  <h1 class="text-xl font-bold tracking-tight text-gray-900">{{ title }}</h1>
+  <p class="mt-2 text-sm text-gray-500">{{ message }}</p>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if details | length > 0 %}
+<div class="space-y-3">
+  <div class="error-box visible" role="alert">
+    <span>Error details</span>
+  </div>
+
+  <ul class="space-y-2 text-sm text-gray-700 list-disc pl-5">
+    {% for detail in details %}
+    <li>{{ detail }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

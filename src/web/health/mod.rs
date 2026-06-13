@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::{
     boot::AppState,
     infrastructure::config::{HealthConfig, ServerConfig},
-    web::controllers::response::{app_state, render_app_error, render_json},
+    web::controllers::response::{app_state, render_app_error_json, render_json},
 };
 
 #[derive(Debug, Serialize)]
@@ -37,7 +37,7 @@ async fn health_handler(depot: &mut Depot, res: &mut Response) {
     let state = match app_state(depot) {
         Ok(state) => state,
         Err(error) => {
-            render_app_error(res, error);
+            render_app_error_json(res, error);
             return;
         }
     };
