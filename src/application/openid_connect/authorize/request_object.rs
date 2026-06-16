@@ -593,9 +593,13 @@ impl AuthorizeService {
             .as_object()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClaimsNotObject))?;
 
+        // A `null` value (e.g. from a serialized `Option::None`) is treated as
+        // absent. Without this, a claims document produced by serializing
+        // `ClaimsRequest` — which emits `"id_token": null` when that section is
+        // unset — would be rejected on re-parse as "field not an object".
         let map_field = |field: &str| -> Result<Option<ClaimRequestMap>, AppError> {
             match object.get(field) {
-                None => Ok(None),
+                None | Some(serde_json::Value::Null) => Ok(None),
                 Some(value) => value
                     .as_object()
                     .cloned()

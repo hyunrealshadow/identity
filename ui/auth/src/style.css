@@ -142,6 +142,27 @@ body {
   display: flex;
 }
 
+/* Error page header (badge + eyebrow) */
+.error-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #b91c1c;
+}
+
+.error-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
 /* Account Tiles (Clerk-like) */
 .account-tile {
   display: flex;

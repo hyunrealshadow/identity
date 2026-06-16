@@ -290,3 +290,36 @@ fn validate_request_object_claims_rejects_future_not_before() {
 
     assert!(result.is_err());
 }
+
+#[test]
+fn parse_claims_request_accepts_round_trip_serialization() {
+    // Regression for oidcc-claims-essential: `AuthorizationRequestData`
+    // stores `claims` by serializing a `ClaimsRequest`. A serialized
+    // `ClaimsRequest` may carry `"id_token": null` (or omit it); re-parsing
+    // such a document must not fail with ClaimsFieldNotObject.
+    use identity_domain::openid_connect::ClaimsRequestSection;
+
+    let parsed =
+        AuthorizeService::parse_claims_request(r#"{"userinfo":{"name":{"essential":true}}}"#)
+            .unwrap();
+    assert_eq!(
+        parsed.essential_claim_names(&[ClaimsRequestSection::UserInfo]),
+        vec!["name"]
+    );
+
+    // The serialized form (the value persisted to storage) must round-trip.
+    let serialized = serde_json::to_string(&parsed).unwrap();
+    let reparsed = AuthorizeService::parse_claims_request(&serialized).unwrap();
+    assert_eq!(parsed, reparsed);
+
+    // Explicit `null` sections (legacy serialized form) are tolerated.
+    let reparsed_null = AuthorizeService::parse_claims_request(
+        r#"{"id_token":null,"userinfo":{"name":{"essential":true}}}"#,
+    )
+    .unwrap();
+    assert_eq!(parsed, reparsed_null);
+
+    // A non-object section value is still rejected.
+    let err = AuthorizeService::parse_claims_request(r#"{"userinfo":"nope"}"#).unwrap_err();
+    assert_eq!(err.code(), 23038); // ClaimsFieldNotObject
+}

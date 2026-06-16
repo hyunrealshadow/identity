@@ -102,6 +102,29 @@ impl From<AppError> for WebError {
     }
 }
 
+/// JSON-only error wrapper for REST endpoints (`/oauth2/token`, `/oauth2/userinfo`,
+/// `/oauth2/register`, `/api/*`, ...).
+///
+/// Unlike `WebError` this **always** renders a JSON body regardless of the
+/// `Accept` header: the endpoint, not the client, decides the response format.
+/// The human-readable message is resolved through the Fluent i18n system using
+/// the request's `Accept-Language`.
+pub struct JsonWebError(pub AppError);
+
+pub type JsonWebResult<T> = Result<T, JsonWebError>;
+
+impl From<AppError> for JsonWebError {
+    fn from(error: AppError) -> Self {
+        Self(error)
+    }
+}
+
+impl From<WebError> for JsonWebError {
+    fn from(error: WebError) -> Self {
+        Self(error.0)
+    }
+}
+
 #[async_trait]
 impl Writer for AppResponse {
     async fn write(self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
@@ -129,6 +152,18 @@ impl Writer for WebError {
             return;
         }
 
+        if let Some(i18n) = error_i18n() {
+            let locale = resolve_locale_from_headers(req.headers());
+            write_error_response(res, i18n, &locale, self.0);
+        } else {
+            render_unlocalized_app_error(res, self.0);
+        }
+    }
+}
+
+#[async_trait]
+impl Writer for JsonWebError {
+    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
         if let Some(i18n) = error_i18n() {
             let locale = resolve_locale_from_headers(req.headers());
             write_error_response(res, i18n, &locale, self.0);

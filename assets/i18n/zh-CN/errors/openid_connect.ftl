@@ -11,3 +11,6 @@ E21008 = 查询登出客户端失败。
 E21009 = 登出客户端不存在。
 E21010 = id_token_hint 参数无效。
 E21011 = 此登出请求缺少 id_token_hint 参数。
+E21012 = Authorization 请求头必须使用 Bearer 方案。
+E21013 = 缺少 Authorization 请求头。
+E21014 = 需要在 Authorization 请求头或 access_token 参数中提供 Bearer 令牌。

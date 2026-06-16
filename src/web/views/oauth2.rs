@@ -46,13 +46,6 @@ pub struct ConsentApiResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct AuthorizeErrorPageData {
-    pub title: String,
-    pub message: String,
-    pub details: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct FormPostField {
     pub name: String,
     pub value: String,

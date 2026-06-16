@@ -11,10 +11,11 @@ export default defineConfig({
   mode: 'production',
   source: {
     entry: {
-      'views/auth/login':    r('src/pages/login.ts'),
-      'views/install/index': r('src/pages/install.ts'),
-      'views/auth/otp':      r('src/pages/otp.ts'),
-      'views/auth/password': r('src/pages/password.ts'),
+      'views/auth/login':          r('src/pages/login.ts'),
+      'views/install/index':       r('src/pages/install.ts'),
+      'views/auth/otp':            r('src/pages/otp.ts'),
+      'views/auth/password':       r('src/pages/password.ts'),
+      'views/error':               r('src/pages/error.ts'),
     },
   },
   html: {
@@ -26,10 +27,11 @@ export default defineConfig({
     inject: false,
     template({ entryName }) {
       const templates: Record<string, string> = {
-        'views/auth/login':    r('src/views/auth/login.html'),
-        'views/install/index': r('src/views/install/index.html'),
-        'views/auth/otp':      r('src/views/auth/otp.html'),
-        'views/auth/password': r('src/views/auth/password.html'),
+        'views/auth/login':          r('src/views/auth/login.html'),
+        'views/install/index':       r('src/views/install/index.html'),
+        'views/auth/otp':            r('src/views/auth/otp.html'),
+        'views/auth/password':       r('src/views/auth/password.html'),
+        'views/error':               r('src/views/error.html'),
       };
       return templates[entryName]
     },
@@ -41,7 +43,7 @@ export default defineConfig({
       css: '[contenthash].css',
     },
     copy: [
-      { from: r('src/views/layouts'), to: 'views/layouts' },
+      { from: r('src/views/layout.html'), to: 'views/layout.html' },
       { from: r('src/views/oauth2'), to: 'views/oauth2' },
     ],
   },

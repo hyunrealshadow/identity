@@ -7,7 +7,7 @@ use crate::{
     domain::key::PublicJwk,
 };
 
-use super::response::{WebResult, app_state, render_json};
+use super::response::{JsonWebResult, app_state, render_json};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonWebKeySetResponse {
@@ -27,7 +27,7 @@ async fn openid_configuration_document(
 }
 
 #[handler]
-async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> WebResult<()> {
+async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let metadata = openid_configuration_document(ctx.services().oidc()).await?;
     render_json(res, StatusCode::OK, metadata);
@@ -35,7 +35,7 @@ async fn openid_configuration(depot: &mut Depot, res: &mut Response) -> WebResul
 }
 
 #[handler]
-async fn keys_handler(depot: &mut Depot, res: &mut Response) -> WebResult<()> {
+async fn keys_handler(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let key_jwks = ctx.services().key().list_available_jwks().await?;
     let keys: Vec<PublicJwk> = key_jwks.into_iter().map(|binding| binding.jwk).collect();

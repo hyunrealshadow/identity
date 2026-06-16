@@ -4,3 +4,4 @@ E20001 = The issuer domain is not configured.
 E20002 = The issuer URL must use HTTPS.
 E20003 = The issuer URL must not contain a query string or fragment.
 E20004 = The issuer URL could not be parsed.
+E20005 = An unexpected error occurred while loading signing keys.

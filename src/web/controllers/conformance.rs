@@ -36,8 +36,8 @@ use crate::{
 use super::{
     oauth2::inline_script_csp_header_value,
     response::{
-        WebResult, app_state, parse_query, redirect_to_response, render_app_error, render_html,
-        render_json,
+        JsonWebResult, WebResult, app_state, parse_query, redirect_to_response, render_app_error,
+        render_html, render_json,
     },
 };
 
@@ -264,7 +264,7 @@ struct RotateKeysResponse {
 }
 
 #[handler]
-async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> WebResult<()> {
+async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let key = ctx
         .services()

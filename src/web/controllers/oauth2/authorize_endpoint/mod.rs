@@ -248,7 +248,7 @@ mod tests {
         let body = response_body_text(response).await;
         assert!(body.contains("Authorization request is invalid"), "{body}");
         assert!(
-            body.contains("missing required parameter: client_id"),
+            body.contains("Missing required parameters: client_id, redirect_uri"),
             "{body}"
         );
     }

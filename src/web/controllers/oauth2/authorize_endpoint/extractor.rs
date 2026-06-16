@@ -153,27 +153,6 @@ pub fn has_request_object_transport(raw: &RawAuthorizeRequest) -> bool {
             .is_some_and(|value| !value.trim().is_empty())
 }
 
-pub fn missing_required_authorize_parameters(raw: &RawAuthorizeRequest) -> Vec<&'static str> {
-    if has_request_object_transport(raw) {
-        return Vec::new();
-    }
-
-    let mut missing = Vec::new();
-
-    for (name, value) in [
-        ("response_type", raw.response_type.as_deref()),
-        ("client_id", raw.client_id.as_deref()),
-        ("redirect_uri", raw.redirect_uri.as_deref()),
-        ("scope", raw.scope.as_deref()),
-    ] {
-        if value.map(str::trim).unwrap_or_default().is_empty() {
-            missing.push(name);
-        }
-    }
-
-    missing
-}
-
 pub fn authorize_input_error(raw: &RawAuthorizeRequest) -> Option<AppError> {
     // Only client_id and redirect_uri missing are non-redirectable errors.
     // Missing response_type/scope are handled by the service which can redirect with error.

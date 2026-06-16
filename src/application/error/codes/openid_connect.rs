@@ -16,6 +16,12 @@ pub enum OpenIdConnectErrorCode {
     LogoutClientNotFound,
     IdTokenHintInvalid,
     IdTokenHintRequired,
+    /// The `Authorization` header does not use the Bearer scheme (RFC 6750).
+    BearerSchemeInvalid,
+    /// The `Authorization` header is missing (RFC 6750).
+    AuthorizationHeaderRequired,
+    /// No Bearer token in the `Authorization` header or `access_token` body parameter.
+    AccessTokenRequired,
 }
 
 impl AppErrorCode for OpenIdConnectErrorCode {
@@ -24,7 +30,10 @@ impl AppErrorCode for OpenIdConnectErrorCode {
             Self::InvalidToken => ErrorKind::Unauthorized,
             Self::InsufficientScope => ErrorKind::Forbidden,
             Self::UserNotFound => ErrorKind::NotFound,
-            Self::PostLogoutRedirectUriNotRegistered
+            Self::BearerSchemeInvalid
+            | Self::AuthorizationHeaderRequired
+            | Self::AccessTokenRequired
+            | Self::PostLogoutRedirectUriNotRegistered
             | Self::IdTokenHintIssuerInvalid
             | Self::PostLogoutRedirectUriInvalid
             | Self::LogoutClientRequired
@@ -50,6 +59,9 @@ impl AppErrorCode for OpenIdConnectErrorCode {
             Self::LogoutClientNotFound => 21009,
             Self::IdTokenHintInvalid => 21010,
             Self::IdTokenHintRequired => 21011,
+            Self::BearerSchemeInvalid => 21012,
+            Self::AuthorizationHeaderRequired => 21013,
+            Self::AccessTokenRequired => 21014,
         }
     }
 }

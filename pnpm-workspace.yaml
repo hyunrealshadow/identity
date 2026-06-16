@@ -1,12 +1,4 @@
 packages:
   - ui/auth
-
-onlyBuiltDependencies:
-  - b
-  - core-js
-  - d
-  - e
-  - i
-  - l
-  - s
-  - u
+allowBuilds:
+  core-js: true

@@ -10,7 +10,7 @@ use http::{HeaderMap, StatusCode};
 use salvo::{Depot, Request, Response, Router, handler};
 
 use super::{
-    response::{WebResult, app_state, parse_json, parse_param, render_json},
+    response::{app_state, parse_json, parse_param, render_json, JsonWebResult},
     shared::{
         append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
         csrf_token, is_secure_cookie, load_active_session_entries, unprotect_session_id,
@@ -45,7 +45,7 @@ async fn active_sessions(
     depot: &mut Depot,
     req: &mut Request,
     res: &mut Response,
-) -> WebResult<()> {
+) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let accounts = load_active_session_entries(&ctx, &headers).await?;
@@ -72,7 +72,7 @@ async fn active_sessions(
 }
 
 #[handler]
-async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
+async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let id: String = parse_param(req, "id")?;
     let login_oid = ctx
@@ -109,7 +109,7 @@ async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) 
 }
 
 #[handler]
-async fn select_account(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
+async fn select_account(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: SelectAccountRequest = parse_json(req).await?;
@@ -133,7 +133,7 @@ async fn select_account(depot: &mut Depot, req: &mut Request, res: &mut Response
 }
 
 #[handler]
-async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
+async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let body: IdentifierRequest = parse_json(req).await?;
 
@@ -168,7 +168,7 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
 }
 
 #[handler]
-async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> WebResult<()> {
+async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: ChallengeRequest = parse_json(req).await?;

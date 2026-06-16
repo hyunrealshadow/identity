@@ -8,10 +8,10 @@ use crate::{
         AuthorizationRequest, OAuthErrorCode, OAuthErrorResponse, ResponseMode,
     },
     infrastructure::{i18n::resolve_locale_from_headers, web},
-    web::views::oauth2::{AuthorizeErrorPageData, FormPostField, FormPostPageData},
+    web::views::oauth2::{ErrorPageData, FormPostField, FormPostPageData},
 };
 
-use super::extractor::{RawAuthorizeRequest, missing_required_authorize_parameters};
+use super::extractor::RawAuthorizeRequest;
 use crate::controllers::response::{redirect_to_response, render_app_error, render_html};
 use crate::controllers::shared::generate_csp_nonce;
 
@@ -152,22 +152,11 @@ pub fn response_mode_from_value(value: Option<&str>) -> Option<ResponseMode> {
 pub fn authorize_error_details(
     i18n: &identity_infrastructure::i18n::I18n,
     headers: &HeaderMap,
-    raw: &RawAuthorizeRequest,
+    _raw: &RawAuthorizeRequest,
     error: &AppError,
 ) -> Vec<String> {
-    let missing = missing_required_authorize_parameters(raw);
-    if !missing.is_empty() {
-        return missing
-            .into_iter()
-            .map(|name| format!("missing required parameter: {name}"))
-            .collect();
-    }
-
-    vec![crate::controllers::response::error_message(
-        i18n,
-        &resolve_locale_from_headers(headers),
-        error,
-    )]
+    let locale = resolve_locale_from_headers(headers);
+    vec![crate::controllers::response::error_message(i18n, &locale, error)]
 }
 
 pub fn render_authorize_error_page(
@@ -190,14 +179,15 @@ pub fn render_authorize_error_page(
         )
     };
 
-    let data = AuthorizeErrorPageData {
+    let data = ErrorPageData {
+        status_code: status.as_u16(),
         title: i18n.t(&locale, "authorize-error-title"),
         message: i18n.t(&locale, "authorize-error-message"),
         details,
     };
 
     let mut response = Response::new();
-    match web::tera::render_view(ctx, headers, "oauth2/authorize_error.html", data) {
+    match web::tera::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(&mut response, status, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }

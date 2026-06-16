@@ -263,7 +263,9 @@ pub enum ClaimsRequestSection {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClaimsRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id_token: Option<ClaimRequestMap>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub userinfo: Option<ClaimRequestMap>,
 }
 

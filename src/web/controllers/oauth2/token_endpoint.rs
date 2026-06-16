@@ -1,7 +1,8 @@
 use base64::Engine;
 use http::{HeaderMap, StatusCode, header};
-use salvo::{Depot, Request, Response, handler};
+use salvo::{Depot, Request, Response, Writer, async_trait, handler};
 use serde::{Deserialize, Serialize};
+use unic_langid::LanguageIdentifier;
 
 use identity_application::{
     error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
@@ -9,8 +10,9 @@ use identity_application::{
 };
 
 use crate::controllers::response::{
-    AppResponse, WebResult, app_state, insert_no_store_headers, json_response, parse_form,
+    AppResponse, app_state, error_message, insert_no_store_headers, json_response, parse_form,
 };
+use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers};
 
 #[derive(Debug, Deserialize)]
 struct TokenForm {
@@ -66,24 +68,70 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
     }
 }
 
-fn token_error_response(error: AppError) -> Response {
-    let status = if error.kind() == ErrorKind::Internal {
+fn token_error_status(error: &AppError) -> StatusCode {
+    if error.kind() == ErrorKind::Internal {
         StatusCode::INTERNAL_SERVER_ERROR
-    } else if app_error_to_rfc6749(&error) == "invalid_client" {
+    } else if app_error_to_rfc6749(error) == "invalid_client" {
         StatusCode::UNAUTHORIZED
     } else {
         StatusCode::BAD_REQUEST
-    };
+    }
+}
 
-    let rfc_error = app_error_to_rfc6749(&error);
+/// Build the RFC 6749 §5.2 token error response body.
+///
+/// `error_description` is resolved through the Fluent i18n system (respecting
+/// `locale`) rather than a hardcoded English template, so the description is
+/// both localized and as specific as the underlying `AppError` code allows.
+fn token_error_response(error: AppError, i18n: &I18n, locale: &LanguageIdentifier) -> Response {
+    let status = token_error_status(&error);
+    let description = error_message(i18n, locale, &error);
     let body = TokenErrorResponse {
-        error: rfc_error,
-        error_description: format!("error code {}", error.code()),
+        error: app_error_to_rfc6749(&error),
+        error_description: description,
     };
 
     let mut response = json_response(status, body);
     insert_no_store_headers(&mut response);
     response
+}
+
+/// Token endpoint error wrapper.
+///
+/// The token endpoint must always return RFC 6749 §5.2 JSON
+/// (`{ "error", "error_description" }`) with the spec-mandated status codes
+/// (e.g. `invalid_client` → 401), regardless of the `Accept` header. The
+/// `error_description` is localized via Fluent using the request's
+/// `Accept-Language`.
+pub struct TokenWebError(pub AppError);
+
+impl From<AppError> for TokenWebError {
+    fn from(error: AppError) -> Self {
+        Self(error)
+    }
+}
+
+#[async_trait]
+impl Writer for TokenWebError {
+    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+        match error_i18n() {
+            Some(i18n) => {
+                let locale = resolve_locale_from_headers(req.headers());
+                let response = token_error_response(self.0, i18n, &locale);
+                *res = response;
+            }
+            None => {
+                let status = token_error_status(&self.0);
+                let body = TokenErrorResponse {
+                    error: app_error_to_rfc6749(&self.0),
+                    error_description: self.0.code().to_string(),
+                };
+                let mut response = json_response(status, body);
+                insert_no_store_headers(&mut response);
+                *res = response;
+            }
+        }
+    }
 }
 
 fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
@@ -98,10 +146,10 @@ fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
 }
 
 #[handler]
-pub async fn token(depot: &mut Depot, req: &mut Request) -> WebResult {
-    let ctx = app_state(depot)?;
+pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, TokenWebError> {
+    let ctx = app_state(depot).map_err(TokenWebError)?;
     let headers: HeaderMap = req.headers().clone();
-    let form: TokenForm = parse_form(req).await?;
+    let form: TokenForm = parse_form(req).await.map_err(TokenWebError)?;
     let basic_auth = parse_basic_client_auth(&headers);
     let client_id = basic_auth
         .as_ref()
@@ -145,35 +193,37 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> WebResult {
             .with_param("grant_type", form.grant_type)),
     };
 
-    Ok(AppResponse(match result {
+    match result {
         Ok(response) => {
             let mut response = json_response(StatusCode::OK, response);
             insert_no_store_headers(&mut response);
-            response
+            Ok(AppResponse(response))
         }
-        Err(error) => token_error_response(error),
-    }))
+        Err(error) => Err(TokenWebError(error)),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use http::{HeaderMap, HeaderValue, StatusCode, header::AUTHORIZATION};
+    use http::{HeaderMap, StatusCode, header::AUTHORIZATION};
 
     #[test]
-    fn token_error_response_sets_cache_headers() {
-        let response =
-            token_error_response(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+    fn token_error_status_for_invalid_grant_is_bad_request() {
+        let error = AppError::from_code(TokenErrorCode::RefreshTokenInvalid);
+        assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
+    }
 
-        assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
-        assert_eq!(
-            response.headers().get("cache-control").unwrap(),
-            HeaderValue::from_static("no-store")
-        );
-        assert_eq!(
-            response.headers().get("pragma").unwrap(),
-            HeaderValue::from_static("no-cache")
-        );
+    #[test]
+    fn token_error_status_for_invalid_client_is_unauthorized() {
+        let error = AppError::from_code(TokenErrorCode::ClientAuthRequired);
+        assert_eq!(token_error_status(&error), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn app_error_to_rfc6749_maps_refresh_errors_to_invalid_grant() {
+        let error = AppError::from_code(TokenErrorCode::RefreshTokenInvalid);
+        assert_eq!(app_error_to_rfc6749(&error), "invalid_grant");
     }
 
     #[test]

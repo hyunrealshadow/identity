@@ -10,10 +10,16 @@ class BrowserAuthHandler:
         self.docker_identity_url = "https://identity:5150"
         self.host_identity_url = "https://host.docker.internal:5150"
         self.last_screenshot: str | None = None
+        # Evidence screenshot captured at the forced re-login page (the page
+        # the IdP shows when `prompt=login` / `max_age` requires fresh
+        # authentication). Preferred over `last_screenshot` when the
+        # conformance suite asks for the "second login" human-review proof.
+        self.login_page_screenshot: str | None = None
         self.browser_storage_state: dict | None = None
 
     def reset_session(self):
         self.last_screenshot = None
+        self.login_page_screenshot = None
         self.browser_storage_state = None
 
     def _localize_url(self, url: str) -> str:
@@ -39,22 +45,27 @@ class BrowserAuthHandler:
     def _auto_login_page_url(self, login_id: str, op_browser_url: str) -> str:
         return f"{op_browser_url}/conformance/auto-login?{urlencode({'login_id': login_id})}"
 
-    def _continue_url(self, login_id: str, op_browser_url: str) -> str:
-        return f"{op_browser_url}/oauth2/continue?{urlencode({'login_id': login_id})}"
-
     def _complete_browser_login(self, page, login_id: str | None) -> bool:
         if not login_id:
             return False
 
+        # Capture the IdP's current page (e.g. the forced re-login page that
+        # `prompt=login` / `max_age` redirect to) BEFORE auto-login completes
+        # the flow. The conformance suite requests this as human-review proof
+        # that the user was asked to log in again.
+        try:
+            self.login_page_screenshot = self._screenshot_data_url(page)
+        except Exception:
+            pass
+
         op_browser_url = self._op_browser_url(page.url)
+        # The auto-login POST returns a 303 redirect to /oauth2/continue, which
+        # the browser follows automatically and which finalizes the
+        # authorization (setting completed_at). Visiting /oauth2/continue again
+        # afterwards would hit a 410 Gone, so we rely on the redirect chain
+        # instead of issuing a second explicit continue navigation.
         page.goto(
             self._auto_login_page_url(login_id, op_browser_url),
-            wait_until="load",
-            timeout=30_000,
-        )
-        page.wait_for_load_state("load", timeout=30_000)
-        page.goto(
-            self._continue_url(login_id, op_browser_url),
             wait_until="load",
             timeout=30_000,
         )
@@ -176,6 +187,13 @@ class BrowserAuthHandler:
             return None
 
     def screenshot_for_upload(self, urls: list[str], method: str = "GET") -> str | None:
+        # The conformance suite requests screenshots as human-review proof of
+        # the IdP prompting for a fresh login. Prefer the forced re-login page
+        # captured during `_complete_browser_login` over the post-completion
+        # page (which would otherwise show the callback or a 410 error).
+        if self.login_page_screenshot:
+            return self.login_page_screenshot
+
         if self.last_screenshot:
             return self.last_screenshot
 

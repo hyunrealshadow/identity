@@ -1,11 +1,20 @@
-{% extends "layouts/auth.html" %}
+{% extends "layout.html" %}
 
 {% block title %}{{ title }}{% endblock %}
 
+{% block head_resources %}
+  <%= htmlPlugin.tags.headTags %>
+{% endblock %}
+
 {% block header %}
 <div class="text-center">
-  <p class="text-5xl font-bold tracking-tight text-gray-200 mb-2">{{ status_code }}</p>
-  <h1 class="text-xl font-bold tracking-tight text-gray-900">{{ title }}</h1>
+  <div class="error-badge mx-auto mb-5" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  </div>
+  <p class="error-eyebrow mb-1">{{ status_code }}</p>
+  <h1 class="text-2xl font-bold tracking-tight text-gray-900">{{ title }}</h1>
   <p class="mt-2 text-sm text-gray-500">{{ message }}</p>
 </div>
 {% endblock %}

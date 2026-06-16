@@ -49,3 +49,5 @@ E24046 = An unexpected error occurred while saving the refresh token.
 E24047 = An unexpected error occurred while saving the refresh token.
 E24048 = Unsupported code_challenge_method: { $code_challenge_method }.
 E24049 = The code_verifier does not match the code_challenge.
+E24050 = No encryption key is available for this client.
+E24051 = An unexpected error occurred while encrypting the token.

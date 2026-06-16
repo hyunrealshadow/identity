@@ -11,3 +11,6 @@ E21008 = Failed to look up the logout client.
 E21009 = Logout client not found.
 E21010 = The id_token_hint parameter is invalid.
 E21011 = The id_token_hint parameter is required for this logout request.
+E21012 = The Authorization header must use the Bearer scheme.
+E21013 = The Authorization header is required.
+E21014 = A Bearer token is required in the Authorization header or the access_token parameter.

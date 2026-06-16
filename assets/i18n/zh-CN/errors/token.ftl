@@ -49,3 +49,5 @@ E24046 = 保存刷新令牌时发生意外错误。
 E24047 = 保存刷新令牌时发生意外错误。
 E24048 = 不支持 code_challenge_method：{ $code_challenge_method }。
 E24049 = code_verifier 与 code_challenge 不匹配。
+E24050 = 该客户端没有可用的加密密钥。
+E24051 = 加密令牌时发生意外错误。
