@@ -24,7 +24,7 @@
       <input type="hidden" name="session_id" value="{{ account.id }}" />
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <button type="submit" class="account-tile w-full text-left group">
-        <div class="account-avatar group-hover:bg-black transition-colors">{{ account.name | truncate(length=1, end="") }}</div>
+        <div class="account-avatar">{{ account.name | truncate(length=1, end="") }}</div>
         <div class="flex flex-col min-w-0">
           <div class="account-info-name truncate">{{ account.name }}</div>
           <div class="account-info-email truncate">{{ account.email }}</div>
@@ -39,7 +39,7 @@
     {% endfor %}
 
     <div class="pt-2">
-      <button type="button" class="w-full text-center py-2 px-4 text-[13px] font-medium text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg transition-all" onclick="window.Auth && Auth.showIdentifierForm()">
+      <button type="button" class="w-full text-center py-2 px-4 text-[13px] font-medium text-gray-700 hover:text-black hover:bg-gray-100 border border-transparent hover:border-gray-200 rounded-lg transition-all" onclick="window.Auth && Auth.showIdentifierForm()">
         {{ t(key="sign-in-use-another-account") }}
       </button>
     </div>
@@ -79,7 +79,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <div class="space-y-4">
       <div>
-        <label for="identifier-input" class="block text-[13px] font-semibold text-gray-700 mb-1.5 px-0.5">
+        <label for="identifier-input" class="block text-[13px] font-semibold text-gray-800 mb-1.5 px-0.5">
           {{ t(key="label-email-or-username") }}
         </label>
         <input

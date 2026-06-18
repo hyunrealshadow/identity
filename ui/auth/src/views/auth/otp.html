@@ -16,7 +16,7 @@
 {% block content %}
 {# User identity display (Clerk style) #}
 {% if user_name %}
-<div class="flex items-center gap-3 mb-8 p-1.5 pr-4 rounded-full border border-gray-100 bg-gray-50/50">
+<div class="flex items-center gap-3 mb-6 p-1.5 pr-4 rounded-full border border-gray-200 bg-gray-100">
   <div class="account-avatar w-8 h-8 text-xs">{{ user_name | truncate(length=1, end="") }}</div>
   <div class="flex flex-col min-w-0 flex-1">
     <div class="account-info-name truncate text-[13px]">{{ user_name }}</div>
@@ -48,7 +48,7 @@
 
   <div class="space-y-6">
     <div>
-      <label for="otp-input" class="block text-[13px] font-semibold text-gray-700 mb-2 text-center">
+      <label for="otp-input" class="block text-[13px] font-semibold text-gray-800 mb-2 text-center">
         {{ t(key="label-otp-code") }}
       </label>
       <input
@@ -59,7 +59,7 @@
         autocomplete="one-time-code"
         maxlength="6"
         autofocus
-        class="input-ms tracking-[0.75em] text-center text-2xl font-bold h-14 bg-gray-50/50 border-gray-200 focus:bg-white transition-all{% if error %} error{% endif %}"
+        class="input-ms tracking-[0.5em] text-center text-2xl font-bold h-14 bg-gray-50 border-gray-200 focus:bg-white transition-all{% if error %} error{% endif %}"
         placeholder="000000"
         data-error-required="{{ t(key='errors-required-field') }}"
         required
