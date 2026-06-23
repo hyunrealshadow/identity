@@ -1,6 +1,8 @@
 # 登录页 - 标识符步骤
 sign-in-pick-account = 选择账号
 sign-in-use-another-account = 使用其他账号
+sign-in-pick-account-title = 选择账号
+sign-in-pick-account-subtitle = 选择一个账户以继续
 sign-in-identifier-hint = 请输入您的邮箱地址或用户名。
 sign-in-no-account = 没有账号？
 

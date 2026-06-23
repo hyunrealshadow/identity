@@ -1,6 +1,8 @@
 # Login page - identifier step
 sign-in-pick-account = Choose an account
 sign-in-use-another-account = Use another account
+sign-in-pick-account-title = Choose an account
+sign-in-pick-account-subtitle = Select an account to continue
 sign-in-identifier-hint = Enter your email address or username.
 sign-in-no-account = No account?
 

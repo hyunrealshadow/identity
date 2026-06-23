@@ -184,27 +184,72 @@ body {
   color: #6b7280;
 }
 
-/* Account Tiles (Clerk-like) */
-.account-tile {
+/* Account card */
+.account-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  cursor: pointer;
+  gap: 0.875rem;
+  width: 100%;
+  padding: 1rem;
   border-radius: var(--radius-auth-control);
-  border: 1px solid transparent;
-  transition: background-color var(--transition-auth), border-color var(--transition-auth);
-  background: transparent;
+  border: 1px solid var(--color-auth-border);
+  background: var(--color-auth-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-auth), border-color var(--transition-auth), box-shadow var(--transition-auth);
 }
 
-.account-tile:hover {
+.account-card:hover {
   background: var(--color-auth-muted);
-  border-color: var(--color-auth-border);
+  border-color: var(--color-auth-border-hover);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.account-tile:focus-visible {
+.account-card:focus-visible {
   outline: 2px solid var(--color-auth-primary);
   outline-offset: -2px;
+}
+
+.account-card .account-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.account-card:hover .account-avatar {
+  background: var(--color-auth-primary);
+}
+
+.account-add-another {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-auth-control);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-auth-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--transition-auth);
+}
+
+.account-add-another:hover {
+  background: var(--color-auth-muted);
+}
+
+.account-add-another:focus-visible {
+  outline: 2px solid var(--color-auth-primary);
+  outline-offset: 0;
+}
+
+.account-add-another .account-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  background: transparent;
+  color: var(--color-auth-text-secondary);
+  border: 1px solid var(--color-auth-border);
 }
 
 .account-avatar {
@@ -224,10 +269,6 @@ body {
   transition: background-color var(--transition-auth);
 }
 
-.account-tile:hover .account-avatar {
-  background: var(--color-auth-primary);
-}
-
 .account-info-name {
   font-weight: 600;
   font-size: 0.875rem;
@@ -238,6 +279,27 @@ body {
 .account-info-email {
   font-size: 0.75rem;
   color: #6b7280;
+}
+
+/* Section visibility toggling (account picker vs identifier form) */
+.auth-section-hidden {
+  display: none !important;
+}
+
+#account-picker:not(.auth-section-hidden),
+#identifier-section:not(.auth-section-hidden) {
+  animation: auth-section-in 200ms ease-out;
+}
+
+@keyframes auth-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Divider */

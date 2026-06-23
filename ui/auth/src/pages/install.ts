@@ -1,4 +1,4 @@
-import '../lib.ts'
+import { SPINNER_HTML } from '../lib.ts'
 
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('install-form') as HTMLFormElement | null
@@ -42,9 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     submitBtn.disabled = true
-    if (submitLabel) {
-      submitLabel.innerHTML = '<span class="loading loading-spinner loading-xs"></span>'
-    }
+    if (submitLabel) submitLabel.innerHTML = SPINNER_HTML
   })
 
   for (const field of requiredFields) {
