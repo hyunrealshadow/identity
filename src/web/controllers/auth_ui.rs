@@ -28,6 +28,7 @@ use crate::{
     application::{
         auth::login::ChallengeOutcome,
         error::{AppError, codes::common::CommonErrorCode},
+        openid_connect::authorize::stored_request_has_prompt,
         setting::runtime::SettingProvider,
     },
     boot::AppState,
@@ -40,7 +41,7 @@ use crate::{
 pub fn routes() -> Router {
     Router::new()
         .hoop(csrf_middleware())
-        .hoop(auth_ui_enabled_guard)
+        .hoop(login_ui_guard)
         .push(
             Router::with_path("login")
                 .get(login_page)
@@ -58,7 +59,7 @@ pub fn routes() -> Router {
 // ─── Guard ────────────────────────────────────────────────────────────────────
 
 #[handler]
-async fn auth_ui_enabled_guard(
+async fn login_ui_guard(
     req: &mut Request,
     depot: &mut Depot,
     res: &mut Response,
@@ -68,7 +69,7 @@ async fn auth_ui_enabled_guard(
         ctrl.call_next(req, depot, res).await;
         return;
     };
-    if *ctx.settings().auth_ui_enabled().current_value() {
+    if ctx.settings().login_url().current_value().is_none() {
         ctrl.call_next(req, depot, res).await;
     } else {
         res.status_code(StatusCode::NOT_FOUND);
@@ -97,6 +98,7 @@ struct OtpQuery {
 #[derive(Debug, Deserialize)]
 struct LoginQuery {
     login_id: Option<String>,
+    no_accounts: Option<bool>,
 }
 
 // ─── Form body structs ────────────────────────────────────────────────────────
@@ -223,7 +225,7 @@ async fn login_page(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let q: LoginQuery = parse_query(req)?;
-    let accounts = match load_active_session_entries(&ctx, &headers).await {
+    let mut accounts = match load_active_session_entries(&ctx, &headers).await {
         Ok(list) => list
             .into_iter()
             .map(|entry| AccountData {
@@ -237,6 +239,29 @@ async fn login_page(depot: &mut Depot, req: &mut Request) -> WebResult {
             Vec::new()
         }
     };
+
+    // User explicitly chose "Use another account"; hide the picker and show
+    // the identifier form directly.
+    if q.no_accounts == Some(true) {
+        accounts.clear();
+    }
+
+    // `prompt=login` forces a fresh authentication — never offer the account
+    // picker even when active sessions exist. The prompt value is read from
+    // the stored authorization request via the login's client_authorization.
+    if !accounts.is_empty() && let Some(login_id) = q.login_id.as_deref() {
+        let continue_context = ctx
+            .services()
+            .oidc_authorize()
+            .load_continue_context_by_login(login_id)
+            .await?;
+        if stored_request_has_prompt(
+            continue_context.stored.request.prompt.as_deref(),
+            "login",
+        ) {
+            accounts.clear();
+        }
+    }
 
     let error = if q.login_id.is_none() && accounts.is_empty() {
         Some(invalid_request_message(&ctx, &headers))
@@ -316,6 +341,23 @@ async fn select_post(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let body: SelectForm = parse_form(req).await?;
+
+    // `prompt=login` forces a fresh authentication — redirect back to the
+    // identifier form instead of selecting an existing session.
+    if let Some(login_id) = body.login_id.as_deref() {
+        let continue_context = ctx
+            .services()
+            .oidc_authorize()
+            .load_continue_context_by_login(login_id)
+            .await?;
+        if stored_request_has_prompt(continue_context.stored.request.prompt.as_deref(), "login") {
+            return Ok(redirect_to_response(&format!(
+                "/login?login_id={}&no_accounts=1",
+                urlencoding::encode(login_id)
+            ))
+            .into());
+        }
+    }
 
     let session_oid = unprotect_session_id(&ctx, &body.session_id).await;
     let response = match session_oid {

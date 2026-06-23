@@ -48,11 +48,7 @@ pub(super) async fn handle_consent_decision(
         &loaded.active_sessions,
     ) {
         if is_html {
-            return Ok(redirect_to_response(&format!(
-                "/login?login_id={}",
-                urlencoding::encode(&login_id)
-            ))
-            .into());
+            return Ok(crate::controllers::shared::login_redirect(&ctx, &login_id).into());
         }
 
         return Err(AppError::from_code(

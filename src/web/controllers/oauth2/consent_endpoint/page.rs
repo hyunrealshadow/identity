@@ -32,7 +32,7 @@ pub(super) async fn consent_page(
     let loaded = load_consent_context(&ctx, &headers, &query.login_id).await?;
 
     if loaded.active_sessions.is_empty() {
-        return Ok(redirect_to_response("/login").into());
+        return Ok(crate::controllers::shared::login_redirect(&ctx, &query.login_id).into());
     }
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
@@ -43,11 +43,7 @@ pub(super) async fn consent_page(
         loaded.stored.interaction.selected_session_oid,
         &loaded.active_sessions,
     ) {
-        return Ok(redirect_to_response(&format!(
-            "/login?login_id={}",
-            urlencoding::encode(&query.login_id)
-        ))
-        .into());
+        return Ok(crate::controllers::shared::login_redirect(&ctx, &query.login_id).into());
     }
 
     let nonce = generate_csp_nonce();

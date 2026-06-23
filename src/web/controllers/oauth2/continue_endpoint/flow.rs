@@ -114,11 +114,11 @@ pub(super) async fn handle_continue(
         selected_session,
         ctx.services().oidc_authorize().should_skip_consent(&client),
     ) {
-        ContinueAction::Login => Ok(continue_login_redirect(login_id).into()),
+        ContinueAction::Login => Ok(continue_login_redirect(ctx, login_id).into()),
         ContinueAction::OAuthError(error) => {
             Ok(continue_oauth_error_response(ctx, headers, &stored.request, error)?.into())
         }
-        ContinueAction::Consent => Ok(continue_consent_redirect(login_id).into()),
+        ContinueAction::Consent => Ok(continue_consent_redirect(ctx, login_id).into()),
         ContinueAction::Deny => ctx
             .services()
             .oidc_authorize()

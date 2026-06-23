@@ -34,9 +34,7 @@ impl FlowDecision {
     pub fn into_response(self, ctx: &AppState, headers: &http::HeaderMap) -> Response {
         match self {
             FlowDecision::LoginRequired { login_id } => {
-                crate::controllers::response::redirect_to_response(&format!(
-                    "/login?login_id={login_id}"
-                ))
+                crate::controllers::shared::login_redirect(ctx, &login_id)
             }
             FlowDecision::Continue { login_id } => {
                 crate::controllers::response::redirect_to_response(&format!(

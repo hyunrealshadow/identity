@@ -1,8 +1,10 @@
 use http::header;
-use salvo::{Depot, Request, handler};
+use http::StatusCode;
+use salvo::{Depot, Request, Response, handler};
 use serde::Deserialize;
 
-use crate::web::controllers::response::WebResult;
+use crate::application::setting::runtime::SettingProvider;
+use crate::web::controllers::response::{WebResult, app_state};
 
 mod api;
 mod context;
@@ -59,6 +61,13 @@ pub async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
         return Ok(api::consent_api(depot, req).await?);
     }
 
+    let ctx = app_state(depot)?;
+    if ctx.settings().consent_url().current_value().is_some() {
+        let mut response = Response::new();
+        response.status_code(StatusCode::NOT_FOUND);
+        return Ok(response.into());
+    }
+
     Ok(page::consent_page(depot, req).await?)
 }
 
@@ -75,6 +84,13 @@ pub async fn consent_post(depot: &mut Depot, req: &mut Request) -> WebResult {
 
     if expects_json_post(accept, content_type) {
         return Ok(api::consent_api_submit(depot, req).await?);
+    }
+
+    let ctx = app_state(depot)?;
+    if ctx.settings().consent_url().current_value().is_some() {
+        let mut response = Response::new();
+        response.status_code(StatusCode::NOT_FOUND);
+        return Ok(response.into());
     }
 
     Ok(decision::consent_submit(depot, req).await?)

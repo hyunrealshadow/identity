@@ -12,18 +12,18 @@ use crate::controllers::oauth2::authorize_endpoint::{
     render_form_post_response, response_mode_from_value,
 };
 
-pub(super) fn continue_login_redirect(login_id: &str) -> salvo::Response {
-    redirect_to_response(&format!(
-        "/login?login_id={}",
-        urlencoding::encode(login_id)
-    ))
+pub(super) fn continue_login_redirect(
+    ctx: &identity_infrastructure::AppState,
+    login_id: &str,
+) -> salvo::Response {
+    crate::controllers::shared::login_redirect(ctx, login_id)
 }
 
-pub(super) fn continue_consent_redirect(login_id: &str) -> salvo::Response {
-    redirect_to_response(&format!(
-        "/oauth2/consent?login_id={}",
-        urlencoding::encode(login_id)
-    ))
+pub(super) fn continue_consent_redirect(
+    ctx: &identity_infrastructure::AppState,
+    login_id: &str,
+) -> salvo::Response {
+    crate::controllers::shared::consent_redirect(ctx, login_id)
 }
 
 pub(super) fn continue_oauth_error_response(

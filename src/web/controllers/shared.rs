@@ -15,8 +15,10 @@ use crate::{
     application::{
         auth::login::SessionContext,
         error::{AppError, codes::common::CommonErrorCode},
+        setting::runtime::SettingProvider,
     },
     boot::AppState,
+    controllers::response::redirect_to_response,
     domain::auth::model::{ActiveSession, SessionOid},
     domain::auth::{SESSION_COOKIE_NAME, SESSION_EXPIRY},
 };
@@ -352,6 +354,44 @@ fn parse_forwarded_ip(value: &str) -> Option<String> {
         .and_then(|v| v.strip_suffix(']'))
         .unwrap_or(value);
     value.parse::<IpAddr>().ok().map(|ip| ip.to_string())
+}
+
+/// Build a redirect Response to the login step.
+///
+/// When `login_url` is unset (`None`), redirects to the built-in `/login`
+/// path. When set, redirects to the external URL with `login_id` appended.
+pub fn login_redirect(ctx: &AppState, login_id: &str) -> Response {
+    let external = ctx.settings().login_url().current_value().as_ref().clone();
+    let target = match external {
+        Some(base) => format!(
+            "{}?login_id={}",
+            base.trim_end_matches('?'),
+            urlencoding::encode(login_id)
+        ),
+        None => format!("/login?login_id={}", urlencoding::encode(login_id)),
+    };
+    redirect_to_response(&target)
+}
+
+/// Build a redirect Response to the consent step.
+///
+/// When `consent_url` is unset (`None`), redirects to the built-in
+/// `/oauth2/consent` path. When set, redirects to the external URL with
+/// `login_id` appended.
+pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Response {
+    let external = ctx.settings().consent_url().current_value().as_ref().clone();
+    let target = match external {
+        Some(base) => format!(
+            "{}?login_id={}",
+            base.trim_end_matches('?'),
+            urlencoding::encode(login_id)
+        ),
+        None => format!(
+            "/oauth2/consent?login_id={}",
+            urlencoding::encode(login_id)
+        ),
+    };
+    redirect_to_response(&target)
 }
 
 #[cfg(test)]
