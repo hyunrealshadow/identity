@@ -29,13 +29,14 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
     use identity_domain::{
         auth::password::PasswordHashSetting,
         setting::{
-            auth_ui::AuthUiEnabledSetting,
+            consent_url::ConsentUrlSetting,
             dynamic_registration::DynamicClientRegistrationSetting,
             installation::{
                 InstallationDomainSetting, InstallationFirstKeyOidSetting,
                 InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
                 InstallationInitializedSetting,
             },
+            login_url::LoginUrlSetting,
             model::SettingDefinition,
         },
     };
@@ -105,11 +106,19 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
-    let auth_ui_enabled_setting = setting::Model {
+    let login_url_setting = setting::Model {
         id: 8,
         oid: uuid::Uuid::new_v4(),
-        key: AuthUiEnabledSetting::KEY.to_string(),
-        value: serde_json::to_value(AuthUiEnabledSetting::default_value()).unwrap(),
+        key: LoginUrlSetting::KEY.to_string(),
+        value: serde_json::to_value(LoginUrlSetting::default_value()).unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
+    let consent_url_setting = setting::Model {
+        id: 9,
+        oid: uuid::Uuid::new_v4(),
+        key: ConsentUrlSetting::KEY.to_string(),
+        value: serde_json::to_value(ConsentUrlSetting::default_value()).unwrap(),
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
@@ -123,7 +132,8 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
             vec![installation_initialized_at_setting],
             vec![password_setting],
             vec![dynamic_registration_setting],
-            vec![auth_ui_enabled_setting],
+            vec![login_url_setting],
+            vec![consent_url_setting],
         ])
         .into_connection();
     let i18n = build_i18n().unwrap();

@@ -13,13 +13,14 @@ use identity_domain::{
     auth::password::PasswordHashSetting,
     setting::model::SettingDefinition,
     setting::{
-        auth_ui::AuthUiEnabledSetting,
+        consent_url::ConsentUrlSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
             InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
             InstallationInitializedSetting, InstallationSetting, InstallationState,
         },
+        login_url::LoginUrlSetting,
     },
 };
 
@@ -37,8 +38,8 @@ pub type AppInstallationInitializedAtSettingService =
 pub type AppInstallationSettingService = GroupedInstallationSettingProvider<SettingRepositoryImpl>;
 pub type AppDynamicClientRegistrationSettingService =
     CachedSetting<DynamicClientRegistrationSetting, SettingRepositoryImpl>;
-pub type AppAuthUiEnabledSettingService =
-    CachedSetting<AuthUiEnabledSetting, SettingRepositoryImpl>;
+pub type AppLoginUrlSettingService = CachedSetting<LoginUrlSetting, SettingRepositoryImpl>;
+pub type AppConsentUrlSettingService = CachedSetting<ConsentUrlSetting, SettingRepositoryImpl>;
 
 #[derive(Clone)]
 pub struct GroupedInstallationSettingProvider<R> {
@@ -123,7 +124,8 @@ pub struct AppRuntimeSettings {
     installation_first_key_oid_setting: Arc<AppInstallationFirstKeyOidSettingService>,
     installation_initialized_at_setting: Arc<AppInstallationInitializedAtSettingService>,
     dynamic_client_registration_setting: Arc<AppDynamicClientRegistrationSettingService>,
-    auth_ui_enabled_setting: Arc<AppAuthUiEnabledSettingService>,
+    login_url_setting: Arc<AppLoginUrlSettingService>,
+    consent_url_setting: Arc<AppConsentUrlSettingService>,
 }
 
 impl AppRuntimeSettings {
@@ -171,8 +173,11 @@ impl AppRuntimeSettings {
                 ))
                 .await?,
             ),
-            auth_ui_enabled_setting: Arc::new(
-                AppAuthUiEnabledSettingService::new(SettingRepositoryImpl::new(db)).await?,
+            login_url_setting: Arc::new(
+                AppLoginUrlSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
+            ),
+            consent_url_setting: Arc::new(
+                AppConsentUrlSettingService::new(SettingRepositoryImpl::new(db)).await?,
             ),
         })
     }
@@ -186,7 +191,8 @@ impl AppRuntimeSettings {
         refresher.register(Arc::clone(&self.installation_first_key_oid_setting));
         refresher.register(Arc::clone(&self.installation_initialized_at_setting));
         refresher.register(Arc::clone(&self.dynamic_client_registration_setting));
-        refresher.register(Arc::clone(&self.auth_ui_enabled_setting));
+        refresher.register(Arc::clone(&self.login_url_setting));
+        refresher.register(Arc::clone(&self.consent_url_setting));
         refresher.spawn_detached();
     }
 
@@ -231,7 +237,12 @@ impl AppRuntimeSettings {
     }
 
     #[must_use]
-    pub fn auth_ui_enabled(&self) -> Arc<AppAuthUiEnabledSettingService> {
-        Arc::clone(&self.auth_ui_enabled_setting)
+    pub fn login_url(&self) -> Arc<AppLoginUrlSettingService> {
+        Arc::clone(&self.login_url_setting)
+    }
+
+    #[must_use]
+    pub fn consent_url(&self) -> Arc<AppConsentUrlSettingService> {
+        Arc::clone(&self.consent_url_setting)
     }
 }
