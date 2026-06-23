@@ -13,13 +13,14 @@ use identity_domain::{
     },
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
     setting::{
-        auth_ui::AuthUiEnabledSetting,
+        consent_url::ConsentUrlSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
             InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
             InstallationInitializedSetting,
         },
+        login_url::LoginUrlSetting,
         model::SettingDefinition,
     },
 };
@@ -101,11 +102,19 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         created_at: now.naive_utc(),
         updated_at: None,
     };
-    let auth_ui_enabled_setting = setting::Model {
+    let login_url_setting = setting::Model {
         id: 8,
         oid: uuid::Uuid::new_v4(),
-        key: AuthUiEnabledSetting::KEY.to_string(),
-        value: serde_json::to_value(AuthUiEnabledSetting::default_value()).unwrap(),
+        key: LoginUrlSetting::KEY.to_string(),
+        value: serde_json::to_value(LoginUrlSetting::default_value()).unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let consent_url_setting = setting::Model {
+        id: 9,
+        oid: uuid::Uuid::new_v4(),
+        key: ConsentUrlSetting::KEY.to_string(),
+        value: serde_json::to_value(ConsentUrlSetting::default_value()).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -290,7 +299,8 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         .append_query_results([[installation_initialized_at_setting]])
         .append_query_results([[password_setting]])
         .append_query_results([[dynamic_registration_setting]])
-        .append_query_results([[auth_ui_enabled_setting]])
+        .append_query_results([[login_url_setting]])
+        .append_query_results([[consent_url_setting]])
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
         .append_query_results([[platform_model]])
         .append_query_results([[BTreeMap::from([(

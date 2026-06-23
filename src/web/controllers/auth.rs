@@ -21,7 +21,14 @@ use crate::views::auth::{
     IdentifierResponse, LoginStatusResponse, SelectAccountRequest, SelectAccountResponse,
     SessionInfo, UserDisplayInfo, mask_email,
 };
-use crate::{application::auth::login::ChallengeOutcome, domain::user::model::UserOid};
+use crate::{
+    application::{
+        auth::login::ChallengeOutcome,
+        error::{AppError, codes::auth::AuthErrorCode},
+        openid_connect::authorize::stored_request_has_prompt,
+    },
+    domain::user::model::UserOid,
+};
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +103,29 @@ async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) 
         None => None,
     };
 
+    let prompt = match ctx
+        .services()
+        .oidc_authorize()
+        .load_continue_context_by_login(&id)
+        .await
+    {
+        Ok(c) => c
+            .stored
+            .request
+            .prompt
+            .unwrap_or_else(|| "select_account".to_string()),
+        Err(_) => "select_account".to_string(),
+    };
+
+    let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
+        Some(format!(
+            "/oauth2/continue?login_id={}",
+            urlencoding::encode(&id)
+        ))
+    } else {
+        None
+    };
+
     render_json(
         res,
         StatusCode::OK,
@@ -103,16 +133,32 @@ async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) 
             id,
             status: login.status,
             user,
+            prompt,
+            continue_uri,
         },
     );
     Ok(())
 }
 
 #[handler]
-async fn select_account(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
+async fn select_account(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let body: SelectAccountRequest = parse_json(req).await?;
+
+    // `prompt=login` forces a fresh authentication — reject session selection.
+    let continue_context = ctx
+        .services()
+        .oidc_authorize()
+        .load_continue_context_by_login(&body.login_id)
+        .await?;
+    if stored_request_has_prompt(continue_context.stored.request.prompt.as_deref(), "login") {
+        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into());
+    }
 
     let session_oid = unprotect_session_id(&ctx, &body.id).await?;
     let session = ctx.services().session().select_session(session_oid).await?;
@@ -200,6 +246,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                     status: "mfa_required",
                     session: None,
                     acr: None,
+                    continue_uri: None,
                 },
             );
         }
@@ -208,6 +255,10 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx))
                     .await?;
             let acr = session.acr.clone();
+            let continue_uri = Some(format!(
+                "/oauth2/continue?login_id={}",
+                urlencoding::encode(&body.id)
+            ));
 
             render_json(
                 res,
@@ -219,6 +270,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                         expires_at: session.expires_at,
                     }),
                     acr,
+                    continue_uri,
                 },
             );
             append_set_cookie(res, &cookie.header);

@@ -64,6 +64,9 @@ pub struct AccountItem {
 pub struct SelectAccountRequest {
     /// Data-protected session.oid to select.
     pub id: String,
+    /// Encrypted login.oid — used to enforce `prompt=login` (reject selection
+    /// and force fresh authentication).
+    pub login_id: String,
 }
 
 /// `POST /api/auth/login/select` response (success).
@@ -104,6 +107,15 @@ pub struct LoginStatusResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<UserDisplayInfo>,
+    /// Prompt value from the original authorization request (`"login"`,
+    /// `"consent"`, `"select_account"`, or `"none"`).  Clients use this to
+    /// decide whether to offer the account picker (`prompt=login` forbids it).
+    /// Defaults to `"select_account"` when the login is not tied to an OIDC
+    /// authorization request.
+    pub prompt: String,
+    /// `/oauth2/continue?login_id=X` — present only when `status == "authenticated"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continue_uri: Option<String>,
 }
 
 /// Masked user info (prevents information leakage).
@@ -146,6 +158,9 @@ pub struct ChallengeResponse {
     /// Present only when `status == "authenticated"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub acr: Option<String>,
+    /// `/oauth2/continue?login_id=X` — present only when `status == "authenticated"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continue_uri: Option<String>,
 }
 
 // ─── Common Types ────────────────────────────────────────────────────────────
