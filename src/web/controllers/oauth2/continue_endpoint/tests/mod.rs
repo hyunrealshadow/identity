@@ -59,7 +59,7 @@ async fn continue_without_sessions_redirects_to_login() {
     assert_eq!(
         location(&response),
         format!(
-            "/login?login_id={}",
+            "https://ui.example.com/login?login_id={}",
             urlencoding::encode(&protected_login_id)
         )
     );
@@ -78,7 +78,7 @@ async fn continue_with_selected_session_and_pending_consent_redirects_to_consent
     assert_eq!(
         location(&response),
         format!(
-            "/oauth2/consent?login_id={}",
+            "https://ui.example.com/consent?login_id={}",
             urlencoding::encode(&protected_login_id)
         )
     );
@@ -185,7 +185,7 @@ async fn continue_auto_selects_active_session_before_redirecting_to_consent() {
     assert_eq!(
         location(&response),
         format!(
-            "/oauth2/consent?login_id={}",
+            "https://ui.example.com/consent?login_id={}",
             urlencoding::encode(&protected_login_id)
         )
     );
@@ -205,7 +205,7 @@ async fn continue_with_select_account_prompt_redirects_to_login() {
     assert_eq!(
         location(&response),
         format!(
-            "/login?login_id={}",
+            "https://ui.example.com/login?login_id={}",
             urlencoding::encode(&protected_login_id)
         )
     );

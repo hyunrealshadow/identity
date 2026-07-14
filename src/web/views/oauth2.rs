@@ -23,13 +23,6 @@ pub struct ConsentPageData {
     pub client_uri: Option<String>,
     pub scopes: Vec<ScopeDisplay>,
     pub csrf_token: String,
-    pub nonce: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ConsentDecisionForm {
-    pub login_id: String,
-    pub decision: ConsentDecision,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -75,7 +68,7 @@ pub struct LogoutPageData {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CheckSessionPageData {
-    pub op_browser_state: String,
+    pub op_browser_state_json: String,
     pub lang: String,
     pub nonce: String,
 }
@@ -83,6 +76,7 @@ pub struct CheckSessionPageData {
 #[derive(Debug, Clone, Serialize)]
 pub struct ErrorPageData {
     pub status_code: u16,
+    pub error_code: Option<u32>,
     pub title: String,
     pub message: String,
     pub details: Vec<String>,

@@ -31,10 +31,14 @@ pub enum FlowDecision {
 }
 
 impl FlowDecision {
-    pub fn into_response(self, ctx: &AppState, headers: &http::HeaderMap) -> Response {
-        match self {
+    pub fn into_response(
+        self,
+        ctx: &AppState,
+        headers: &http::HeaderMap,
+    ) -> Result<Response, AppError> {
+        Ok(match self {
             FlowDecision::LoginRequired { login_id } => {
-                crate::controllers::shared::login_redirect(ctx, &login_id)
+                crate::controllers::shared::login_redirect(ctx, &login_id)?
             }
             FlowDecision::Continue { login_id } => {
                 crate::controllers::response::redirect_to_response(&format!(
@@ -44,7 +48,7 @@ impl FlowDecision {
             FlowDecision::OAuthError { request, error } => {
                 super::response::redirect_oauth_error_response(ctx, headers, &request, error)
             }
-        }
+        })
     }
 }
 

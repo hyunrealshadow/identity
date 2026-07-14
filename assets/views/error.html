@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="{{ lang | default(value='en') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} - {{ t(key="app-name") }}</title>
+  <link rel="stylesheet" href="/static/css/error.css">
+</head>
+<body>
+  <main class="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6 sm:py-16">
+    <div class="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,#ffffff_0%,#f8fafc_44%,#eef2f7_100%)]"></div>
+
+    <article class="w-full max-w-3xl rounded-4xl border border-slate-200/90 bg-white/95 px-5 py-10 shadow-error-card backdrop-blur sm:px-10 sm:py-14 lg:px-14">
+      <header class="text-center">
+        <div class="mx-auto flex size-24 items-center justify-center rounded-full bg-red-50 text-red-500 sm:size-28" aria-hidden="true">
+          <svg class="size-14 drop-shadow-[0_8px_12px_rgb(239_68_68/0.22)] sm:size-16" viewBox="0 0 64 64" fill="none">
+            <path fill="currentColor" d="M27.3 10.4a5.4 5.4 0 0 1 9.4 0l22 38.1a5.4 5.4 0 0 1-4.7 8.1H10a5.4 5.4 0 0 1-4.7-8.1l22-38.1Z"/>
+            <path stroke="white" stroke-linecap="round" stroke-width="5" d="M32 23v14"/>
+            <circle cx="32" cy="46" r="2.7" fill="white"/>
+          </svg>
+        </div>
+
+        <p class="mx-auto mt-5 w-fit rounded-full border border-red-200 bg-red-50 px-5 py-1.5 text-sm font-medium text-red-600">
+          {{ t(key="error-page-badge") }} · HTTP {{ status_code }}
+        </p>
+        <h1 class="mt-7 text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">{{ title }}</h1>
+        <p class="mx-auto mt-5 max-w-2xl text-base leading-8 text-slate-500 sm:text-lg">{{ message }}</p>
+
+        {% if error_code %}
+        <code class="mt-5 inline-flex rounded-lg border border-red-200 bg-red-50 px-4 py-1.5 font-mono text-sm text-red-600">E{{ error_code }}</code>
+        {% endif %}
+      </header>
+
+      <div class="my-8 h-px bg-slate-200 sm:my-10"></div>
+
+      <details class="group overflow-hidden rounded-2xl border border-slate-200 bg-white" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold text-slate-800 marker:content-none sm:px-6">
+          <span class="flex items-center gap-3">
+            <svg class="size-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4" y="3" width="16" height="18" rx="2"/>
+              <path d="M8 8h8M8 12h8M8 16h5"/>
+            </svg>
+            {{ t(key="error-page-details") }}
+          </span>
+          <svg class="size-5 text-slate-500 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/>
+          </svg>
+        </summary>
+
+        <dl class="border-t border-slate-200 px-5 py-3 text-sm sm:px-6 sm:text-base">
+          <div class="grid gap-1 border-b border-dashed border-slate-200 py-3 sm:grid-cols-[12rem_1fr] sm:gap-4">
+            <dt class="text-slate-500">{{ t(key="error-page-http-status") }}</dt>
+            <dd class="m-0 font-medium text-slate-800">{{ status_code }} · {{ title }}</dd>
+          </div>
+          {% if error_code %}
+          <div class="grid gap-1 border-b border-dashed border-slate-200 py-3 sm:grid-cols-[12rem_1fr] sm:gap-4">
+            <dt class="text-slate-500">{{ t(key="error-page-error-code") }}</dt>
+            <dd class="m-0 font-mono text-slate-800">E{{ error_code }}</dd>
+          </div>
+          {% endif %}
+          <div class="grid gap-1 py-3 sm:grid-cols-[12rem_1fr] sm:gap-4">
+            <dt class="text-slate-500">{{ t(key="error-page-description") }}</dt>
+            <dd class="m-0 wrap-break-word text-slate-800">{{ message }}</dd>
+          </div>
+          {% for detail in details %}
+          <div class="grid gap-1 border-t border-dashed border-slate-200 py-3 sm:grid-cols-[12rem_1fr] sm:gap-4">
+            <dt class="text-slate-500">{{ t(key="error-page-detail") }} {{ loop.index }}</dt>
+            <dd class="m-0 wrap-break-word text-slate-800">{{ detail }}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+      </details>
+
+      <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+        <a href="" class="inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-600 px-7 font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200">{{ t(key="error-page-retry") }}</a>
+        <a href="/" class="inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-300 bg-white px-7 font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">{{ t(key="error-page-back") }}</a>
+      </div>
+    </article>
+  </main>
+</body>
+</html>

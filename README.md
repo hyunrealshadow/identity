@@ -15,7 +15,14 @@ src/
   boot/           — App assembly, server startup
 ```
 
-PostgreSQL via SeaORM, form templates via Tera.
+PostgreSQL via SeaORM. Interactive login, consent, and installation UI lives in
+the external React/TanStack application. This service renders only terminal
+error pages and protocol-required HTML documents (`form_post`, session iframe,
+and front-channel logout).
+
+The external UI locations are configured through the `app.login_url` and
+`app.consent_url` runtime settings. They must be set before an interactive OIDC
+flow can redirect to the React application.
 
 ## Run
 
@@ -25,6 +32,10 @@ cargo run
 
 # conformance mode
 APP_ENV=conformance cargo run
+
+# rebuild the server-rendered error page stylesheet
+pnpm install --frozen-lockfile
+pnpm build:error-css
 ```
 
 Environment overrides: `APP_ENV`, `PORT`, `HOST`, `DATABASE_URL`.
@@ -33,6 +44,7 @@ Environment overrides: `APP_ENV`, `PORT`, `HOST`, `DATABASE_URL`.
 
 - Rust 1.85+
 - PostgreSQL (running on default port)
+- Node.js and pnpm (error-page CSS only)
 - `sea-orm-cli` for migration management
 
 ### Database

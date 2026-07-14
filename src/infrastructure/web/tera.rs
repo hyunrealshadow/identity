@@ -59,16 +59,18 @@ pub fn build_i18n() -> Result<I18n, Box<dyn std::error::Error + Send + Sync + 's
 ///   `{ LIST($fields, listType: "or") }`  - disjunction, e.g. "A or B"
 ///   `{ LIST($fields, listType: "unit") }` - unit list, e.g. "A B"
 fn register_list_function<R>(bundle: &mut fluent_templates::FluentBundle<R>) {
+    use fluent_templates::fluent_bundle::{FluentArgs, FluentValue};
     use icu_list::{
         ListFormatter,
         options::{ListFormatterOptions, ListLength},
     };
     use writeable::Writeable;
-    use fluent_templates::fluent_bundle::{FluentArgs, FluentValue};
 
     let langid = bundle.locales.first().cloned().unwrap_or(langid!("en-US"));
-    let locale: icu_locale_core::LanguageIdentifier =
-        langid.to_string().parse().unwrap_or_else(|_| "en-US".parse().unwrap());
+    let locale: icu_locale_core::LanguageIdentifier = langid
+        .to_string()
+        .parse()
+        .unwrap_or_else(|_| "en-US".parse().unwrap());
     let opts = ListFormatterOptions::default().with_length(ListLength::Narrow);
     let prefs = locale.into();
 
@@ -92,26 +94,29 @@ fn register_list_function<R>(bundle: &mut fluent_templates::FluentBundle<R>) {
     let formatters: &'static ListFormatters = Box::leak(Box::new(formatters));
 
     bundle
-        .add_function("LIST", move |positional: &[FluentValue], named: &FluentArgs| {
-            let Some(FluentValue::String(raw)) = positional.first() else {
-                return FluentValue::Error;
-            };
+        .add_function(
+            "LIST",
+            move |positional: &[FluentValue], named: &FluentArgs| {
+                let Some(FluentValue::String(raw)) = positional.first() else {
+                    return FluentValue::Error;
+                };
 
-            let formatter = match named.get("listType") {
-                Some(FluentValue::String(s)) if s == "or" => &formatters.or,
-                Some(FluentValue::String(s)) if s == "unit" => &formatters.unit,
-                _ => &formatters.and,
-            };
+                let formatter = match named.get("listType") {
+                    Some(FluentValue::String(s)) if s == "or" => &formatters.or,
+                    Some(FluentValue::String(s)) if s == "unit" => &formatters.unit,
+                    _ => &formatters.and,
+                };
 
-            let items: Vec<&str> = raw
-                .split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .collect();
-            let formatted = formatter.format(items.into_iter());
-            let joined = formatted.write_to_string().into_owned();
-            FluentValue::String(joined.into())
-        })
+                let items: Vec<&str> = raw
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                let formatted = formatter.format(items.into_iter());
+                let joined = formatted.write_to_string().into_owned();
+                FluentValue::String(joined.into())
+            },
+        )
         .expect("registering LIST() Fluent function");
 }
 
@@ -222,27 +227,24 @@ pub fn render_view<T: serde::Serialize>(
 
 #[cfg(test)]
 mod tests {
-    use tera::Context;
     use unic_langid::langid;
 
-    use super::{build_i18n, build_tera, render_with_locale};
+    use super::{build_i18n, build_tera};
     use identity_application::error::params::ErrorParams;
 
-    #[derive(serde::Serialize)]
-    struct InstallPageData {
-        username: String,
-        email: String,
-        domain: String,
-        error: Option<String>,
-        csrf_token: String,
-        algorithms: Vec<InstallAlgorithmOption>,
-    }
+    #[test]
+    fn build_tera_loads_runtime_templates_from_assets_views() {
+        let tera = build_tera(None).expect("tera should load templates from assets/views");
+        let template_names = tera.get_template_names().collect::<Vec<_>>();
 
-    #[derive(serde::Serialize)]
-    struct InstallAlgorithmOption {
-        value: &'static str,
-        label: &'static str,
-        selected: bool,
+        for expected in [
+            "error.html",
+            "oauth2/form_post.html",
+            "oauth2/check_session.html",
+            "oauth2/logout.html",
+        ] {
+            assert!(template_names.contains(&expected), "missing {expected}");
+        }
     }
 
     #[test]
@@ -313,78 +315,5 @@ mod tests {
             ),
             "Unsupported key algorithm: rsa(1024)."
         );
-    }
-
-    #[test]
-    fn template_uses_context_lang_when_t_lang_is_omitted() {
-        let i18n = build_i18n().expect("i18n should load from assets/i18n");
-        let tera = build_tera(i18n.loader()).expect("tera should build from assets/views");
-        let data = InstallPageData {
-            username: "admin".to_owned(),
-            email: "admin@example.com".to_owned(),
-            domain: "identity.example.com".to_owned(),
-            error: None,
-            csrf_token: "csrf-token".to_owned(),
-            algorithms: vec![InstallAlgorithmOption {
-                value: "ed25519",
-                label: "Ed25519",
-                selected: true,
-            }],
-        };
-
-        let mut value = serde_json::to_value(data).expect("install data should serialize");
-        value
-            .as_object_mut()
-            .expect("install page data should serialize to object")
-            .insert("lang".to_owned(), tera::Value::String("zh-CN".to_owned()));
-        let context = Context::from_value(value).expect("context should build");
-
-        let rendered = render_with_locale(
-            tera.as_ref(),
-            i18n.loader(),
-            langid!("zh-CN"),
-            "install/index.html",
-            &context,
-        )
-        .expect("install template should render");
-
-        assert!(rendered.contains("使用条款"), "{rendered}");
-        assert!(!rendered.contains("Unknown localization key"), "{rendered}");
-    }
-
-    #[test]
-    fn install_template_renders_install_specific_copy_in_detected_locale() {
-        let i18n = build_i18n().expect("i18n should load from assets/i18n");
-        let tera = build_tera(i18n.loader()).expect("tera should build from assets/views");
-        let data = InstallPageData {
-            username: "admin".to_owned(),
-            email: "admin@example.com".to_owned(),
-            domain: "identity.example.com".to_owned(),
-            error: None,
-            csrf_token: "csrf-token".to_owned(),
-            algorithms: vec![InstallAlgorithmOption {
-                value: "ed25519",
-                label: "Ed25519",
-                selected: true,
-            }],
-        };
-
-        let mut value = serde_json::to_value(data).expect("install data should serialize");
-        value
-            .as_object_mut()
-            .expect("install page data should serialize to object")
-            .insert("lang".to_owned(), tera::Value::String("zh-CN".to_owned()));
-        let context = Context::from_value(value).expect("context should build");
-
-        let rendered = render_with_locale(
-            tera.as_ref(),
-            i18n.loader(),
-            langid!("zh-CN"),
-            "install/index.html",
-            &context,
-        )
-        .expect("install template should render");
-
-        assert!(rendered.contains("初始化安装"), "{rendered}");
     }
 }

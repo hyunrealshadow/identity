@@ -25,7 +25,8 @@ pub async fn check_session_iframe(
         .join(".");
 
     let data = CheckSessionPageData {
-        op_browser_state,
+        op_browser_state_json: serde_json::to_string(&op_browser_state)
+            .unwrap_or_else(|_| "\"\"".to_owned()),
         lang: "en".to_owned(),
         nonce: nonce.clone(),
     };

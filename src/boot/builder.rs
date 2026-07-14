@@ -109,8 +109,8 @@ impl AppBuilder {
     ///
     /// If the system is not yet installed AND the `install` config section
     /// provides `domain` + `username` + `password`, performs installation
-    /// automatically.  Otherwise this is a no-op (web installation remains
-    /// available).
+    /// automatically. Otherwise this is a no-op (the installation API remains
+    /// available for the external application).
     ///
     /// Must be called after `connect_database` and before
     /// `load_runtime_settings`.

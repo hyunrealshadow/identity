@@ -169,7 +169,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
         }
     };
 
-    Ok(flow.into_response(&ctx, &headers).into())
+    Ok(flow.into_response(&ctx, &headers)?.into())
 }
 
 #[cfg(test)]
@@ -247,6 +247,8 @@ mod tests {
         assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
         let body = response_body_text(response).await;
         assert!(body.contains("Authorization request is invalid"), "{body}");
+        assert!(body.contains("href=\"/static/css/error.css\""), "{body}");
+        assert!(body.contains("E22002"), "{body}");
         assert!(
             body.contains("Missing required parameters: client_id, redirect_uri"),
             "{body}"

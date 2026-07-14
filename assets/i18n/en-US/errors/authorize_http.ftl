@@ -5,3 +5,4 @@ E22002 = Missing required parameters: { LIST($fields) }.
 E22003 = Authentication is required for this client.
 E22004 = No active session found for the requested account.
 E22005 = This authorization interaction is no longer available.
+E22006 = The { $interaction } interaction URL is not configured.

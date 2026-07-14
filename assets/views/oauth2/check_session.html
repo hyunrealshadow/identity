@@ -1,12 +1,9 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>OP session iframe</title>
-</head>
+<head><meta charset="utf-8"><title>OP session iframe</title></head>
 <body>
 <script nonce="{{ nonce }}">
-const opBrowserState = {{ op_browser_state }};
+const opBrowserState = {{ op_browser_state_json | safe }};
 function base64url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);

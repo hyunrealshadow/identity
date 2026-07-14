@@ -181,6 +181,7 @@ pub fn render_authorize_error_page(
 
     let data = ErrorPageData {
         status_code: status.as_u16(),
+        error_code: Some(error.code()),
         title: i18n.t(&locale, "authorize-error-title"),
         message: i18n.t(&locale, "authorize-error-message"),
         details,
@@ -256,7 +257,8 @@ mod tests {
             "{body}"
         );
         assert!(body.contains("name=\"state\" value=\"state\""), "{body}");
-        assert!(body.contains("auth-card"), "{body}");
+        assert!(body.contains("<noscript>"), "{body}");
+        assert!(body.contains("type=\"submit\""), "{body}");
     }
 
     #[test]

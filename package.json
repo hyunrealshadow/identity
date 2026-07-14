@@ -1,0 +1,12 @@
+{
+  "name": "identity-assets",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:error-css": "tailwindcss -i ./assets/styles/error.css -o ./assets/static/css/error.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.2",
+    "tailwindcss": "4.3.2"
+  }
+}

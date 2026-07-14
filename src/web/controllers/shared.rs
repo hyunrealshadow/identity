@@ -1,6 +1,4 @@
-//! Shared helpers used by both the JSON API (`auth`) and the SSR UI (`auth_ui`)
-//! controllers. Keeping them here avoids duplication and ensures both surfaces
-//! behave identically for cookie handling, etc.
+//! Shared helpers for the authentication and OAuth protocol controllers.
 
 use std::net::IpAddr;
 
@@ -356,42 +354,41 @@ fn parse_forwarded_ip(value: &str) -> Option<String> {
     value.parse::<IpAddr>().ok().map(|ip| ip.to_string())
 }
 
-/// Build a redirect Response to the login step.
-///
-/// When `login_url` is unset (`None`), redirects to the built-in `/login`
-/// path. When set, redirects to the external URL with `login_id` appended.
-pub fn login_redirect(ctx: &AppState, login_id: &str) -> Response {
-    let external = ctx.settings().login_url().current_value().as_ref().clone();
-    let target = match external {
-        Some(base) => format!(
-            "{}?login_id={}",
-            base.trim_end_matches('?'),
-            urlencoding::encode(login_id)
-        ),
-        None => format!("/login?login_id={}", urlencoding::encode(login_id)),
-    };
-    redirect_to_response(&target)
+/// Redirect to the external login application with the protected interaction ID.
+pub fn login_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
+    interaction_redirect(
+        ctx.settings().login_url().current_value().as_ref(),
+        "login",
+        login_id,
+    )
 }
 
-/// Build a redirect Response to the consent step.
-///
-/// When `consent_url` is unset (`None`), redirects to the built-in
-/// `/oauth2/consent` path. When set, redirects to the external URL with
-/// `login_id` appended.
-pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Response {
-    let external = ctx.settings().consent_url().current_value().as_ref().clone();
-    let target = match external {
-        Some(base) => format!(
-            "{}?login_id={}",
-            base.trim_end_matches('?'),
-            urlencoding::encode(login_id)
-        ),
-        None => format!(
-            "/oauth2/consent?login_id={}",
-            urlencoding::encode(login_id)
-        ),
-    };
-    redirect_to_response(&target)
+/// Redirect to the external consent application with the protected interaction ID.
+pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
+    interaction_redirect(
+        ctx.settings().consent_url().current_value().as_ref(),
+        "consent",
+        login_id,
+    )
+}
+
+fn interaction_redirect(
+    base: &Option<String>,
+    interaction: &'static str,
+    login_id: &str,
+) -> Result<Response, AppError> {
+    let base = base.as_deref().filter(|value| !value.trim().is_empty()).ok_or_else(|| {
+        AppError::from_code(
+            crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::InteractionUrlNotConfigured,
+        )
+        .with_param("interaction", interaction)
+    })?;
+    let separator = if base.contains('?') { '&' } else { '?' };
+    let target = format!(
+        "{base}{separator}login_id={}",
+        urlencoding::encode(login_id)
+    );
+    Ok(redirect_to_response(&target))
 }
 
 #[cfg(test)]

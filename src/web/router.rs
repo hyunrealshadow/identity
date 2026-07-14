@@ -1,6 +1,6 @@
-use salvo::{Response, Router, handler, serve_static::StaticDir};
+use salvo::{Router, serve_static::StaticDir};
 
-use crate::controllers::response::{handle_404, redirect_to};
+use crate::controllers::response::handle_404;
 use crate::health;
 use identity_application::setting::runtime::SettingProvider;
 use identity_infrastructure::AppState;
@@ -20,15 +20,11 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
 
     if *state.settings().installation_initialized().current_value() {
         router = router
-            .push(Router::new().get(root_redirect))
             .push(controllers::oauth2::routes())
             .push(controllers::auth::routes())
-            .push(controllers::auth_ui::routes())
             .push(controllers::well_known::routes());
     } else {
-        router = router
-            .push(controllers::install::routes())
-            .goal(install_fallback);
+        router = router.push(controllers::install::routes());
     }
 
     #[cfg(feature = "oidc-conformance")]
@@ -43,14 +39,4 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     router = router.goal(handle_404);
 
     router
-}
-
-#[handler]
-async fn root_redirect(res: &mut Response) {
-    redirect_to(res, "/login");
-}
-
-#[handler]
-async fn install_fallback(res: &mut Response) {
-    redirect_to(res, "/install");
 }

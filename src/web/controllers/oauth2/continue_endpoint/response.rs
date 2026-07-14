@@ -15,14 +15,14 @@ use crate::controllers::oauth2::authorize_endpoint::{
 pub(super) fn continue_login_redirect(
     ctx: &identity_infrastructure::AppState,
     login_id: &str,
-) -> salvo::Response {
+) -> Result<salvo::Response, AppError> {
     crate::controllers::shared::login_redirect(ctx, login_id)
 }
 
 pub(super) fn continue_consent_redirect(
     ctx: &identity_infrastructure::AppState,
     login_id: &str,
-) -> salvo::Response {
+) -> Result<salvo::Response, AppError> {
     crate::controllers::shared::consent_redirect(ctx, login_id)
 }
 

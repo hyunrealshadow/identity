@@ -55,7 +55,6 @@ pub(super) async fn consent_api(
                 .map(url::Url::to_string),
             scopes: build_scope_display(&loaded.scope),
             csrf_token: csrf_token(depot),
-            nonce: String::new(),
         },
     )
     .into())
@@ -68,5 +67,5 @@ pub(super) async fn consent_api_submit(
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
     let payload: ConsentDecisionPayload = parse_json(req).await?;
-    handle_consent_decision(ctx, headers, payload.login_id, payload.decision, false).await
+    handle_consent_decision(ctx, headers, payload.login_id, payload.decision).await
 }

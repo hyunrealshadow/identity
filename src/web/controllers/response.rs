@@ -275,7 +275,8 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
 
     let data = ErrorPageData {
         status_code: status.as_u16(),
-        title: status.canonical_reason().unwrap_or("Error").to_owned(),
+        error_code: Some(error.code()),
+        title: i18n.t(&locale, "error-page-title"),
         message,
         details: Vec::new(),
     };
@@ -324,6 +325,7 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
 
         let data = ErrorPageData {
             status_code: status.as_u16(),
+            error_code: None,
             title: i18n.t(&locale, "error-404-title"),
             message,
             details: Vec::new(),

@@ -126,7 +126,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         id: 8,
         oid: uuid::Uuid::new_v4(),
         key: LoginUrlSetting::KEY.to_string(),
-        value: serde_json::to_value(LoginUrlSetting::default_value()).unwrap(),
+        value: serde_json::to_value(Some("https://ui.example.com/login".to_owned())).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -134,7 +134,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         id: 9,
         oid: uuid::Uuid::new_v4(),
         key: ConsentUrlSetting::KEY.to_string(),
-        value: serde_json::to_value(ConsentUrlSetting::default_value()).unwrap(),
+        value: serde_json::to_value(Some("https://ui.example.com/consent".to_owned())).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };

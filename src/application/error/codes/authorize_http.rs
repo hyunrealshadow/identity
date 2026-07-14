@@ -17,6 +17,8 @@ pub enum AuthorizeHttpErrorCode {
     ConsentSessionNotFound,
     /// Authorization request interaction has expired or already completed.
     ContinueInteractionUnavailable,
+    /// The external login or consent application URL is not configured.
+    InteractionUrlNotConfigured,
 }
 
 impl AppErrorCode for AuthorizeHttpErrorCode {
@@ -28,6 +30,7 @@ impl AppErrorCode for AuthorizeHttpErrorCode {
             Self::InternalClientLoginRequired => ErrorKind::Validation,
             Self::ConsentSessionNotFound => ErrorKind::Validation,
             Self::ContinueInteractionUnavailable => ErrorKind::Gone,
+            Self::InteractionUrlNotConfigured => ErrorKind::Internal,
         }
     }
 
@@ -39,6 +42,7 @@ impl AppErrorCode for AuthorizeHttpErrorCode {
             Self::InternalClientLoginRequired => 22003,
             Self::ConsentSessionNotFound => 22004,
             Self::ContinueInteractionUnavailable => 22005,
+            Self::InteractionUrlNotConfigured => 22006,
         }
     }
 }

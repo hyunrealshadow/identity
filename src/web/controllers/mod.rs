@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod auth_ui;
 #[cfg(feature = "oidc-conformance")]
 pub mod conformance;
 pub mod install;
