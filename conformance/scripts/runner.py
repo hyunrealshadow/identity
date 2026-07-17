@@ -104,7 +104,9 @@ class TestRunner:
                 if m.instances:
                     run_id = self.client.select_preferred_instance(m.instances)
                     info = self.client.get_test_info(run_id)
-                    if not self._is_active_status(info.status):
+                    if info.status == "INTERRUPTED":
+                        run_id = None
+                    elif not self._is_active_status(info.status):
                         return TestResult(
                             test_name=test_name,
                             status=info.status,
@@ -219,6 +221,12 @@ class TestRunner:
                 run_id = self.client.select_preferred_instance(m.instances)
                 info = self.client.get_test_info(run_id)
                 result = info.result or "?"
+                if info.status == "INTERRUPTED":
+                    print(" - retrying interrupted instance")
+                    result = self.run_single_test(plan_id, m.test_module, m.variant)
+                    print(f" - {result.status} {result.result or ''}")
+                    results.append(result)
+                    continue
                 if not self._is_active_status(info.status):
                     print(f" - already ran: {info.status} {result}")
                     results.append(
@@ -249,11 +257,9 @@ class TestRunner:
     def summarize_results(self, results: list[TestResult]) -> dict[str, int]:
         summary = {"PASSED": 0, "WARNING": 0, "REVIEW": 0, "SKIPPED": 0, "FAILED": 0}
         for r in results:
-            if r.status == "TIMEOUT" or r.status == "INTERRUPTED":
-                summary["FAILED"] += 1
-            elif r.result in summary:
+            if r.status == "FINISHED" and r.result in summary:
                 summary[r.result] += 1
-            elif r.result:
+            else:
                 summary["FAILED"] += 1
         return summary
 

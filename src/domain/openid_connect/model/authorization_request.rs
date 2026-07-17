@@ -325,6 +325,8 @@ pub struct AuthorizationRequestData {
     pub code_challenge_method: Option<String>,
     pub acr_values: Option<Vec<String>>,
     pub claims: Option<String>,
+    #[serde(default)]
+    pub ui_locales: Option<Vec<String>>,
 }
 
 impl From<&AuthorizationRequest> for AuthorizationRequestData {
@@ -347,6 +349,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             code_challenge: value.code_challenge.clone(),
             code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),
             acr_values: value.acr_values.clone(),
+            ui_locales: value.ui_locales.clone(),
             claims: value
                 .claims
                 .as_ref()

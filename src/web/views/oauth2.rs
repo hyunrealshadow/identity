@@ -23,6 +23,8 @@ pub struct ConsentPageData {
     pub client_uri: Option<String>,
     pub scopes: Vec<ScopeDisplay>,
     pub csrf_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui_locales: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

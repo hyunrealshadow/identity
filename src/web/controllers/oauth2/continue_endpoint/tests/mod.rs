@@ -68,7 +68,7 @@ async fn continue_without_sessions_redirects_to_login() {
 #[tokio::test]
 async fn continue_with_selected_session_and_pending_consent_redirects_to_consent() {
     let (state, protected_login_id, session_oid) = continue_selected_session_state().await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -88,7 +88,7 @@ async fn continue_with_selected_session_and_pending_consent_redirects_to_consent
 async fn continue_with_silent_pending_consent_returns_consent_required() {
     let (state, protected_login_id, session_oid) =
         continue_selected_session_with_prompt_state("none").await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -109,7 +109,7 @@ async fn continue_with_silent_pending_consent_returns_consent_required() {
 async fn continue_with_approved_consent_completes_authorization() {
     let (state, protected_login_id, session_oid) =
         continue_selected_session_with_consent_state(ConsentState::Approved).await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -127,7 +127,7 @@ async fn continue_with_approved_consent_completes_authorization() {
 async fn continue_with_denied_consent_returns_access_denied() {
     let (state, protected_login_id, session_oid) =
         continue_selected_session_with_consent_state(ConsentState::Denied).await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -152,7 +152,7 @@ async fn continue_skips_consent_when_client_allows_it() {
             ..ContinueFixture::default()
         })
         .await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -175,7 +175,7 @@ async fn continue_auto_selects_active_session_before_redirecting_to_consent() {
         ..ContinueFixture::default()
     })
     .await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -195,7 +195,7 @@ async fn continue_auto_selects_active_session_before_redirecting_to_consent() {
 async fn continue_with_select_account_prompt_redirects_to_login() {
     let (state, protected_login_id, session_oid) =
         continue_selected_session_with_prompt_state("select_account").await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 
@@ -242,7 +242,7 @@ async fn continue_with_expired_session_and_silent_prompt_returns_login_required(
             ..ContinueFixture::default()
         })
         .await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
 

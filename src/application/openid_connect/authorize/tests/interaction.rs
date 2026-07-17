@@ -29,6 +29,7 @@ fn request() -> AuthorizationRequestData {
         code_challenge_method: None,
         acr_values: None,
         claims: None,
+        ui_locales: None,
     }
 }
 

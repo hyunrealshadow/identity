@@ -29,7 +29,7 @@ use crate::{
     views::oauth2::{FormPostField, FormPostPageData},
     web::controllers::shared::{
         append_set_cookie, build_selected_session_cookie, build_session_context,
-        generate_csp_nonce, is_secure_cookie,
+        generate_csp_nonce,
     },
 };
 
@@ -251,8 +251,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     )
     .await?;
 
-    let cookie =
-        build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx)).await?;
+    let cookie = build_selected_session_cookie(&ctx, &headers, session.oid).await?;
     *res = auto_login_success_response(&body.login_id, &cookie.header);
     Ok(())
 }
@@ -356,7 +355,7 @@ mod tests {
     fn auto_login_success_response_redirects_back_to_oauth2_continue() {
         let response = super::auto_login_success_response(
             "login-123",
-            "sessions=[\"session-123\"]; HttpOnly; SameSite=Lax; Path=/; Max-Age=42",
+            "sessions=[\"session-123\"]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=42",
         );
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
@@ -366,7 +365,7 @@ mod tests {
         );
         assert_eq!(
             response.headers().get(header::SET_COOKIE).unwrap(),
-            "sessions=[\"session-123\"]; HttpOnly; SameSite=Lax; Path=/; Max-Age=42",
+            "sessions=[\"session-123\"]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=42",
         );
     }
 

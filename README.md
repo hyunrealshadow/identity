@@ -24,6 +24,27 @@ The external UI locations are configured through the `app.login_url` and
 `app.consent_url` runtime settings. They must be set before an interactive OIDC
 flow can redirect to the React application.
 
+The TanStack Start application is located in `apps/login`. Both Identity and
+the public Login origin must be exposed through HTTPS. Configure the runtime
+settings with HTTPS Login and Consent URLs, then start the application with:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev:login
+```
+
+The application proxies protocol API requests and `/oauth2/continue` to
+`IDENTITY_API_URL`, which defaults to `https://127.0.0.1:5150`. Keeping the
+continuation request behind the same BFF preserves session and CSRF cookies
+when the applications use different origins. Login and consent use native POST
+forms without JavaScript and are progressively enhanced after hydration.
+
+Identity accepts only two TLS deployment modes under `server.tls.termination`:
+`direct`, where Identity terminates TLS itself, and `upstream`, where a trusted
+reverse proxy terminates TLS. Upstream mode rejects requests unless
+`Forwarded: proto=https` or `X-Forwarded-Proto: https` is present. In both
+modes, `server.host` must use `https://`.
+
 ## Run
 
 ```sh

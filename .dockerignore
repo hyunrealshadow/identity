@@ -27,6 +27,7 @@ assets/static/js
 
 # Node
 node_modules/
+**/node_modules/
 
 # Git internals (large history is irrelevant inside the builder)
 .git/

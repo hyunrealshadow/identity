@@ -18,6 +18,8 @@ services:
       APP_ENV: conformance
       DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
       HOST: https://identity:5150
+      LOGIN_URL: https://login:3443/login
+      CONSENT_URL: https://login:3443/consent
       TLS_DOMAIN: identity
       PORT: "5150"
     ports:
@@ -27,6 +29,21 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  login:
+    build:
+      context: ..
+      dockerfile: conformance/login.Dockerfile
+    environment:
+      IDENTITY_API_URL: https://identity:5150
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    depends_on:
+      identity:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -57,9 +74,13 @@ services:
       context: ./nginx
     ports:
       - "8443:8443"
+      - "3443:3443"
     networks:
       default:
         aliases:
           - localhost.emobix.co.uk
     depends_on:
-      - server
+      server:
+        condition: service_started
+      login:
+        condition: service_healthy

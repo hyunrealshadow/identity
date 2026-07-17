@@ -64,6 +64,7 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 |----------|---------|-------------|
 | `SUITE_URL` | `https://localhost.emobix.co.uk:8443` | Conformance Suite URL |
 | `IDENTITY_URL` | `https://localhost:5150` | Identity server URL |
+| `LOGIN_URL` | `https://localhost:3443` | TLS-proxied TanStack Start login application URL |
 | `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `third-party-init`, `rp-init-logout`, `session`, or `backchannel`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
 | `PLAN_NAME` | Derived from `PROFILE` | Conformance suite plan name |

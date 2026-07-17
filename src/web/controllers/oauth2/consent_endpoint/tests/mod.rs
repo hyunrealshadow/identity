@@ -8,12 +8,22 @@ use salvo::{
     test::{ResponseExt, TestClient},
 };
 
-use crate::{controllers::shared::build_session_cookie, router::app_router};
+use crate::{
+    controllers::shared::{SESSION_HEADER_NAME, build_session_cookie},
+    router::app_router,
+};
+
+fn session_header(cookie: &str) -> &str {
+    cookie
+        .strip_prefix("sessions=")
+        .and_then(|value| value.split(';').next())
+        .expect("test session cookie should contain a JSON session list")
+}
 
 #[tokio::test]
 async fn consent_get_is_a_json_api_without_content_negotiation() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
     let service = Service::new(app_router(state, &consent_test_config()));
@@ -21,7 +31,7 @@ async fn consent_get_is_a_json_api_without_content_negotiation() {
     let mut response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
     ))
-    .add_header(header::COOKIE, session_cookie, true)
+    .add_header(SESSION_HEADER_NAME, session_header(&session_cookie), true)
     .send(&service)
     .await;
 
@@ -42,7 +52,7 @@ async fn consent_get_is_a_json_api_without_content_negotiation() {
 async fn consent_get_rejects_invalid_stored_scope() {
     let (state, protected_login_id, session_oid) =
         consent_test_state_with_scope("openid unknown_scope").await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
     let service = Service::new(app_router(state, &consent_test_config()));
@@ -50,7 +60,7 @@ async fn consent_get_rejects_invalid_stored_scope() {
     let response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
     ))
-    .add_header(header::COOKIE, session_cookie, true)
+    .add_header(SESSION_HEADER_NAME, session_header(&session_cookie), true)
     .send(&service)
     .await;
 
@@ -60,7 +70,7 @@ async fn consent_get_rejects_invalid_stored_scope() {
 #[tokio::test]
 async fn consent_post_accepts_json_and_returns_continue_uri() {
     let (state, protected_login_id, session_oid) = consent_test_state().await;
-    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+    let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
         .await
         .unwrap();
     let service = Service::new(app_router(state, &consent_test_config()));
@@ -68,30 +78,16 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
     let mut context_response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
     ))
-    .add_header(header::COOKIE, session_cookie.clone(), true)
+    .add_header(SESSION_HEADER_NAME, session_header(&session_cookie), true)
     .send(&service)
     .await;
-    let csrf_cookie = context_response
-        .headers()
-        .get(header::SET_COOKIE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| {
-            value
-                .split(';')
-                .find_map(|segment| segment.trim().strip_prefix("salvo.csrf="))
-        })
-        .unwrap()
-        .to_owned();
+    assert!(context_response.headers().get(header::SET_COOKIE).is_none());
     let context: serde_json::Value =
         serde_json::from_str(&context_response.take_string().await.unwrap()).unwrap();
     let csrf_token = context["csrf_token"].as_str().unwrap();
 
     let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/consent")
-        .add_header(
-            header::COOKIE,
-            format!("{session_cookie}; salvo.csrf={csrf_cookie}"),
-            true,
-        )
+        .add_header(SESSION_HEADER_NAME, session_header(&session_cookie), true)
         .add_header("x-csrf-token", csrf_token, true)
         .raw_json(format!(
             r#"{{"login_id":"{protected_login_id}","decision":"approve"}}"#

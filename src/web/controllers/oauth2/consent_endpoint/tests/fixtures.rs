@@ -222,6 +222,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
             code_challenge_method: None,
             acr_values: None,
             claims: None,
+            ui_locales: None,
         },
         interaction: AuthorizationInteractionState {
             selected_session_oid: Some(SessionOid(session_oid)),

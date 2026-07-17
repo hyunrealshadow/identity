@@ -4,13 +4,20 @@ use crate::controllers::response::handle_404;
 use crate::health;
 use identity_application::setting::runtime::SettingProvider;
 use identity_infrastructure::AppState;
-use identity_infrastructure::config::AppConfig;
+use identity_infrastructure::config::{AppConfig, TlsTermination};
 
-use super::{controllers, middleware::security_headers_middleware};
+use super::{
+    controllers,
+    middleware::{require_upstream_https_middleware, security_headers_middleware},
+};
 
 pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
-    let mut router = Router::new()
+    let mut router = Router::new();
+    if config.server.tls.termination == TlsTermination::Upstream {
+        router = router.hoop(require_upstream_https_middleware);
+    }
+    router = router
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state.clone()))
         .push(

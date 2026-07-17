@@ -41,6 +41,7 @@ impl BusinessErrorResponse {
 pub struct ActiveAccountsResponse {
     pub accounts: Vec<AccountItem>,
     pub csrf_token: String,
+    pub sessions: Vec<String>,
 }
 
 /// A single logged-in account entry.
@@ -74,6 +75,7 @@ pub struct SelectAccountRequest {
 pub struct SelectAccountResponse {
     pub status: &'static str,
     pub session: SessionInfo,
+    pub sessions: Vec<String>,
 }
 
 // ─── Identifier Step ─────────────────────────────────────────────────────────
@@ -113,6 +115,8 @@ pub struct LoginStatusResponse {
     /// Defaults to `"select_account"` when the login is not tied to an OIDC
     /// authorization request.
     pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui_locales: Option<Vec<String>>,
     /// `/oauth2/continue?login_id=X` — present only when `status == "authenticated"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continue_uri: Option<String>,
@@ -146,7 +150,7 @@ pub struct ChallengeRequest {
 /// client must call the challenge endpoint again with `credential_type = "otp"`.
 ///
 /// When `status` is `"authenticated"` the `session` field is populated and
-/// the `Set-Cookie` header contains the updated sessions cookie.
+/// the `sessions` field contains the updated protected session ID list.
 #[derive(Debug, Serialize)]
 pub struct ChallengeResponse {
     /// `"authenticated"` or `"mfa_required"`.
@@ -161,6 +165,9 @@ pub struct ChallengeResponse {
     /// `/oauth2/continue?login_id=X` — present only when `status == "authenticated"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continue_uri: Option<String>,
+    /// Complete protected session ID list after authentication.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<Vec<String>>,
 }
 
 // ─── Common Types ────────────────────────────────────────────────────────────

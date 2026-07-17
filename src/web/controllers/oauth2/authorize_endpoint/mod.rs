@@ -258,7 +258,7 @@ mod tests {
     #[tokio::test]
     async fn authorize_with_reusable_session_redirects_to_oauth2_continue() {
         let (state, session_oid) = authorize_first_hop_state().await;
-        let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)], false)
+        let session_cookie = build_session_cookie(&state, &[SessionOid(session_oid)])
             .await
             .unwrap();
         let response = call_authorize_with_state(

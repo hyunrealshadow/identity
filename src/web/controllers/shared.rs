@@ -1,11 +1,14 @@
 //! Shared helpers for the authentication and OAuth protocol controllers.
 
-use std::net::IpAddr;
+use std::{convert::Infallible, net::IpAddr};
 
 use http::{HeaderMap, HeaderValue, header};
 use salvo::{
-    Depot, Response,
-    csrf::{CsrfDepotExt, FormFinder, HeaderFinder, JsonFinder, bcrypt_cookie_csrf},
+    Depot, Request, Response, async_trait,
+    csrf::{
+        BcryptCipher, CookieStore, Csrf, CsrfCipher, CsrfDepotExt, CsrfStore, CsrfTokenFinder,
+        FormFinder, HeaderFinder, bcrypt_cookie_csrf,
+    },
 };
 use uuid::Uuid;
 
@@ -23,6 +26,8 @@ use crate::{
 
 pub const CSRF_HEADER_NAME: &str = "x-csrf-token";
 pub const CSRF_FORM_FIELD_NAME: &str = "csrf_token";
+pub const SESSION_HEADER_NAME: &str = "x-sessions";
+const API_CSRF_TOKEN_KEY: &str = "identity.api.csrf-token";
 const SESSION_ID_PROTECTION_PURPOSE: &str = "session-id";
 
 #[derive(Debug, Clone)]
@@ -34,6 +39,12 @@ pub struct ActiveSessionEntry {
 #[derive(Debug, Clone)]
 pub struct SelectedSessionCookie {
     pub header: String,
+    pub protected_session_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedSessionState {
+    pub protected_session_ids: Vec<String>,
     pub protected_session_id: String,
 }
 
@@ -58,6 +69,18 @@ fn parse_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
                 None
             }
         })
+}
+
+pub fn protected_session_ids(headers: &HeaderMap) -> Vec<String> {
+    headers
+        .get(SESSION_HEADER_NAME)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+        .or_else(|| {
+            parse_cookie(headers, SESSION_COOKIE_NAME)
+                .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
+        })
+        .unwrap_or_default()
 }
 
 pub async fn protect_session_id(
@@ -90,14 +113,12 @@ pub async fn unprotect_session_id(
     Ok(SessionOid(uuid))
 }
 
-/// Parse the `sessions` cookie from request headers.
+/// Parse protected sessions from `X-Sessions`, falling back to the legacy cookie.
 ///
-/// The cookie value is a JSON array of data-protected session IDs. Returns an
-/// empty `Vec` when the cookie is absent or malformed.
+/// The value is a JSON array of data-protected session IDs. Returns an empty
+/// `Vec` when neither transport contains a valid array.
 pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<SessionCookieEntry> {
-    let protected_ids = parse_cookie(headers, SESSION_COOKIE_NAME)
-        .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
-        .unwrap_or_default();
+    let protected_ids = protected_session_ids(headers);
 
     let mut entries = Vec::new();
     for protected_session_id in protected_ids {
@@ -122,21 +143,15 @@ pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<Se
 
 /// Build the `Set-Cookie` header value for the sessions cookie.
 ///
-/// Set `secure = true` in production so the cookie is only sent over HTTPS.
-pub fn build_session_cookie_from_protected_ids(protected_ids: &[String], secure: bool) -> String {
+pub fn build_session_cookie_from_protected_ids(protected_ids: &[String]) -> String {
     let json = serde_json::to_string(protected_ids).unwrap_or_else(|_| "[]".to_owned());
     let max_age = SESSION_EXPIRY.as_secs();
-    let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{SESSION_COOKIE_NAME}={json}; HttpOnly{secure_flag}; SameSite=Lax; Path=/; Max-Age={max_age}"
+        "{SESSION_COOKIE_NAME}={json}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age={max_age}"
     )
 }
 
-pub async fn build_session_cookie(
-    ctx: &AppState,
-    oids: &[SessionOid],
-    secure: bool,
-) -> Result<String, AppError> {
+pub async fn build_session_cookie(ctx: &AppState, oids: &[SessionOid]) -> Result<String, AppError> {
     #[cfg(test)]
     {
         let _ = ctx;
@@ -144,7 +159,7 @@ pub async fn build_session_cookie(
             .iter()
             .map(|oid| Uuid::from(*oid).to_string())
             .collect::<Vec<_>>();
-        Ok(build_session_cookie_from_protected_ids(&ids, secure))
+        Ok(build_session_cookie_from_protected_ids(&ids))
     }
 
     #[cfg(not(test))]
@@ -153,10 +168,7 @@ pub async fn build_session_cookie(
         for oid in oids {
             protected_ids.push(protect_session_id(ctx, *oid).await?);
         }
-        Ok(build_session_cookie_from_protected_ids(
-            &protected_ids,
-            secure,
-        ))
+        Ok(build_session_cookie_from_protected_ids(&protected_ids))
     }
 }
 
@@ -164,8 +176,19 @@ pub async fn build_selected_session_cookie(
     ctx: &AppState,
     headers: &HeaderMap,
     session_oid: SessionOid,
-    secure: bool,
 ) -> Result<SelectedSessionCookie, AppError> {
+    let state = build_selected_session_state(ctx, headers, session_oid).await?;
+    Ok(SelectedSessionCookie {
+        header: build_session_cookie_from_protected_ids(&state.protected_session_ids),
+        protected_session_id: state.protected_session_id,
+    })
+}
+
+pub async fn build_selected_session_state(
+    ctx: &AppState,
+    headers: &HeaderMap,
+    session_oid: SessionOid,
+) -> Result<SelectedSessionState, AppError> {
     let mut entries = parse_session_cookie(ctx, headers).await;
     let existing = entries
         .iter()
@@ -181,8 +204,8 @@ pub async fn build_selected_session_cookie(
     protected_ids.push(protected_session_id.clone());
     protected_ids.extend(entries.into_iter().map(|entry| entry.protected_session_id));
 
-    Ok(SelectedSessionCookie {
-        header: build_session_cookie_from_protected_ids(&protected_ids, secure),
+    Ok(SelectedSessionState {
+        protected_session_ids: protected_ids,
         protected_session_id,
     })
 }
@@ -229,35 +252,75 @@ pub async fn load_active_sessions(
         .collect())
 }
 
-/// Return `true` when the app is running in the `production` environment,
-/// which triggers the `Secure` flag on session cookies.
-pub fn is_secure_cookie(ctx: &AppState) -> bool {
-    if ctx.context().is_production() {
-        return true;
-    }
-
-    #[cfg(feature = "oidc-conformance")]
-    if ctx.context().is_conformance() {
-        return true;
-    }
-
-    false
-}
-
 pub fn append_set_cookie(response: &mut Response, cookie: &str) {
     if let Ok(value) = HeaderValue::from_str(cookie) {
         response.headers_mut().append(header::SET_COOKIE, value);
     }
 }
 
-pub fn csrf_middleware() -> salvo::csrf::Csrf<salvo::csrf::BcryptCipher, salvo::csrf::CookieStore> {
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ApiCsrfHeaderStore;
+
+impl CsrfStore for ApiCsrfHeaderStore {
+    type Error = Infallible;
+
+    async fn load<C: CsrfCipher>(
+        &self,
+        req: &mut Request,
+        _depot: &mut Depot,
+        cipher: &C,
+    ) -> Option<(String, String)> {
+        let value = req
+            .headers()
+            .get(CSRF_HEADER_NAME)
+            .and_then(|value| value.to_str().ok())?;
+        let (token, proof) = value.split_once('.')?;
+        cipher
+            .verify(token, proof)
+            .then(|| (token.to_owned(), proof.to_owned()))
+    }
+
+    async fn save(
+        &self,
+        _req: &mut Request,
+        depot: &mut Depot,
+        _res: &mut Response,
+        token: &str,
+        proof: &str,
+    ) -> Result<(), Self::Error> {
+        depot.insert(API_CSRF_TOKEN_KEY, format!("{token}.{proof}"));
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ApiCsrfHeaderFinder;
+
+#[async_trait]
+impl CsrfTokenFinder for ApiCsrfHeaderFinder {
+    async fn find_token(&self, req: &mut Request) -> Option<String> {
+        req.headers()
+            .get(CSRF_HEADER_NAME)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split_once('.'))
+            .map(|(token, _)| token.to_owned())
+    }
+}
+
+pub(crate) fn api_csrf_middleware() -> Csrf<BcryptCipher, ApiCsrfHeaderStore> {
+    Csrf::new(BcryptCipher::new(), ApiCsrfHeaderStore, ApiCsrfHeaderFinder)
+}
+
+pub fn browser_csrf_middleware() -> Csrf<BcryptCipher, CookieStore> {
     bcrypt_cookie_csrf(HeaderFinder::new(CSRF_HEADER_NAME))
         .add_finder(FormFinder::new(CSRF_FORM_FIELD_NAME))
-        .add_finder(JsonFinder::new(CSRF_FORM_FIELD_NAME))
 }
 
 pub fn csrf_token(depot: &Depot) -> String {
-    depot.csrf_token().unwrap_or_default().to_owned()
+    depot.get::<String>(API_CSRF_TOKEN_KEY).map_or_else(
+        |_| depot.csrf_token().unwrap_or_default().to_owned(),
+        Clone::clone,
+    )
 }
 
 pub fn generate_csp_nonce() -> String {
@@ -397,20 +460,28 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
-    fn build_session_cookie_uses_lax_without_secure_flag() {
-        let cookie =
-            super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], false);
+    fn build_session_cookie_is_always_secure_and_cross_site() {
+        let cookie = super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()]);
 
-        assert!(cookie.contains("; HttpOnly; SameSite=Lax;"));
-        assert!(!cookie.contains("; Secure;"));
+        assert!(cookie.contains("; HttpOnly; Secure; SameSite=None;"));
     }
 
     #[test]
-    fn build_session_cookie_uses_lax_when_secure() {
-        let cookie =
-            super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()], true);
+    fn session_header_takes_precedence_over_legacy_cookie() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::SESSION_HEADER_NAME,
+            HeaderValue::from_static("[\"header-session\"]"),
+        );
+        headers.insert(
+            http::header::COOKIE,
+            HeaderValue::from_static("sessions=[\"cookie-session\"]"),
+        );
 
-        assert!(cookie.contains("; HttpOnly; Secure; SameSite=Lax;"));
+        assert_eq!(
+            super::protected_session_ids(&headers),
+            vec!["header-session"]
+        );
     }
 
     #[test]

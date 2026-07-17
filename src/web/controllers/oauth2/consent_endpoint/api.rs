@@ -55,6 +55,7 @@ pub(super) async fn consent_api(
                 .map(url::Url::to_string),
             scopes: build_scope_display(&loaded.scope),
             csrf_token: csrf_token(depot),
+            ui_locales: loaded.stored.request.ui_locales.clone(),
         },
     )
     .into())

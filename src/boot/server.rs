@@ -9,7 +9,7 @@ use salvo::{
 };
 
 use identity_infrastructure::{
-    config::AppConfig,
+    config::{AppConfig, TlsTermination},
     crypto::tls::{TlsMode, prepare_tls_material},
     lifecycle::{AppLifecycle, wait_for_shutdown},
     state::AppState,
@@ -29,8 +29,8 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
     let needs_separate_health = config.health.enable && !shared_health;
 
     match listener_mode(config) {
-        ListenerMode::Http => {
-            let main_listener = build_http_listener(&main_address).await?;
+        ListenerMode::UpstreamTls => {
+            let main_listener = build_upstream_tls_listener(&main_address).await?;
 
             if needs_separate_health {
                 let health_address = health::bind_address(&config.health, &config.server);
@@ -57,7 +57,7 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
                 serve_with_shutdown(main_listener, app, shutdown).await?;
             }
         }
-        ListenerMode::Https => {
+        ListenerMode::DirectTls => {
             let main_listener = build_https_listener(config, &main_address).await?;
 
             if needs_separate_health {
@@ -112,23 +112,22 @@ where
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ListenerMode {
-    Http,
-    Https,
+    DirectTls,
+    UpstreamTls,
 }
 
 fn listener_mode(config: &AppConfig) -> ListenerMode {
-    if config.server.tls.enable {
-        ListenerMode::Https
-    } else {
-        ListenerMode::Http
+    match config.server.tls.termination {
+        TlsTermination::Direct => ListenerMode::DirectTls,
+        TlsTermination::Upstream => ListenerMode::UpstreamTls,
     }
 }
 
-async fn build_http_listener(address: &str) -> AppResult<salvo::conn::tcp::TcpAcceptor> {
+async fn build_upstream_tls_listener(address: &str) -> AppResult<salvo::conn::tcp::TcpAcceptor> {
     tracing::info!(
         address,
-        mode = "http",
-        "tls disabled; starting plain http listener"
+        mode = "upstream-tls",
+        "tls is terminated by a trusted upstream proxy"
     );
     Ok(TcpListener::new(address.to_owned()).try_bind().await?)
 }
@@ -190,22 +189,23 @@ mod tests {
 
     use identity_infrastructure::config::{
         AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig,
+        TlsTermination,
     };
 
     use super::{ListenerMode, build_https_listener, listener_mode};
 
     #[test]
-    fn listener_mode_is_http_when_tls_disabled() {
-        let config = app_config(false);
+    fn listener_mode_is_upstream_tls_when_configured() {
+        let config = app_config(TlsTermination::Upstream);
 
-        assert!(matches!(listener_mode(&config), ListenerMode::Http));
+        assert!(matches!(listener_mode(&config), ListenerMode::UpstreamTls));
     }
 
     #[test]
     fn listener_mode_is_https_when_tls_enabled() {
-        let config = app_config(true);
+        let config = app_config(TlsTermination::Direct);
 
-        assert!(matches!(listener_mode(&config), ListenerMode::Https));
+        assert!(matches!(listener_mode(&config), ListenerMode::DirectTls));
     }
 
     #[tokio::test]
@@ -214,7 +214,7 @@ mod tests {
         let cert_path = dir.join("server.crt");
         let key_path = dir.join("server.key");
 
-        let mut config = app_config(true);
+        let mut config = app_config(TlsTermination::Direct);
         config.server.binding = "127.0.0.1".to_owned();
         config.server.tls.auto_generate = true;
         config.server.tls.cert_path = cert_path.to_string_lossy().into_owned();
@@ -227,7 +227,7 @@ mod tests {
         assert!(key_path.exists());
     }
 
-    fn app_config(tls_enabled: bool) -> AppConfig {
+    fn app_config(termination: TlsTermination) -> AppConfig {
         let mut config = AppConfig {
             logger: LoggerConfig::default(),
             server: ServerConfig::default(),
@@ -236,7 +236,7 @@ mod tests {
             settings: SettingsConfig::default(),
             install: Default::default(),
         };
-        config.server.tls.enable = tls_enabled;
+        config.server.tls.termination = termination;
         config
     }
 

@@ -29,8 +29,10 @@ impl AppConfig {
         let raw = fs::read_to_string(&path)?;
         let rendered = render_config_template(&raw)?;
         let config: Self = serde_yml::from_str(&rendered)?;
+        let config = config.normalized();
+        config.validate_https_contract()?;
 
-        Ok((config.normalized(), environment))
+        Ok((config, environment))
     }
 
     #[must_use]
@@ -48,6 +50,27 @@ impl AppConfig {
 
         self
     }
+
+    pub fn validate_https_contract(&self) -> ConfigResult<()> {
+        let host = self
+            .server
+            .host
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| invalid_config("server.host must be an https URL"))?;
+        let host = Url::parse(host)
+            .map_err(|error| invalid_config(format!("server.host must be a valid URL: {error}")))?;
+
+        if host.scheme() != "https" {
+            return Err(invalid_config("server.host must use https").into());
+        }
+
+        Ok(())
+    }
+}
+
+fn invalid_config(message: impl Into<String>) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, message.into())
 }
 
 fn render_config_template(raw: &str) -> ConfigResult<String> {
@@ -103,9 +126,10 @@ impl Default for ServerConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TlsConfig {
     #[serde(default)]
-    pub enable: bool,
+    pub termination: TlsTermination,
     #[serde(default = "default_true")]
     pub auto_generate: bool,
     #[serde(default = "default_tls_cert_path")]
@@ -119,13 +143,21 @@ pub struct TlsConfig {
 impl Default for TlsConfig {
     fn default() -> Self {
         Self {
-            enable: false,
+            termination: TlsTermination::Direct,
             auto_generate: true,
             cert_path: default_tls_cert_path(),
             key_path: default_tls_key_path(),
             domain: None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TlsTermination {
+    #[default]
+    Direct,
+    Upstream,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -378,7 +410,7 @@ fn default_settings_refresh_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnvironment, render_config_template};
+    use super::{AppConfig, AppEnvironment, TlsTermination, render_config_template};
     use serial_test::serial;
 
     fn set_env(key: &str, value: &str) {
@@ -469,7 +501,7 @@ database:
         assert_eq!(config.logger.format, "compact");
         assert_eq!(config.server.port, 5150);
         assert_eq!(config.server.binding, "127.0.0.1");
-        assert!(!config.server.tls.enable);
+        assert_eq!(config.server.tls.termination, TlsTermination::Direct);
         assert_eq!(config.health.route, "/health");
         assert_eq!(config.settings.refresh_interval_secs, 5);
         assert!(config.health.enable);
@@ -487,7 +519,7 @@ database:
         )
         .unwrap();
 
-        assert!(!config.server.tls.enable);
+        assert_eq!(config.server.tls.termination, TlsTermination::Direct);
         assert!(config.server.tls.auto_generate);
         assert_eq!(config.server.tls.cert_path, "config/tls/server.crt");
         assert_eq!(config.server.tls.key_path, "config/tls/server.key");
@@ -499,7 +531,7 @@ database:
         let config: AppConfig = serde_yml::from_str(
             r#"
 server:
-  host: http://example.com
+  host: https://example.com
   tls:
     domain: identity.example.com
 database:
@@ -554,5 +586,41 @@ database:
         let config = config.normalized();
 
         assert_eq!(config.server.tls.domain.as_deref(), Some("localhost"));
+    }
+
+    #[test]
+    fn https_contract_rejects_plain_http_host() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: http://identity.example.com
+  tls:
+    termination: upstream
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        let error = config.validate_https_contract().unwrap_err();
+
+        assert!(error.to_string().contains("must use https"));
+    }
+
+    #[test]
+    fn https_contract_accepts_upstream_tls_termination() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+  tls:
+    termination: upstream
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        assert!(config.validate_https_contract().is_ok());
     }
 }

@@ -178,7 +178,7 @@ mod tests {
                 Url::parse("https://identity.example.com/docs/openid-connect").unwrap(),
             ),
             claims_locales_supported: Some(vec!["en-US".to_owned()]),
-            ui_locales_supported: Some(vec!["en-US".to_owned()]),
+            ui_locales_supported: Some(vec!["en-US".to_owned(), "zh-CN".to_owned()]),
             claims_parameter_supported: false,
             request_parameter_supported: false,
             request_uri_parameter_supported: true,

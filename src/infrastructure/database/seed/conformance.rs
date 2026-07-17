@@ -23,7 +23,9 @@ use crate::{
         client_scope, scope, setting, user, user_credential,
     },
 };
-use identity_domain::setting::{DynamicClientRegistrationSetting, SettingDefinition};
+use identity_domain::setting::{
+    ConsentUrlSetting, DynamicClientRegistrationSetting, LoginUrlSetting, SettingDefinition,
+};
 
 use super::Seed;
 
@@ -113,6 +115,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     let now = Utc::now();
 
     ensure_dynamic_registration_enabled(&txn, now).await?;
+    ensure_interaction_urls(&txn, now).await?;
 
     // ── Test user ──────────────────────────────────────────────────────────
 
@@ -196,6 +199,64 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     txn.commit()
         .await
         .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+
+    Ok(())
+}
+
+async fn ensure_interaction_urls(
+    db: &impl sea_orm::ConnectionTrait,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let login_url =
+        std::env::var("LOGIN_URL").unwrap_or_else(|_| "https://login:3443/login".to_owned());
+    let consent_url =
+        std::env::var("CONSENT_URL").unwrap_or_else(|_| "https://login:3443/consent".to_owned());
+
+    ensure_string_setting(db, LoginUrlSetting::KEY, login_url, now).await?;
+    ensure_string_setting(db, ConsentUrlSetting::KEY, consent_url, now).await?;
+    Ok(())
+}
+
+async fn ensure_string_setting(
+    db: &impl sea_orm::ConnectionTrait,
+    key: &str,
+    value: String,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), AppError> {
+    let existing = setting::Entity::find()
+        .filter(setting::Column::Key.eq(key))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    let value = serde_json::json!(value);
+
+    if let Some(existing) = existing {
+        if existing.value == value {
+            return Ok(());
+        }
+
+        setting::ActiveModel {
+            id: Set(existing.id),
+            value: Set(value),
+            updated_at: Set(Some(now.naive_utc())),
+            ..Default::default()
+        }
+        .update(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    } else {
+        setting::ActiveModel {
+            oid: Set(Uuid::new_v4()),
+            key: Set(key.to_owned()),
+            value: Set(value),
+            created_at: Set(now.naive_utc()),
+            updated_at: Set(Some(now.naive_utc())),
+            ..Default::default()
+        }
+        .insert(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    }
 
     Ok(())
 }

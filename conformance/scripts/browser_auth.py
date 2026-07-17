@@ -27,7 +27,7 @@ class BrowserAuthHandler:
 
     def _chromium_launch_args(self) -> list[str]:
         return [
-            "--host-resolver-rules=MAP identity 127.0.0.1,MAP host.docker.internal 127.0.0.1"
+            "--host-resolver-rules=MAP identity 127.0.0.1,MAP login 127.0.0.1,MAP host.docker.internal 127.0.0.1"
         ]
 
     def _login_id_from_location(self, location: str) -> str | None:
@@ -45,7 +45,12 @@ class BrowserAuthHandler:
     def _auto_login_page_url(self, login_id: str, op_browser_url: str) -> str:
         return f"{op_browser_url}/conformance/auto-login?{urlencode({'login_id': login_id})}"
 
-    def _complete_browser_login(self, page, login_id: str | None) -> bool:
+    def _complete_browser_login(
+        self,
+        page,
+        login_id: str | None,
+        op_browser_url: str | None = None,
+    ) -> bool:
         if not login_id:
             return False
 
@@ -58,18 +63,19 @@ class BrowserAuthHandler:
         except Exception:
             pass
 
-        op_browser_url = self._op_browser_url(page.url)
+        op_browser_url = op_browser_url or self.identity_url
         # The auto-login POST returns a 303 redirect to /oauth2/continue, which
         # the browser follows automatically and which finalizes the
         # authorization (setting completed_at). Visiting /oauth2/continue again
         # afterwards would hit a 410 Gone, so we rely on the redirect chain
         # instead of issuing a second explicit continue navigation.
-        page.goto(
+        response = page.goto(
             self._auto_login_page_url(login_id, op_browser_url),
             wait_until="load",
             timeout=30_000,
         )
         page.wait_for_load_state("load", timeout=30_000)
+        self._assert_page_loaded(page, response)
         return True
 
     def _submit_post_form(self, page, url: str, body: str) -> None:
@@ -94,6 +100,17 @@ class BrowserAuthHandler:
         image = page.screenshot(full_page=True)
         return f"data:image/png;base64,{base64.b64encode(image).decode()}"
 
+    @staticmethod
+    def _assert_page_loaded(page, response=None) -> None:
+        if response is not None and response.status >= 500:
+            raise RuntimeError(
+                f"browser navigation failed with HTTP {response.status}: {page.url}"
+            )
+
+        content = page.content()
+        if "Blocked request. This host" in content:
+            raise RuntimeError(f"Vite rejected browser host for {page.url}")
+
     def _complete_in_browser(
         self,
         local_url: str,
@@ -115,13 +132,16 @@ class BrowserAuthHandler:
                     context_args["storage_state"] = self.browser_storage_state
                 context = browser.new_context(**context_args)
                 page = context.new_page()
+                op_browser_url = self._op_browser_url(local_url)
 
                 if method == "POST":
                     parsed = urlparse(local_url)
                     post_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
                     self._submit_post_form(page, post_url, parsed.query)
+                    self._assert_page_loaded(page)
                 else:
-                    page.goto(local_url, wait_until="load", timeout=30_000)
+                    response = page.goto(local_url, wait_until="load", timeout=30_000)
+                    self._assert_page_loaded(page, response)
 
                 try:
                     page.wait_for_load_state("networkidle", timeout=10_000)
@@ -130,7 +150,9 @@ class BrowserAuthHandler:
 
                 current_login_id = login_id or self._login_id_from_location(page.url)
                 if current_login_id:
-                    if not self._complete_browser_login(page, current_login_id):
+                    if not self._complete_browser_login(
+                        page, current_login_id, op_browser_url
+                    ):
                         browser.close()
                         return False
                     try:
@@ -170,8 +192,10 @@ class BrowserAuthHandler:
                     parsed = urlparse(local_url)
                     post_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
                     self._submit_post_form(page, post_url, parsed.query)
+                    self._assert_page_loaded(page)
                 else:
-                    page.goto(local_url, wait_until="load", timeout=30_000)
+                    response = page.goto(local_url, wait_until="load", timeout=30_000)
+                    self._assert_page_loaded(page, response)
 
                 try:
                     page.wait_for_load_state("networkidle", timeout=10_000)

@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:error-css": "tailwindcss -i ./assets/styles/error.css -o ./assets/static/css/error.css --minify"
+    "build:error-css": "tailwindcss -i ./assets/styles/error.css -o ./assets/static/css/error.css --minify",
+    "dev:login": "pnpm --filter login dev",
+    "build:login": "pnpm --filter login build"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.2",

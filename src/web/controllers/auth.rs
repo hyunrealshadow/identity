@@ -1,7 +1,7 @@
 //! Authentication controller handlers.
 //!
 //! All handlers follow the progressive login flow:
-//! 1. `GET  /api/auth/sessions/active`  – list active accounts from cookie
+//! 1. `GET  /api/auth/sessions/active`  – list active accounts from `X-Sessions`
 //! 2. `POST /api/auth/login/select`     – select an existing session
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/challenge`  – verify credential, create session
@@ -10,10 +10,10 @@ use http::{HeaderMap, StatusCode};
 use salvo::{Depot, Request, Response, Router, handler};
 
 use super::{
-    response::{app_state, parse_json, parse_param, render_json, JsonWebResult},
+    response::{JsonWebResult, app_state, parse_json, parse_param, render_json},
     shared::{
-        append_set_cookie, build_selected_session_cookie, build_session_context, csrf_middleware,
-        csrf_token, is_secure_cookie, load_active_session_entries, unprotect_session_id,
+        api_csrf_middleware, build_selected_session_state, build_session_context, csrf_token,
+        load_active_session_entries, unprotect_session_id,
     },
 };
 use crate::views::auth::{
@@ -34,7 +34,7 @@ use crate::{
 
 pub fn routes() -> Router {
     Router::new()
-        .hoop(csrf_middleware())
+        .hoop(api_csrf_middleware())
         .push(Router::with_path("api/auth/sessions/active").get(active_sessions))
         .push(Router::with_path("api/auth/login/{id}").get(login_status))
         .push(Router::with_path("api/auth/login/select").post(select_account))
@@ -46,7 +46,7 @@ pub fn routes() -> Router {
 
 /// `GET /api/auth/sessions/active`
 ///
-/// Read the `sessions` cookie and return the list of active accounts.
+/// Read `X-Sessions` and return the list of active accounts.
 #[handler]
 async fn active_sessions(
     depot: &mut Depot,
@@ -70,6 +70,7 @@ async fn active_sessions(
         res,
         StatusCode::OK,
         ActiveAccountsResponse {
+            sessions: items.iter().map(|item| item.id.clone()).collect(),
             accounts: items,
             csrf_token: csrf_token(depot),
         },
@@ -79,7 +80,11 @@ async fn active_sessions(
 }
 
 #[handler]
-async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
+async fn login_status(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let id: String = parse_param(req, "id")?;
     let login_oid = ctx
@@ -103,18 +108,20 @@ async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) 
         None => None,
     };
 
-    let prompt = match ctx
+    let (prompt, ui_locales) = match ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&id)
         .await
     {
-        Ok(c) => c
-            .stored
-            .request
-            .prompt
-            .unwrap_or_else(|| "select_account".to_string()),
-        Err(_) => "select_account".to_string(),
+        Ok(c) => (
+            c.stored
+                .request
+                .prompt
+                .unwrap_or_else(|| "select_account".to_string()),
+            c.stored.request.ui_locales,
+        ),
+        Err(_) => ("select_account".to_string(), None),
     };
 
     let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
@@ -134,6 +141,7 @@ async fn login_status(depot: &mut Depot, req: &mut Request, res: &mut Response) 
             status: login.status,
             user,
             prompt,
+            ui_locales,
             continue_uri,
         },
     );
@@ -162,19 +170,18 @@ async fn select_account(
 
     let session_oid = unprotect_session_id(&ctx, &body.id).await?;
     let session = ctx.services().session().select_session(session_oid).await?;
-    let cookie =
-        build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx)).await?;
+    let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
 
     let resp = SelectAccountResponse {
         status: "ok",
         session: SessionInfo {
-            id: cookie.protected_session_id.clone(),
+            id: selected.protected_session_id.clone(),
             expires_at: session.expires_at,
         },
+        sessions: selected.protected_session_ids,
     };
 
     render_json(res, StatusCode::OK, resp);
-    append_set_cookie(res, &cookie.header);
     Ok(())
 }
 
@@ -247,13 +254,12 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                     session: None,
                     acr: None,
                     continue_uri: None,
+                    sessions: None,
                 },
             );
         }
         ChallengeOutcome::Authenticated { session, .. } => {
-            let cookie =
-                build_selected_session_cookie(&ctx, &headers, session.oid, is_secure_cookie(&ctx))
-                    .await?;
+            let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
             let acr = session.acr.clone();
             let continue_uri = Some(format!(
                 "/oauth2/continue?login_id={}",
@@ -266,14 +272,14 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 ChallengeResponse {
                     status: "authenticated",
                     session: Some(SessionInfo {
-                        id: cookie.protected_session_id.clone(),
+                        id: selected.protected_session_id.clone(),
                         expires_at: session.expires_at,
                     }),
                     acr,
                     continue_uri,
+                    sessions: Some(selected.protected_session_ids),
                 },
             );
-            append_set_cookie(res, &cookie.header);
         }
     }
     Ok(())

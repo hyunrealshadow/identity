@@ -202,6 +202,7 @@ pub(super) async fn continue_state(
             code_challenge_method: None,
             acr_values: None,
             claims: None,
+            ui_locales: None,
         },
         interaction: match (selected_session_oid, selected_user_oid) {
             (Some(session_oid), Some(user_oid)) => AuthorizationInteractionState {

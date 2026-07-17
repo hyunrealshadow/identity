@@ -7,7 +7,22 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scripts.client import TestInfo, TestModule
-from scripts.runner import TestRunner
+from scripts.runner import TestResult, TestRunner
+
+
+class TestRunnerSummaryTests(unittest.TestCase):
+    def test_non_terminal_result_is_counted_as_failed(self):
+        runner = TestRunner(None, None)
+        results = [
+            TestResult(
+                test_name="oidcc-incomplete",
+                status="WAITING_NO_PROGRESS",
+                result=None,
+                run_id="run-1",
+            )
+        ]
+
+        self.assertEqual(runner.summarize_results(results)["FAILED"], 1)
 
 
 class FakeClient:
@@ -89,6 +104,38 @@ class FakeAutoLogin:
 
 
 class TestRunnerResumeTests(unittest.TestCase):
+    @patch("scripts.runner.time.sleep", return_value=None)
+    def test_run_all_tests_retries_interrupted_instance(self, _sleep):
+        interrupted_run_id = "interrupted-run"
+        retry_run_id = "retry-run"
+        variant = {"response_type": "code"}
+        client = FakeClient(
+            modules=[TestModule("oidcc-retry", variant, [interrupted_run_id], "")],
+            info_sequences={
+                interrupted_run_id: [
+                    TestInfo(interrupted_run_id, "INTERRUPTED", None)
+                ],
+                retry_run_id: [
+                    TestInfo(retry_run_id, "WAITING", None),
+                    TestInfo(retry_run_id, "FINISHED", "PASSED"),
+                ],
+            },
+            start_run_ids={"oidcc-retry": retry_run_id},
+        )
+        runner = TestRunner(
+            client, FakeAutoLogin(), timeout_per_test=5, poll_interval=1
+        )
+
+        results = runner.run_all_tests("plan-1")
+
+        self.assertEqual(results[0].status, "FINISHED")
+        self.assertEqual(results[0].result, "PASSED")
+        self.assertEqual(results[0].run_id, retry_run_id)
+        self.assertEqual(
+            client.started_tests,
+            [("plan-1", "oidcc-retry", variant, retry_run_id)],
+        )
+
     @patch("scripts.runner.time.sleep", return_value=None)
     def test_run_single_test_resumes_waiting_instance(self, _sleep):
         run_id = "waiting-run"

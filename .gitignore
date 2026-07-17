@@ -33,6 +33,7 @@ ref
 
 # Conformance suite GitLab clone (built inside Docker image)
 conformance/suite/
+conformance/debug.log
 
 # Python
 __pycache__/

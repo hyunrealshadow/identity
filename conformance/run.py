@@ -11,6 +11,7 @@ Usage:
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
     IDENTITY_URL     - Identity server URL (default: https://localhost:5150)
+    LOGIN_URL        - Login application URL (default: https://localhost:3443)
     PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, formpost-hybrid, third-party-init, rp-init-logout, session, or backchannel (default: basic)
     CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
     PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
@@ -184,6 +185,11 @@ def main():
         help="Identity server URL",
     )
     parser.add_argument(
+        "--login-url",
+        default=os.environ.get("LOGIN_URL", "https://localhost:3443"),
+        help="Login application URL",
+    )
+    parser.add_argument(
         "--exit-on-failure",
         action="store_true",
         help="Exit with error code if any tests fail",
@@ -217,6 +223,11 @@ def main():
 
         if not wait_for_service(
             args.identity_url + "/health", timeout=60, name="Identity"
+        ):
+            stop_docker_stack(compose_file)
+            return 1
+        if not wait_for_service(
+            args.login_url + "/login", timeout=120, name="Login"
         ):
             stop_docker_stack(compose_file)
             return 1

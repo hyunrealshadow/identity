@@ -149,6 +149,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
                 code_challenge_method: None,
                 acr_values: None,
                 claims: None,
+                ui_locales: None,
             },
             interaction: AuthorizationInteractionState::default(),
         })
@@ -335,6 +336,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
                     code_challenge_method: None,
                     acr_values: None,
                     claims: None,
+                    ui_locales: None,
                 },
                 interaction: AuthorizationInteractionState::default(),
             })

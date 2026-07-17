@@ -17,7 +17,7 @@ use crate::controllers::{
     },
     shared::{
         append_set_cookie, build_session_cookie_from_protected_ids, generate_csp_nonce,
-        is_secure_cookie, load_active_session_entries,
+        load_active_session_entries,
     },
 };
 
@@ -49,14 +49,13 @@ impl From<LogoutParams> for RpInitiatedLogoutRequest {
 pub fn session_cookie_without(
     entries: &[crate::controllers::shared::SessionCookieEntry],
     revoked: SessionOid,
-    secure: bool,
 ) -> String {
     let remaining = entries
         .iter()
         .filter(|entry| entry.session_oid != revoked)
         .map(|entry| entry.protected_session_id.clone())
         .collect::<Vec<_>>();
-    build_session_cookie_from_protected_ids(&remaining, secure)
+    build_session_cookie_from_protected_ids(&remaining)
 }
 
 pub async fn redirect_or_page_response(
@@ -191,11 +190,7 @@ async fn handle_logout(
 
     let set_cookie = if let Some((session_oid, _)) = session_to_revoke {
         let _ = ctx.services().session().revoke(session_oid).await;
-        Some(session_cookie_without(
-            &session_entries,
-            session_oid,
-            is_secure_cookie(&ctx),
-        ))
+        Some(session_cookie_without(&session_entries, session_oid))
     } else {
         None
     };
@@ -243,7 +238,7 @@ mod tests {
             },
         ];
 
-        let cookie = super::session_cookie_without(&entries, SessionOid(first), false);
+        let cookie = super::session_cookie_without(&entries, SessionOid(first));
 
         assert!(!cookie.contains(&first.to_string()));
         assert!(!cookie.contains("protected-first"));
@@ -274,7 +269,9 @@ mod tests {
             identity_application::openid_connect::logout::LogoutOutcome::Redirect {
                 redirect_uri: url::Url::parse("https://rp.example.com/logout?state=abc").unwrap(),
             },
-            Some("sessions=[]; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600".to_owned()),
+            Some(
+                "sessions=[]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=3600".to_owned(),
+            ),
         )
         .await;
 

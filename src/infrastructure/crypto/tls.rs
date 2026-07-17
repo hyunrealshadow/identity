@@ -222,7 +222,7 @@ mod tests {
 
     fn config(cert_path: &Path, key_path: &Path, auto_generate: bool) -> TlsConfig {
         TlsConfig {
-            enable: true,
+            termination: crate::config::TlsTermination::Direct,
             auto_generate,
             cert_path: cert_path.to_string_lossy().into_owned(),
             key_path: key_path.to_string_lossy().into_owned(),
