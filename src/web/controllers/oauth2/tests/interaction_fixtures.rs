@@ -302,6 +302,8 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         .append_query_results([[dynamic_registration_setting]])
         .append_query_results([[login_url_setting]])
         .append_query_results([[consent_url_setting]])
+        .append_query_results([[symmetric_key.clone()]])
+        .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
         .append_query_results([[platform_model]])
         .append_query_results([[BTreeMap::from([(
@@ -314,8 +316,6 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         .append_query_results([[client_model.clone()]])
         .append_query_results([[inserted_authorization_model.clone()]])
         .append_query_results([[inserted_login_model.clone()]])
-        .append_query_results([[symmetric_key.clone()]])
-        .append_query_results([[symmetric_key]])
         .append_query_results([[inserted_login_model]])
         .append_query_results([[client_model]])
         .append_query_results([[inserted_authorization_model]])

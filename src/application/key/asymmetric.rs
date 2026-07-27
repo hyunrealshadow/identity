@@ -40,6 +40,7 @@ pub struct AsymmetricKeyService {
     generator: Arc<dyn AsymmetricKeyGenerator>,
     jwk_generator: Arc<dyn KeyJwkGenerator>,
     jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
+    runtime_key_ring: Option<Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>>,
 }
 
 impl AsymmetricKeyService {
@@ -55,7 +56,24 @@ impl AsymmetricKeyService {
             generator,
             jwk_generator,
             jwk_repo,
+            runtime_key_ring: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_runtime_key_ring(
+        mut self,
+        runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+    ) -> Self {
+        self.runtime_key_ring = Some(runtime_key_ring);
+        self
+    }
+
+    async fn refresh_runtime_key_ring(&self) -> Result<(), AppError> {
+        if let Some(provider) = &self.runtime_key_ring {
+            provider.refresh_value().await?;
+        }
+        Ok(())
     }
 
     pub async fn list_available(&self) -> Result<Vec<Key>, AppError> {
@@ -104,6 +122,7 @@ impl AsymmetricKeyService {
                 .await?;
         }
 
+        self.refresh_runtime_key_ring().await?;
         Ok(key)
     }
 
@@ -125,6 +144,7 @@ impl AsymmetricKeyService {
                 .await?;
         }
 
+        self.refresh_runtime_key_ring().await?;
         Ok(key)
     }
 
@@ -145,14 +165,18 @@ impl AsymmetricKeyService {
             return Err(AppError::from_code(KeyErrorCode::Revoked));
         }
 
+        self.refresh_runtime_key_ring().await?;
         Ok(key)
     }
 
     pub async fn revoke(&self, oid: Uuid) -> Result<Key, AppError> {
-        self.repo
+        let key = self
+            .repo
             .revoke_by_oid(oid.into(), Utc::now())
             .await?
-            .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))
+            .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
+        self.refresh_runtime_key_ring().await?;
+        Ok(key)
     }
 }
 

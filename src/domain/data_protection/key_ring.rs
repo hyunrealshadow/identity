@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use std::cmp::Reverse;
 
 use crate::key::{Key, KeyOid, KeyType};
 
@@ -8,7 +9,7 @@ pub struct KeyRing {
 
 impl KeyRing {
     pub fn new(mut keys: Vec<Key>) -> Self {
-        keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        keys.sort_by_key(|key| Reverse(key.created_at));
         Self { keys }
     }
 

@@ -163,34 +163,38 @@ impl TokenService {
                 Some(record.oid),
             )
             .await?;
-        let access_token = self.sign_access_token(SignAccessTokenInput {
-            token_id: &access_token_record.oid.to_string(),
-            key_id: &signing_key_id,
-            private_key_pem: &signing_key_pem,
-            alg: &signing_alg,
-            issuer: &issuer,
-            audience: &audience,
-            client_id: &client_id_str,
-            user_oid: &user_oid,
-            protected_session_id: &protected_session_id,
-            scope: &data.scope,
-            claims: data.claims.as_ref(),
-        })?;
-        let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
-            let signed = self.sign_id_token(SignIdTokenInput {
+        let access_token = self
+            .sign_access_token(SignAccessTokenInput {
+                token_id: &access_token_record.oid.to_string(),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
-                alg: &id_token_alg,
+                alg: &signing_alg,
                 issuer: &issuer,
                 audience: &audience,
-                client: &authenticated_client,
-                user: &user,
-                nonce: data.nonce.as_deref(),
-                auth_time: data.auth_time,
-                acr: data.acr.as_deref(),
-                access_token: Some(&access_token),
-                protected_session_id: Some(&protected_session_id),
-            })?;
+                client_id: &client_id_str,
+                user_oid: &user_oid,
+                protected_session_id: &protected_session_id,
+                scope: &data.scope,
+                claims: data.claims.as_ref(),
+            })
+            .await?;
+        let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
+            let signed = self
+                .sign_id_token(SignIdTokenInput {
+                    key_id: &signing_key_id,
+                    private_key_pem: &signing_key_pem,
+                    alg: &id_token_alg,
+                    issuer: &issuer,
+                    audience: &audience,
+                    client: &authenticated_client,
+                    user: &user,
+                    nonce: data.nonce.as_deref(),
+                    auth_time: data.auth_time,
+                    acr: data.acr.as_deref(),
+                    access_token: Some(&access_token),
+                    protected_session_id: Some(&protected_session_id),
+                })
+                .await?;
             let id_token = match authenticated_client
                 .metadata()
                 .id_token_encrypted_response_alg
@@ -361,33 +365,37 @@ impl TokenService {
                 None,
             )
             .await?;
-        let access_token = self.sign_access_token(SignAccessTokenInput {
-            token_id: &access_token_record.oid.to_string(),
-            key_id: &signing_key_id,
-            private_key_pem: &signing_key_pem,
-            alg: &signing_alg,
-            issuer: &issuer,
-            audience: &client_id,
-            client_id: &client_id,
-            user_oid: &user_oid,
-            protected_session_id: &protected_session_id,
-            scope: &scope,
-            claims: None,
-        })?;
-        let signed_id_token = self.sign_id_token(SignIdTokenInput {
-            key_id: &signing_key_id,
-            private_key_pem: &signing_key_pem,
-            alg: &signing_alg,
-            issuer: &issuer,
-            audience: &client_id,
-            client: &authenticated_client,
-            user: &user,
-            nonce: None,
-            auth_time: refresh_data.auth_time,
-            acr: None,
-            access_token: Some(&access_token),
-            protected_session_id: Some(&protected_session_id),
-        })?;
+        let access_token = self
+            .sign_access_token(SignAccessTokenInput {
+                token_id: &access_token_record.oid.to_string(),
+                key_id: &signing_key_id,
+                private_key_pem: &signing_key_pem,
+                alg: &signing_alg,
+                issuer: &issuer,
+                audience: &client_id,
+                client_id: &client_id,
+                user_oid: &user_oid,
+                protected_session_id: &protected_session_id,
+                scope: &scope,
+                claims: None,
+            })
+            .await?;
+        let signed_id_token = self
+            .sign_id_token(SignIdTokenInput {
+                key_id: &signing_key_id,
+                private_key_pem: &signing_key_pem,
+                alg: &signing_alg,
+                issuer: &issuer,
+                audience: &client_id,
+                client: &authenticated_client,
+                user: &user,
+                nonce: None,
+                auth_time: refresh_data.auth_time,
+                acr: None,
+                access_token: Some(&access_token),
+                protected_session_id: Some(&protected_session_id),
+            })
+            .await?;
         let id_token = Some(
             match authenticated_client
                 .metadata()

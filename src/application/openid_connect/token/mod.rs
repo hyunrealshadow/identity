@@ -70,6 +70,7 @@ pub struct TokenService {
     provider_service: Arc<OpenIdProviderService>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     data_protector: Arc<dyn DataProtector>,
+    runtime_key_ring: Option<Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>>,
 }
 
 pub struct TokenServiceDependencies {
@@ -96,7 +97,17 @@ impl TokenService {
             provider_service: deps.provider_service,
             signing_algorithm_detector: deps.signing_algorithm_detector,
             data_protector: deps.data_protector,
+            runtime_key_ring: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_runtime_key_ring(
+        mut self,
+        runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+    ) -> Self {
+        self.runtime_key_ring = Some(runtime_key_ring);
+        self
     }
 }
 

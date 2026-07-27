@@ -309,9 +309,16 @@ impl LoginService {
         };
 
         // Verify the password.
-        let verify_result =
-            self.password_hasher
-                .verify(credential, &stored_password, hash_options)?;
+        let password_hasher = Arc::clone(&self.password_hasher);
+        let credential = credential.to_owned();
+        let verify_password = credential.clone();
+        let stored_password = stored_password.clone();
+        let hash_options = hash_options.clone();
+        let verify_hash_options = hash_options.clone();
+        let verify_result = super::password::run_password_hashing(move || {
+            password_hasher.verify(&verify_password, &stored_password, &verify_hash_options)
+        })
+        .await?;
 
         match verify_result {
             VerifyResult::Failure => {
@@ -351,14 +358,31 @@ impl LoginService {
             }
             VerifyResult::Success | VerifyResult::NeedsRehash => {
                 // Transparently rehash if needed.
-                if verify_result == VerifyResult::NeedsRehash
-                    && let Ok(new_password) = self.password_hasher.hash(credential, hash_options)
-                    && let Err(e) = self
-                        .credential_repo
-                        .update_password_by_oid(password_cred.oid, &new_password)
-                        .await
-                {
-                    tracing::error!(error = %e, "failed to rehash password");
+                if verify_result == VerifyResult::NeedsRehash {
+                    let password_hasher = Arc::clone(&self.password_hasher);
+                    let hash_options = hash_options.clone();
+                    let rehash = super::password::run_password_hashing(move || {
+                        password_hasher.hash(&credential, &hash_options)
+                    })
+                    .await;
+
+                    match rehash {
+                        Ok(new_password) => {
+                            if let Err(error) = self
+                                .credential_repo
+                                .update_password_by_oid(password_cred.oid, &new_password)
+                                .await
+                            {
+                                tracing::error!(
+                                    error = %error,
+                                    "failed to persist rehashed password"
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            tracing::error!(error = %error, "failed to rehash password");
+                        }
+                    }
                 }
 
                 // Reset failed attempts on the user.

@@ -521,11 +521,9 @@ pub(super) async fn continue_state(
     };
 
     let db = db
-        .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_code_model]])
-        .append_query_results([[symmetric_key]])
         .append_exec_results([MockExecResult {
             last_insert_id: 0,
             rows_affected: 1,

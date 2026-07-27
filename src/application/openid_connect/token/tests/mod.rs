@@ -65,6 +65,8 @@ use self::fixtures::{
     MockClientAuthorizationRepository, cred_repo_with, jwk_repo_with_bindings, key_repo_with_keys,
     provider_service, signing_algorithm_detector,
 };
+use crate::key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider, RuntimeSigningKey};
+use crate::openid_connect::tests::fixtures::mocks::{MockKeyJwkRepository, MockKeyRepository};
 
 fn expected_at_hash(access_token: &str) -> String {
     expected_at_hash_for_alg(access_token, "RS256")
@@ -290,6 +292,59 @@ fn build_token_service_with_key(
         signing_algorithm_detector: signing_algorithm_detector(),
         data_protector: InMemoryDataProtector::new(),
     })
+}
+
+struct StaticRuntimeKeyRingProvider {
+    value: Arc<RuntimeKeyRing>,
+}
+
+#[async_trait]
+impl RuntimeKeyRingProvider for StaticRuntimeKeyRingProvider {
+    fn current_value(&self) -> Arc<RuntimeKeyRing> {
+        Arc::clone(&self.value)
+    }
+
+    async fn refresh_value(&self) -> Result<(), AppError> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn signing_key_provider_avoids_hot_path_repository_queries() {
+    let key = key_for_algorithm("RS256");
+    let private_key_pem = match &key.data {
+        KeyData::Asymmetric(data) => data.private_key.clone(),
+        KeyData::Symmetric(_) => unreachable!(),
+    };
+    let provider = Arc::new(StaticRuntimeKeyRingProvider {
+        value: Arc::new(RuntimeKeyRing::new(
+            identity_domain::data_protection::KeyRing::new(vec![]),
+            Some(RuntimeSigningKey {
+                key_id: Uuid::new_v4().to_string(),
+                private_key_pem,
+                algorithm: "RS256".to_owned(),
+            }),
+        )),
+    });
+
+    let service = TokenService::new(TokenServiceDependencies {
+        client_authorization_repo: Arc::new(MockClientAuthorizationRepository::new()),
+        key_repo: Arc::new(MockKeyRepository::new()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        user_repo: Arc::new(InMemoryUserRepository {
+            user: test_user(Uuid::new_v4()),
+        }),
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(cred_repo_with(vec![])),
+        provider_service: provider_service(),
+        signing_algorithm_detector: signing_algorithm_detector(),
+        data_protector: InMemoryDataProtector::new(),
+    })
+    .with_runtime_key_ring(provider);
+
+    let first = service.load_signing_key().await.unwrap();
+    let second = service.load_signing_key().await.unwrap();
+    assert_eq!(first, second);
 }
 
 fn key_data_algorithm(key: &Key) -> String {

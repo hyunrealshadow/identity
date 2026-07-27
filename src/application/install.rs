@@ -43,6 +43,7 @@ pub struct InstallService<R: SettingRepository> {
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
     pub certificate_generator: Arc<dyn CertificateGenerator>,
     pub persistence: Arc<dyn InstallPersistence>,
+    pub runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
 }
 
 pub trait CertificateGenerator: Send + Sync {
@@ -94,9 +95,11 @@ impl<R: SettingRepository> InstallService<R> {
         })?;
 
         let hash_options = self.password_hash_options.current_value();
-        let password = self
-            .password_hasher
-            .hash(&password, hash_options.as_ref())?;
+        let password_hasher = Arc::clone(&self.password_hasher);
+        let password = crate::auth::password::run_password_hashing(move || {
+            password_hasher.hash(&password, hash_options.as_ref())
+        })
+        .await?;
         let mut key_data =
             self.key_generator
                 .generate(&identity_domain::key::generator::AsymmetricKeySpec {
@@ -134,6 +137,7 @@ impl<R: SettingRepository> InstallService<R> {
         self.installation_initialized_at
             .set(Some(Utc::now()))
             .await?;
+        self.runtime_key_ring.refresh_value().await?;
 
         Ok(())
     }

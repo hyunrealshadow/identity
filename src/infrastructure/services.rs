@@ -87,7 +87,7 @@ impl AppServices {
         let signing_algorithm_detector = Arc::new(SigningAlgorithmDetectorImpl);
         let key_jwk_generator = Arc::new(KeyJwkGeneratorImpl);
         let data_protector = Arc::new(DataProtectorImpl::new(
-            key_repo.clone(),
+            settings.key_ring(),
             Arc::new(XChaCha20DataProtectionCipher),
         ));
         let oidc_client_repo = Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
@@ -113,7 +113,8 @@ impl AppServices {
                 Arc::new(AsymmetricKeyGeneratorImpl),
                 key_jwk_generator.clone(),
                 Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
-            ),
+            )
+            .with_runtime_key_ring(settings.key_ring()),
             install: InstallService {
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 password_hash_options: settings.password_hash_options(),
@@ -125,6 +126,7 @@ impl AppServices {
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
                 certificate_generator: Arc::new(CertificateGeneratorImpl),
                 persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
+                runtime_key_ring: settings.key_ring(),
             },
             oidc: OpenIdProviderService::new(settings.installation())
                 .with_dynamic_registration_setting(settings.dynamic_client_registration())
@@ -157,7 +159,8 @@ impl AppServices {
                 provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
-            }),
+            })
+            .with_runtime_key_ring(settings.key_ring()),
             oidc_logout: LogoutService::new(LogoutServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
                 provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
@@ -171,12 +174,15 @@ impl AppServices {
                 oidc_client_repo.clone(),
                 oidc_credential_repo.clone(),
                 Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone())),
-                Arc::new(AsymmetricKeyService::new(
-                    Arc::new(KeyRepositoryImpl::new(db.clone())),
-                    Arc::new(AsymmetricKeyGeneratorImpl),
-                    key_jwk_generator,
-                    Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
-                )),
+                Arc::new(
+                    AsymmetricKeyService::new(
+                        Arc::new(KeyRepositoryImpl::new(db.clone())),
+                        Arc::new(AsymmetricKeyGeneratorImpl),
+                        key_jwk_generator,
+                        Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
+                    )
+                    .with_runtime_key_ring(settings.key_ring()),
+                ),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
             ),
             dynamic_client_registration: DynamicClientRegistrationService::new(

@@ -594,6 +594,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 scope: "openid profile",
                 claims: None,
             })
+            .await
             .unwrap();
         let client = service
             .client_repo
@@ -616,6 +617,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 access_token: Some(&access_token),
                 protected_session_id: None,
             })
+            .await
             .unwrap();
 
         let access_payload = decode_jwt_with_alg(&access_token, &public_key, alg);

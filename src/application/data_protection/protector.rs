@@ -8,8 +8,7 @@ use sha2::Sha256;
 use tracing::warn;
 
 use identity_domain::data_protection::DataProtectionError;
-use identity_domain::data_protection::{KeyRing, ProtectedPayload, Purpose};
-use identity_domain::key::repository::KeyRepository;
+use identity_domain::data_protection::{ProtectedPayload, Purpose};
 
 pub const DATA_PROTECTION_KEY_SIZE: usize = 32;
 
@@ -38,13 +37,19 @@ pub trait DataProtector: Send + Sync {
 }
 
 pub struct DataProtectorImpl {
-    key_repo: Arc<dyn KeyRepository>,
+    key_ring_provider: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
     cipher: Arc<dyn DataProtectionCipher>,
 }
 
 impl DataProtectorImpl {
-    pub fn new(key_repo: Arc<dyn KeyRepository>, cipher: Arc<dyn DataProtectionCipher>) -> Self {
-        Self { key_repo, cipher }
+    pub fn new(
+        key_ring_provider: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+        cipher: Arc<dyn DataProtectionCipher>,
+    ) -> Self {
+        Self {
+            key_ring_provider,
+            cipher,
+        }
     }
 }
 
@@ -55,13 +60,8 @@ impl DataProtector for DataProtectorImpl {
         purpose: &str,
         plaintext: &[u8],
     ) -> Result<String, DataProtectionError> {
-        let keys = self
-            .key_repo
-            .list_available_symmetric()
-            .await
-            .map_err(|e| DataProtectionError::Internal(Box::new(e)))?;
-
-        let ring = KeyRing::new(keys);
+        let key_ring = self.key_ring_provider.current_value();
+        let ring = key_ring.data_protection();
         let now = Utc::now();
 
         let key = ring
@@ -90,13 +90,8 @@ impl DataProtector for DataProtectorImpl {
         let purpose_hash = purpose.hash_prefix();
         let aad = payload.aad(&purpose_hash);
 
-        let keys = self
-            .key_repo
-            .list_available_symmetric()
-            .await
-            .map_err(|e| DataProtectionError::Internal(Box::new(e)))?;
-
-        let ring = KeyRing::new(keys);
+        let key_ring = self.key_ring_provider.current_value();
+        let ring = key_ring.data_protection();
 
         let key = ring.decrypting_key(&payload.key_id).ok_or_else(|| {
             warn!(key_id = %uuid::Uuid::from(payload.key_id), "key not found for decryption");
@@ -165,11 +160,11 @@ mod tests {
     use std::sync::Arc;
     use uuid::Uuid;
 
+    use crate::key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider};
     use identity_domain::data_protection::DataProtectionError;
     use identity_domain::key::{
         Key, KeyData, KeyOid, KeyType,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
-        repository::{KeyRepository, KeyRepositoryError},
     };
 
     use super::{DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl};
@@ -219,53 +214,29 @@ mod tests {
         Arc::new(TestCipher)
     }
 
-    struct MockKeyRepo {
-        keys: Vec<Key>,
+    struct MockKeyRingProvider {
+        value: Arc<RuntimeKeyRing>,
+    }
+
+    impl MockKeyRingProvider {
+        fn new(keys: Vec<Key>) -> Self {
+            Self {
+                value: Arc::new(RuntimeKeyRing::new(
+                    identity_domain::data_protection::KeyRing::new(keys),
+                    None,
+                )),
+            }
+        }
     }
 
     #[async_trait]
-    impl KeyRepository for MockKeyRepo {
-        async fn find_by_oid(&self, _oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
-            Ok(None)
+    impl RuntimeKeyRingProvider for MockKeyRingProvider {
+        fn current_value(&self) -> Arc<RuntimeKeyRing> {
+            Arc::clone(&self.value)
         }
 
-        async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            Ok(vec![])
-        }
-
-        async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
-            Ok(self.keys.clone())
-        }
-
-        async fn create(
-            &self,
-            _key_type: KeyType,
-            _data: &KeyData,
-            _expires_at: Option<DateTime<Utc>>,
-        ) -> Result<Key, KeyRepositoryError> {
-            Err(KeyRepositoryError::CreateFailed(
-                "not implemented in protector tests".into(),
-            ))
-        }
-
-        async fn update_certificate_by_oid(
-            &self,
-            _oid: KeyOid,
-            _certificate_pem: &str,
-        ) -> Result<Option<Key>, KeyRepositoryError> {
-            Err(KeyRepositoryError::UpdateFailed(
-                "not implemented in protector tests".into(),
-            ))
-        }
-
-        async fn revoke_by_oid(
-            &self,
-            _oid: KeyOid,
-            _revoked_at: DateTime<Utc>,
-        ) -> Result<Option<Key>, KeyRepositoryError> {
-            Err(KeyRepositoryError::UpdateFailed(
-                "not implemented in protector tests".into(),
-            ))
+        async fn refresh_value(&self) -> Result<(), crate::error::AppError> {
+            Ok(())
         }
     }
 
@@ -302,8 +273,8 @@ mod tests {
     async fn protect_unprotect_roundtrip() {
         let now = Utc::now();
         let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
-        let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo, test_cipher());
+        let provider = Arc::new(MockKeyRingProvider::new(vec![key]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
 
         let plaintext = b"secret session data";
         let token = protector.protect("session", plaintext).await.unwrap();
@@ -316,8 +287,8 @@ mod tests {
     async fn wrong_purpose_fails() {
         let now = Utc::now();
         let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
-        let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo, test_cipher());
+        let provider = Arc::new(MockKeyRingProvider::new(vec![key]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
 
         let plaintext = b"secret";
         let token = protector.protect("session", plaintext).await.unwrap();
@@ -337,8 +308,8 @@ mod tests {
             Some(now + Duration::hours(1)),
             Some(now),
         );
-        let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo, test_cipher());
+        let provider = Arc::new(MockKeyRingProvider::new(vec![key]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
 
         let result = protector.protect("session", b"secret").await;
         assert!(matches!(result, Err(DataProtectionError::KeyRingEmpty)));
@@ -352,10 +323,8 @@ mod tests {
 
         // Step 1: Create a valid key (no expiry) and encrypt data
         let valid_key = make_symmetric_key_with_id(key_id, now, None, None);
-        let repo = Arc::new(MockKeyRepo {
-            keys: vec![valid_key],
-        });
-        let protector = DataProtectorImpl::new(repo, test_cipher());
+        let provider = Arc::new(MockKeyRingProvider::new(vec![valid_key]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
 
         let plaintext = b"secret";
         let token = protector.protect("session", plaintext).await.unwrap();
@@ -367,10 +336,8 @@ mod tests {
             Some(now - Duration::hours(1)),
             None,
         );
-        let expired_repo = Arc::new(MockKeyRepo {
-            keys: vec![expired_key],
-        });
-        let expired_protector = DataProtectorImpl::new(expired_repo, test_cipher());
+        let expired_provider = Arc::new(MockKeyRingProvider::new(vec![expired_key]));
+        let expired_protector = DataProtectorImpl::new(expired_provider, test_cipher());
 
         let decrypted = expired_protector
             .unprotect("session", &token)
@@ -387,10 +354,8 @@ mod tests {
             Some(now - Duration::hours(1)),
             None,
         );
-        let repo = Arc::new(MockKeyRepo {
-            keys: vec![expired],
-        });
-        let protector = DataProtectorImpl::new(repo, test_cipher());
+        let provider = Arc::new(MockKeyRingProvider::new(vec![expired]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
 
         let result = protector.protect("session", b"test").await;
         assert!(matches!(result, Err(DataProtectionError::KeyRingEmpty)));
@@ -400,8 +365,8 @@ mod tests {
     async fn tampered_token_fails() {
         let now = Utc::now();
         let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
-        let repo = Arc::new(MockKeyRepo { keys: vec![key] });
-        let protector = DataProtectorImpl::new(repo, test_cipher());
+        let provider = Arc::new(MockKeyRingProvider::new(vec![key]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
 
         let plaintext = b"secret";
         let mut token = protector.protect("session", plaintext).await.unwrap();

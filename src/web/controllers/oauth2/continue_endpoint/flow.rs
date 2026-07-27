@@ -74,11 +74,11 @@ pub(super) async fn handle_continue(
         selected_session,
         ctx.services().oidc_authorize().should_skip_consent(&client),
     ) {
-        ContinueAction::Login => continue_login_redirect(ctx, login_id)?.into(),
+        ContinueAction::Login => continue_login_redirect(ctx, login_id)?,
         ContinueAction::OAuthError(error) => {
-            continue_oauth_error_response(ctx, headers, &stored.request, error)?.into()
+            continue_oauth_error_response(ctx, headers, &stored.request, error)?
         }
-        ContinueAction::Consent => continue_consent_redirect(ctx, login_id)?.into(),
+        ContinueAction::Consent => continue_consent_redirect(ctx, login_id)?,
         ContinueAction::Deny => ctx
             .services()
             .oidc_authorize()
@@ -91,7 +91,6 @@ pub(super) async fn handle_continue(
                     &redirect,
                     response_mode_from_value(stored.request.response_mode.as_deref()),
                 )
-                .into()
             })?,
         ContinueAction::Approve {
             session_oid,
@@ -115,7 +114,6 @@ pub(super) async fn handle_continue(
                     &redirect,
                     response_mode_from_value(stored.request.response_mode.as_deref()),
                 )
-                .into()
             })?,
     };
 

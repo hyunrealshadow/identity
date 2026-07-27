@@ -48,6 +48,18 @@ pub(super) struct SignIdTokenInput<'a> {
 
 impl TokenService {
     pub(super) async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
+        if let Some(provider) = &self.runtime_key_ring {
+            let ring = provider.current_value();
+            let key = ring
+                .signing_key()
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))?;
+            return Ok((
+                key.key_id.clone(),
+                key.private_key_pem.clone(),
+                key.algorithm.clone(),
+            ));
+        }
+
         let keys = self
             .key_repo
             .list_available_asymmetric()
@@ -89,7 +101,7 @@ impl TokenService {
         Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
     }
 
-    pub(super) fn sign_access_token(
+    pub(super) async fn sign_access_token(
         &self,
         input: SignAccessTokenInput<'_>,
     ) -> Result<String, AppError> {
@@ -148,13 +160,25 @@ impl TokenService {
                 })?;
         }
 
-        let signer = build_access_token_signer(input.private_key_pem, input.alg)?;
-        jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
-            AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+        let private_key_pem = input.private_key_pem.to_owned();
+        let alg = input.alg.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let signer = build_access_token_signer(&private_key_pem, &alg)?;
+            jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+            })
         })
+        .await
+        .map_err(|error| {
+            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
+                .with_source(error)
+        })?
     }
 
-    pub(super) fn sign_id_token(&self, input: SignIdTokenInput<'_>) -> Result<String, AppError> {
+    pub(super) async fn sign_id_token(
+        &self,
+        input: SignIdTokenInput<'_>,
+    ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
         header.set_token_type("JWT");
         header.set_key_id(input.key_id);
@@ -236,11 +260,19 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
         }
 
-        let signer: Box<dyn josekit::jws::JwsSigner> =
-            build_id_token_signer(input.private_key_pem, input.alg)?;
-        jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
-            AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+        let private_key_pem = input.private_key_pem.to_owned();
+        let alg = input.alg.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let signer = build_id_token_signer(&private_key_pem, &alg)?;
+            jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+            })
         })
+        .await
+        .map_err(|error| {
+            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
+                .with_source(error)
+        })?
     }
 
     #[cfg(feature = "allow-none-alg")]

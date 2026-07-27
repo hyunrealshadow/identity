@@ -61,53 +61,43 @@ pub(in crate::openid_connect) fn test_signing_algorithm_detector()
 }
 
 pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector> {
-    let mut key_repo = MockallKeyRepository::new();
-    key_repo.expect_find_by_oid().returning(|_| Ok(None));
-    key_repo
-        .expect_list_available_asymmetric()
-        .returning(|| Ok(vec![]));
-    key_repo.expect_list_available_symmetric().returning(|| {
-        let raw_key = base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]);
-        Ok(vec![Key {
-            oid: KeyOid::from(Uuid::new_v4()),
-            r#type: KeyType::Symmetric,
-            data: KeyData::Symmetric(SymmetricKeyData {
-                key: raw_key,
-                algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
-            }),
-            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
-            revoked_at: None,
-            created_at: Utc::now(),
-            updated_at: None,
-        }])
-    });
-    key_repo.expect_create().returning(|_, _, _| {
-        Err(
-            identity_domain::key::repository::KeyRepositoryError::CreateFailed(
-                "not implemented in test fixture".into(),
-            ),
-        )
-    });
-    key_repo
-        .expect_update_certificate_by_oid()
-        .returning(|_, _| {
-            Err(
-                identity_domain::key::repository::KeyRepositoryError::UpdateFailed(
-                    "not implemented in test fixture".into(),
-                ),
-            )
-        });
-    key_repo.expect_revoke_by_oid().returning(|_, _| {
-        Err(
-            identity_domain::key::repository::KeyRepositoryError::UpdateFailed(
-                "not implemented in test fixture".into(),
-            ),
-        )
-    });
+    let raw_key = base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]);
+    let provider = StaticRuntimeKeyRingProvider {
+        value: Arc::new(crate::key::runtime::RuntimeKeyRing::new(
+            identity_domain::data_protection::KeyRing::new(vec![Key {
+                oid: KeyOid::from(Uuid::new_v4()),
+                r#type: KeyType::Symmetric,
+                data: KeyData::Symmetric(SymmetricKeyData {
+                    key: raw_key,
+                    algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
+                }),
+                expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            }]),
+            None,
+        )),
+    };
     Arc::new(DataProtectorImpl::new(
-        Arc::new(key_repo),
+        Arc::new(provider),
         Arc::new(TestCipher),
     ))
+}
+
+struct StaticRuntimeKeyRingProvider {
+    value: Arc<crate::key::runtime::RuntimeKeyRing>,
+}
+
+#[async_trait::async_trait]
+impl crate::key::runtime::RuntimeKeyRingProvider for StaticRuntimeKeyRingProvider {
+    fn current_value(&self) -> Arc<crate::key::runtime::RuntimeKeyRing> {
+        Arc::clone(&self.value)
+    }
+
+    async fn refresh_value(&self) -> Result<(), crate::error::AppError> {
+        Ok(())
+    }
 }
 
 struct TestSigningAlgorithmDetector;

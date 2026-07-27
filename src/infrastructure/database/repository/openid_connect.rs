@@ -541,52 +541,96 @@ impl OpenIdConnectClientRepositoryImpl {
         session_oid: SessionOid,
         channel: LogoutChannel,
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
-        let Some(session_model) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
-            .one(&self.db)
-            .await
-            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
-        else {
-            return Ok(Vec::new());
-        };
-
         let client_ids = LoginEntity::find()
-            .filter(login::Column::SessionId.eq(session_model.id))
+            .inner_join(SessionEntity)
+            .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
             .select_only()
             .column(login::Column::ClientId)
+            .distinct()
             .into_tuple::<i64>()
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
-        let mut clients = Vec::new();
-        let mut seen = std::collections::BTreeSet::new();
-        for client_id in client_ids {
-            if !seen.insert(client_id) {
-                continue;
-            }
-
-            let Some(client_model) = ClientEntity::find_by_id(client_id)
-                .one(&self.db)
-                .await
-                .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
-            else {
-                continue;
-            };
-
-            let Some(client) = self.find_by_oid(client_model.oid).await? else {
-                continue;
-            };
-
-            let has_channel = match channel {
-                LogoutChannel::Front => client.metadata().frontchannel_logout_uri.is_some(),
-                LogoutChannel::Back => client.metadata().backchannel_logout_uri.is_some(),
-            };
-            if has_channel {
-                clients.push(client);
-            }
+        if client_ids.is_empty() {
+            return Ok(Vec::new());
         }
 
+        let channel_filter = match channel {
+            LogoutChannel::Front => {
+                client_open_id_connect::Column::FrontchannelLogoutUri.is_not_null()
+            }
+            LogoutChannel::Back => {
+                client_open_id_connect::Column::BackchannelLogoutUri.is_not_null()
+            }
+        };
+        let mut client_rows = ClientEntity::find()
+            .filter(client::Column::Id.is_in(client_ids.clone()))
+            .filter(client::Column::Protocol.eq("openid_connect"))
+            .find_also_related(OpenIdConnectClientEntity)
+            .filter(channel_filter)
+            .all(&self.db)
+            .await
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
+
+        if client_rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        client_rows.sort_by_key(|(client, _)| client.id);
+        let matched_client_ids = client_rows
+            .iter()
+            .map(|(client, _)| client.id)
+            .collect::<Vec<_>>();
+
+        let platform_models = ClientPlatformEntity::find()
+            .filter(client_platform::Column::ClientId.is_in(matched_client_ids.clone()))
+            .all(&self.db)
+            .await
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
+        let mut platforms_by_client = std::collections::BTreeMap::<i64, Vec<_>>::new();
+        for platform_model in platform_models {
+            platforms_by_client
+                .entry(platform_model.client_id)
+                .or_default()
+                .push(to_platform(platform_model)?);
+        }
+
+        let scope_rows = ClientScopeEntity::find()
+            .inner_join(ScopeEntity)
+            .filter(client_scope::Column::ClientId.is_in(matched_client_ids))
+            .filter(scope::Column::Protocol.eq("openid_connect"))
+            .select_only()
+            .column(client_scope::Column::ClientId)
+            .column(scope::Column::Name)
+            .into_tuple::<(i64, String)>()
+            .all(&self.db)
+            .await
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
+        let mut scopes_by_client = std::collections::BTreeMap::<i64, Vec<String>>::new();
+        for (client_id, scope_name) in scope_rows {
+            scopes_by_client
+                .entry(client_id)
+                .or_default()
+                .push(scope_name);
+        }
+
+        let mut clients = Vec::with_capacity(client_rows.len());
+        for (client_model, metadata_model) in client_rows {
+            let metadata_model = metadata_model.ok_or(
+                OpenIdConnectClientRepositoryError::MissingMetadata(client_model.oid),
+            )?;
+            let client_id = client_model.id;
+            clients.push(
+                OpenIdConnectClient::new(
+                    to_client(client_model)?,
+                    to_metadata(metadata_model)?,
+                    platforms_by_client.remove(&client_id).unwrap_or_default(),
+                    scopes_by_client.remove(&client_id).unwrap_or_default(),
+                )
+                .map_err(OpenIdConnectClientRepositoryError::InvalidClient)?,
+            );
+        }
         Ok(clients)
     }
 }

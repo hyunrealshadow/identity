@@ -230,6 +230,7 @@ fn build_install_service(
         key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         persistence: Arc::new(InstallPersistenceImpl::new(db)),
+        runtime_key_ring: settings.key_ring(),
     }
 }
 

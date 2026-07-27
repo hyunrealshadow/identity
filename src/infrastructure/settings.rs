@@ -1,16 +1,25 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use sea_orm::DatabaseConnection;
 
-use crate::database::repository::setting::SettingRepositoryImpl;
+use crate::{
+    crypto::signing_algorithm::SigningAlgorithmDetectorImpl,
+    database::repository::{
+        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, setting::SettingRepositoryImpl,
+    },
+};
 use identity_application::{
     error::AppError,
+    key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider, RuntimeSigningKey},
+    openid_connect::provider::SigningAlgorithmDetector,
     setting::runtime::{CachedSetting, RefreshableSetting, SettingProvider, SettingsRefresher},
 };
 use identity_domain::{
     auth::password::PasswordHashSetting,
+    data_protection::KeyRing,
+    key::{KeyData, KeyJwkRepository, repository::KeyRepository},
     setting::model::SettingDefinition,
     setting::{
         consent_url::ConsentUrlSetting,
@@ -40,6 +49,95 @@ pub type AppDynamicClientRegistrationSettingService =
     CachedSetting<DynamicClientRegistrationSetting, SettingRepositoryImpl>;
 pub type AppLoginUrlSettingService = CachedSetting<LoginUrlSetting, SettingRepositoryImpl>;
 pub type AppConsentUrlSettingService = CachedSetting<ConsentUrlSetting, SettingRepositoryImpl>;
+
+pub struct CachedRuntimeKeyRingProvider {
+    key_repo: Arc<dyn KeyRepository>,
+    key_jwk_repo: Arc<dyn KeyJwkRepository>,
+    signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
+    value: RwLock<Arc<RuntimeKeyRing>>,
+}
+
+impl CachedRuntimeKeyRingProvider {
+    pub async fn new(db: DatabaseConnection) -> Result<Self, AppError> {
+        let provider = Self {
+            key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
+            key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db)),
+            signing_algorithm_detector: Arc::new(SigningAlgorithmDetectorImpl),
+            value: RwLock::new(Arc::new(RuntimeKeyRing::new(KeyRing::new(vec![]), None))),
+        };
+        provider.refresh().await?;
+        Ok(provider)
+    }
+
+    async fn refresh(&self) -> Result<(), AppError> {
+        let symmetric_keys = self.key_repo.list_available_symmetric().await?;
+        let asymmetric_keys = self.key_repo.list_available_asymmetric().await?;
+        let mut signing_key = None;
+
+        for key in asymmetric_keys {
+            let KeyData::Asymmetric(data) = &key.data else {
+                continue;
+            };
+            let Some(algorithm) = self
+                .signing_algorithm_detector
+                .detect(&key)
+                .into_iter()
+                .next()
+            else {
+                continue;
+            };
+            let Some(binding) = self
+                .key_jwk_repo
+                .find_active_by_key_oid_and_algorithm(key.oid, algorithm.as_str())
+                .await?
+            else {
+                continue;
+            };
+
+            signing_key = Some(RuntimeSigningKey {
+                key_id: uuid::Uuid::from(binding.oid).to_string(),
+                private_key_pem: data.private_key.clone(),
+                algorithm: algorithm.as_str().to_owned(),
+            });
+            break;
+        }
+
+        let value = Arc::new(RuntimeKeyRing::new(
+            KeyRing::new(symmetric_keys),
+            signing_key,
+        ));
+        *self
+            .value
+            .write()
+            .unwrap_or_else(|error| error.into_inner()) = value;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl RuntimeKeyRingProvider for CachedRuntimeKeyRingProvider {
+    fn current_value(&self) -> Arc<RuntimeKeyRing> {
+        self.value
+            .read()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    }
+
+    async fn refresh_value(&self) -> Result<(), AppError> {
+        self.refresh().await
+    }
+}
+
+#[async_trait]
+impl RefreshableSetting for CachedRuntimeKeyRingProvider {
+    fn key(&self) -> &'static str {
+        "runtime.key_ring"
+    }
+
+    async fn refresh_value(&self) -> Result<(), AppError> {
+        self.refresh().await
+    }
+}
 
 #[derive(Clone)]
 pub struct GroupedInstallationSettingProvider<R> {
@@ -126,6 +224,7 @@ pub struct AppRuntimeSettings {
     dynamic_client_registration_setting: Arc<AppDynamicClientRegistrationSettingService>,
     login_url_setting: Arc<AppLoginUrlSettingService>,
     consent_url_setting: Arc<AppConsentUrlSettingService>,
+    key_ring: Arc<CachedRuntimeKeyRingProvider>,
 }
 
 impl AppRuntimeSettings {
@@ -177,8 +276,9 @@ impl AppRuntimeSettings {
                 AppLoginUrlSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
             ),
             consent_url_setting: Arc::new(
-                AppConsentUrlSettingService::new(SettingRepositoryImpl::new(db)).await?,
+                AppConsentUrlSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
             ),
+            key_ring: Arc::new(CachedRuntimeKeyRingProvider::new(db.clone()).await?),
         })
     }
 
@@ -193,6 +293,7 @@ impl AppRuntimeSettings {
         refresher.register(Arc::clone(&self.dynamic_client_registration_setting));
         refresher.register(Arc::clone(&self.login_url_setting));
         refresher.register(Arc::clone(&self.consent_url_setting));
+        refresher.register(Arc::clone(&self.key_ring));
         refresher.spawn_detached();
     }
 
@@ -244,5 +345,10 @@ impl AppRuntimeSettings {
     #[must_use]
     pub fn consent_url(&self) -> Arc<AppConsentUrlSettingService> {
         Arc::clone(&self.consent_url_setting)
+    }
+
+    #[must_use]
+    pub fn key_ring(&self) -> Arc<CachedRuntimeKeyRingProvider> {
+        Arc::clone(&self.key_ring)
     }
 }
