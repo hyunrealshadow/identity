@@ -156,7 +156,9 @@ pub fn authorize_error_details(
     error: &AppError,
 ) -> Vec<String> {
     let locale = resolve_locale_from_headers(headers);
-    vec![crate::controllers::response::error_message(i18n, &locale, error)]
+    vec![crate::controllers::response::error_message(
+        i18n, &locale, error,
+    )]
 }
 
 pub fn render_authorize_error_page(

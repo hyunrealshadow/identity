@@ -2,7 +2,10 @@ use url::Url;
 
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
-    domain::openid_connect::{OpenIdConnectClientPlatformType, model::claim::StandardScopes},
+    domain::{
+        key::JwaSigningAlgorithm,
+        openid_connect::{OpenIdConnectClientPlatformType, model::claim::StandardScopes},
+    },
     openid_connect::remote::{
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
         fetch_https_public_document, remote_http_client,
@@ -26,7 +29,7 @@ pub(super) fn split_scope(value: Option<&str>) -> Vec<String> {
     })
 }
 
-pub(super) fn reject_none_outside_conformance(
+pub(super) fn reject_none_algorithm(
     field: &'static str,
     value: Option<&str>,
 ) -> Result<(), AppError> {
@@ -35,6 +38,45 @@ pub(super) fn reject_none_outside_conformance(
             AppError::from_code(RegistrationErrorCode::NoneNotSupported).with_param("field", field)
         );
     }
+    Ok(())
+}
+
+pub(super) fn validate_request_object_encryption(
+    alg: Option<&str>,
+    enc: Option<&str>,
+) -> Result<(), AppError> {
+    let invalid_field = alg
+        .filter(|value| {
+            !crate::openid_connect::jose::REQUEST_OBJECT_ENCRYPTION_ALGORITHMS.contains(value)
+        })
+        .map(|_| "request_object_encryption_alg")
+        .or_else(|| {
+            enc.filter(|value| {
+                !crate::openid_connect::jose::REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS
+                    .contains(value)
+            })
+            .map(|_| "request_object_encryption_enc")
+        })
+        .or_else(|| (enc.is_some() && alg.is_none()).then_some("request_object_encryption_alg"));
+
+    if let Some(field) = invalid_field {
+        return Err(
+            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                .with_param("field", field),
+        );
+    }
+
+    Ok(())
+}
+
+pub(super) fn validate_request_object_signing(value: Option<&str>) -> Result<(), AppError> {
+    if value.is_some_and(|value| value != "none" && value.parse::<JwaSigningAlgorithm>().is_err()) {
+        return Err(
+            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                .with_param("field", "request_object_signing_alg"),
+        );
+    }
+
     Ok(())
 }
 

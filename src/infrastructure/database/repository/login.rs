@@ -270,6 +270,36 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(())
     }
 
+    async fn bind_session(
+        &self,
+        login_oid: Uuid,
+        session_oid: SessionOid,
+    ) -> Result<(), LoginRepositoryError> {
+        let session = SessionEntity::find()
+            .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
+            .one(&self.db)
+            .await
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(LoginRepositoryError::SessionNotFound)?;
+
+        let result = LoginEntity::update_many()
+            .col_expr(login::Column::SessionId, Expr::value(Some(session.id)))
+            .col_expr(
+                login::Column::UpdatedAt,
+                Expr::value(Some(Utc::now().naive_utc())),
+            )
+            .filter(login::Column::Oid.eq(login_oid))
+            .exec(&self.db)
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+
+        if result.rows_affected == 0 {
+            return Err(LoginRepositoryError::LoginNotFound);
+        }
+
+        Ok(())
+    }
+
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
         let now = Utc::now().naive_utc();
         LoginEntity::update_many()

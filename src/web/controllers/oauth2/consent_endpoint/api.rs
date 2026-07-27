@@ -22,10 +22,9 @@ pub(super) async fn consent_api(
     req: &mut Request,
 ) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
-    let headers = req.headers().clone();
     let query: ConsentQuery = parse_query(req)?;
 
-    let loaded = load_consent_context(&ctx, &headers, &query.login_id).await?;
+    let loaded = load_consent_context(&ctx, &query.login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
         return Err(AppError::from_code(
@@ -33,10 +32,7 @@ pub(super) async fn consent_api(
         ));
     }
 
-    if !has_selected_session(
-        loaded.stored.interaction.selected_session_oid,
-        &loaded.active_sessions,
-    ) {
+    if !has_selected_session(loaded.selected_session_oid, &loaded.active_sessions) {
         return Err(AppError::from_code(
             AuthorizeHttpErrorCode::ConsentSessionNotFound,
         ));
@@ -66,7 +62,6 @@ pub(super) async fn consent_api_submit(
     req: &mut Request,
 ) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
-    let headers = req.headers().clone();
     let payload: ConsentDecisionPayload = parse_json(req).await?;
-    handle_consent_decision(ctx, headers, payload.login_id, payload.decision).await
+    handle_consent_decision(ctx, payload.login_id, payload.decision).await
 }

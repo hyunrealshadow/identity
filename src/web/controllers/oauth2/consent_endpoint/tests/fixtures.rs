@@ -250,7 +250,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         oid: login_oid,
         client_id: client_model.id,
         client_authorization_id: authorization_model.id,
-        session_id: None,
+        session_id: Some(active_session.id),
         user_id: None,
         status: LoginStatus::CREATED.to_owned(),
         failure_reason: None,
@@ -326,11 +326,11 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[login_url_setting]])
         .append_query_results([[consent_url_setting]])
         .append_query_results([[symmetric_key.clone()]])
-        .append_query_results([[(active_session.clone(), active_user.clone())]])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[login_model.clone()]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_model.clone()]])
+        .append_query_results([[active_session.clone()]])
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
         .append_query_results([Vec::<
@@ -342,16 +342,19 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[login_model.clone()]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_model.clone()]])
+        .append_query_results([[active_session.clone()]])
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), oidc_metadata_model)]])
         .append_query_results([Vec::<
             crate::infrastructure::database::entity::client_platform::Model,
         >::new()])
         .append_query_results([[openid_scope_row]])
+        .append_query_results([[(active_session.clone(), active_user.clone())]])
         .append_query_results([[symmetric_key]])
         .append_query_results([[login_model.clone()]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_model.clone()]])
+        .append_query_results([[active_session]])
         .append_query_results([[authorization_model]])
         .append_exec_results([MockExecResult {
             last_insert_id: 0,

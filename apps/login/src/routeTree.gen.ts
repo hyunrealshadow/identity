@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as Oauth2ContinueRouteImport } from './routes/oauth2.continue'
 import { Route as LoginChallengeRouteImport } from './routes/login.challenge'
 
 const LoginRoute = LoginRouteImport.update({
@@ -30,11 +29,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const Oauth2ContinueRoute = Oauth2ContinueRouteImport.update({
-  id: '/oauth2/continue',
-  path: '/oauth2/continue',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginChallengeRoute = LoginChallengeRouteImport.update({
   id: '/challenge',
   path: '/challenge',
@@ -46,14 +40,12 @@ export interface FileRoutesByFullPath {
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
-  '/oauth2/continue': typeof Oauth2ContinueRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
-  '/oauth2/continue': typeof Oauth2ContinueRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,28 +53,19 @@ export interface FileRoutesById {
   '/consent': typeof ConsentRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
-  '/oauth2/continue': typeof Oauth2ContinueRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    '/' | '/consent' | '/login' | '/login/challenge' | '/oauth2/continue'
+  fullPaths: '/' | '/consent' | '/login' | '/login/challenge'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/consent' | '/login' | '/login/challenge' | '/oauth2/continue'
-  id:
-    | '__root__'
-    | '/'
-    | '/consent'
-    | '/login'
-    | '/login/challenge'
-    | '/oauth2/continue'
+  to: '/' | '/consent' | '/login' | '/login/challenge'
+  id: '__root__' | '/' | '/consent' | '/login' | '/login/challenge'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConsentRoute: typeof ConsentRoute
   LoginRoute: typeof LoginRouteWithChildren
-  Oauth2ContinueRoute: typeof Oauth2ContinueRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -106,13 +89,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/oauth2/continue': {
-      id: '/oauth2/continue'
-      path: '/oauth2/continue'
-      fullPath: '/oauth2/continue'
-      preLoaderRoute: typeof Oauth2ContinueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login/challenge': {
@@ -139,7 +115,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConsentRoute: ConsentRoute,
   LoginRoute: LoginRouteWithChildren,
-  Oauth2ContinueRoute: Oauth2ContinueRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

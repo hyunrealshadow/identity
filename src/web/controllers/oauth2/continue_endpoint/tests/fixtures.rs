@@ -207,7 +207,7 @@ pub(super) async fn continue_state(
         interaction: match (selected_session_oid, selected_user_oid) {
             (Some(session_oid), Some(user_oid)) => AuthorizationInteractionState {
                 selected_session_oid: Some(SessionOid(session_oid)),
-                selected_protected_session_id: None,
+                selected_protected_session_id: Some(session_oid.to_string()),
                 selected_user_oid: Some(user_oid.to_string()),
                 selection_source: fixture.selection_source.or(Some(SelectionSource::Auto)),
                 consent_state: fixture.consent_state,
@@ -259,7 +259,10 @@ pub(super) async fn continue_state(
         oid: login_oid,
         client_id: client_model.id,
         client_authorization_id: authorization_model.id,
-        session_id: None,
+        session_id: match (selected_session_oid, active_session_selection) {
+            (Some(selected), Some((active, _))) if selected == active => Some(43),
+            _ => None,
+        },
         user_id: None,
         status: fixture.login_status.to_owned(),
         failure_reason: None,
@@ -461,6 +464,13 @@ pub(super) async fn continue_state(
         ));
     }
 
+    let bound_session_model = selected_session_oid.and_then(|selected| {
+        active_session_and_users
+            .iter()
+            .find(|(session, _)| session.oid == selected)
+            .map(|(session, _)| session.clone())
+    });
+
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[installation_initialized_setting]])
         .append_query_results([[installation_domain_setting]])
@@ -477,7 +487,12 @@ pub(super) async fn continue_state(
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[login_model.clone()]])
         .append_query_results([[client_model.clone()]])
-        .append_query_results([[authorization_model.clone()]])
+        .append_query_results([[authorization_model.clone()]]);
+    let db = match bound_session_model {
+        Some(session) => db.append_query_results([[session]]),
+        None => db,
+    };
+    let db = db
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
         .append_query_results([[platform_model]])
@@ -507,9 +522,6 @@ pub(super) async fn continue_state(
 
     let db = db
         .append_query_results([[symmetric_key.clone()]])
-        .append_query_results([[login_model]])
-        .append_query_results([[client_model.clone()]])
-        .append_query_results([[authorization_model.clone()]])
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_code_model]])

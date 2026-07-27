@@ -131,10 +131,10 @@ export const Route = createFileRoute('/login/challenge')({
             return navigationResponse(request, destination.toString())
           }
 
-          const continueUri =
-            result.continue_uri ??
-            `/oauth2/continue?login_id=${encodeURIComponent(loginId)}`
-          return navigationResponse(request, continueUri)
+          if (!result.continue_uri) {
+            throw new Error('Identity API did not return the OP continuation URI')
+          }
+          return navigationResponse(request, result.continue_uri)
         } catch (error) {
           return formErrorResponse(
             request,

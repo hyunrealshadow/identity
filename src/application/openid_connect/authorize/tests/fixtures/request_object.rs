@@ -53,6 +53,114 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
     })
 }
 
+pub(in crate::openid_connect) fn authorize_service_with_request_object_encryption_key(
+    client_signing_public_key: Vec<u8>,
+    encryption_private_key: Vec<u8>,
+    encryption_public_key: Vec<u8>,
+    kid: &str,
+    encryption_alg: &str,
+) -> AuthorizeService {
+    let creds = vec![OpenIdConnectCredential {
+        oid: Uuid::new_v4(),
+        client_oid: TEST_CLIENT_ID,
+        r#type: OpenIdConnectCredentialType::ClientPublicKey,
+        hint: "request_object".to_string(),
+        data: OpenIdConnectCredentialData::ClientPublicKey {
+            public_key: String::from_utf8(client_signing_public_key).unwrap(),
+            jwk: None,
+        },
+        expires_at: chrono::Utc::now(),
+        revoked_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    }];
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_by_client_oid_and_type()
+        .returning(move |_, _| Ok(creds.clone()));
+
+    let key_oid = KeyOid::from(Uuid::new_v4());
+    let key = Key {
+        oid: key_oid,
+        r#type: KeyType::Asymmetric,
+        data: KeyData::Asymmetric(AsymmetricKeyData {
+            public_key: String::from_utf8(encryption_public_key).unwrap(),
+            private_key: String::from_utf8(encryption_private_key).unwrap(),
+            certificate: None,
+        }),
+        expires_at: None,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+    let mut key_repo = crate::openid_connect::tests::fixtures::mocks::MockKeyRepository::new();
+    let found_key = key.clone();
+    key_repo
+        .expect_find_by_oid()
+        .returning(move |oid| Ok((oid == key_oid).then(|| found_key.clone())));
+    let available_key = key.clone();
+    key_repo
+        .expect_list_available_asymmetric()
+        .returning(move || Ok(vec![available_key.clone()]));
+    key_repo
+        .expect_list_available_symmetric()
+        .returning(|| Ok(vec![]));
+
+    let kid = kid.to_owned();
+    let binding_oid = KeyJwkOid::from(Uuid::parse_str(&kid).unwrap());
+    let public_jwk = if encryption_alg.starts_with("RSA") {
+        PublicJwk::Rsa {
+            key_use: Some("enc".to_owned()),
+            alg: Some(encryption_alg.to_owned()),
+            kid: Some(kid),
+            n: "test".to_owned(),
+            e: "AQAB".to_owned(),
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        }
+    } else {
+        PublicJwk::Ec {
+            key_use: Some("enc".to_owned()),
+            alg: Some(encryption_alg.to_owned()),
+            kid: Some(kid),
+            crv: "P-256".to_owned(),
+            x: "test".to_owned(),
+            y: "test".to_owned(),
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        }
+    };
+    let binding = KeyJwk {
+        oid: binding_oid,
+        key_oid,
+        algorithm: encryption_alg.to_owned(),
+        jwk: public_jwk,
+        created_at: Utc::now(),
+    };
+    let mut key_jwk_repo = MockKeyJwkRepository::new();
+    key_jwk_repo
+        .expect_list_active()
+        .returning(move || Ok(vec![binding.clone()]));
+
+    AuthorizeService::new(AuthorizeServiceDependencies {
+        client_repo: Arc::new(FoundClientRepository),
+        credential_repo: Arc::new(credential_repo),
+        client_authorization_repo: Arc::new(mock_client_auth_repo_with_state(Arc::new(
+            ClientAuthorizationState::default(),
+        ))),
+        login_repo: Arc::new(mock_login_repo()),
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(key_repo),
+        key_jwk_repo: Arc::new(key_jwk_repo),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+        http_client: crate::openid_connect::remote::test_http_client(),
+    })
+}
+
 pub(in crate::openid_connect) fn authorize_service_with_request_uri(
     request_uri: &str,
 ) -> AuthorizeService {

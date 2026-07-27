@@ -88,7 +88,119 @@ async fn parse_unsecured_request_object_is_accepted() {
 }
 
 #[tokio::test]
-async fn parse_encrypted_request_object_is_rejected_explicitly() {
+async fn parse_unsecured_request_object_rejects_non_empty_signature() {
+    let service = authorize_service_with_public_key(signing_keypair().1);
+    let client = FoundClientRepository
+        .find_by_oid(TEST_CLIENT_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut header = JwsHeader::new();
+    header.set_token_type("JWT");
+    let mut payload = JwtPayload::new();
+    payload
+        .set_claim("scope", Some(serde_json::json!("openid")))
+        .unwrap();
+    let mut token = jwt::encode_unsecured(&payload, &header).unwrap();
+    token.push_str("forged-signature");
+
+    let error = service
+        .parse_request_object_payload(&client, &token)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23041);
+}
+
+#[tokio::test]
+async fn parse_rsa_encrypted_signed_request_object() {
+    let (client_private_key, client_public_key) = signing_keypair();
+    let (encryption_private_key, encryption_public_key) = signing_keypair();
+    let kid = Uuid::new_v4().to_string();
+    let service = authorize_service_with_request_object_encryption_key(
+        client_public_key,
+        encryption_private_key,
+        encryption_public_key.clone(),
+        &kid,
+        "RSA-OAEP",
+    );
+    let client = FoundClientRepository
+        .find_by_oid(TEST_CLIENT_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    let inner = signed_request_object(
+        &client_private_key,
+        [
+            ("client_id", json!(TEST_CLIENT_ID)),
+            ("scope", json!("openid profile")),
+            ("state", json!("encrypted-state")),
+        ],
+    );
+    let mut header = JweHeader::new();
+    header.set_algorithm("RSA-OAEP");
+    header.set_content_encryption("A128GCM");
+    header.set_key_id(&kid);
+    header.set_content_type("JWT");
+    let encrypter = RSA_OAEP.encrypter_from_pem(&encryption_public_key).unwrap();
+    let encrypted = serialize_compact(inner.as_bytes(), &header, &encrypter).unwrap();
+
+    let parsed = service
+        .parse_request_object_payload(&client, &encrypted)
+        .await
+        .unwrap();
+
+    assert_eq!(parsed["client_id"], TEST_CLIENT_ID.to_string());
+    assert_eq!(parsed["scope"], "openid profile");
+    assert_eq!(parsed["state"], "encrypted-state");
+}
+
+#[tokio::test]
+async fn parse_ecdh_encrypted_signed_request_object() {
+    let (client_private_key, client_public_key) = signing_keypair();
+    let encryption_key_pair = EcKeyPair::generate(EcCurve::P256).unwrap();
+    let encryption_private_key = encryption_key_pair.to_pem_private_key();
+    let encryption_public_key = encryption_key_pair.to_pem_public_key();
+    let kid = Uuid::new_v4().to_string();
+    let service = authorize_service_with_request_object_encryption_key(
+        client_public_key,
+        encryption_private_key,
+        encryption_public_key.clone(),
+        &kid,
+        "ECDH-ES",
+    );
+    let client = FoundClientRepository
+        .find_by_oid(TEST_CLIENT_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    let inner = signed_request_object(
+        &client_private_key,
+        [
+            ("client_id", json!(TEST_CLIENT_ID)),
+            ("scope", json!("openid")),
+            ("state", json!("ecdh-state")),
+        ],
+    );
+    let mut header = JweHeader::new();
+    header.set_algorithm("ECDH-ES");
+    header.set_content_encryption("A256GCM");
+    header.set_key_id(&kid);
+    header.set_content_type("JWT");
+    let encrypter = ECDH_ES.encrypter_from_pem(&encryption_public_key).unwrap();
+    let encrypted = serialize_compact(inner.as_bytes(), &header, &encrypter).unwrap();
+
+    let parsed = service
+        .parse_request_object_payload(&client, &encrypted)
+        .await
+        .unwrap();
+
+    assert_eq!(parsed["scope"], "openid");
+    assert_eq!(parsed["state"], "ecdh-state");
+}
+
+#[tokio::test]
+async fn parse_encrypted_request_object_rejects_malformed_protected_header() {
     let service = authorize_service_with_public_key(signing_keypair().1);
     let client = FoundClientRepository
         .find_by_oid(TEST_CLIENT_ID)
@@ -101,7 +213,74 @@ async fn parse_encrypted_request_object_is_rejected_explicitly() {
         .await;
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().code(), 23061);
+    assert_eq!(result.unwrap_err().code(), 23023);
+}
+
+#[tokio::test]
+async fn parse_encrypted_request_object_enforces_registered_alg_and_enc() {
+    let service = authorize_service_with_public_key(signing_keypair().1);
+    let mut metadata = test_metadata(None, None);
+    metadata.request_object_encryption_alg = Some("RSA-OAEP-256".to_owned());
+    metadata.request_object_encryption_enc = Some("A256GCM".to_owned());
+    let client = OpenIdConnectClient::new(
+        test_client(TEST_CLIENT_ID),
+        metadata,
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap();
+    let protected = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&json!({
+            "alg": "RSA-OAEP",
+            "enc": "A128GCM"
+        }))
+        .unwrap(),
+    );
+
+    let error = service
+        .parse_request_object_payload(&client, &format!("{protected}.key.iv.ciphertext.tag"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23061);
+}
+
+#[tokio::test]
+async fn parse_encrypted_request_object_rejects_unknown_kid() {
+    let (client_private_key, client_public_key) = signing_keypair();
+    let (encryption_private_key, encryption_public_key) = signing_keypair();
+    let service = authorize_service_with_request_object_encryption_key(
+        client_public_key,
+        encryption_private_key,
+        encryption_public_key.clone(),
+        &Uuid::new_v4().to_string(),
+        "RSA-OAEP",
+    );
+    let client = FoundClientRepository
+        .find_by_oid(TEST_CLIENT_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    let inner = signed_request_object(
+        &client_private_key,
+        [
+            ("client_id", json!(TEST_CLIENT_ID)),
+            ("scope", json!("openid")),
+        ],
+    );
+    let mut header = JweHeader::new();
+    header.set_algorithm("RSA-OAEP");
+    header.set_content_encryption("A128GCM");
+    header.set_key_id(Uuid::new_v4().to_string());
+    let encrypter = RSA_OAEP.encrypter_from_pem(&encryption_public_key).unwrap();
+    let encrypted = serialize_compact(inner.as_bytes(), &header, &encrypter).unwrap();
+
+    let error = service
+        .parse_request_object_payload(&client, &encrypted)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23061);
 }
 
 #[tokio::test]

@@ -8,11 +8,12 @@ mod services;
 pub(super) use crate::openid_connect::tests::fixtures::mocks::mock_login_repo;
 pub(super) use clients::{
     FoundClientRepository, InitiateLoginClientRepository, MissingClientRepository,
-    RequestUriClientRepository, ScopedClientRepository, TEST_CLIENT_ID,
+    PublicClientRepository, RequestUriClientRepository, ScopedClientRepository, TEST_CLIENT_ID,
 };
 pub(super) use request_object::{
-    authorize_service_with_public_key, authorize_service_with_request_uri, signed_request_object,
-    signing_keypair, spawn_chunked_response_server, spawn_redirect_response_server,
+    authorize_service_with_public_key, authorize_service_with_request_object_encryption_key,
+    authorize_service_with_request_uri, signed_request_object, signing_keypair,
+    spawn_chunked_response_server, spawn_redirect_response_server,
 };
 pub(super) use services::{
     build_test_service, empty_cred_repo, provider_service, stub_key_repo, stub_user_repo,

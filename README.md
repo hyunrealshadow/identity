@@ -33,11 +33,11 @@ pnpm install --frozen-lockfile
 pnpm dev:login
 ```
 
-The application proxies protocol API requests and `/oauth2/continue` to
-`IDENTITY_API_URL`, which defaults to `https://127.0.0.1:5150`. Keeping the
-continuation request behind the same BFF preserves session and CSRF cookies
-when the applications use different origins. Login and consent use native POST
-forms without JavaScript and are progressively enhanced after hydration.
+The application proxies interactive JSON API requests to `IDENTITY_API_URL`,
+which defaults to `https://127.0.0.1:5150`. Once login or consent has updated
+the authorization interaction, the browser returns directly to the OP
+`/oauth2/continue` endpoint. Login and consent use native POST forms without
+JavaScript and are progressively enhanced after hydration.
 
 Identity accepts only two TLS deployment modes under `server.tls.termination`:
 `direct`, where Identity terminates TLS itself, and `upstream`, where a trusted

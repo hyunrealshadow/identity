@@ -39,6 +39,12 @@ export interface IdentifierResponse {
   user: UserDisplayInfo
 }
 
+export interface SelectAccountResponse {
+  status: 'ok'
+  continue_uri: string
+  sessions: Array<string>
+}
+
 export interface ChallengeResponse {
   status: 'authenticated' | 'mfa_required'
   continue_uri?: string

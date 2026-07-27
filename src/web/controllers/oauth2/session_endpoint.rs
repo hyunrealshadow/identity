@@ -4,7 +4,7 @@ use salvo::{Depot, Request, Response, handler};
 use crate::{
     controllers::{
         response::{WebResult, app_state, render_app_error, render_html},
-        shared::{generate_csp_nonce, load_active_session_entries},
+        shared::{generate_csp_nonce, load_op_active_session_entries},
     },
     views::oauth2::CheckSessionPageData,
 };
@@ -17,7 +17,7 @@ pub async fn check_session_iframe(
 ) -> WebResult<()> {
     let ctx = app_state(depot)?;
     let nonce = generate_csp_nonce();
-    let active_sessions = load_active_session_entries(&ctx, req.headers()).await?;
+    let active_sessions = load_op_active_session_entries(&ctx, req.headers()).await?;
     let op_browser_state = active_sessions
         .iter()
         .map(|entry| entry.protected_session_id.as_str())

@@ -115,19 +115,10 @@ impl Default for OpenIdProviderCapabilities {
             ],
             request_object_signing_alg_values_supported:
                 supported_request_object_signing_algorithms(),
-            request_object_encryption_alg_values_supported: vec![
-                "RSA-OAEP".to_owned(),
-                "RSA-OAEP-256".to_owned(),
-                "ECDH-ES".to_owned(),
-                "ECDH-ES+A128KW".to_owned(),
-                "ECDH-ES+A256KW".to_owned(),
-            ],
-            request_object_encryption_enc_values_supported: vec![
-                "A128CBC-HS256".to_owned(),
-                "A256CBC-HS512".to_owned(),
-                "A128GCM".to_owned(),
-                "A256GCM".to_owned(),
-            ],
+            request_object_encryption_alg_values_supported:
+                super::jose::request_object_encryption_algorithms(),
+            request_object_encryption_enc_values_supported:
+                super::jose::request_object_content_encryption_algorithms(),
             token_endpoint_auth_methods_supported: supported_token_endpoint_auth_methods(),
             token_endpoint_auth_signing_alg_values_supported:
                 supported_token_endpoint_auth_signing_algorithms(),
@@ -181,27 +172,14 @@ fn supported_token_endpoint_auth_signing_algorithms() -> Vec<String> {
 }
 
 fn supported_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
-    let mut methods = default_token_endpoint_auth_methods();
-    append_conformance_token_endpoint_auth_methods(&mut methods);
-    methods
-}
-
-fn default_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
     vec![
         TokenEndpointAuthMethod::ClientSecretBasic,
         TokenEndpointAuthMethod::ClientSecretPost,
         TokenEndpointAuthMethod::ClientSecretJwt,
         TokenEndpointAuthMethod::PrivateKeyJwt,
+        TokenEndpointAuthMethod::None,
     ]
 }
-
-#[cfg(feature = "allow-none-alg")]
-fn append_conformance_token_endpoint_auth_methods(methods: &mut Vec<TokenEndpointAuthMethod>) {
-    methods.push(TokenEndpointAuthMethod::None);
-}
-
-#[cfg(not(feature = "allow-none-alg"))]
-fn append_conformance_token_endpoint_auth_methods(_methods: &mut Vec<TokenEndpointAuthMethod>) {}
 
 fn supported_asymmetric_jws_algorithms() -> Vec<String> {
     JwaSigningAlgorithm::all()
@@ -832,6 +810,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn default_discovery_advertises_request_object_encryption() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().await.unwrap();
+
+        assert_eq!(
+            metadata.request_object_encryption_alg_values_supported,
+            Some(super::super::jose::request_object_encryption_algorithms())
+        );
+        assert_eq!(
+            metadata.request_object_encryption_enc_values_supported,
+            Some(super::super::jose::request_object_content_encryption_algorithms())
+        );
+    }
+
+    #[tokio::test]
     async fn discovery_advertises_registration_endpoint_when_enabled() {
         let service = OpenIdProviderService::for_test(InstallationState {
             initialized: true,
@@ -852,7 +853,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn discovery_advertises_none_token_auth_only_in_conformance() {
+    async fn discovery_advertises_public_client_auth_method() {
         let service = OpenIdProviderService::for_test(InstallationState {
             initialized: true,
             domain: Some("https://identity.example.com".to_owned()),
@@ -865,10 +866,7 @@ mod tests {
         let metadata = service.discovery_metadata().await.unwrap();
         let methods = metadata.token_endpoint_auth_methods_supported.unwrap();
 
-        assert_eq!(
-            methods.iter().any(|method| method == "none"),
-            cfg!(feature = "allow-none-alg")
-        );
+        assert!(methods.iter().any(|method| method == "none"));
     }
 
     #[tokio::test]

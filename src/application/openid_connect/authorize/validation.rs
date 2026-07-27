@@ -137,6 +137,25 @@ impl AuthorizeService {
             None => None,
         };
 
+        if client.metadata().settings.allow_public_client_flow {
+            if response_type != ResponseType::Code {
+                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", response_type.to_string()));
+            }
+            if params.code_challenge.as_deref().is_none_or(str::is_empty) {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
+                        .with_param("field", "code_challenge"),
+                );
+            }
+            if code_challenge_method != Some(CodeChallengeMethod::S256) {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
+                        .with_param("code_challenge_method", "S256 required for public client"),
+                );
+            }
+        }
+
         let claims = params
             .claims
             .as_deref()
@@ -216,6 +235,27 @@ impl AuthorizeService {
         let Some(raw) = raw else {
             return Ok(());
         };
+
+        let header_segment = raw
+            .split('.')
+            .next()
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid))?;
+        let header = URL_SAFE_NO_PAD.decode(header_segment).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
+        })?;
+        let header = serde_json::from_slice::<serde_json::Value>(&header).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
+        })?;
+        if !cfg!(feature = "allow-none-alg")
+            && header
+                .get(JwtClaimNames::ALG)
+                .and_then(|value| value.as_str())
+                .is_none_or(|alg| alg.eq_ignore_ascii_case("none"))
+        {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::IdTokenHintIssuerInvalid,
+            ));
+        }
 
         let payload_segment = raw
             .split('.')

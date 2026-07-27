@@ -30,6 +30,50 @@ async fn validate_request_rejects_unknown_scope() {
 }
 
 #[tokio::test]
+async fn public_client_requires_pkce_s256() {
+    let service = build_test_service(
+        Arc::new(PublicClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let missing = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap_err();
+    assert_eq!(missing.code(), 23013);
+
+    let mut plain = params("openid profile");
+    plain.code_challenge = Some("challenge".to_owned());
+    plain.code_challenge_method = Some("plain".to_owned());
+    let plain = service.validate_request(plain).await.unwrap_err();
+    assert_eq!(plain.code(), 23011);
+
+    let mut s256 = params("openid profile");
+    s256.code_challenge = Some("challenge".to_owned());
+    s256.code_challenge_method = Some("S256".to_owned());
+    assert!(service.validate_request(s256).await.is_ok());
+}
+
+#[tokio::test]
+async fn public_client_rejects_implicit_response_type() {
+    let service = build_test_service(
+        Arc::new(PublicClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.response_type = "id_token".to_owned();
+    request.nonce = Some("nonce".to_owned());
+    request.code_challenge = Some("challenge".to_owned());
+    request.code_challenge_method = Some("S256".to_owned());
+
+    let error = service.validate_request(request).await.unwrap_err();
+
+    assert_eq!(error.code(), 23003);
+}
+
+#[tokio::test]
 async fn validate_request_reports_missing_required_fields() {
     let service = build_test_service(
         Arc::new(MissingClientRepository),
@@ -83,6 +127,22 @@ async fn validate_request_rejects_id_token_hint_from_other_issuer() {
 
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), 23060);
+}
+
+#[cfg(not(feature = "allow-none-alg"))]
+#[tokio::test]
+async fn validate_request_rejects_none_algorithm_id_token_hint() {
+    let mut params = params("openid profile");
+    params.id_token_hint = Some(unsigned_id_token_hint("https://identity.example.com/"));
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let error = service.validate_request(params).await.unwrap_err();
+
+    assert_eq!(error.code(), 23060);
 }
 
 fn unsigned_id_token_hint(issuer: &str) -> String {

@@ -67,6 +67,3 @@ pub const SESSION_EXPIRY: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// back to [`ACR_PASSWORD`] and the caller must re-challenge with TOTP to
 /// regain the elevated level.
 pub const ACR_EXPIRY: Duration = Duration::from_secs(60 * 60); // 1 hour
-
-/// Name of the session cookie.
-pub const SESSION_COOKIE_NAME: &str = "sessions";

@@ -7,6 +7,8 @@ pub(in crate::openid_connect) struct MissingClientRepository;
 
 pub(in crate::openid_connect) struct FoundClientRepository;
 
+pub(in crate::openid_connect) struct PublicClientRepository;
+
 pub(in crate::openid_connect) struct RequestUriClientRepository {
     pub(in crate::openid_connect) request_uris: Vec<Url>,
 }
@@ -45,6 +47,22 @@ impl OpenIdConnectClientRepository for FoundClientRepository {
                 test_scopes(),
             )
             .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for PublicClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: Uuid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, None);
+        metadata.token_endpoint_auth_method = Some("none".to_owned());
+        metadata.settings.allow_public_client_flow = true;
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
         ))
     }
 }

@@ -24,6 +24,7 @@ import type {
   ActiveAccountsResponse,
   IdentifierResponse,
   LoginStatusResponse,
+  SelectAccountResponse,
 } from '#/lib/identity-types'
 import {
   formErrorResponse,
@@ -109,7 +110,7 @@ export const Route = createFileRoute('/login')({
 
         try {
           if (intent === 'select') {
-            await identityJson('/api/auth/login/select', {
+            const result = await identityJson<SelectAccountResponse>('/api/auth/login/select', {
               method: 'POST',
               csrfToken,
               body: {
@@ -117,10 +118,7 @@ export const Route = createFileRoute('/login')({
                 login_id: loginId,
               },
             })
-            return navigationResponse(
-              request,
-              `/oauth2/continue?login_id=${encodeURIComponent(loginId)}`,
-            )
+            return navigationResponse(request, result.continue_uri)
           }
 
           const identifier = String(form.get('identifier') ?? '').trim()

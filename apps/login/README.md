@@ -10,8 +10,9 @@ pnpm dev
 ```
 
 The Rust protocol service must be available to the Start server at
-`IDENTITY_API_URL` (default `https://127.0.0.1:5150`). Login, consent, and the
-protocol continuation endpoint are proxied server-side. The Rust JSON API uses
+`IDENTITY_API_URL` (default `https://127.0.0.1:5150`). Login and consent APIs
+are proxied server-side; their successful responses send the browser directly
+back to the OP continuation endpoint. The Rust JSON API uses
 `X-Sessions` and `X-CSRF-Token`; API responses return updated values through
 the `sessions` and `csrf_token` JSON fields. The Start server keeps the session
 list in its own secure, HttpOnly first-party cookie and translates it to the API

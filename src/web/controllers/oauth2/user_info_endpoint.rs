@@ -34,12 +34,12 @@ pub async fn userinfo(
         Some(_) => {
             return Err(UserinfoWebError(AppError::from_code(
                 OpenIdConnectErrorCode::BearerSchemeInvalid,
-            )))
+            )));
         }
         None => {
             return Err(UserinfoWebError(AppError::from_code(
                 OpenIdConnectErrorCode::AuthorizationHeaderRequired,
-            )))
+            )));
         }
     };
 
@@ -82,7 +82,10 @@ async fn handle_userinfo_request(
 ) -> Result<AppResponse, UserinfoWebError> {
     let service = ctx.services().user_info();
 
-    let token_claims = service.validate_access_token(token).await.map_err(UserinfoWebError)?;
+    let token_claims = service
+        .validate_access_token(token)
+        .await
+        .map_err(UserinfoWebError)?;
 
     let user_claims = service
         .get_user_info(
@@ -115,7 +118,9 @@ async fn handle_userinfo_request(
     Ok(AppResponse(build_success_response(user_claims)))
 }
 
-fn build_success_response(claims: identity_application::openid_connect::dto::UserInfoClaims) -> Response {
+fn build_success_response(
+    claims: identity_application::openid_connect::dto::UserInfoClaims,
+) -> Response {
     let mut response = json_response(StatusCode::OK, claims);
     insert_no_store_headers(&mut response);
     response
@@ -233,12 +238,10 @@ impl Writer for UserinfoWebError {
                     "error_description": self.0.code().to_string()
                 });
                 let mut response = json_response(status, error_body);
-                response.headers_mut().insert(
-                    header::CACHE_CONTROL,
-                    HeaderValue::from_static("no-store"),
-                );
-                if let Ok(value) = HeaderValue::from_str(&format!("Bearer error=\"{rfc_error}\""))
-                {
+                response
+                    .headers_mut()
+                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                if let Ok(value) = HeaderValue::from_str(&format!("Bearer error=\"{rfc_error}\"")) {
                     response
                         .headers_mut()
                         .insert(header::WWW_AUTHENTICATE, value);

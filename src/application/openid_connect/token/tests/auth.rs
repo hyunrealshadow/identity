@@ -150,6 +150,25 @@ async fn authenticate_private_key_jwt_accepts_signed_assertion() {
     assert!(result.is_ok());
 }
 
+#[cfg(not(feature = "allow-none-alg"))]
+#[tokio::test]
+async fn authenticate_private_key_jwt_rejects_none_algorithm() {
+    let service = build_token_service(Arc::new(mock_client_auth_repo()), Uuid::new_v4());
+    let mut header = JwsHeader::new();
+    header.set_token_type("JWT");
+    let mut payload = JwtPayload::new();
+    payload.set_issuer("00000000-0000-0000-0000-000000000000");
+    payload.set_subject("00000000-0000-0000-0000-000000000000");
+    let assertion = jwt::encode_unsecured(&payload, &header).unwrap();
+
+    let error = service
+        .authenticate_private_key_jwt("00000000-0000-0000-0000-000000000000", &assertion)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 24039);
+}
+
 #[tokio::test]
 async fn authenticate_private_key_jwt_rejects_wrong_subject() {
     let service = build_token_service(Arc::new(mock_client_auth_repo()), Uuid::new_v4());

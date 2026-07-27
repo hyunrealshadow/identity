@@ -18,6 +18,7 @@ pub(super) fn client_credentials_from_jwks(
     let Some(jwks) = jwks else {
         return Ok(Vec::new());
     };
+    reject_none_jwk_alg(jwks)?;
 
     jwks.keys
         .iter()
@@ -38,6 +39,7 @@ pub(super) async fn client_credentials_from_jwks_uri(
     };
 
     let jwks = fetch_jwks(jwks_uri).await?;
+    reject_none_jwk_alg(&jwks)?;
     let public_keys = jwks
         .keys
         .iter()
@@ -52,6 +54,19 @@ pub(super) async fn client_credentials_from_jwks_uri(
         public_keys,
         jwks: jwks.keys,
     }))
+}
+
+fn reject_none_jwk_alg(jwks: &DynamicClientJwks) -> Result<(), AppError> {
+    if !cfg!(feature = "allow-none-alg")
+        && jwks.keys.iter().any(|jwk| jwk.algorithm() == Some("none"))
+    {
+        return Err(
+            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                .with_param("field", "jwks"),
+        );
+    }
+
+    Ok(())
 }
 
 async fn fetch_jwks(jwks_uri: &Url) -> Result<DynamicClientJwks, AppError> {

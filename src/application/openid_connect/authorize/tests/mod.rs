@@ -4,6 +4,11 @@ use async_trait::async_trait;
 use base64::Engine;
 use chrono::Utc;
 use josekit::{
+    jwe::{ECDH_ES, JweHeader, RSA_OAEP, serialize_compact},
+    jwk::{
+        KeyPair,
+        alg::ec::{EcCurve, EcKeyPair},
+    },
     jws::{JwsHeader, RS256},
     jwt::{self, JwtPayload},
 };
@@ -30,7 +35,7 @@ use identity_domain::{
     client_authorization::{ClientAuthorization, ClientAuthorizationType},
     key::{
         JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid, KeyType, PublicJwk,
-        material::{SymmetricKeyAlgorithm, SymmetricKeyData},
+        material::{AsymmetricKeyData, SymmetricKeyAlgorithm, SymmetricKeyData},
     },
     openid_connect::{
         OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,

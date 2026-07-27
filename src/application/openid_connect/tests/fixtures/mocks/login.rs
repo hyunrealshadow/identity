@@ -6,6 +6,7 @@ use identity_domain::auth::repository::{LoginRepository, LoginRepositoryError};
 // ─── LoginRepository test double (mockall can't handle &str lifetime params) ───
 
 type UpdateStatusCall = (uuid::Uuid, String, Option<SessionOid>, Option<String>);
+type BindSessionCall = (uuid::Uuid, SessionOid);
 
 /// Simple test double for LoginRepository.  mockall's `mock!` macro cannot
 /// generate a mock for this trait because the methods use `Option<&str>` and
@@ -16,6 +17,7 @@ pub struct MockLoginRepository {
     pub create_pending_error: std::sync::Mutex<Option<LoginRepositoryError>>,
     pub bind_user_login: std::sync::Mutex<Option<Login>>,
     pub bind_user_error: std::sync::Mutex<Option<LoginRepositoryError>>,
+    pub bind_session_calls: std::sync::Mutex<Vec<BindSessionCall>>,
     pub update_status_calls: std::sync::Mutex<Vec<UpdateStatusCall>>,
     pub increment_failed_attempts_calls: std::sync::Mutex<Vec<(uuid::Uuid, Option<String>)>>,
     pub reset_failed_attempts_calls: std::sync::Mutex<Vec<uuid::Uuid>>,
@@ -29,6 +31,7 @@ impl Default for MockLoginRepository {
             create_pending_error: std::sync::Mutex::new(None),
             bind_user_login: std::sync::Mutex::new(None),
             bind_user_error: std::sync::Mutex::new(None),
+            bind_session_calls: std::sync::Mutex::new(Vec::new()),
             update_status_calls: std::sync::Mutex::new(Vec::new()),
             increment_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
             reset_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
@@ -100,6 +103,21 @@ impl LoginRepository for MockLoginRepository {
         Ok(())
     }
 
+    async fn bind_session(
+        &self,
+        login_oid: uuid::Uuid,
+        session_oid: SessionOid,
+    ) -> Result<(), LoginRepositoryError> {
+        self.bind_session_calls
+            .lock()
+            .unwrap()
+            .push((login_oid, session_oid));
+        if let Some(Some(login)) = self.find_by_oid_result.lock().unwrap().as_mut() {
+            login.session_oid = Some(session_oid);
+        }
+        Ok(())
+    }
+
     async fn increment_failed_attempts(
         &self,
         login_oid: uuid::Uuid,
@@ -155,6 +173,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             requested_acr: None,
         })),
         bind_user_error: std::sync::Mutex::new(None),
+        bind_session_calls: std::sync::Mutex::new(Vec::new()),
         update_status_calls: std::sync::Mutex::new(Vec::new()),
         increment_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
         reset_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),

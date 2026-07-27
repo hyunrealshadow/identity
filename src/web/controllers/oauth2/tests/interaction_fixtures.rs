@@ -308,13 +308,17 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
             "name".to_owned(),
             Value::String(Some("openid".to_owned())),
         )])]])
-        .append_query_results([[(active_session, active_user)]])
+        .append_query_results([[(active_session.clone(), active_user)]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[inserted_authorization_model.clone()]])
+        .append_query_results([[client_model.clone()]])
+        .append_query_results([[inserted_authorization_model.clone()]])
+        .append_query_results([[inserted_login_model.clone()]])
+        .append_query_results([[symmetric_key.clone()]])
+        .append_query_results([[symmetric_key]])
+        .append_query_results([[inserted_login_model]])
         .append_query_results([[client_model]])
         .append_query_results([[inserted_authorization_model]])
-        .append_query_results([[inserted_login_model]])
-        .append_query_results([[symmetric_key]])
         .append_query_results([[client_authorization::Model {
             id: 23,
             oid: authorization_oid,
@@ -347,6 +351,11 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
             created_at: now.into(),
             updated_at: Some(now.into()),
         }]])
+        .append_exec_results([MockExecResult {
+            last_insert_id: 0,
+            rows_affected: 1,
+        }])
+        .append_query_results([[active_session]])
         .append_exec_results([MockExecResult {
             last_insert_id: 0,
             rows_affected: 1,

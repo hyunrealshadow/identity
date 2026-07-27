@@ -20,13 +20,14 @@ use crate::{
     },
     boot::AppState,
     controllers::response::redirect_to_response,
+    domain::auth::SESSION_EXPIRY,
     domain::auth::model::{ActiveSession, SessionOid},
-    domain::auth::{SESSION_COOKIE_NAME, SESSION_EXPIRY},
 };
 
 pub const CSRF_HEADER_NAME: &str = "x-csrf-token";
 pub const CSRF_FORM_FIELD_NAME: &str = "csrf_token";
 pub const SESSION_HEADER_NAME: &str = "x-sessions";
+pub const OP_SESSION_COOKIE_NAME: &str = "sessions";
 const API_CSRF_TOKEN_KEY: &str = "identity.api.csrf-token";
 const SESSION_ID_PROTECTION_PURPOSE: &str = "session-id";
 
@@ -76,10 +77,12 @@ pub fn protected_session_ids(headers: &HeaderMap) -> Vec<String> {
         .get(SESSION_HEADER_NAME)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
-        .or_else(|| {
-            parse_cookie(headers, SESSION_COOKIE_NAME)
-                .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
-        })
+        .unwrap_or_default()
+}
+
+pub fn op_protected_session_ids(headers: &HeaderMap) -> Vec<String> {
+    parse_cookie(headers, OP_SESSION_COOKIE_NAME)
+        .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
         .unwrap_or_default()
 }
 
@@ -117,9 +120,10 @@ pub async fn unprotect_session_id(
 ///
 /// The value is a JSON array of data-protected session IDs. Returns an empty
 /// `Vec` when neither transport contains a valid array.
-pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<SessionCookieEntry> {
-    let protected_ids = protected_session_ids(headers);
-
+async fn parse_protected_session_ids(
+    ctx: &AppState,
+    protected_ids: Vec<String>,
+) -> Vec<SessionCookieEntry> {
     let mut entries = Vec::new();
     for protected_session_id in protected_ids {
         if let Ok(session_oid) = unprotect_session_id(ctx, &protected_session_id).await {
@@ -141,13 +145,31 @@ pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<Se
     entries
 }
 
+/// Parse protected sessions supplied by the Login BFF through `X-Sessions`.
+pub async fn parse_session_header(ctx: &AppState, headers: &HeaderMap) -> Vec<SessionCookieEntry> {
+    parse_protected_session_ids(ctx, protected_session_ids(headers)).await
+}
+
+/// Parse the OP-owned browser session cookie used by protocol endpoints.
+pub async fn parse_op_session_cookie(
+    ctx: &AppState,
+    headers: &HeaderMap,
+) -> Vec<SessionCookieEntry> {
+    parse_protected_session_ids(ctx, op_protected_session_ids(headers)).await
+}
+
+/// Backwards-compatible alias for Login BFF session transport.
+pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<SessionCookieEntry> {
+    parse_session_header(ctx, headers).await
+}
+
 /// Build the `Set-Cookie` header value for the sessions cookie.
 ///
 pub fn build_session_cookie_from_protected_ids(protected_ids: &[String]) -> String {
     let json = serde_json::to_string(protected_ids).unwrap_or_else(|_| "[]".to_owned());
     let max_age = SESSION_EXPIRY.as_secs();
     format!(
-        "{SESSION_COOKIE_NAME}={json}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age={max_age}"
+        "{OP_SESSION_COOKIE_NAME}={json}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age={max_age}"
     )
 }
 
@@ -177,11 +199,40 @@ pub async fn build_selected_session_cookie(
     headers: &HeaderMap,
     session_oid: SessionOid,
 ) -> Result<SelectedSessionCookie, AppError> {
-    let state = build_selected_session_state(ctx, headers, session_oid).await?;
+    let mut entries = parse_op_session_cookie(ctx, headers).await;
+    let existing = entries
+        .iter()
+        .find(|entry| entry.session_oid == session_oid)
+        .map(|entry| entry.protected_session_id.clone());
+    let protected_session_id = match existing {
+        Some(id) => id,
+        None => protect_session_id(ctx, session_oid).await?,
+    };
+
+    entries.retain(|entry| entry.session_oid != session_oid);
+    let mut protected_session_ids = Vec::with_capacity(entries.len() + 1);
+    protected_session_ids.push(protected_session_id.clone());
+    protected_session_ids.extend(entries.into_iter().map(|entry| entry.protected_session_id));
+
     Ok(SelectedSessionCookie {
-        header: build_session_cookie_from_protected_ids(&state.protected_session_ids),
-        protected_session_id: state.protected_session_id,
+        header: build_session_cookie_from_protected_ids(&protected_session_ids),
+        protected_session_id,
     })
+}
+
+pub async fn build_op_session_cookie_with_selected_id(
+    ctx: &AppState,
+    headers: &HeaderMap,
+    session_oid: SessionOid,
+    protected_session_id: &str,
+) -> String {
+    let mut entries = parse_op_session_cookie(ctx, headers).await;
+    entries.retain(|entry| entry.session_oid != session_oid);
+
+    let mut protected_session_ids = Vec::with_capacity(entries.len() + 1);
+    protected_session_ids.push(protected_session_id.to_owned());
+    protected_session_ids.extend(entries.into_iter().map(|entry| entry.protected_session_id));
+    build_session_cookie_from_protected_ids(&protected_session_ids)
 }
 
 pub async fn build_selected_session_state(
@@ -189,7 +240,7 @@ pub async fn build_selected_session_state(
     headers: &HeaderMap,
     session_oid: SessionOid,
 ) -> Result<SelectedSessionState, AppError> {
-    let mut entries = parse_session_cookie(ctx, headers).await;
+    let mut entries = parse_session_header(ctx, headers).await;
     let existing = entries
         .iter()
         .find(|entry| entry.session_oid == session_oid)
@@ -214,7 +265,38 @@ pub async fn load_active_session_entries(
     ctx: &AppState,
     headers: &HeaderMap,
 ) -> Result<Vec<ActiveSessionEntry>, AppError> {
-    let entries = parse_session_cookie(ctx, headers).await;
+    let entries = parse_session_header(ctx, headers).await;
+
+    if entries.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let session_oids: Vec<SessionOid> = entries.iter().map(|entry| entry.session_oid).collect();
+    let active_sessions = ctx
+        .services()
+        .session()
+        .get_active_accounts(&session_oids)
+        .await?;
+
+    Ok(active_sessions
+        .into_iter()
+        .filter_map(|session| {
+            entries
+                .iter()
+                .find(|entry| entry.session_oid == session.session_oid)
+                .map(|entry| ActiveSessionEntry {
+                    session,
+                    protected_session_id: entry.protected_session_id.clone(),
+                })
+        })
+        .collect())
+}
+
+pub async fn load_op_active_session_entries(
+    ctx: &AppState,
+    headers: &HeaderMap,
+) -> Result<Vec<ActiveSessionEntry>, AppError> {
+    let entries = parse_op_session_cookie(ctx, headers).await;
 
     if entries.is_empty() {
         return Ok(Vec::new());
@@ -250,6 +332,26 @@ pub async fn load_active_sessions(
         .into_iter()
         .map(|entry| entry.session)
         .collect())
+}
+
+pub async fn load_op_active_sessions(
+    ctx: &AppState,
+    headers: &HeaderMap,
+) -> Result<Vec<ActiveSession>, AppError> {
+    Ok(load_op_active_session_entries(ctx, headers)
+        .await?
+        .into_iter()
+        .map(|entry| entry.session)
+        .collect())
+}
+
+pub fn protocol_continue_uri(ctx: &AppState, login_id: &str) -> Result<String, AppError> {
+    let issuer = ctx.services().oidc().issuer()?;
+    let base = issuer.as_str().trim_end_matches('/');
+    Ok(format!(
+        "{base}/oauth2/continue?login_id={}",
+        urlencoding::encode(login_id)
+    ))
 }
 
 pub fn append_set_cookie(response: &mut Response, cookie: &str) {
@@ -463,11 +565,12 @@ mod tests {
     fn build_session_cookie_is_always_secure_and_cross_site() {
         let cookie = super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()]);
 
+        assert!(cookie.starts_with("sessions="));
         assert!(cookie.contains("; HttpOnly; Secure; SameSite=None;"));
     }
 
     #[test]
-    fn session_header_takes_precedence_over_legacy_cookie() {
+    fn bff_header_and_op_cookie_are_distinct_transports() {
         let mut headers = HeaderMap::new();
         headers.insert(
             super::SESSION_HEADER_NAME,
@@ -475,12 +578,16 @@ mod tests {
         );
         headers.insert(
             http::header::COOKIE,
-            HeaderValue::from_static("sessions=[\"cookie-session\"]"),
+            HeaderValue::from_static("sessions=[\"op-cookie-session\"]"),
         );
 
         assert_eq!(
             super::protected_session_ids(&headers),
             vec!["header-session"]
+        );
+        assert_eq!(
+            super::op_protected_session_ids(&headers),
+            vec!["op-cookie-session"]
         );
     }
 

@@ -4,8 +4,7 @@ use unic_langid::LanguageIdentifier;
 
 use identity_application::{
     error::{
-        AppError, code::AppErrorCode, codes::registration::RegistrationErrorCode,
-        kind::ErrorKind,
+        AppError, code::AppErrorCode, codes::registration::RegistrationErrorCode, kind::ErrorKind,
     },
     openid_connect::registration::DynamicClientRegistrationRequest,
 };
@@ -21,9 +20,7 @@ fn registration_rfc_error_code(error: &AppError) -> &'static str {
     match error.code() {
         c if c == RegistrationErrorCode::InvalidRedirectUri.code() => "invalid_redirect_uri",
         c if c == RegistrationErrorCode::InvalidClientMetadata.code() => "invalid_client_metadata",
-        c if c == RegistrationErrorCode::InvalidRegistrationAccessToken.code() => {
-            "invalid_token"
-        }
+        c if c == RegistrationErrorCode::InvalidRegistrationAccessToken.code() => "invalid_token",
         _ => match error.kind() {
             ErrorKind::Unauthorized => "invalid_token",
             ErrorKind::Validation => "invalid_client_metadata",
@@ -95,10 +92,9 @@ impl Writer for RegistrationWebError {
                     "error_description": self.0.code().to_string()
                 });
                 let mut response = json_response(status, error_body);
-                response.headers_mut().insert(
-                    header::CACHE_CONTROL,
-                    HeaderValue::from_static("no-store"),
-                );
+                response
+                    .headers_mut()
+                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
                 *res = response;
             }
         }

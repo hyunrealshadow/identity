@@ -96,6 +96,17 @@ impl TokenService {
 
         let verifier = params.code_verifier.as_deref();
 
+        if authenticated_client
+            .metadata()
+            .settings
+            .allow_public_client_flow
+            && (data.code_challenge.as_deref().is_none_or(str::is_empty)
+                || data.code_challenge_method.as_deref() != Some("S256"))
+        {
+            return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
+                .with_param("code_challenge_method", "S256 required for public client"));
+        }
+
         verify_pkce(
             data.code_challenge.as_deref(),
             data.code_challenge_method.as_deref(),

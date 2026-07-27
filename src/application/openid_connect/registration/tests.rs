@@ -310,6 +310,101 @@ async fn register_rejects_non_https_initiate_login_uri() {
 }
 
 #[tokio::test]
+async fn register_accepts_supported_request_object_encryption_metadata() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service =
+        DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+    service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                request_object_encryption_alg: Some("RSA-OAEP-256".to_owned()),
+                request_object_encryption_enc: Some("A256GCM".to_owned()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    let registration = captured.lock().unwrap().clone().unwrap();
+    assert_eq!(
+        registration
+            .metadata
+            .request_object_encryption_alg
+            .as_deref(),
+        Some("RSA-OAEP-256")
+    );
+    assert_eq!(
+        registration
+            .metadata
+            .request_object_encryption_enc
+            .as_deref(),
+        Some("A256GCM")
+    );
+}
+
+#[tokio::test]
+async fn register_rejects_invalid_request_object_encryption_metadata() {
+    for request in [
+        DynamicClientRegistrationRequest {
+            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            request_object_encryption_alg: Some("RSA1_5".to_owned()),
+            ..DynamicClientRegistrationRequest::default()
+        },
+        DynamicClientRegistrationRequest {
+            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            request_object_encryption_alg: Some("RSA-OAEP".to_owned()),
+            request_object_encryption_enc: Some("unsupported".to_owned()),
+            ..DynamicClientRegistrationRequest::default()
+        },
+        DynamicClientRegistrationRequest {
+            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            request_object_encryption_enc: Some("A128GCM".to_owned()),
+            ..DynamicClientRegistrationRequest::default()
+        },
+    ] {
+        let captured = Arc::new(std::sync::Mutex::new(None));
+        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+        let service =
+            DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+        let error = service.register(request, &issuer()).await.unwrap_err();
+
+        assert_eq!(error.code(), 25009);
+        assert!(captured.lock().unwrap().is_none());
+    }
+}
+
+#[tokio::test]
+async fn register_rejects_invalid_request_object_signing_algorithm() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service =
+        DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                request_object_signing_alg: Some("unsupported".to_owned()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25009);
+    assert!(captured.lock().unwrap().is_none());
+}
+
+#[tokio::test]
 async fn register_rejects_unsafe_sector_identifier_uri_before_fetch() {
     let captured = Arc::new(std::sync::Mutex::new(None));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -393,9 +488,8 @@ async fn delete_removes_client_found_by_registration_access_token() {
     assert_eq!(deleted.lock().unwrap().as_slice(), &[client_oid]);
 }
 
-#[cfg(not(feature = "allow-none-alg"))]
 #[tokio::test]
-async fn register_rejects_none_token_auth_method_outside_conformance() {
+async fn register_allows_public_client_none_auth() {
     let captured = Arc::new(std::sync::Mutex::new(None));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
@@ -404,7 +498,7 @@ async fn register_rejects_none_token_auth_method_outside_conformance() {
         repo.clone(),
     );
 
-    let error = service
+    let response = service
         .register(
             DynamicClientRegistrationRequest {
                 redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
@@ -414,15 +508,45 @@ async fn register_rejects_none_token_auth_method_outside_conformance() {
             &issuer(),
         )
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert_eq!(error.code(), 25007);
-    assert!(captured.lock().unwrap().is_none());
+    assert!(response.client_secret.is_none());
+    assert_eq!(response.token_endpoint_auth_method.as_deref(), Some("none"));
+    let registration = captured.lock().unwrap().clone().unwrap();
+    assert!(registration.client_secret.is_none());
+    assert!(registration.metadata.settings.allow_public_client_flow);
+}
+
+#[cfg(feature = "allow-none-alg")]
+#[tokio::test]
+async fn register_allows_none_id_token_algorithm_with_feature() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service =
+        DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+    let response = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                id_token_signed_response_alg: Some("none".to_owned()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.id_token_signed_response_alg.as_deref(),
+        Some("none")
+    );
 }
 
 #[cfg(not(feature = "allow-none-alg"))]
 #[tokio::test]
-async fn register_rejects_none_id_token_signing_alg_outside_conformance() {
+async fn register_rejects_none_id_token_signing_alg() {
     let captured = Arc::new(std::sync::Mutex::new(None));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
@@ -445,6 +569,96 @@ async fn register_rejects_none_id_token_signing_alg_outside_conformance() {
 
     assert_eq!(error.code(), 25007);
     assert!(captured.lock().unwrap().is_none());
+}
+
+#[cfg(not(feature = "allow-none-alg"))]
+#[tokio::test]
+async fn register_rejects_none_in_other_client_algorithm_metadata() {
+    for request in [
+        DynamicClientRegistrationRequest {
+            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            userinfo_signed_response_alg: Some("none".to_owned()),
+            ..DynamicClientRegistrationRequest::default()
+        },
+        DynamicClientRegistrationRequest {
+            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            token_endpoint_auth_signing_alg: Some("none".to_owned()),
+            ..DynamicClientRegistrationRequest::default()
+        },
+        DynamicClientRegistrationRequest {
+            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            id_token_encrypted_response_alg: Some("none".to_owned()),
+            ..DynamicClientRegistrationRequest::default()
+        },
+    ] {
+        let captured = Arc::new(std::sync::Mutex::new(None));
+        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+        let service =
+            DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+        let error = service.register(request, &issuer()).await.unwrap_err();
+
+        assert_eq!(error.code(), 25007);
+        assert!(captured.lock().unwrap().is_none());
+    }
+}
+
+#[cfg(not(feature = "allow-none-alg"))]
+#[tokio::test]
+async fn register_rejects_jwk_with_none_algorithm() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service =
+        DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+    let jwk = serde_json::from_value(serde_json::json!({
+        "kty": "RSA",
+        "use": "sig",
+        "alg": "none",
+        "kid": "bad-key",
+        "n": "test",
+        "e": "AQAB"
+    }))
+    .unwrap();
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                jwks: Some(super::DynamicClientJwks { keys: vec![jwk] }),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25009);
+    assert!(captured.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn register_allows_none_request_object_signing_algorithm() {
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+    let service =
+        DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+    let response = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                request_object_signing_alg: Some("none".to_owned()),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.request_object_signing_alg.as_deref(), Some("none"));
 }
 
 #[test]
@@ -458,40 +672,4 @@ fn sector_identifier_uris_must_include_registered_redirects() {
             &redirect_uris
         )
     );
-}
-
-#[cfg(feature = "allow-none-alg")]
-#[tokio::test]
-async fn register_allows_public_client_none_auth_in_conformance() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
-    let service = DynamicClientRegistrationService::new(
-        Arc::new(TestRegistrationSetting(true)),
-        repo.clone(),
-    );
-
-    let response = service
-        .register(
-            DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
-                id_token_signed_response_alg: Some("none".to_owned()),
-                token_endpoint_auth_method: Some("none".to_owned()),
-                ..DynamicClientRegistrationRequest::default()
-            },
-            &issuer(),
-        )
-        .await
-        .unwrap();
-
-    assert!(response.client_secret.is_none());
-    assert_eq!(response.token_endpoint_auth_method.as_deref(), Some("none"));
-    assert_eq!(
-        response.id_token_signed_response_alg.as_deref(),
-        Some("none")
-    );
-
-    let captured_val = captured.lock().unwrap().clone().unwrap();
-    assert!(captured_val.client_secret.is_none());
-    assert!(captured_val.metadata.settings.allow_public_client_flow);
 }

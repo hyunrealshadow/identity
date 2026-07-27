@@ -124,6 +124,13 @@ pub trait LoginRepository: Send + Sync {
         status: &str,
     ) -> Result<Login, LoginRepositoryError>;
 
+    /// Bind the session selected for this login interaction.
+    async fn bind_session(
+        &self,
+        login_oid: Uuid,
+        session_oid: SessionOid,
+    ) -> Result<(), LoginRepositoryError>;
+
     /// Update login status (and optionally link a session by session OID).
     ///
     /// `acr` is written when the login transitions to `authenticated` so that

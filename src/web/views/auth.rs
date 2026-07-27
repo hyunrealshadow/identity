@@ -76,6 +76,7 @@ pub struct SelectAccountResponse {
     pub status: &'static str,
     pub session: SessionInfo,
     pub sessions: Vec<String>,
+    pub continue_uri: String,
 }
 
 // ─── Identifier Step ─────────────────────────────────────────────────────────
@@ -117,7 +118,7 @@ pub struct LoginStatusResponse {
     pub prompt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_locales: Option<Vec<String>>,
-    /// `/oauth2/continue?login_id=X` — present only when `status == "authenticated"`.
+    /// Absolute OP `/oauth2/continue?login_id=X` URI, present only when authenticated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continue_uri: Option<String>,
 }

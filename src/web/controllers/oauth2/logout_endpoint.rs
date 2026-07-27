@@ -17,7 +17,7 @@ use crate::controllers::{
     },
     shared::{
         append_set_cookie, build_session_cookie_from_protected_ids, generate_csp_nonce,
-        load_active_session_entries,
+        load_op_active_session_entries,
     },
 };
 
@@ -169,8 +169,8 @@ async fn handle_logout(
 ) -> Result<AppResponse, identity_application::error::AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
-    let session_entries = crate::controllers::shared::parse_session_cookie(&ctx, &headers).await;
-    let active_entries = load_active_session_entries(&ctx, &headers).await?;
+    let session_entries = crate::controllers::shared::parse_op_session_cookie(&ctx, &headers).await;
+    let active_entries = load_op_active_session_entries(&ctx, &headers).await?;
     let session_to_revoke = active_entries.first().map(|entry| {
         (
             entry.session.session_oid,
@@ -269,9 +269,7 @@ mod tests {
             identity_application::openid_connect::logout::LogoutOutcome::Redirect {
                 redirect_uri: url::Url::parse("https://rp.example.com/logout?state=abc").unwrap(),
             },
-            Some(
-                "sessions=[]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=3600".to_owned(),
-            ),
+            Some("sessions=[]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=3600".to_owned()),
         )
         .await;
 

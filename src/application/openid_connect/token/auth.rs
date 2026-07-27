@@ -245,6 +245,9 @@ impl TokenService {
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none");
+        if algorithm == "none" && !cfg!(feature = "allow-none-alg") {
+            return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
+        }
         if let Some(registered_algorithm) =
             client.metadata().token_endpoint_auth_signing_alg.as_deref()
             && registered_algorithm != algorithm
@@ -333,6 +336,9 @@ impl TokenService {
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none");
+        if algorithm == "none" && !cfg!(feature = "allow-none-alg") {
+            return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
+        }
         if let Some(registered_algorithm) =
             client.metadata().token_endpoint_auth_signing_alg.as_deref()
             && registered_algorithm != algorithm
@@ -398,6 +404,11 @@ async fn fetch_and_verify_jwks_uri(
     let jwks = serde_json::from_slice::<RemoteJwks>(&body).map_err(|error| {
         AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
     })?;
+    if !cfg!(feature = "allow-none-alg")
+        && jwks.keys.iter().any(|jwk| jwk.algorithm() == Some("none"))
+    {
+        return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
+    }
     for jwk in jwks.keys {
         if let Ok(payload) = decode_assertion_with_jwk(algorithm, assertion, &jwk) {
             return Ok(Some(payload));

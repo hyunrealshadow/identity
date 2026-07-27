@@ -819,6 +819,21 @@ mod tests {
             Ok(())
         }
 
+        async fn bind_session(
+            &self,
+            login_oid: Uuid,
+            session_oid: SessionOid,
+        ) -> Result<(), LoginRepositoryError> {
+            let mut state = self.state.lock().unwrap();
+            let login = state
+                .logins
+                .iter_mut()
+                .find(|login| login.oid == login_oid)
+                .ok_or(LoginRepositoryError::LoginNotFound)?;
+            login.session_oid = Some(session_oid);
+            Ok(())
+        }
+
         async fn increment_failed_attempts(
             &self,
             login_oid: Uuid,

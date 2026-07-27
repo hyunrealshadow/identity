@@ -1,6 +1,8 @@
 use super::*;
 use crate::openid_connect::jose::{
+    REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
     asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
+    decrypt_compact_with_private_pem,
 };
 #[cfg(test)]
 use crate::openid_connect::remote::fetchable_url;
@@ -79,7 +81,7 @@ impl AuthorizeService {
         raw: &str,
     ) -> Result<serde_json::Value, AppError> {
         let raw = if raw.split('.').count() == 5 {
-            self.decrypt_request_object(raw).await?
+            self.decrypt_request_object(client, raw).await?
         } else {
             raw.to_owned()
         };
@@ -101,33 +103,12 @@ impl AuthorizeService {
         }
 
         let payload = match algorithm {
-            "none" => {
-                let parts: Vec<&str> = raw.split('.').collect();
-                if parts.len() < 2 {
-                    return Err(AppError::from_code(
-                        AuthorizeErrorCode::RequestObjectHeaderInvalid,
-                    ));
-                }
-                let decoded = URL_SAFE_NO_PAD.decode(parts[1]).map_err(|error| {
+            "none" => jwt::decode_unsecured(&raw)
+                .map(|(payload, _)| payload)
+                .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
                         .with_source(error)
-                })?;
-                let payload_value: serde_json::Value =
-                    serde_json::from_slice(&decoded).map_err(|error| {
-                        AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
-                            .with_source(error)
-                    })?;
-                let mut jwt_payload = jwt::JwtPayload::new();
-                if let serde_json::Value::Object(map) = payload_value {
-                    for (k, v) in map {
-                        jwt_payload.set_claim(&k, Some(v)).map_err(|error| {
-                            AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
-                                .with_source(error)
-                        })?;
-                    }
-                }
-                jwt_payload
-            }
+                })?,
             _ => {
                 self.verify_signed_request_object(client, &raw, algorithm)
                     .await?
@@ -168,42 +149,90 @@ impl AuthorizeService {
         Ok(serde_json::Value::Object(value))
     }
 
-    async fn decrypt_request_object(&self, raw: &str) -> Result<String, AppError> {
-        use josekit::jwe::{
-            ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, RSA_OAEP, RSA_OAEP_256, deserialize_compact,
-        };
+    async fn decrypt_request_object(
+        &self,
+        client: &OpenIdConnectClient,
+        raw: &str,
+    ) -> Result<String, AppError> {
+        let protected = raw
+            .split('.')
+            .next()
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
+        let protected = URL_SAFE_NO_PAD.decode(protected).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
+        })?;
+        let header = josekit::jwe::JweHeader::from_bytes(&protected).map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
+        })?;
+        let algorithm = header
+            .algorithm()
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
+        let content_encryption = header
+            .content_encryption()
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
 
-        let keys = self
-            .key_repo
-            .list_available_asymmetric()
-            .await
-            .map_err(|error| {
+        if !REQUEST_OBJECT_ENCRYPTION_ALGORITHMS.contains(&algorithm)
+            || !REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS.contains(&content_encryption)
+        {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
+            ));
+        }
+        if client
+            .metadata()
+            .request_object_encryption_alg
+            .as_deref()
+            .is_some_and(|registered| registered != algorithm)
+            || client
+                .metadata()
+                .request_object_encryption_enc
+                .as_deref()
+                .is_some_and(|registered| registered != content_encryption)
+        {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
+            ));
+        }
+
+        let keys = if let Some(kid) = header.key_id() {
+            let bindings = self.key_jwk_repo.list_active().await.map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
             })?;
+            let binding = bindings
+                .into_iter()
+                .find(|binding| binding.jwk.key_id() == Some(kid))
+                .ok_or_else(|| {
+                    AppError::from_code(AuthorizeErrorCode::RequestObjectEncryptionUnsupported)
+                })?;
+            self.key_repo
+                .find_by_oid(binding.key_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+                })?
+                .into_iter()
+                .collect()
+        } else {
+            self.key_repo
+                .list_available_asymmetric()
+                .await
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+                })?
+        };
 
         for key in &keys {
             let KeyData::Asymmetric(data) = &key.data else {
                 continue;
             };
-            let pem = data.private_key.as_bytes();
-
-            macro_rules! try_decrypt {
-                ($alg:expr) => {
-                    if let Ok(decrypter) = $alg.decrypter_from_pem(pem) {
-                        if let Ok((bytes, _header)) = deserialize_compact(raw, &decrypter) {
-                            if let Ok(payload_str) = String::from_utf8(bytes) {
-                                return Ok(payload_str);
-                            }
-                        }
-                    }
-                };
+            if let Ok((bytes, authenticated_header)) =
+                decrypt_compact_with_private_pem(raw, data.private_key.as_bytes(), algorithm)
+                && authenticated_header.algorithm() == Some(algorithm)
+                && authenticated_header.content_encryption() == Some(content_encryption)
+                && let Ok(payload) = String::from_utf8(bytes)
+            {
+                return Ok(payload);
             }
-
-            try_decrypt!(RSA_OAEP);
-            try_decrypt!(RSA_OAEP_256);
-            try_decrypt!(ECDH_ES);
-            try_decrypt!(ECDH_ES_A128KW);
-            try_decrypt!(ECDH_ES_A256KW);
         }
 
         Err(AppError::from_code(

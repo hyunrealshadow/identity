@@ -13,7 +13,7 @@ use super::{
     response::{JsonWebResult, app_state, parse_json, parse_param, render_json},
     shared::{
         api_csrf_middleware, build_selected_session_state, build_session_context, csrf_token,
-        load_active_session_entries, unprotect_session_id,
+        load_active_session_entries, protocol_continue_uri, unprotect_session_id,
     },
 };
 use crate::views::auth::{
@@ -27,7 +27,7 @@ use crate::{
         error::{AppError, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
     },
-    domain::user::model::UserOid,
+    domain::{client_authorization::SelectionSource, user::model::UserOid},
 };
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -125,10 +125,7 @@ async fn login_status(
     };
 
     let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
-        Some(format!(
-            "/oauth2/continue?login_id={}",
-            urlencoding::encode(&id)
-        ))
+        Some(protocol_continue_uri(&ctx, &id)?)
     } else {
         None
     };
@@ -171,6 +168,16 @@ async fn select_account(
     let session_oid = unprotect_session_id(&ctx, &body.id).await?;
     let session = ctx.services().session().select_session(session_oid).await?;
     let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
+    ctx.services()
+        .oidc_authorize()
+        .record_selection_by_login(
+            &body.login_id,
+            session.oid,
+            session.user_oid,
+            Some(selected.protected_session_id.clone()),
+            SelectionSource::AccountPicker,
+        )
+        .await?;
 
     let resp = SelectAccountResponse {
         status: "ok",
@@ -179,6 +186,7 @@ async fn select_account(
             expires_at: session.expires_at,
         },
         sessions: selected.protected_session_ids,
+        continue_uri: protocol_continue_uri(&ctx, &body.login_id)?,
     };
 
     render_json(res, StatusCode::OK, resp);
@@ -260,11 +268,18 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
         }
         ChallengeOutcome::Authenticated { session, .. } => {
             let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
+            ctx.services()
+                .oidc_authorize()
+                .record_selection_by_login(
+                    &body.id,
+                    session.oid,
+                    session.user_oid,
+                    Some(selected.protected_session_id.clone()),
+                    SelectionSource::FreshLogin,
+                )
+                .await?;
             let acr = session.acr.clone();
-            let continue_uri = Some(format!(
-                "/oauth2/continue?login_id={}",
-                urlencoding::encode(&body.id)
-            ));
+            let continue_uri = Some(protocol_continue_uri(&ctx, &body.id)?);
 
             render_json(
                 res,

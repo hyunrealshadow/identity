@@ -1,3 +1,4 @@
+use josekit::jwe::{ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, RSA_OAEP, RSA_OAEP_256};
 use josekit::jwk::{
     Jwk, KeyPair,
     alg::{ec::EcCurve, ecx::EcxCurve, ed::EdCurve},
@@ -230,7 +231,30 @@ pub fn generate_all_jwks_for_key(
 
     base_jwk.set_algorithm(alg.as_str());
 
-    Ok(vec![(alg.as_str().to_owned(), base_jwk)])
+    let mut jwks = vec![(alg.as_str().to_owned(), base_jwk.clone())];
+    let pem = private_key_pem.as_bytes();
+    for (encryption_alg, supported) in [
+        ("RSA-OAEP", RSA_OAEP.decrypter_from_pem(pem).is_ok()),
+        ("RSA-OAEP-256", RSA_OAEP_256.decrypter_from_pem(pem).is_ok()),
+        ("ECDH-ES", ECDH_ES.decrypter_from_pem(pem).is_ok()),
+        (
+            "ECDH-ES+A128KW",
+            ECDH_ES_A128KW.decrypter_from_pem(pem).is_ok(),
+        ),
+        (
+            "ECDH-ES+A256KW",
+            ECDH_ES_A256KW.decrypter_from_pem(pem).is_ok(),
+        ),
+    ] {
+        if supported {
+            let mut encryption_jwk = base_jwk.clone();
+            encryption_jwk.set_key_use("enc");
+            encryption_jwk.set_algorithm(encryption_alg);
+            jwks.push((encryption_alg.to_owned(), encryption_jwk));
+        }
+    }
+
+    Ok(jwks)
 }
 
 fn primary_jwa_algorithm_for_private_key(

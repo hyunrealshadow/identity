@@ -6,8 +6,8 @@
 //! Routes:
 //!   GET  /conformance/auto-login  – render an auto-submit form for the fixed
 //!                                    conformance credentials
-//!   POST /conformance/auto-login  – authenticate, set the browser session cookie,
-//!                                    and continue the authorize redirect chain
+//!   POST /conformance/auto-login  – authenticate and continue the authorize
+//!                                    redirect chain
 
 use http::{HeaderMap, StatusCode, header};
 use salvo::{Depot, Request, Response, Router, handler};
@@ -27,10 +27,7 @@ use crate::{
         web,
     },
     views::oauth2::{FormPostField, FormPostPageData},
-    web::controllers::shared::{
-        append_set_cookie, build_selected_session_cookie, build_session_context,
-        generate_csp_nonce,
-    },
+    web::controllers::shared::{build_session_context, generate_csp_nonce},
 };
 
 use super::{
@@ -113,10 +110,8 @@ fn auto_login_continue_url(login_id: &str) -> String {
     )
 }
 
-fn auto_login_success_response(login_id: &str, cookie: &str) -> Response {
-    let mut response = redirect_to_response(&auto_login_continue_url(login_id));
-    append_set_cookie(&mut response, cookie);
-    response
+fn auto_login_success_response(login_id: &str) -> Response {
+    redirect_to_response(&auto_login_continue_url(login_id))
 }
 
 async fn record_auto_login_selection<F, Fut>(
@@ -232,7 +227,8 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         }
     };
 
-    // Step 4: build the session cookie and jump back into the browser flow.
+    // Step 4: bind the session and jump back into the browser flow. The OP
+    // session cookie is written centrally by `/oauth2/continue`.
     let authorize_service = ctx.services().oidc_authorize();
     record_auto_login_selection(
         &body.login_id,
@@ -251,8 +247,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     )
     .await?;
 
-    let cookie = build_selected_session_cookie(&ctx, &headers, session.oid).await?;
-    *res = auto_login_success_response(&body.login_id, &cookie.header);
+    *res = auto_login_success_response(&body.login_id);
     Ok(())
 }
 
@@ -353,20 +348,14 @@ mod tests {
 
     #[test]
     fn auto_login_success_response_redirects_back_to_oauth2_continue() {
-        let response = super::auto_login_success_response(
-            "login-123",
-            "sessions=[\"session-123\"]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=42",
-        );
+        let response = super::auto_login_success_response("login-123");
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         assert_eq!(
             response.headers().get(header::LOCATION).unwrap(),
             "/oauth2/continue?login_id=login-123",
         );
-        assert_eq!(
-            response.headers().get(header::SET_COOKIE).unwrap(),
-            "sessions=[\"session-123\"]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=42",
-        );
+        assert!(response.headers().get(header::SET_COOKIE).is_none());
     }
 
     #[tokio::test]

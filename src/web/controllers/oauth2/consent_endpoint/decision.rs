@@ -5,18 +5,16 @@ use crate::{
     web::controllers::response::{AppResponse, json_response},
     web::views::oauth2::{ConsentApiResponse, ConsentDecision},
 };
-use http::HeaderMap;
 use http::StatusCode;
 
 use super::context::{has_selected_session, load_consent_context};
 
 pub(super) async fn handle_consent_decision(
     ctx: AppState,
-    headers: HeaderMap,
     login_id: String,
     decision: ConsentDecision,
 ) -> Result<AppResponse, AppError> {
-    let loaded = load_consent_context(&ctx, &headers, &login_id).await?;
+    let loaded = load_consent_context(&ctx, &login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
         return Err(AppError::from_code(
@@ -24,10 +22,7 @@ pub(super) async fn handle_consent_decision(
         ));
     }
 
-    if !has_selected_session(
-        loaded.stored.interaction.selected_session_oid,
-        &loaded.active_sessions,
-    ) {
+    if !has_selected_session(loaded.selected_session_oid, &loaded.active_sessions) {
         return Err(AppError::from_code(
             AuthorizeHttpErrorCode::ConsentSessionNotFound,
         ));

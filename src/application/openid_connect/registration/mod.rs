@@ -35,8 +35,9 @@ use credential::{client_credentials_from_jwks, client_credentials_from_jwks_uri}
 use response::{registration_client_uri, response_from_client};
 use token::{default_skip_consent, generate_client_secret, generate_registration_access_token};
 use validation::{
-    parse_application_type, reject_none_outside_conformance, split_scope,
-    validate_initiate_login_uri, validate_sector_identifier_uri,
+    parse_application_type, reject_none_algorithm, split_scope, validate_initiate_login_uri,
+    validate_request_object_encryption, validate_request_object_signing,
+    validate_sector_identifier_uri,
 };
 
 pub struct DynamicClientRegistrationService {
@@ -102,13 +103,42 @@ impl DynamicClientRegistrationService {
             .token_endpoint_auth_method
             .clone()
             .unwrap_or_else(|| "client_secret_basic".to_owned());
-        reject_none_outside_conformance(
-            "token_endpoint_auth_method",
-            Some(token_auth_method.as_str()),
-        )?;
-        reject_none_outside_conformance(
+        reject_none_algorithm(
             "id_token_signed_response_alg",
             request.id_token_signed_response_alg.as_deref(),
+        )?;
+        for (field, value) in [
+            (
+                "id_token_encrypted_response_alg",
+                request.id_token_encrypted_response_alg.as_deref(),
+            ),
+            (
+                "id_token_encrypted_response_enc",
+                request.id_token_encrypted_response_enc.as_deref(),
+            ),
+            (
+                "userinfo_signed_response_alg",
+                request.userinfo_signed_response_alg.as_deref(),
+            ),
+            (
+                "userinfo_encrypted_response_alg",
+                request.userinfo_encrypted_response_alg.as_deref(),
+            ),
+            (
+                "userinfo_encrypted_response_enc",
+                request.userinfo_encrypted_response_enc.as_deref(),
+            ),
+            (
+                "token_endpoint_auth_signing_alg",
+                request.token_endpoint_auth_signing_alg.as_deref(),
+            ),
+        ] {
+            reject_none_algorithm(field, value)?;
+        }
+        validate_request_object_signing(request.request_object_signing_alg.as_deref())?;
+        validate_request_object_encryption(
+            request.request_object_encryption_alg.as_deref(),
+            request.request_object_encryption_enc.as_deref(),
         )?;
         let public_client = token_auth_method == "none";
         let client_secret = (!public_client).then(generate_client_secret);

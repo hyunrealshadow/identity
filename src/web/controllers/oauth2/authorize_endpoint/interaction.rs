@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::future::Future;
 use uuid::Uuid;
@@ -145,6 +146,7 @@ pub async fn determine_authorize_flow(
     request: &AuthorizationRequest,
     _client: &OpenIdConnectClient,
     sessions: &[ActiveSession],
+    protected_session_ids: &HashMap<SessionOid, String>,
     authorization_request_id: Uuid,
     login_id: String,
     authorize_service: &AuthorizeService,
@@ -153,15 +155,22 @@ pub async fn determine_authorize_flow(
         request,
         sessions,
         authorization_request_id,
-        login_id,
+        login_id.clone(),
         |authorization_request_id, session_oid, user_oid, source| {
-            authorize_service.record_authorization_selection(
-                authorization_request_id,
-                session_oid,
-                user_oid,
-                None,
-                source,
-            )
+            let _ = authorization_request_id;
+            let login_id = login_id.clone();
+            let protected_session_id = protected_session_ids.get(&session_oid).cloned();
+            async move {
+                authorize_service
+                    .record_selection_by_login(
+                        &login_id,
+                        session_oid,
+                        user_oid,
+                        protected_session_id,
+                        source,
+                    )
+                    .await
+            }
         },
     )
     .await

@@ -3,7 +3,7 @@ use salvo::{Depot, Request, Response, handler};
 
 use crate::controllers::{
     response::{WebResult, app_state, redirect_to_response},
-    shared::load_active_sessions,
+    shared::load_op_active_session_entries,
 };
 use identity_application::error::AppError;
 use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
@@ -112,7 +112,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
         }
     };
 
-    let active_sessions = match load_active_sessions(&ctx, &headers).await {
+    let active_session_entries = match load_op_active_session_entries(&ctx, &headers).await {
         Ok(value) => value,
         Err(error) => {
             return Ok(render_error(&ctx, &headers, &raw_request, error)
@@ -120,6 +120,19 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
                 .into());
         }
     };
+    let active_sessions = active_session_entries
+        .iter()
+        .map(|entry| entry.session.clone())
+        .collect::<Vec<_>>();
+    let protected_session_ids = active_session_entries
+        .iter()
+        .map(|entry| {
+            (
+                entry.session.session_oid,
+                entry.protected_session_id.clone(),
+            )
+        })
+        .collect();
     let authorization_request_id = match authorize_service
         .create_authorization_request(&request)
         .await
@@ -155,6 +168,7 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
         &request,
         &client,
         &active_sessions,
+        &protected_session_ids,
         authorization_request_id,
         login_id,
         authorize_service,

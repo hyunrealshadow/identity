@@ -2,7 +2,8 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::{
     JoseError,
     jwe::{
-        ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweEncrypter, JweHeader, RSA_OAEP, RSA_OAEP_256,
+        ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweDecrypter, JweEncrypter, JweHeader, RSA_OAEP,
+        RSA_OAEP_256,
     },
     jws::{
         ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, JwsSigner, JwsVerifier, PS256,
@@ -13,6 +14,31 @@ use josekit::{
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
 use crate::domain::key::{JwaSigningAlgorithm, PublicJwk};
+
+pub const REQUEST_OBJECT_ENCRYPTION_ALGORITHMS: &[&str] = &[
+    "RSA-OAEP",
+    "RSA-OAEP-256",
+    "ECDH-ES",
+    "ECDH-ES+A128KW",
+    "ECDH-ES+A256KW",
+];
+
+pub const REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS: &[&str] =
+    &["A128CBC-HS256", "A256CBC-HS512", "A128GCM", "A256GCM"];
+
+pub fn request_object_encryption_algorithms() -> Vec<String> {
+    REQUEST_OBJECT_ENCRYPTION_ALGORITHMS
+        .iter()
+        .map(|value| (*value).to_owned())
+        .collect()
+}
+
+pub fn request_object_content_encryption_algorithms() -> Vec<String> {
+    REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS
+        .iter()
+        .map(|value| (*value).to_owned())
+        .collect()
+}
 
 pub fn asymmetric_verifier_from_pem(
     alg: &str,
@@ -196,6 +222,15 @@ pub fn encrypt_compact_with_public_jwk(
     josekit::jwe::serialize_compact(plaintext, &header, &*encrypter)
 }
 
+pub fn decrypt_compact_with_private_pem(
+    compact: &str,
+    private_key_pem: &[u8],
+    encryption_alg: &str,
+) -> Result<(Vec<u8>, JweHeader), JoseError> {
+    let decrypter = jwe_decrypter_from_private_pem(encryption_alg, private_key_pem)?;
+    josekit::jwe::deserialize_compact(compact, &*decrypter)
+}
+
 pub fn front_channel_hash(value: &str, alg: &str) -> Result<String, JoseError> {
     let jwa: JwaSigningAlgorithm = alg
         .parse()
@@ -237,6 +272,32 @@ fn jwe_encrypter_from_public_jwk(
         "ECDH-ES+A256KW" => ECDH_ES_A256KW
             .encrypter_from_jwk(jwk)
             .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
+        _ => Err(JoseError::InvalidJweFormat(anyhow::anyhow!(
+            "unsupported JWE alg: {alg}"
+        ))),
+    }
+}
+
+fn jwe_decrypter_from_private_pem(
+    alg: &str,
+    private_key_pem: &[u8],
+) -> Result<Box<dyn JweDecrypter>, JoseError> {
+    match alg {
+        "RSA-OAEP" => RSA_OAEP
+            .decrypter_from_pem(private_key_pem)
+            .map(|value| Box::new(value) as Box<dyn JweDecrypter>),
+        "RSA-OAEP-256" => RSA_OAEP_256
+            .decrypter_from_pem(private_key_pem)
+            .map(|value| Box::new(value) as Box<dyn JweDecrypter>),
+        "ECDH-ES" => ECDH_ES
+            .decrypter_from_pem(private_key_pem)
+            .map(|value| Box::new(value) as Box<dyn JweDecrypter>),
+        "ECDH-ES+A128KW" => ECDH_ES_A128KW
+            .decrypter_from_pem(private_key_pem)
+            .map(|value| Box::new(value) as Box<dyn JweDecrypter>),
+        "ECDH-ES+A256KW" => ECDH_ES_A256KW
+            .decrypter_from_pem(private_key_pem)
+            .map(|value| Box::new(value) as Box<dyn JweDecrypter>),
         _ => Err(JoseError::InvalidJweFormat(anyhow::anyhow!(
             "unsupported JWE alg: {alg}"
         ))),

@@ -209,7 +209,13 @@ impl AuthorizeService {
             protected_session_id,
             source,
         )
-        .await
+        .await?;
+        self.login_repo
+            .bind_session(login.oid, session_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
+            })
     }
 
     pub async fn record_consent_by_login(
@@ -358,28 +364,9 @@ impl AuthorizeService {
             .load_stored_authorization_request(authorization_request_id)
             .await?;
         let request = stored.request;
-        let protected_session_id = match stored.interaction.selected_protected_session_id {
-            Some(protected_session_id) => {
-                let stored_session_oid = self.decrypt_session_id(&protected_session_id).await?;
-                if stored_session_oid != session_oid {
-                    return Err(AppError::from_code(
-                        AuthorizeErrorCode::StoredSessionIdInvalid,
-                    ));
-                }
-                protected_session_id
-            }
-            None => match protected_session_id {
-                Some(protected_session_id) => {
-                    let stored_session_oid = self.decrypt_session_id(&protected_session_id).await?;
-                    if stored_session_oid != session_oid {
-                        return Err(AppError::from_code(
-                            AuthorizeErrorCode::StoredSessionIdInvalid,
-                        ));
-                    }
-                    protected_session_id
-                }
-                None => self.encrypt_session_id(session_oid).await?,
-            },
+        let protected_session_id = match protected_session_id {
+            Some(protected_session_id) => protected_session_id,
+            None => self.encrypt_session_id(session_oid).await?,
         };
 
         let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
