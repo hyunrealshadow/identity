@@ -5,7 +5,11 @@ use salvo::{Depot, Request, Router, handler};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::{install::InstallInput, setting::runtime::SettingProvider},
+    application::{
+        error::{AppError, codes::common::CommonErrorCode},
+        install::InstallInput,
+        setting::runtime::SettingProvider,
+    },
     domain::key::AsymmetricKeyAlgorithm,
     web::controllers::response::{
         AppResponse, JsonWebError, JsonWebResult, app_state, insert_no_store_headers,
@@ -108,12 +112,18 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
         .into());
     }
 
+    let key_algorithm = parse_algorithm(&request.key_algorithm).map_err(|error| {
+        JsonWebError(
+            AppError::from_code(CommonErrorCode::ValidationFailed)
+                .with_field_error("key_algorithm", error),
+        )
+    })?;
     let input = InstallInput {
         username: request.username.clone(),
         email: request.email.clone(),
         password: request.password.clone(),
         domain: request.domain.clone(),
-        key_algorithm: parse_algorithm(&request.key_algorithm)?,
+        key_algorithm,
     };
 
     if let Err(error) = ctx.services().install().install(input).await {
@@ -132,7 +142,7 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
     .into())
 }
 
-fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, JsonWebError> {
+fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, AppError> {
     match value {
         "ecdsa-p256" => Ok(AsymmetricKeyAlgorithm::EcdsaP256),
         "ecdsa-p384" => Ok(AsymmetricKeyAlgorithm::EcdsaP384),
@@ -143,11 +153,10 @@ fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, JsonWebError> 
         "rsa-2048" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 2048 }),
         "rsa-3072" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
         "rsa-4096" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
-        _ => Err(identity_application::error::AppError::from_code(
+        _ => Err(AppError::from_code(
             identity_application::error::codes::install::InstallErrorCode::UnsupportedAlgorithm,
         )
-        .with_param("algorithm", value)
-        .into()),
+        .with_param("algorithm", value)),
     }
 }
 

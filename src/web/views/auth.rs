@@ -21,6 +21,19 @@ pub struct ErrorDetail {
     pub code: u32,
     /// Localized human-readable message.
     pub message: String,
+    /// Field-specific validation errors. Omitted for non-validation errors.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<FieldErrorDetail>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FieldErrorDetail {
+    /// Stable request field path, e.g. `email` or `redirect_uris.0`.
+    pub field: String,
+    /// Machine-readable numeric field error code.
+    pub code: u32,
+    /// Localized human-readable field error message.
+    pub message: String,
 }
 
 impl BusinessErrorResponse {
@@ -29,8 +42,14 @@ impl BusinessErrorResponse {
             error: ErrorDetail {
                 code,
                 message: message.into(),
+                fields: Vec::new(),
             },
         }
+    }
+
+    pub fn with_fields(mut self, fields: Vec<FieldErrorDetail>) -> Self {
+        self.error.fields = fields;
+        self
     }
 }
 

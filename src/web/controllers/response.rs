@@ -6,26 +6,34 @@ use serde::{Serialize, de::DeserializeOwned};
 use unic_langid::LanguageIdentifier;
 
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
+    application::error::{AppError, codes::common::CommonErrorCode, params::ErrorParams},
     boot::AppState,
     infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
     infrastructure::web,
-    web::views::{auth::BusinessErrorResponse, oauth2::ErrorPageData},
+    web::views::{
+        auth::{BusinessErrorResponse, FieldErrorDetail},
+        oauth2::ErrorPageData,
+    },
 };
 
 pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> String {
-    if let Some(message) = error
-        .params()
-        .get("message")
-        .filter(|message| !message.is_empty())
-    {
+    localized_error_message(i18n, locale, error.code(), error.params())
+}
+
+fn localized_error_message(
+    i18n: &I18n,
+    locale: &LanguageIdentifier,
+    code: u32,
+    params: &ErrorParams,
+) -> String {
+    if let Some(message) = params.get("message").filter(|message| !message.is_empty()) {
         return message.to_owned();
     }
 
-    if error.params().is_empty() {
-        i18n.t_code(locale, error.code())
+    if params.is_empty() {
+        i18n.t_code(locale, code)
     } else {
-        i18n.t_code_with_params(locale, error.code(), error.params())
+        i18n.t_code_with_params(locale, code, params)
     }
 }
 
@@ -239,7 +247,26 @@ pub fn write_error_response(
     }
 
     let message = error_message(i18n, locale, &error);
-    let body = BusinessErrorResponse::new(error.code(), message);
+    let fields = error
+        .validation()
+        .map(|validation| {
+            validation
+                .fields()
+                .iter()
+                .map(|field_error| FieldErrorDetail {
+                    field: field_error.field().to_owned(),
+                    code: field_error.code(),
+                    message: localized_error_message(
+                        i18n,
+                        locale,
+                        field_error.code(),
+                        field_error.params(),
+                    ),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let body = BusinessErrorResponse::new(error.code(), message).with_fields(fields);
     render_json(res, status, body);
 }
 
@@ -299,7 +326,26 @@ fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
         .filter(|message| !message.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| error.code().to_string());
-    let body = BusinessErrorResponse::new(error.code(), message);
+    let fields = error
+        .validation()
+        .map(|validation| {
+            validation
+                .fields()
+                .iter()
+                .map(|field_error| FieldErrorDetail {
+                    field: field_error.field().to_owned(),
+                    code: field_error.code(),
+                    message: field_error
+                        .params()
+                        .get("message")
+                        .filter(|message| !message.is_empty())
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| field_error.code().to_string()),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let body = BusinessErrorResponse::new(error.code(), message).with_fields(fields);
     render_json(res, status, body);
 }
 
@@ -355,16 +401,29 @@ mod tests {
         test::{ResponseExt, TestClient},
     };
 
-    use super::WebResult;
+    use super::{JsonWebResult, WebResult};
 
     use crate::{
-        application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
+        application::error::{
+            AppError,
+            codes::{
+                authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode,
+                install::InstallErrorCode,
+            },
+        },
         infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
     };
 
     #[handler]
     async fn direct_app_error() -> WebResult<()> {
         Err(AppError::from_code(AuthorizeHttpErrorCode::ContinueInteractionUnavailable).into())
+    }
+
+    #[handler]
+    async fn validation_app_error() -> JsonWebResult<()> {
+        Err(AppError::from_code(CommonErrorCode::ValidationFailed)
+            .with_field_error("email", AppError::from_code(InstallErrorCode::EmailInvalid))
+            .into())
     }
 
     #[tokio::test]
@@ -380,6 +439,26 @@ mod tests {
         let body = response.take_string().await.unwrap();
         assert!(
             body.contains("\"message\":\"This authorization interaction is no longer available.\""),
+            "{body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn validation_error_writer_includes_localized_field_errors() {
+        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
+        let service = Service::new(Router::with_path("validation").post(validation_app_error));
+
+        let mut response = TestClient::post("http://127.0.0.1:5800/validation")
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+        let body = response.take_string().await.unwrap();
+        assert!(body.contains("\"code\":10002"), "{body}");
+        assert!(body.contains("\"field\":\"email\""), "{body}");
+        assert!(body.contains("\"code\":13006"), "{body}");
+        assert!(
+            body.contains("\"message\":\"The email address is invalid.\""),
             "{body}"
         );
     }

@@ -19,6 +19,7 @@ import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
+  IdentityApiError,
   identityJson,
 } from '#/lib/identity.server'
 import type {
@@ -30,6 +31,7 @@ import type {
 import {
   consumeFormFlash,
   formErrorResponse,
+  formValidationErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
@@ -53,6 +55,10 @@ const loadLoginPage = createServerFn({ method: 'GET' })
     const flash = consumeFormFlash('/login')
     const loginId = data.loginId || flash?.values.login_id || ''
     const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+    const identifierError =
+      flash?.fields?.identifier ??
+      (flash?.field === 'identifier' ? flash.message : undefined)
+    const pageError = identifierError ? undefined : flash?.message
 
     if (!loginId) {
       const locale = requestLocale(uiLocales.split(' '))
@@ -62,8 +68,8 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         loginId,
         locale,
         uiLocales,
-        error: flash?.field ? undefined : (flash?.message ?? translate(locale, 'missingLogin')),
-        fieldError: flash?.field === 'identifier' ? flash.message : undefined,
+        error: pageError ?? translate(locale, 'missingLogin'),
+        fieldError: identifierError,
         formValues: flash?.values ?? {},
       }
     }
@@ -82,8 +88,8 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         loginId,
         locale: requestLocale(status.ui_locales),
         uiLocales: status.ui_locales?.join(' ') ?? '',
-        error: flash?.field ? undefined : flash?.message,
-        fieldError: flash?.field === 'identifier' ? flash.message : undefined,
+        error: pageError,
+        fieldError: identifierError,
         formValues: flash?.values ?? {},
       }
     } catch (error) {
@@ -94,8 +100,8 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         loginId,
         locale,
         uiLocales,
-        error: flash?.field ? undefined : (flash?.message ?? errorMessage(error, locale)),
-        fieldError: flash?.field === 'identifier' ? flash.message : undefined,
+        error: pageError ?? errorMessage(error, locale),
+        fieldError: identifierError,
         formValues: flash?.values ?? {},
       }
     }
@@ -177,11 +183,28 @@ export const Route = createFileRoute('/login')({
           if (uiLocales) destination.searchParams.set('ui_locales', uiLocales)
           return navigationResponse(request, destination.toString())
         } catch (error) {
-          return formErrorResponse(request, '/login', errorMessage(error, locale), {
+          const values = {
             login_id: loginId,
             identifier: optionalString(form.get('identifier')),
             ui_locales: uiLocales,
-          }, 'identifier')
+          }
+          if (error instanceof IdentityApiError && error.fields.length > 0) {
+            return formValidationErrorResponse(
+              request,
+              '/login',
+              error.message,
+              values,
+              Object.fromEntries(
+                error.fields.map((fieldError) => [
+                  fieldError.field,
+                  fieldError.message,
+                ]),
+              ),
+            )
+          }
+          return formErrorResponse(request, '/login', errorMessage(error, locale), {
+            ...values,
+          })
         }
       },
     },

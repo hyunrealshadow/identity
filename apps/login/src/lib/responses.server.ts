@@ -11,6 +11,7 @@ const FLASH_COOKIE_PREFIX = 'identity.form-flash.'
 interface FormFlash {
   message: string
   values: Record<string, string | undefined>
+  fields?: Record<string, string>
   /** Set when the message belongs to a form field (FieldError) instead of
       the page-level alert. */
   field?: string
@@ -73,6 +74,21 @@ export function formErrorResponse(
   response.headers.append(
     'set-cookie',
     `${flashCookieName(pathname)}=${serializeFlash({ message, values, field })}; Path=${pathname}; Max-Age=60; HttpOnly; Secure; SameSite=Lax`,
+  )
+  return response
+}
+
+export function formValidationErrorResponse(
+  request: Request,
+  pathname: string,
+  message: string,
+  values: Record<string, string | undefined>,
+  fields: Record<string, string>,
+) {
+  const response = navigationResponse(request, new URL(pathname, request.url).toString())
+  response.headers.append(
+    'set-cookie',
+    `${flashCookieName(pathname)}=${serializeFlash({ message, values, fields })}; Path=${pathname}; Max-Age=60; HttpOnly; Secure; SameSite=Lax`,
   )
   return response
 }

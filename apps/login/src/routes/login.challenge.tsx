@@ -17,6 +17,7 @@ import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
+  IdentityApiError,
   identityJson,
 } from '#/lib/identity.server'
 import type {
@@ -27,6 +28,7 @@ import type {
 import {
   consumeFormFlash,
   formErrorResponse,
+  formValidationErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
@@ -49,6 +51,10 @@ const loadChallengePage = createServerFn({ method: 'GET' })
     const flash = consumeFormFlash('/login/challenge')
     const loginId = data.loginId || flash?.values.login_id || ''
     const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+    const credentialError =
+      flash?.fields?.credential ??
+      (flash?.field === 'credential' ? flash.message : undefined)
+    const pageError = credentialError ? undefined : flash?.message
 
     if (!loginId) {
       const locale = requestLocale(uiLocales.split(' '))
@@ -58,8 +64,8 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         loginId,
         locale,
         uiLocales,
-        error: flash?.field ? undefined : (flash?.message ?? translate(locale, 'missingLogin')),
-        fieldError: flash?.field === 'credential' ? flash.message : undefined,
+        error: pageError ?? translate(locale, 'missingLogin'),
+        fieldError: credentialError,
       }
     }
 
@@ -76,8 +82,8 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         loginId,
         locale: requestLocale(status.ui_locales),
         uiLocales: status.ui_locales?.join(' ') ?? '',
-        error: flash?.field ? undefined : flash?.message,
-        fieldError: flash?.field === 'credential' ? flash.message : undefined,
+        error: pageError,
+        fieldError: credentialError,
       }
     } catch (error) {
       const locale = requestLocale()
@@ -87,8 +93,8 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         loginId,
         locale,
         uiLocales,
-        error: flash?.field ? undefined : (flash?.message ?? errorMessage(error, locale)),
-        fieldError: flash?.field === 'credential' ? flash.message : undefined,
+        error: pageError ?? errorMessage(error, locale),
+        fieldError: credentialError,
       }
     }
   })
@@ -155,12 +161,30 @@ export const Route = createFileRoute('/login/challenge')({
           }
           return navigationResponse(request, result.continue_uri)
         } catch (error) {
+          const values = {
+            login_id: loginId,
+            credential_type: credentialType,
+            ui_locales: uiLocales,
+          }
+          if (error instanceof IdentityApiError && error.fields.length > 0) {
+            return formValidationErrorResponse(
+              request,
+              '/login/challenge',
+              error.message,
+              values,
+              Object.fromEntries(
+                error.fields.map((fieldError) => [
+                  fieldError.field,
+                  fieldError.message,
+                ]),
+              ),
+            )
+          }
           return formErrorResponse(
             request,
             '/login/challenge',
             errorMessage(error, locale),
-            { login_id: loginId, credential_type: credentialType, ui_locales: uiLocales },
-            'credential',
+            values,
           )
         }
       },

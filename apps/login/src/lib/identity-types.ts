@@ -2,7 +2,14 @@ export interface BusinessErrorResponse {
   error: {
     code: number
     message: string
+    fields?: Array<FieldErrorResponse>
   }
+}
+
+export interface FieldErrorResponse {
+  field: string
+  code: number
+  message: string
 }
 
 export interface InstallationStatusResponse {

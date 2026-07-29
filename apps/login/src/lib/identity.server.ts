@@ -3,7 +3,10 @@ import {
   setResponseHeader,
 } from '@tanstack/react-start/server'
 
-import type { BusinessErrorResponse } from './identity-types'
+import type {
+  BusinessErrorResponse,
+  FieldErrorResponse,
+} from './identity-types'
 import type { Locale } from './i18n'
 import { translate } from './i18n'
 
@@ -15,13 +18,20 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60
 
 export class IdentityApiError extends Error {
   readonly code?: number
+  readonly fields: Array<FieldErrorResponse>
   readonly status: number
 
-  constructor(message: string, status: number, code?: number) {
+  constructor(
+    message: string,
+    status: number,
+    code?: number,
+    fields: Array<FieldErrorResponse> = [],
+  ) {
     super(message)
     this.name = 'IdentityApiError'
     this.status = status
     this.code = code
+    this.fields = fields
   }
 }
 
@@ -90,6 +100,20 @@ function isBusinessError(value: unknown): value is BusinessErrorResponse {
   )
 }
 
+function responseFieldErrors(
+  fields: BusinessErrorResponse['error']['fields'],
+): Array<FieldErrorResponse> {
+  if (!Array.isArray(fields)) return []
+  return fields.filter(
+    (field): field is FieldErrorResponse =>
+      !!field &&
+      typeof field === 'object' &&
+      typeof field.field === 'string' &&
+      typeof field.code === 'number' &&
+      typeof field.message === 'string',
+  )
+}
+
 export async function identityJson<T>(
   path: string,
   init?: {
@@ -116,6 +140,7 @@ export async function identityJson<T>(
         payload.error.message,
         response.status,
         payload.error.code,
+        responseFieldErrors(payload.error.fields),
       )
     }
     throw new IdentityApiError(

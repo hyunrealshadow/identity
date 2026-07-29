@@ -5,7 +5,10 @@ use chrono::Utc;
 
 use crate::{
     application::{
-        error::{AppError, codes::install::InstallErrorCode},
+        error::{
+            AppError,
+            codes::{common::CommonErrorCode, install::InstallErrorCode},
+        },
         setting::runtime::{CachedSetting, SettingProvider},
     },
     domain::{
@@ -83,21 +86,13 @@ impl<R: SettingRepository> InstallService<R> {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
 
-        let username = normalize_required(&input.username, "username")?;
-        let email = normalize_email(&input.email)?;
-        let password = normalize_required(&input.password, "password")?;
-        let domain = normalize_domain(&input.domain)?;
+        let input = validate_install_input(input)?;
         tracing::info!("install: validations passed, persisting");
-
-        input.key_algorithm.validate().map_err(|_| {
-            AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
-                .with_param("algorithm", asymmetric_algorithm_name(&input.key_algorithm))
-        })?;
 
         let hash_options = self.password_hash_options.current_value();
         let password_hasher = Arc::clone(&self.password_hasher);
         let password = crate::auth::password::run_password_hashing(move || {
-            password_hasher.hash(&password, hash_options.as_ref())
+            password_hasher.hash(&input.password, hash_options.as_ref())
         })
         .await?;
         let mut key_data =
@@ -107,7 +102,7 @@ impl<R: SettingRepository> InstallService<R> {
                 })?;
         let certificate = self.certificate_generator.generate_self_signed(
             &key_data.private_key,
-            &domain,
+            &input.domain,
             &input.key_algorithm,
         )?;
         key_data.certificate = Some(certificate);
@@ -115,10 +110,10 @@ impl<R: SettingRepository> InstallService<R> {
         let installation_state = self
             .persistence
             .persist_installation(InstallPersistenceInput {
-                username,
-                email,
+                username: input.username,
+                email: input.email,
                 password,
-                domain,
+                domain: input.domain,
                 key_data,
             })
             .await?;
@@ -140,6 +135,73 @@ impl<R: SettingRepository> InstallService<R> {
         self.runtime_key_ring.refresh_value().await?;
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct ValidatedInstallInput {
+    username: String,
+    email: String,
+    password: String,
+    domain: String,
+    key_algorithm: AsymmetricKeyAlgorithm,
+}
+
+fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, AppError> {
+    let mut validation = AppError::from_code(CommonErrorCode::ValidationFailed);
+    let username = collect_field(
+        &mut validation,
+        "username",
+        normalize_required(&input.username, "username"),
+    );
+    let email = collect_field(&mut validation, "email", normalize_email(&input.email));
+    let password = collect_field(
+        &mut validation,
+        "password",
+        normalize_required(&input.password, "password"),
+    );
+    let domain = collect_field(&mut validation, "domain", normalize_domain(&input.domain));
+    let algorithm_name = asymmetric_algorithm_name(&input.key_algorithm);
+    let key_algorithm = collect_field(
+        &mut validation,
+        "key_algorithm",
+        input
+            .key_algorithm
+            .validate()
+            .map(|()| input.key_algorithm)
+            .map_err(|_| {
+                AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
+                    .with_param("algorithm", algorithm_name)
+            }),
+    );
+
+    if validation
+        .validation()
+        .is_some_and(|details| !details.is_empty())
+    {
+        return Err(validation);
+    }
+
+    Ok(ValidatedInstallInput {
+        username: username.expect("validated username"),
+        email: email.expect("validated email"),
+        password: password.expect("validated password"),
+        domain: domain.expect("validated domain"),
+        key_algorithm: key_algorithm.expect("validated key algorithm"),
+    })
+}
+
+fn collect_field<T>(
+    validation: &mut AppError,
+    field: &'static str,
+    result: Result<T, AppError>,
+) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(error) => {
+            validation.push_field_error(field, error);
+            None
+        }
     }
 }
 
@@ -194,5 +256,45 @@ fn asymmetric_algorithm_name(algorithm: &AsymmetricKeyAlgorithm) -> String {
         AsymmetricKeyAlgorithm::Ed448 => "ed448".to_owned(),
         AsymmetricKeyAlgorithm::X25519 => "x25519".to_owned(),
         AsymmetricKeyAlgorithm::X448 => "x448".to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InstallInput, validate_install_input};
+    use crate::application::error::code::AppErrorCode;
+    use crate::{
+        application::error::codes::common::CommonErrorCode, domain::key::AsymmetricKeyAlgorithm,
+    };
+
+    #[test]
+    fn install_validation_collects_all_invalid_fields() {
+        let error = validate_install_input(InstallInput {
+            username: " ".to_owned(),
+            email: "not-an-email".to_owned(),
+            password: String::new(),
+            domain: "invalid domain".to_owned(),
+            key_algorithm: AsymmetricKeyAlgorithm::EcdsaP256,
+        })
+        .expect_err("invalid form should fail validation");
+
+        assert_eq!(error.code(), CommonErrorCode::ValidationFailed.code());
+        let fields = error
+            .validation()
+            .expect("validation details should be attached")
+            .fields();
+        assert_eq!(fields.len(), 4);
+        assert_eq!(
+            fields
+                .iter()
+                .map(|field| (field.field(), field.code()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("username", 13001),
+                ("email", 13006),
+                ("password", 13003),
+                ("domain", 13005),
+            ]
+        );
     }
 }

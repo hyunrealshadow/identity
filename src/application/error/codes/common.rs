@@ -5,6 +5,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 pub enum CommonErrorCode {
     InvalidRequest,
     InternalError,
+    ValidationFailed,
 }
 
 impl AppErrorCode for CommonErrorCode {
@@ -12,6 +13,7 @@ impl AppErrorCode for CommonErrorCode {
         match self {
             Self::InvalidRequest => ErrorKind::Validation,
             Self::InternalError => ErrorKind::Internal,
+            Self::ValidationFailed => ErrorKind::Validation,
         }
     }
 
@@ -19,6 +21,7 @@ impl AppErrorCode for CommonErrorCode {
         match self {
             Self::InvalidRequest => 10000,
             Self::InternalError => 10001,
+            Self::ValidationFailed => 10002,
         }
     }
 }

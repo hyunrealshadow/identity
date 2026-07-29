@@ -1,12 +1,20 @@
 use std::error::Error as StdError;
 
-use super::{code::AppErrorCode, kind::ErrorKind, params::ErrorParams};
+use super::{
+    code::AppErrorCode, kind::ErrorKind, params::ErrorParams, validation::ValidationError,
+};
+
+#[derive(Debug)]
+enum AppErrorDetails {
+    Validation(ValidationError),
+}
 
 #[derive(Debug)]
 pub struct AppError {
     kind: ErrorKind,
     code: u32,
     params: ErrorParams,
+    details: Option<AppErrorDetails>,
     source: Option<Box<dyn StdError + Send + Sync + 'static>>,
 }
 
@@ -16,6 +24,7 @@ impl AppError {
             kind: code.kind(),
             code: code.code(),
             params: ErrorParams::new(),
+            details: None,
             source: None,
         }
     }
@@ -30,6 +39,22 @@ impl AppError {
         self
     }
 
+    pub fn with_field_error(mut self, field: impl Into<String>, error: AppError) -> Self {
+        self.push_field_error(field, error);
+        self
+    }
+
+    pub fn with_field(mut self, field: impl Into<String>) -> Self {
+        let code = self.code;
+        let params = self.params.clone();
+        self.validation_mut().push_parts(field, code, params);
+        self
+    }
+
+    pub fn push_field_error(&mut self, field: impl Into<String>, error: AppError) {
+        self.validation_mut().push(field, error);
+    }
+
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }
@@ -40,6 +65,21 @@ impl AppError {
 
     pub fn params(&self) -> &ErrorParams {
         &self.params
+    }
+
+    pub fn validation(&self) -> Option<&ValidationError> {
+        match self.details.as_ref()? {
+            AppErrorDetails::Validation(validation) => Some(validation),
+        }
+    }
+
+    fn validation_mut(&mut self) -> &mut ValidationError {
+        let details = self
+            .details
+            .get_or_insert_with(|| AppErrorDetails::Validation(ValidationError::default()));
+        match details {
+            AppErrorDetails::Validation(validation) => validation,
+        }
     }
 }
 

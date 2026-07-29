@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { formErrorResponse, navigationResponse } from './responses.server'
+import {
+  formErrorResponse,
+  formValidationErrorResponse,
+  navigationResponse,
+} from './responses.server'
 
 describe('progressive form responses', () => {
   it('uses a 303 redirect for native form submissions', () => {
@@ -47,5 +51,30 @@ describe('progressive form responses', () => {
     expect(response.headers.get('set-cookie')).toContain('Secure')
     expect(response.headers.get('set-cookie')).toContain('SameSite=Lax')
     expect(response.headers.get('set-cookie')).toContain('Max-Age=60')
+  })
+
+  it('stores multiple field errors in the flash cookie', () => {
+    const request = new Request('https://login.example.com/install', {
+      method: 'POST',
+    })
+
+    const response = formValidationErrorResponse(
+      request,
+      '/install',
+      'Check the form for errors.',
+      { username: '', email: 'invalid' },
+      {
+        username: 'Username is required.',
+        email: 'The email address is invalid.',
+      },
+    )
+    const cookie = response.headers.get('set-cookie') ?? ''
+    const encoded = cookie.split(';')[0]?.split('=').slice(1).join('=') ?? ''
+    const flash = JSON.parse(decodeURIComponent(encoded))
+
+    expect(flash.fields).toEqual({
+      username: 'Username is required.',
+      email: 'The email address is invalid.',
+    })
   })
 })

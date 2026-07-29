@@ -24,7 +24,7 @@ use crate::views::auth::{
 use crate::{
     application::{
         auth::login::ChallengeOutcome,
-        error::{AppError, codes::auth::AuthErrorCode},
+        error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
     },
     domain::{client_authorization::SelectionSource, user::model::UserOid},
@@ -207,7 +207,8 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         .services()
         .login()
         .identify(login_oid, &body.identifier)
-        .await?;
+        .await
+        .map_err(identifier_form_error)?;
     let protected_id = ctx
         .services()
         .oidc_authorize()
@@ -250,7 +251,8 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
             &body.credential,
             session_ctx,
         )
-        .await?;
+        .await
+        .map_err(challenge_form_error)?;
 
     match outcome {
         ChallengeOutcome::MfaRequired { .. } => {
@@ -298,4 +300,63 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
         }
     }
     Ok(())
+}
+
+fn identifier_form_error(error: AppError) -> AppError {
+    let code = error.code();
+    if code == AuthErrorCode::UserNotFound.code()
+        || code == AuthErrorCode::IdentifierRequired.code()
+    {
+        error.with_field("identifier")
+    } else {
+        error
+    }
+}
+
+fn challenge_form_error(error: AppError) -> AppError {
+    let code = error.code();
+    if code == AuthErrorCode::InvalidCredential.code() || code == AuthErrorCode::InvalidOtp.code() {
+        error.with_field("credential")
+    } else {
+        error
+    }
+}
+
+#[cfg(test)]
+mod form_error_tests {
+    use super::{challenge_form_error, identifier_form_error};
+    use crate::application::error::{
+        AppError,
+        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+        kind::ErrorKind,
+    };
+
+    #[test]
+    fn identifier_errors_are_attached_to_identifier_field() {
+        let error = identifier_form_error(AppError::from_code(AuthErrorCode::IdentifierRequired));
+
+        assert_eq!(error.kind(), ErrorKind::Validation);
+        let fields = error.validation().expect("field details").fields();
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].field(), "identifier");
+        assert_eq!(fields[0].code(), 11012);
+    }
+
+    #[test]
+    fn invalid_credentials_keep_unauthorized_status_and_attach_field() {
+        let error = challenge_form_error(AppError::from_code(AuthErrorCode::InvalidCredential));
+
+        assert_eq!(error.kind(), ErrorKind::Unauthorized);
+        let fields = error.validation().expect("field details").fields();
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].field(), "credential");
+        assert_eq!(fields[0].code(), 11001);
+    }
+
+    #[test]
+    fn login_state_errors_remain_page_level() {
+        let error = identifier_form_error(AppError::from_code(CommonErrorCode::InternalError));
+
+        assert!(error.validation().is_none());
+    }
 }
