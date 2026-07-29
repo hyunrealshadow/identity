@@ -19,3 +19,9 @@ describe('resolveLocale', () => {
 it('interpolates translated messages', () => {
   expect(translate('en-US', 'consentDescription', { client: 'Portal' })).toBe('Portal wants to access your account.')
 })
+
+it('formats ICU plural messages', () => {
+  expect(translate('en-US', 'permissionCount', { count: 1 })).toBe('1 item')
+  expect(translate('en-US', 'permissionCount', { count: 2 })).toBe('2 items')
+  expect(translate('zh-CN', 'permissionCount', { count: 2 })).toBe('2 项')
+})

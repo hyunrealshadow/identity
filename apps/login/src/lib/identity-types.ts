@@ -5,6 +5,15 @@ export interface BusinessErrorResponse {
   }
 }
 
+export interface InstallationStatusResponse {
+  installed: boolean
+}
+
+export interface InstallResponse {
+  status: 'installed'
+  restart_required: boolean
+}
+
 export interface AccountItem {
   id: string
   name: string

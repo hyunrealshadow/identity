@@ -28,7 +28,7 @@ describe('progressive form responses', () => {
     })
   })
 
-  it('preserves safe form context in error redirects', () => {
+  it('keeps errors and form context out of the redirect URL', () => {
     const request = new Request('https://login.example.com/login', {
       method: 'POST',
     })
@@ -42,8 +42,10 @@ describe('progressive form responses', () => {
     const destination = new URL(response.headers.get('location') ?? '')
 
     expect(destination.pathname).toBe('/login')
-    expect(destination.searchParams.get('error')).toBe('Invalid account')
-    expect(destination.searchParams.get('login_id')).toBe('protected-login')
-    expect(destination.searchParams.get('identifier')).toBe('alice')
+    expect(destination.search).toBe('')
+    expect(response.headers.get('set-cookie')).toContain('HttpOnly')
+    expect(response.headers.get('set-cookie')).toContain('Secure')
+    expect(response.headers.get('set-cookie')).toContain('SameSite=Lax')
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=60')
   })
 })

@@ -1,10 +1,11 @@
-import { Alert, Button, Chip } from '@heroui/react'
+import { Alert, Chip } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { Check, ExternalLink, ShieldCheck } from 'lucide-react'
 
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
+import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
   identityJson,
@@ -14,6 +15,7 @@ import type {
   ConsentPageData,
 } from '#/lib/identity-types'
 import {
+  consumeFormFlash,
   formErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
@@ -31,21 +33,40 @@ function optionalString(value: unknown) {
 }
 
 const loadConsentPage = createServerFn({ method: 'GET' })
-  .validator((data: { loginId: string }) => data)
+  .validator((data: { loginId: string; uiLocales?: string }) => data)
   .handler(async ({ data }) => {
+    const flash = consumeFormFlash('/consent')
+    const loginId = data.loginId || flash?.values.login_id || ''
+    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+
+    if (!loginId) {
+      const locale = requestLocale(uiLocales.split(' '))
+      return {
+        consent: undefined,
+        locale,
+        uiLocales,
+        error: flash?.message ?? translate(locale, 'missingConsent'),
+      }
+    }
+
     try {
       const consent = await identityJson<ConsentPageData>(
-        `/oauth2/consent?login_id=${encodeURIComponent(data.loginId)}`,
+        `/oauth2/consent?login_id=${encodeURIComponent(loginId)}`,
       )
       return {
         consent,
         locale: requestLocale(consent.ui_locales),
         uiLocales: consent.ui_locales?.join(' ') ?? '',
-        error: undefined,
+        error: flash?.message,
       }
     } catch (error) {
       const locale = requestLocale()
-      return { consent: undefined, locale, uiLocales: '', error: errorMessage(error, locale) }
+      return {
+        consent: undefined,
+        locale,
+        uiLocales,
+        error: flash?.message ?? errorMessage(error, locale),
+      }
     }
   })
 
@@ -55,16 +76,11 @@ export const Route = createFileRoute('/consent')({
     error: optionalString(search.error),
     ui_locales: optionalString(search.ui_locales),
   }),
-  loaderDeps: ({ search }) => ({ loginId: search.login_id ?? '' }),
-  loader: ({ deps }) =>
-    deps.loginId
-      ? loadConsentPage({ data: { loginId: deps.loginId } })
-      : Promise.resolve({
-          consent: undefined,
-          locale: 'en-US' as const,
-          uiLocales: '',
-          error: translate('en-US', 'missingConsent'),
-        }),
+  loaderDeps: ({ search }) => ({
+    loginId: search.login_id ?? '',
+    uiLocales: search.ui_locales,
+  }),
+  loader: ({ deps }) => loadConsentPage({ data: deps }),
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -91,7 +107,7 @@ export const Route = createFileRoute('/consent')({
             },
           )
           if (!result.continue_uri) {
-            throw new Error('Identity API did not return the OP continuation URI')
+            throw new Error(translate(locale, 'continuationMissing'))
           }
           return navigationResponse(request, result.continue_uri)
         } catch (error) {
@@ -117,7 +133,6 @@ function ConsentPage() {
   return (
     <AuthShell
       lang={data.locale}
-      eyebrow="OAuth 2.0"
       title={t('consentTitle')}
       description={
         consent
@@ -126,7 +141,10 @@ function ConsentPage() {
       }
     >
       {visibleError ? (
-        <Alert status="danger" className="mb-5">
+        <Alert
+          status="danger"
+          className="auth-alert mb-5"
+        >
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{t('consentLoadFailed')}</Alert.Title>
@@ -137,7 +155,7 @@ function ConsentPage() {
 
       {consent ? (
         <>
-          <div className="mb-5 rounded-2xl border border-divider bg-surface-secondary p-4">
+          <div className="mb-5 rounded-xl border border-border bg-surface-secondary p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-sm shadow-black/10">
                 <ShieldCheck className="size-5" aria-hidden="true" />
@@ -168,11 +186,11 @@ function ConsentPage() {
                 {t('permissionCount', { count: consent.scopes.length })}
               </Chip>
             </div>
-            <ul className="space-y-2">
+            <ul className="auth-stagger-fast space-y-2">
               {consent.scopes.map((scope) => (
                 <li
                   key={scope.name}
-                  className="flex gap-3 rounded-xl border border-divider px-3 py-3"
+                  className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:border-black/15 hover:bg-black/[0.02]"
                 >
                   <Check
                     className="mt-0.5 size-4 shrink-0 text-accent"
@@ -212,12 +230,12 @@ function ConsentPage() {
               value={consent.csrf_token}
             />
             <input type="hidden" name="ui_locales" value={data.uiLocales} />
-            <Button type="submit" name="decision" value="deny" variant="secondary">
+            <SubmitButton name="decision" value="deny" variant="secondary">
               {t('deny')}
-            </Button>
-            <Button type="submit" name="decision" value="approve">
+            </SubmitButton>
+            <SubmitButton name="decision" value="approve">
               {t('allow')}
-            </Button>
+            </SubmitButton>
           </ProgressiveForm>
 
           <p className="mt-5 text-center text-xs leading-5 text-muted">

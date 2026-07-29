@@ -1,18 +1,33 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
 import { Card } from '@heroui/react'
-import { Fingerprint } from 'lucide-react'
-import { translate } from '#/lib/i18n'
 
-export const Route = createFileRoute('/')({ component: Home })
+import { translate } from '#/lib/i18n'
+import { requestLocale } from '#/lib/i18n.server'
+
+const loadHomePage = createServerFn({ method: 'GET' }).handler(async () => ({
+  locale: requestLocale(),
+}))
+
+export const Route = createFileRoute('/')({
+  loader: () => loadHomePage(),
+  component: Home,
+})
 
 function Home() {
+  const { locale } = Route.useLoaderData()
+
   return (
-    <main className="auth-background flex min-h-screen items-center justify-center px-6">
-      <Card className="max-w-lg border border-black/10 bg-white/95 p-8 text-center shadow-[0_24px_70px_-32px_rgba(0,0,0,0.35)]">
-        <Fingerprint className="mx-auto size-10 text-accent" aria-hidden="true" />
-        <Card.Title className="mt-4 text-2xl">{translate('en-US', 'homeTitle')}</Card.Title>
-        <Card.Description className="mt-3 leading-6">
-          {translate('en-US', 'homeDescription')}
+    <main
+      lang={locale}
+      className="auth-background flex min-h-screen items-center justify-center px-6"
+    >
+      <Card className="auth-card max-w-lg border border-black/[0.07] bg-white/90 p-8 text-center backdrop-blur-xl">
+        <Card.Title className="auth-item auth-delay-1 text-2xl tracking-tight">
+          {translate(locale, 'homeTitle')}
+        </Card.Title>
+        <Card.Description className="auth-item auth-delay-2 mt-3 leading-6">
+          {translate(locale, 'homeDescription')}
         </Card.Description>
       </Card>
     </main>

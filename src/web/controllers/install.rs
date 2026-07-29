@@ -8,12 +8,22 @@ use crate::{
     application::{install::InstallInput, setting::runtime::SettingProvider},
     domain::key::AsymmetricKeyAlgorithm,
     web::controllers::response::{
-        AppResponse, JsonWebError, JsonWebResult, app_state, json_response, parse_json,
+        AppResponse, JsonWebError, JsonWebResult, app_state, insert_no_store_headers,
+        json_response, parse_json,
     },
 };
 
 pub fn routes() -> Router {
     Router::with_path("install").post(install_submit)
+}
+
+pub fn status_routes() -> Router {
+    Router::with_path("installation/status").get(installation_status)
+}
+
+#[derive(Debug, Serialize)]
+struct InstallationStatusResponse {
+    installed: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +81,19 @@ fn log_install_failure(error: &identity_application::error::AppError, request: &
             "install submission rejected"
         );
     }
+}
+
+#[handler]
+async fn installation_status(depot: &mut Depot) -> JsonWebResult<AppResponse> {
+    let ctx = app_state(depot).map_err(JsonWebError)?;
+    let mut response = json_response(
+        StatusCode::OK,
+        InstallationStatusResponse {
+            installed: *ctx.settings().installation_initialized().current_value(),
+        },
+    );
+    insert_no_store_headers(&mut response);
+    Ok(response.into())
 }
 
 #[handler]

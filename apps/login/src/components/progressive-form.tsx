@@ -1,4 +1,7 @@
+import { Alert } from '@heroui/react'
 import { useState, type FormEvent, type ReactNode } from 'react'
+
+import { FormPendingContext } from '#/components/submit-button'
 
 import type { EnhancedNavigationResponse } from '#/lib/identity-types'
 
@@ -15,12 +18,13 @@ export function ProgressiveForm({
   className,
   enhancementErrorMessage,
 }: ProgressiveFormProps) {
-  const [isPending, setIsPending] = useState(false)
+  // `undefined` = idle, otherwise the `value` of the clicked submitter
+  // (null when the submitter carries no value attribute).
+  const [pendingSubmitter, setPendingSubmitter] = useState<string | null>()
   const [enhancementError, setEnhancementError] = useState<string>()
 
   async function enhance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setIsPending(true)
     setEnhancementError(undefined)
 
     const form = event.currentTarget
@@ -28,6 +32,7 @@ export function ProgressiveForm({
     const data = submitter
       ? new FormData(form, submitter)
       : new FormData(form)
+    setPendingSubmitter(submitter?.getAttribute('value') ?? null)
 
     try {
       const response = await fetch(action, {
@@ -39,10 +44,12 @@ export function ProgressiveForm({
       const result = (await response.json()) as EnhancedNavigationResponse
       window.location.assign(result.redirect)
     } catch {
+      setPendingSubmitter(undefined)
       setEnhancementError(enhancementErrorMessage)
-      setIsPending(false)
     }
   }
+
+  const isPending = pendingSubmitter !== undefined
 
   return (
     <form
@@ -52,11 +59,21 @@ export function ProgressiveForm({
       aria-busy={isPending}
       onSubmit={enhance}
     >
-      {children}
+      <FormPendingContext
+        value={{ isPending, submitter: pendingSubmitter ?? null }}
+      >
+        {children}
+      </FormPendingContext>
       {enhancementError ? (
-        <p className="mt-3 text-sm text-danger" role="alert">
-          {enhancementError}
-        </p>
+        <Alert
+          status="danger"
+          className="auth-alert mt-4"
+        >
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Description>{enhancementError}</Alert.Description>
+          </Alert.Content>
+        </Alert>
       ) : null}
     </form>
   )

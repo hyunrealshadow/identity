@@ -9,8 +9,14 @@ built with HeroUI v3 and Tailwind CSS v4.
 pnpm dev
 ```
 
+The Vite development server uses an automatically generated self-signed
+certificate and is available at `https://localhost:3000`. Accept the
+certificate warning in the browser the first time you open it. In development,
+the Vite server also accepts the local Identity server's self-signed
+certificate; production builds retain normal TLS certificate validation.
+
 The Rust protocol service must be available to the Start server at
-`IDENTITY_API_URL` (default `https://127.0.0.1:5150`). Login and consent APIs
+`IDENTITY_API_URL` (default `https://localhost:5150`). Login and consent APIs
 are proxied server-side; their successful responses send the browser directly
 back to the OP continuation endpoint. The Rust JSON API uses
 `X-Sessions` and `X-CSRF-Token`; API responses return updated values through
@@ -18,11 +24,13 @@ the `sessions` and `csrf_token` JSON fields. The Start server keeps the session
 list in its own secure, HttpOnly first-party cookie and translates it to the API
 header.
 
-Expose this application through a local TLS proxy and configure the Identity
-runtime settings to point to its HTTPS origin, for example:
+Configure the Identity runtime settings to point to the development server:
 
-- Login URL: `https://login.localhost/login`
-- Consent URL: `https://login.localhost/consent`
+- Login URL: `https://localhost:3000/login`
+- Consent URL: `https://localhost:3000/consent`
+
+When using a custom local hostname, start Vite with `--host`, trust its
+self-signed certificate, and configure the same HTTPS origin in Identity.
 
 All state-changing interactions are native HTML form POSTs. Client JavaScript
 intercepts the same forms only to provide enhanced navigation; disabling

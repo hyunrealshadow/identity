@@ -9,14 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConsentRouteImport } from './routes/consent'
+import { Route as InstallRouteImport } from './routes/install'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoginChallengeRouteImport } from './routes/login.challenge'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsentRoute = ConsentRouteImport.update({
@@ -24,9 +25,14 @@ const ConsentRoute = ConsentRouteImport.update({
   path: '/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const InstallRoute = InstallRouteImport.update({
+  id: '/install',
+  path: '/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginChallengeRoute = LoginChallengeRouteImport.update({
@@ -38,12 +44,14 @@ const LoginChallengeRoute = LoginChallengeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/consent': typeof ConsentRoute
+  '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/consent': typeof ConsentRoute
+  '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
 }
@@ -51,30 +59,32 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/consent': typeof ConsentRoute
+  '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/consent' | '/login' | '/login/challenge'
+  fullPaths: '/' | '/consent' | '/install' | '/login' | '/login/challenge'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/consent' | '/login' | '/login/challenge'
-  id: '__root__' | '/' | '/consent' | '/login' | '/login/challenge'
+  to: '/' | '/consent' | '/install' | '/login' | '/login/challenge'
+  id: '__root__' | '/' | '/consent' | '/install' | '/login' | '/login/challenge'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConsentRoute: typeof ConsentRoute
+  InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/consent': {
@@ -84,11 +94,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/install': {
+      id: '/install'
+      path: '/install'
+      fullPath: '/install'
+      preLoaderRoute: typeof InstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login/challenge': {
@@ -114,6 +131,7 @@ const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConsentRoute: ConsentRoute,
+  InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
 }
 export const routeTree = rootRouteImport

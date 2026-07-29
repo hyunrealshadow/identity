@@ -2,17 +2,19 @@ import {
   Alert,
   Avatar,
   Button,
+  FieldError,
   Input,
   Label,
   TextField,
 } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
+import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
   identityJson,
@@ -23,6 +25,7 @@ import type {
   LoginStatusResponse,
 } from '#/lib/identity-types'
 import {
+  consumeFormFlash,
   formErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
@@ -41,30 +44,51 @@ function optionalString(value: unknown) {
 }
 
 const loadChallengePage = createServerFn({ method: 'GET' })
-  .validator((data: { loginId: string }) => data)
+  .validator((data: { loginId: string; uiLocales?: string }) => data)
   .handler(async ({ data }) => {
+    const flash = consumeFormFlash('/login/challenge')
+    const loginId = data.loginId || flash?.values.login_id || ''
+    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+
+    if (!loginId) {
+      const locale = requestLocale(uiLocales.split(' '))
+      return {
+        status: undefined,
+        csrfToken: '',
+        loginId,
+        locale,
+        uiLocales,
+        error: flash?.field ? undefined : (flash?.message ?? translate(locale, 'missingLogin')),
+        fieldError: flash?.field === 'credential' ? flash.message : undefined,
+      }
+    }
+
     try {
       const [active, status] = await Promise.all([
         identityJson<ActiveAccountsResponse>('/api/auth/sessions/active'),
         identityJson<LoginStatusResponse>(
-          `/api/auth/login/${encodeURIComponent(data.loginId)}`,
+          `/api/auth/login/${encodeURIComponent(loginId)}`,
         ),
       ])
       return {
         status,
         csrfToken: active.csrf_token,
+        loginId,
         locale: requestLocale(status.ui_locales),
         uiLocales: status.ui_locales?.join(' ') ?? '',
-        error: undefined,
+        error: flash?.field ? undefined : flash?.message,
+        fieldError: flash?.field === 'credential' ? flash.message : undefined,
       }
     } catch (error) {
       const locale = requestLocale()
       return {
         status: undefined,
         csrfToken: '',
+        loginId,
         locale,
-        uiLocales: '',
-        error: errorMessage(error, locale),
+        uiLocales,
+        error: flash?.field ? undefined : (flash?.message ?? errorMessage(error, locale)),
+        fieldError: flash?.field === 'credential' ? flash.message : undefined,
       }
     }
   })
@@ -76,17 +100,11 @@ export const Route = createFileRoute('/login/challenge')({
     error: optionalString(search.error),
     ui_locales: optionalString(search.ui_locales),
   }),
-  loaderDeps: ({ search }) => ({ loginId: search.login_id ?? '' }),
-  loader: ({ deps }) =>
-    deps.loginId
-      ? loadChallengePage({ data: { loginId: deps.loginId } })
-      : Promise.resolve({
-        status: undefined,
-        csrfToken: '',
-        locale: 'en-US' as const,
-        uiLocales: '',
-        error: translate('en-US', 'missingLogin'),
-        }),
+  loaderDeps: ({ search }) => ({
+    loginId: search.login_id ?? '',
+    uiLocales: search.ui_locales,
+  }),
+  loader: ({ deps }) => loadChallengePage({ data: deps }),
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -106,6 +124,7 @@ export const Route = createFileRoute('/login/challenge')({
             '/login/challenge',
             translate(locale, 'challengeRequired'),
             { login_id: loginId, credential_type: credentialType, ui_locales: uiLocales },
+            loginId ? 'credential' : undefined,
           )
         }
 
@@ -132,7 +151,7 @@ export const Route = createFileRoute('/login/challenge')({
           }
 
           if (!result.continue_uri) {
-            throw new Error('Identity API did not return the OP continuation URI')
+            throw new Error(translate(locale, 'continuationMissing'))
           }
           return navigationResponse(request, result.continue_uri)
         } catch (error) {
@@ -141,6 +160,7 @@ export const Route = createFileRoute('/login/challenge')({
             '/login/challenge',
             errorMessage(error, locale),
             { login_id: loginId, credential_type: credentialType, ui_locales: uiLocales },
+            'credential',
           )
         }
       },
@@ -153,7 +173,7 @@ function ChallengePage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
   const [showPassword, setShowPassword] = useState(false)
-  const loginId = search.login_id ?? ''
+  const loginId = data.loginId
   const credentialType = search.credential_type === 'otp' ? 'otp' : 'password'
   const isOtp = credentialType === 'otp'
   const visibleError = search.error ?? data.error
@@ -171,7 +191,7 @@ function ChallengePage() {
       }
     >
       {user ? (
-        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-divider bg-surface-secondary p-3">
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface-secondary p-3">
           <Avatar size="sm">
             <Avatar.Fallback>{user.name.slice(0, 1)}</Avatar.Fallback>
           </Avatar>
@@ -183,7 +203,10 @@ function ChallengePage() {
       ) : null}
 
       {visibleError ? (
-        <Alert status="danger" className="mb-5">
+        <Alert
+          status="danger"
+          className="auth-alert mb-5"
+        >
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{t('verificationFailed')}</Alert.Title>
@@ -211,7 +234,7 @@ function ChallengePage() {
         <input type="hidden" name="ui_locales" value={data.uiLocales} />
 
         {isOtp ? (
-          <TextField isRequired fullWidth name="credential">
+          <TextField isRequired fullWidth name="credential" isInvalid={!!data.fieldError}>
             <Label>{t('otp')}</Label>
             <Input
               autoFocus
@@ -222,9 +245,10 @@ function ChallengePage() {
               placeholder="000000"
               className="text-center font-mono text-xl tracking-[0.35em]"
             />
+            <FieldError>{data.fieldError}</FieldError>
           </TextField>
         ) : (
-          <TextField isRequired fullWidth name="credential">
+          <TextField isRequired fullWidth name="credential" isInvalid={!!data.fieldError}>
             <Label>{t('password')}</Label>
             <div className="relative">
               <Input
@@ -248,25 +272,22 @@ function ChallengePage() {
                 )}
               </Button>
             </div>
+            <FieldError>{data.fieldError}</FieldError>
           </TextField>
         )}
 
-        <Button type="submit" fullWidth>
+        <SubmitButton fullWidth>
           {isOtp ? t('verify') : t('login')}
-        </Button>
+        </SubmitButton>
       </ProgressiveForm>
 
       <a
         href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-        className="mt-5 flex items-center justify-center gap-1.5 text-sm font-semibold text-accent hover:underline"
+        className="auth-link mx-auto mt-5 flex w-fit items-center justify-center gap-1.5 text-sm font-semibold text-accent"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         {t('switchAccount')}
       </a>
-      <p className="mt-7 flex items-center justify-center gap-2 text-xs text-muted">
-        <KeyRound className="size-3.5" aria-hidden="true" />
-        {t('encrypted')}
-      </p>
     </AuthShell>
   )
 }

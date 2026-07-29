@@ -7,7 +7,7 @@ import type { BusinessErrorResponse } from './identity-types'
 import type { Locale } from './i18n'
 import { translate } from './i18n'
 
-const DEFAULT_IDENTITY_URL = 'https://127.0.0.1:5150'
+const DEFAULT_IDENTITY_URL = 'https://localhost:5150'
 const SESSION_COOKIE_NAME = 'identity.sessions'
 const SESSION_HEADER_NAME = 'x-sessions'
 const CSRF_HEADER_NAME = 'x-csrf-token'

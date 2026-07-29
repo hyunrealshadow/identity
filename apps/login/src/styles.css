@@ -2,29 +2,80 @@
 @import "@heroui/styles";
 
 :root {
-  --background: oklch(97.5% 0 0);
+  --background: oklch(97.6% 0 0);
   --foreground: oklch(14.5% 0 0);
   --surface: oklch(100% 0 0);
   --surface-foreground: var(--foreground);
-  --surface-secondary: oklch(96.7% 0 0);
+  --surface-secondary: oklch(96.9% 0 0);
   --surface-secondary-foreground: var(--foreground);
   --surface-tertiary: oklch(93.5% 0 0);
   --surface-tertiary-foreground: var(--foreground);
-  --muted: oklch(47% 0 0);
+  --muted: oklch(45.5% 0 0);
   --default: oklch(94.5% 0 0);
   --default-foreground: var(--foreground);
-  --accent: oklch(14.5% 0 0);
+  --accent: oklch(16% 0 0);
   --accent-foreground: oklch(98.5% 0 0);
-  --accent-hover: oklch(24% 0 0);
+  --accent-hover: oklch(27% 0 0);
   --accent-soft: oklch(93.5% 0 0);
   --accent-soft-foreground: var(--foreground);
   --accent-soft-hover: oklch(90% 0 0);
-  --border: oklch(89.5% 0 0);
-  --separator: oklch(92% 0 0);
+  --border: oklch(90% 0 0);
+  --separator: oklch(92.4% 0 0);
   --focus: oklch(14.5% 0 0);
   --link: var(--foreground);
+  /* One global radius for HeroUI components and rounded surfaces. */
+  --radius: 0.5rem;
+
+  /* Form fields: Clerk/WorkOS-style bordered inputs. */
+  --field-radius: var(--radius);
+  --field-border-width: 1px;
+  --field-border: oklch(86.7% 0 0);
   --field-border-focus: oklch(35% 0 0);
-  --radius: 0.625rem;
+  --field-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+/* HeroUI normally derives several radius sizes from --radius. Collapse all
+   non-circular radius utilities to the same global value instead. */
+@theme inline {
+  --radius-xs: var(--radius);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
+  --radius-field: var(--radius);
+}
+
+/* HeroUI overrides live in the components layer so they beat the library
+   defaults (same layer, later in the stylesheet) but still lose to
+   per-instance Tailwind utilities such as `hover:shadow-*`. */
+@layer components {
+  /* Secondary buttons: white surface with a visible border. */
+  [data-slot="button"].button--secondary {
+    --button-bg: var(--surface);
+    --button-bg-hover: var(--surface-secondary);
+    --button-bg-pressed: var(--surface-secondary);
+    border: 1px solid var(--field-border);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  @media (hover: hover) {
+    [data-slot="button"].button--secondary:hover {
+      border-color: var(--field-border-hover);
+    }
+  }
+
+  /* Invalid fields: the danger border replaces the dark focus border, so a
+     focused invalid field reads as a single red border + red ring. The stock
+     theme gets away with stacking them because its focus color is light. */
+  [data-slot="input"][data-invalid="true"],
+  [data-slot="textarea"][data-invalid="true"] {
+    border-color: var(--danger);
+    outline: none;
+  }
+
 }
 
 * {
@@ -45,6 +96,7 @@ body {
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
@@ -52,26 +104,195 @@ body {
   background: #18181b;
 }
 
+/* ---------------------------------------------------------------
+   Ambient background: flat neutral wash (Zitadel/WorkOS-style calm)
+--------------------------------------------------------------- */
 .auth-background {
   position: relative;
-  background:
-    radial-gradient(circle at 50% -12rem, rgb(24 24 27 / 0.08), transparent 32rem),
-    linear-gradient(180deg, #fafafa 0%, #f4f4f5 100%);
+  isolation: isolate;
+  background: var(--background);
 }
 
-.auth-background::before {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  opacity: 0.32;
-  background-image: radial-gradient(rgb(24 24 27 / 0.16) 0.5px, transparent 0.5px);
-  background-size: 5px 5px;
-  mask-image: linear-gradient(to bottom, black, transparent 72%);
+/* ---------------------------------------------------------------
+   Entrance motion
+--------------------------------------------------------------- */
+@keyframes auth-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.progressive-form[aria-busy="true"] button[type="submit"] {
-  cursor: wait;
-  opacity: 0.65;
+@keyframes auth-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes auth-alert-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  45% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  72% {
+    transform: translateX(4px);
+  }
+  84% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.auth-card {
+  animation: auth-card-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 12px 32px -16px rgb(0 0 0 / 0.14),
+    0 40px 80px -48px rgb(0 0 0 / 0.18);
+}
+
+.auth-item {
+  animation: auth-item-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-delay-1 {
+  animation-delay: 0.15s;
+}
+
+.auth-delay-2 {
+  animation-delay: 0.21s;
+}
+
+.auth-delay-3 {
+  animation-delay: 0.27s;
+}
+
+.auth-delay-4 {
+  animation-delay: 0.33s;
+}
+
+.auth-stagger > *,
+.auth-stagger-fast > * {
+  animation: auth-item-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-stagger > *:nth-child(1) { animation-delay: 0.16s; }
+.auth-stagger > *:nth-child(2) { animation-delay: 0.22s; }
+.auth-stagger > *:nth-child(3) { animation-delay: 0.28s; }
+.auth-stagger > *:nth-child(4) { animation-delay: 0.34s; }
+.auth-stagger > *:nth-child(5) { animation-delay: 0.4s; }
+.auth-stagger > *:nth-child(6) { animation-delay: 0.46s; }
+
+.auth-stagger-fast > *:nth-child(1) { animation-delay: 0.05s; }
+.auth-stagger-fast > *:nth-child(2) { animation-delay: 0.1s; }
+.auth-stagger-fast > *:nth-child(3) { animation-delay: 0.15s; }
+.auth-stagger-fast > *:nth-child(4) { animation-delay: 0.2s; }
+.auth-stagger-fast > *:nth-child(5) { animation-delay: 0.25s; }
+.auth-stagger-fast > *:nth-child(6) { animation-delay: 0.3s; }
+
+/* Defined after the stagger rules so the shake wins for alert children. */
+.auth-alert {
+  animation: auth-alert-in 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) 0.15s both;
+  background: var(--surface);
+  border: 0;
+  /* The original stays visible through elevation alone on the gray docs
+     background; on the white auth card it needs a hairline ring plus a
+     deeper lift to read as a raised surface. */
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.05),
+    var(--surface-shadow),
+    0 12px 28px -12px rgb(0 0 0 / 0.15);
+}
+
+/* ---------------------------------------------------------------
+   Button micro-interactions
+--------------------------------------------------------------- */
+[data-slot="button"] {
+  transition-property:
+    color, background-color, border-color, box-shadow, opacity, scale, translate;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-slot="button"]:active,
+[data-slot="button"][data-pressed="true"] {
+  scale: 0.98;
+}
+
+[data-slot="button"][data-pending] {
+  cursor: progress;
+}
+
+/* Busy progressive form: freeze every submit, dim the inactive ones. */
+.progressive-form[aria-busy="true"] [data-slot="button"][type="submit"] {
   pointer-events: none;
+}
+
+.progressive-form[aria-busy="true"] [data-slot="button"][type="submit"]:not([data-pending]) {
+  opacity: 0.55;
+}
+
+.progressive-form[aria-busy="true"] :is(input, textarea) {
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------
+   Inline links: animated underline + visible keyboard focus
+--------------------------------------------------------------- */
+.auth-link {
+  padding-bottom: 1px;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition:
+    background-size 0.25s ease,
+    color 0.2s ease;
+}
+
+.auth-link:hover {
+  background-size: 100% 1px;
+}
+
+.auth-background a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid rgb(24 24 27 / 0.55);
+  outline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------
+   Reduced motion
+--------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .auth-card,
+  .auth-item,
+  .auth-alert,
+  .auth-stagger > *,
+  .auth-stagger-fast > * {
+    animation: none;
+  }
+
+  [data-slot="button"],
+  .auth-link {
+    transition-duration: 1ms;
+  }
 }

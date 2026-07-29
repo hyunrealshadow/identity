@@ -20,6 +20,7 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     router = router
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state.clone()))
+        .push(controllers::install::status_routes())
         .push(
             Router::with_path("static/{**path}")
                 .get(StaticDir::new(["assets/static"]).fallback("404.html")),

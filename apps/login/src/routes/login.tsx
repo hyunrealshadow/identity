@@ -1,7 +1,7 @@
 import {
   Alert,
   Avatar,
-  Button,
+  FieldError,
   Input,
   Label,
   TextField,
@@ -12,10 +12,11 @@ import {
   useRouterState,
 } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ChevronRight, Plus, UserRound } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
 
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
+import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
   identityJson,
@@ -27,6 +28,7 @@ import type {
   SelectAccountResponse,
 } from '#/lib/identity-types'
 import {
+  consumeFormFlash,
   formErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
@@ -46,31 +48,55 @@ function optionalString(value: unknown) {
 }
 
 const loadLoginPage = createServerFn({ method: 'GET' })
-  .validator((data: { loginId: string }) => data)
+  .validator((data: { loginId: string; uiLocales?: string }) => data)
   .handler(async ({ data }) => {
+    const flash = consumeFormFlash('/login')
+    const loginId = data.loginId || flash?.values.login_id || ''
+    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+
+    if (!loginId) {
+      const locale = requestLocale(uiLocales.split(' '))
+      return {
+        accounts: [],
+        csrfToken: '',
+        loginId,
+        locale,
+        uiLocales,
+        error: flash?.field ? undefined : (flash?.message ?? translate(locale, 'missingLogin')),
+        fieldError: flash?.field === 'identifier' ? flash.message : undefined,
+        formValues: flash?.values ?? {},
+      }
+    }
+
     try {
       const [active, status] = await Promise.all([
         identityJson<ActiveAccountsResponse>('/api/auth/sessions/active'),
         identityJson<LoginStatusResponse>(
-          `/api/auth/login/${encodeURIComponent(data.loginId)}`,
+          `/api/auth/login/${encodeURIComponent(loginId)}`,
         ),
       ])
 
       return {
         accounts: status.prompt === 'login' ? [] : active.accounts,
         csrfToken: active.csrf_token,
+        loginId,
         locale: requestLocale(status.ui_locales),
         uiLocales: status.ui_locales?.join(' ') ?? '',
-        error: undefined,
+        error: flash?.field ? undefined : flash?.message,
+        fieldError: flash?.field === 'identifier' ? flash.message : undefined,
+        formValues: flash?.values ?? {},
       }
     } catch (error) {
       const locale = requestLocale()
       return {
         accounts: [],
         csrfToken: '',
+        loginId,
         locale,
-        uiLocales: '',
-        error: errorMessage(error, locale),
+        uiLocales,
+        error: flash?.field ? undefined : (flash?.message ?? errorMessage(error, locale)),
+        fieldError: flash?.field === 'identifier' ? flash.message : undefined,
+        formValues: flash?.values ?? {},
       }
     }
   })
@@ -83,17 +109,11 @@ export const Route = createFileRoute('/login')({
     error: optionalString(search.error),
     ui_locales: optionalString(search.ui_locales),
   }),
-  loaderDeps: ({ search }) => ({ loginId: search.login_id ?? '' }),
-  loader: ({ deps }) =>
-    deps.loginId
-      ? loadLoginPage({ data: { loginId: deps.loginId } })
-      : Promise.resolve({
-          accounts: [],
-          csrfToken: '',
-          locale: 'en-US' as const,
-          uiLocales: '',
-          error: translate('en-US', 'missingLogin'),
-        }),
+  loaderDeps: ({ search }) => ({
+    loginId: search.login_id ?? '',
+    uiLocales: search.ui_locales,
+  }),
+  loader: ({ deps }) => loadLoginPage({ data: deps }),
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -128,6 +148,7 @@ export const Route = createFileRoute('/login')({
               '/login',
               translate(locale, 'identifierRequired'),
               { login_id: loginId, ui_locales: uiLocales },
+              'identifier',
             )
           }
 
@@ -160,7 +181,7 @@ export const Route = createFileRoute('/login')({
             login_id: loginId,
             identifier: optionalString(form.get('identifier')),
             ui_locales: uiLocales,
-          })
+          }, 'identifier')
         }
       },
     },
@@ -179,7 +200,7 @@ function LoginRoute() {
 function LoginPage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
-  const loginId = search.login_id ?? ''
+  const loginId = data.loginId
   const showAccounts = data.accounts.length > 0 && search.no_accounts !== '1'
   const visibleError = search.error ?? data.error
   const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
@@ -197,7 +218,7 @@ function LoginPage() {
       {visibleError ? <ErrorAlert message={visibleError} title={t('unableToContinue')} /> : null}
 
       {showAccounts ? (
-        <div className="space-y-3">
+        <div className="auth-stagger-fast space-y-3">
           {data.accounts.map((account) => (
             <ProgressiveForm
               action="/login"
@@ -214,11 +235,10 @@ function LoginPage() {
                 name="csrf_token"
                 value={data.csrfToken}
               />
-              <Button
-                type="submit"
+              <SubmitButton
                 variant="secondary"
                 fullWidth
-                className="h-auto justify-start gap-3 px-4 py-3 text-left"
+                className="group h-auto justify-start gap-3 px-4 py-3 text-left hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-14px_rgba(0,0,0,0.3)]"
               >
                 <Avatar size="sm">
                   <Avatar.Fallback>{account.name.slice(0, 1)}</Avatar.Fallback>
@@ -231,13 +251,16 @@ function LoginPage() {
                     {account.email}
                   </span>
                 </span>
-                <ChevronRight className="size-4 text-muted" aria-hidden="true" />
-              </Button>
+                <ChevronRight
+                  className="size-4 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+                  aria-hidden="true"
+                />
+              </SubmitButton>
             </ProgressiveForm>
           ))}
           <a
             href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-accent transition hover:bg-accent/5"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-accent transition-colors duration-200 hover:bg-accent/5 active:scale-[0.98]"
           >
             <Plus className="size-4" aria-hidden="true" />
               {t('useAnotherAccount')}
@@ -249,40 +272,39 @@ function LoginPage() {
           <input type="hidden" name="login_id" value={loginId} />
           <input type="hidden" name="csrf_token" value={data.csrfToken} />
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
-          <TextField isRequired fullWidth name="identifier">
+          <TextField isRequired fullWidth name="identifier" isInvalid={!!data.fieldError}>
             <Label>{t('identifier')}</Label>
             <Input
               autoFocus
-              defaultValue={search.identifier}
+              defaultValue={data.formValues.identifier ?? search.identifier}
               autoComplete="username"
               placeholder="name@example.com"
             />
+            <FieldError>{data.fieldError}</FieldError>
           </TextField>
-          <Button type="submit" fullWidth>
+          <SubmitButton fullWidth>
             {t('next')}
-          </Button>
+          </SubmitButton>
           {data.accounts.length > 0 ? (
             <a
               href={`/login?login_id=${encodeURIComponent(loginId)}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-              className="flex justify-center text-sm font-semibold text-accent hover:underline"
+              className="auth-link mx-auto flex w-fit justify-center text-sm font-semibold text-accent"
             >
               {t('backToAccounts')}
             </a>
           ) : null}
         </ProgressiveForm>
       )}
-
-      <div className="mt-7 flex items-center justify-center gap-2 text-xs text-muted">
-        <UserRound className="size-3.5" aria-hidden="true" />
-        {t('loginPrivacy')}
-      </div>
     </AuthShell>
   )
 }
 
-function ErrorAlert({ message, title = 'Unable to continue' }: { message: string; title?: string }) {
+function ErrorAlert({ message, title }: { message: string; title: string }) {
   return (
-    <Alert status="danger" className="mb-5">
+    <Alert
+      status="danger"
+      className="auth-alert mb-5"
+    >
       <Alert.Indicator />
       <Alert.Content>
         <Alert.Title>{title}</Alert.Title>
