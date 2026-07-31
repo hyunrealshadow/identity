@@ -149,12 +149,12 @@ impl AuthorizeService {
             None => None,
         };
 
-        if client.metadata().settings.allow_public_client_flow {
-            if response_type != ResponseType::Code {
-                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", response_type.to_string()));
-            }
-            if params.code_challenge.as_deref().is_none_or(str::is_empty) {
+        let has_code_challenge = params
+            .code_challenge
+            .as_deref()
+            .is_some_and(|challenge| !challenge.is_empty());
+        if params.code_challenge.is_some() || code_challenge_method.is_some() {
+            if !has_code_challenge {
                 return Err(
                     AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
                         .with_param("field", "code_challenge"),
@@ -163,7 +163,20 @@ impl AuthorizeService {
             if code_challenge_method != Some(CodeChallengeMethod::S256) {
                 return Err(
                     AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                        .with_param("code_challenge_method", "S256 required for public client"),
+                        .with_param("code_challenge_method", "S256 required"),
+                );
+            }
+        }
+
+        if client.metadata().settings.allow_public_client_flow {
+            if response_type != ResponseType::Code {
+                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", response_type.to_string()));
+            }
+            if !has_code_challenge {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
+                        .with_param("field", "code_challenge"),
                 );
             }
         }

@@ -88,17 +88,12 @@ pub(super) fn verify_pkce(
     };
 
     let method = code_challenge_method.unwrap_or("plain");
-    let computed = match method {
-        "plain" => code_verifier.to_string(),
-        "S256" => {
-            let digest = Sha256::digest(code_verifier.as_bytes());
-            URL_SAFE_NO_PAD.encode(digest)
-        }
-        _ => {
-            return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
-                .with_param("code_challenge_method", method));
-        }
-    };
+    if method != "S256" {
+        return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
+            .with_param("code_challenge_method", method));
+    }
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    let computed = URL_SAFE_NO_PAD.encode(digest);
 
     if !bool::from(subtle::ConstantTimeEq::ct_eq(
         computed.as_bytes(),

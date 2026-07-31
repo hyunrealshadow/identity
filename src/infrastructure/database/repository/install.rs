@@ -369,30 +369,6 @@ where
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use sea_orm::{DbBackend, MockDatabase, MockExecResult, Statement, Transaction};
-
-    use super::{INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock};
-
-    #[tokio::test]
-    async fn install_lock_is_transaction_scoped() {
-        let db = MockDatabase::new(DbBackend::Postgres)
-            .append_exec_results([MockExecResult::default()])
-            .into_connection();
-
-        acquire_install_transaction_lock(&db).await.unwrap();
-
-        assert_eq!(
-            db.into_transaction_log(),
-            [Transaction::one(Statement::from_string(
-                DbBackend::Postgres,
-                format!("SELECT pg_advisory_xact_lock({INSTALL_TRANSACTION_LOCK_ID})"),
-            ))]
-        );
-    }
-}
-
 async fn installation_state_exists<C>(db: &C) -> Result<bool, AppError>
 where
     C: ConnectionTrait,
@@ -492,4 +468,28 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{DbBackend, MockDatabase, MockExecResult, Statement, Transaction};
+
+    use super::{INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock};
+
+    #[tokio::test]
+    async fn install_lock_is_transaction_scoped() {
+        let db = MockDatabase::new(DbBackend::Postgres)
+            .append_exec_results([MockExecResult::default()])
+            .into_connection();
+
+        acquire_install_transaction_lock(&db).await.unwrap();
+
+        assert_eq!(
+            db.into_transaction_log(),
+            [Transaction::one(Statement::from_string(
+                DbBackend::Postgres,
+                format!("SELECT pg_advisory_xact_lock({INSTALL_TRANSACTION_LOCK_ID})"),
+            ))]
+        );
+    }
 }

@@ -30,12 +30,7 @@ pub async fn userinfo(
     let auth_header = headers.get("Authorization").and_then(|v| v.to_str().ok());
 
     let bearer_token = match auth_header {
-        Some(header) if header.starts_with("Bearer ") => &header[7..],
-        Some(_) => {
-            return Err(UserinfoWebError(AppError::from_code(
-                OpenIdConnectErrorCode::BearerSchemeInvalid,
-            )));
-        }
+        Some(header) => parse_bearer_token(header).map_err(UserinfoWebError)?,
         None => {
             return Err(UserinfoWebError(AppError::from_code(
                 OpenIdConnectErrorCode::AuthorizationHeaderRequired,
@@ -58,13 +53,9 @@ pub async fn userinfo_post(
     let auth_header = headers.get("Authorization").and_then(|v| v.to_str().ok());
 
     let bearer_token: String = if let Some(header) = auth_header {
-        if let Some(token) = header.strip_prefix("Bearer ") {
-            token.to_string()
-        } else {
-            return Err(UserinfoWebError(AppError::from_code(
-                OpenIdConnectErrorCode::BearerSchemeInvalid,
-            )));
-        }
+        parse_bearer_token(header)
+            .map(str::to_owned)
+            .map_err(UserinfoWebError)?
     } else if let Some(token) = form.access_token {
         token
     } else {
@@ -74,6 +65,18 @@ pub async fn userinfo_post(
     };
 
     handle_userinfo_request(ctx, &bearer_token).await
+}
+
+fn parse_bearer_token(header: &str) -> Result<&str, AppError> {
+    let token = header
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::BearerSchemeInvalid))?;
+    if token.is_empty() {
+        return Err(AppError::from_code(
+            OpenIdConnectErrorCode::AccessTokenRequired,
+        ));
+    }
+    Ok(token)
 }
 
 async fn handle_userinfo_request(
@@ -258,5 +261,31 @@ impl Writer for UserinfoWebError {
                 *res = response;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_bearer_token;
+
+    #[test]
+    fn parses_bearer_token_without_indexing_header_bytes() {
+        assert_eq!(
+            parse_bearer_token("Bearer token-value").unwrap(),
+            "token-value"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_bearer_token() {
+        assert_eq!(parse_bearer_token("Bearer ").unwrap_err().code(), 21014);
+    }
+
+    #[test]
+    fn rejects_non_bearer_authorization_scheme() {
+        assert_eq!(
+            parse_bearer_token("Basic credentials").unwrap_err().code(),
+            21012
+        );
     }
 }

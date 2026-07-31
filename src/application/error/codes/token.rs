@@ -119,7 +119,7 @@ pub enum TokenErrorCode {
     StoreRefreshFailed,
 
     // --- PKCE ---
-    /// `code_challenge_method` is not `plain` or `S256`.
+    /// `code_challenge_method` is not `S256`.
     PkceMethodUnsupported,
     /// `code_verifier` does not match the stored `code_challenge`.
     PkceVerifierMismatch,

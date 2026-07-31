@@ -6,6 +6,10 @@ use identity_domain::auth::ACR_PASSWORD;
 use identity_domain::auth::SessionOid;
 use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
 
+fn s256_challenge(verifier: &str) -> String {
+    URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
+}
+
 fn rs256_token_service_with_public_key(
     repo: Arc<MockClientAuthorizationRepository>,
     user_oid: Uuid,
@@ -34,8 +38,8 @@ async fn exchange_authorization_code_revokes_code_after_success() {
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-123".to_string()),
-                code_challenge: Some("verifier-123".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-123")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(session_oid),
                 protected_session_id: None,
@@ -119,8 +123,8 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "email openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
-                code_challenge: Some("verifier-123".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-123")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -169,8 +173,8 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
-                code_challenge: Some("expected-verifier".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("expected-verifier")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -244,8 +248,8 @@ async fn exchange_authorization_code_rejects_reused_code() {
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
-                code_challenge: Some("verifier-789".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-789")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -334,8 +338,8 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-offline".to_string()),
-                code_challenge: Some("verifier-offline".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-offline")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -399,8 +403,8 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                     scope: "openid profile".to_string(),
                     nonce: Some(format!("nonce-{alg}")),
-                    code_challenge: Some(format!("verifier-{alg}")),
-                    code_challenge_method: Some("plain".to_string()),
+                    code_challenge: Some(s256_challenge(&format!("verifier-{alg}"))),
+                    code_challenge_method: Some("S256".to_string()),
                     user_oid: user_oid.to_string(),
                     session_oid: SessionOid::from(Uuid::new_v4()),
                     protected_session_id: None,
@@ -504,8 +508,8 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-rs256".to_string()),
-                code_challenge: Some("verifier-rs256".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-rs256")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,

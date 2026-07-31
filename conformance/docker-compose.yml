@@ -18,8 +18,8 @@ services:
       APP_ENV: conformance
       DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
       HOST: https://identity:5150
-      LOGIN_URL: https://login:3443/login
-      CONSENT_URL: https://login:3443/consent
+      LOGIN_URL: https://localhost:3443/login
+      CONSENT_URL: https://localhost:3443/consent
       TLS_DOMAIN: identity
       PORT: "5150"
     ports:
@@ -43,7 +43,7 @@ services:
       identity:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('https://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 20

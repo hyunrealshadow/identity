@@ -2,6 +2,10 @@ use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
 use identity_domain::auth::SessionOid;
 
+fn s256_challenge(verifier: &str) -> String {
+    URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
+}
+
 fn refresh_token_data(
     record: identity_domain::client_authorization::ClientAuthorization,
 ) -> RefreshTokenData {
@@ -24,8 +28,8 @@ async fn exchange_refresh_token_returns_new_access_token() {
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
-                code_challenge: Some("verifier-refresh".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-refresh")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -177,8 +181,8 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh-es256".to_string()),
-                code_challenge: Some("verifier-refresh-es256".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-refresh-es256")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -312,8 +316,8 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-auth-time".to_string()),
-                code_challenge: Some("verifier-auth-time".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-auth-time")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -406,8 +410,8 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access".to_string(),
                 nonce: None,
-                code_challenge: Some("verifier-no-auth-time".to_string()),
-                code_challenge_method: Some("plain".to_string()),
+                code_challenge: Some(s256_challenge("verifier-no-auth-time")),
+                code_challenge_method: Some("S256".to_string()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,

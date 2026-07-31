@@ -10,7 +10,13 @@ fn verify_pkce_accepts_matching_s256_verifier() {
 }
 
 #[test]
-fn verify_pkce_rejects_mismatched_plain_verifier() {
-    let result = verify_pkce(Some("expected"), Some("plain"), Some("actual"));
-    assert!(result.is_err());
+fn verify_pkce_rejects_plain_even_when_verifier_matches() {
+    let result = verify_pkce(Some("verifier"), Some("plain"), Some("verifier"));
+    assert_eq!(result.unwrap_err().code(), 24048);
+}
+
+#[test]
+fn verify_pkce_rejects_implicit_plain_method() {
+    let result = verify_pkce(Some("verifier"), None, Some("verifier"));
+    assert_eq!(result.unwrap_err().code(), 24048);
 }

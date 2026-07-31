@@ -56,6 +56,37 @@ async fn public_client_requires_pkce_s256() {
 }
 
 #[tokio::test]
+async fn confidential_client_rejects_plain_pkce() {
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.code_challenge = Some("challenge".to_owned());
+    request.code_challenge_method = Some("plain".to_owned());
+
+    let error = service.validate_request(request).await.unwrap_err();
+
+    assert_eq!(error.code(), 23011);
+}
+
+#[tokio::test]
+async fn confidential_client_rejects_pkce_method_without_challenge() {
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.code_challenge_method = Some("S256".to_owned());
+
+    let error = service.validate_request(request).await.unwrap_err();
+
+    assert_eq!(error.code(), 23013);
+}
+
+#[tokio::test]
 async fn public_client_rejects_implicit_response_type() {
     let service = build_test_service(
         Arc::new(PublicClientRepository),

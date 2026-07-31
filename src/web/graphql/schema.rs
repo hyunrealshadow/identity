@@ -150,8 +150,8 @@ impl Viewer {
 #[derive(Interface)]
 #[graphql(field(name = "id", ty = "&ID"))]
 pub enum Node {
-    User(UserNode),
-    Session(SessionNode),
+    User(Box<UserNode>),
+    Session(Box<SessionNode>),
 }
 
 pub struct UserNode {
@@ -600,6 +600,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
                 .await
                 .map_err(internal_error)?
                 .map(UserNode::from)
+                .map(Box::new)
                 .map(Node::from))
         }
         NodeId::Session(oid) => {
@@ -615,6 +616,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             Ok(session
                 .filter(|session| session.user_oid == Uuid::from(request.claims.user_oid))
                 .map(|session| SessionNode::new(session, request.claims.session_oid))
+                .map(Box::new)
                 .map(Node::from))
         }
     }
