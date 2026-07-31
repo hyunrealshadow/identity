@@ -61,8 +61,11 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
             if needs_separate_graphql {
                 let graphql_address = graphql::bind_address(&config.graphql, &config.server);
                 let graphql_listener = build_upstream_tls_listener(&graphql_address).await?;
-                let graphql_app = graphql::router(state.clone(), &config.graphql)
-                    .hoop(identity_web::middleware::require_upstream_https_middleware);
+                let graphql_app = graphql::router(state.clone(), &config.graphql).hoop(
+                    identity_web::middleware::RequireUpstreamHttps::new(
+                        &config.server.tls.trusted_proxies,
+                    ),
+                );
                 tracing::info!(
                     environment,
                     address = graphql_address.as_str(),

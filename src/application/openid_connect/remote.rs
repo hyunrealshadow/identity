@@ -50,11 +50,8 @@ impl RemoteFetchPolicy {
 pub const DEFAULT_REMOTE_DOCUMENT_MAX_BYTES: usize = 1024 * 1024;
 
 #[must_use]
-pub fn conformance_allows_invalid_certs() -> bool {
+pub const fn conformance_allows_invalid_certs() -> bool {
     cfg!(feature = "oidc-conformance")
-        || std::env::var("APP_ENV")
-            .map(|value| value.eq_ignore_ascii_case("conformance"))
-            .unwrap_or(false)
 }
 
 pub fn validate_https_public_url(url: &Url) -> Result<(), RemoteUrlError> {
@@ -247,7 +244,10 @@ pub fn fetchable_url(url: &Url) -> Url {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-    use super::{RemoteUrlError, fetchable_url, is_unsafe_ip, validate_https_public_url};
+    use super::{
+        RemoteUrlError, conformance_allows_invalid_certs, fetchable_url, is_unsafe_ip,
+        validate_https_public_url,
+    };
     use url::Url;
 
     #[test]
@@ -319,6 +319,14 @@ mod tests {
         assert_eq!(
             fetchable_url(&url).as_str(),
             "https://rp.example.com/request.jwt"
+        );
+    }
+
+    #[test]
+    fn invalid_certificate_policy_is_compile_time_only() {
+        assert_eq!(
+            conformance_allows_invalid_certs(),
+            cfg!(feature = "oidc-conformance")
         );
     }
 }

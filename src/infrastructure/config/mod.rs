@@ -1,5 +1,6 @@
 use std::{env, fs};
 
+use ipnet::IpNet;
 use serde::Deserialize;
 use tera::Tera;
 use url::Url;
@@ -80,6 +81,15 @@ impl AppConfig {
             return Err(invalid_config("server.host must use https").into());
         }
 
+        if self.server.tls.termination == TlsTermination::Upstream
+            && self.server.tls.trusted_proxies.is_empty()
+        {
+            return Err(invalid_config(
+                "server.tls.trusted_proxies must contain at least one proxy network when TLS termination is upstream",
+            )
+            .into());
+        }
+
         Ok(())
     }
 }
@@ -153,6 +163,8 @@ pub struct TlsConfig {
     pub key_path: String,
     #[serde(default)]
     pub domain: Option<String>,
+    #[serde(default)]
+    pub trusted_proxies: Vec<IpNet>,
 }
 
 impl Default for TlsConfig {
@@ -163,6 +175,7 @@ impl Default for TlsConfig {
             cert_path: default_tls_cert_path(),
             key_path: default_tls_key_path(),
             domain: None,
+            trusted_proxies: Vec::new(),
         }
     }
 }
@@ -601,6 +614,7 @@ database:
         assert_eq!(config.server.tls.cert_path, "config/tls/server.crt");
         assert_eq!(config.server.tls.key_path, "config/tls/server.key");
         assert_eq!(config.server.tls.domain, None);
+        assert!(config.server.tls.trusted_proxies.is_empty());
     }
 
     #[test]
@@ -713,6 +727,8 @@ server:
   host: https://identity.example.com
   tls:
     termination: upstream
+    trusted_proxies:
+      - 10.0.0.0/8
 database:
   uri: postgres://localhost/identity
 "#,
@@ -720,5 +736,24 @@ database:
         .unwrap();
 
         assert!(config.validate_https_contract().is_ok());
+    }
+
+    #[test]
+    fn https_contract_rejects_upstream_tls_without_trusted_proxies() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+  tls:
+    termination: upstream
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        let error = config.validate_https_contract().unwrap_err();
+
+        assert!(error.to_string().contains("trusted_proxies"));
     }
 }

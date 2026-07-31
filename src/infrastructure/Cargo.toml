@@ -22,6 +22,7 @@ icu_provider = { version = "2.2", features = ["sync"] }
 identity-application = { workspace = true }
 identity-domain = { workspace = true }
 idna = { workspace = true }
+ipnet = { workspace = true }
 include_dir = { version = "0.7" }
 josekit = { workspace = true }
 migration = { workspace = true }

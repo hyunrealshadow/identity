@@ -9,16 +9,19 @@ use identity_infrastructure::config::{AppConfig, TlsTermination};
 
 use super::{
     controllers,
-    middleware::{require_upstream_https_middleware, security_headers_middleware},
+    middleware::{RequireUpstreamHttps, ResolveClientIp, security_headers_middleware},
 };
 
 pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
     let mut router = Router::new();
     if config.server.tls.termination == TlsTermination::Upstream {
-        router = router.hoop(require_upstream_https_middleware);
+        router = router.hoop(RequireUpstreamHttps::new(
+            &config.server.tls.trusted_proxies,
+        ));
     }
     router = router
+        .hoop(ResolveClientIp::new(&config.server.tls.trusted_proxies))
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state.clone()))
         .push(controllers::install::status_routes())

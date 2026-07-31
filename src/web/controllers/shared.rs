@@ -1,6 +1,6 @@
 //! Shared helpers for the authentication and OAuth protocol controllers.
 
-use std::{convert::Infallible, net::IpAddr};
+use std::convert::Infallible;
 
 use http::{HeaderMap, HeaderValue, header};
 use salvo::{
@@ -475,10 +475,9 @@ pub fn parse_user_agent(headers: &HeaderMap) -> ParsedUserAgent {
     }
 }
 
-pub fn build_session_context(headers: &HeaderMap) -> SessionContext {
+pub fn build_session_context(headers: &HeaderMap, ip_address: Option<String>) -> SessionContext {
     let (device_name, device_type, os_name, os_version, browser_name, browser_version, user_agent) =
         parse_user_agent(headers);
-    let ip_address = extract_ip(headers);
 
     SessionContext {
         device_name,
@@ -490,33 +489,6 @@ pub fn build_session_context(headers: &HeaderMap) -> SessionContext {
         user_agent,
         ip_address,
     }
-}
-
-/// Extract the client IP address from proxy headers or fall back to
-/// peer address.
-pub fn extract_ip(headers: &HeaderMap) -> Option<String> {
-    // X-Forwarded-For: client, proxy1, proxy2 — take the first.
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok())
-        && let Some(ip) = xff.split(',').next().and_then(parse_forwarded_ip)
-    {
-        return Some(ip);
-    }
-    // X-Real-Ip
-    if let Some(xri) = headers.get("x-real-ip").and_then(|v| v.to_str().ok())
-        && let Some(ip) = parse_forwarded_ip(xri)
-    {
-        return Some(ip);
-    }
-    None
-}
-
-fn parse_forwarded_ip(value: &str) -> Option<String> {
-    let value = value.trim().trim_matches('"');
-    let value = value
-        .strip_prefix('[')
-        .and_then(|v| v.strip_suffix(']'))
-        .unwrap_or(value);
-    value.parse::<IpAddr>().ok().map(|ip| ip.to_string())
 }
 
 /// Redirect to the external login application with the protected interaction ID.
@@ -589,36 +561,5 @@ mod tests {
             super::op_protected_session_ids(&headers),
             vec!["op-cookie-session"]
         );
-    }
-
-    #[test]
-    fn extract_ip_accepts_first_forwarded_ip() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "x-forwarded-for",
-            HeaderValue::from_static("203.0.113.10, 10.0.0.1"),
-        );
-
-        assert_eq!(super::extract_ip(&headers).as_deref(), Some("203.0.113.10"));
-    }
-
-    #[test]
-    fn extract_ip_rejects_non_ip_header_values() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "x-forwarded-for",
-            HeaderValue::from_static("unknown, attacker controlled"),
-        );
-        headers.insert("x-real-ip", HeaderValue::from_static("not-an-ip"));
-
-        assert_eq!(super::extract_ip(&headers), None);
-    }
-
-    #[test]
-    fn extract_ip_normalizes_bracketed_ipv6() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-real-ip", HeaderValue::from_static("[2001:db8::1]"));
-
-        assert_eq!(super::extract_ip(&headers).as_deref(), Some("2001:db8::1"));
     }
 }

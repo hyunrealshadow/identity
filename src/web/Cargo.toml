@@ -16,6 +16,7 @@ http = { workspace = true }
 identity-application = { workspace = true }
 identity-domain = { workspace = true }
 identity-infrastructure = { workspace = true }
+ipnet = { workspace = true }
 josekit = { workspace = true }
 rand = { workspace = true }
 salvo = { workspace = true }

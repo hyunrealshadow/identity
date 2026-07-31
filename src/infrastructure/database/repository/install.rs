@@ -3,8 +3,8 @@ use base64::Engine as _;
 use chrono::Utc;
 use rand::RngExt;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-    TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    Set, TransactionTrait,
 };
 use serde_json::Value;
 use uuid::Uuid;
@@ -44,6 +44,9 @@ use crate::{
 pub struct InstallPersistenceImpl {
     db: DatabaseConnection,
 }
+
+// Deliberately distinct from the process-lifetime startup guard lock.
+const INSTALL_TRANSACTION_LOCK_ID: i64 = 841_463_791_178_241_512;
 
 impl InstallPersistenceImpl {
     #[must_use]
@@ -87,6 +90,7 @@ impl InstallPersistence for InstallPersistenceImpl {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
 
+        acquire_install_transaction_lock(&txn).await?;
         if installation_state_exists(&txn).await? {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
@@ -354,9 +358,44 @@ impl InstallPersistence for InstallPersistenceImpl {
     }
 }
 
+async fn acquire_install_transaction_lock<C>(db: &C) -> Result<(), AppError>
+where
+    C: ConnectionTrait,
+{
+    let statement = format!("SELECT pg_advisory_xact_lock({INSTALL_TRANSACTION_LOCK_ID})");
+    db.execute_unprepared(&statement)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{DbBackend, MockDatabase, MockExecResult, Statement, Transaction};
+
+    use super::{INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock};
+
+    #[tokio::test]
+    async fn install_lock_is_transaction_scoped() {
+        let db = MockDatabase::new(DbBackend::Postgres)
+            .append_exec_results([MockExecResult::default()])
+            .into_connection();
+
+        acquire_install_transaction_lock(&db).await.unwrap();
+
+        assert_eq!(
+            db.into_transaction_log(),
+            [Transaction::one(Statement::from_string(
+                DbBackend::Postgres,
+                format!("SELECT pg_advisory_xact_lock({INSTALL_TRANSACTION_LOCK_ID})"),
+            ))]
+        );
+    }
+}
+
 async fn installation_state_exists<C>(db: &C) -> Result<bool, AppError>
 where
-    C: sea_orm::ConnectionTrait,
+    C: ConnectionTrait,
 {
     let state = setting::Entity::find()
         .filter(setting::Column::Key.eq(InstallationInitializedSetting::KEY))
@@ -375,7 +414,7 @@ where
 
 async fn upsert_installation_state<C>(db: &C, state: &InstallationState) -> Result<(), AppError>
 where
-    C: sea_orm::ConnectionTrait,
+    C: ConnectionTrait,
 {
     upsert_setting(
         db,
@@ -423,7 +462,7 @@ where
 
 async fn upsert_setting<C>(db: &C, key: &str, value: Value) -> Result<(), AppError>
 where
-    C: sea_orm::ConnectionTrait,
+    C: ConnectionTrait,
 {
     let now = Utc::now().naive_utc();
     if let Some(existing) = setting::Entity::find()

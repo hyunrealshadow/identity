@@ -26,6 +26,7 @@ use crate::{
         database::seed::conformance::{CONFORMANCE_PASSWORD, CONFORMANCE_USERNAME},
         web,
     },
+    middleware::resolved_client_ip,
     views::oauth2::{FormPostField, FormPostPageData},
     web::controllers::shared::{build_session_context, generate_csp_nonce},
 };
@@ -196,7 +197,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     };
 
     // Step 3: password challenge
-    let sess_ctx = build_session_context(&headers);
+    let sess_ctx = build_session_context(&headers, resolved_client_ip(depot));
     let session = match ctx
         .services()
         .login()

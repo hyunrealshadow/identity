@@ -42,9 +42,22 @@ JavaScript and are progressively enhanced after hydration.
 
 Identity accepts only two TLS deployment modes under `server.tls.termination`:
 `direct`, where Identity terminates TLS itself, and `upstream`, where a trusted
-reverse proxy terminates TLS. Upstream mode rejects requests unless
-`Forwarded: proto=https` or `X-Forwarded-Proto: https` is present. In both
-modes, `server.host` must use `https://`.
+reverse proxy terminates TLS. Upstream mode requires
+`server.tls.trusted_proxies` to list the proxy IP networks. Identity accepts
+`Forwarded: proto=https` or `X-Forwarded-Proto: https` only when the TCP peer
+belongs to one of those networks; the same boundary applies to
+`X-Forwarded-For` and `X-Real-IP` when recording session audit data. Direct
+clients cannot spoof these headers. In both modes, `server.host` must use
+`https://`.
+
+```yaml
+server:
+  tls:
+    termination: upstream
+    trusted_proxies:
+      - 10.0.0.0/8
+      - fd00::/8
+```
 
 ## Run
 

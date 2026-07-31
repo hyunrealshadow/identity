@@ -28,6 +28,7 @@ use crate::{
         openid_connect::authorize::stored_request_has_prompt,
     },
     domain::{client_authorization::SelectionSource, user::model::UserOid},
+    middleware::resolved_client_ip,
 };
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -235,7 +236,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
     let headers: HeaderMap = req.headers().clone();
     let body: ChallengeRequest = parse_json(req).await?;
 
-    let session_ctx = build_session_context(&headers);
+    let session_ctx = build_session_context(&headers, resolved_client_ip(depot));
     let login_oid = ctx
         .services()
         .oidc_authorize()
