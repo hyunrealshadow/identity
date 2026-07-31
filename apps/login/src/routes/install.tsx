@@ -19,16 +19,19 @@ import {
   formValidationErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
+import { persistClientCredentials } from '#/lib/client-credentials.server'
 
 interface InstallSearch {
   error?: string
   username?: string
   email?: string
   domain?: string
+  application_url?: string
 }
 
 const visibleInstallFields = new Set([
   'domain',
+  'application_url',
   'username',
   'email',
   'password',
@@ -64,6 +67,7 @@ export const Route = createFileRoute('/install')({
     username: optionalString(search.username),
     email: optionalString(search.email),
     domain: optionalString(search.domain),
+    application_url: optionalString(search.application_url),
   }),
   loader: () => loadInstallPage(),
   server: {
@@ -73,9 +77,17 @@ export const Route = createFileRoute('/install')({
         const username = String(form.get('username') ?? '').trim()
         const email = String(form.get('email') ?? '').trim()
         const domain = String(form.get('domain') ?? '').trim()
+        const applicationUrl = String(
+          form.get('application_url') ?? '',
+        ).trim()
         const password = String(form.get('password') ?? '')
         const confirmPassword = String(form.get('confirm_password') ?? '')
-        const values = { username, email, domain }
+        const values = {
+          username,
+          email,
+          domain,
+          application_url: applicationUrl,
+        }
         const locale = formLocale(request, null)
 
         if (password !== confirmPassword) {
@@ -89,18 +101,24 @@ export const Route = createFileRoute('/install')({
         }
 
         try {
-          await identityJson<InstallResponse>('/install', {
+          const result = await identityJson<InstallResponse>('/install', {
             method: 'POST',
             body: {
               username,
               email,
               password,
               domain,
+              application_url: applicationUrl,
               key_algorithm: String(
                 form.get('key_algorithm') ?? 'ecdsa-p256',
               ),
             },
           })
+          await persistClientCredentials(
+            result.client_id,
+            result.client_secret,
+            applicationUrl,
+          )
           return navigationResponse(request, '/')
         } catch (error) {
           if (error instanceof IdentityApiError && error.fields.length > 0) {
@@ -176,6 +194,25 @@ function InstallPage() {
             placeholder="https://id.example.com"
           />
           <FieldError>{fieldError('domain')}</FieldError>
+        </TextField>
+
+        <TextField
+          isRequired
+          fullWidth
+          name="application_url"
+          isInvalid={Boolean(fieldError('application_url'))}
+        >
+          <Label>{t('installApplicationUrl')}</Label>
+          <Input
+            defaultValue={
+              formValues.application_url ??
+              search.application_url ??
+              'https://localhost:3000'
+            }
+            inputMode="url"
+            placeholder="https://account.example.com"
+          />
+          <FieldError>{fieldError('application_url')}</FieldError>
         </TextField>
 
         <TextField

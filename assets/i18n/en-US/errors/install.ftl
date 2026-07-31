@@ -9,3 +9,4 @@ E13006 = The email address is invalid.
 E13007 = That username is already taken.
 E13008 = That email address is already registered.
 E13009 = Unsupported key algorithm: { $algorithm }.
+E13010 = The application URL must be a valid HTTPS origin without a path, query, or fragment.

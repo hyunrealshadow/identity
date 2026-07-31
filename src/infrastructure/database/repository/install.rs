@@ -20,6 +20,7 @@ use crate::{
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
         setting::{
+            ConsentUrlSetting, LoginUrlSetting,
             installation::{
                 InstallationDomainSetting, InstallationFirstKeyOidSetting,
                 InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
@@ -31,8 +32,11 @@ use crate::{
     infrastructure::{
         crypto::key::generate_all_jwks_for_key,
         database::{
-            entity::{key, key_jwk, setting, user, user_credential},
-            repository::shared::encode_nonnullable_expiry,
+            entity::{
+                client, client_open_id_connect, client_open_id_connect_credential, client_platform,
+                client_scope, key, key_jwk, scope, setting, user, user_credential,
+            },
+            repository::shared::{encode_nonnullable_expiry, non_expiring_timestamp},
         },
     },
 };
@@ -57,6 +61,7 @@ impl InstallPersistence for InstallPersistenceImpl {
         let now = Utc::now();
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
+        let client_oid = input.client_id;
         let normalized_username =
             identity_domain::user::normalization::normalize_username(&input.username)
                 .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
@@ -142,6 +147,121 @@ impl InstallPersistence for InstallPersistenceImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
+        let created_client = client::ActiveModel {
+            oid: Set(client_oid),
+            protocol: Set("openid_connect".to_owned()),
+            name: Set("Identity Account".to_owned()),
+            names: Set(None),
+            description: Set(Some(
+                "Built-in account and session management application".to_owned(),
+            )),
+            created_at: Set(now.naive_utc()),
+            updated_at: Set(Some(now.naive_utc())),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+        let callback_url = input
+            .application_url
+            .join("oauth/callback")
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        client_open_id_connect::ActiveModel {
+            client_id: Set(created_client.id),
+            post_logout_redirect_uris: Set(Some(serde_json::json!([input
+                .application_url
+                .as_str()]))),
+            response_types: Set(Some(serde_json::json!(["code"]))),
+            grant_types: Set(Some(serde_json::json!([
+                "authorization_code",
+                "refresh_token"
+            ]))),
+            subject_type: Set(Some("public".to_owned())),
+            token_endpoint_auth_method: Set(Some("client_secret_basic".to_owned())),
+            settings: Set(serde_json::json!({
+                "skip_consent": true,
+                "allow_public_client_flow": false
+            })),
+            created_at: Set(now.into()),
+            updated_at: Set(Some(now.into())),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+        client_platform::ActiveModel {
+            client_id: Set(created_client.id),
+            platform: Set("web".to_owned()),
+            redirect_uris: Set(Some(serde_json::json!([callback_url.as_str()]))),
+            created_at: Set(now.into()),
+            updated_at: Set(Some(now.into())),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+        let assigned_scope_names = [
+            "openid",
+            "profile",
+            "email",
+            "offline_access",
+            "account",
+            "session",
+            "password.change",
+        ];
+        let assigned_scopes = scope::Entity::find()
+            .filter(scope::Column::Protocol.eq("openid_connect"))
+            .filter(scope::Column::Name.is_in(assigned_scope_names))
+            .all(&txn)
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        if assigned_scopes.len() != assigned_scope_names.len() {
+            return Err(AppError::from_code(CommonErrorCode::InternalError));
+        }
+        client_scope::Entity::insert_many(assigned_scopes.into_iter().map(|scope| {
+            client_scope::ActiveModel {
+                client_id: Set(created_client.id),
+                scope_id: Set(scope.id),
+                created_at: Set(now.into()),
+                ..Default::default()
+            }
+        }))
+        .exec(&txn)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
+        let client_secret_hint = input
+            .client_secret
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        client_open_id_connect_credential::ActiveModel {
+            oid: Set(Uuid::new_v4()),
+            client_id: Set(created_client.id),
+            r#type: Set("client_secret".to_owned()),
+            data: Set(serde_json::json!({ "secret": input.client_secret })),
+            hint: Set(client_secret_hint),
+            expires_at: Set(non_expiring_timestamp()),
+            revoked_at: Set(None),
+            created_at: Set(now.into()),
+            updated_at: Set(Some(now.into())),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+
         key::ActiveModel {
             oid: Set(key_oid),
             r#type: Set(KeyType::Asymmetric.to_string()),
@@ -209,6 +329,22 @@ impl InstallPersistence for InstallPersistenceImpl {
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
         upsert_installation_state(&txn, &installation_state).await?;
+        upsert_setting(
+            &txn,
+            LoginUrlSetting::KEY,
+            serde_json::json!(input.application_url.join("login").map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?),
+        )
+        .await?;
+        upsert_setting(
+            &txn,
+            ConsentUrlSetting::KEY,
+            serde_json::json!(input.application_url.join("consent").map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?),
+        )
+        .await?;
 
         txn.commit().await.map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)

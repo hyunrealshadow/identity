@@ -160,7 +160,8 @@ impl AppServices {
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
             })
-            .with_runtime_key_ring(settings.key_ring()),
+            .with_runtime_key_ring(settings.key_ring())
+            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone()))),
             oidc_logout: LogoutService::new(LogoutServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
                 provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
@@ -184,7 +185,8 @@ impl AppServices {
                     .with_runtime_key_ring(settings.key_ring()),
                 ),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
-            ),
+            )
+            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone()))),
             dynamic_client_registration: DynamicClientRegistrationService::new(
                 settings.dynamic_client_registration(),
                 oidc_client_registration_repo.clone(),

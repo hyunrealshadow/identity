@@ -1,6 +1,7 @@
 use salvo::{Router, serve_static::StaticDir};
 
 use crate::controllers::response::handle_404;
+use crate::graphql;
 use crate::health;
 use identity_application::setting::runtime::SettingProvider;
 use identity_infrastructure::AppState;
@@ -42,6 +43,9 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
 
     if config.health.enable && shared_health_listener {
         router = router.push(health::router(&config.health));
+    }
+    if graphql::shares_listener(&config.graphql, &config.server) {
+        router = router.push(graphql::router(state.clone(), &config.graphql));
     }
 
     router = router.goal(handle_404);

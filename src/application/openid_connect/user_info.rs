@@ -17,7 +17,10 @@ use crate::{
         },
     },
     domain::{
-        client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
+        auth::{SessionOid, SessionStatus, repository::SessionRepository},
+        client_authorization::{
+            ClientAuthorizationData, ClientAuthorizationRepository, ClientAuthorizationType,
+        },
         key::KeyData,
         openid_connect::{
             ClaimsRequest, OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
@@ -41,13 +44,18 @@ pub struct UserInfoService {
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_service: Arc<AsymmetricKeyService>,
     provider_service: Arc<OpenIdProviderService>,
+    session_repo: Option<Arc<dyn SessionRepository>>,
 }
 
 pub struct TokenClaims {
     pub user_oid: UserOid,
     pub client_oid: Uuid,
+    pub session_oid: SessionOid,
     pub scope: ScopeSet,
     pub claims: Option<ClaimsRequest>,
+    pub audience: Vec<String>,
+    pub auth_time: Option<i64>,
+    pub acr: Option<String>,
 }
 
 impl UserInfoService {
@@ -66,7 +74,14 @@ impl UserInfoService {
             client_authorization_repo,
             key_service,
             provider_service,
+            session_repo: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
+        self.session_repo = Some(session_repo);
+        self
     }
 
     pub async fn get_user_info(
@@ -232,12 +247,28 @@ impl UserInfoService {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 
-        let now = chrono::Utc::now().timestamp();
-        if let Some(exp) = payload.claim(JwtClaimNames::EXP).and_then(|v| v.as_i64())
-            && exp <= now
-        {
+        let expires_at = payload
+            .expires_at()
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        if expires_at <= std::time::SystemTime::now() {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
+        let issued_at = payload
+            .issued_at()
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        if issued_at > std::time::SystemTime::now() + std::time::Duration::from_secs(60) {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        let issuer = self.provider_service.issuer()?;
+        if payload.issuer() != Some(issuer.as_str()) {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        let audience = payload
+            .audience()
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
 
         let sub = payload
             .claim(JwtClaimNames::SUB)
@@ -275,6 +306,38 @@ impl UserInfoService {
         {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
+        let ClientAuthorizationData::AccessToken(access_token_data) = &access_token_record.data
+        else {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        };
+        if access_token_data.user_oid != user_oid.to_string() {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        if let Some(session_repo) = &self.session_repo {
+            let session = session_repo
+                .find_by_oid(access_token_data.session_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+                })?
+                .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            if session.user_oid != user_oid
+                || session.status != SessionStatus::ACTIVE
+                || session.revoked_at.is_some()
+                || session
+                    .expires_at
+                    .is_some_and(|expires_at| expires_at < chrono::Utc::now())
+            {
+                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            }
+        }
+        let client_id = payload
+            .claim(JwtClaimNames::CLIENT_ID)
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        if client_id != access_token_record.client_oid.to_string() {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
 
         let scope_str = payload
             .claim(JwtClaimNames::SCOPE)
@@ -282,6 +345,9 @@ impl UserInfoService {
             .unwrap_or("");
         let scope = ScopeSet::parse(scope_str)
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        if scope.to_scope_string() != access_token_data.scope {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
 
         if !scope.openid {
             return Err(AppError::from_code(
@@ -299,8 +365,17 @@ impl UserInfoService {
         Ok(TokenClaims {
             user_oid: UserOid::from(user_oid),
             client_oid: access_token_record.client_oid,
+            session_oid: access_token_data.session_oid,
             scope,
             claims,
+            audience,
+            auth_time: payload
+                .claim(JwtClaimNames::AUTH_TIME)
+                .and_then(|value| value.as_i64()),
+            acr: payload
+                .claim(JwtClaimNames::ACR)
+                .and_then(|value| value.as_str())
+                .map(str::to_owned),
         })
     }
 

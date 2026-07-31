@@ -3,6 +3,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
+    domain::openid_connect::ApiScope,
     domain::openid_connect::model::claim::StandardScopes,
     infrastructure::database::entity::scope,
 };
@@ -54,6 +55,48 @@ pub const BUILT_IN_OPENID_CONNECT_SCOPES: &[BuiltInScopeDefinition] = &[
         name: StandardScopes::OFFLINE_ACCESS,
         display_name: "Offline Access",
         description: "Request refresh tokens for long-lived access",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::ACCOUNT,
+        display_name: "Account",
+        description: "Read and update your account",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::ACCOUNT_UPDATE,
+        display_name: "Update account",
+        description: "Update your account profile",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::ACCOUNT_READ,
+        display_name: "Read account",
+        description: "Read your account profile",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::SESSION,
+        display_name: "Sessions",
+        description: "Read and revoke your sessions",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::SESSION_REVOKE,
+        display_name: "Revoke sessions",
+        description: "Revoke your sessions",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::SESSION_READ,
+        display_name: "Read sessions",
+        description: "Read your sessions",
+    },
+    BuiltInScopeDefinition {
+        protocol: OPENID_CONNECT_PROTOCOL,
+        name: ApiScope::PASSWORD_CHANGE,
+        display_name: "Change password",
+        description: "Change your password after recent authentication",
     },
 ];
 
@@ -128,7 +171,14 @@ mod tests {
                 "email",
                 "address",
                 "phone",
-                "offline_access"
+                "offline_access",
+                "account",
+                "account.update",
+                "account.read",
+                "session",
+                "session.revoke",
+                "session.read",
+                "password.change",
             ]
         );
         assert!(

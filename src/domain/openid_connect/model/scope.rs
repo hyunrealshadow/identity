@@ -1,5 +1,54 @@
 use super::claim::StandardScopes;
-use std::{fmt, str::FromStr};
+use std::{collections::BTreeSet, fmt, str::FromStr};
+
+pub const API_RESOURCE: &str = "urn:identity:graphql";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ApiScope {
+    Account,
+    AccountUpdate,
+    AccountRead,
+    Session,
+    SessionRevoke,
+    SessionRead,
+    PasswordChange,
+}
+
+impl ApiScope {
+    pub const ACCOUNT: &'static str = "account";
+    pub const ACCOUNT_UPDATE: &'static str = "account.update";
+    pub const ACCOUNT_READ: &'static str = "account.read";
+    pub const SESSION: &'static str = "session";
+    pub const SESSION_REVOKE: &'static str = "session.revoke";
+    pub const SESSION_READ: &'static str = "session.read";
+    pub const PASSWORD_CHANGE: &'static str = "password.change";
+
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Account => Self::ACCOUNT,
+            Self::AccountUpdate => Self::ACCOUNT_UPDATE,
+            Self::AccountRead => Self::ACCOUNT_READ,
+            Self::Session => Self::SESSION,
+            Self::SessionRevoke => Self::SESSION_REVOKE,
+            Self::SessionRead => Self::SESSION_READ,
+            Self::PasswordChange => Self::PASSWORD_CHANGE,
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            Self::ACCOUNT => Self::Account,
+            Self::ACCOUNT_UPDATE => Self::AccountUpdate,
+            Self::ACCOUNT_READ => Self::AccountRead,
+            Self::SESSION => Self::Session,
+            Self::SESSION_REVOKE => Self::SessionRevoke,
+            Self::SESSION_READ => Self::SessionRead,
+            Self::PASSWORD_CHANGE => Self::PasswordChange,
+            _ => return None,
+        })
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ScopeSet {
@@ -9,6 +58,7 @@ pub struct ScopeSet {
     pub address: bool,
     pub phone: bool,
     pub offline_access: bool,
+    api: BTreeSet<ApiScope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +92,10 @@ impl ScopeSet {
                 StandardScopes::ADDRESS => set.address = true,
                 StandardScopes::PHONE => set.phone = true,
                 StandardScopes::OFFLINE_ACCESS => set.offline_access = true,
+                other if ApiScope::parse(other).is_some() => {
+                    set.api
+                        .insert(ApiScope::parse(other).expect("scope was checked"));
+                }
                 other => {
                     return Err(ScopeParseError {
                         scope_name: other.to_owned(),
@@ -50,6 +104,7 @@ impl ScopeSet {
             }
         }
 
+        set.normalize_api_scopes();
         Ok(set)
     }
 
@@ -73,6 +128,7 @@ impl ScopeSet {
         if self.offline_access {
             scopes.push(StandardScopes::OFFLINE_ACCESS);
         }
+        scopes.extend(self.api.iter().copied().map(ApiScope::name));
         scopes.join(" ")
     }
 
@@ -96,11 +152,54 @@ impl ScopeSet {
         if self.offline_access {
             scopes.push(StandardScopes::OFFLINE_ACCESS);
         }
+        scopes.extend(self.api.iter().copied().map(ApiScope::name));
         scopes
     }
 
     pub fn contains_openid(&self) -> bool {
         self.openid
+    }
+
+    #[must_use]
+    pub fn allows(&self, required: ApiScope) -> bool {
+        self.api.iter().copied().any(|granted| match granted {
+            ApiScope::Account => matches!(
+                required,
+                ApiScope::Account | ApiScope::AccountUpdate | ApiScope::AccountRead
+            ),
+            ApiScope::AccountUpdate => {
+                matches!(required, ApiScope::AccountUpdate | ApiScope::AccountRead)
+            }
+            ApiScope::Session => matches!(
+                required,
+                ApiScope::Session | ApiScope::SessionRevoke | ApiScope::SessionRead
+            ),
+            ApiScope::SessionRevoke => {
+                matches!(required, ApiScope::SessionRevoke | ApiScope::SessionRead)
+            }
+            other => other == required,
+        })
+    }
+
+    #[must_use]
+    pub fn has_api_scopes(&self) -> bool {
+        !self.api.is_empty()
+    }
+
+    fn normalize_api_scopes(&mut self) {
+        if self.api.contains(&ApiScope::Account) {
+            self.api.remove(&ApiScope::AccountUpdate);
+            self.api.remove(&ApiScope::AccountRead);
+        } else if self.api.contains(&ApiScope::AccountUpdate) {
+            self.api.remove(&ApiScope::AccountRead);
+        }
+
+        if self.api.contains(&ApiScope::Session) {
+            self.api.remove(&ApiScope::SessionRevoke);
+            self.api.remove(&ApiScope::SessionRead);
+        } else if self.api.contains(&ApiScope::SessionRevoke) {
+            self.api.remove(&ApiScope::SessionRead);
+        }
     }
 }
 
@@ -114,7 +213,9 @@ impl FromStr for ScopeSet {
 
 #[cfg(test)]
 mod tests {
-    use super::ScopeSet;
+    use std::collections::BTreeSet;
+
+    use super::{ApiScope, ScopeSet};
 
     #[test]
     fn parse_valid_scope_string() {
@@ -158,6 +259,7 @@ mod tests {
             address: false,
             phone: false,
             offline_access: true,
+            api: BTreeSet::new(),
         };
         assert_eq!(scope.to_scope_string(), "openid profile offline_access");
     }
@@ -180,6 +282,7 @@ mod tests {
             address: true,
             phone: true,
             offline_access: true,
+            api: BTreeSet::new(),
         };
 
         assert_eq!(
@@ -202,5 +305,24 @@ mod tests {
 
         let scope_no_openid = ScopeSet::parse("profile").unwrap();
         assert!(!scope_no_openid.contains_openid());
+    }
+
+    #[test]
+    fn api_parent_scopes_imply_children_and_are_normalized() {
+        let scope = ScopeSet::parse("openid account account.read session session.revoke").unwrap();
+
+        assert!(scope.allows(ApiScope::AccountRead));
+        assert!(scope.allows(ApiScope::AccountUpdate));
+        assert!(scope.allows(ApiScope::SessionRead));
+        assert!(scope.allows(ApiScope::SessionRevoke));
+        assert_eq!(scope.to_scope_string(), "openid account session");
+    }
+
+    #[test]
+    fn password_change_is_standalone() {
+        let scope = ScopeSet::parse("openid password.change").unwrap();
+
+        assert!(scope.allows(ApiScope::PasswordChange));
+        assert!(!scope.allows(ApiScope::AccountRead));
     }
 }

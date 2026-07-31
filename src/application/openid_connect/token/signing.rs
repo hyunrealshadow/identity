@@ -29,6 +29,8 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub protected_session_id: &'a str,
     pub scope: &'a str,
     pub claims: Option<&'a ClaimsRequest>,
+    pub auth_time: Option<i64>,
+    pub acr: Option<&'a str>,
 }
 
 pub(super) struct SignIdTokenInput<'a> {
@@ -146,6 +148,20 @@ impl TokenService {
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
+        if let Some(auth_time) = input.auth_time {
+            payload
+                .set_claim(JwtClaimNames::AUTH_TIME, Some(serde_json::json!(auth_time)))
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+                })?;
+        }
+        if let Some(acr) = input.acr {
+            payload
+                .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+                })?;
+        }
         if let Some(claims_value) = input.claims {
             payload
                 .set_claim(

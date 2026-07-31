@@ -102,5 +102,12 @@ health:
   checks:
     database: true
 
+graphql:
+  server:
+    binding: localhost
+    port: 5150
+  allowed_origins:
+    - https://localhost:3000
+
 settings:
   refresh_interval_secs: {{ get_env(name="SETTINGS_REFRESH_INTERVAL_SECS", default="30") }}

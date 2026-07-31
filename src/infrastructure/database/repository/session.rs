@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+};
 use uuid::Uuid;
 
 use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
@@ -42,6 +44,35 @@ pub struct SessionRepositoryImpl {
 impl SessionRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    pub async fn list_by_user_oid(
+        &self,
+        user_oid: Uuid,
+    ) -> Result<Vec<Session>, SessionRepositoryError> {
+        let Some(user) = UserEntity::find()
+            .filter(user::Column::Oid.eq(user_oid))
+            .one(&self.db)
+            .await
+            .map_err(|error| SessionRepositoryError::QueryFailed(Box::new(error)))?
+        else {
+            return Ok(Vec::new());
+        };
+
+        SessionEntity::find()
+            .filter(session::Column::UserId.eq(user.id))
+            .order_by_desc(session::Column::LastActiveAt)
+            .order_by_desc(session::Column::CreatedAt)
+            .order_by_desc(session::Column::Oid)
+            .all(&self.db)
+            .await
+            .map(|sessions| {
+                sessions
+                    .into_iter()
+                    .map(|session| session_to_domain(session, user_oid))
+                    .collect()
+            })
+            .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))
     }
 }
 

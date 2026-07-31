@@ -86,6 +86,15 @@ async fn handle_userinfo_request(
         .validate_access_token(token)
         .await
         .map_err(UserinfoWebError)?;
+    if !token_claims
+        .audience
+        .iter()
+        .any(|audience| audience == &token_claims.client_oid.to_string())
+    {
+        return Err(UserinfoWebError(AppError::from_code(
+            OpenIdConnectErrorCode::InvalidToken,
+        )));
+    }
 
     let user_claims = service
         .get_user_info(

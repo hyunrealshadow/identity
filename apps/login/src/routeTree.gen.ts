@@ -14,6 +14,8 @@ import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoginChallengeRouteImport } from './routes/login.challenge'
+import { Route as OauthCallbackRouteImport } from './routes/oauth.callback'
+import { Route as OauthStartRouteImport } from './routes/oauth.start'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,6 +42,16 @@ const LoginChallengeRoute = LoginChallengeRouteImport.update({
   path: '/challenge',
   getParentRoute: () => LoginRoute,
 } as any)
+const OauthCallbackRoute = OauthCallbackRouteImport.update({
+  id: '/oauth/callback',
+  path: '/oauth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthStartRoute = OauthStartRouteImport.update({
+  id: '/oauth/start',
+  path: '/oauth/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +59,8 @@ export interface FileRoutesByFullPath {
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
+  '/oauth/callback': typeof OauthCallbackRoute
+  '/oauth/start': typeof OauthStartRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +68,8 @@ export interface FileRoutesByTo {
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
+  '/oauth/callback': typeof OauthCallbackRoute
+  '/oauth/start': typeof OauthStartRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +78,37 @@ export interface FileRoutesById {
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
+  '/oauth/callback': typeof OauthCallbackRoute
+  '/oauth/start': typeof OauthStartRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/consent' | '/install' | '/login' | '/login/challenge'
+  fullPaths:
+    | '/'
+    | '/consent'
+    | '/install'
+    | '/login'
+    | '/login/challenge'
+    | '/oauth/callback'
+    | '/oauth/start'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/consent' | '/install' | '/login' | '/login/challenge'
-  id: '__root__' | '/' | '/consent' | '/install' | '/login' | '/login/challenge'
+  to:
+    | '/'
+    | '/consent'
+    | '/install'
+    | '/login'
+    | '/login/challenge'
+    | '/oauth/callback'
+    | '/oauth/start'
+  id:
+    | '__root__'
+    | '/'
+    | '/consent'
+    | '/install'
+    | '/login'
+    | '/login/challenge'
+    | '/oauth/callback'
+    | '/oauth/start'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +116,8 @@ export interface RootRouteChildren {
   ConsentRoute: typeof ConsentRoute
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
+  OauthCallbackRoute: typeof OauthCallbackRoute
+  OauthStartRoute: typeof OauthStartRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -115,6 +157,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginChallengeRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/oauth/callback': {
+      id: '/oauth/callback'
+      path: '/oauth/callback'
+      fullPath: '/oauth/callback'
+      preLoaderRoute: typeof OauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/start': {
+      id: '/oauth/start'
+      path: '/oauth/start'
+      fullPath: '/oauth/start'
+      preLoaderRoute: typeof OauthStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -133,6 +189,8 @@ const rootRouteChildren: RootRouteChildren = {
   ConsentRoute: ConsentRoute,
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
+  OauthCallbackRoute: OauthCallbackRoute,
+  OauthStartRoute: OauthStartRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

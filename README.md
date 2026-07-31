@@ -24,7 +24,8 @@ The external UI locations are configured through the `app.login_url` and
 `app.consent_url` runtime settings. They must be set before an interactive OIDC
 flow can redirect to the React application.
 
-The TanStack Start application is located in `apps/login`. Both Identity and
+The TanStack Start application is located in `apps/login`. It provides login,
+consent, installation, and GraphQL-backed account/session management. Both Identity and
 the public Login origin must be exposed through HTTPS. Configure the runtime
 settings with HTTPS Login and Consent URLs, then start the application with:
 
@@ -60,6 +61,9 @@ pnpm build:error-css
 ```
 
 Environment overrides: `APP_ENV`, `PORT`, `HOST`, `DATABASE_URL`.
+
+Deployment examples for persisting the built-in Login application's client ID
+and secret are documented in `deploy/README.md`.
 
 ### Prerequisites
 

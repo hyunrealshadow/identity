@@ -16,6 +16,8 @@ pub enum AuthErrorCode {
     SessionExpired,
     SessionRevoked,
     IdentifierRequired,
+    PasswordTooShort,
+    PasswordUnchanged,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -34,6 +36,8 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::SessionExpired => ErrorKind::Unauthorized,
             AuthErrorCode::SessionRevoked => ErrorKind::Unauthorized,
             AuthErrorCode::IdentifierRequired => ErrorKind::Validation,
+            AuthErrorCode::PasswordTooShort => ErrorKind::Validation,
+            AuthErrorCode::PasswordUnchanged => ErrorKind::Validation,
         }
     }
 
@@ -52,6 +56,8 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::SessionExpired => 11010,
             AuthErrorCode::SessionRevoked => 11011,
             AuthErrorCode::IdentifierRequired => 11012,
+            AuthErrorCode::PasswordTooShort => 11013,
+            AuthErrorCode::PasswordUnchanged => 11014,
         }
     }
 }

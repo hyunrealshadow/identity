@@ -129,6 +129,25 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             essential: false,
         });
     }
+    for name in scope.names().into_iter().filter(|name| {
+        name.starts_with("account") || name.starts_with("session") || *name == "password.change"
+    }) {
+        let description = match name {
+            "account" => "Read and update your account",
+            "account.update" => "Update your account profile",
+            "account.read" => "Read your account profile",
+            "session" => "Read and revoke your sessions",
+            "session.revoke" => "Revoke your sessions",
+            "session.read" => "Read your sessions",
+            "password.change" => "Change your password after recent authentication",
+            _ => continue,
+        };
+        scopes.push(ScopeDisplay {
+            name,
+            description,
+            essential: false,
+        });
+    }
 
     scopes
 }

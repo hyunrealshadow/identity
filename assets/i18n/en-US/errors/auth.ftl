@@ -17,3 +17,5 @@ E11009 = The session { $session_id } does not exist.
 E11010 = Your session has expired. Please sign in again.
 E11011 = Your session has been revoked. Please sign in again.
 E11012 = The identifier (email or username) is required.
+E11013 = The new password must contain at least 12 characters.
+E11014 = The new password must differ from the current password.

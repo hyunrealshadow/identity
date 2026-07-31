@@ -95,6 +95,74 @@ impl LoginService {
             .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
     }
 
+    pub async fn change_password(
+        &self,
+        user_oid: identity_domain::user::UserOid,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<(), AppError> {
+        if new_password.len() < 12 {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::ValidationFailed,
+            )
+            .with_field_error(
+                "newPassword",
+                AppError::from_code(AuthErrorCode::PasswordTooShort),
+            ));
+        }
+        if current_password == new_password {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::ValidationFailed,
+            )
+            .with_field_error(
+                "newPassword",
+                AppError::from_code(AuthErrorCode::PasswordUnchanged),
+            ));
+        }
+        let credential = self
+            .credential_repo
+            .find_by_user_oid_and_type(user_oid, CredentialType::Password)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?;
+        let stored_password = match &credential.data {
+            CredentialData::Password(password) => password.clone(),
+            _ => {
+                return Err(AppError::from_code(
+                    AuthErrorCode::CredentialTypeUnsupported,
+                ));
+            }
+        };
+        let options = self.hash_options.current_value();
+        let hasher = Arc::clone(&self.password_hasher);
+        let current_password = current_password.to_owned();
+        let verify_options = options.clone();
+        let verified = super::password::run_password_hashing(move || {
+            hasher.verify(&current_password, &stored_password, &verify_options)
+        })
+        .await?;
+        if verified == VerifyResult::Failure {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::ValidationFailed,
+            )
+            .with_field_error(
+                "currentPassword",
+                AppError::from_code(AuthErrorCode::InvalidCredential),
+            ));
+        }
+        let hasher = Arc::clone(&self.password_hasher);
+        let new_password = new_password.to_owned();
+        let password = super::password::run_password_hashing(move || {
+            hasher.hash(&new_password, options.as_ref())
+        })
+        .await?;
+        self.credential_repo
+            .update_password_by_oid(credential.oid, &password)
+            .await?;
+        Ok(())
+    }
+
     /// Fetch the user associated with a login by their OID.
     pub async fn get_user(
         &self,

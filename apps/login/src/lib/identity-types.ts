@@ -19,6 +19,8 @@ export interface InstallationStatusResponse {
 export interface InstallResponse {
   status: 'installed'
   restart_required: boolean
+  client_id: string
+  client_secret: string
 }
 
 export interface AccountItem {

@@ -10,7 +10,7 @@ use crate::{
     domain::{
         key::{JwaSigningAlgorithm, Key, KeyData, repository::KeyRepository},
         openid_connect::{
-            OpenIdProviderMetadata, ResponseMode, SubjectType, TokenEndpointAuthMethod,
+            ApiScope, OpenIdProviderMetadata, ResponseMode, SubjectType, TokenEndpointAuthMethod,
             model::claim::{JwtClaimNames, StandardScopes},
         },
         setting::{
@@ -64,6 +64,13 @@ impl Default for OpenIdProviderCapabilities {
                 StandardScopes::ADDRESS.to_owned(),
                 StandardScopes::PHONE.to_owned(),
                 StandardScopes::OFFLINE_ACCESS.to_owned(),
+                ApiScope::ACCOUNT.to_owned(),
+                ApiScope::ACCOUNT_UPDATE.to_owned(),
+                ApiScope::ACCOUNT_READ.to_owned(),
+                ApiScope::SESSION.to_owned(),
+                ApiScope::SESSION_REVOKE.to_owned(),
+                ApiScope::SESSION_READ.to_owned(),
+                ApiScope::PASSWORD_CHANGE.to_owned(),
             ],
             response_types_supported: vec![
                 "code".to_owned(),

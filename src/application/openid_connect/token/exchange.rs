@@ -152,6 +152,14 @@ impl TokenService {
                 .as_deref(),
         );
         let audience = client_id.clone();
+        let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&data.scope)
+            .map(|scope| scope.has_api_scopes())
+            .unwrap_or(false)
+        {
+            identity_domain::openid_connect::API_RESOURCE
+        } else {
+            audience.as_str()
+        };
         let client_id_str = record.client_oid.to_string();
         let access_token_record = self
             .create_access_token_record(
@@ -170,12 +178,14 @@ impl TokenService {
                 private_key_pem: &signing_key_pem,
                 alg: &signing_alg,
                 issuer: &issuer,
-                audience: &audience,
+                audience: access_token_audience,
                 client_id: &client_id_str,
                 user_oid: &user_oid,
                 protected_session_id: &protected_session_id,
                 scope: &data.scope,
                 claims: data.claims.as_ref(),
+                auth_time: data.auth_time,
+                acr: data.acr.as_deref(),
             })
             .await?;
         let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
@@ -215,6 +225,12 @@ impl TokenService {
         } else {
             None
         };
+        let refreshable_scope = data
+            .scope
+            .split_whitespace()
+            .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
+            .collect::<Vec<_>>()
+            .join(" ");
         let refresh_token = if data
             .scope
             .split_whitespace()
@@ -223,7 +239,7 @@ impl TokenService {
             Some(
                 self.store_refresh_token(StoreRefreshTokenParams {
                     client_oid: record.client_oid,
-                    scope: &data.scope,
+                    scope: &refreshable_scope,
                     user_oid: &data.user_oid,
                     session_oid: data.session_oid,
                     protected_session_id: Some(&protected_session_id),
@@ -311,6 +327,22 @@ impl TokenService {
                 ));
             }
         };
+        if let Some(session_repo) = &self.session_repo {
+            let session = session_repo
+                .find_by_oid(refresh_data.session_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::RefreshTokenInvalid).with_source(error)
+                })?
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenInvalid))?;
+            let session_is_active = session.status == crate::domain::auth::SessionStatus::ACTIVE
+                && session.revoked_at.is_none()
+                && session.expires_at.is_none_or(|expires_at| expires_at > now)
+                && session.user_oid.to_string() == refresh_data.user_oid;
+            if !session_is_active {
+                return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+            }
+        }
         let protected_session_id = self
             .protected_session_id(
                 refresh_data.session_oid,
@@ -354,7 +386,20 @@ impl TokenService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
-        let scope = refresh_data.scope.clone();
+        let scope = refresh_data
+            .scope
+            .split_whitespace()
+            .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&scope)
+            .map(|scope| scope.has_api_scopes())
+            .unwrap_or(false)
+        {
+            identity_domain::openid_connect::API_RESOURCE
+        } else {
+            client_id.as_str()
+        };
         let access_token_record = self
             .create_access_token_record(
                 authenticated_client_oid,
@@ -372,12 +417,14 @@ impl TokenService {
                 private_key_pem: &signing_key_pem,
                 alg: &signing_alg,
                 issuer: &issuer,
-                audience: &client_id,
+                audience: access_token_audience,
                 client_id: &client_id,
                 user_oid: &user_oid,
                 protected_session_id: &protected_session_id,
                 scope: &scope,
                 claims: None,
+                auth_time: refresh_data.auth_time,
+                acr: None,
             })
             .await?;
         let signed_id_token = self

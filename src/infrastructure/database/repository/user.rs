@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
+    sea_query::Expr,
 };
 
 use crate::database::entity::{user, user::Entity as UserEntity};
@@ -50,10 +51,89 @@ pub struct UserRepositoryImpl {
     db: DatabaseConnection,
 }
 
+macro_rules! apply_patch {
+    ($active:ident, $patch:ident, $($field:ident),+ $(,)?) => {
+        $(
+            if let Some(value) = $patch.$field.take() {
+                $active.$field = Set(value);
+            }
+        )+
+    };
+}
+
 impl UserRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
+
+    pub async fn update_profile(
+        &self,
+        oid: UserOid,
+        mut patch: UserProfilePatch,
+    ) -> Result<Option<User>, UserRepositoryError> {
+        let Some(model) = UserEntity::find()
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
+            .one(&self.db)
+            .await
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
+        else {
+            return Ok(None);
+        };
+        let mut active: user::ActiveModel = model.into();
+        let phone_changed = patch.phone_number.is_some();
+        apply_patch!(
+            active,
+            patch,
+            given_name,
+            family_name,
+            middle_name,
+            nickname
+        );
+        apply_patch!(active, patch, profile, picture, website, gender);
+        apply_patch!(active, patch, birthdate, zone_info, locale, phone_number);
+        apply_patch!(
+            active,
+            patch,
+            address_formatted,
+            address_street_address,
+            address_locality,
+            address_region,
+            address_postal_code,
+            address_country
+        );
+        if phone_changed {
+            active.phone_number_verified = Set(Some(false));
+        }
+        active.updated_at = Set(Some(Utc::now().into()));
+        active
+            .update(&self.db)
+            .await
+            .map(to_domain)
+            .map(Some)
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct UserProfilePatch {
+    pub given_name: Option<Option<String>>,
+    pub family_name: Option<Option<String>>,
+    pub middle_name: Option<Option<String>>,
+    pub nickname: Option<Option<String>>,
+    pub profile: Option<Option<String>>,
+    pub picture: Option<Option<String>>,
+    pub website: Option<Option<String>>,
+    pub gender: Option<Option<String>>,
+    pub birthdate: Option<Option<String>>,
+    pub zone_info: Option<Option<String>>,
+    pub locale: Option<Option<String>>,
+    pub phone_number: Option<Option<String>>,
+    pub address_formatted: Option<Option<String>>,
+    pub address_street_address: Option<Option<String>>,
+    pub address_locality: Option<Option<String>>,
+    pub address_region: Option<Option<String>>,
+    pub address_postal_code: Option<Option<String>>,
+    pub address_country: Option<Option<String>>,
 }
 
 #[async_trait]

@@ -17,6 +17,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub health: HealthConfig,
     #[serde(default)]
+    pub graphql: GraphqlConfig,
+    #[serde(default)]
     pub settings: SettingsConfig,
     #[serde(default)]
     pub install: InstallConfig,
@@ -46,6 +48,19 @@ impl AppConfig {
         {
             self.server.tls.domain =
                 Some(default_tls_domain_from_host(self.server.host.as_deref()));
+        }
+        if let Some(host) = self.server.host.as_deref()
+            && let Ok(url) = Url::parse(host)
+        {
+            let origin = url.origin().ascii_serialization();
+            if !self
+                .graphql
+                .allowed_origins
+                .iter()
+                .any(|allowed| allowed == &origin)
+            {
+                self.graphql.allowed_origins.push(origin);
+            }
         }
 
         self
@@ -197,6 +212,7 @@ pub struct InstallConfig {
     pub username: Option<String>,
     pub email: Option<String>,
     pub password: Option<String>,
+    pub application_url: Option<String>,
     #[serde(default = "default_key_algorithm")]
     pub key_algorithm: String,
 }
@@ -208,6 +224,7 @@ impl Default for InstallConfig {
             username: None,
             email: None,
             password: None,
+            application_url: None,
             key_algorithm: default_key_algorithm(),
         }
     }
@@ -267,6 +284,45 @@ impl Default for HealthChecksConfig {
     fn default() -> Self {
         Self { database: true }
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GraphqlConfig {
+    #[serde(default)]
+    pub server: GraphqlServerConfig,
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+    #[serde(default = "default_graphql_max_depth")]
+    pub max_depth: usize,
+    #[serde(default = "default_graphql_max_complexity")]
+    pub max_complexity: usize,
+    #[serde(default = "default_graphql_max_page_size")]
+    pub max_page_size: usize,
+    #[serde(default = "default_graphql_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+impl Default for GraphqlConfig {
+    fn default() -> Self {
+        Self {
+            server: GraphqlServerConfig::default(),
+            allowed_origins: Vec::new(),
+            max_depth: default_graphql_max_depth(),
+            max_complexity: default_graphql_max_complexity(),
+            max_page_size: default_graphql_max_page_size(),
+            timeout_secs: default_graphql_timeout_secs(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GraphqlServerConfig {
+    #[serde(default)]
+    pub binding: Option<String>,
+    #[serde(default)]
+    pub port: Option<u16>,
 }
 
 impl Default for DatabaseConfig {
@@ -408,6 +464,22 @@ fn default_settings_refresh_interval_secs() -> u64 {
     5
 }
 
+fn default_graphql_max_depth() -> usize {
+    12
+}
+
+fn default_graphql_max_complexity() -> usize {
+    300
+}
+
+fn default_graphql_max_page_size() -> usize {
+    100
+}
+
+fn default_graphql_timeout_secs() -> u64 {
+    10
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AppConfig, AppEnvironment, TlsTermination, render_config_template};
@@ -489,7 +561,7 @@ mod tests {
 
     #[test]
     fn deserialization_applies_config_defaults() {
-        let config: AppConfig = serde_yml::from_str(
+        let config = serde_yml::from_str::<AppConfig>(
             r#"
 database:
   uri: postgres://localhost/identity
@@ -503,6 +575,11 @@ database:
         assert_eq!(config.server.binding, "127.0.0.1");
         assert_eq!(config.server.tls.termination, TlsTermination::Direct);
         assert_eq!(config.health.route, "/health");
+        assert_eq!(config.graphql.server.port, None);
+        assert_eq!(config.graphql.max_depth, 12);
+        assert_eq!(config.graphql.max_complexity, 300);
+        assert_eq!(config.graphql.max_page_size, 100);
+        assert_eq!(config.graphql.timeout_secs, 10);
         assert_eq!(config.settings.refresh_interval_secs, 5);
         assert!(config.health.enable);
         assert!(config.health.checks.database);
@@ -567,6 +644,27 @@ database:
         assert_eq!(
             config.server.tls.domain.as_deref(),
             Some("identity.example.com")
+        );
+    }
+
+    #[test]
+    fn graphql_cors_always_allows_the_configured_public_origin() {
+        let config = serde_yml::from_str::<AppConfig>(
+            r#"
+server:
+  host: https://identity.example.com:8443/base
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap()
+        .normalized();
+
+        assert!(
+            config
+                .graphql
+                .allowed_origins
+                .contains(&"https://identity.example.com:8443".to_string())
         );
     }
 

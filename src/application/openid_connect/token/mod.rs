@@ -12,6 +12,7 @@ use crate::{
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
     domain::{
+        auth::repository::SessionRepository,
         client_authorization::{
             AccessTokenData, ClientAuthorization, ClientAuthorizationData,
             ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
@@ -71,6 +72,7 @@ pub struct TokenService {
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     data_protector: Arc<dyn DataProtector>,
     runtime_key_ring: Option<Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>>,
+    session_repo: Option<Arc<dyn SessionRepository>>,
 }
 
 pub struct TokenServiceDependencies {
@@ -98,6 +100,7 @@ impl TokenService {
             signing_algorithm_detector: deps.signing_algorithm_detector,
             data_protector: deps.data_protector,
             runtime_key_ring: None,
+            session_repo: None,
         }
     }
 
@@ -107,6 +110,12 @@ impl TokenService {
         runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
     ) -> Self {
         self.runtime_key_ring = Some(runtime_key_ring);
+        self
+    }
+
+    #[must_use]
+    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
+        self.session_repo = Some(session_repo);
         self
     }
 }

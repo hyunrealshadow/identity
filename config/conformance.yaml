@@ -43,4 +43,5 @@ install:
   username: "admin"
   password: "ConformanceAdmin1!"
   email: "admin@conformance.local"
+  application_url: "https://login:3443"
   key_algorithm: "rsa-2048"

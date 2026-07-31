@@ -14,7 +14,7 @@ use identity_infrastructure::{
     lifecycle::{AppLifecycle, wait_for_shutdown},
     state::AppState,
 };
-use identity_web::health;
+use identity_web::{graphql, health};
 
 use super::AppResult;
 
@@ -22,16 +22,24 @@ use super::AppResult;
 /// with graceful shutdown support.
 pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) -> AppResult<()> {
     let shared_health = health::shares_listener(&config.health, &config.server);
+    let shared_graphql = graphql::shares_listener(&config.graphql, &config.server);
 
     let main_address = format!("{}:{}", config.server.binding, config.server.port);
     let environment = state.context().environment().as_str();
 
     let needs_separate_health = config.health.enable && !shared_health;
+    let needs_separate_graphql = !shared_graphql;
+    let shutdown = Arc::new(state.lifecycle().clone());
+    let mut servers = tokio::task::JoinSet::new();
 
     match listener_mode(config) {
         ListenerMode::UpstreamTls => {
             let main_listener = build_upstream_tls_listener(&main_address).await?;
-
+            servers.spawn(serve_with_shutdown(
+                main_listener,
+                app,
+                Arc::clone(&shutdown),
+            ));
             if needs_separate_health {
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
@@ -44,22 +52,37 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
                     route = config.health.route.as_str(),
                     "health listening"
                 );
-
-                let shutdown = Arc::new(state.lifecycle().clone());
-                let health_shutdown = Arc::clone(&shutdown);
-
-                tokio::try_join!(
-                    serve_with_shutdown(main_listener, app, shutdown),
-                    serve_with_shutdown(health_listener, health_app, health_shutdown),
-                )?;
-            } else {
-                let shutdown = Arc::new(state.lifecycle().clone());
-                serve_with_shutdown(main_listener, app, shutdown).await?;
+                servers.spawn(serve_with_shutdown(
+                    health_listener,
+                    health_app,
+                    Arc::clone(&shutdown),
+                ));
+            }
+            if needs_separate_graphql {
+                let graphql_address = graphql::bind_address(&config.graphql, &config.server);
+                let graphql_listener = build_upstream_tls_listener(&graphql_address).await?;
+                let graphql_app = graphql::router(state.clone(), &config.graphql)
+                    .hoop(identity_web::middleware::require_upstream_https_middleware);
+                tracing::info!(
+                    environment,
+                    address = graphql_address.as_str(),
+                    route = "/graphql",
+                    "graphql listening"
+                );
+                servers.spawn(serve_with_shutdown(
+                    graphql_listener,
+                    graphql_app,
+                    Arc::clone(&shutdown),
+                ));
             }
         }
         ListenerMode::DirectTls => {
             let main_listener = build_https_listener(config, &main_address).await?;
-
+            servers.spawn(serve_with_shutdown(
+                main_listener,
+                app,
+                Arc::clone(&shutdown),
+            ));
             if needs_separate_health {
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
@@ -72,18 +95,35 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
                     route = config.health.route.as_str(),
                     "health listening"
                 );
-
-                let shutdown = Arc::new(state.lifecycle().clone());
-                let health_shutdown = Arc::clone(&shutdown);
-
-                tokio::try_join!(
-                    serve_with_shutdown(main_listener, app, shutdown),
-                    serve_with_shutdown(health_listener, health_app, health_shutdown),
-                )?;
-            } else {
-                let shutdown = Arc::new(state.lifecycle().clone());
-                serve_with_shutdown(main_listener, app, shutdown).await?;
+                servers.spawn(serve_with_shutdown(
+                    health_listener,
+                    health_app,
+                    Arc::clone(&shutdown),
+                ));
             }
+            if needs_separate_graphql {
+                let graphql_address = graphql::bind_address(&config.graphql, &config.server);
+                let graphql_listener = build_https_listener(config, &graphql_address).await?;
+                let graphql_app = graphql::router(state.clone(), &config.graphql);
+                tracing::info!(
+                    environment,
+                    address = graphql_address.as_str(),
+                    route = "/graphql",
+                    "graphql listening"
+                );
+                servers.spawn(serve_with_shutdown(
+                    graphql_listener,
+                    graphql_app,
+                    Arc::clone(&shutdown),
+                ));
+            }
+        }
+    }
+
+    while let Some(result) = servers.join_next().await {
+        result??;
+        if !state.lifecycle().shutdown_requested() {
+            return Err(std::io::Error::other("HTTP listener stopped unexpectedly").into());
         }
     }
 
@@ -188,8 +228,8 @@ mod tests {
     };
 
     use identity_infrastructure::config::{
-        AppConfig, DatabaseConfig, HealthConfig, LoggerConfig, ServerConfig, SettingsConfig,
-        TlsTermination,
+        AppConfig, DatabaseConfig, GraphqlConfig, HealthConfig, LoggerConfig, ServerConfig,
+        SettingsConfig, TlsTermination,
     };
 
     use super::{ListenerMode, build_https_listener, listener_mode};
@@ -233,6 +273,7 @@ mod tests {
             server: ServerConfig::default(),
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
+            graphql: GraphqlConfig::default(),
             settings: SettingsConfig::default(),
             install: Default::default(),
         };

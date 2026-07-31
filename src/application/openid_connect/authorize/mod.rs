@@ -34,6 +34,7 @@ pub struct AuthorizationRequestParams {
     pub client_id: String,
     pub redirect_uri: String,
     pub scope: String,
+    pub resource: Option<String>,
     pub state: String,
     pub nonce: Option<String>,
     pub display: Option<String>,

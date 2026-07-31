@@ -170,10 +170,7 @@ impl AuthorizeService {
         }
 
         let id_token_scope = if input.access_token.is_some() || input.code.is_some() {
-            ScopeSet {
-                openid: true,
-                ..Default::default()
-            }
+            ScopeSet::parse("openid").expect("openid is a supported scope")
         } else {
             input.scope.clone()
         };

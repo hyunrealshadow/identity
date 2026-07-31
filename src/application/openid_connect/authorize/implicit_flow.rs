@@ -73,6 +73,11 @@ impl AuthorizeService {
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;
+        let access_token_audience = if scope.has_api_scopes() {
+            identity_domain::openid_connect::API_RESOURCE
+        } else {
+            audience.as_str()
+        };
         let claims = request
             .claims
             .as_deref()
@@ -95,7 +100,7 @@ impl AuthorizeService {
                         signing_key_pem: &signing_key_pem,
                         signing_alg: &signing_alg,
                         issuer: &issuer,
-                        audience: &audience,
+                        audience: access_token_audience,
                         claims: claims.as_ref(),
                     })
                     .await?,
@@ -202,6 +207,11 @@ impl AuthorizeService {
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;
+        let access_token_audience = if scope.has_api_scopes() {
+            identity_domain::openid_connect::API_RESOURCE
+        } else {
+            audience.as_str()
+        };
         let claims = request
             .claims
             .as_deref()
@@ -221,7 +231,7 @@ impl AuthorizeService {
                     signing_key_pem: &signing_key_pem,
                     signing_alg: &signing_alg,
                     issuer: &issuer,
-                    audience: &audience,
+                    audience: access_token_audience,
                     claims: claims.as_ref(),
                 })
                 .await?,
@@ -335,7 +345,7 @@ impl AuthorizeService {
             alg: input.signing_alg,
             issuer: input.issuer,
             audience: input.audience,
-            client_id: input.audience,
+            client_id: &input.client_id.to_string(),
             user_oid: &input.user_oid.to_string(),
             protected_session_id: input.protected_session_id,
             scope: &input.request.scope,

@@ -29,6 +29,17 @@ Configure the Identity runtime settings to point to the development server:
 - Login URL: `https://localhost:3000/login`
 - Consent URL: `https://localhost:3000/consent`
 
+The same application also hosts the account and session management UI at `/`.
+Installation creates its confidential OIDC client automatically. In local
+development the server-side client credentials are written to
+`.data/client-credentials.json`; this file is ignored by Git. Set
+`IDENTITY_CLIENT_CREDENTIALS_FILE` to move it to a persistent volume.
+
+Production and Kubernetes deployments may instead inject
+`IDENTITY_CLIENT_ID`, `IDENTITY_CLIENT_SECRET`, and
+`IDENTITY_PUBLIC_APP_URL`. Client credentials are server-only and are never
+included in browser JavaScript.
+
 When using a custom local hostname, start Vite with `--host`, trust its
 self-signed certificate, and configure the same HTTPS origin in Identity.
 

@@ -39,3 +39,5 @@ conformance/debug.log
 __pycache__/
 
 .env
+.data/
+apps/login/.data/

@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
+use rand::RngExt;
+use url::Url;
+use uuid::Uuid;
 
 use crate::{
     application::{
@@ -32,7 +36,14 @@ pub struct InstallInput {
     pub email: String,
     pub password: String,
     pub domain: String,
+    pub application_url: String,
     pub key_algorithm: AsymmetricKeyAlgorithm,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstallOutput {
+    pub client_id: Uuid,
+    pub client_secret: String,
 }
 
 pub struct InstallService<R: SettingRepository> {
@@ -64,6 +75,9 @@ pub struct InstallPersistenceInput {
     pub email: String,
     pub password: Password,
     pub domain: String,
+    pub application_url: Url,
+    pub client_id: Uuid,
+    pub client_secret: String,
     pub key_data: identity_domain::key::AsymmetricKeyData,
 }
 
@@ -80,7 +94,7 @@ impl<R: SettingRepository> InstallService<R> {
         *self.installation_initialized.current_value()
     }
 
-    pub async fn install(&self, input: InstallInput) -> Result<(), AppError> {
+    pub async fn install(&self, input: InstallInput) -> Result<InstallOutput, AppError> {
         tracing::info!("install: starting");
         if self.is_initialized() {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
@@ -106,6 +120,10 @@ impl<R: SettingRepository> InstallService<R> {
             &input.key_algorithm,
         )?;
         key_data.certificate = Some(certificate);
+        let client_id = Uuid::new_v4();
+        let mut client_secret_bytes = [0_u8; 32];
+        rand::rng().fill(&mut client_secret_bytes);
+        let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
 
         let installation_state = self
             .persistence
@@ -114,6 +132,9 @@ impl<R: SettingRepository> InstallService<R> {
                 email: input.email,
                 password,
                 domain: input.domain,
+                application_url: input.application_url,
+                client_id,
+                client_secret: client_secret.clone(),
                 key_data,
             })
             .await?;
@@ -134,7 +155,10 @@ impl<R: SettingRepository> InstallService<R> {
             .await?;
         self.runtime_key_ring.refresh_value().await?;
 
-        Ok(())
+        Ok(InstallOutput {
+            client_id,
+            client_secret,
+        })
     }
 }
 
@@ -144,6 +168,7 @@ struct ValidatedInstallInput {
     email: String,
     password: String,
     domain: String,
+    application_url: Url,
     key_algorithm: AsymmetricKeyAlgorithm,
 }
 
@@ -161,6 +186,11 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         normalize_required(&input.password, "password"),
     );
     let domain = collect_field(&mut validation, "domain", normalize_domain(&input.domain));
+    let application_url = collect_field(
+        &mut validation,
+        "application_url",
+        normalize_application_url(&input.application_url),
+    );
     let algorithm_name = asymmetric_algorithm_name(&input.key_algorithm);
     let key_algorithm = collect_field(
         &mut validation,
@@ -187,8 +217,24 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         email: email.expect("validated email"),
         password: password.expect("validated password"),
         domain: domain.expect("validated domain"),
+        application_url: application_url.expect("validated application URL"),
         key_algorithm: key_algorithm.expect("validated key algorithm"),
     })
+}
+
+fn normalize_application_url(value: &str) -> Result<Url, AppError> {
+    let mut url = Url::parse(value.trim())
+        .map_err(|_| AppError::from_code(InstallErrorCode::ApplicationUrlInvalid))?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AppError::from_code(InstallErrorCode::ApplicationUrlInvalid));
+    }
+    url.set_path("");
+    Ok(url)
 }
 
 fn collect_field<T>(
@@ -274,6 +320,7 @@ mod tests {
             email: "not-an-email".to_owned(),
             password: String::new(),
             domain: "invalid domain".to_owned(),
+            application_url: "not-a-url".to_owned(),
             key_algorithm: AsymmetricKeyAlgorithm::EcdsaP256,
         })
         .expect_err("invalid form should fail validation");
@@ -283,7 +330,7 @@ mod tests {
             .validation()
             .expect("validation details should be attached")
             .fields();
-        assert_eq!(fields.len(), 4);
+        assert_eq!(fields.len(), 5);
         assert_eq!(
             fields
                 .iter()
@@ -294,6 +341,7 @@ mod tests {
                 ("email", 13006),
                 ("password", 13003),
                 ("domain", 13005),
+                ("application_url", 13010),
             ]
         );
     }

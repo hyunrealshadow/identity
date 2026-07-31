@@ -153,6 +153,10 @@ impl AppBuilder {
             }),
             password: cfg.password.clone().unwrap_or_default(),
             domain,
+            application_url: cfg
+                .application_url
+                .clone()
+                .unwrap_or_else(|| "https://localhost:3000".to_owned()),
             key_algorithm,
         })
         .await?;

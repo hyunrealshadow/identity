@@ -593,6 +593,8 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 protected_session_id: &Uuid::new_v4().to_string(),
                 scope: "openid profile",
                 claims: None,
+                auth_time: None,
+                acr: None,
             })
             .await
             .unwrap();

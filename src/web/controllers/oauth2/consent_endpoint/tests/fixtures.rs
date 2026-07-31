@@ -48,6 +48,7 @@ pub(super) fn consent_test_config() -> AppConfig {
         server: ServerConfig::default(),
         database: DatabaseConfig::default(),
         health: HealthConfig::default(),
+        graphql: Default::default(),
         settings: SettingsConfig::default(),
         install: Default::default(),
     }

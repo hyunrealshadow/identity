@@ -333,6 +333,9 @@ impl AuthorizeService {
         if let Some(value) = payload.get("scope").and_then(|value| value.as_str()) {
             params.scope = value.to_string();
         }
+        if let Some(value) = payload.get("resource").and_then(|value| value.as_str()) {
+            params.resource = Some(value.to_string());
+        }
         if let Some(value) = payload.get("state").and_then(|value| value.as_str()) {
             params.state = value.to_string();
         }

@@ -87,6 +87,7 @@ async fn validate_request_reports_missing_required_fields() {
         client_id: String::new(),
         redirect_uri: String::new(),
         scope: String::new(),
+        resource: None,
         state: String::new(),
         nonce: None,
         display: None,
@@ -257,4 +258,37 @@ async fn validate_request_rejects_unassigned_openid_scope() {
         .unwrap_err();
 
     assert_eq!(error.code(), 23056);
+}
+
+#[tokio::test]
+async fn api_scopes_require_graphql_resource() {
+    let service = build_test_service(
+        Arc::new(ScopedClientRepository {
+            assigned_scopes: vec!["openid".to_string(), "account".to_string()],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let error = service
+        .validate_request(params("openid account"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23005);
+}
+
+#[tokio::test]
+async fn api_scopes_accept_graphql_resource() {
+    let service = build_test_service(
+        Arc::new(ScopedClientRepository {
+            assigned_scopes: vec!["openid".to_string(), "account".to_string()],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid account");
+    request.resource = Some(identity_domain::openid_connect::API_RESOURCE.to_string());
+
+    assert!(service.validate_request(request).await.is_ok());
 }

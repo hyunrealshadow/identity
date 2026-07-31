@@ -36,6 +36,7 @@ struct InstallRequest {
     email: String,
     password: String,
     domain: String,
+    application_url: String,
     key_algorithm: String,
 }
 
@@ -43,6 +44,8 @@ struct InstallRequest {
 struct InstallResponse {
     status: &'static str,
     restart_required: bool,
+    client_id: uuid::Uuid,
+    client_secret: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,23 +126,32 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
         email: request.email.clone(),
         password: request.password.clone(),
         domain: request.domain.clone(),
+        application_url: request.application_url.clone(),
         key_algorithm,
     };
 
-    if let Err(error) = ctx.services().install().install(input).await {
-        log_install_failure(&error, &request);
-        return Err(error.into());
-    }
+    let output = ctx
+        .services()
+        .install()
+        .install(input)
+        .await
+        .map_err(|error| {
+            log_install_failure(&error, &request);
+            JsonWebError(error)
+        })?;
 
     ctx.lifecycle().request_shutdown();
-    Ok(json_response(
+    let mut response = json_response(
         StatusCode::ACCEPTED,
         InstallResponse {
             status: "installed",
             restart_required: true,
+            client_id: output.client_id,
+            client_secret: output.client_secret,
         },
-    )
-    .into())
+    );
+    insert_no_store_headers(&mut response);
+    Ok(response.into())
 }
 
 fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, AppError> {
@@ -173,6 +185,7 @@ mod tests {
             email: "admin@example.com".to_owned(),
             password: "super-secret-password".to_owned(),
             domain: "identity.example.com".to_owned(),
+            application_url: "https://login.example.com".to_owned(),
             key_algorithm: "ed25519".to_owned(),
         };
         let error = AppError::from_code(CommonErrorCode::InternalError);

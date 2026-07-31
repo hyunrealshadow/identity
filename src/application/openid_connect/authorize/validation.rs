@@ -75,6 +75,18 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;
 
+        if params
+            .resource
+            .as_deref()
+            .is_some_and(|resource| resource != identity_domain::openid_connect::API_RESOURCE)
+            || (scope.has_api_scopes()
+                && params.resource.as_deref()
+                    != Some(identity_domain::openid_connect::API_RESOURCE))
+        {
+            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
+                .with_param("resource", params.resource.as_deref().unwrap_or_default()));
+        }
+
         if !scope.contains_openid() {
             return Err(AppError::from_code(AuthorizeErrorCode::OpenidScopeRequired));
         }
