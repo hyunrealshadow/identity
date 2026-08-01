@@ -1,12 +1,16 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import { loadClientCredentials } from './client-credentials.server'
+import { translate } from './i18n'
+import { requestLocale } from './i18n.server'
 import {
   type OAuthFlowSession,
   type OAuthTokenSession,
   useAuthorizationSession,
+  useAccountFlashSession,
   useOAuthFlowSession,
   useMfaUiSession,
+  storeAccountFlash,
 } from './oauth-session.server'
 
 const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
@@ -100,7 +104,9 @@ export async function finishAuthorization(request: Request) {
     typeof flow.data.verifier !== 'string' ||
     !constantTimeEqual(returnedState, flow.data.state)
   ) {
-    return new Response('Invalid OAuth callback state', { status: 400 })
+    return new Response(translate(requestLocale(), 'oauthCallbackInvalid'), {
+      status: 400,
+    })
   }
 
   const credentials = await loadClientCredentials()
@@ -123,6 +129,7 @@ export async function finishAuthorization(request: Request) {
       elevated_access_token: tokens.access_token,
       elevated_expires_at: Date.now() + tokens.expires_in * 1000,
     })
+    await storeAccountFlash({ message: 'reauthenticated' })
   } else {
     await authorization.update(toStoredTokens(tokens))
   }
@@ -134,6 +141,7 @@ export async function finishAuthorization(request: Request) {
 export async function clearAuthorizationCookie() {
   await (await useAuthorizationSession()).clear()
   await (await useMfaUiSession()).clear()
+  await (await useAccountFlashSession()).clear()
 }
 
 export async function finishLogout(applicationUrl: string) {
@@ -144,6 +152,7 @@ export async function finishLogout(applicationUrl: string) {
       : undefined
   await authorization.clear()
   await (await useMfaUiSession()).clear()
+  await (await useAccountFlashSession()).clear()
   if (idToken) {
     const logoutUrl = new URL('/oauth2/logout', API_URL)
     logoutUrl.search = new URLSearchParams({

@@ -3,6 +3,7 @@ import {
   clearAuthorizationCookie,
   elevatedAccessToken,
 } from './oauth.server'
+import { requestLocale } from './i18n.server'
 
 const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
 
@@ -42,6 +43,7 @@ export async function identityGraphql<T>(
       accept: 'application/graphql-response+json, application/json',
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
+      'accept-language': requestLocale(),
     },
     body: JSON.stringify({ query, variables }),
   })

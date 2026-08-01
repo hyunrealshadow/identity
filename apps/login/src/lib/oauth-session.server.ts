@@ -3,12 +3,14 @@ import { useSession } from '@tanstack/react-start/server'
 
 import { loadClientCredentials } from './client-credentials.server'
 
-const AUTH_SESSION_NAME = '__Host-identity.account'
-const FLOW_SESSION_NAME = '__Host-identity.oauth'
-const MFA_UI_SESSION_NAME = '__Host-identity.mfa-ui'
+const AUTH_SESSION_NAME = '__Host-login.account'
+const FLOW_SESSION_NAME = '__Host-login.oauth'
+const MFA_UI_SESSION_NAME = '__Host-login.mfa-ui'
+const ACCOUNT_FLASH_SESSION_NAME = '__Host-login.flash'
 const AUTH_SESSION_MAX_AGE = 30 * 24 * 60 * 60
 const FLOW_SESSION_MAX_AGE = 10 * 60
 const MFA_UI_SESSION_MAX_AGE = 15 * 60
+const ACCOUNT_FLASH_SESSION_MAX_AGE = 5 * 60
 
 export interface OAuthFlowSession {
   state: string
@@ -34,6 +36,12 @@ export interface MfaUiSession {
     enrollment_token: string
   }
   recovery_codes?: Array<string>
+}
+
+export interface AccountFlashSession {
+  message?: 'saved' | 'reauthenticated'
+  error?: string
+  fields?: Record<string, string>
 }
 
 export async function useAuthorizationSession() {
@@ -84,9 +92,40 @@ export async function useMfaUiSession() {
   })
 }
 
+export async function useAccountFlashSession() {
+  return useSession<AccountFlashSession>({
+    name: ACCOUNT_FLASH_SESSION_NAME,
+    password: await sessionPassword('account-flash'),
+    maxAge: ACCOUNT_FLASH_SESSION_MAX_AGE,
+    sessionHeader: false,
+    cookie: {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: ACCOUNT_FLASH_SESSION_MAX_AGE,
+    },
+  })
+}
+
+export async function storeAccountFlash(value: AccountFlashSession) {
+  await (await useAccountFlashSession()).update(value)
+}
+
+export async function consumeAccountFlash() {
+  const session = await useAccountFlashSession()
+  const value: AccountFlashSession = {
+    message: session.data.message,
+    error: session.data.error,
+    fields: session.data.fields,
+  }
+  await session.clear()
+  return value
+}
+
 export function deriveSessionPassword(clientSecret: string, purpose: string) {
   return createHash('sha256')
-    .update('identity-account-cookie:v1\0', 'utf8')
+    .update('login.cookie:v1\0', 'utf8')
     .update(purpose, 'utf8')
     .update('\0', 'utf8')
     .update(clientSecret, 'utf8')

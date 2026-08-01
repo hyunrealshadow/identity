@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { deriveSessionPassword } from './oauth-session.server'
 
-describe('encrypted OAuth session password derivation', () => {
+describe('encrypted login cookie password derivation', () => {
   it('is stable and long enough for TanStack Start sessions', () => {
     const password = deriveSessionPassword('client-secret', 'authorization')
 

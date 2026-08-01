@@ -1,6 +1,8 @@
 mod cursor;
 mod id;
 mod schema;
+#[cfg(test)]
+mod tests;
 
 use async_graphql::{
     Request as GraphqlRequest,
@@ -295,7 +297,7 @@ pub fn shares_listener(graphql: &GraphqlConfig, server: &ServerConfig) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use async_graphql::Request as GraphqlRequest;
     use identity_infrastructure::config::{GraphqlConfig, GraphqlServerConfig, ServerConfig};
 

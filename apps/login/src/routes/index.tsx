@@ -15,6 +15,7 @@ import {
   GraphqlRequestError,
   identityGraphql,
 } from '#/lib/graphql.server'
+import { graphqlFieldErrors } from '#/lib/account-errors'
 import { loadClientCredentials } from '#/lib/client-credentials.server'
 import {
   clearElevatedAuthorization,
@@ -26,6 +27,10 @@ import {
 } from '#/lib/oauth.server'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
+import {
+  consumeAccountFlash,
+  storeAccountFlash,
+} from '#/lib/oauth-session.server'
 
 interface AccountData {
   viewer: {
@@ -85,17 +90,19 @@ const ACCOUNT_QUERY = `
 
 const loadAccountPage = createServerFn({ method: 'GET' }).handler(async () => {
   const locale = requestLocale()
+  const flash = await consumeAccountFlash()
   try {
     const [data, mfa] = await Promise.all([
       identityGraphql<AccountData>(ACCOUNT_QUERY),
       mfaUiState(),
     ])
-    return { locale, data, mfa, error: undefined }
+    return { locale, data, mfa, flash, error: undefined }
   } catch (error) {
     return {
       locale,
       data: undefined,
       mfa: { enrollment: undefined, recoveryCodes: undefined },
+      flash,
       error:
         error instanceof GraphqlRequestError
           ? error.message
@@ -107,21 +114,21 @@ const loadAccountPage = createServerFn({ method: 'GET' }).handler(async () => {
 })
 
 export const Route = createFileRoute('/')({
-  validateSearch: (search): { message?: string; error?: string } => ({
-    message: typeof search.message === 'string' ? search.message : undefined,
-    error: typeof search.error === 'string' ? search.error : undefined,
-  }),
   loader: () => loadAccountPage(),
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const locale = requestLocale()
         const origin = request.headers.get('origin')
         const credentials = await loadClientCredentials()
         if (
           origin &&
           origin !== new URL(credentials.application_url).origin
         ) {
-          return new Response('Invalid request origin', { status: 403 })
+          return new Response(
+            translate(locale, 'accountInvalidRequestOrigin'),
+            { status: 403 },
+          )
         }
         const form = await request.formData()
         const action = String(form.get('action') ?? '')
@@ -161,7 +168,15 @@ export const Route = createFileRoute('/')({
           } else if (action === 'change-password') {
             const newPassword = String(form.get('new_password') ?? '')
             if (newPassword !== String(form.get('confirm_password') ?? '')) {
-              throw new Error('Passwords do not match')
+              throw new AccountActionError(
+                translate(locale, 'accountPasswordMismatch'),
+                {
+                  confirm_password: translate(
+                    locale,
+                    'accountPasswordMismatch',
+                  ),
+                },
+              )
             }
             await requireGraphql(
               `mutation ChangePassword($input: ChangePasswordInput!) {
@@ -199,7 +214,14 @@ export const Route = createFileRoute('/')({
             })
           } else if (action === 'confirm-totp') {
             const mfa = await mfaUiState()
-            if (!mfa.enrollment) throw new Error('Authenticator setup expired')
+            if (!mfa.enrollment) {
+              throw new AccountActionError(
+                translate(locale, 'accountMfaSetupExpired'),
+                {
+                  code: translate(locale, 'accountMfaSetupExpired'),
+                },
+              )
+            }
             const data = await requireGraphql<{
               confirmTotpEnrollment: { recoveryCodes: Array<string> }
             }>(
@@ -243,9 +265,12 @@ export const Route = createFileRoute('/')({
           } else if (action === 'acknowledge-recovery-codes') {
             await clearMfaUiState()
           } else {
-            return new Response('Unknown action', { status: 400 })
+            return new Response(translate(locale, 'accountUnknownAction'), {
+              status: 400,
+            })
           }
-          return redirectWith('message', 'saved')
+          await storeAccountFlash({ message: 'saved' })
+          return redirectHome()
         } catch (error) {
           if (
             (action === 'change-password' || isMfaAction(action)) &&
@@ -255,14 +280,12 @@ export const Route = createFileRoute('/')({
             return new Response(null, {
               status: 303,
               headers: {
-                location: `/oauth/reauth?purpose=${reauthPurpose(action)}&return_to=%2F%3Fmessage%3Dreauthenticated`,
+                location: `/oauth/reauth?purpose=${reauthPurpose(action)}&return_to=%2F`,
               },
             })
           }
-          return redirectWith(
-            'error',
-            error instanceof Error ? error.message : 'Request failed',
-          )
+          await storeAccountFlash(accountFlashFromError(error, locale))
+          return redirectHome()
         }
       },
     },
@@ -271,8 +294,7 @@ export const Route = createFileRoute('/')({
 })
 
 function AccountHome() {
-  const { locale, data, error: loadError } = Route.useLoaderData()
-  const search = Route.useSearch()
+  const { locale, data, flash, error: loadError } = Route.useLoaderData()
   const t = (
     key: Parameters<typeof translate>[1],
     values?: Parameters<typeof translate>[2],
@@ -332,24 +354,24 @@ function AccountHome() {
       </header>
 
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8">
-        {search.message ? (
+        {flash.message ? (
           <Alert status="success">
             <Alert.Indicator />
             <Alert.Content>
               <Alert.Title>
-                {search.message === 'reauthenticated'
+                {flash.message === 'reauthenticated'
                   ? t('accountReauthenticated')
                   : t('accountSaved')}
               </Alert.Title>
             </Alert.Content>
           </Alert>
         ) : null}
-        {search.error ? (
+        {flash.error ? (
           <Alert status="danger" className="auth-alert">
             <Alert.Indicator />
             <Alert.Content>
               <Alert.Title>{t('accountRequestFailed')}</Alert.Title>
-              <Alert.Description>{search.error}</Alert.Description>
+              <Alert.Description>{flash.error}</Alert.Description>
             </Alert.Content>
           </Alert>
         ) : null}
@@ -366,21 +388,25 @@ function AccountHome() {
                 name="given_name"
                 label={t('accountGivenName')}
                 value={account.givenName}
+                error={flash.fields?.given_name}
               />
               <ProfileField
                 name="family_name"
                 label={t('accountFamilyName')}
                 value={account.familyName}
+                error={flash.fields?.family_name}
               />
               <ProfileField
                 name="nickname"
                 label={t('accountNickname')}
                 value={account.nickname}
+                error={flash.fields?.nickname}
               />
               <ProfileField
                 name="phone_number"
                 label={t('accountPhone')}
                 value={account.phoneNumber}
+                error={flash.fields?.phone_number}
               />
               <div className="md:col-span-2">
                 <Button type="submit">{t('accountSaveProfile')}</Button>
@@ -431,10 +457,15 @@ function AccountHome() {
                   </div>
                   <form method="post" className="grid gap-3">
                     <input type="hidden" name="action" value="confirm-totp" />
-                    <TextField isRequired fullWidth name="code">
+                    <TextField
+                      isRequired
+                      fullWidth
+                      isInvalid={Boolean(flash.fields?.code)}
+                      name="code"
+                    >
                       <Label>{t('otp')}</Label>
                       <Input inputMode="numeric" autoComplete="one-time-code" maxLength={8} placeholder="000000" />
-                      <FieldError />
+                      <FieldError>{flash.fields?.code}</FieldError>
                     </TextField>
                     <Button type="submit">{t('accountMfaConfirm')}</Button>
                   </form>
@@ -552,14 +583,17 @@ function AccountHome() {
               <PasswordField
                 name="current_password"
                 label={t('accountCurrentPassword')}
+                error={flash.fields?.current_password}
               />
               <PasswordField
                 name="new_password"
                 label={t('accountNewPassword')}
+                error={flash.fields?.new_password}
               />
               <PasswordField
                 name="confirm_password"
                 label={t('accountConfirmPassword')}
+                error={flash.fields?.confirm_password}
               />
               <Button type="submit">{t('accountChangePassword')}</Button>
             </form>
@@ -574,26 +608,36 @@ function ProfileField({
   name,
   label,
   value,
+  error,
 }: {
   name: string
   label: string
   value?: string
+  error?: string
 }) {
   return (
-    <TextField fullWidth name={name}>
+    <TextField fullWidth isInvalid={Boolean(error)} name={name}>
       <Label>{label}</Label>
       <Input defaultValue={value} />
-      <FieldError />
+      <FieldError>{error}</FieldError>
     </TextField>
   )
 }
 
-function PasswordField({ name, label }: { name: string; label: string }) {
+function PasswordField({
+  name,
+  label,
+  error,
+}: {
+  name: string
+  label: string
+  error?: string
+}) {
   return (
-    <TextField isRequired fullWidth name={name}>
+    <TextField isRequired fullWidth isInvalid={Boolean(error)} name={name}>
       <Label>{label}</Label>
       <Input type="password" autoComplete="new-password" />
-      <FieldError />
+      <FieldError>{error}</FieldError>
     </TextField>
   )
 }
@@ -604,8 +648,44 @@ async function requireGraphql<T>(
   options?: { authorization?: 'default' | 'elevated' },
 ) {
   const data = await identityGraphql<T>(query, variables, options)
-  if (!data) throw new Error('Authentication is required')
+  if (!data) {
+    throw new AccountActionError(
+      translate(requestLocale(), 'accountAuthenticationRequired'),
+    )
+  }
   return data
+}
+
+class AccountActionError extends Error {
+  readonly fields: Record<string, string>
+
+  constructor(message: string, fields: Record<string, string> = {}) {
+    super(message)
+    this.name = 'AccountActionError'
+    this.fields = fields
+  }
+}
+
+function accountFlashFromError(
+  error: unknown,
+  locale: string,
+): { error: string; fields?: Record<string, string> } {
+  if (error instanceof AccountActionError) {
+    return { error: error.message, fields: error.fields }
+  }
+  if (error instanceof GraphqlRequestError) {
+    const fields = graphqlFieldErrors(error.errors)
+    return {
+      error: error.message,
+      fields: Object.keys(fields).length ? fields : undefined,
+    }
+  }
+  return {
+    error:
+      error instanceof Error
+        ? error.message
+        : translate(locale, 'temporaryError'),
+  }
 }
 
 function requiresReauthentication(error: GraphqlRequestError) {
@@ -640,12 +720,10 @@ function nullableFormValue(form: FormData, name: string) {
   return value || null
 }
 
-function redirectWith(name: 'message' | 'error', value: string) {
-  const location = new URL('/', 'https://local.invalid')
-  location.searchParams.set(name, value)
+function redirectHome() {
   return new Response(null, {
     status: 303,
-    headers: { location: `${location.pathname}${location.search}` },
+    headers: { location: '/' },
   })
 }
 
