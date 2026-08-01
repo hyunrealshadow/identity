@@ -34,6 +34,18 @@ pub trait DataProtector: Send + Sync {
     async fn protect(&self, purpose: &str, plaintext: &[u8])
     -> Result<String, DataProtectionError>;
     async fn unprotect(&self, purpose: &str, token: &str) -> Result<Vec<u8>, DataProtectionError>;
+
+    async fn protect_many(
+        &self,
+        purpose: &str,
+        plaintexts: &[Vec<u8>],
+    ) -> Result<Vec<String>, DataProtectionError> {
+        let mut tokens = Vec::with_capacity(plaintexts.len());
+        for plaintext in plaintexts {
+            tokens.push(self.protect(purpose, plaintext).await?);
+        }
+        Ok(tokens)
+    }
 }
 
 pub struct DataProtectorImpl {
@@ -51,6 +63,38 @@ impl DataProtectorImpl {
             cipher,
         }
     }
+
+    fn protection_context(&self, purpose: &str) -> Result<ProtectionContext, DataProtectionError> {
+        let key_ring = self.key_ring_provider.current_value();
+        let ring = key_ring.data_protection();
+        let key = ring
+            .encrypting_key(Utc::now())
+            .ok_or(DataProtectionError::KeyRingEmpty)?;
+        let master_key = decode_master_key(key)?;
+        let purpose = Purpose::new(purpose);
+        Ok(ProtectionContext {
+            key_id: key.oid,
+            subkey: derive_subkey(&master_key, &purpose.hkdf_info()),
+            purpose_hash: purpose.hash_prefix(),
+        })
+    }
+
+    fn protect_with_context(
+        &self,
+        context: &ProtectionContext,
+        plaintext: &[u8],
+    ) -> Result<String, DataProtectionError> {
+        let aad =
+            ProtectedPayload::new(context.key_id, [0u8; 24], vec![]).aad(&context.purpose_hash);
+        let (nonce, ciphertext) = self.cipher.encrypt(&context.subkey, plaintext, &aad)?;
+        Ok(ProtectedPayload::new(context.key_id, nonce, ciphertext).encode())
+    }
+}
+
+struct ProtectionContext {
+    key_id: identity_domain::key::KeyOid,
+    subkey: [u8; DATA_PROTECTION_KEY_SIZE],
+    purpose_hash: [u8; 8],
 }
 
 #[async_trait]
@@ -60,24 +104,8 @@ impl DataProtector for DataProtectorImpl {
         purpose: &str,
         plaintext: &[u8],
     ) -> Result<String, DataProtectionError> {
-        let key_ring = self.key_ring_provider.current_value();
-        let ring = key_ring.data_protection();
-        let now = Utc::now();
-
-        let key = ring
-            .encrypting_key(now)
-            .ok_or(DataProtectionError::KeyRingEmpty)?;
-
-        let master_key = decode_master_key(key)?;
-        let purpose = Purpose::new(purpose);
-        let purpose_hash = purpose.hash_prefix();
-        let subkey = derive_subkey(&master_key, &purpose.hkdf_info());
-        let aad = ProtectedPayload::new(key.oid, [0u8; 24], vec![]).aad(&purpose_hash);
-
-        let (nonce, ciphertext) = self.cipher.encrypt(&subkey, plaintext, &aad)?;
-
-        let payload = ProtectedPayload::new(key.oid, nonce, ciphertext);
-        Ok(payload.encode())
+        let context = self.protection_context(purpose)?;
+        self.protect_with_context(&context, plaintext)
     }
 
     async fn unprotect(&self, purpose: &str, token: &str) -> Result<Vec<u8>, DataProtectionError> {
@@ -112,6 +140,21 @@ impl DataProtector for DataProtectorImpl {
                 warn!("decryption failed for protected payload");
                 DataProtectionError::InvalidProtectedPayload
             })
+    }
+
+    async fn protect_many(
+        &self,
+        purpose: &str,
+        plaintexts: &[Vec<u8>],
+    ) -> Result<Vec<String>, DataProtectionError> {
+        if plaintexts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let context = self.protection_context(purpose)?;
+        plaintexts
+            .iter()
+            .map(|plaintext| self.protect_with_context(&context, plaintext))
+            .collect()
     }
 }
 
@@ -281,6 +324,38 @@ mod tests {
         let decrypted = protector.unprotect("session", &token).await.unwrap();
 
         assert_eq!(decrypted, plaintext);
+    }
+
+    #[tokio::test]
+    async fn protect_many_uses_one_context_and_produces_independent_tokens() {
+        let now = Utc::now();
+        let key = make_symmetric_key(now, Some(now + Duration::hours(1)), None);
+        let provider = Arc::new(MockKeyRingProvider::new(vec![key]));
+        let protector = DataProtectorImpl::new(provider, test_cipher());
+        let plaintexts = vec![b"first".to_vec(), b"second".to_vec()];
+
+        let tokens = protector
+            .protect_many("graphql:session-cursor:v2:user", &plaintexts)
+            .await
+            .unwrap();
+
+        assert_eq!(tokens.len(), 2);
+        assert_ne!(tokens[0], tokens[1]);
+        for (token, plaintext) in tokens.iter().zip(&plaintexts) {
+            assert_eq!(
+                protector
+                    .unprotect("graphql:session-cursor:v2:user", token)
+                    .await
+                    .unwrap(),
+                *plaintext
+            );
+        }
+        assert!(matches!(
+            protector
+                .unprotect("graphql:session-cursor:v2:another-user", &tokens[0])
+                .await,
+            Err(DataProtectionError::InvalidProtectedPayload)
+        ));
     }
 
     #[tokio::test]

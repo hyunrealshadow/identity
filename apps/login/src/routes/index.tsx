@@ -42,7 +42,6 @@ interface AccountData {
       givenName?: string
       familyName?: string
       nickname?: string
-      phoneNumber?: string
       createdAt: string
     }
     sessions: {
@@ -72,8 +71,7 @@ const ACCOUNT_QUERY = `
   query AccountHome {
     viewer {
       account {
-        id username email emailVerified givenName familyName nickname
-        phoneNumber createdAt
+        id username email emailVerified givenName familyName nickname createdAt
       }
       sessions(first: 50) {
         edges {
@@ -153,7 +151,7 @@ export const Route = createFileRoute('/')({
             await requireGraphql(
               `mutation UpdateProfile($input: UpdateProfileInput!) {
                 updateProfile(input: $input) {
-                  user { id username givenName familyName nickname phoneNumber }
+                  user { id username givenName familyName nickname }
                 }
               }`,
               {
@@ -161,10 +159,25 @@ export const Route = createFileRoute('/')({
                   givenName: nullableFormValue(form, 'given_name'),
                   familyName: nullableFormValue(form, 'family_name'),
                   nickname: nullableFormValue(form, 'nickname'),
-                  phoneNumber: nullableFormValue(form, 'phone_number'),
                 },
               },
             )
+          } else if (action === 'update-identifiers') {
+            await requireGraphql(
+              `mutation UpdateAccountIdentifiers($input: UpdateAccountIdentifiersInput!) {
+                updateAccountIdentifiers(input: $input) {
+                  user { id username email emailVerified }
+                }
+              }`,
+              {
+                input: {
+                  username: String(form.get('username') ?? ''),
+                  email: String(form.get('email') ?? ''),
+                },
+              },
+              { authorization: 'elevated' },
+            )
+            await clearElevatedAuthorization()
           } else if (action === 'change-password') {
             const newPassword = String(form.get('new_password') ?? '')
             if (newPassword !== String(form.get('confirm_password') ?? '')) {
@@ -273,7 +286,9 @@ export const Route = createFileRoute('/')({
           return redirectHome()
         } catch (error) {
           if (
-            (action === 'change-password' || isMfaAction(action)) &&
+            (action === 'change-password' ||
+              action === 'update-identifiers' ||
+              isMfaAction(action)) &&
             error instanceof GraphqlRequestError &&
             requiresReauthentication(error)
           ) {
@@ -378,6 +393,42 @@ function AccountHome() {
 
         <Card className="border border-black/[0.07]">
           <Card.Header>
+            <Card.Title>{t('accountIdentifiers')}</Card.Title>
+            <Card.Description>
+              {account.emailVerified
+                ? t('accountEmailVerified')
+                : t('accountEmailUnverified')}
+            </Card.Description>
+          </Card.Header>
+          <Card.Content>
+            <form method="post" className="grid gap-4 md:grid-cols-2">
+              <input type="hidden" name="action" value="update-identifiers" />
+              <ProfileField
+                name="username"
+                label={t('accountUsername')}
+                value={account.username}
+                error={flash.fields?.username}
+                required
+              />
+              <ProfileField
+                name="email"
+                label={t('accountEmail')}
+                value={account.email}
+                error={flash.fields?.email}
+                required
+              />
+              <p className="text-sm text-muted md:col-span-2">
+                {t('accountIdentifiersDescription')}
+              </p>
+              <div className="md:col-span-2">
+                <Button type="submit">{t('accountSaveIdentifiers')}</Button>
+              </div>
+            </form>
+          </Card.Content>
+        </Card>
+
+        <Card className="border border-black/[0.07]">
+          <Card.Header>
             <Card.Title>{t('accountProfile')}</Card.Title>
             <Card.Description>{account.email}</Card.Description>
           </Card.Header>
@@ -401,12 +452,6 @@ function AccountHome() {
                 label={t('accountNickname')}
                 value={account.nickname}
                 error={flash.fields?.nickname}
-              />
-              <ProfileField
-                name="phone_number"
-                label={t('accountPhone')}
-                value={account.phoneNumber}
-                error={flash.fields?.phone_number}
               />
               <div className="md:col-span-2">
                 <Button type="submit">{t('accountSaveProfile')}</Button>
@@ -609,14 +654,21 @@ function ProfileField({
   label,
   value,
   error,
+  required = false,
 }: {
   name: string
   label: string
   value?: string
   error?: string
+  required?: boolean
 }) {
   return (
-    <TextField fullWidth isInvalid={Boolean(error)} name={name}>
+    <TextField
+      isRequired={required}
+      fullWidth
+      isInvalid={Boolean(error)}
+      name={name}
+    >
       <Label>{label}</Label>
       <Input defaultValue={value} />
       <FieldError>{error}</FieldError>
@@ -712,6 +764,7 @@ function reauthPurpose(action: string) {
   ) {
     return 'mfa'
   }
+  if (action === 'update-identifiers') return 'account'
   return isMfaAction(action) ? 'account' : 'password'
 }
 

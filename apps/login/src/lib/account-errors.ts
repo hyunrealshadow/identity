@@ -23,7 +23,6 @@ export function htmlFieldName(field: string) {
     newPassword: 'new_password',
     givenName: 'given_name',
     familyName: 'family_name',
-    phoneNumber: 'phone_number',
   }
   return names[field] ?? field
 }

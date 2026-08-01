@@ -5,23 +5,34 @@ use async_graphql::{
     Object, Result, Schema,
     connection::{Connection, Edge, query},
 };
-use identity_application::error::{AppError, kind::ErrorKind};
 use identity_application::openid_connect::user_info::TokenClaims;
+use identity_application::{
+    data_protection::DataProtector,
+    error::{AppError, codes::account::AccountErrorCode, kind::ErrorKind},
+};
 use identity_domain::{
     auth::{SessionOid, model::Session},
     openid_connect::ApiScope,
-    user::{User, repository::UserRepository},
+    user::{
+        User,
+        normalization::{EmailNormalizationError, UsernameValidationError},
+        repository::{UserRepository, UserRepositoryError},
+    },
 };
 use identity_infrastructure::{
     AppState,
     database::repository::{
         session::SessionRepositoryImpl,
-        user::{UserProfilePatch, UserRepositoryImpl},
+        session::{SessionPageDirection, SessionSortKey},
+        user::{UserIdentifierPatch, UserProfilePatch, UserRepositoryImpl},
     },
 };
 use uuid::Uuid;
 
-use super::{cursor::SessionCursor, id::NodeId};
+use super::{
+    cursor::{ProtectedSessionCursor, SessionCursor},
+    id::NodeId,
+};
 
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
@@ -95,15 +106,15 @@ impl Viewer {
         before: Option<String>,
         first: Option<i32>,
         last: Option<i32>,
-    ) -> Result<Connection<SessionCursor, SessionNode>> {
+    ) -> Result<Connection<ProtectedSessionCursor, SessionNode>> {
         require_scope(ctx, ApiScope::SessionRead)?;
         let request = request_context(ctx)?;
         let max_page_size = ctx.data_opt::<usize>().copied().unwrap_or(100);
         let repo = SessionRepositoryImpl::new(request.state.resources().db().clone());
-        let sessions = repo
-            .list_by_user_oid(Uuid::from(request.claims.user_oid))
-            .await
-            .map_err(internal_error)?;
+        let current_session_oid = request.claims.session_oid;
+        let user_oid = Uuid::from(request.claims.user_oid);
+        let data_protector = request.state.services().data_protector().clone();
+        let cursor_purpose = session_cursor_purpose(user_oid);
 
         query(
             after,
@@ -117,45 +128,52 @@ impl Viewer {
                         "page size cannot exceed {max_page_size}"
                     )));
                 }
-
-                let mut start = 0usize;
-                let mut end = sessions.len();
-                if let Some(after) = after
-                    && let Some(position) = sessions
-                        .iter()
-                        .position(|session| session_cursor(session) == after)
-                {
-                    start = position + 1;
-                }
-                if let Some(before) = before
-                    && let Some(position) = sessions
-                        .iter()
-                        .position(|session| session_cursor(session) == before)
-                {
-                    end = position;
-                }
-                start = start.min(end);
-                let available = &sessions[start..end];
-                let (slice_start, slice_end) = if let Some(last) = last {
-                    (available.len().saturating_sub(last), available.len())
+                let direction = if last.is_some() {
+                    SessionPageDirection::Backward
                 } else {
-                    (0, first.unwrap_or(20).min(available.len()))
+                    SessionPageDirection::Forward
                 };
-                let mut connection =
-                    Connection::new(start + slice_start > 0, start + slice_end < sessions.len());
-                connection
-                    .edges
-                    .extend(
-                        available[slice_start..slice_end]
-                            .iter()
-                            .cloned()
-                            .map(|session| {
-                                Edge::new(
-                                    session_cursor(&session),
-                                    SessionNode::new(session, request.claims.session_oid),
-                                )
-                            }),
-                    );
+                let after = unprotect_session_cursor(
+                    data_protector.as_ref(),
+                    &cursor_purpose,
+                    after.as_ref(),
+                )
+                .await?;
+                let before = unprotect_session_cursor(
+                    data_protector.as_ref(),
+                    &cursor_purpose,
+                    before.as_ref(),
+                )
+                .await?;
+                let page = repo
+                    .list_page_by_user_oid(user_oid, after, before, requested, direction)
+                    .await
+                    .map_err(internal_error)?;
+                let cursor_plaintexts = page
+                    .items
+                    .iter()
+                    .map(|item| {
+                        SessionCursor::new(item.sort_key.last_active_at, item.sort_key.id)
+                            .to_bytes()
+                    })
+                    .collect::<Vec<_>>();
+                let protected_cursors = data_protector
+                    .protect_many(&cursor_purpose, &cursor_plaintexts)
+                    .await
+                    .map_err(internal_error)?;
+                let mut connection = Connection::new(page.has_previous_page, page.has_next_page);
+                connection.edges.extend(
+                    page.items
+                        .into_iter()
+                        .zip(
+                            protected_cursors
+                                .into_iter()
+                                .map(ProtectedSessionCursor::new),
+                        )
+                        .map(|(item, cursor)| {
+                            Edge::new(cursor, SessionNode::new(item.session, current_session_oid))
+                        }),
+                );
                 Ok::<_, Error>(connection)
             },
         )
@@ -232,14 +250,6 @@ impl UserNode {
 
     async fn locale(&self) -> Option<&str> {
         self.user.locale.as_deref()
-    }
-
-    async fn phone_number(&self) -> Option<&str> {
-        self.user.phone_number.as_deref()
-    }
-
-    async fn phone_number_verified(&self) -> Option<bool> {
-        self.user.phone_number_verified
     }
 
     async fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
@@ -326,6 +336,27 @@ pub struct MutationRoot;
 
 #[Object]
 impl MutationRoot {
+    async fn update_account_identifiers(
+        &self,
+        ctx: &Context<'_>,
+        input: UpdateAccountIdentifiersInput,
+    ) -> Result<UpdateProfilePayload> {
+        require_scope(ctx, ApiScope::AccountUpdate)?;
+        require_recent_authentication(ctx, None)?;
+        let request = request_context(ctx)?;
+        let patch = validate_account_identifiers(&input).map_err(|error| app_error(ctx, error))?;
+        let repo = UserRepositoryImpl::new(request.state.resources().db().clone());
+        let user = repo
+            .update_identifiers(request.claims.user_oid, patch)
+            .await
+            .map_err(|error| account_repository_error(ctx, error))?
+            .ok_or_else(|| Error::new("account not found"))?;
+        Ok(UpdateProfilePayload {
+            user: UserNode::from(user),
+            client_mutation_id: input.client_mutation_id,
+        })
+    }
+
     async fn update_profile(
         &self,
         ctx: &Context<'_>,
@@ -679,7 +710,6 @@ pub struct UpdateProfileInput {
     pub birthdate: MaybeUndefined<String>,
     pub zone_info: MaybeUndefined<String>,
     pub locale: MaybeUndefined<String>,
-    pub phone_number: MaybeUndefined<String>,
     pub address_formatted: MaybeUndefined<String>,
     pub address_street_address: MaybeUndefined<String>,
     pub address_locality: MaybeUndefined<String>,
@@ -703,7 +733,6 @@ impl UpdateProfileInput {
             birthdate: patch_value(self.birthdate),
             zone_info: patch_value(self.zone_info),
             locale: patch_value(self.locale),
-            phone_number: patch_value(self.phone_number),
             address_formatted: patch_value(self.address_formatted),
             address_street_address: patch_value(self.address_street_address),
             address_locality: patch_value(self.address_locality),
@@ -711,6 +740,72 @@ impl UpdateProfileInput {
             address_postal_code: patch_value(self.address_postal_code),
             address_country: patch_value(self.address_country),
         }
+    }
+}
+
+#[derive(Clone, InputObject)]
+pub struct UpdateAccountIdentifiersInput {
+    pub username: String,
+    pub email: String,
+    pub client_mutation_id: Option<String>,
+}
+
+fn validate_account_identifiers(
+    input: &UpdateAccountIdentifiersInput,
+) -> std::result::Result<UserIdentifierPatch, AppError> {
+    let mut error = AppError::from_code(AccountErrorCode::ValidationFailed);
+    let username = match identity_domain::user::normalization::validate_username(&input.username) {
+        Ok(normalized) => Some((input.username.trim().to_owned(), normalized)),
+        Err(UsernameValidationError::Empty) => {
+            error.push_field_error(
+                "username",
+                AppError::from_code(AccountErrorCode::UsernameRequired),
+            );
+            None
+        }
+        Err(UsernameValidationError::InvalidLength | UsernameValidationError::InvalidCharacter) => {
+            error.push_field_error(
+                "username",
+                AppError::from_code(AccountErrorCode::UsernameInvalid),
+            );
+            None
+        }
+    };
+    let email = match identity_domain::user::normalization::normalize_email(&input.email) {
+        Ok(normalized) => Some((input.email.trim().to_owned(), normalized)),
+        Err(EmailNormalizationError::Empty) => {
+            error.push_field_error(
+                "email",
+                AppError::from_code(AccountErrorCode::EmailRequired),
+            );
+            None
+        }
+        Err(EmailNormalizationError::InvalidFormat | EmailNormalizationError::InvalidDomain) => {
+            error.push_field_error("email", AppError::from_code(AccountErrorCode::EmailInvalid));
+            None
+        }
+    };
+    if error
+        .validation()
+        .is_some_and(|validation| !validation.is_empty())
+    {
+        Err(error)
+    } else {
+        Ok(UserIdentifierPatch { username, email })
+    }
+}
+
+fn account_repository_error(ctx: &Context<'_>, error: UserRepositoryError) -> Error {
+    match error {
+        UserRepositoryError::UsernameExists => app_error(
+            ctx,
+            AppError::from_code(AccountErrorCode::UsernameExists).with_field("username"),
+        ),
+        UserRepositoryError::EmailExists => app_error(
+            ctx,
+            AppError::from_code(AccountErrorCode::EmailExists).with_field("email"),
+        ),
+        error => internal_error(error),
     }
 }
 
@@ -914,17 +1009,42 @@ fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
     })
 }
 
-fn session_cursor(session: &Session) -> SessionCursor {
-    SessionCursor::new(
-        session.last_active_at.unwrap_or(session.created_at),
-        session.created_at,
-        Uuid::from(session.oid),
-    )
+fn session_cursor_purpose(user_oid: Uuid) -> String {
+    format!("graphql:session-cursor:v2:{user_oid}")
+}
+
+async fn unprotect_session_cursor(
+    data_protector: &dyn DataProtector,
+    purpose: &str,
+    cursor: Option<&ProtectedSessionCursor>,
+) -> Result<Option<SessionSortKey>> {
+    use chrono::TimeZone as _;
+
+    let Some(cursor) = cursor else {
+        return Ok(None);
+    };
+    let plaintext = data_protector
+        .unprotect(purpose, cursor.as_str())
+        .await
+        .map_err(|_| Error::new("invalid session cursor"))?;
+    let cursor =
+        SessionCursor::from_bytes(&plaintext).map_err(|_| Error::new("invalid session cursor"))?;
+    if cursor.id <= 0 {
+        return Err(Error::new("invalid session cursor"));
+    }
+    let last_active_at = chrono::Utc
+        .timestamp_micros(cursor.last_active_micros)
+        .single()
+        .ok_or_else(|| Error::new("invalid session cursor"))?;
+    Ok(Some(SessionSortKey {
+        last_active_at,
+        id: cursor.id,
+    }))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::build_schema;
+    use super::{UpdateAccountIdentifiersInput, build_schema, validate_account_identifiers};
 
     #[test]
     fn schema_exposes_mfa_self_service_contract() {
@@ -940,5 +1060,53 @@ mod tests {
         ] {
             assert!(sdl.contains(field), "schema is missing {field}");
         }
+    }
+
+    #[test]
+    fn schema_exposes_identifier_updates_without_phone_management() {
+        let sdl = build_schema(20, 1_000).sdl();
+
+        assert!(sdl.contains("updateAccountIdentifiers("));
+        assert!(sdl.contains("input UpdateAccountIdentifiersInput"));
+        assert!(!sdl.contains("phoneNumber"));
+    }
+
+    #[test]
+    fn identifier_validation_returns_both_field_errors() {
+        let error = validate_account_identifiers(&UpdateAccountIdentifiersInput {
+            username: "@".to_owned(),
+            email: "invalid".to_owned(),
+            client_mutation_id: None,
+        })
+        .unwrap_err();
+        let fields = error.validation().unwrap().fields();
+
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].field(), "username");
+        assert_eq!(fields[0].code(), 15_002);
+        assert_eq!(fields[1].field(), "email");
+        assert_eq!(fields[1].code(), 15_004);
+    }
+
+    #[test]
+    fn identifier_validation_normalizes_unique_keys_but_preserves_display_values() {
+        let patch = validate_account_identifiers(&UpdateAccountIdentifiersInput {
+            username: " Alice-01 ".to_owned(),
+            email: "USER@例子.测试".to_owned(),
+            client_mutation_id: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            patch.username,
+            Some(("Alice-01".to_owned(), "alice-01".to_owned()))
+        );
+        assert_eq!(
+            patch.email,
+            Some((
+                "USER@例子.测试".to_owned(),
+                "user@xn--fsqu00a.xn--0zwm56d".to_owned()
+            ))
+        );
     }
 }

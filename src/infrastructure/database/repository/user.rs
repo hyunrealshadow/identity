@@ -80,7 +80,6 @@ impl UserRepositoryImpl {
             return Ok(None);
         };
         let mut active: user::ActiveModel = model.into();
-        let phone_changed = patch.phone_number.is_some();
         apply_patch!(
             active,
             patch,
@@ -90,7 +89,7 @@ impl UserRepositoryImpl {
             nickname
         );
         apply_patch!(active, patch, profile, picture, website, gender);
-        apply_patch!(active, patch, birthdate, zone_info, locale, phone_number);
+        apply_patch!(active, patch, birthdate, zone_info, locale);
         apply_patch!(
             active,
             patch,
@@ -101,9 +100,6 @@ impl UserRepositoryImpl {
             address_postal_code,
             address_country
         );
-        if phone_changed {
-            active.phone_number_verified = Set(Some(false));
-        }
         active.updated_at = Set(Some(Utc::now().into()));
         active
             .update(&self.db)
@@ -112,6 +108,94 @@ impl UserRepositoryImpl {
             .map(Some)
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))
     }
+
+    pub async fn update_identifiers(
+        &self,
+        oid: UserOid,
+        patch: UserIdentifierPatch,
+    ) -> Result<Option<User>, UserRepositoryError> {
+        let Some(model) = UserEntity::find()
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
+            .one(&self.db)
+            .await
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
+        else {
+            return Ok(None);
+        };
+
+        if let Some((_, normalized)) = &patch.username
+            && normalized != &model.name_normalized
+            && self
+                .identifier_exists(user::Column::NameNormalized, normalized, model.id)
+                .await?
+        {
+            return Err(UserRepositoryError::UsernameExists);
+        }
+        if let Some((_, normalized)) = &patch.email
+            && normalized != &model.email_normalized
+            && self
+                .identifier_exists(user::Column::EmailNormalized, normalized, model.id)
+                .await?
+        {
+            return Err(UserRepositoryError::EmailExists);
+        }
+
+        let mut active: user::ActiveModel = model.clone().into();
+        if let Some((username, normalized)) = &patch.username {
+            active.name = Set(username.clone());
+            active.name_normalized = Set(normalized.clone());
+        }
+        if let Some((email, normalized)) = &patch.email {
+            let changed = normalized != &model.email_normalized;
+            active.email = Set(email.clone());
+            active.email_normalized = Set(normalized.clone());
+            if changed {
+                active.email_verified = Set(false);
+            }
+        }
+        active.updated_at = Set(Some(Utc::now().into()));
+        match active.update(&self.db).await {
+            Ok(model) => Ok(Some(to_domain(model))),
+            Err(error) => {
+                if let Some((_, normalized)) = &patch.username
+                    && self
+                        .identifier_exists(user::Column::NameNormalized, normalized, model.id)
+                        .await?
+                {
+                    return Err(UserRepositoryError::UsernameExists);
+                }
+                if let Some((_, normalized)) = &patch.email
+                    && self
+                        .identifier_exists(user::Column::EmailNormalized, normalized, model.id)
+                        .await?
+                {
+                    return Err(UserRepositoryError::EmailExists);
+                }
+                Err(UserRepositoryError::QueryFailed(Box::new(error)))
+            }
+        }
+    }
+
+    async fn identifier_exists(
+        &self,
+        column: user::Column,
+        normalized: &str,
+        except_id: i64,
+    ) -> Result<bool, UserRepositoryError> {
+        UserEntity::find()
+            .filter(column.eq(normalized))
+            .filter(user::Column::Id.ne(except_id))
+            .one(&self.db)
+            .await
+            .map(|user| user.is_some())
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct UserIdentifierPatch {
+    pub username: Option<(String, String)>,
+    pub email: Option<(String, String)>,
 }
 
 #[derive(Debug, Default)]
@@ -127,7 +211,6 @@ pub struct UserProfilePatch {
     pub birthdate: Option<Option<String>>,
     pub zone_info: Option<Option<String>>,
     pub locale: Option<Option<String>>,
-    pub phone_number: Option<Option<String>>,
     pub address_formatted: Option<Option<String>>,
     pub address_street_address: Option<Option<String>>,
     pub address_locality: Option<Option<String>>,
@@ -243,13 +326,69 @@ impl UserRepository for UserRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::to_domain;
+    use sea_orm::{DatabaseBackend, MockDatabase};
+
+    use super::{UserIdentifierPatch, UserRepositoryImpl, to_domain};
     use crate::database::entity::user;
 
     #[test]
     fn maps_oidc_phone_and_address_claim_fields() {
+        let model = user_model();
+
+        let user = to_domain(model);
+
+        assert_eq!(user.phone_number.as_deref(), Some("+12025550123"));
+        assert_eq!(user.phone_number_verified, Some(true));
+        assert_eq!(
+            user.address_formatted.as_deref(),
+            Some("1 Main St\nExample City")
+        );
+        assert_eq!(user.address_street_address.as_deref(), Some("1 Main St"));
+        assert_eq!(user.address_locality.as_deref(), Some("Example City"));
+        assert_eq!(user.address_region.as_deref(), Some("CA"));
+        assert_eq!(user.address_postal_code.as_deref(), Some("94000"));
+        assert_eq!(user.address_country.as_deref(), Some("US"));
+    }
+
+    #[tokio::test]
+    async fn identifier_update_marks_a_changed_email_unverified() {
+        let current = user_model();
+        let mut updated = current.clone();
+        updated.name = "Ada-01".to_owned();
+        updated.name_normalized = "ada-01".to_owned();
+        updated.email = "ada@new.example".to_owned();
+        updated.email_normalized = "ada@new.example".to_owned();
+        updated.email_verified = false;
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([
+                vec![current],
+                Vec::<user::Model>::new(),
+                Vec::<user::Model>::new(),
+                vec![updated],
+            ])
+            .into_connection();
+        let repo = UserRepositoryImpl::new(db);
+
+        let user = repo
+            .update_identifiers(
+                uuid::Uuid::nil().into(),
+                UserIdentifierPatch {
+                    username: Some(("Ada-01".to_owned(), "ada-01".to_owned())),
+                    email: Some(("ada@new.example".to_owned(), "ada@new.example".to_owned())),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(user.name, "Ada-01");
+        assert_eq!(user.email, "ada@new.example");
+        assert!(!user.email_verified);
+    }
+
+    fn user_model() -> user::Model {
         let now = chrono::Utc::now().into();
-        let model = user::Model {
+        user::Model {
             id: 1,
             oid: uuid::Uuid::nil(),
             email: "user@example.com".to_string(),
@@ -282,20 +421,6 @@ mod tests {
             locked_until: None,
             created_at: now,
             updated_at: None,
-        };
-
-        let user = to_domain(model);
-
-        assert_eq!(user.phone_number.as_deref(), Some("+12025550123"));
-        assert_eq!(user.phone_number_verified, Some(true));
-        assert_eq!(
-            user.address_formatted.as_deref(),
-            Some("1 Main St\nExample City")
-        );
-        assert_eq!(user.address_street_address.as_deref(), Some("1 Main St"));
-        assert_eq!(user.address_locality.as_deref(), Some("Example City"));
-        assert_eq!(user.address_region.as_deref(), Some("CA"));
-        assert_eq!(user.address_postal_code.as_deref(), Some("94000"));
-        assert_eq!(user.address_country.as_deref(), Some("US"));
+        }
     }
 }

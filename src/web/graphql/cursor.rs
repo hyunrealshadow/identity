@@ -1,51 +1,77 @@
 use async_graphql::connection::CursorType;
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 
-const SESSION_CURSOR_KIND: u8 = 1;
-const CURSOR_VERSION: u8 = 1;
+const SESSION_CURSOR_VERSION: u8 = 2;
+const SESSION_CURSOR_PLAINTEXT_SIZE: usize = 17;
+const MAX_PROTECTED_CURSOR_LENGTH: usize = 512;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionCursor {
     pub last_active_micros: i64,
-    pub created_micros: i64,
-    pub oid: Uuid,
+    pub id: i64,
 }
 
 impl SessionCursor {
     #[must_use]
-    pub fn new(last_active_at: DateTime<Utc>, created_at: DateTime<Utc>, oid: Uuid) -> Self {
+    pub fn new(last_active_at: DateTime<Utc>, id: i64) -> Self {
         Self {
             last_active_micros: last_active_at.timestamp_micros(),
-            created_micros: created_at.timestamp_micros(),
-            oid,
+            id,
         }
     }
 
     #[must_use]
-    pub fn encode(self) -> String {
-        let mut bytes = Vec::with_capacity(34);
-        bytes.push(SESSION_CURSOR_KIND);
-        bytes.push(CURSOR_VERSION);
+    pub fn to_bytes(self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(SESSION_CURSOR_PLAINTEXT_SIZE);
+        bytes.push(SESSION_CURSOR_VERSION);
         bytes.extend_from_slice(&self.last_active_micros.to_be_bytes());
-        bytes.extend_from_slice(&self.created_micros.to_be_bytes());
-        bytes.extend_from_slice(self.oid.as_bytes());
-        URL_SAFE_NO_PAD.encode(bytes)
+        bytes.extend_from_slice(&self.id.to_be_bytes());
+        bytes
     }
 
-    pub fn decode(value: &str) -> Result<Self, InvalidCursor> {
-        let bytes = URL_SAFE_NO_PAD
-            .decode(value.as_bytes())
-            .map_err(|_| InvalidCursor)?;
-        if bytes.len() != 34 || bytes[0] != SESSION_CURSOR_KIND || bytes[1] != CURSOR_VERSION {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidCursor> {
+        if bytes.len() != SESSION_CURSOR_PLAINTEXT_SIZE || bytes[0] != SESSION_CURSOR_VERSION {
             return Err(InvalidCursor);
         }
         Ok(Self {
-            last_active_micros: i64::from_be_bytes(bytes[2..10].try_into().unwrap()),
-            created_micros: i64::from_be_bytes(bytes[10..18].try_into().unwrap()),
-            oid: Uuid::from_slice(&bytes[18..]).map_err(|_| InvalidCursor)?,
+            last_active_micros: i64::from_be_bytes(bytes[1..9].try_into().unwrap()),
+            id: i64::from_be_bytes(bytes[9..17].try_into().unwrap()),
         })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtectedSessionCursor(String);
+
+impl ProtectedSessionCursor {
+    #[must_use]
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl CursorType for ProtectedSessionCursor {
+    type Error = InvalidCursor;
+
+    fn decode_cursor(value: &str) -> Result<Self, Self::Error> {
+        if value.is_empty()
+            || value.len() > MAX_PROTECTED_CURSOR_LENGTH
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err(InvalidCursor);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    fn encode_cursor(&self) -> String {
+        self.0.clone()
     }
 }
 
@@ -58,33 +84,27 @@ impl std::fmt::Display for InvalidCursor {
     }
 }
 
-impl CursorType for SessionCursor {
-    type Error = InvalidCursor;
-
-    fn decode_cursor(value: &str) -> Result<Self, Self::Error> {
-        Self::decode(value)
-    }
-
-    fn encode_cursor(&self) -> String {
-        self.encode()
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use async_graphql::connection::CursorType as _;
     use chrono::{TimeZone, Utc};
-    use uuid::Uuid;
 
-    use super::SessionCursor;
+    use super::{ProtectedSessionCursor, SessionCursor};
 
     #[test]
-    fn session_cursor_round_trips_binary_sort_key() {
+    fn session_cursor_plaintext_round_trips_the_database_sort_key() {
         let cursor = SessionCursor::new(
             Utc.timestamp_micros(1_800_000_000_123_456).unwrap(),
-            Utc.timestamp_micros(1_700_000_000_654_321).unwrap(),
-            Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap(),
+            9_223_372_036_854,
         );
 
-        assert_eq!(SessionCursor::decode(&cursor.encode()), Ok(cursor));
+        assert_eq!(SessionCursor::from_bytes(&cursor.to_bytes()), Ok(cursor));
+        assert_eq!(cursor.to_bytes().len(), 17);
+    }
+
+    #[test]
+    fn protected_cursor_rejects_non_base64url_input_early() {
+        assert!(ProtectedSessionCursor::decode_cursor("not/a/cursor").is_err());
+        assert!(ProtectedSessionCursor::decode_cursor("").is_err());
     }
 }

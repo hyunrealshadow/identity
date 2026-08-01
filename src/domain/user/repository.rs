@@ -14,6 +14,12 @@ pub enum UserRepositoryError {
     #[error("user not found")]
     UserNotFound,
 
+    #[error("username already exists")]
+    UsernameExists,
+
+    #[error("email already exists")]
+    EmailExists,
+
     #[error("failed to update failed attempts")]
     UpdateFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 

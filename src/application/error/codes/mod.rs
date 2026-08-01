@@ -1,3 +1,4 @@
+pub mod account;
 pub mod auth;
 pub mod authorize;
 pub mod authorize_http;
@@ -26,6 +27,7 @@ mod tests {
             include_str!("data_protection.rs"),
             14000..=14099,
         ),
+        ("account", include_str!("account.rs"), 15000..=15099),
         ("provider", include_str!("provider.rs"), 20000..=20099),
         (
             "openid_connect",

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, Set, TransactionTrait,
+    QueryOrder, QuerySelect, Set, TransactionTrait,
     sea_query::{Expr, SimpleExpr},
 };
 use uuid::Uuid;
@@ -45,6 +45,29 @@ pub struct SessionRepositoryImpl {
     db: DatabaseConnection,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct SessionSortKey {
+    pub last_active_at: DateTime<Utc>,
+    pub id: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionPageDirection {
+    Forward,
+    Backward,
+}
+
+pub struct SessionPage {
+    pub items: Vec<SessionPageItem>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+}
+
+pub struct SessionPageItem {
+    pub session: Session,
+    pub sort_key: SessionSortKey,
+}
+
 impl SessionRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
@@ -66,8 +89,7 @@ impl SessionRepositoryImpl {
         SessionEntity::find()
             .filter(session::Column::UserId.eq(user.id))
             .order_by_desc(session::Column::LastActiveAt)
-            .order_by_desc(session::Column::CreatedAt)
-            .order_by_desc(session::Column::Oid)
+            .order_by_desc(session::Column::Id)
             .all(&self.db)
             .await
             .map(|sessions| {
@@ -77,6 +99,107 @@ impl SessionRepositoryImpl {
                     .collect()
             })
             .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))
+    }
+
+    pub async fn list_page_by_user_oid(
+        &self,
+        user_oid: Uuid,
+        after: Option<SessionSortKey>,
+        before: Option<SessionSortKey>,
+        limit: usize,
+        direction: SessionPageDirection,
+    ) -> Result<SessionPage, SessionRepositoryError> {
+        let mut query = SessionEntity::find()
+            .inner_join(UserEntity)
+            .select_also(UserEntity)
+            .filter(user::Column::Oid.eq(user_oid));
+        if let Some(after) = after {
+            query = query.filter(session_cursor_condition(after, CursorComparison::After));
+        }
+        if let Some(before) = before {
+            query = query.filter(session_cursor_condition(before, CursorComparison::Before));
+        }
+        query = match direction {
+            SessionPageDirection::Forward => query
+                .order_by_desc(session::Column::LastActiveAt)
+                .order_by_desc(session::Column::Id),
+            SessionPageDirection::Backward => query
+                .order_by_asc(session::Column::LastActiveAt)
+                .order_by_asc(session::Column::Id),
+        };
+        let rows: Vec<(session::Model, Option<user::Model>)> = query
+            .limit((limit.saturating_add(1)) as u64)
+            .all(&self.db)
+            .await
+            .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))?;
+        let items = rows
+            .into_iter()
+            .filter_map(|(session, user)| {
+                user.map(|user| SessionPageItem {
+                    sort_key: SessionSortKey {
+                        last_active_at: session.last_active_at.with_timezone(&Utc),
+                        id: session.id,
+                    },
+                    session: session_to_domain(session, user.oid),
+                })
+            })
+            .collect::<Vec<_>>();
+        Ok(build_session_page(
+            items,
+            limit,
+            direction,
+            after.is_some(),
+            before.is_some(),
+        ))
+    }
+}
+
+fn build_session_page(
+    mut items: Vec<SessionPageItem>,
+    limit: usize,
+    direction: SessionPageDirection,
+    has_after_cursor: bool,
+    has_before_cursor: bool,
+) -> SessionPage {
+    let has_more = items.len() > limit;
+    items.truncate(limit);
+    if direction == SessionPageDirection::Backward {
+        items.reverse();
+    }
+    let (has_previous_page, has_next_page) = match direction {
+        SessionPageDirection::Forward => (has_after_cursor, has_more || has_before_cursor),
+        SessionPageDirection::Backward => (has_more || has_after_cursor, has_before_cursor),
+    };
+    SessionPage {
+        items,
+        has_previous_page,
+        has_next_page,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CursorComparison {
+    After,
+    Before,
+}
+
+fn session_cursor_condition(cursor: SessionSortKey, comparison: CursorComparison) -> Condition {
+    let last_active_at = cursor.last_active_at.fixed_offset();
+    match comparison {
+        CursorComparison::After => Condition::any()
+            .add(session::Column::LastActiveAt.lt(last_active_at))
+            .add(
+                Condition::all()
+                    .add(session::Column::LastActiveAt.eq(last_active_at))
+                    .add(session::Column::Id.lt(cursor.id)),
+            ),
+        CursorComparison::Before => Condition::any()
+            .add(session::Column::LastActiveAt.gt(last_active_at))
+            .add(
+                Condition::all()
+                    .add(session::Column::LastActiveAt.eq(last_active_at))
+                    .add(session::Column::Id.gt(cursor.id)),
+            ),
     }
 }
 
@@ -261,12 +384,17 @@ impl SessionRepository for SessionRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::session_to_domain;
+    use sea_orm::{DbBackend, EntityTrait as _, QueryFilter as _, QueryTrait as _};
+
+    use super::{
+        CursorComparison, SessionPageItem, SessionSortKey, session_cursor_condition,
+        session_to_domain,
+    };
     use chrono::{DateTime, Utc};
     use uuid::Uuid;
 
     use crate::database::entity::session;
-    use identity_domain::auth::SessionStatus;
+    use identity_domain::auth::{SessionOid, SessionStatus, model::Session};
 
     #[test]
     fn session_to_domain_wraps_required_timestamps_in_some() {
@@ -305,5 +433,101 @@ mod tests {
         );
         assert_eq!(session.expires_at, Some(expires_at.with_timezone(&Utc)));
         assert_eq!(session.created_at, created_at.with_timezone(&Utc));
+    }
+
+    #[test]
+    fn relay_cursor_filter_uses_the_complete_stable_sort_key() {
+        let cursor = SessionSortKey {
+            last_active_at: "2026-08-01T12:00:00Z".parse().unwrap(),
+            id: 42,
+        };
+        let statement = session::Entity::find()
+            .filter(session_cursor_condition(cursor, CursorComparison::After))
+            .build(DbBackend::Postgres)
+            .to_string();
+
+        assert!(statement.contains(r#""session"."last_active_at" <"#));
+        assert!(statement.contains(r#""session"."id" <"#));
+        assert!(statement.contains(" OR "));
+    }
+
+    #[test]
+    fn backward_relay_page_restores_connection_order_and_reports_boundaries() {
+        let first_oid = Uuid::from_u128(1);
+        let second_oid = Uuid::from_u128(2);
+        let third_oid = Uuid::from_u128(3);
+        let page = super::build_session_page(
+            vec![
+                page_item(1, first_oid),
+                page_item(2, second_oid),
+                page_item(3, third_oid),
+            ],
+            2,
+            super::SessionPageDirection::Backward,
+            false,
+            true,
+        );
+
+        assert_eq!(
+            page.items
+                .iter()
+                .map(|item| Uuid::from(item.session.oid))
+                .collect::<Vec<_>>(),
+            vec![second_oid, first_oid]
+        );
+        assert!(page.has_previous_page);
+        assert!(page.has_next_page);
+    }
+
+    #[test]
+    fn first_relay_page_only_reports_a_next_page_when_one_more_row_exists() {
+        let page = super::build_session_page(
+            vec![
+                page_item(3, Uuid::from_u128(3)),
+                page_item(2, Uuid::from_u128(2)),
+                page_item(1, Uuid::from_u128(1)),
+            ],
+            2,
+            super::SessionPageDirection::Forward,
+            false,
+            false,
+        );
+
+        assert!(!page.has_previous_page);
+        assert!(page.has_next_page);
+    }
+
+    fn domain_session(oid: Uuid) -> Session {
+        let now = Utc::now();
+        Session {
+            oid: SessionOid(oid),
+            user_oid: Uuid::nil(),
+            status: SessionStatus::ACTIVE.to_owned(),
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            last_active_at: Some(now),
+            expires_at: None,
+            revoked_at: None,
+            created_at: now,
+            acr: None,
+            acr_expires_at: None,
+        }
+    }
+
+    fn page_item(id: i64, oid: Uuid) -> SessionPageItem {
+        let session = domain_session(oid);
+        SessionPageItem {
+            sort_key: SessionSortKey {
+                last_active_at: session.last_active_at.unwrap(),
+                id,
+            },
+            session,
+        }
     }
 }
