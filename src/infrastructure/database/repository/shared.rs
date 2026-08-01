@@ -1,4 +1,6 @@
 use chrono::{DateTime, FixedOffset, Utc};
+use identity_domain::auth::SessionOid;
+use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement};
 
 /// Sentinel value used to represent "no expiry" in the database,
 /// since nullable timestamp columns would require schema changes.
@@ -37,4 +39,43 @@ pub fn decode_nonnullable_expiry(value: DateTime<FixedOffset>) -> Option<DateTim
 /// but represent optional expiry in the domain model.
 pub fn encode_nonnullable_expiry(value: Option<DateTime<Utc>>) -> DateTime<FixedOffset> {
     value.map(Into::into).unwrap_or_else(non_expiring_timestamp)
+}
+
+/// Serializes token issuance and revocation for a session across transactions.
+pub async fn lock_session<C: ConnectionTrait>(
+    connection: &C,
+    oid: SessionOid,
+) -> Result<(), DbErr> {
+    connection
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT pg_advisory_xact_lock($1)",
+            [session_lock_id(oid).into()],
+        ))
+        .await?;
+    Ok(())
+}
+
+fn session_lock_id(oid: SessionOid) -> i64 {
+    let uuid = uuid::Uuid::from(oid);
+    let bytes: [u8; 8] = uuid.as_bytes()[..8]
+        .try_into()
+        .expect("UUID always contains eight leading bytes");
+    i64::from_be_bytes(bytes) ^ 0x5345_5353_494f_4e00_i64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::session_lock_id;
+    use identity_domain::auth::SessionOid;
+    use uuid::Uuid;
+
+    #[test]
+    fn session_lock_id_is_stable_and_session_specific() {
+        let first = SessionOid(Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap());
+        let second = SessionOid(Uuid::parse_str("019c1234-5678-7abd-9def-0123456789ab").unwrap());
+
+        assert_eq!(session_lock_id(first), session_lock_id(first));
+        assert_ne!(session_lock_id(first), session_lock_id(second));
+    }
 }

@@ -23,6 +23,8 @@ pub struct AppConfig {
     pub settings: SettingsConfig,
     #[serde(default)]
     pub install: InstallConfig,
+    #[serde(default)]
+    pub openid_connect: OpenIdConnectConfig,
 }
 
 impl AppConfig {
@@ -147,6 +149,32 @@ impl Default for ServerConfig {
             host: None,
             tls: TlsConfig::default(),
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenIdConnectConfig {
+    #[serde(default)]
+    pub dynamic_registration: DynamicClientRegistrationConfig,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicClientRegistrationConfig {
+    /// Optional RFC 7591 initial access token. When absent, registration is
+    /// open if the database-backed dynamic-registration setting is enabled.
+    #[serde(default)]
+    pub initial_access_token: Option<String>,
+}
+
+impl DynamicClientRegistrationConfig {
+    #[must_use]
+    pub fn required_initial_access_token(&self) -> Option<&str> {
+        self.initial_access_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
     }
 }
 

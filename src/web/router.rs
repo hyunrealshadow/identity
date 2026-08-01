@@ -24,6 +24,9 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
         .hoop(ResolveClientIp::new(&config.server.tls.trusted_proxies))
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state.clone()))
+        .hoop(salvo::affix_state::inject(
+            config.openid_connect.dynamic_registration.clone(),
+        ))
         .push(controllers::install::status_routes())
         .push(
             Router::with_path("static/{**path}")

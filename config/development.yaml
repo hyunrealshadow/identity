@@ -111,3 +111,9 @@ graphql:
 
 settings:
   refresh_interval_secs: {{ get_env(name="SETTINGS_REFRESH_INTERVAL_SECS", default="30") }}
+
+openid_connect:
+  dynamic_registration:
+    # Leave empty for RFC 7591 open registration. Set this in production to
+    # require the same Bearer token on POST /oauth2/register.
+    initial_access_token: {{ get_env(name="OIDC_REGISTRATION_INITIAL_ACCESS_TOKEN", default="") }}

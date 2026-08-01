@@ -122,12 +122,12 @@ impl LoginRepository for MockLoginRepository {
         &self,
         login_oid: uuid::Uuid,
         failure_reason: Option<&str>,
-    ) -> Result<(), LoginRepositoryError> {
+    ) -> Result<i32, LoginRepositoryError> {
         self.increment_failed_attempts_calls
             .lock()
             .unwrap()
             .push((login_oid, failure_reason.map(str::to_owned)));
-        Ok(())
+        Ok(1)
     }
 
     async fn reset_failed_attempts(

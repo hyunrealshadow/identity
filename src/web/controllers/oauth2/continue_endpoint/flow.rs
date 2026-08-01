@@ -96,6 +96,7 @@ pub(super) async fn handle_continue(
             session_oid,
             user_oid,
             auth_time,
+            acr,
         } => ctx
             .services()
             .oidc_authorize()
@@ -105,6 +106,7 @@ pub(super) async fn handle_continue(
                 user_oid,
                 selected_protected_session_id,
                 auth_time,
+                acr,
             )
             .await
             .map(|redirect| {

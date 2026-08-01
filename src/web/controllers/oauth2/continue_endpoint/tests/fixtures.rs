@@ -488,7 +488,7 @@ pub(super) async fn continue_state(
         .append_query_results([[login_model.clone()]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_model.clone()]]);
-    let db = match bound_session_model {
+    let db = match bound_session_model.clone() {
         Some(session) => db.append_query_results([[session]]),
         None => db,
     };
@@ -520,14 +520,24 @@ pub(super) async fn continue_state(
         db
     };
 
+    let db = db.append_query_results([[(authorization_model.clone(), client_model.clone())]]);
+    let db = match bound_session_model {
+        Some(session) => db.append_query_results([[session]]),
+        None => db,
+    };
     let db = db
-        .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_code_model]])
-        .append_exec_results([MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
+        .append_exec_results([
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+        ])
         .into_connection();
 
     let i18n = build_i18n().unwrap();

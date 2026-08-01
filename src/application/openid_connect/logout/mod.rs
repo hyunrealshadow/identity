@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+#[cfg(test)]
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use josekit::{
     jws::{
@@ -18,7 +19,7 @@ use crate::{
             AppError,
             codes::{common::CommonErrorCode, openid_connect::OpenIdConnectErrorCode},
         },
-        openid_connect::provider::OpenIdProviderService,
+        openid_connect::{jose::asymmetric_verifier_from_pem, provider::OpenIdProviderService},
     },
     domain::{
         key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
@@ -66,8 +67,8 @@ pub enum LogoutOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct IdTokenHintClaims {
-    issuer: Option<String>,
     audience: Vec<String>,
+    authorized_party: Option<String>,
 }
 
 pub struct LogoutService {
@@ -110,6 +111,11 @@ impl LogoutService {
         &self,
         request: RpInitiatedLogoutRequest,
     ) -> Result<LogoutOutcome, AppError> {
+        let id_token_hint = match request.id_token_hint.as_deref() {
+            Some(raw) => Some(self.verify_id_token_hint(raw).await?),
+            None => None,
+        };
+
         let Some(raw_redirect_uri) = request.post_logout_redirect_uri.as_deref() else {
             return self
                 .outcome_with_frontchannel_notifications(
@@ -125,15 +131,6 @@ impl LogoutService {
                 .with_source(error)
         })?;
 
-        let id_token_hint = request
-            .id_token_hint
-            .as_deref()
-            .map(parse_id_token_hint_claims)
-            .transpose()?;
-        if let Some(claims) = id_token_hint.as_ref() {
-            self.validate_id_token_hint_issuer(claims)?;
-        }
-
         let client_id = request
             .client_id
             .as_deref()
@@ -145,6 +142,21 @@ impl LogoutService {
         let client_oid = Uuid::parse_str(&client_id).map_err(|error| {
             AppError::from_code(OpenIdConnectErrorCode::LogoutClientInvalid).with_source(error)
         })?;
+
+        if id_token_hint.as_ref().is_some_and(|claims| {
+            !claims
+                .audience
+                .iter()
+                .any(|audience| audience == &client_id)
+                || claims
+                    .authorized_party
+                    .as_ref()
+                    .is_some_and(|authorized_party| authorized_party != &client_id)
+        }) {
+            return Err(AppError::from_code(
+                OpenIdConnectErrorCode::IdTokenHintInvalid,
+            ));
+        }
 
         let client = self
             .client_repo
@@ -407,19 +419,70 @@ impl LogoutService {
             .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
     }
 
-    fn validate_id_token_hint_issuer(&self, claims: &IdTokenHintClaims) -> Result<(), AppError> {
-        let issuer = self.provider_service.issuer()?;
-        if claims
-            .issuer
-            .as_deref()
-            .is_some_and(|value| value == issuer.as_str())
+    async fn verify_id_token_hint(&self, raw: &str) -> Result<IdTokenHintClaims, AppError> {
+        let invalid = || AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid);
+        let header = jwt::decode_header(raw).map_err(|_| invalid())?;
+        let alg = header
+            .claim("alg")
+            .and_then(|value| value.as_str())
+            .filter(|alg| !alg.eq_ignore_ascii_case("none"))
+            .ok_or_else(invalid)?;
+        if header
+            .claim("typ")
+            .and_then(|value| value.as_str())
+            .is_some_and(|typ| typ != "JWT")
         {
-            return Ok(());
+            return Err(invalid());
         }
 
-        Err(AppError::from_code(
-            OpenIdConnectErrorCode::IdTokenHintIssuerInvalid,
-        ))
+        let keys = self
+            .key_repo
+            .list_available_asymmetric()
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        let mut verified_payload = None;
+        for key in keys {
+            let KeyData::Asymmetric(data) = key.data else {
+                continue;
+            };
+            let Ok(verifier) = asymmetric_verifier_from_pem(alg, data.public_key.as_bytes()) else {
+                continue;
+            };
+            if let Ok((payload, _)) = jwt::decode_with_verifier(raw, verifier.as_ref()) {
+                verified_payload = Some(payload);
+                break;
+            }
+        }
+        let payload = verified_payload.ok_or_else(invalid)?;
+        if payload.subject().is_none() || payload.issued_at().is_none() {
+            return Err(invalid());
+        }
+
+        let issuer = self.provider_service.issuer()?;
+        if payload.issuer() != Some(issuer.as_str()) {
+            return Err(AppError::from_code(
+                OpenIdConnectErrorCode::IdTokenHintIssuerInvalid,
+            ));
+        }
+
+        let audience = payload
+            .audience()
+            .filter(|audience| !audience.is_empty())
+            .ok_or_else(invalid)?
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let authorized_party = payload
+            .claim("azp")
+            .and_then(|value| value.as_str())
+            .map(str::to_owned);
+
+        Ok(IdTokenHintClaims {
+            audience,
+            authorized_party,
+        })
     }
 }
 
@@ -443,60 +506,12 @@ fn validate_registered_post_logout_redirect_uri(
 }
 
 fn audience_client_id(claims: Option<&IdTokenHintClaims>) -> Option<String> {
-    claims.and_then(|claims| claims.audience.first().cloned())
-}
-
-fn parse_id_token_hint_claims(raw: &str) -> Result<IdTokenHintClaims, AppError> {
-    let header_segment = raw
-        .split('.')
-        .next()
-        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid))?;
-    let header = URL_SAFE_NO_PAD.decode(header_segment).map_err(|error| {
-        AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid).with_source(error)
-    })?;
-    let header = serde_json::from_slice::<serde_json::Value>(&header).map_err(|error| {
-        AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid).with_source(error)
-    })?;
-    if header
-        .get("alg")
-        .and_then(|value| value.as_str())
-        .is_none_or(|alg| alg.eq_ignore_ascii_case("none"))
-    {
-        return Err(AppError::from_code(
-            OpenIdConnectErrorCode::IdTokenHintInvalid,
-        ));
-    }
-
-    let payload_segment = raw
-        .split('.')
-        .nth(1)
-        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid))?;
-    let payload = URL_SAFE_NO_PAD.decode(payload_segment).map_err(|error| {
-        AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid).with_source(error)
-    })?;
-    let payload = serde_json::from_slice::<serde_json::Value>(&payload).map_err(|error| {
-        AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid).with_source(error)
-    })?;
-
-    let issuer = payload
-        .get("iss")
-        .and_then(|value| value.as_str())
-        .map(str::to_owned);
-    let audience = match payload.get("aud") {
-        Some(value) if value.is_string() => value
-            .as_str()
-            .map(|value| vec![value.to_owned()])
-            .unwrap_or_default(),
-        Some(value) if value.is_array() => value
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|value| value.as_str().map(str::to_owned))
-            .collect(),
-        _ => Vec::new(),
-    };
-
-    Ok(IdTokenHintClaims { issuer, audience })
+    claims.and_then(|claims| {
+        claims
+            .authorized_party
+            .clone()
+            .or_else(|| (claims.audience.len() == 1).then(|| claims.audience[0].clone()))
+    })
 }
 
 fn build_logout_token_signer(
@@ -525,17 +540,6 @@ fn build_logout_token_signer(
 }
 
 #[cfg(test)]
-fn signed_like_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
-    let payload = serde_json::json!({
-        "iss": issuer,
-        "aud": audience.to_string()
-    });
-    let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256"}"#);
-    let payload = URL_SAFE_NO_PAD.encode(payload.to_string());
-    format!("{header}.{payload}.signature")
-}
-
-#[cfg(test)]
 fn unsigned_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
     let payload = serde_json::json!({
         "iss": issuer,
@@ -550,7 +554,7 @@ fn unsigned_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
 mod tests {
     use super::{
         LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
-        signed_like_id_token_hint_for_test, unsigned_id_token_hint_for_test,
+        unsigned_id_token_hint_for_test,
     };
     use crate::{
         domain::{
@@ -574,7 +578,10 @@ mod tests {
     use async_trait::async_trait;
     use chrono::Utc;
     use identity_domain::auth::SessionOid;
-    use josekit::{jws::RS256, jwt};
+    use josekit::{
+        jws::{JwsHeader, RS256},
+        jwt::{self, JwtPayload},
+    };
     use openssl::rsa::Rsa;
     use std::{collections::HashMap, sync::Arc};
     use url::Url;
@@ -736,6 +743,43 @@ mod tests {
         }
     }
 
+    fn signed_id_token_hint_for_test(
+        signing: &SigningMaterial,
+        issuer: &str,
+        audience: Uuid,
+    ) -> String {
+        let KeyData::Asymmetric(key) = &signing.key.data else {
+            panic!("expected asymmetric signing key");
+        };
+        let mut header = JwsHeader::new();
+        header.set_token_type("JWT");
+        header.set_key_id(Uuid::from(signing.binding.oid).to_string());
+        let now = std::time::SystemTime::now();
+        let mut payload = JwtPayload::new();
+        payload.set_issuer(issuer);
+        payload.set_subject(Uuid::new_v4().to_string());
+        payload.set_audience(vec![audience.to_string()]);
+        payload.set_issued_at(&now);
+        payload.set_expires_at(&(now - std::time::Duration::from_secs(60)));
+        payload
+            .set_claim("azp", Some(serde_json::json!(audience.to_string())))
+            .unwrap();
+        let signer = RS256.signer_from_pem(key.private_key.as_bytes()).unwrap();
+        jwt::encode_with_signer(&payload, &header, &signer).unwrap()
+    }
+
+    fn service_with_client_and_signing(
+        client_oid: Uuid,
+        post_logout_redirect_uri: Option<&str>,
+    ) -> (LogoutService, SigningMaterial) {
+        service_with_clients_and_signing(vec![test_client(
+            client_oid,
+            post_logout_redirect_uri,
+            None,
+            None,
+        )])
+    }
+
     fn service_with_clients_and_signing(
         clients: Vec<OpenIdConnectClient>,
     ) -> (LogoutService, SigningMaterial) {
@@ -813,12 +857,15 @@ mod tests {
     #[tokio::test]
     async fn validates_registered_post_logout_redirect_uri_and_preserves_state() {
         let client_oid = Uuid::new_v4();
-        let service =
-            service_with_client(client_oid, Some("https://rp.example.com/logout/callback"));
+        let (service, signing) = service_with_client_and_signing(
+            client_oid,
+            Some("https://rp.example.com/logout/callback"),
+        );
 
         let outcome = service
             .rp_initiated_logout(RpInitiatedLogoutRequest {
-                id_token_hint: Some(signed_like_id_token_hint_for_test(
+                id_token_hint: Some(signed_id_token_hint_for_test(
+                    &signing,
                     "https://identity.example.com/",
                     client_oid,
                 )),
@@ -845,12 +892,15 @@ mod tests {
     #[tokio::test]
     async fn rejects_unregistered_post_logout_redirect_uri() {
         let client_oid = Uuid::new_v4();
-        let service =
-            service_with_client(client_oid, Some("https://rp.example.com/logout/callback"));
+        let (service, signing) = service_with_client_and_signing(
+            client_oid,
+            Some("https://rp.example.com/logout/callback"),
+        );
 
         let error = service
             .rp_initiated_logout(RpInitiatedLogoutRequest {
-                id_token_hint: Some(signed_like_id_token_hint_for_test(
+                id_token_hint: Some(signed_id_token_hint_for_test(
+                    &signing,
                     "https://identity.example.com/",
                     client_oid,
                 )),
@@ -942,7 +992,7 @@ mod tests {
     async fn frontchannel_logout_preserves_post_logout_redirect_uri() {
         let client_oid = Uuid::new_v4();
         let session_oid = SessionOid(Uuid::new_v4());
-        let service = service_with_clients(vec![test_client(
+        let (service, signing) = service_with_clients_and_signing(vec![test_client(
             client_oid,
             Some("https://rp.example.com/logout/callback"),
             Some("https://rp.example.com/frontchannel_logout"),
@@ -951,7 +1001,8 @@ mod tests {
 
         let outcome = service
             .rp_initiated_logout(RpInitiatedLogoutRequest {
-                id_token_hint: Some(signed_like_id_token_hint_for_test(
+                id_token_hint: Some(signed_id_token_hint_for_test(
+                    &signing,
                     "https://identity.example.com/",
                     client_oid,
                 )),
@@ -1102,12 +1153,15 @@ mod tests {
     #[tokio::test]
     async fn rejects_id_token_hint_from_another_issuer_when_redirecting() {
         let client_oid = Uuid::new_v4();
-        let service =
-            service_with_client(client_oid, Some("https://rp.example.com/logout/callback"));
+        let (service, signing) = service_with_client_and_signing(
+            client_oid,
+            Some("https://rp.example.com/logout/callback"),
+        );
 
         let error = service
             .rp_initiated_logout(RpInitiatedLogoutRequest {
-                id_token_hint: Some(signed_like_id_token_hint_for_test(
+                id_token_hint: Some(signed_id_token_hint_for_test(
+                    &signing,
                     "https://other.example.com/",
                     client_oid,
                 )),
@@ -1123,5 +1177,75 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.code(), 21004);
+    }
+
+    #[tokio::test]
+    async fn rejects_id_token_hint_with_untrusted_signature() {
+        let client_oid = Uuid::new_v4();
+        let (service, _) = service_with_client_and_signing(
+            client_oid,
+            Some("https://rp.example.com/logout/callback"),
+        );
+        let untrusted_signing = signing_material();
+
+        let error = service
+            .rp_initiated_logout(RpInitiatedLogoutRequest {
+                id_token_hint: Some(signed_id_token_hint_for_test(
+                    &untrusted_signing,
+                    "https://identity.example.com/",
+                    client_oid,
+                )),
+                client_id: None,
+                logout_hint: None,
+                post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
+                state: None,
+                ui_locales: None,
+                session_oid: None,
+                protected_session_id: None,
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), 21010);
+    }
+
+    #[tokio::test]
+    async fn rejects_client_id_that_does_not_match_id_token_hint() {
+        let hinted_client_oid = Uuid::new_v4();
+        let requested_client_oid = Uuid::new_v4();
+        let (service, signing) = service_with_clients_and_signing(vec![
+            test_client(
+                hinted_client_oid,
+                Some("https://rp.example.com/logout/callback"),
+                None,
+                None,
+            ),
+            test_client(
+                requested_client_oid,
+                Some("https://rp.example.com/logout/callback"),
+                None,
+                None,
+            ),
+        ]);
+
+        let error = service
+            .rp_initiated_logout(RpInitiatedLogoutRequest {
+                id_token_hint: Some(signed_id_token_hint_for_test(
+                    &signing,
+                    "https://identity.example.com/",
+                    hinted_client_oid,
+                )),
+                client_id: Some(requested_client_oid.to_string()),
+                logout_hint: None,
+                post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
+                state: None,
+                ui_locales: None,
+                session_oid: None,
+                protected_session_id: None,
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), 21010);
     }
 }

@@ -149,15 +149,5 @@ pub(crate) fn sector_redirect_uris_include_registered_redirects(
 }
 
 fn default_scopes() -> Vec<String> {
-    [
-        StandardScopes::OPENID,
-        StandardScopes::PROFILE,
-        StandardScopes::EMAIL,
-        StandardScopes::ADDRESS,
-        StandardScopes::PHONE,
-        StandardScopes::OFFLINE_ACCESS,
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
+    vec![StandardScopes::OPENID.to_owned()]
 }

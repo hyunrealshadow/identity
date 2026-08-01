@@ -8,7 +8,7 @@ use async_graphql::{
     parser::{parse_query, types::OperationType},
 };
 use http::{HeaderValue, Method, StatusCode, header};
-use identity_domain::{auth::SessionStatus, user::repository::UserRepository};
+use identity_domain::user::repository::UserRepository;
 use identity_infrastructure::{
     AppState,
     config::{GraphqlConfig, ServerConfig},
@@ -134,23 +134,6 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             return;
         }
     };
-    let session_valid = matches!(
-        state
-            .services()
-            .session()
-            .session_repo
-            .find_by_oid(claims.session_oid)
-            .await,
-        Ok(Some(session))
-            if session.user_oid == uuid::Uuid::from(claims.user_oid)
-                && session.status == SessionStatus::ACTIVE
-                && session.revoked_at.is_none()
-                && session.expires_at.is_none_or(|expires_at| expires_at >= chrono::Utc::now())
-    );
-    if !session_valid {
-        write_unauthorized(res, "invalid access token");
-        return;
-    }
     let user_repo = UserRepositoryImpl::new(state.resources().db().clone());
     let user = match user_repo.find_by_oid(claims.user_oid).await {
         Ok(Some(user)) if user.enabled && !user.locked => user,

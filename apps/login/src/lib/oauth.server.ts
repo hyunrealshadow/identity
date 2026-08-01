@@ -1,40 +1,53 @@
-import {
-  createHash,
-  randomBytes,
-  timingSafeEqual,
-} from 'node:crypto'
-import {
-  getRequestHeader,
-  setResponseHeader,
-} from '@tanstack/react-start/server'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import { loadClientCredentials } from './client-credentials.server'
+import {
+  type OAuthFlowSession,
+  type OAuthTokenSession,
+  useAuthorizationSession,
+  useOAuthFlowSession,
+  useMfaUiSession,
+} from './oauth-session.server'
 
 const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
-const AUTH_COOKIE = '__Host-identity.account'
-const FLOW_COOKIE = '__Host-identity.oauth'
 const API_RESOURCE = 'urn:identity:graphql'
 const SCOPES =
   'openid profile email offline_access account session password.change'
-
-interface OAuthFlow {
-  state: string
-  verifier: string
-}
-
-interface OAuthTokens {
-  access_token: string
-  refresh_token?: string
-  expires_at: number
-}
+const REAUTHENTICATION_SCOPES = {
+  password: 'openid password.change',
+  account: 'openid account.update',
+  mfa: 'openid account.update',
+} as const
+const ACR_PASSWORD = 'urn:oasis:names:tc:SAML:2.0:ac:classes:Password'
+const ACR_MFA = 'urn:identity:acr:mfa'
 
 interface TokenResponse {
   access_token: string
   refresh_token?: string
+  id_token?: string
   expires_in: number
 }
 
 export async function startAuthorization() {
+  return startAuthorizationFlow('signin', '/')
+}
+
+export async function startReauthorization(
+  returnTo: string | undefined,
+  purpose: 'password' | 'account' | 'mfa' = 'password',
+) {
+  return startAuthorizationFlow(
+    'reauth',
+    safeReturnTo(returnTo, '/?message=reauthenticated'),
+    purpose,
+  )
+}
+
+async function startAuthorizationFlow(
+  mode: OAuthFlowSession['mode'],
+  returnTo: string,
+  reauthPurpose: 'password' | 'account' | 'mfa' = 'password',
+) {
   const credentials = await loadClientCredentials()
   const state = randomBytes(32).toString('base64url')
   const verifier = randomBytes(48).toString('base64url')
@@ -45,31 +58,47 @@ export async function startAuthorization() {
     response_type: 'code',
     client_id: credentials.client_id,
     redirect_uri: redirectUri,
-    scope: SCOPES,
+    scope:
+      mode === 'reauth'
+        ? REAUTHENTICATION_SCOPES[reauthPurpose]
+        : SCOPES,
     resource: API_RESOURCE,
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
   }).toString()
+  if (mode === 'reauth') {
+    authorizeUrl.searchParams.set('prompt', 'login')
+    authorizeUrl.searchParams.set('max_age', '0')
+    authorizeUrl.searchParams.set(
+      'acr_values',
+      reauthPurpose === 'mfa' ? ACR_MFA : ACR_PASSWORD,
+    )
+  }
 
-  return redirect(authorizeUrl, [
-    serializeCookie(FLOW_COOKIE, { state, verifier } satisfies OAuthFlow, 600),
-  ])
+  const flow = await useOAuthFlowSession()
+  await flow.update({
+    state,
+    verifier,
+    mode,
+    return_to: returnTo,
+    reauth_purpose: mode === 'reauth' ? reauthPurpose : undefined,
+  } satisfies OAuthFlowSession)
+
+  return redirect(authorizeUrl)
 }
 
 export async function finishAuthorization(request: Request) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const returnedState = url.searchParams.get('state')
-  const flow = readJsonCookie<OAuthFlow>(
-    request.headers.get('cookie'),
-    FLOW_COOKIE,
-  )
+  const flow = await useOAuthFlowSession()
   if (
     !code ||
     !returnedState ||
-    !flow ||
-    !constantTimeEqual(returnedState, flow.state)
+    typeof flow.data.state !== 'string' ||
+    typeof flow.data.verifier !== 'string' ||
+    !constantTimeEqual(returnedState, flow.data.state)
   ) {
     return new Response('Invalid OAuth callback state', { status: 400 })
   }
@@ -80,37 +109,115 @@ export async function finishAuthorization(request: Request) {
       grant_type: 'authorization_code',
       code,
       redirect_uri: callbackUrl(credentials.application_url),
-      code_verifier: flow.verifier,
+      code_verifier: flow.data.verifier,
     }),
     credentials.client_id,
     credentials.client_secret,
   )
 
-  return redirect(new URL('/', credentials.application_url), [
-    clearCookie(FLOW_COOKIE),
-    serializeCookie(AUTH_COOKIE, toStoredTokens(tokens), 30 * 24 * 60 * 60),
-  ])
+  const authorization = await useAuthorizationSession()
+  const mode = flow.data.mode === 'reauth' ? 'reauth' : 'signin'
+  const returnTo = safeReturnTo(flow.data.return_to, '/')
+  if (mode === 'reauth') {
+    await authorization.update({
+      elevated_access_token: tokens.access_token,
+      elevated_expires_at: Date.now() + tokens.expires_in * 1000,
+    })
+  } else {
+    await authorization.update(toStoredTokens(tokens))
+  }
+  await flow.clear()
+
+  return redirect(new URL(returnTo, credentials.application_url))
 }
 
-export function clearAuthorizationCookie() {
-  setResponseHeader('set-cookie', clearCookie(AUTH_COOKIE))
+export async function clearAuthorizationCookie() {
+  await (await useAuthorizationSession()).clear()
+  await (await useMfaUiSession()).clear()
 }
 
-export function finishLogout(applicationUrl: string) {
+export async function finishLogout(applicationUrl: string) {
+  const authorization = await useAuthorizationSession()
+  const idToken =
+    typeof authorization.data.id_token === 'string'
+      ? authorization.data.id_token
+      : undefined
+  await authorization.clear()
+  await (await useMfaUiSession()).clear()
+  if (idToken) {
+    const logoutUrl = new URL('/oauth2/logout', API_URL)
+    logoutUrl.search = new URLSearchParams({
+      id_token_hint: idToken,
+      post_logout_redirect_uri: new URL('/', applicationUrl).toString(),
+    }).toString()
+    return new Response(null, {
+      status: 303,
+      headers: { location: logoutUrl.toString() },
+    })
+  }
   return new Response(null, {
     status: 303,
-    headers: {
-      location: new URL('/', applicationUrl).toString(),
-      'set-cookie': clearCookie(AUTH_COOKIE),
-    },
+    headers: { location: new URL('/', applicationUrl).toString() },
+  })
+}
+
+export async function elevatedAccessToken() {
+  const session = await useAuthorizationSession()
+  if (
+    typeof session.data.elevated_access_token !== 'string' ||
+    typeof session.data.elevated_expires_at !== 'number' ||
+    session.data.elevated_expires_at <= Date.now() + 5_000
+  ) {
+    return
+  }
+  return session.data.elevated_access_token
+}
+
+export async function clearElevatedAuthorization() {
+  await (
+    await useAuthorizationSession()
+  ).update({
+    elevated_access_token: undefined,
+    elevated_expires_at: undefined,
+  })
+}
+
+export async function mfaUiState() {
+  const session = await useMfaUiSession()
+  return {
+    enrollment: session.data.mfa_enrollment,
+    recoveryCodes: session.data.recovery_codes,
+  }
+}
+
+export async function storeMfaEnrollment(enrollment: {
+  secret: string
+  otpauth_uri: string
+  enrollment_token: string
+}) {
+  await (await useMfaUiSession()).update({
+    mfa_enrollment: enrollment,
+    recovery_codes: undefined,
+  })
+}
+
+export async function storeRecoveryCodes(recoveryCodes: Array<string>) {
+  await (await useMfaUiSession()).update({
+    mfa_enrollment: undefined,
+    recovery_codes: recoveryCodes,
+  })
+}
+
+export async function clearMfaUiState() {
+  await (await useMfaUiSession()).update({
+    mfa_enrollment: undefined,
+    recovery_codes: undefined,
   })
 }
 
 export async function accessToken() {
-  const stored = readJsonCookie<OAuthTokens>(
-    getRequestHeader('cookie'),
-    AUTH_COOKIE,
-  )
+  const session = await useAuthorizationSession()
+  const stored = storedTokens(session.data)
   if (!stored) return
   if (stored.expires_at > Date.now() + 30_000) return stored.access_token
   if (!stored.refresh_token) return
@@ -127,20 +234,34 @@ export async function accessToken() {
   const next = toStoredTokens({
     ...refreshed,
     refresh_token: refreshed.refresh_token ?? stored.refresh_token,
+    id_token: refreshed.id_token ?? stored.id_token,
   })
-  setResponseHeader(
-    'set-cookie',
-    serializeCookie(AUTH_COOKIE, next, 30 * 24 * 60 * 60),
-  )
+  await session.update(next)
   return next.access_token
 }
 
-function toStoredTokens(tokens: TokenResponse): OAuthTokens {
+function toStoredTokens(tokens: TokenResponse): OAuthTokenSession {
   return {
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
+    id_token: tokens.id_token,
     expires_at: Date.now() + tokens.expires_in * 1000,
   }
+}
+
+function storedTokens(
+  data: Partial<OAuthTokenSession>,
+): OAuthTokenSession | undefined {
+  if (
+    typeof data.access_token !== 'string' ||
+    typeof data.expires_at !== 'number' ||
+    (data.refresh_token !== undefined &&
+      typeof data.refresh_token !== 'string') ||
+    (data.id_token !== undefined && typeof data.id_token !== 'string')
+  ) {
+    return
+  }
+  return data as OAuthTokenSession
 }
 
 async function exchangeToken(
@@ -175,34 +296,23 @@ function callbackUrl(applicationUrl: string) {
   return new URL('/oauth/callback', applicationUrl).toString()
 }
 
-function redirect(location: URL, cookies: Array<string>) {
-  const headers = new Headers({ location: location.toString() })
-  for (const cookie of cookies) headers.append('set-cookie', cookie)
-  return new Response(null, { status: 302, headers })
-}
-
-function serializeCookie(name: string, value: unknown, maxAge: number) {
-  return `${name}=${encodeURIComponent(JSON.stringify(value))}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`
-}
-
-function clearCookie(name: string) {
-  return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
-}
-
-function readJsonCookie<T>(
-  cookieHeader: string | null | undefined,
-  name: string,
-): T | undefined {
-  const encoded = cookieHeader
-    ?.split(/;\s*/)
-    .find((part) => part.startsWith(`${name}=`))
-    ?.slice(name.length + 1)
-  if (!encoded) return
-  try {
-    return JSON.parse(decodeURIComponent(encoded)) as T
-  } catch {
-    return
+function safeReturnTo(value: string | undefined, fallback: string) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return fallback
   }
+  try {
+    const url = new URL(value, 'https://identity.invalid')
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return fallback
+  }
+}
+
+function redirect(location: URL) {
+  return new Response(null, {
+    status: 302,
+    headers: { location: location.toString() },
+  })
 }
 
 function constantTimeEqual(left: string, right: string) {

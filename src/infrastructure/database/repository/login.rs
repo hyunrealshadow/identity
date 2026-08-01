@@ -243,7 +243,7 @@ impl LoginRepository for LoginRepositoryImpl {
         &self,
         login_oid: Uuid,
         failure_reason: Option<&str>,
-    ) -> Result<(), LoginRepositoryError> {
+    ) -> Result<i32, LoginRepositoryError> {
         let now = Utc::now().naive_utc();
         let mut update = LoginEntity::update_many()
             .col_expr(
@@ -263,11 +263,14 @@ impl LoginRepository for LoginRepositoryImpl {
             );
         }
 
-        update
-            .exec(&self.db)
+        let updated = update
+            .exec_with_returning(&self.db)
             .await
-            .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
-        Ok(())
+            .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?
+            .into_iter()
+            .next()
+            .ok_or(LoginRepositoryError::LoginNotFound)?;
+        Ok(updated.failed_attempts)
     }
 
     async fn bind_session(

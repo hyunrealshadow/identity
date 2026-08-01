@@ -9,6 +9,7 @@ E11006 =
     { $credential_type ->
         [password] Password sign-in is not available for this account.
         [otp] Verification code sign-in is not available for this account.
+        [recovery_code] Recovery-code sign-in is not available for this account.
        *[other] This sign-in method is not supported.
     }
 E11007 = The verification code is incorrect. Try again.
@@ -19,3 +20,6 @@ E11011 = Your session has been revoked. Please sign in again.
 E11012 = The identifier (email or username) is required.
 E11013 = The new password must contain at least 12 characters.
 E11014 = The new password must differ from the current password.
+E11015 = An authenticator app is already configured for this account.
+E11016 = No authenticator app is configured for this account.
+E11017 = The authenticator setup is invalid or has expired. Start setup again.

@@ -225,6 +225,7 @@ mod tests {
             last_active_at: Some(created_at),
             expires_at: None,
             created_at,
+            acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
         }
     }
 
@@ -238,6 +239,7 @@ mod tests {
             last_active_at: Some(Utc::now()),
             expires_at: None,
             created_at: Utc::now(),
+            acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
         };
         let other = ActiveSession {
             session_oid: SessionOid(Uuid::new_v4()),
@@ -247,6 +249,7 @@ mod tests {
             last_active_at: Some(Utc::now()),
             expires_at: None,
             created_at: Utc::now(),
+            acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
         };
 
         let sessions = [other, matching.clone()];

@@ -67,6 +67,7 @@ fn active_session() -> ActiveSession {
         last_active_at: Some(Utc::now()),
         expires_at: None,
         created_at: Utc::now(),
+        acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
     }
 }
 
@@ -87,8 +88,29 @@ fn continue_action_approves_when_consent_is_approved() {
             session_oid: selected_session.session_oid,
             user_oid: selected_session.user_oid,
             auth_time: Some(selected_session.created_at.timestamp()),
+            acr: selected_session.acr.clone(),
         }
     );
+}
+
+#[test]
+fn continue_action_uses_session_acr_instead_of_requested_acr() {
+    let selected_session = active_session();
+    let mut stored = stored(ConsentState::Approved);
+    stored.request.acr_values = Some(vec![identity_domain::auth::ACR_MFA.to_owned()]);
+
+    let action = determine_continue_action(
+        &stored,
+        &login(LoginStatus::AUTHENTICATED),
+        Some(&selected_session),
+        false,
+    );
+
+    assert!(matches!(
+        action,
+        ContinueAction::Approve { acr, .. }
+            if acr.as_deref() == Some(identity_domain::auth::ACR_PASSWORD)
+    ));
 }
 
 #[test]

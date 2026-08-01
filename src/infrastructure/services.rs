@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use identity_application::{
-    auth::{login::LoginService, session::SessionService},
+    auth::{login::LoginService, mfa::MfaService, session::SessionService},
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
     key::asymmetric::AsymmetricKeyService,
@@ -44,6 +44,8 @@ pub type AppLoginService = LoginService;
 
 pub type AppSessionService = SessionService;
 
+pub type AppMfaService = MfaService;
+
 pub type AppKeyService = AsymmetricKeyService;
 
 pub type AppInstallService = InstallService<SettingRepositoryImpl>;
@@ -63,6 +65,7 @@ pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
 pub struct AppServices {
     login: AppLoginService,
     session: AppSessionService,
+    mfa: AppMfaService,
     key: AppKeyService,
     install: AppInstallService,
     oidc: AppOpenIdProviderService,
@@ -94,20 +97,28 @@ impl AppServices {
         let oidc_client_registration_repo: Arc<dyn OpenIdConnectClientRegistrationRepository> =
             Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
         let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
+        let user_credential_repo = Arc::new(UserCredentialRepositoryImpl::new(db.clone()));
+        let totp = Arc::new(TotpVerifierImpl);
 
         Ok(Self {
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
-                Arc::new(UserCredentialRepositoryImpl::new(db.clone())),
+                user_credential_repo.clone(),
                 Arc::new(SessionRepositoryImpl::new(db.clone())),
                 Arc::new(LoginRepositoryImpl::new(db.clone())),
                 Arc::new(PasswordHasherImpl::new()),
-                Arc::new(TotpVerifierImpl),
+                totp.clone(),
                 settings.password_hash_options(),
             ),
             session: SessionService {
                 session_repo: Arc::new(SessionRepositoryImpl::new(db.clone())),
             },
+            mfa: MfaService::new(
+                user_credential_repo,
+                totp.clone(),
+                totp,
+                data_protector.clone(),
+            ),
             key: AsymmetricKeyService::new(
                 key_repo.clone(),
                 Arc::new(AsymmetricKeyGeneratorImpl),
@@ -185,8 +196,7 @@ impl AppServices {
                     .with_runtime_key_ring(settings.key_ring()),
                 ),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
-            )
-            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone()))),
+            ),
             dynamic_client_registration: DynamicClientRegistrationService::new(
                 settings.dynamic_client_registration(),
                 oidc_client_registration_repo.clone(),
@@ -205,6 +215,11 @@ impl AppServices {
     #[must_use]
     pub fn session(&self) -> &AppSessionService {
         &self.session
+    }
+
+    #[must_use]
+    pub fn mfa(&self) -> &AppMfaService {
+        &self.mfa
     }
 
     #[must_use]

@@ -17,7 +17,10 @@ use identity_domain::{
         totp::TotpVerifier,
     },
     user::{
-        model::{CredentialData, CredentialType, OtpCredentialData, Password, User},
+        model::{
+            CredentialData, CredentialType, OtpCredentialData, Password,
+            RecoveryCodeCredentialData, User,
+        },
         repository::{UserCredentialRepository, UserRepository},
     },
 };
@@ -301,6 +304,7 @@ impl LoginService {
                     .await
             }
             "otp" => self.challenge_otp(login, credential, ctx).await,
+            "recovery_code" => self.challenge_recovery_code(login, credential, ctx).await,
             _ => Err(
                 AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
                     .with_param("credential_type", credential_type),
@@ -337,23 +341,7 @@ impl LoginService {
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
 
-        // Check lock.
-        if user.locked {
-            if let Some(until) = user.locked_until {
-                if Utc::now() < until {
-                    return Err(AppError::from_code(AuthErrorCode::UserLocked));
-                }
-                if let Err(e) = self.user_repo.reset_failed_attempts(user.oid).await {
-                    tracing::error!(error = %e, "failed to reset expired lock");
-                }
-            } else {
-                return Err(AppError::from_code(AuthErrorCode::UserLocked));
-            }
-        }
-
-        if !user.enabled {
-            return Err(AppError::from_code(AuthErrorCode::UserLocked));
-        }
+        self.ensure_user_can_authenticate(&user).await?;
 
         // Load the password credential.
         let credentials = self
@@ -390,34 +378,21 @@ impl LoginService {
 
         match verify_result {
             VerifyResult::Failure => {
-                if let Err(e) = self
-                    .login_repo
+                self.login_repo
                     .increment_failed_attempts(
                         login.oid,
                         Some(&AuthErrorCode::InvalidCredential.code().to_string()),
                     )
-                    .await
-                {
-                    tracing::error!(error = %e, "failed to increment login failed attempts");
-                }
+                    .await?;
 
-                let new_attempts = user.failed_attempts + 1;
-                let lock_until = if new_attempts >= MAX_FAILED_ATTEMPTS {
-                    Some(
-                        Utc::now()
-                            + chrono::Duration::from_std(LOCK_DURATION)
-                                .unwrap_or_else(|_| chrono::Duration::seconds(900)),
-                    )
-                } else {
-                    None
-                };
-                if let Err(e) = self
+                let new_attempts = self
                     .user_repo
-                    .increment_failed_attempts(user.oid, lock_until)
-                    .await
-                {
-                    tracing::error!(error = %e, "failed to increment user failed attempts");
-                }
+                    .increment_failed_attempts(
+                        user.oid,
+                        MAX_FAILED_ATTEMPTS,
+                        failed_attempt_lock_until(),
+                    )
+                    .await?;
 
                 if new_attempts >= MAX_FAILED_ATTEMPTS {
                     return Err(AppError::from_code(AuthErrorCode::UserLocked));
@@ -453,11 +428,6 @@ impl LoginService {
                     }
                 }
 
-                // Reset failed attempts on the user.
-                if let Err(e) = self.user_repo.reset_failed_attempts(user.oid).await {
-                    tracing::error!(error = %e, "failed to reset user failed attempts");
-                }
-
                 // Check if the user has an OTP credential.
                 let otp_credentials = self
                     .credential_repo
@@ -465,6 +435,7 @@ impl LoginService {
                     .await?;
 
                 if otp_credentials.is_empty() {
+                    self.user_repo.reset_failed_attempts(user.oid).await?;
                     // No MFA — create session immediately with password ACR.
                     let session = self
                         .create_session(user.oid.into(), ctx, ACR_PASSWORD, false)
@@ -533,6 +504,7 @@ impl LoginService {
             )
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
+        self.ensure_user_can_authenticate(&user).await?;
 
         // Load the OTP credential.
         let otp_credentials = self
@@ -562,25 +534,30 @@ impl LoginService {
         let valid = self.totp_verifier.verify(&otp_data, code)?;
 
         if !valid {
-            if let Err(e) = self
+            let login_attempts = self
                 .login_repo
                 .increment_failed_attempts(
                     login.oid,
                     Some(&AuthErrorCode::InvalidOtp.code().to_string()),
                 )
-                .await
-            {
-                tracing::error!(error = %e, "failed to increment login failed attempts");
-            }
+                .await?;
+            let user_attempts = self
+                .user_repo
+                .increment_failed_attempts(
+                    user.oid,
+                    MAX_FAILED_ATTEMPTS,
+                    failed_attempt_lock_until(),
+                )
+                .await?;
 
-            let new_attempts = login.failed_attempts + 1;
-            if new_attempts >= MAX_OTP_ATTEMPTS {
+            if login_attempts >= MAX_OTP_ATTEMPTS || user_attempts >= MAX_FAILED_ATTEMPTS {
                 self.fail_login_for_too_many_otp_attempts(login.oid).await;
                 return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
             }
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         }
 
+        self.user_repo.reset_failed_attempts(user.oid).await?;
         // Create session with MFA ACR + expiry.
         let session = self
             .create_session(user.oid.into(), ctx, ACR_MFA, true)
@@ -599,6 +576,92 @@ impl LoginService {
             tracing::error!(error = %e, "failed to update login status to authenticated");
         }
 
+        Ok(ChallengeOutcome::Authenticated {
+            login,
+            session: Box::new(session),
+        })
+    }
+
+    async fn challenge_recovery_code(
+        &self,
+        login: Login,
+        code: &str,
+        ctx: SessionContext,
+    ) -> Result<ChallengeOutcome, AppError> {
+        if login.status != LoginStatus::MFA_REQUIRED {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        }
+        if login.failed_attempts >= MAX_OTP_ATTEMPTS {
+            self.fail_login_for_too_many_otp_attempts(login.oid).await;
+            return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+        }
+        let user_oid = login
+            .user_oid
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+            .into();
+        let user = self
+            .user_repo
+            .find_by_oid(user_oid)
+            .await?
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
+        self.ensure_user_can_authenticate(&user).await?;
+        let expected_hash = super::mfa::recovery_code_hash(code);
+        let credentials = self
+            .credential_repo
+            .find_by_user_oid_and_type(user_oid, CredentialType::RecoveryCode)
+            .await?;
+        let matched = credentials.into_iter().find(|credential| {
+            let CredentialData::RecoveryCode(RecoveryCodeCredentialData { hash }) =
+                &credential.data
+            else {
+                return false;
+            };
+            bool::from(subtle::ConstantTimeEq::ct_eq(
+                hash.as_bytes(),
+                expected_hash.as_bytes(),
+            ))
+        });
+        let Some(matched) = matched else {
+            let login_attempts = self
+                .login_repo
+                .increment_failed_attempts(
+                    login.oid,
+                    Some(&AuthErrorCode::InvalidOtp.code().to_string()),
+                )
+                .await?;
+            let user_attempts = self
+                .user_repo
+                .increment_failed_attempts(
+                    user_oid,
+                    MAX_FAILED_ATTEMPTS,
+                    failed_attempt_lock_until(),
+                )
+                .await?;
+            if login_attempts >= MAX_OTP_ATTEMPTS || user_attempts >= MAX_FAILED_ATTEMPTS {
+                self.fail_login_for_too_many_otp_attempts(login.oid).await;
+                return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+            }
+            return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
+        };
+        if !self.credential_repo.delete_by_oid(matched.oid).await? {
+            return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
+        }
+        self.user_repo.reset_failed_attempts(user_oid).await?;
+        let session = self
+            .create_session(Uuid::from(user_oid), ctx, ACR_MFA, true)
+            .await?;
+        if let Err(error) = self
+            .login_repo
+            .update_status(
+                login.oid,
+                LoginStatus::AUTHENTICATED,
+                Some(session.oid),
+                Some(ACR_MFA),
+            )
+            .await
+        {
+            tracing::error!(%error, "failed to authenticate recovery-code login");
+        }
         Ok(ChallengeOutcome::Authenticated {
             login,
             session: Box::new(session),
@@ -658,6 +721,28 @@ impl LoginService {
             })
             .await?)
     }
+
+    async fn ensure_user_can_authenticate(&self, user: &User) -> Result<(), AppError> {
+        if !user.enabled {
+            return Err(AppError::from_code(AuthErrorCode::UserLocked));
+        }
+        if !user.locked {
+            return Ok(());
+        }
+        match user.locked_until {
+            Some(until) if Utc::now() >= until => {
+                self.user_repo.reset_failed_attempts(user.oid).await?;
+                Ok(())
+            }
+            _ => Err(AppError::from_code(AuthErrorCode::UserLocked)),
+        }
+    }
+}
+
+fn failed_attempt_lock_until() -> chrono::DateTime<Utc> {
+    Utc::now()
+        + chrono::Duration::from_std(LOCK_DURATION)
+            .unwrap_or_else(|_| chrono::Duration::seconds(900))
 }
 
 #[cfg(test)]
@@ -668,7 +753,7 @@ mod tests {
     use chrono::Utc;
     use identity_domain::{
         auth::{
-            LoginStatus, MAX_OTP_ATTEMPTS,
+            LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
             model::{Login, Session, SessionOid},
             password::{HashOptions, PasswordHashSetting, VerifyResult},
             repository::{
@@ -745,31 +830,49 @@ mod tests {
     }
 
     struct TestUserRepo {
-        user: User,
+        user: Arc<Mutex<User>>,
     }
 
     #[async_trait]
     impl UserRepository for TestUserRepo {
         async fn find_by_identifier(&self, _identifier: &str) -> Result<User, UserRepositoryError> {
-            Ok(self.user.clone())
+            Ok(self.user.lock().unwrap().clone())
         }
 
         async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
-            Ok((self.user.oid == oid).then_some(self.user.clone()))
+            let user = self.user.lock().unwrap();
+            Ok((user.oid == oid).then(|| user.clone()))
         }
 
         async fn increment_failed_attempts(
             &self,
-            _user_oid: UserOid,
-            _lock_until: Option<chrono::DateTime<chrono::Utc>>,
-        ) -> Result<(), UserRepositoryError> {
-            Ok(())
+            user_oid: UserOid,
+            lock_threshold: i32,
+            lock_until: chrono::DateTime<chrono::Utc>,
+        ) -> Result<i32, UserRepositoryError> {
+            let mut user = self.user.lock().unwrap();
+            if user.oid != user_oid {
+                return Err(UserRepositoryError::UserNotFound);
+            }
+            user.failed_attempts += 1;
+            if user.failed_attempts >= lock_threshold {
+                user.locked = true;
+                user.locked_until = Some(lock_until);
+            }
+            Ok(user.failed_attempts)
         }
 
         async fn reset_failed_attempts(
             &self,
-            _user_oid: UserOid,
+            user_oid: UserOid,
         ) -> Result<(), UserRepositoryError> {
+            let mut user = self.user.lock().unwrap();
+            if user.oid != user_oid {
+                return Err(UserRepositoryError::UserNotFound);
+            }
+            user.failed_attempts = 0;
+            user.locked = false;
+            user.locked_until = None;
             Ok(())
         }
     }
@@ -799,6 +902,21 @@ mod tests {
             _password: &Password,
         ) -> Result<(), UserCredentialRepositoryError> {
             Ok(())
+        }
+
+        async fn replace_by_user_oid(
+            &self,
+            _user_oid: UserOid,
+            _replacements: Vec<(CredentialType, Vec<CredentialData>)>,
+        ) -> Result<(), UserCredentialRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete_by_oid(
+            &self,
+            _credential_oid: UserCredentialOid,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            Ok(true)
         }
     }
 
@@ -930,12 +1048,15 @@ mod tests {
             &self,
             login_oid: Uuid,
             _failure_reason: Option<&str>,
-        ) -> Result<(), LoginRepositoryError> {
+        ) -> Result<i32, LoginRepositoryError> {
             let mut state = self.state.lock().unwrap();
-            if let Some(login) = state.logins.iter_mut().find(|login| login.oid == login_oid) {
-                login.failed_attempts += 1;
-            }
-            Ok(())
+            let login = state
+                .logins
+                .iter_mut()
+                .find(|login| login.oid == login_oid)
+                .ok_or(LoginRepositoryError::LoginNotFound)?;
+            login.failed_attempts += 1;
+            Ok(login.failed_attempts)
         }
 
         async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
@@ -998,9 +1119,12 @@ mod tests {
         }
     }
 
-    fn otp_service(login_repo: Arc<TestLoginRepo>, user: User) -> LoginService {
-        LoginService::new(
-            Arc::new(TestUserRepo { user: user.clone() }),
+    fn otp_service(login_repo: Arc<TestLoginRepo>, user: User) -> (LoginService, Arc<Mutex<User>>) {
+        let user = Arc::new(Mutex::new(user));
+        let service = LoginService::new(
+            Arc::new(TestUserRepo {
+                user: Arc::clone(&user),
+            }),
             Arc::new(TestCredentialRepo {
                 credentials: vec![UserCredential {
                     oid: UserCredentialOid(Uuid::new_v4()),
@@ -1026,7 +1150,8 @@ mod tests {
                     parallelism: 4,
                 },
             )))),
-        )
+        );
+        (service, user)
     }
 
     fn assert_error_code(error: AppError, expected: AuthErrorCode) {
@@ -1044,7 +1169,7 @@ mod tests {
                 ..Default::default()
             })),
         });
-        let service = otp_service(Arc::clone(&login_repo), user);
+        let (service, _) = otp_service(Arc::clone(&login_repo), user);
 
         let error = service
             .challenge(
@@ -1082,7 +1207,7 @@ mod tests {
                 ..Default::default()
             })),
         });
-        let service = otp_service(Arc::clone(&login_repo), user);
+        let (service, _) = otp_service(Arc::clone(&login_repo), user);
 
         let error = service
             .challenge(
@@ -1121,7 +1246,7 @@ mod tests {
                 ..Default::default()
             })),
         });
-        let service = otp_service(login_repo.clone(), user);
+        let (service, _) = otp_service(login_repo.clone(), user);
 
         let error = service
             .challenge(
@@ -1146,5 +1271,90 @@ mod tests {
         let state = login_repo.state.lock().unwrap();
         assert_eq!(state.logins[0].failed_attempts, MAX_OTP_ATTEMPTS);
         assert_eq!(state.update_status_calls[0].1, LoginStatus::FAILED);
+    }
+
+    #[tokio::test]
+    async fn otp_failures_across_fresh_logins_lock_the_user() {
+        let user = test_user();
+        let user_oid = Uuid::from(user.oid);
+        let logins: Vec<_> = (0..=MAX_FAILED_ATTEMPTS)
+            .map(|_| test_login(user_oid, 0))
+            .collect();
+        let login_oids: Vec<_> = logins.iter().map(|login| login.oid).collect();
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins,
+                ..Default::default()
+            })),
+        });
+        let (service, user_state) = otp_service(login_repo, user);
+
+        for login_oid in &login_oids[..usize::try_from(MAX_FAILED_ATTEMPTS - 1).unwrap()] {
+            let error = service
+                .challenge(
+                    *login_oid,
+                    "otp",
+                    "000000",
+                    SessionContext {
+                        device_name: None,
+                        device_type: None,
+                        os_name: None,
+                        os_version: None,
+                        browser_name: None,
+                        browser_version: None,
+                        user_agent: None,
+                        ip_address: None,
+                    },
+                )
+                .await
+                .expect_err("expected invalid otp");
+            assert_error_code(error, AuthErrorCode::InvalidOtp);
+        }
+
+        let threshold_index = usize::try_from(MAX_FAILED_ATTEMPTS - 1).unwrap();
+        let error = service
+            .challenge(
+                login_oids[threshold_index],
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
+            .await
+            .expect_err("expected threshold failure");
+        assert_error_code(error, AuthErrorCode::TooManyAttempts);
+        {
+            let user = user_state.lock().unwrap();
+            assert_eq!(user.failed_attempts, MAX_FAILED_ATTEMPTS);
+            assert!(user.locked);
+        }
+
+        let error = service
+            .challenge(
+                login_oids[threshold_index + 1],
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
+            .await
+            .expect_err("expected user lock to apply to another login");
+        assert_error_code(error, AuthErrorCode::UserLocked);
     }
 }

@@ -50,8 +50,20 @@ impl RemoteFetchPolicy {
 pub const DEFAULT_REMOTE_DOCUMENT_MAX_BYTES: usize = 1024 * 1024;
 
 #[must_use]
-pub const fn conformance_allows_invalid_certs() -> bool {
-    cfg!(feature = "oidc-conformance")
+pub fn conformance_mode_active() -> bool {
+    conformance_mode_active_for(
+        cfg!(feature = "oidc-conformance"),
+        std::env::var("APP_ENV").ok().as_deref(),
+    )
+}
+
+fn conformance_mode_active_for(feature_enabled: bool, app_env: Option<&str>) -> bool {
+    feature_enabled && app_env.is_some_and(|value| value.trim().eq_ignore_ascii_case("conformance"))
+}
+
+#[must_use]
+pub fn conformance_allows_invalid_certs() -> bool {
+    conformance_mode_active()
 }
 
 pub fn validate_https_public_url(url: &Url) -> Result<(), RemoteUrlError> {
@@ -245,8 +257,8 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::{
-        RemoteUrlError, conformance_allows_invalid_certs, fetchable_url, is_unsafe_ip,
-        validate_https_public_url,
+        RemoteUrlError, conformance_allows_invalid_certs, conformance_mode_active,
+        conformance_mode_active_for, fetchable_url, is_unsafe_ip, validate_https_public_url,
     };
     use url::Url;
 
@@ -323,10 +335,19 @@ mod tests {
     }
 
     #[test]
-    fn invalid_certificate_policy_is_compile_time_only() {
+    fn invalid_certificate_policy_matches_active_conformance_mode() {
         assert_eq!(
             conformance_allows_invalid_certs(),
-            cfg!(feature = "oidc-conformance")
+            conformance_mode_active()
         );
+    }
+
+    #[test]
+    fn conformance_mode_requires_feature_and_environment() {
+        assert!(!conformance_mode_active_for(false, None));
+        assert!(!conformance_mode_active_for(false, Some("conformance")));
+        assert!(!conformance_mode_active_for(true, None));
+        assert!(!conformance_mode_active_for(true, Some("production")));
+        assert!(conformance_mode_active_for(true, Some(" conformance ")));
     }
 }

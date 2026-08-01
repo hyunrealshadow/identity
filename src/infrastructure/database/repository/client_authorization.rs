@@ -2,14 +2,17 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    TransactionTrait,
     sea_query::{Expr, SimpleExpr},
 };
 use uuid::Uuid;
 
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity,
+    client_authorization::Entity as ClientAuthorizationEntity, session,
+    session::Entity as SessionEntity,
 };
+use crate::database::repository::shared::lock_session;
 use identity_domain::{
     auth::SessionOid,
     client::model::ClientOid,
@@ -151,9 +154,44 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         data: ClientAuthorizationData,
         expires_at: chrono::DateTime<Utc>,
     ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
+        let session_oid = match &data {
+            ClientAuthorizationData::AuthorizationCode(data) => Some(data.session_oid),
+            ClientAuthorizationData::AccessToken(data) => Some(data.session_oid),
+            ClientAuthorizationData::RefreshToken(data) => Some(data.session_oid),
+            _ => None,
+        };
+        let transaction =
+            self.db.begin().await.map_err(|error| {
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+            })?;
+        if let Some(session_oid) = session_oid {
+            lock_session(&transaction, session_oid)
+                .await
+                .map_err(|error| {
+                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                })?;
+            let now = Utc::now();
+            let session_available = SessionEntity::find()
+                .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
+                .filter(session::Column::Status.eq(identity_domain::auth::SessionStatus::ACTIVE))
+                .filter(session::Column::RevokedAt.is_null())
+                .filter(session::Column::ExpiresAt.gt(now))
+                .one(&transaction)
+                .await
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+                .is_some();
+            if !session_available {
+                return Err(ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                    sea_orm::DbErr::RecordNotFound(format!(
+                        "session {} is not active",
+                        Uuid::from(session_oid)
+                    )),
+                )));
+            }
+        }
         let client_model = ClientEntity::find()
             .filter(client::Column::Oid.eq(client_oid))
-            .one(&self.db)
+            .one(&transaction)
             .await
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or_else(|| {
@@ -176,10 +214,13 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
         }
-        .insert(&self.db)
+        .insert(&transaction)
         .await
         .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
-
+        transaction
+            .commit()
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
         to_domain(model, client_oid)
     }
 

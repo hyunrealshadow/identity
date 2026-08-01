@@ -72,6 +72,22 @@ impl Viewer {
         Ok(Some(UserNode::from(request_context(ctx)?.user.clone())))
     }
 
+    async fn security(&self, ctx: &Context<'_>) -> Result<AccountSecurity> {
+        require_scope(ctx, ApiScope::AccountRead)?;
+        let request = request_context(ctx)?;
+        let status = request
+            .state
+            .services()
+            .mfa()
+            .status(request.claims.user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(AccountSecurity {
+            totp_enabled: status.totp_enabled,
+            recovery_codes_remaining: status.recovery_codes_remaining as i32,
+        })
+    }
+
     async fn sessions(
         &self,
         ctx: &Context<'_>,
@@ -336,20 +352,7 @@ impl MutationRoot {
     ) -> Result<ChangePasswordPayload> {
         require_scope(ctx, ApiScope::PasswordChange)?;
         let request = request_context(ctx)?;
-        let now = chrono::Utc::now().timestamp();
-        if request
-            .claims
-            .auth_time
-            .is_none_or(|auth_time| now.saturating_sub(auth_time) > 300)
-            || request.claims.acr.is_none()
-        {
-            return Err(Error::new("recent authentication is required").extend_with(
-                |_, extensions| {
-                    extensions.set("kind", "authorization_error");
-                    extensions.set("code", "FRESH_AUTHENTICATION_REQUIRED");
-                },
-            ));
-        }
+        require_recent_authentication(ctx, None)?;
         request
             .state
             .services()
@@ -383,6 +386,106 @@ impl MutationRoot {
         Ok(ChangePasswordPayload {
             changed: true,
             client_mutation_id: input.client_mutation_id,
+        })
+    }
+
+    async fn begin_totp_enrollment(
+        &self,
+        ctx: &Context<'_>,
+        client_mutation_id: Option<String>,
+    ) -> Result<BeginTotpEnrollmentPayload> {
+        require_scope(ctx, ApiScope::AccountUpdate)?;
+        require_recent_authentication(ctx, None)?;
+        let request = request_context(ctx)?;
+        let issuer = request
+            .state
+            .services()
+            .oidc()
+            .issuer()
+            .map_err(|error| app_error(ctx, error))?;
+        let enrollment = request
+            .state
+            .services()
+            .mfa()
+            .begin_totp_enrollment(
+                request.claims.user_oid,
+                issuer.host_str().unwrap_or("Identity"),
+                &request.user.email,
+            )
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(BeginTotpEnrollmentPayload {
+            secret: enrollment.secret,
+            otpauth_uri: enrollment.otpauth_uri,
+            enrollment_token: enrollment.enrollment_token,
+            client_mutation_id,
+        })
+    }
+
+    async fn confirm_totp_enrollment(
+        &self,
+        ctx: &Context<'_>,
+        input: ConfirmTotpEnrollmentInput,
+    ) -> Result<RecoveryCodesPayload> {
+        require_scope(ctx, ApiScope::AccountUpdate)?;
+        require_recent_authentication(ctx, None)?;
+        let request = request_context(ctx)?;
+        let confirmed = request
+            .state
+            .services()
+            .mfa()
+            .confirm_totp_enrollment(
+                request.claims.user_oid,
+                &input.enrollment_token,
+                &input.code,
+            )
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(RecoveryCodesPayload {
+            recovery_codes: confirmed.recovery_codes,
+            client_mutation_id: input.client_mutation_id,
+        })
+    }
+
+    async fn disable_totp(
+        &self,
+        ctx: &Context<'_>,
+        client_mutation_id: Option<String>,
+    ) -> Result<TotpChangedPayload> {
+        require_scope(ctx, ApiScope::AccountUpdate)?;
+        require_recent_authentication(ctx, Some(identity_domain::auth::ACR_MFA))?;
+        let request = request_context(ctx)?;
+        request
+            .state
+            .services()
+            .mfa()
+            .disable_totp(request.claims.user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(TotpChangedPayload {
+            changed: true,
+            client_mutation_id,
+        })
+    }
+
+    async fn regenerate_recovery_codes(
+        &self,
+        ctx: &Context<'_>,
+        client_mutation_id: Option<String>,
+    ) -> Result<RecoveryCodesPayload> {
+        require_scope(ctx, ApiScope::AccountUpdate)?;
+        require_recent_authentication(ctx, Some(identity_domain::auth::ACR_MFA))?;
+        let request = request_context(ctx)?;
+        let recovery_codes = request
+            .state
+            .services()
+            .mfa()
+            .regenerate_recovery_codes(request.claims.user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(RecoveryCodesPayload {
+            recovery_codes,
+            client_mutation_id,
         })
     }
 
@@ -469,6 +572,87 @@ pub struct ChangePasswordInput {
 pub struct ChangePasswordPayload {
     changed: bool,
     client_mutation_id: Option<String>,
+}
+
+pub struct AccountSecurity {
+    totp_enabled: bool,
+    recovery_codes_remaining: i32,
+}
+
+#[Object]
+impl AccountSecurity {
+    async fn totp_enabled(&self) -> bool {
+        self.totp_enabled
+    }
+
+    async fn recovery_codes_remaining(&self) -> i32 {
+        self.recovery_codes_remaining
+    }
+}
+
+pub struct BeginTotpEnrollmentPayload {
+    secret: String,
+    otpauth_uri: String,
+    enrollment_token: String,
+    client_mutation_id: Option<String>,
+}
+
+#[Object]
+impl BeginTotpEnrollmentPayload {
+    async fn secret(&self) -> &str {
+        &self.secret
+    }
+
+    async fn otpauth_uri(&self) -> &str {
+        &self.otpauth_uri
+    }
+
+    async fn enrollment_token(&self) -> &str {
+        &self.enrollment_token
+    }
+
+    async fn client_mutation_id(&self) -> Option<&str> {
+        self.client_mutation_id.as_deref()
+    }
+}
+
+#[derive(InputObject)]
+pub struct ConfirmTotpEnrollmentInput {
+    enrollment_token: String,
+    code: String,
+    client_mutation_id: Option<String>,
+}
+
+pub struct RecoveryCodesPayload {
+    recovery_codes: Vec<String>,
+    client_mutation_id: Option<String>,
+}
+
+#[Object]
+impl RecoveryCodesPayload {
+    async fn recovery_codes(&self) -> &[String] {
+        &self.recovery_codes
+    }
+
+    async fn client_mutation_id(&self) -> Option<&str> {
+        self.client_mutation_id.as_deref()
+    }
+}
+
+pub struct TotpChangedPayload {
+    changed: bool,
+    client_mutation_id: Option<String>,
+}
+
+#[Object]
+impl TotpChangedPayload {
+    async fn changed(&self) -> bool {
+        self.changed
+    }
+
+    async fn client_mutation_id(&self) -> Option<&str> {
+        self.client_mutation_id.as_deref()
+    }
 }
 
 #[Object]
@@ -640,6 +824,29 @@ fn require_scope(ctx: &Context<'_>, scope: ApiScope) -> Result<()> {
     }
 }
 
+fn require_recent_authentication(ctx: &Context<'_>, required_acr: Option<&str>) -> Result<()> {
+    let claims = &request_context(ctx)?.claims;
+    let now = chrono::Utc::now().timestamp();
+    if claims
+        .auth_time
+        .is_some_and(|auth_time| now.saturating_sub(auth_time) <= 300)
+        && claims.acr.is_some()
+        && required_acr.is_none_or(|required| claims.acr.as_deref() == Some(required))
+    {
+        Ok(())
+    } else {
+        Err(
+            Error::new("recent authentication is required").extend_with(|_, extensions| {
+                extensions.set("kind", "authorization_error");
+                extensions.set("code", "FRESH_AUTHENTICATION_REQUIRED");
+                if let Some(required_acr) = required_acr {
+                    extensions.set("requiredAcr", required_acr);
+                }
+            }),
+        )
+    }
+}
+
 fn internal_error(error: impl std::fmt::Display) -> Error {
     tracing::error!(error = %error, "graphql resolver failed");
     Error::new("internal server error")
@@ -713,4 +920,25 @@ fn session_cursor(session: &Session) -> SessionCursor {
         session.created_at,
         Uuid::from(session.oid),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_schema;
+
+    #[test]
+    fn schema_exposes_mfa_self_service_contract() {
+        let sdl = build_schema(20, 1_000).sdl();
+
+        for field in [
+            "security: AccountSecurity!",
+            "beginTotpEnrollment(",
+            "confirmTotpEnrollment(",
+            "disableTotp(",
+            "regenerateRecoveryCodes(",
+            "recoveryCodesRemaining: Int!",
+        ] {
+            assert!(sdl.contains(field), "schema is missing {field}");
+        }
+    }
 }

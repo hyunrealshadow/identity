@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::user::{CredentialType, Password, User, UserCredential, UserCredentialOid, UserOid};
+use crate::user::{
+    CredentialData, CredentialType, Password, User, UserCredential, UserCredentialOid, UserOid,
+};
 
 #[derive(Debug, Error)]
 pub enum UserRepositoryError {
@@ -32,6 +34,12 @@ pub enum UserCredentialRepositoryError {
 
     #[error("failed to update password credential")]
     UpdatePasswordFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("failed to replace credentials")]
+    ReplaceFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("failed to delete credential")]
+    DeleteFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 // ─── UserRepository ──────────────────────────────────────────────────────────
@@ -44,12 +52,14 @@ pub trait UserRepository: Send + Sync {
     /// Find a user by external OID.
     async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError>;
 
-    /// Increment `failed_attempts` by 1 and optionally lock the account.
+    /// Atomically increment `failed_attempts`, lock the account when the
+    /// resulting count reaches `lock_threshold`, and return that count.
     async fn increment_failed_attempts(
         &self,
         user_oid: UserOid,
-        lock_until: Option<DateTime<Utc>>,
-    ) -> Result<(), UserRepositoryError>;
+        lock_threshold: i32,
+        lock_until: DateTime<Utc>,
+    ) -> Result<i32, UserRepositoryError>;
 
     /// Reset `failed_attempts` to 0 and clear the lock.
     async fn reset_failed_attempts(&self, user_oid: UserOid) -> Result<(), UserRepositoryError>;
@@ -79,4 +89,17 @@ pub trait UserCredentialRepository: Send + Sync {
         credential_oid: UserCredentialOid,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError>;
+
+    /// Atomically replaces one or more credential groups owned by the user.
+    async fn replace_by_user_oid(
+        &self,
+        user_oid: UserOid,
+        replacements: Vec<(CredentialType, Vec<CredentialData>)>,
+    ) -> Result<(), UserCredentialRepositoryError>;
+
+    /// Deletes one credential. Used to consume a recovery code exactly once.
+    async fn delete_by_oid(
+        &self,
+        credential_oid: UserCredentialOid,
+    ) -> Result<bool, UserCredentialRepositoryError>;
 }

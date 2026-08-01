@@ -16,7 +16,14 @@ import {
   identityGraphql,
 } from '#/lib/graphql.server'
 import { loadClientCredentials } from '#/lib/client-credentials.server'
-import { finishLogout } from '#/lib/oauth.server'
+import {
+  clearElevatedAuthorization,
+  clearMfaUiState,
+  finishLogout,
+  mfaUiState,
+  storeMfaEnrollment,
+  storeRecoveryCodes,
+} from '#/lib/oauth.server'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 
@@ -49,6 +56,10 @@ interface AccountData {
         }
       }>
     }
+    security: {
+      totpEnabled: boolean
+      recoveryCodesRemaining: number
+    }
   }
 }
 
@@ -67,6 +78,7 @@ const ACCOUNT_QUERY = `
           }
         }
       }
+      security { totpEnabled recoveryCodesRemaining }
     }
   }
 `
@@ -74,12 +86,16 @@ const ACCOUNT_QUERY = `
 const loadAccountPage = createServerFn({ method: 'GET' }).handler(async () => {
   const locale = requestLocale()
   try {
-    const data = await identityGraphql<AccountData>(ACCOUNT_QUERY)
-    return { locale, data, error: undefined }
+    const [data, mfa] = await Promise.all([
+      identityGraphql<AccountData>(ACCOUNT_QUERY),
+      mfaUiState(),
+    ])
+    return { locale, data, mfa, error: undefined }
   } catch (error) {
     return {
       locale,
       data: undefined,
+      mfa: { enrollment: undefined, recoveryCodes: undefined },
       error:
         error instanceof GraphqlRequestError
           ? error.message
@@ -111,7 +127,7 @@ export const Route = createFileRoute('/')({
         const action = String(form.get('action') ?? '')
         try {
           if (action === 'logout') {
-            return finishLogout(credentials.application_url)
+            return await finishLogout(credentials.application_url)
           }
           if (action === 'revoke-session') {
             await requireGraphql(
@@ -157,12 +173,92 @@ export const Route = createFileRoute('/')({
                   newPassword,
                 },
               },
+              { authorization: 'elevated' },
             )
+            await clearElevatedAuthorization()
+          } else if (action === 'begin-totp') {
+            const data = await requireGraphql<{
+              beginTotpEnrollment: {
+                secret: string
+                otpauthUri: string
+                enrollmentToken: string
+              }
+            }>(
+              `mutation BeginTotpEnrollment {
+                beginTotpEnrollment {
+                  secret otpauthUri enrollmentToken
+                }
+              }`,
+              undefined,
+              { authorization: 'elevated' },
+            )
+            await storeMfaEnrollment({
+              secret: data.beginTotpEnrollment.secret,
+              otpauth_uri: data.beginTotpEnrollment.otpauthUri,
+              enrollment_token: data.beginTotpEnrollment.enrollmentToken,
+            })
+          } else if (action === 'confirm-totp') {
+            const mfa = await mfaUiState()
+            if (!mfa.enrollment) throw new Error('Authenticator setup expired')
+            const data = await requireGraphql<{
+              confirmTotpEnrollment: { recoveryCodes: Array<string> }
+            }>(
+              `mutation ConfirmTotpEnrollment($input: ConfirmTotpEnrollmentInput!) {
+                confirmTotpEnrollment(input: $input) { recoveryCodes }
+              }`,
+              {
+                input: {
+                  enrollmentToken: mfa.enrollment.enrollment_token,
+                  code: String(form.get('code') ?? ''),
+                },
+              },
+              { authorization: 'elevated' },
+            )
+            await storeRecoveryCodes(
+              data.confirmTotpEnrollment.recoveryCodes,
+            )
+            await clearElevatedAuthorization()
+          } else if (action === 'disable-totp') {
+            await requireGraphql(
+              `mutation DisableTotp { disableTotp { changed } }`,
+              undefined,
+              { authorization: 'elevated' },
+            )
+            await clearMfaUiState()
+            await clearElevatedAuthorization()
+          } else if (action === 'regenerate-recovery-codes') {
+            const data = await requireGraphql<{
+              regenerateRecoveryCodes: { recoveryCodes: Array<string> }
+            }>(
+              `mutation RegenerateRecoveryCodes {
+                regenerateRecoveryCodes { recoveryCodes }
+              }`,
+              undefined,
+              { authorization: 'elevated' },
+            )
+            await storeRecoveryCodes(
+              data.regenerateRecoveryCodes.recoveryCodes,
+            )
+            await clearElevatedAuthorization()
+          } else if (action === 'acknowledge-recovery-codes') {
+            await clearMfaUiState()
           } else {
             return new Response('Unknown action', { status: 400 })
           }
           return redirectWith('message', 'saved')
         } catch (error) {
+          if (
+            (action === 'change-password' || isMfaAction(action)) &&
+            error instanceof GraphqlRequestError &&
+            requiresReauthentication(error)
+          ) {
+            return new Response(null, {
+              status: 303,
+              headers: {
+                location: `/oauth/reauth?purpose=${reauthPurpose(action)}&return_to=%2F%3Fmessage%3Dreauthenticated`,
+              },
+            })
+          }
           return redirectWith(
             'error',
             error instanceof Error ? error.message : 'Request failed',
@@ -177,9 +273,13 @@ export const Route = createFileRoute('/')({
 function AccountHome() {
   const { locale, data, error: loadError } = Route.useLoaderData()
   const search = Route.useSearch()
-  const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
+  const t = (
+    key: Parameters<typeof translate>[1],
+    values?: Parameters<typeof translate>[2],
+  ) => translate(locale, key, values)
   const account = data?.viewer.account
   const sessions = data?.viewer.sessions.edges.map((edge) => edge.node) ?? []
+  const security = data?.viewer.security
 
   if (!account) {
     return (
@@ -236,7 +336,11 @@ function AccountHome() {
           <Alert status="success">
             <Alert.Indicator />
             <Alert.Content>
-              <Alert.Title>{t('accountSaved')}</Alert.Title>
+              <Alert.Title>
+                {search.message === 'reauthenticated'
+                  ? t('accountReauthenticated')
+                  : t('accountSaved')}
+              </Alert.Title>
             </Alert.Content>
           </Alert>
         ) : null}
@@ -284,6 +388,82 @@ function AccountHome() {
             </form>
           </Card.Content>
         </Card>
+
+        {security ? (
+          <Card className="border border-black/[0.07]">
+            <Card.Header>
+              <Card.Title>{t('accountMfa')}</Card.Title>
+              <Card.Description>{t('accountMfaDescription')}</Card.Description>
+            </Card.Header>
+            <Card.Content className="space-y-5">
+              {mfa.recoveryCodes?.length ? (
+                <Alert status="warning">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Title>{t('accountRecoveryCodesTitle')}</Alert.Title>
+                    <Alert.Description>
+                      {t('accountRecoveryCodesDescription')}
+                    </Alert.Description>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {mfa.recoveryCodes.map((code) => (
+                        <code key={code} className="rounded-field bg-surface-secondary px-3 py-2 font-mono text-sm">
+                          {code}
+                        </code>
+                      ))}
+                    </div>
+                    <form method="post" className="mt-4">
+                      <input type="hidden" name="action" value="acknowledge-recovery-codes" />
+                      <Button type="submit">{t('accountRecoveryCodesSaved')}</Button>
+                    </form>
+                  </Alert.Content>
+                </Alert>
+              ) : null}
+
+              {mfa.enrollment ? (
+                <div className="grid max-w-xl gap-4">
+                  <p className="text-sm text-muted">{t('accountMfaSetupDescription')}</p>
+                  <div className="rounded-field bg-surface-secondary p-4">
+                    <p className="text-xs font-medium text-muted">{t('accountMfaSecret')}</p>
+                    <code className="mt-1 block break-all font-mono">{mfa.enrollment.secret}</code>
+                    <a className="auth-link mt-3 inline-block text-sm font-semibold text-accent" href={mfa.enrollment.otpauth_uri}>
+                      {t('accountMfaOpenAuthenticator')}
+                    </a>
+                  </div>
+                  <form method="post" className="grid gap-3">
+                    <input type="hidden" name="action" value="confirm-totp" />
+                    <TextField isRequired fullWidth name="code">
+                      <Label>{t('otp')}</Label>
+                      <Input inputMode="numeric" autoComplete="one-time-code" maxLength={8} placeholder="000000" />
+                      <FieldError />
+                    </TextField>
+                    <Button type="submit">{t('accountMfaConfirm')}</Button>
+                  </form>
+                </div>
+              ) : security.totpEnabled ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted">
+                    {t('accountMfaEnabled')} · {t('accountRecoveryCodesRemaining', { count: security.recoveryCodesRemaining })}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <form method="post">
+                      <input type="hidden" name="action" value="regenerate-recovery-codes" />
+                      <Button type="submit" variant="secondary">{t('accountRegenerateRecoveryCodes')}</Button>
+                    </form>
+                    <form method="post">
+                      <input type="hidden" name="action" value="disable-totp" />
+                      <Button type="submit" variant="danger">{t('accountMfaDisable')}</Button>
+                    </form>
+                  </div>
+                </div>
+              ) : (
+                <form method="post">
+                  <input type="hidden" name="action" value="begin-totp" />
+                  <Button type="submit">{t('accountMfaEnable')}</Button>
+                </form>
+              )}
+            </Card.Content>
+          </Card>
+        ) : null}
 
         <Card className="border border-black/[0.07]">
           <Card.Header>
@@ -421,10 +601,38 @@ function PasswordField({ name, label }: { name: string; label: string }) {
 async function requireGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
+  options?: { authorization?: 'default' | 'elevated' },
 ) {
-  const data = await identityGraphql<T>(query, variables)
+  const data = await identityGraphql<T>(query, variables, options)
   if (!data) throw new Error('Authentication is required')
   return data
+}
+
+function requiresReauthentication(error: GraphqlRequestError) {
+  return error.errors.some(
+    ({ extensions }) =>
+      extensions?.code === 'FRESH_AUTHENTICATION_REQUIRED' ||
+      extensions?.requiredScope === 'password.change',
+  )
+}
+
+function isMfaAction(action: string) {
+  return [
+    'begin-totp',
+    'confirm-totp',
+    'disable-totp',
+    'regenerate-recovery-codes',
+  ].includes(action)
+}
+
+function reauthPurpose(action: string) {
+  if (
+    action === 'disable-totp' ||
+    action === 'regenerate-recovery-codes'
+  ) {
+    return 'mfa'
+  }
+  return isMfaAction(action) ? 'account' : 'password'
 }
 
 function nullableFormValue(form: FormData, name: string) {

@@ -1,4 +1,8 @@
-import { accessToken, clearAuthorizationCookie } from './oauth.server'
+import {
+  accessToken,
+  clearAuthorizationCookie,
+  elevatedAccessToken,
+} from './oauth.server'
 
 const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
 
@@ -25,8 +29,12 @@ export class GraphqlRequestError extends Error {
 export async function identityGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
+  options?: { authorization?: 'default' | 'elevated' },
 ) {
-  const token = await accessToken()
+  const token =
+    options?.authorization === 'elevated'
+      ? ((await elevatedAccessToken()) ?? (await accessToken()))
+      : await accessToken()
   if (!token) return
   const response = await fetch(new URL('/graphql', API_URL), {
     method: 'POST',
@@ -38,7 +46,7 @@ export async function identityGraphql<T>(
     body: JSON.stringify({ query, variables }),
   })
   if (response.status === 401) {
-    clearAuthorizationCookie()
+    await clearAuthorizationCookie()
     return
   }
   const payload = (await response.json()) as {

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
-    sea_query::Expr,
+    TransactionTrait, sea_query::Expr,
 };
 
 use crate::database::entity::{user, user::Entity as UserEntity};
@@ -168,11 +168,17 @@ impl UserRepository for UserRepositoryImpl {
     async fn increment_failed_attempts(
         &self,
         user_oid: UserOid,
-        lock_until: Option<DateTime<Utc>>,
-    ) -> Result<(), UserRepositoryError> {
+        lock_threshold: i32,
+        lock_until: DateTime<Utc>,
+    ) -> Result<i32, UserRepositoryError> {
         let oid = uuid::Uuid::from(user_oid);
         let now = Utc::now().naive_utc();
-        let mut update = UserEntity::update_many()
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
+        let updated = UserEntity::update_many()
             .col_expr(
                 user::Column::FailedAttempts,
                 Expr::col(user::Column::FailedAttempts).add(1),
@@ -181,22 +187,35 @@ impl UserRepository for UserRepositoryImpl {
                 user::Column::UpdatedAt,
                 Expr::value(Option::<chrono::NaiveDateTime>::Some(now)),
             )
-            .filter(user::Column::Oid.eq(oid));
+            .filter(user::Column::Oid.eq(oid))
+            .exec_with_returning(&transaction)
+            .await
+            .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?
+            .into_iter()
+            .next()
+            .ok_or(UserRepositoryError::UserNotFound)?;
+        let attempts = updated.failed_attempts;
 
-        if let Some(until) = lock_until {
-            update = update
+        if attempts >= lock_threshold {
+            UserEntity::update_many()
                 .col_expr(user::Column::Locked, Expr::value(true))
                 .col_expr(
                     user::Column::LockedUntil,
-                    Expr::value(Option::<chrono::NaiveDateTime>::Some(until.naive_utc())),
-                );
+                    Expr::value(Option::<chrono::NaiveDateTime>::Some(
+                        lock_until.naive_utc(),
+                    )),
+                )
+                .filter(user::Column::Oid.eq(oid))
+                .exec(&transaction)
+                .await
+                .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
         }
 
-        update
-            .exec(&self.db)
+        transaction
+            .commit()
             .await
-            .map_err(|e| UserRepositoryError::UpdateFailedAttempts(Box::new(e)))?;
-        Ok(())
+            .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
+        Ok(attempts)
     }
 
     async fn reset_failed_attempts(&self, user_oid: UserOid) -> Result<(), UserRepositoryError> {

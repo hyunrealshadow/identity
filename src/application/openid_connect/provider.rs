@@ -90,7 +90,10 @@ impl Default for OpenIdProviderCapabilities {
                 "implicit".to_owned(),
                 "refresh_token".to_owned(),
             ],
-            acr_values_supported: vec!["1".to_owned()],
+            acr_values_supported: vec![
+                identity_domain::auth::ACR_PASSWORD.to_owned(),
+                identity_domain::auth::ACR_MFA.to_owned(),
+            ],
             subject_types_supported: vec![SubjectType::Public, SubjectType::Pairwise],
             id_token_signing_alg_values_supported: vec!["ES256".to_owned()],
             id_token_encryption_alg_values_supported: vec![

@@ -129,7 +129,13 @@ mod tests {
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);
         assert_eq!(json["require_request_uri_registration"], false);
-        assert_eq!(json["acr_values_supported"], serde_json::json!(["1"]));
+        assert_eq!(
+            json["acr_values_supported"],
+            serde_json::json!([
+                identity_domain::auth::ACR_PASSWORD,
+                identity_domain::auth::ACR_MFA
+            ])
+        );
         assert_eq!(
             json["subject_types_supported"],
             serde_json::json!(["public", "pairwise"])

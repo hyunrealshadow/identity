@@ -167,7 +167,8 @@ pub struct ChallengeRequest {
 /// `POST /api/auth/login/challenge` response (success).
 ///
 /// When `status` is `"mfa_required"` the `session` field is `None` — the
-/// client must call the challenge endpoint again with `credential_type = "otp"`.
+/// client must call the challenge endpoint again with `credential_type = "otp"`
+/// or `credential_type = "recovery_code"`.
 ///
 /// When `status` is `"authenticated"` the `session` field is populated and
 /// the `sessions` field contains the updated protected session ID list.

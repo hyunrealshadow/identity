@@ -10,6 +10,7 @@ use identity_domain::user::{
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
+    TransactionTrait,
 };
 
 pub struct UserCredentialRepositoryImpl {
@@ -135,5 +136,76 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(e)))?;
         Ok(())
+    }
+
+    async fn replace_by_user_oid(
+        &self,
+        user_oid: UserOid,
+        replacements: Vec<(CredentialType, Vec<CredentialData>)>,
+    ) -> Result<(), UserCredentialRepositoryError> {
+        let user = UserEntity::find()
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .one(&self.db)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        let replacements = replacements
+            .into_iter()
+            .map(|(credential_type, data)| {
+                let serialized = data
+                    .into_iter()
+                    .map(|data| match data {
+                        CredentialData::Password(value) => serde_json::to_value(value),
+                        CredentialData::Otp(value) => serde_json::to_value(value),
+                        CredentialData::RecoveryCode(value) => serde_json::to_value(value),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((credential_type.as_ref().to_owned(), serialized))
+            })
+            .collect::<Result<Vec<_>, serde_json::Error>>()
+            .map_err(UserCredentialRepositoryError::Serialization)?;
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        for (credential_type, serialized) in replacements {
+            UserCredentialEntity::delete_many()
+                .filter(user_credential::Column::UserId.eq(user.id))
+                .filter(user_credential::Column::Type.eq(&credential_type))
+                .exec(&txn)
+                .await
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+            for value in serialized {
+                user_credential::ActiveModel {
+                    oid: Set(uuid::Uuid::new_v4()),
+                    user_id: Set(user.id),
+                    r#type: Set(credential_type.clone()),
+                    data: Set(value),
+                    expires_at: Set(None),
+                    created_at: Set(Utc::now().into()),
+                    ..Default::default()
+                }
+                .insert(&txn)
+                .await
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+            }
+        }
+        txn.commit()
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        Ok(())
+    }
+
+    async fn delete_by_oid(
+        &self,
+        credential_oid: UserCredentialOid,
+    ) -> Result<bool, UserCredentialRepositoryError> {
+        let result = UserCredentialEntity::delete_many()
+            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .exec(&self.db)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::DeleteFailed(Box::new(e)))?;
+        Ok(result.rows_affected == 1)
     }
 }

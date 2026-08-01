@@ -239,12 +239,12 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
     assert!(!captured_val.registration_access_token.is_empty());
     assert_eq!(
         captured_val.metadata.settings.skip_consent,
-        cfg!(feature = "oidc-conformance")
+        crate::openid_connect::remote::conformance_mode_active()
     );
 }
 
 #[tokio::test]
-async fn register_defaults_to_supported_oidc_scopes_when_scope_is_omitted() {
+async fn register_defaults_to_openid_scope_when_scope_is_omitted() {
     let captured = Arc::new(std::sync::Mutex::new(None));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
@@ -264,23 +264,10 @@ async fn register_defaults_to_supported_oidc_scopes_when_scope_is_omitted() {
         .await
         .unwrap();
 
-    assert_eq!(
-        response.scope.as_deref(),
-        Some("openid profile email address phone offline_access")
-    );
+    assert_eq!(response.scope.as_deref(), Some("openid"));
 
     let captured_val = captured.lock().unwrap().clone().unwrap();
-    assert_eq!(
-        captured_val.assigned_scopes,
-        vec![
-            "openid",
-            "profile",
-            "email",
-            "address",
-            "phone",
-            "offline_access"
-        ]
-    );
+    assert_eq!(captured_val.assigned_scopes, vec!["openid"]);
 }
 
 #[tokio::test]

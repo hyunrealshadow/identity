@@ -38,6 +38,11 @@ health:
 settings:
   refresh_interval_secs: {{ get_env(name="SETTINGS_REFRESH_INTERVAL_SECS", default="30") }}
 
+openid_connect:
+  dynamic_registration:
+    # Conformance registration remains deliberately open.
+    initial_access_token:
+
 install:
   domain: {{ get_env(name="DOMAIN", default="identity") }}
   username: "admin"

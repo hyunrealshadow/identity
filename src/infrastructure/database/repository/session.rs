@@ -1,19 +1,23 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
+    QueryOrder, Set, TransactionTrait,
+    sea_query::{Expr, SimpleExpr},
 };
 use uuid::Uuid;
 
-use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
+use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry, lock_session};
 use crate::database::entity::{
-    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
+    client_authorization, client_authorization::Entity as ClientAuthorizationEntity, session,
+    session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 use identity_domain::auth::{
     SessionOid, SessionStatus,
     model::{ActiveSession, Session},
     repository::{CreateSessionInput, SessionRepository, SessionRepositoryError},
 };
+use identity_domain::client_authorization::ClientAuthorizationType;
 
 fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
     Session {
@@ -124,6 +128,14 @@ impl SessionRepository for SessionRepositoryImpl {
                     last_active_at: Some(s.last_active_at.with_timezone(&Utc)),
                     expires_at: decode_nonnullable_expiry(s.expires_at),
                     created_at: s.created_at.with_timezone(&Utc),
+                    acr: if s.acr.as_deref() == Some(identity_domain::auth::ACR_MFA)
+                        && s.acr_expires_at
+                            .is_some_and(|expires_at| expires_at.with_timezone(&Utc) <= Utc::now())
+                    {
+                        Some(identity_domain::auth::ACR_PASSWORD.to_owned())
+                    } else {
+                        s.acr
+                    },
                 })
             })
             .collect())
@@ -187,11 +199,19 @@ impl SessionRepository for SessionRepositoryImpl {
         oid: SessionOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
+        lock_session(&transaction, oid)
+            .await
+            .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         let Some((s_model, Some(u_model))) = SessionEntity::find()
             .filter(session::Column::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)
             .select_also(UserEntity)
-            .one(&self.db)
+            .one(&transaction)
             .await
             .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
         else {
@@ -200,10 +220,41 @@ impl SessionRepository for SessionRepositoryImpl {
 
         let mut active: session::ActiveModel = s_model.into();
         active.revoked_at = Set(Some(revoked_at.into()));
+        active.status = Set(SessionStatus::REVOKED.to_owned());
+        active.updated_at = Set(Some(revoked_at.into()));
         let model = active
-            .update(&self.db)
+            .update(&transaction)
             .await
             .map_err(|e| SessionRepositoryError::RevokeFailed(Box::new(e)))?;
+        ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::RevokedAt,
+                SimpleExpr::Value(Some(revoked_at).into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(Some(revoked_at).into()),
+            )
+            .filter(
+                Condition::all()
+                    .add(client_authorization::Column::RevokedAt.is_null())
+                    .add(client_authorization::Column::Type.is_in([
+                        ClientAuthorizationType::AuthorizationCode.to_string(),
+                        ClientAuthorizationType::AccessToken.to_string(),
+                        ClientAuthorizationType::RefreshToken.to_string(),
+                    ]))
+                    .add(Expr::cust_with_values(
+                        r#"("client_authorization"."data"->>'session_oid') = $1"#,
+                        [Uuid::from(oid).to_string()],
+                    )),
+            )
+            .exec(&transaction)
+            .await
+            .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         Ok(Some(session_to_domain(model, u_model.oid)))
     }
 }

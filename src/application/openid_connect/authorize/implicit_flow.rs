@@ -18,6 +18,14 @@ struct CreateFrontChannelAccessTokenInput<'a> {
     issuer: &'a Url,
     audience: &'a str,
     claims: Option<&'a ClaimsRequest>,
+    auth_time: i64,
+    acr: Option<&'a str>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct AuthenticationContext<'a> {
+    pub auth_time: Option<i64>,
+    pub acr: Option<&'a str>,
 }
 
 impl AuthorizeService {
@@ -28,7 +36,7 @@ impl AuthorizeService {
         protected_session_id: &str,
         user_oid: Uuid,
         response_type: ResponseType,
-        auth_time: Option<i64>,
+        authentication: AuthenticationContext<'_>,
     ) -> Result<Url, AppError> {
         let nonce = request
             .nonce
@@ -69,7 +77,9 @@ impl AuthorizeService {
             client.metadata().id_token_signed_response_alg.as_deref(),
         );
         let audience = client_id.to_string();
-        let auth_time_val = auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp());
+        let auth_time_val = authentication
+            .auth_time
+            .unwrap_or_else(|| chrono::Utc::now().timestamp());
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;
@@ -102,6 +112,8 @@ impl AuthorizeService {
                         issuer: &issuer,
                         audience: access_token_audience,
                         claims: claims.as_ref(),
+                        auth_time: auth_time_val,
+                        acr: authentication.acr,
                     })
                     .await?,
                 ),
@@ -120,10 +132,7 @@ impl AuthorizeService {
             user: &user,
             nonce,
             auth_time: auth_time_val,
-            acr: request
-                .acr_values
-                .as_ref()
-                .and_then(|v| v.first().map(String::as_str)),
+            acr: authentication.acr,
             access_token: access_token.as_deref(),
             code: None,
             protected_session_id: Some(protected_session_id),
@@ -171,7 +180,7 @@ impl AuthorizeService {
         protected_session_id: &str,
         user_oid: Uuid,
         response_type: ResponseType,
-        auth_time: Option<i64>,
+        authentication: AuthenticationContext<'_>,
     ) -> Result<Url, AppError> {
         let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
@@ -193,7 +202,8 @@ impl AuthorizeService {
                 user_oid,
                 session_oid,
                 protected_session_id,
-                auth_time,
+                authentication.auth_time,
+                authentication.acr,
             )
             .await?;
 
@@ -233,6 +243,10 @@ impl AuthorizeService {
                     issuer: &issuer,
                     audience: access_token_audience,
                     claims: claims.as_ref(),
+                    auth_time: authentication
+                        .auth_time
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp()),
+                    acr: authentication.acr,
                 })
                 .await?,
             )
@@ -261,11 +275,10 @@ impl AuthorizeService {
                 audience: &audience,
                 user: &user,
                 nonce,
-                auth_time: auth_time.unwrap_or_else(|| chrono::Utc::now().timestamp()),
-                acr: request
-                    .acr_values
-                    .as_ref()
-                    .and_then(|v| v.first().map(String::as_str)),
+                auth_time: authentication
+                    .auth_time
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp()),
+                acr: authentication.acr,
                 access_token: access_token.as_deref(),
                 code: Some(&code),
                 protected_session_id: Some(protected_session_id),
@@ -351,6 +364,8 @@ impl AuthorizeService {
             scope: &input.request.scope,
             token_id: &access_token_record.oid.to_string(),
             claims: input.claims,
+            auth_time: input.auth_time,
+            acr: input.acr,
         })
     }
 }

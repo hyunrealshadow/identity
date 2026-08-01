@@ -18,6 +18,9 @@ pub enum AuthErrorCode {
     IdentifierRequired,
     PasswordTooShort,
     PasswordUnchanged,
+    TotpAlreadyEnabled,
+    TotpNotEnabled,
+    InvalidTotpEnrollment,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -38,6 +41,9 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::IdentifierRequired => ErrorKind::Validation,
             AuthErrorCode::PasswordTooShort => ErrorKind::Validation,
             AuthErrorCode::PasswordUnchanged => ErrorKind::Validation,
+            AuthErrorCode::TotpAlreadyEnabled => ErrorKind::Conflict,
+            AuthErrorCode::TotpNotEnabled => ErrorKind::Conflict,
+            AuthErrorCode::InvalidTotpEnrollment => ErrorKind::Validation,
         }
     }
 
@@ -58,6 +64,9 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::IdentifierRequired => 11012,
             AuthErrorCode::PasswordTooShort => 11013,
             AuthErrorCode::PasswordUnchanged => 11014,
+            AuthErrorCode::TotpAlreadyEnabled => 11015,
+            AuthErrorCode::TotpNotEnabled => 11016,
+            AuthErrorCode::InvalidTotpEnrollment => 11017,
         }
     }
 }

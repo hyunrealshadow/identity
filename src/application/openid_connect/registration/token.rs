@@ -15,6 +15,6 @@ fn generate_url_safe_token() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-pub(super) const fn default_skip_consent() -> bool {
-    cfg!(feature = "oidc-conformance")
+pub(super) fn default_skip_consent() -> bool {
+    crate::openid_connect::remote::conformance_mode_active()
 }

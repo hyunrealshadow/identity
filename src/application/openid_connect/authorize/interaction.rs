@@ -16,6 +16,7 @@ pub enum ContinueAction {
         session_oid: SessionOid,
         user_oid: uuid::Uuid,
         auth_time: Option<i64>,
+        acr: Option<String>,
     },
     Deny,
 }
@@ -60,6 +61,7 @@ fn approve_action(selected_session: &ActiveSession) -> ContinueAction {
         session_oid: selected_session.session_oid,
         user_oid: selected_session.user_oid,
         auth_time: Some(selected_session.created_at.timestamp()),
+        acr: selected_session.acr.clone(),
     }
 }
 

@@ -1,5 +1,6 @@
 use http::{HeaderValue, StatusCode, header};
 use salvo::{Depot, Request, Response, Writer, async_trait, handler};
+use subtle::ConstantTimeEq;
 use unic_langid::LanguageIdentifier;
 
 use identity_application::{
@@ -14,6 +15,7 @@ use crate::controllers::response::{
     render_json,
 };
 use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers};
+use identity_infrastructure::config::DynamicClientRegistrationConfig;
 
 /// Map a registration `AppError` to an RFC 7591 §3.3 `error` value.
 fn registration_rfc_error_code(error: &AppError) -> &'static str {
@@ -108,6 +110,14 @@ pub async fn register(
     res: &mut Response,
 ) -> Result<(), RegistrationWebError> {
     let ctx = app_state(depot)?;
+    let registration_config = depot
+        .obtain::<DynamicClientRegistrationConfig>()
+        .map_err(|_| {
+            AppError::from_code(
+                identity_application::error::codes::common::CommonErrorCode::InternalError,
+            )
+        })?;
+    validate_initial_access_token(registration_config, req)?;
     let request: DynamicClientRegistrationRequest = parse_json(req).await?;
     let response = ctx
         .services()
@@ -118,6 +128,37 @@ pub async fn register(
     insert_no_store_headers(res);
     render_json(res, StatusCode::CREATED, response);
     Ok(())
+}
+
+fn validate_initial_access_token(
+    config: &DynamicClientRegistrationConfig,
+    req: &Request,
+) -> Result<(), AppError> {
+    if config.required_initial_access_token().is_none() {
+        return Ok(());
+    }
+    let provided = bearer_token(req).ok();
+    if initial_access_token_matches(config, provided) {
+        Ok(())
+    } else {
+        Err(AppError::from_code(
+            RegistrationErrorCode::InvalidRegistrationAccessToken,
+        ))
+    }
+}
+
+fn initial_access_token_matches(
+    config: &DynamicClientRegistrationConfig,
+    provided: Option<&str>,
+) -> bool {
+    let Some(expected) = config.required_initial_access_token() else {
+        return true;
+    };
+    let Some(provided) = provided else {
+        return false;
+    };
+
+    expected.len() == provided.len() && bool::from(expected.as_bytes().ct_eq(provided.as_bytes()))
 }
 
 #[handler]
@@ -174,4 +215,40 @@ fn bearer_token(req: &Request) -> Result<&str, AppError> {
                 identity_application::error::codes::registration::RegistrationErrorCode::InvalidRegistrationAccessToken,
             )
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::initial_access_token_matches;
+    use identity_infrastructure::config::DynamicClientRegistrationConfig;
+
+    fn registration_config(initial_access_token: Option<&str>) -> DynamicClientRegistrationConfig {
+        DynamicClientRegistrationConfig {
+            initial_access_token: initial_access_token.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn registration_is_open_when_initial_access_token_is_not_configured() {
+        assert!(initial_access_token_matches(
+            &registration_config(None),
+            None
+        ));
+        assert!(initial_access_token_matches(
+            &registration_config(Some("   ")),
+            None
+        ));
+    }
+
+    #[test]
+    fn registration_requires_the_exact_configured_initial_access_token() {
+        let config = registration_config(Some("registration-secret"));
+
+        assert!(initial_access_token_matches(
+            &config,
+            Some("registration-secret")
+        ));
+        assert!(!initial_access_token_matches(&config, None));
+        assert!(!initial_access_token_matches(&config, Some("wrong-secret")));
+    }
 }

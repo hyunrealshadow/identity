@@ -94,6 +94,8 @@ pub trait SessionRepository: Send + Sync {
     /// Update `last_active_at` for a session (identified by OID).
     async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError>;
 
+    /// Atomically revokes the session and all authorization artifacts derived
+    /// from it (authorization codes, access tokens, and refresh tokens).
     async fn revoke_by_oid(
         &self,
         oid: SessionOid,
@@ -143,12 +145,13 @@ pub trait LoginRepository: Send + Sync {
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError>;
 
-    /// Increment login `failed_attempts` and record a failure reason.
+    /// Atomically increment login `failed_attempts`, record a failure reason,
+    /// and return the resulting count.
     async fn increment_failed_attempts(
         &self,
         login_oid: Uuid,
         failure_reason: Option<&str>,
-    ) -> Result<(), LoginRepositoryError>;
+    ) -> Result<i32, LoginRepositoryError>;
 
     /// Reset login `failed_attempts` to zero.
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError>;

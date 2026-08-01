@@ -11,8 +11,12 @@ mockall::mock! {
             -> Result<User, UserRepositoryError>;
         async fn find_by_oid(&self, oid: UserOid)
             -> Result<Option<User>, UserRepositoryError>;
-        async fn increment_failed_attempts(&self, user_oid: UserOid, lock_until: Option<DateTime<Utc>>)
-            -> Result<(), UserRepositoryError>;
+        async fn increment_failed_attempts(
+            &self,
+            user_oid: UserOid,
+            lock_threshold: i32,
+            lock_until: DateTime<Utc>,
+        ) -> Result<i32, UserRepositoryError>;
         async fn reset_failed_attempts(&self, user_oid: UserOid)
             -> Result<(), UserRepositoryError>;
     }
@@ -29,7 +33,7 @@ pub fn user_repo_with(user: User) -> MockUserRepository {
     mock.expect_find_by_identifier()
         .returning(move |_| Ok(u.clone()));
     mock.expect_increment_failed_attempts()
-        .returning(|_user_oid, _lock_until| Ok(()));
+        .returning(|_user_oid, _lock_threshold, _lock_until| Ok(1));
     mock.expect_reset_failed_attempts()
         .returning(|_user_oid| Ok(()));
     mock

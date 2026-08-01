@@ -198,8 +198,13 @@ function ChallengePage() {
   const data = Route.useLoaderData()
   const [showPassword, setShowPassword] = useState(false)
   const loginId = data.loginId
-  const credentialType = search.credential_type === 'otp' ? 'otp' : 'password'
+  const credentialType =
+    search.credential_type === 'otp' ||
+    search.credential_type === 'recovery_code'
+      ? search.credential_type
+      : 'password'
   const isOtp = credentialType === 'otp'
+  const isRecoveryCode = credentialType === 'recovery_code'
   const visibleError = search.error ?? data.error
   const user = data.status?.user
   const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
@@ -207,9 +212,17 @@ function ChallengePage() {
   return (
     <AuthShell
       lang={data.locale}
-      title={isOtp ? t('otpTitle') : t('passwordTitle')}
+      title={
+        isRecoveryCode
+          ? t('recoveryCodeTitle')
+          : isOtp
+            ? t('otpTitle')
+            : t('passwordTitle')
+      }
       description={
-        isOtp
+        isRecoveryCode
+          ? t('recoveryCodeDescription')
+          : isOtp
           ? t('otpDescription')
           : t('passwordDescription')
       }
@@ -257,17 +270,17 @@ function ChallengePage() {
         />
         <input type="hidden" name="ui_locales" value={data.uiLocales} />
 
-        {isOtp ? (
+        {isOtp || isRecoveryCode ? (
           <TextField isRequired fullWidth name="credential" isInvalid={!!data.fieldError}>
-            <Label>{t('otp')}</Label>
+            <Label>{isRecoveryCode ? t('recoveryCode') : t('otp')}</Label>
             <Input
               autoFocus
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={8}
-              pattern="[0-9]*"
-              placeholder="000000"
-              className="text-center font-mono text-xl tracking-[0.35em]"
+              inputMode={isRecoveryCode ? 'text' : 'numeric'}
+              autoComplete={isRecoveryCode ? 'off' : 'one-time-code'}
+              maxLength={isRecoveryCode ? 32 : 8}
+              pattern={isRecoveryCode ? undefined : '[0-9]*'}
+              placeholder={isRecoveryCode ? 'ABCD-EFGH-IJKL-MNOP' : '000000'}
+              className="text-center font-mono text-xl tracking-[0.2em]"
             />
             <FieldError>{data.fieldError}</FieldError>
           </TextField>
@@ -301,9 +314,18 @@ function ChallengePage() {
         )}
 
         <SubmitButton fullWidth>
-          {isOtp ? t('verify') : t('login')}
+          {isOtp || isRecoveryCode ? t('verify') : t('login')}
         </SubmitButton>
       </ProgressiveForm>
+
+      {isOtp || isRecoveryCode ? (
+        <a
+          href={`/login/challenge?login_id=${encodeURIComponent(loginId)}&credential_type=${isRecoveryCode ? 'otp' : 'recovery_code'}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
+          className="auth-link mx-auto mt-5 flex w-fit items-center justify-center text-sm font-semibold text-accent"
+        >
+          {isRecoveryCode ? t('useAuthenticatorCode') : t('useRecoveryCode')}
+        </a>
+      ) : null}
 
       <a
         href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}

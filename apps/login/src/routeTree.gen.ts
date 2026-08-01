@@ -15,6 +15,7 @@ import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoginChallengeRouteImport } from './routes/login.challenge'
 import { Route as OauthCallbackRouteImport } from './routes/oauth.callback'
+import { Route as OauthReauthRouteImport } from './routes/oauth.reauth'
 import { Route as OauthStartRouteImport } from './routes/oauth.start'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const OauthCallbackRoute = OauthCallbackRouteImport.update({
   path: '/oauth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OauthReauthRoute = OauthReauthRouteImport.update({
+  id: '/oauth/reauth',
+  path: '/oauth/reauth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthStartRoute = OauthStartRouteImport.update({
   id: '/oauth/start',
   path: '/oauth/start',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
   '/oauth/callback': typeof OauthCallbackRoute
+  '/oauth/reauth': typeof OauthReauthRoute
   '/oauth/start': typeof OauthStartRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
   '/oauth/callback': typeof OauthCallbackRoute
+  '/oauth/reauth': typeof OauthReauthRoute
   '/oauth/start': typeof OauthStartRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRouteWithChildren
   '/login/challenge': typeof LoginChallengeRoute
   '/oauth/callback': typeof OauthCallbackRoute
+  '/oauth/reauth': typeof OauthReauthRoute
   '/oauth/start': typeof OauthStartRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login/challenge'
     | '/oauth/callback'
+    | '/oauth/reauth'
     | '/oauth/start'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login/challenge'
     | '/oauth/callback'
+    | '/oauth/reauth'
     | '/oauth/start'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login/challenge'
     | '/oauth/callback'
+    | '/oauth/reauth'
     | '/oauth/start'
   fileRoutesById: FileRoutesById
 }
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
   OauthCallbackRoute: typeof OauthCallbackRoute
+  OauthReauthRoute: typeof OauthReauthRoute
   OauthStartRoute: typeof OauthStartRoute
 }
 
@@ -164,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OauthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/oauth/reauth': {
+      id: '/oauth/reauth'
+      path: '/oauth/reauth'
+      fullPath: '/oauth/reauth'
+      preLoaderRoute: typeof OauthReauthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/start': {
       id: '/oauth/start'
       path: '/oauth/start'
@@ -190,6 +210,7 @@ const rootRouteChildren: RootRouteChildren = {
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
   OauthCallbackRoute: OauthCallbackRoute,
+  OauthReauthRoute: OauthReauthRoute,
   OauthStartRoute: OauthStartRoute,
 }
 export const routeTree = rootRouteImport

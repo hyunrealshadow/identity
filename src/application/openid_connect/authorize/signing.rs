@@ -41,6 +41,8 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
     pub scope: &'a str,
     pub token_id: &'a str,
     pub claims: Option<&'a ClaimsRequest>,
+    pub auth_time: i64,
+    pub acr: Option<&'a str>,
 }
 
 impl AuthorizeService {
@@ -264,6 +266,21 @@ impl AuthorizeService {
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
+        payload
+            .set_claim(
+                JwtClaimNames::AUTH_TIME,
+                Some(serde_json::json!(input.auth_time)),
+            )
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+            })?;
+        if let Some(acr) = input.acr {
+            payload
+                .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+                })?;
+        }
         if let Some(claims_value) = input.claims {
             payload
                 .set_claim(

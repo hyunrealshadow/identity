@@ -277,6 +277,7 @@ mod tests {
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
             graphql: GraphqlConfig::default(),
+            openid_connect: Default::default(),
             settings: SettingsConfig::default(),
             install: Default::default(),
         };

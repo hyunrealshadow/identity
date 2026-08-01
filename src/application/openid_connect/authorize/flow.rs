@@ -341,6 +341,7 @@ impl AuthorizeService {
         session_oid: SessionOid,
         user_oid: Uuid,
         auth_time: Option<i64>,
+        acr: Option<String>,
     ) -> Result<Url, AppError> {
         self.approve_authorization_request_with_protected_session_id(
             authorization_request_id,
@@ -348,6 +349,7 @@ impl AuthorizeService {
             user_oid,
             None,
             auth_time,
+            acr,
         )
         .await
     }
@@ -359,6 +361,7 @@ impl AuthorizeService {
         user_oid: Uuid,
         protected_session_id: Option<String>,
         auth_time: Option<i64>,
+        acr: Option<String>,
     ) -> Result<Url, AppError> {
         let stored = self
             .load_stored_authorization_request(authorization_request_id)
@@ -382,7 +385,10 @@ impl AuthorizeService {
                 &protected_session_id,
                 user_oid,
                 response_type,
-                auth_time,
+                super::implicit_flow::AuthenticationContext {
+                    auth_time,
+                    acr: acr.as_deref(),
+                },
             )
             .await?
         } else if response_type.uses_front_channel_response() {
@@ -392,7 +398,10 @@ impl AuthorizeService {
                 &protected_session_id,
                 user_oid,
                 response_type,
-                auth_time,
+                super::implicit_flow::AuthenticationContext {
+                    auth_time,
+                    acr: acr.as_deref(),
+                },
             )
             .await?
         } else {
@@ -402,6 +411,7 @@ impl AuthorizeService {
                 session_oid,
                 &protected_session_id,
                 auth_time,
+                acr.as_deref(),
             )
             .await?
         };
@@ -419,6 +429,7 @@ impl AuthorizeService {
         session_oid: SessionOid,
         protected_session_id: &str,
         auth_time: Option<i64>,
+        acr: Option<&str>,
     ) -> Result<Url, AppError> {
         let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
@@ -431,6 +442,7 @@ impl AuthorizeService {
                 session_oid,
                 protected_session_id,
                 auth_time,
+                acr,
             )
             .await?;
 
@@ -454,6 +466,7 @@ impl AuthorizeService {
         session_oid: SessionOid,
         protected_session_id: &str,
         auth_time: Option<i64>,
+        acr: Option<&str>,
     ) -> Result<(String, Uuid), AppError> {
         let record = self
             .client_authorization_repo
@@ -472,7 +485,7 @@ impl AuthorizeService {
                         user_oid: user_oid.to_string(),
                         session_oid,
                         protected_session_id: Some(protected_session_id.to_string()),
-                        acr: request.acr_values.as_ref().and_then(|v| v.first().cloned()),
+                        acr: acr.map(str::to_owned),
                         redirect_uri: request.redirect_uri.clone(),
                         auth_time,
                         claims: request
@@ -545,6 +558,7 @@ impl AuthorizeService {
             user_oid,
             protected_session_id,
             auth_time,
+            login.acr,
         )
         .await
     }

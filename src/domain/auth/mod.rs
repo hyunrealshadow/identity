@@ -40,8 +40,9 @@ pub const ACR_PASSWORD: &str = "urn:oasis:names:tc:SAML:2.0:ac:classes:Password"
 
 /// ACR value for password + TOTP (MFA) authentication.
 ///
-/// SAML 2.0 PasswordProtectedTransport class — conventionally used for MFA.
-pub const ACR_MFA: &str = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport";
+/// OIDC leaves ACR values deployment-specific. This private value is advertised
+/// through discovery and represents a backend-verified multi-factor session.
+pub const ACR_MFA: &str = "urn:identity:acr:mfa";
 
 // ─── Policy Constants ────────────────────────────────────────────────────────
 

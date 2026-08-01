@@ -1,5 +1,6 @@
 use totp_rs::{Algorithm, Secret, TOTP};
 
+use identity_application::auth::mfa::{GeneratedTotpEnrollment, TotpEnrollmentGenerator};
 use identity_domain::{
     auth::totp::{TotpError, TotpVerifier},
     user::model::{OtpAlgorithm, OtpCredentialData},
@@ -29,6 +30,38 @@ impl TotpVerifier for TotpVerifierImpl {
 
         totp.check_current(code)
             .map_err(|e| TotpError::Internal(e.to_string()))
+    }
+}
+
+impl TotpEnrollmentGenerator for TotpVerifierImpl {
+    fn generate(
+        &self,
+        issuer: &str,
+        account_name: &str,
+    ) -> Result<GeneratedTotpEnrollment, TotpError> {
+        let secret = Secret::generate_secret().to_encoded().to_string();
+        let secret_bytes = Secret::Encoded(secret.clone())
+            .to_bytes()
+            .map_err(|error| TotpError::Internal(error.to_string()))?;
+        let totp = TOTP::new(
+            Algorithm::SHA1,
+            6,
+            TOTP_ALLOWED_SKEW_STEPS,
+            30,
+            secret_bytes,
+            Some(issuer.to_owned()),
+            account_name.to_owned(),
+        )
+        .map_err(|error| TotpError::Internal(error.to_string()))?;
+        Ok(GeneratedTotpEnrollment {
+            credential: OtpCredentialData {
+                secret,
+                digits: 6,
+                period: 30,
+                algorithm: OtpAlgorithm::Sha1,
+            },
+            otpauth_uri: totp.get_url(),
+        })
     }
 }
 

@@ -484,6 +484,7 @@ async fn approve_authorization_request_is_single_use_after_completion() {
             SessionOid(Uuid::new_v4()),
             Uuid::new_v4(),
             None,
+            None,
         )
         .await
         .unwrap_err();
@@ -504,7 +505,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None, None)
         .await
         .unwrap();
 
@@ -529,7 +530,7 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
     set_stored_request_redirect_uri_for_test(&request_repo, oid, "not a uri");
 
     let error = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None, None)
         .await
         .unwrap_err();
     assert_eq!(error.code(), 23052);
@@ -542,7 +543,7 @@ async fn approve_authorization_request_failure_does_not_burn_interaction() {
     );
 
     let redirect = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), Uuid::new_v4(), None, None)
         .await
         .unwrap();
 
@@ -587,7 +588,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None, None)
         .await
         .unwrap();
 
@@ -656,7 +657,7 @@ async fn approve_implicit_flow_returns_session_state() {
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None, None)
         .await
         .unwrap();
 
@@ -705,7 +706,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None, None)
         .await
         .unwrap();
 
@@ -769,7 +770,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
         .await
         .unwrap();
     let redirect = service
-        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None)
+        .approve_authorization_request(oid, SessionOid(Uuid::new_v4()), user_oid, None, None)
         .await
         .unwrap();
 

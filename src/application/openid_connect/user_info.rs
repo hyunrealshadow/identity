@@ -17,7 +17,7 @@ use crate::{
         },
     },
     domain::{
-        auth::{SessionOid, SessionStatus, repository::SessionRepository},
+        auth::SessionOid,
         client_authorization::{
             ClientAuthorizationData, ClientAuthorizationRepository, ClientAuthorizationType,
         },
@@ -44,7 +44,6 @@ pub struct UserInfoService {
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_service: Arc<AsymmetricKeyService>,
     provider_service: Arc<OpenIdProviderService>,
-    session_repo: Option<Arc<dyn SessionRepository>>,
 }
 
 pub struct TokenClaims {
@@ -74,14 +73,7 @@ impl UserInfoService {
             client_authorization_repo,
             key_service,
             provider_service,
-            session_repo: None,
         }
-    }
-
-    #[must_use]
-    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
-        self.session_repo = Some(session_repo);
-        self
     }
 
     pub async fn get_user_info(
@@ -313,24 +305,6 @@ impl UserInfoService {
         if access_token_data.user_oid != user_oid.to_string() {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
-        if let Some(session_repo) = &self.session_repo {
-            let session = session_repo
-                .find_by_oid(access_token_data.session_oid)
-                .await
-                .map_err(|error| {
-                    AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-                })?
-                .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-            if session.user_oid != user_oid
-                || session.status != SessionStatus::ACTIVE
-                || session.revoked_at.is_some()
-                || session
-                    .expires_at
-                    .is_some_and(|expires_at| expires_at < chrono::Utc::now())
-            {
-                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
-            }
-        }
         let client_id = payload
             .claim(JwtClaimNames::CLIENT_ID)
             .and_then(|value| value.as_str())
@@ -362,6 +336,17 @@ impl UserInfoService {
             .transpose()
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
+        let auth_time = payload
+            .claim(JwtClaimNames::AUTH_TIME)
+            .and_then(|value| value.as_i64());
+        let acr = effective_token_acr(
+            payload
+                .claim(JwtClaimNames::ACR)
+                .and_then(|value| value.as_str()),
+            auth_time,
+            chrono::Utc::now().timestamp(),
+        );
+
         Ok(TokenClaims {
             user_oid: UserOid::from(user_oid),
             client_oid: access_token_record.client_oid,
@@ -369,13 +354,8 @@ impl UserInfoService {
             scope,
             claims,
             audience,
-            auth_time: payload
-                .claim(JwtClaimNames::AUTH_TIME)
-                .and_then(|value| value.as_i64()),
-            acr: payload
-                .claim(JwtClaimNames::ACR)
-                .and_then(|value| value.as_str())
-                .map(str::to_owned),
+            auth_time,
+            acr,
         })
     }
 
@@ -430,6 +410,20 @@ impl UserInfoService {
     }
 }
 
+fn effective_token_acr(acr: Option<&str>, auth_time: Option<i64>, now: i64) -> Option<String> {
+    match acr {
+        Some(identity_domain::auth::ACR_MFA)
+            if auth_time.is_none_or(|auth_time| {
+                now.saturating_sub(auth_time) >= identity_domain::auth::ACR_EXPIRY.as_secs() as i64
+            }) =>
+        {
+            Some(identity_domain::auth::ACR_PASSWORD.to_owned())
+        }
+        Some(acr) => Some(acr.to_owned()),
+        None => None,
+    }
+}
+
 fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppError> {
     let value = serde_json::to_value(claims)
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
@@ -453,4 +447,43 @@ fn build_user_info_signer(
 ) -> Result<Box<dyn JwsSigner>, AppError> {
     asymmetric_signer_from_pem(alg, private_key_pem.as_bytes())
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::effective_token_acr;
+    use identity_domain::auth::{ACR_EXPIRY, ACR_MFA, ACR_PASSWORD};
+
+    #[test]
+    fn token_acr_keeps_unexpired_mfa() {
+        let auth_time = 1_700_000_000;
+
+        assert_eq!(
+            effective_token_acr(Some(ACR_MFA), Some(auth_time), auth_time + 60).as_deref(),
+            Some(ACR_MFA)
+        );
+    }
+
+    #[test]
+    fn token_acr_degrades_expired_mfa() {
+        let auth_time = 1_700_000_000;
+
+        assert_eq!(
+            effective_token_acr(
+                Some(ACR_MFA),
+                Some(auth_time),
+                auth_time + ACR_EXPIRY.as_secs() as i64,
+            )
+            .as_deref(),
+            Some(ACR_PASSWORD)
+        );
+    }
+
+    #[test]
+    fn token_acr_degrades_mfa_without_auth_time() {
+        assert_eq!(
+            effective_token_acr(Some(ACR_MFA), None, 1_700_000_000).as_deref(),
+            Some(ACR_PASSWORD)
+        );
+    }
 }

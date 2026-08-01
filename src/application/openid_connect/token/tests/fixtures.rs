@@ -189,9 +189,10 @@ impl UserRepository for InMemoryUserRepository {
     async fn increment_failed_attempts(
         &self,
         _user_oid: UserOid,
-        _lock_until: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<(), UserRepositoryError> {
-        Ok(())
+        _lock_threshold: i32,
+        _lock_until: chrono::DateTime<chrono::Utc>,
+    ) -> Result<i32, UserRepositoryError> {
+        Ok(self.user.failed_attempts + 1)
     }
 
     async fn reset_failed_attempts(&self, _user_oid: UserOid) -> Result<(), UserRepositoryError> {
