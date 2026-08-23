@@ -264,10 +264,27 @@ async fn register_defaults_to_openid_scope_when_scope_is_omitted() {
         .await
         .unwrap();
 
-    assert_eq!(response.scope.as_deref(), Some("openid"));
-
     let captured_val = captured.lock().unwrap().clone().unwrap();
-    assert_eq!(captured_val.assigned_scopes, vec!["openid"]);
+    if cfg!(feature = "oidc-conformance") {
+        assert_eq!(
+            response.scope.as_deref(),
+            Some("openid profile email address phone offline_access")
+        );
+        assert_eq!(
+            captured_val.assigned_scopes,
+            vec![
+                "openid",
+                "profile",
+                "email",
+                "address",
+                "phone",
+                "offline_access"
+            ]
+        );
+    } else {
+        assert_eq!(response.scope.as_deref(), Some("openid"));
+        assert_eq!(captured_val.assigned_scopes, vec!["openid"]);
+    }
 }
 
 #[tokio::test]

@@ -117,7 +117,7 @@ pub async fn register(
                 identity_application::error::codes::common::CommonErrorCode::InternalError,
             )
         })?;
-    validate_initial_access_token(registration_config, req)?;
+    validate_initial_access_token(registration_config, ctx.context().is_conformance(), req)?;
     let request: DynamicClientRegistrationRequest = parse_json(req).await?;
     let response = ctx
         .services()
@@ -132,13 +132,11 @@ pub async fn register(
 
 fn validate_initial_access_token(
     config: &DynamicClientRegistrationConfig,
+    is_conformance: bool,
     req: &Request,
 ) -> Result<(), AppError> {
-    if config.required_initial_access_token().is_none() {
-        return Ok(());
-    }
     let provided = bearer_token(req).ok();
-    if initial_access_token_matches(config, provided) {
+    if initial_access_token_matches(config, is_conformance, provided) {
         Ok(())
     } else {
         Err(AppError::from_code(
@@ -149,9 +147,13 @@ fn validate_initial_access_token(
 
 fn initial_access_token_matches(
     config: &DynamicClientRegistrationConfig,
+    is_conformance: bool,
     provided: Option<&str>,
 ) -> bool {
-    let Some(expected) = config.required_initial_access_token() else {
+    if !is_conformance {
+        return true;
+    }
+    let Some(expected) = config.required_conformance_initial_access_token() else {
         return true;
     };
     let Some(provided) = provided else {
@@ -222,33 +224,60 @@ mod tests {
     use super::initial_access_token_matches;
     use identity_infrastructure::config::DynamicClientRegistrationConfig;
 
+    #[cfg(feature = "oidc-conformance")]
     fn registration_config(initial_access_token: Option<&str>) -> DynamicClientRegistrationConfig {
         DynamicClientRegistrationConfig {
-            initial_access_token: initial_access_token.map(str::to_owned),
+            conformance_initial_access_token: initial_access_token.map(str::to_owned),
         }
     }
 
+    #[cfg(not(feature = "oidc-conformance"))]
+    fn registration_config(_initial_access_token: Option<&str>) -> DynamicClientRegistrationConfig {
+        DynamicClientRegistrationConfig::default()
+    }
+
     #[test]
-    fn registration_is_open_when_initial_access_token_is_not_configured() {
+    #[cfg(feature = "oidc-conformance")]
+    fn registration_is_open_when_conformance_initial_access_token_is_not_configured() {
         assert!(initial_access_token_matches(
             &registration_config(None),
+            true,
             None
         ));
         assert!(initial_access_token_matches(
             &registration_config(Some("   ")),
+            true,
             None
         ));
     }
 
     #[test]
-    fn registration_requires_the_exact_configured_initial_access_token() {
+    fn fixed_initial_access_token_is_ignored_outside_conformance() {
+        let config = registration_config(Some("registration-secret"));
+
+        assert!(initial_access_token_matches(&config, false, None));
+        assert!(initial_access_token_matches(
+            &config,
+            false,
+            Some("wrong-secret")
+        ));
+    }
+
+    #[test]
+    #[cfg(feature = "oidc-conformance")]
+    fn conformance_requires_the_exact_configured_initial_access_token() {
         let config = registration_config(Some("registration-secret"));
 
         assert!(initial_access_token_matches(
             &config,
+            true,
             Some("registration-secret")
         ));
-        assert!(!initial_access_token_matches(&config, None));
-        assert!(!initial_access_token_matches(&config, Some("wrong-secret")));
+        assert!(!initial_access_token_matches(&config, true, None));
+        assert!(!initial_access_token_matches(
+            &config,
+            true,
+            Some("wrong-secret")
+        ));
     }
 }

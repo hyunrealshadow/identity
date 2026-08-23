@@ -40,8 +40,9 @@ settings:
 
 openid_connect:
   dynamic_registration:
-    # Conformance registration remains deliberately open.
-    initial_access_token:
+    # A fixed token is supported only for conformance harnesses. Leave empty
+    # when the suite expects open RFC 7591 registration.
+    conformance_initial_access_token: {{ get_env(name="OIDC_REGISTRATION_INITIAL_ACCESS_TOKEN", default="") }}
 
 install:
   domain: {{ get_env(name="DOMAIN", default="identity") }}

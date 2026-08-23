@@ -13,7 +13,11 @@ use http::{HeaderMap, StatusCode, header};
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::{Deserialize, Serialize};
 
-use identity_application::error::{AppError, codes::common::CommonErrorCode};
+use identity_application::error::{
+    AppError,
+    code::AppErrorCode,
+    codes::{auth::AuthErrorCode, common::CommonErrorCode},
+};
 use identity_application::key::asymmetric::GenerateAsymmetricKeyInput;
 use identity_domain::key::model::AsymmetricKeyAlgorithm;
 
@@ -182,7 +186,12 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         .identify(login_oid, &body.username)
         .await
     {
-        Ok(result) => result,
+        Ok(_) => {}
+        // `prompt=login` may create a fresh interaction that is already bound
+        // to the user from the OP session. In that state identification is
+        // intentionally rejected, but the conformance-only helper must still
+        // submit the password challenge to prove fresh authentication.
+        Err(e) if e.code() == AuthErrorCode::InvalidLoginState.code() => {}
         Err(e) => {
             tracing::warn!(error = %e, "auto_login: identify failed");
             render_json(
@@ -379,6 +388,7 @@ mod tests {
             created_at: Utc::now(),
             acr: Some("pwd".to_owned()),
             acr_expires_at: None,
+            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
         };
         let recorded = Arc::new(Mutex::new(None));
 

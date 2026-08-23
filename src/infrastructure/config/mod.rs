@@ -162,19 +162,28 @@ pub struct OpenIdConnectConfig {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DynamicClientRegistrationConfig {
-    /// Optional RFC 7591 initial access token. When absent, registration is
-    /// open if the database-backed dynamic-registration setting is enabled.
+    /// Optional fixed RFC 7591 initial access token used only by the OIDC
+    /// conformance harness. Ordinary deployments must not use a long-lived
+    /// shared token for dynamic client registration.
+    #[cfg(feature = "oidc-conformance")]
     #[serde(default)]
-    pub initial_access_token: Option<String>,
+    pub conformance_initial_access_token: Option<String>,
 }
 
 impl DynamicClientRegistrationConfig {
     #[must_use]
-    pub fn required_initial_access_token(&self) -> Option<&str> {
-        self.initial_access_token
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+    pub fn required_conformance_initial_access_token(&self) -> Option<&str> {
+        #[cfg(feature = "oidc-conformance")]
+        {
+            self.conformance_initial_access_token
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        }
+        #[cfg(not(feature = "oidc-conformance"))]
+        {
+            None
+        }
     }
 }
 
@@ -425,9 +434,15 @@ impl AppEnvironment {
     }
 
     #[must_use]
-    #[cfg(feature = "oidc-conformance")]
     pub fn is_conformance(&self) -> bool {
-        matches!(self, Self::Conformance)
+        #[cfg(feature = "oidc-conformance")]
+        {
+            matches!(self, Self::Conformance)
+        }
+        #[cfg(not(feature = "oidc-conformance"))]
+        {
+            false
+        }
     }
 }
 
@@ -625,6 +640,54 @@ database:
         assert!(config.health.enable);
         assert!(config.health.checks.database);
         assert!(config.database.auto_migrate);
+    }
+
+    #[test]
+    fn legacy_fixed_registration_token_config_is_rejected() {
+        let result = serde_yml::from_str::<AppConfig>(
+            r#"
+openid_connect:
+  dynamic_registration:
+    initial_access_token: long-lived-secret
+"#,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(feature = "oidc-conformance")]
+    fn conformance_registration_token_config_is_explicit() {
+        let config = serde_yml::from_str::<AppConfig>(
+            r#"
+openid_connect:
+  dynamic_registration:
+    conformance_initial_access_token: " test-secret "
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config
+                .openid_connect
+                .dynamic_registration
+                .required_conformance_initial_access_token(),
+            Some("test-secret")
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "oidc-conformance"))]
+    fn conformance_registration_token_config_requires_feature() {
+        let result = serde_yml::from_str::<AppConfig>(
+            r#"
+openid_connect:
+  dynamic_registration:
+    conformance_initial_access_token: test-secret
+"#,
+        );
+
+        assert!(result.is_err());
     }
 
     #[test]

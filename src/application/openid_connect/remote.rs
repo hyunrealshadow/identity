@@ -153,7 +153,7 @@ pub async fn validate_resolved_https_public_url(url: &Url) -> Result<(), RemoteF
 
     for address in addresses.by_ref() {
         has_address = true;
-        if is_unsafe_ip(address.ip()) {
+        if !resolved_address_is_allowed(address.ip(), conformance_mode_active()) {
             return Err(RemoteFetchError::UnsafeHost);
         }
     }
@@ -163,6 +163,10 @@ pub async fn validate_resolved_https_public_url(url: &Url) -> Result<(), RemoteF
     }
 
     Ok(())
+}
+
+fn resolved_address_is_allowed(address: IpAddr, allow_unsafe: bool) -> bool {
+    allow_unsafe || !is_unsafe_ip(address)
 }
 
 pub async fn fetch_document_after_url_validation(
@@ -258,7 +262,8 @@ mod tests {
 
     use super::{
         RemoteUrlError, conformance_allows_invalid_certs, conformance_mode_active,
-        conformance_mode_active_for, fetchable_url, is_unsafe_ip, validate_https_public_url,
+        conformance_mode_active_for, fetchable_url, is_unsafe_ip, resolved_address_is_allowed,
+        validate_https_public_url,
     };
     use url::Url;
 
@@ -322,6 +327,14 @@ mod tests {
         ] {
             assert!(is_unsafe_ip(address), "{address} should be rejected");
         }
+    }
+
+    #[test]
+    fn conformance_mode_can_fetch_documents_from_the_suite_network() {
+        let address = IpAddr::V4(Ipv4Addr::new(172, 18, 0, 5));
+
+        assert!(!resolved_address_is_allowed(address, false));
+        assert!(resolved_address_is_allowed(address, true));
     }
 
     #[test]

@@ -11,7 +11,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY . .
 COPY --from=ui-builder /app/assets/static /app/assets/static
-RUN cargo build --release --bin identity --features oidc-conformance
+RUN cargo build --release --bin identity --features oidc-conformance,allow-none-alg
 
 FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*

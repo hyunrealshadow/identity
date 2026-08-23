@@ -25,7 +25,6 @@ impl AppContext {
     }
 
     #[must_use]
-    #[cfg(feature = "oidc-conformance")]
     pub fn is_conformance(&self) -> bool {
         self.environment.is_conformance()
     }

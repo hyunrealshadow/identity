@@ -149,5 +149,16 @@ pub(crate) fn sector_redirect_uris_include_registered_redirects(
 }
 
 fn default_scopes() -> Vec<String> {
+    #[cfg(feature = "oidc-conformance")]
+    return vec![
+        StandardScopes::OPENID.to_owned(),
+        StandardScopes::PROFILE.to_owned(),
+        StandardScopes::EMAIL.to_owned(),
+        StandardScopes::ADDRESS.to_owned(),
+        StandardScopes::PHONE.to_owned(),
+        StandardScopes::OFFLINE_ACCESS.to_owned(),
+    ];
+
+    #[cfg(not(feature = "oidc-conformance"))]
     vec![StandardScopes::OPENID.to_owned()]
 }

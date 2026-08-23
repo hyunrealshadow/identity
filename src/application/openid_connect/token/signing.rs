@@ -253,7 +253,9 @@ impl TokenService {
                     AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
                 })?;
         }
-        if let Some(access_token) = input.access_token {
+        if input.alg != "none"
+            && let Some(access_token) = input.access_token
+        {
             let at_hash = front_channel_hash(access_token, input.alg).map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
             })?;

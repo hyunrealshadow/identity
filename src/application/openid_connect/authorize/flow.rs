@@ -228,7 +228,13 @@ impl AuthorizeService {
             source,
         )
         .await?;
-        if source == SelectionSource::Reauthentication {
+        // The initial forced-login selection binds the existing subject so the
+        // challenge page can authenticate it.  Controllers record the selected
+        // session again after a successful challenge; do not downgrade that
+        // completed login back to `identifier_verified` on the second write.
+        if source == SelectionSource::Reauthentication
+            && login.status != identity_domain::auth::LoginStatus::AUTHENTICATED
+        {
             self.login_repo
                 .bind_user(
                     login.oid,
