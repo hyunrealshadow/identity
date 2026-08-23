@@ -48,25 +48,7 @@
   --radius-field: var(--radius);
 }
 
-/* HeroUI overrides live in the components layer so they beat the library
-   defaults (same layer, later in the stylesheet) but still lose to
-   per-instance Tailwind utilities such as `hover:shadow-*`. */
 @layer components {
-  /* Secondary buttons: white surface with a visible border. */
-  [data-slot="button"].button--secondary {
-    --button-bg: var(--surface);
-    --button-bg-hover: var(--surface-secondary);
-    --button-bg-pressed: var(--surface-secondary);
-    border: 1px solid var(--field-border);
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  }
-
-  @media (hover: hover) {
-    [data-slot="button"].button--secondary:hover {
-      border-color: var(--field-border-hover);
-    }
-  }
-
   /* Invalid fields: the danger border replaces the dark focus border, so a
      focused invalid field reads as a single red border + red ring. The stock
      theme gets away with stacking them because its focus color is light. */
@@ -88,6 +70,10 @@ body,
   min-height: 100%;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   color: var(--foreground);
@@ -97,6 +83,107 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+.account-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+}
+
+.account-card {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.03),
+    0 8px 24px -20px rgb(0 0 0 / 0.22);
+}
+
+.account-nav-link {
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.account-nav-link:hover {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+.account-nav-link[aria-current="page"] {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 11%, transparent);
+}
+
+.account-nav-link[aria-current="page"]:hover {
+  background: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.account-nav-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------
+   Progressive enhancement gates: `.js-only` renders only when the
+   head script has flipped the root class to `.js`; `.no-js-only`
+   renders only without client JavaScript.
+--------------------------------------------------------------- */
+.no-js .js-only {
+  display: none !important;
+}
+
+.js .no-js-only {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------
+   Account: TOTP enrollment QR + manual entry disclosure
+--------------------------------------------------------------- */
+.account-qr {
+  inline-size: 168px;
+  block-size: 168px;
+  padding: 12px;
+  background: white;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+.account-qr svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.account-details summary {
+  list-style: none;
+}
+
+.account-details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* ---------------------------------------------------------------
+   Print: isolate the recovery-code sheet so it prints on its own
+--------------------------------------------------------------- */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #recovery-codes-sheet,
+  #recovery-codes-sheet * {
+    visibility: visible;
+  }
+
+  #recovery-codes-sheet {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    margin: 0;
+    padding: 24px;
+  }
 }
 
 ::selection {
@@ -119,22 +206,18 @@ body {
 @keyframes auth-card-in {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes auth-item-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -162,7 +245,7 @@ body {
 }
 
 .auth-card {
-  animation: auth-card-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: auth-card-in 0.18s ease-out both;
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.04),
     0 12px 32px -16px rgb(0 0 0 / 0.14),
@@ -170,43 +253,43 @@ body {
 }
 
 .auth-item {
-  animation: auth-item-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: auth-item-in 0.16s ease-out both;
 }
 
 .auth-delay-1 {
-  animation-delay: 0.15s;
+  animation-delay: 0.02s;
 }
 
 .auth-delay-2 {
-  animation-delay: 0.21s;
+  animation-delay: 0.04s;
 }
 
 .auth-delay-3 {
-  animation-delay: 0.27s;
+  animation-delay: 0.06s;
 }
 
 .auth-delay-4 {
-  animation-delay: 0.33s;
+  animation-delay: 0.08s;
 }
 
 .auth-stagger > *,
 .auth-stagger-fast > * {
-  animation: auth-item-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: auth-item-in 0.16s ease-out both;
 }
 
-.auth-stagger > *:nth-child(1) { animation-delay: 0.16s; }
-.auth-stagger > *:nth-child(2) { animation-delay: 0.22s; }
-.auth-stagger > *:nth-child(3) { animation-delay: 0.28s; }
-.auth-stagger > *:nth-child(4) { animation-delay: 0.34s; }
-.auth-stagger > *:nth-child(5) { animation-delay: 0.4s; }
-.auth-stagger > *:nth-child(6) { animation-delay: 0.46s; }
+.auth-stagger > *:nth-child(1) { animation-delay: 0.03s; }
+.auth-stagger > *:nth-child(2) { animation-delay: 0.05s; }
+.auth-stagger > *:nth-child(3) { animation-delay: 0.07s; }
+.auth-stagger > *:nth-child(4) { animation-delay: 0.09s; }
+.auth-stagger > *:nth-child(5) { animation-delay: 0.11s; }
+.auth-stagger > *:nth-child(6) { animation-delay: 0.13s; }
 
-.auth-stagger-fast > *:nth-child(1) { animation-delay: 0.05s; }
-.auth-stagger-fast > *:nth-child(2) { animation-delay: 0.1s; }
-.auth-stagger-fast > *:nth-child(3) { animation-delay: 0.15s; }
-.auth-stagger-fast > *:nth-child(4) { animation-delay: 0.2s; }
-.auth-stagger-fast > *:nth-child(5) { animation-delay: 0.25s; }
-.auth-stagger-fast > *:nth-child(6) { animation-delay: 0.3s; }
+.auth-stagger-fast > *:nth-child(1) { animation-delay: 0.02s; }
+.auth-stagger-fast > *:nth-child(2) { animation-delay: 0.04s; }
+.auth-stagger-fast > *:nth-child(3) { animation-delay: 0.06s; }
+.auth-stagger-fast > *:nth-child(4) { animation-delay: 0.08s; }
+.auth-stagger-fast > *:nth-child(5) { animation-delay: 0.1s; }
+.auth-stagger-fast > *:nth-child(6) { animation-delay: 0.12s; }
 
 /* Defined after the stagger rules so the shake wins for alert children. */
 .auth-alert {
@@ -273,6 +356,25 @@ body {
   background-size: 100% 1px;
 }
 
+.auth-methods {
+  interpolate-size: allow-keywords;
+}
+
+.auth-methods::details-content {
+  block-size: 0;
+  overflow: clip;
+  opacity: 0;
+  transition:
+    block-size 0.18s ease-out,
+    content-visibility 0.18s allow-discrete,
+    opacity 0.14s ease-out;
+}
+
+.auth-methods[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+}
+
 .auth-background a:focus-visible {
   border-radius: 3px;
   outline: 2px solid rgb(24 24 27 / 0.55);
@@ -289,6 +391,10 @@ body {
   .auth-stagger > *,
   .auth-stagger-fast > * {
     animation: none;
+  }
+
+  .auth-methods::details-content {
+    transition: none;
   }
 
   [data-slot="button"],

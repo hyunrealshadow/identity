@@ -19,7 +19,7 @@ use super::{
 use crate::views::auth::{
     AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse, IdentifierRequest,
     IdentifierResponse, LoginStatusResponse, SelectAccountRequest, SelectAccountResponse,
-    SessionInfo, UserDisplayInfo, mask_email,
+    SessionInfo, UserDisplayInfo,
 };
 use crate::{
     application::{
@@ -27,7 +27,10 @@ use crate::{
         error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
     },
-    domain::{client_authorization::SelectionSource, user::model::UserOid},
+    domain::{
+        client_authorization::SelectionSource,
+        user::model::{CredentialType, UserOid},
+    },
     middleware::resolved_client_ip,
 };
 
@@ -63,6 +66,7 @@ async fn active_sessions(
             id: entry.protected_session_id,
             name: entry.session.user_name,
             email: entry.session.user_email,
+            picture: entry.session.user_picture,
             last_active_at: entry.session.last_active_at,
         })
         .collect();
@@ -95,21 +99,24 @@ async fn login_status(
         .await?;
     let login = ctx.services().login().get(login_oid).await?;
 
-    let user = match login.user_oid {
-        Some(user_oid) => ctx
-            .services()
-            .login()
-            .get_user(UserOid::from(user_oid))
-            .await
-            .map(|user| UserDisplayInfo {
-                email: mask_email(&user.email),
-                name: user.name,
-            })
-            .map(Some)?,
-        None => None,
+    let (user, credential_types) = match login.user_oid {
+        Some(user_oid) => {
+            let user_oid = UserOid::from(user_oid);
+            let credential_types = ctx.services().login().credential_types(user_oid).await?;
+            let user = ctx.services().login().get_user(user_oid).await?;
+            (
+                Some(UserDisplayInfo {
+                    email: user.email,
+                    name: user.name,
+                    picture: user.picture,
+                }),
+                credential_types,
+            )
+        }
+        None => (None, Vec::new()),
     };
 
-    let (prompt, ui_locales) = match ctx
+    let (prompt, requires_reauthentication, ui_locales) = match ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&id)
@@ -120,13 +127,36 @@ async fn login_status(
                 .request
                 .prompt
                 .unwrap_or_else(|| "select_account".to_string()),
+            c.stored.interaction.selection_source == Some(SelectionSource::Reauthentication),
             c.stored.request.ui_locales,
         ),
-        Err(_) => ("select_account".to_string(), None),
+        Err(_) => ("select_account".to_string(), false, None),
     };
 
     let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
         Some(protocol_continue_uri(&ctx, &id)?)
+    } else {
+        None
+    };
+    let challenge_uri = if user.is_some()
+        && (stored_request_has_prompt(Some(prompt.as_str()), "login") || requires_reauthentication)
+    {
+        let credential_type =
+            if requires_reauthentication && credential_types.contains(&CredentialType::Otp) {
+                CredentialType::Otp
+            } else if credential_types.contains(&CredentialType::Password) {
+                CredentialType::Password
+            } else {
+                credential_types
+                    .first()
+                    .cloned()
+                    .unwrap_or(CredentialType::Password)
+            };
+        Some(login_challenge_uri(
+            &id,
+            &credential_type.to_string(),
+            ui_locales.as_deref(),
+        ))
     } else {
         None
     };
@@ -138,12 +168,29 @@ async fn login_status(
             id,
             status: login.status,
             user,
+            credential_types,
             prompt,
+            requires_reauthentication,
+            challenge_uri,
             ui_locales,
             continue_uri,
         },
     );
     Ok(())
+}
+
+fn login_challenge_uri(
+    login_id: &str,
+    credential_type: &str,
+    ui_locales: Option<&[String]>,
+) -> String {
+    let mut query = url::form_urlencoded::Serializer::new(String::new());
+    query.append_pair("login_id", login_id);
+    query.append_pair("credential_type", credential_type);
+    if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
+        query.append_pair("ui_locales", &ui_locales.join(" "));
+    }
+    format!("/login/challenge?{}", query.finish())
 }
 
 #[handler]
@@ -156,13 +203,17 @@ async fn select_account(
     let headers: HeaderMap = req.headers().clone();
     let body: SelectAccountRequest = parse_json(req).await?;
 
-    // `prompt=login` forces a fresh authentication — reject session selection.
+    // A forced login or AAL elevation is bound to the original subject. It
+    // must never become an account-selection flow.
     let continue_context = ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&body.login_id)
         .await?;
-    if stored_request_has_prompt(continue_context.stored.request.prompt.as_deref(), "login") {
+    if stored_request_has_prompt(continue_context.stored.request.prompt.as_deref(), "login")
+        || continue_context.stored.interaction.selection_source
+            == Some(SelectionSource::Reauthentication)
+    {
         return Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into());
     }
 
@@ -221,8 +272,9 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         status: "identifier_verified",
         credential_types: result.credential_types,
         user: UserDisplayInfo {
-            email: mask_email(&result.user.email),
+            email: result.user.email.clone(),
             name: result.user.name.clone(),
+            picture: result.user.picture.clone(),
         },
     };
 

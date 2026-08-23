@@ -61,31 +61,29 @@ impl SessionService {
                     .with_param("session_id", session_oid.0.to_string())
             })?;
 
-        if session.status != SessionStatus::ACTIVE {
+        validate_selectable_session(&session)?;
+
+        // The write repeats all lifecycle checks atomically. A concurrent
+        // revoke or expiry therefore prevents `last_active_at` from changing.
+        if !self.session_repo.touch_active_by_oid(session_oid).await? {
+            let current = self
+                .session_repo
+                .find_by_oid(session_oid)
+                .await?
+                .ok_or_else(|| session_not_found(session_oid))?;
+            validate_selectable_session(&current)?;
             return Err(AppError::from_code(AuthErrorCode::SessionExpired));
         }
 
-        if let Some(expires_at) = &session.expires_at
-            && Utc::now() > *expires_at
-        {
-            return Err(AppError::from_code(AuthErrorCode::SessionExpired));
-        }
-
-        if session.revoked_at.is_some() {
-            return Err(AppError::from_code(AuthErrorCode::SessionRevoked));
-        }
-
-        // Touch the session.
-        self.session_repo.touch_by_oid(session_oid).await?;
-
-        // Re-fetch to get updated `last_active_at`.
-        self.session_repo
+        // Re-fetch and revalidate so a revoke committed immediately after the
+        // touch cannot be returned as a selectable session.
+        let session = self
+            .session_repo
             .find_by_oid(session_oid)
             .await?
-            .ok_or_else(|| {
-                AppError::from_code(AuthErrorCode::SessionNotFound)
-                    .with_param("session_id", session_oid.0.to_string())
-            })
+            .ok_or_else(|| session_not_found(session_oid))?;
+        validate_selectable_session(&session)?;
+        Ok(session)
     }
 
     pub async fn revoke(&self, session_oid: SessionOid) -> Result<Session, AppError> {
@@ -97,4 +95,23 @@ impl SessionService {
                     .with_param("session_id", session_oid.0.to_string())
             })
     }
+}
+
+fn validate_selectable_session(session: &Session) -> Result<(), AppError> {
+    if session.revoked_at.is_some() {
+        return Err(AppError::from_code(AuthErrorCode::SessionRevoked));
+    }
+    if session.status != SessionStatus::ACTIVE
+        || session
+            .expires_at
+            .is_some_and(|expires_at| Utc::now() > expires_at)
+    {
+        return Err(AppError::from_code(AuthErrorCode::SessionExpired));
+    }
+    Ok(())
+}
+
+fn session_not_found(session_oid: SessionOid) -> AppError {
+    AppError::from_code(AuthErrorCode::SessionNotFound)
+        .with_param("session_id", session_oid.0.to_string())
 }

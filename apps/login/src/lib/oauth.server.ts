@@ -19,11 +19,11 @@ const SCOPES =
   'openid profile email offline_access account session password.change'
 const REAUTHENTICATION_SCOPES = {
   password: 'openid password.change',
-  account: 'openid account.update',
-  mfa: 'openid account.update',
+  account: 'openid account',
+  mfa: 'openid account',
 } as const
-const ACR_PASSWORD = 'urn:oasis:names:tc:SAML:2.0:ac:classes:Password'
-const ACR_MFA = 'urn:identity:acr:mfa'
+const ACR_AAL1 = 'urn:identity:acr:aal1'
+const ACR_AAL2 = 'urn:identity:acr:aal2'
 
 interface TokenResponse {
   access_token: string
@@ -32,25 +32,79 @@ interface TokenResponse {
   expires_in: number
 }
 
-export async function startAuthorization() {
+interface TokenErrorResponse {
+  error?: string
+  error_description?: string
+}
+
+const pendingTokenExchanges = new Map<string, Promise<TokenResponse>>()
+
+export class OAuthTokenExchangeError extends Error {
+  readonly grantType: string
+  readonly oauthError?: string
+  readonly status: number
+
+  constructor(
+    grantType: string,
+    status: number,
+    oauthError?: string,
+    description?: string,
+  ) {
+    const detail = [oauthError, description].filter(Boolean).join(': ')
+    super(
+      detail
+        ? `OAuth ${grantType} exchange failed: ${detail}`
+        : `OAuth ${grantType} exchange failed (${status})`,
+    )
+    this.name = 'OAuthTokenExchangeError'
+    this.grantType = grantType
+    this.oauthError = oauthError
+    this.status = status
+  }
+}
+
+export async function prepareAuthorization() {
   return startAuthorizationFlow('signin', '/')
 }
 
 export async function startReauthorization(
   returnTo: string | undefined,
   purpose: 'password' | 'account' | 'mfa' = 'password',
+  requirements: { acrValues?: string; maxAge?: number } = {},
 ) {
-  return startAuthorizationFlow(
-    'reauth',
-    safeReturnTo(returnTo, '/?message=reauthenticated'),
-    purpose,
+  return redirect(
+    await startAuthorizationFlow(
+      'reauth',
+      safeReturnTo(returnTo, '/?message=reauthenticated'),
+      purpose,
+      requirements,
+    ),
   )
+}
+
+export function reauthenticationScope(
+  purpose: 'password' | 'account' | 'mfa',
+) {
+  return REAUTHENTICATION_SCOPES[purpose]
+}
+
+export function reauthenticationRequestParameters(
+  purpose: 'password' | 'account' | 'mfa',
+  requirements: { acrValues?: string; maxAge?: number } = {},
+) {
+  return {
+    prompt: 'login',
+    maxAge: requirements.maxAge ?? 0,
+    acrValues:
+      requirements.acrValues ?? (purpose === 'mfa' ? ACR_AAL2 : ACR_AAL1),
+  }
 }
 
 async function startAuthorizationFlow(
   mode: OAuthFlowSession['mode'],
   returnTo: string,
   reauthPurpose: 'password' | 'account' | 'mfa' = 'password',
+  requirements: { acrValues?: string; maxAge?: number } = {},
 ) {
   const credentials = await loadClientCredentials()
   const state = randomBytes(32).toString('base64url')
@@ -64,7 +118,7 @@ async function startAuthorizationFlow(
     redirect_uri: redirectUri,
     scope:
       mode === 'reauth'
-        ? REAUTHENTICATION_SCOPES[reauthPurpose]
+        ? reauthenticationScope(reauthPurpose)
         : SCOPES,
     resource: API_RESOURCE,
     state,
@@ -72,12 +126,13 @@ async function startAuthorizationFlow(
     code_challenge_method: 'S256',
   }).toString()
   if (mode === 'reauth') {
-    authorizeUrl.searchParams.set('prompt', 'login')
-    authorizeUrl.searchParams.set('max_age', '0')
-    authorizeUrl.searchParams.set(
-      'acr_values',
-      reauthPurpose === 'mfa' ? ACR_MFA : ACR_PASSWORD,
+    const parameters = reauthenticationRequestParameters(
+      reauthPurpose,
+      requirements,
     )
+    authorizeUrl.searchParams.set('prompt', parameters.prompt)
+    authorizeUrl.searchParams.set('max_age', String(parameters.maxAge))
+    authorizeUrl.searchParams.set('acr_values', parameters.acrValues)
   }
 
   const flow = await useOAuthFlowSession()
@@ -89,7 +144,7 @@ async function startAuthorizationFlow(
     reauth_purpose: mode === 'reauth' ? reauthPurpose : undefined,
   } satisfies OAuthFlowSession)
 
-  return redirect(authorizeUrl)
+  return authorizeUrl
 }
 
 export async function finishAuthorization(request: Request) {
@@ -97,12 +152,28 @@ export async function finishAuthorization(request: Request) {
   const code = url.searchParams.get('code')
   const returnedState = url.searchParams.get('state')
   const flow = await useOAuthFlowSession()
+  const stateMatches =
+    !!returnedState &&
+    typeof flow.data.state === 'string' &&
+    constantTimeEqual(returnedState, flow.data.state)
+
+  if (url.searchParams.has('error')) {
+    if (!stateMatches) {
+      return new Response(translate(requestLocale(), 'oauthCallbackInvalid'), {
+        status: 400,
+      })
+    }
+    await clearFailedAuthorization(flow)
+    return authorizationFailureResponse(
+      url.searchParams.get('error'),
+      url.searchParams.get('error_description'),
+    )
+  }
+
   if (
     !code ||
-    !returnedState ||
-    typeof flow.data.state !== 'string' ||
-    typeof flow.data.verifier !== 'string' ||
-    !constantTimeEqual(returnedState, flow.data.state)
+    !stateMatches ||
+    typeof flow.data.verifier !== 'string'
   ) {
     return new Response(translate(requestLocale(), 'oauthCallbackInvalid'), {
       status: 400,
@@ -110,16 +181,25 @@ export async function finishAuthorization(request: Request) {
   }
 
   const credentials = await loadClientCredentials()
-  const tokens = await exchangeToken(
-    new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: callbackUrl(credentials.application_url),
-      code_verifier: flow.data.verifier,
-    }),
-    credentials.client_id,
-    credentials.client_secret,
-  )
+  let tokens: TokenResponse
+  try {
+    tokens = await exchangeToken(
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: callbackUrl(credentials.application_url),
+        code_verifier: flow.data.verifier,
+      }),
+      credentials.client_id,
+      credentials.client_secret,
+    )
+  } catch (error) {
+    if (error instanceof OAuthTokenExchangeError) {
+      await clearFailedAuthorization(flow)
+      return authorizationFailureResponse(error.oauthError, error.message)
+    }
+    throw error
+  }
 
   const authorization = await useAuthorizationSession()
   const mode = flow.data.mode === 'reauth' ? 'reauth' : 'signin'
@@ -136,6 +216,31 @@ export async function finishAuthorization(request: Request) {
   await flow.clear()
 
   return redirect(new URL(returnTo, credentials.application_url))
+}
+
+function authorizationFailureResponse(
+  error: string | undefined | null,
+  description: string | undefined | null,
+) {
+  const errorType = error || 'invalid_request'
+  const detail = description ? `${errorType}: ${description}` : errorType
+  return new Response(detail, {
+    status: 400,
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  })
+}
+
+async function clearFailedAuthorization(
+  flow: Awaited<ReturnType<typeof useOAuthFlowSession>>,
+) {
+  const mode = flow.data.mode === 'reauth' ? 'reauth' : 'signin'
+  await flow.clear()
+  await clearMfaUiState()
+  if (mode === 'reauth') {
+    await clearElevatedAuthorization()
+  } else {
+    await clearAuthorizationCookie()
+  }
 }
 
 export async function clearAuthorizationCookie() {
@@ -195,32 +300,23 @@ export async function mfaUiState() {
   const session = await useMfaUiSession()
   return {
     enrollment: session.data.mfa_enrollment,
-    recoveryCodes: session.data.recovery_codes,
   }
 }
 
 export async function storeMfaEnrollment(enrollment: {
   secret: string
-  otpauth_uri: string
+  otp_auth_uri: string
   enrollment_token: string
+  recovery_codes: Array<string>
 }) {
   await (await useMfaUiSession()).update({
     mfa_enrollment: enrollment,
-    recovery_codes: undefined,
-  })
-}
-
-export async function storeRecoveryCodes(recoveryCodes: Array<string>) {
-  await (await useMfaUiSession()).update({
-    mfa_enrollment: undefined,
-    recovery_codes: recoveryCodes,
   })
 }
 
 export async function clearMfaUiState() {
   await (await useMfaUiSession()).update({
     mfa_enrollment: undefined,
-    recovery_codes: undefined,
   })
 }
 
@@ -232,14 +328,26 @@ export async function accessToken() {
   if (!stored.refresh_token) return
 
   const credentials = await loadClientCredentials()
-  const refreshed = await exchangeToken(
-    new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: stored.refresh_token,
-    }),
-    credentials.client_id,
-    credentials.client_secret,
-  )
+  let refreshed: TokenResponse
+  try {
+    refreshed = await exchangeToken(
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: stored.refresh_token,
+      }),
+      credentials.client_id,
+      credentials.client_secret,
+    )
+  } catch (error) {
+    if (
+      error instanceof OAuthTokenExchangeError &&
+      error.oauthError === 'invalid_grant'
+    ) {
+      await session.clear()
+      return
+    }
+    throw error
+  }
   const next = toStoredTokens({
     ...refreshed,
     refresh_token: refreshed.refresh_token ?? stored.refresh_token,
@@ -273,7 +381,33 @@ function storedTokens(
   return data as OAuthTokenSession
 }
 
-async function exchangeToken(
+export async function exchangeToken(
+  body: URLSearchParams,
+  clientId: string,
+  clientSecret: string,
+) {
+  const exchangeKey = createHash('sha256')
+    .update(clientId)
+    .update('\0')
+    .update(clientSecret)
+    .update('\0')
+    .update(body.toString())
+    .digest('base64url')
+  const pending = pendingTokenExchanges.get(exchangeKey)
+  if (pending) return pending
+
+  const exchange = performTokenExchange(body, clientId, clientSecret)
+  pendingTokenExchanges.set(exchangeKey, exchange)
+  try {
+    return await exchange
+  } finally {
+    if (pendingTokenExchanges.get(exchangeKey) === exchange) {
+      pendingTokenExchanges.delete(exchangeKey)
+    }
+  }
+}
+
+async function performTokenExchange(
   body: URLSearchParams,
   clientId: string,
   clientSecret: string,
@@ -289,23 +423,27 @@ async function exchangeToken(
   })
   const payload = (await response.json().catch(() => null)) as
     | TokenResponse
-    | { error?: string }
+    | TokenErrorResponse
     | null
   if (!response.ok || !payload || !('access_token' in payload)) {
-    throw new Error(
-      payload && 'error' in payload
-        ? `OAuth token exchange failed: ${payload.error}`
-        : `OAuth token exchange failed (${response.status})`,
+    const grant = body.get('grant_type') ?? 'unknown grant'
+    const oauthError = payload?.error?.trim()
+    const description = payload?.error_description?.trim()
+    throw new OAuthTokenExchangeError(
+      grant,
+      response.status,
+      oauthError,
+      description,
     )
   }
   return payload
 }
 
-function callbackUrl(applicationUrl: string) {
-  return new URL('/oauth/callback', applicationUrl).toString()
+export function callbackUrl(applicationUrl: string) {
+  return new URL('/callback', applicationUrl).toString()
 }
 
-function safeReturnTo(value: string | undefined, fallback: string) {
+export function safeReturnTo(value: string | undefined, fallback: string) {
   if (!value || !value.startsWith('/') || value.startsWith('//')) {
     return fallback
   }

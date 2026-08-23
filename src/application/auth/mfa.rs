@@ -22,10 +22,11 @@ use crate::{
 const ENROLLMENT_PURPOSE: &str = "identity.mfa.totp-enrollment.v1";
 const ENROLLMENT_LIFETIME: Duration = Duration::minutes(10);
 const RECOVERY_CODE_COUNT: usize = 10;
+const RECOVERY_CODE_LENGTH: usize = 8;
 
 pub struct GeneratedTotpEnrollment {
     pub credential: OtpCredentialData,
-    pub otpauth_uri: String,
+    pub otp_auth_uri: String,
 }
 
 pub trait TotpEnrollmentGenerator: Send + Sync {
@@ -34,6 +35,13 @@ pub trait TotpEnrollmentGenerator: Send + Sync {
         issuer: &str,
         account_name: &str,
     ) -> Result<GeneratedTotpEnrollment, TotpError>;
+
+    fn otp_auth_uri(
+        &self,
+        issuer: &str,
+        account_name: &str,
+        credential: &OtpCredentialData,
+    ) -> Result<String, TotpError>;
 }
 
 #[derive(Debug, Clone)]
@@ -45,8 +53,9 @@ pub struct MfaStatus {
 #[derive(Debug, Clone)]
 pub struct BeginTotpEnrollment {
     pub secret: String,
-    pub otpauth_uri: String,
+    pub otp_auth_uri: String,
     pub enrollment_token: String,
+    pub recovery_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +68,8 @@ struct PendingTotpEnrollment {
     user_oid: UserOid,
     expires_at: chrono::DateTime<Utc>,
     credential: OtpCredentialData,
+    recovery_codes: Vec<String>,
+    recovery_credentials: Vec<CredentialData>,
 }
 
 pub struct MfaService {
@@ -111,10 +122,13 @@ impl MfaService {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
         }
         let generated = self.generator.generate(issuer, account_name)?;
+        let (recovery_codes, recovery_credentials) = generate_recovery_codes();
         let pending = PendingTotpEnrollment {
             user_oid,
             expires_at: Utc::now() + ENROLLMENT_LIFETIME,
             credential: generated.credential.clone(),
+            recovery_codes: recovery_codes.clone(),
+            recovery_credentials,
         };
         let plaintext = serde_json::to_vec(&pending).map_err(|error| {
             AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
@@ -126,8 +140,9 @@ impl MfaService {
             .await?;
         Ok(BeginTotpEnrollment {
             secret: generated.credential.secret,
-            otpauth_uri: generated.otpauth_uri,
+            otp_auth_uri: generated.otp_auth_uri,
             enrollment_token,
+            recovery_codes,
         })
     }
 
@@ -150,23 +165,69 @@ impl MfaService {
         if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
             return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
         }
-        if !self.verifier.verify(&pending.credential, code)? {
+        let Some(counter) = self.verifier.verify(&pending.credential, code)? else {
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp).with_field("code"));
-        }
-        let (recovery_codes, recovery_credentials) = generate_recovery_codes();
+        };
+        let mut otp_credential = pending.credential;
+        otp_credential.last_used_counter = Some(counter);
+        let recovery_codes = pending.recovery_codes;
         self.credential_repo
             .replace_by_user_oid(
                 user_oid,
                 vec![
                     (
                         CredentialType::Otp,
-                        vec![CredentialData::Otp(pending.credential)],
+                        vec![CredentialData::Otp(otp_credential)],
                     ),
-                    (CredentialType::RecoveryCode, recovery_credentials),
+                    (CredentialType::RecoveryCode, pending.recovery_credentials),
                 ],
             )
             .await?;
         Ok(ConfirmTotpEnrollment { recovery_codes })
+    }
+
+    pub async fn change_totp_enrollment_algorithm(
+        &self,
+        user_oid: UserOid,
+        enrollment_token: &str,
+        issuer: &str,
+        account_name: &str,
+        algorithm: identity_domain::user::OtpAlgorithm,
+    ) -> Result<BeginTotpEnrollment, AppError> {
+        if self.status(user_oid).await?.totp_enabled {
+            return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
+        }
+        let plaintext = self
+            .data_protector
+            .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
+            .await
+            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+        let mut pending: PendingTotpEnrollment = serde_json::from_slice(&plaintext)
+            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+        if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
+            return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
+        }
+
+        pending.credential.algorithm = algorithm;
+        pending.credential.last_used_counter = None;
+        let otp_auth_uri =
+            self.generator
+                .otp_auth_uri(issuer, account_name, &pending.credential)?;
+        let plaintext = serde_json::to_vec(&pending).map_err(|error| {
+            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
+                .with_source(error)
+        })?;
+        let enrollment_token = self
+            .data_protector
+            .protect(ENROLLMENT_PURPOSE, &plaintext)
+            .await?;
+
+        Ok(BeginTotpEnrollment {
+            secret: pending.credential.secret,
+            otp_auth_uri,
+            enrollment_token,
+            recovery_codes: pending.recovery_codes,
+        })
     }
 
     pub async fn disable_totp(&self, user_oid: UserOid) -> Result<(), AppError> {
@@ -184,20 +245,6 @@ impl MfaService {
             .await?;
         Ok(())
     }
-
-    pub async fn regenerate_recovery_codes(
-        &self,
-        user_oid: UserOid,
-    ) -> Result<Vec<String>, AppError> {
-        if !self.status(user_oid).await?.totp_enabled {
-            return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
-        }
-        let (codes, credentials) = generate_recovery_codes();
-        self.credential_repo
-            .replace_by_user_oid(user_oid, vec![(CredentialType::RecoveryCode, credentials)])
-            .await?;
-        Ok(codes)
-    }
 }
 
 pub fn recovery_code_hash(code: &str) -> String {
@@ -213,19 +260,13 @@ fn generate_recovery_codes() -> (Vec<String>, Vec<CredentialData>) {
     let codes = (0..RECOVERY_CODE_COUNT)
         .map(|_| {
             const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-            let mut bytes = [0u8; 16];
+            let mut bytes = [0u8; RECOVERY_CODE_LENGTH];
             rand::rng().fill(&mut bytes);
             let encoded = bytes
                 .into_iter()
                 .map(|byte| ALPHABET[(byte & 31) as usize] as char)
                 .collect::<String>();
-            format!(
-                "{}-{}-{}-{}",
-                &encoded[0..4],
-                &encoded[4..8],
-                &encoded[8..12],
-                &encoded[12..16]
-            )
+            format!("{}-{}", &encoded[0..4], &encoded[4..8])
         })
         .collect::<Vec<_>>();
     let credentials = codes
@@ -256,15 +297,31 @@ mod tests {
     };
     use uuid::Uuid;
 
-    use super::{GeneratedTotpEnrollment, MfaService, TotpEnrollmentGenerator, recovery_code_hash};
+    use super::{
+        GeneratedTotpEnrollment, MfaService, TotpEnrollmentGenerator, generate_recovery_codes,
+        recovery_code_hash,
+    };
     use crate::data_protection::DataProtector;
 
     #[test]
     fn recovery_code_hash_ignores_case_and_separators() {
         assert_eq!(
-            recovery_code_hash("abcd-efgh-ijkl-mnop"),
-            recovery_code_hash("ABCDEFGHIJKLMNOP")
+            recovery_code_hash("abcd-efgh"),
+            recovery_code_hash("ABCDEFGH")
         );
+    }
+
+    #[test]
+    fn generated_recovery_codes_have_eight_characters() {
+        let (codes, credentials) = generate_recovery_codes();
+
+        assert_eq!(codes.len(), 10);
+        assert_eq!(credentials.len(), codes.len());
+        assert!(codes.iter().all(|code| {
+            code.len() == 9
+                && code.as_bytes()[4] == b'-'
+                && code.chars().filter(char::is_ascii_alphanumeric).count() == 8
+        }));
     }
 
     struct TestGenerator;
@@ -280,18 +337,35 @@ mod tests {
                     secret: "JBSWY3DPEHPK3PXP".to_owned(),
                     digits: 6,
                     period: 30,
-                    algorithm: OtpAlgorithm::Sha1,
+                    algorithm: OtpAlgorithm::Sha256,
+                    last_used_counter: None,
                 },
-                otpauth_uri: "otpauth://totp/example".to_owned(),
+                otp_auth_uri: "otpauth://totp/example".to_owned(),
             })
+        }
+
+        fn otp_auth_uri(
+            &self,
+            _issuer: &str,
+            _account_name: &str,
+            credential: &OtpCredentialData,
+        ) -> Result<String, TotpError> {
+            Ok(format!(
+                "otpauth://totp/example?algorithm={}",
+                credential.algorithm
+            ))
         }
     }
 
     struct AlwaysValid;
 
     impl TotpVerifier for AlwaysValid {
-        fn verify(&self, _otp_data: &OtpCredentialData, _code: &str) -> Result<bool, TotpError> {
-            Ok(true)
+        fn verify(
+            &self,
+            _otp_data: &OtpCredentialData,
+            _code: &str,
+        ) -> Result<Option<u64>, TotpError> {
+            Ok(Some(42))
         }
     }
 
@@ -348,6 +422,14 @@ mod tests {
             Ok(())
         }
 
+        async fn consume_totp_counter(
+            &self,
+            _credential_oid: UserCredentialOid,
+            _counter: u64,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            Ok(true)
+        }
+
         async fn replace_by_user_oid(
             &self,
             _user_oid: UserOid,
@@ -377,7 +459,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn confirmation_enables_totp_and_creates_hashed_recovery_codes() {
+    async fn confirmation_persists_the_pre_generated_recovery_codes() {
         let repo = Arc::new(TestCredentialRepo::default());
         let service = MfaService::new(
             repo.clone(),
@@ -395,7 +477,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(confirmed.recovery_codes.len(), 10);
+        assert_eq!(enrollment.recovery_codes.len(), 10);
+        assert_eq!(confirmed.recovery_codes, enrollment.recovery_codes);
         assert!(service.status(user_oid).await.unwrap().totp_enabled);
         assert_eq!(
             service
@@ -406,9 +489,44 @@ mod tests {
             10
         );
         let stored = repo.credentials.lock().unwrap();
+        assert!(stored.iter().any(|credential| matches!(
+            &credential.data,
+            CredentialData::Otp(data) if data.last_used_counter == Some(42)
+        )));
         assert!(stored.iter().all(|credential| match &credential.data {
-            CredentialData::RecoveryCode(data) => !confirmed.recovery_codes.contains(&data.hash),
+            CredentialData::RecoveryCode(data) => !enrollment.recovery_codes.contains(&data.hash),
             _ => true,
         }));
+    }
+
+    #[tokio::test]
+    async fn changing_enrollment_algorithm_reuses_secret_and_recovery_codes() {
+        let repo = Arc::new(TestCredentialRepo::default());
+        let service = MfaService::new(
+            repo,
+            Arc::new(AlwaysValid),
+            Arc::new(TestGenerator),
+            Arc::new(TestProtector),
+        );
+        let user_oid = UserOid(Uuid::new_v4());
+        let enrollment = service
+            .begin_totp_enrollment(user_oid, "example.com", "user@example.com")
+            .await
+            .unwrap();
+
+        let compatible = service
+            .change_totp_enrollment_algorithm(
+                user_oid,
+                &enrollment.enrollment_token,
+                "example.com",
+                "user@example.com",
+                OtpAlgorithm::Sha1,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(compatible.secret, enrollment.secret);
+        assert_eq!(compatible.recovery_codes, enrollment.recovery_codes);
+        assert!(compatible.otp_auth_uri.contains("algorithm=SHA1"));
     }
 }

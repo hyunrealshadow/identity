@@ -109,10 +109,10 @@ impl UserRepositoryImpl {
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))
     }
 
-    pub async fn update_identifiers(
+    pub async fn update_identifier(
         &self,
         oid: UserOid,
-        patch: UserIdentifierPatch,
+        update: UserIdentifierUpdate,
     ) -> Result<Option<User>, UserRepositoryError> {
         let Some(model) = UserEntity::find()
             .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
@@ -123,53 +123,55 @@ impl UserRepositoryImpl {
             return Ok(None);
         };
 
-        if let Some((_, normalized)) = &patch.username
-            && normalized != &model.name_normalized
-            && self
-                .identifier_exists(user::Column::NameNormalized, normalized, model.id)
-                .await?
-        {
-            return Err(UserRepositoryError::UsernameExists);
-        }
-        if let Some((_, normalized)) = &patch.email
-            && normalized != &model.email_normalized
-            && self
-                .identifier_exists(user::Column::EmailNormalized, normalized, model.id)
-                .await?
-        {
-            return Err(UserRepositoryError::EmailExists);
-        }
-
         let mut active: user::ActiveModel = model.clone().into();
-        if let Some((username, normalized)) = &patch.username {
-            active.name = Set(username.clone());
-            active.name_normalized = Set(normalized.clone());
-        }
-        if let Some((email, normalized)) = &patch.email {
-            let changed = normalized != &model.email_normalized;
-            active.email = Set(email.clone());
-            active.email_normalized = Set(normalized.clone());
-            if changed {
-                active.email_verified = Set(false);
-            }
-        }
-        active.updated_at = Set(Some(Utc::now().into()));
-        match active.update(&self.db).await {
-            Ok(model) => Ok(Some(to_domain(model))),
-            Err(error) => {
-                if let Some((_, normalized)) = &patch.username
+        match &update {
+            UserIdentifierUpdate::Username { value, normalized } => {
+                if normalized != &model.name_normalized
                     && self
                         .identifier_exists(user::Column::NameNormalized, normalized, model.id)
                         .await?
                 {
                     return Err(UserRepositoryError::UsernameExists);
                 }
-                if let Some((_, normalized)) = &patch.email
+                active.name = Set(value.clone());
+                active.name_normalized = Set(normalized.clone());
+            }
+            UserIdentifierUpdate::Email { value, normalized } => {
+                if normalized != &model.email_normalized
                     && self
                         .identifier_exists(user::Column::EmailNormalized, normalized, model.id)
                         .await?
                 {
                     return Err(UserRepositoryError::EmailExists);
+                }
+                let changed = normalized != &model.email_normalized;
+                active.email = Set(value.clone());
+                active.email_normalized = Set(normalized.clone());
+                if changed {
+                    active.email_verified = Set(false);
+                }
+            }
+        }
+        active.updated_at = Set(Some(Utc::now().into()));
+        match active.update(&self.db).await {
+            Ok(model) => Ok(Some(to_domain(model))),
+            Err(error) => {
+                match &update {
+                    UserIdentifierUpdate::Username { normalized, .. }
+                        if self
+                            .identifier_exists(user::Column::NameNormalized, normalized, model.id)
+                            .await? =>
+                    {
+                        return Err(UserRepositoryError::UsernameExists);
+                    }
+                    UserIdentifierUpdate::Email { normalized, .. }
+                        if self
+                            .identifier_exists(user::Column::EmailNormalized, normalized, model.id)
+                            .await? =>
+                    {
+                        return Err(UserRepositoryError::EmailExists);
+                    }
+                    _ => {}
                 }
                 Err(UserRepositoryError::QueryFailed(Box::new(error)))
             }
@@ -192,10 +194,10 @@ impl UserRepositoryImpl {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct UserIdentifierPatch {
-    pub username: Option<(String, String)>,
-    pub email: Option<(String, String)>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UserIdentifierUpdate {
+    Username { value: String, normalized: String },
+    Email { value: String, normalized: String },
 }
 
 #[derive(Debug, Default)]
@@ -328,7 +330,7 @@ impl UserRepository for UserRepositoryImpl {
 mod tests {
     use sea_orm::{DatabaseBackend, MockDatabase};
 
-    use super::{UserIdentifierPatch, UserRepositoryImpl, to_domain};
+    use super::{UserIdentifierUpdate, UserRepositoryImpl, to_domain};
     use crate::database::entity::user;
 
     #[test]
@@ -353,35 +355,29 @@ mod tests {
     #[tokio::test]
     async fn identifier_update_marks_a_changed_email_unverified() {
         let current = user_model();
+        let current_name = current.name.clone();
         let mut updated = current.clone();
-        updated.name = "Ada-01".to_owned();
-        updated.name_normalized = "ada-01".to_owned();
         updated.email = "ada@new.example".to_owned();
         updated.email_normalized = "ada@new.example".to_owned();
         updated.email_verified = false;
         let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![current],
-                Vec::<user::Model>::new(),
-                Vec::<user::Model>::new(),
-                vec![updated],
-            ])
+            .append_query_results([vec![current], Vec::<user::Model>::new(), vec![updated]])
             .into_connection();
         let repo = UserRepositoryImpl::new(db);
 
         let user = repo
-            .update_identifiers(
+            .update_identifier(
                 uuid::Uuid::nil().into(),
-                UserIdentifierPatch {
-                    username: Some(("Ada-01".to_owned(), "ada-01".to_owned())),
-                    email: Some(("ada@new.example".to_owned(), "ada@new.example".to_owned())),
+                UserIdentifierUpdate::Email {
+                    value: "ada@new.example".to_owned(),
+                    normalized: "ada@new.example".to_owned(),
                 },
             )
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(user.name, "Ada-01");
+        assert_eq!(user.name, current_name);
         assert_eq!(user.email, "ada@new.example");
         assert!(!user.email_verified);
     }

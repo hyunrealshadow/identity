@@ -167,12 +167,7 @@ impl InstallPersistence for InstallPersistenceImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        let callback_url = input
-            .application_url
-            .join("oauth/callback")
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+        let callback_url = built_in_callback_url(&input.application_url)?;
         client_open_id_connect::ActiveModel {
             client_id: Set(created_client.id),
             post_logout_redirect_uris: Set(Some(serde_json::json!([input
@@ -369,6 +364,12 @@ where
     Ok(())
 }
 
+fn built_in_callback_url(application_url: &url::Url) -> Result<url::Url, AppError> {
+    application_url
+        .join("callback")
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+}
+
 async fn installation_state_exists<C>(db: &C) -> Result<bool, AppError>
 where
     C: ConnectionTrait,
@@ -474,7 +475,19 @@ where
 mod tests {
     use sea_orm::{DbBackend, MockDatabase, MockExecResult, Statement, Transaction};
 
-    use super::{INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock};
+    use super::{
+        INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock, built_in_callback_url,
+    };
+
+    #[test]
+    fn built_in_client_uses_top_level_callback_route() {
+        let application_url = url::Url::parse("https://identity.example/").unwrap();
+
+        assert_eq!(
+            built_in_callback_url(&application_url).unwrap().as_str(),
+            "https://identity.example/callback"
+        );
+    }
 
     #[tokio::test]
     async fn install_lock_is_transaction_scoped() {

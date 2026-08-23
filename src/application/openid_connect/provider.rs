@@ -91,8 +91,8 @@ impl Default for OpenIdProviderCapabilities {
                 "refresh_token".to_owned(),
             ],
             acr_values_supported: vec![
-                identity_domain::auth::ACR_PASSWORD.to_owned(),
-                identity_domain::auth::ACR_MFA.to_owned(),
+                identity_domain::auth::ACR_AAL1.to_owned(),
+                identity_domain::auth::ACR_AAL2.to_owned(),
             ],
             subject_types_supported: vec![SubjectType::Public, SubjectType::Pairwise],
             id_token_signing_alg_values_supported: vec!["ES256".to_owned()],
@@ -139,6 +139,7 @@ impl Default for OpenIdProviderCapabilities {
                 JwtClaimNames::ISS.to_owned(),
                 JwtClaimNames::AUTH_TIME.to_owned(),
                 JwtClaimNames::ACR.to_owned(),
+                JwtClaimNames::AMR.to_owned(),
                 JwtClaimNames::NAME.to_owned(),
                 JwtClaimNames::GIVEN_NAME.to_owned(),
                 JwtClaimNames::FAMILY_NAME.to_owned(),
@@ -273,7 +274,7 @@ impl OpenIdProviderService {
 
     pub fn issuer(&self) -> Result<Url, AppError> {
         let installation = self.installation_setting.current_value();
-        canonical_issuer(installation.as_ref())
+        normalize_issuer(installation.as_ref())
     }
 
     pub async fn discovery_metadata(&self) -> Result<OpenIdProviderMetadata, AppError> {
@@ -434,7 +435,7 @@ fn endpoint_url(issuer: &Url, path: &str) -> Result<Url, AppError> {
     })
 }
 
-fn canonical_issuer(installation: &InstallationState) -> Result<Url, AppError> {
+fn normalize_issuer(installation: &InstallationState) -> Result<Url, AppError> {
     if !installation.initialized {
         return Err(AppError::from_code(ProviderErrorCode::NotInitialized));
     }
@@ -681,7 +682,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn canonicalizes_plain_domain_to_https_issuer() {
+    async fn normalizes_plain_domain_to_https_issuer() {
         let service = OpenIdProviderService::for_test(InstallationState {
             initialized: true,
             domain: Some("identity.example.com".to_owned()),
@@ -766,6 +767,7 @@ mod tests {
         assert!(claims.iter().any(|claim| claim == "address"));
         assert!(claims.iter().any(|claim| claim == "phone_number"));
         assert!(claims.iter().any(|claim| claim == "phone_number_verified"));
+        assert!(claims.iter().any(|claim| claim == "amr"));
     }
 
     #[tokio::test]

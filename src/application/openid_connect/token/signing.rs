@@ -14,6 +14,8 @@ pub(super) struct StoreRefreshTokenParams<'a> {
     pub session_oid: SessionOid,
     pub protected_session_id: Option<&'a str>,
     pub auth_time: Option<i64>,
+    pub acr: Option<&'a str>,
+    pub amr: &'a [String],
     pub rotated_from: Option<&'a str>,
 }
 
@@ -31,6 +33,7 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub claims: Option<&'a ClaimsRequest>,
     pub auth_time: Option<i64>,
     pub acr: Option<&'a str>,
+    pub amr: &'a [String],
 }
 
 pub(super) struct SignIdTokenInput<'a> {
@@ -44,6 +47,7 @@ pub(super) struct SignIdTokenInput<'a> {
     pub nonce: Option<&'a str>,
     pub auth_time: Option<i64>,
     pub acr: Option<&'a str>,
+    pub amr: &'a [String],
     pub access_token: Option<&'a str>,
     pub protected_session_id: Option<&'a str>,
 }
@@ -162,6 +166,11 @@ impl TokenService {
                     AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
                 })?;
         }
+        payload
+            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+            })?;
         if let Some(claims_value) = input.claims {
             payload
                 .set_claim(
@@ -219,10 +228,7 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
             })?;
         payload
-            .set_claim(
-                JwtClaimNames::AMR,
-                Some(serde_json::json!(amr_values(input.acr))),
-            )
+            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
             })?;
@@ -335,13 +341,6 @@ impl TokenService {
     }
 }
 
-fn amr_values(acr: Option<&str>) -> Vec<&'static str> {
-    match acr {
-        Some(identity_domain::auth::ACR_MFA) => vec!["pwd", "otp"],
-        _ => vec!["pwd"],
-    }
-}
-
 fn build_access_token_signer(
     private_key_pem: &str,
     alg: &str,
@@ -376,6 +375,8 @@ impl TokenService {
             session_oid: params.session_oid,
             protected_session_id: params.protected_session_id.map(str::to_string),
             auth_time: params.auth_time,
+            acr: params.acr.map(str::to_string),
+            amr: params.amr.to_vec(),
             rotated_from: params.rotated_from.map(str::to_string),
         });
 

@@ -33,16 +33,25 @@ impl SessionStatus {
 
 // ─── ACR (Authentication Context Class Reference) ────────────────────────────
 
-/// ACR value for password-only authentication.
+/// Application AAL1 authentication assurance policy.
 ///
-/// SAML 2.0 Password class.
-pub const ACR_PASSWORD: &str = "urn:oasis:names:tc:SAML:2.0:ac:classes:Password";
+/// The authentication methods used to satisfy this policy are reported
+/// separately through the OIDC `amr` claim.
+pub const ACR_AAL1: &str = "urn:identity:acr:aal1";
 
-/// ACR value for password + TOTP (MFA) authentication.
+/// Application AAL2 authentication assurance policy.
 ///
-/// OIDC leaves ACR values deployment-specific. This private value is advertised
-/// through discovery and represents a backend-verified multi-factor session.
-pub const ACR_MFA: &str = "urn:identity:acr:mfa";
+/// OIDC leaves ACR values deployment-specific. This private URI is advertised
+/// through discovery. The methods currently satisfying it are password and TOTP.
+pub const ACR_AAL2: &str = "urn:identity:acr:aal2";
+
+// ─── AMR (Authentication Methods References) ────────────────────────────────
+
+pub const AMR_PASSWORD: &str = "pwd";
+pub const AMR_OTP: &str = "otp";
+pub const AMR_MFA: &str = "mfa";
+/// Private value because RFC 8176 does not register a recovery-code AMR.
+pub const AMR_RECOVERY_CODE: &str = "urn:identity:amr:recovery-code";
 
 // ─── Policy Constants ────────────────────────────────────────────────────────
 
@@ -62,9 +71,13 @@ pub const LOGIN_EXPIRY: Duration = Duration::from_secs(5 * 60);
 /// Duration for which a session remains valid.
 pub const SESSION_EXPIRY: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-/// Duration for which an MFA-elevated ACR remains valid within a session.
+/// Duration for which a password authentication may authorize sensitive
+/// account operations without asking the user to authenticate again.
+pub const RECENT_AUTHENTICATION_TTL: Duration = Duration::from_secs(5 * 60);
+
+/// Duration for which AAL2 authentication remains valid within a session.
 ///
 /// After this duration the session stays active but the `acr` field degrades
-/// back to [`ACR_PASSWORD`] and the caller must re-challenge with TOTP to
-/// regain the elevated level.
-pub const ACR_EXPIRY: Duration = Duration::from_secs(60 * 60); // 1 hour
+/// back to [`ACR_AAL1`] and the caller must perform step-up authentication to
+/// regain AAL2.
+pub const ELEVATED_AUTHENTICATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 hour

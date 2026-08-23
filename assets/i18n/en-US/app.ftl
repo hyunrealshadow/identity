@@ -19,12 +19,10 @@ btn-sign-up = Sign up
 # Error pages
 error-404-title = Page not found
 error-404-message = The page you are looking for does not exist or has been moved.
-error-page-badge = Request error
-error-page-title = Request could not be completed
+error-page-title = Something went wrong
 error-page-details = Error details
-error-page-http-status = HTTP status
+error-page-error-type = Error type
 error-page-error-code = Error code
 error-page-description = Description
-error-page-detail = Detail
-error-page-retry = Try again
-error-page-back = Back to application
+error-page-additional-info = Additional information
+error-page-support-hint = If this keeps happening, note the error code above and contact support.

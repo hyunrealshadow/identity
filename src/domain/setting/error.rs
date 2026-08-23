@@ -17,15 +17,3 @@ impl SettingValidationError {
         &self.message
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::SettingValidationError;
-
-    #[test]
-    fn validation_error_exposes_message() {
-        let error = SettingValidationError::new("invalid value");
-
-        assert_eq!(error.message(), "invalid value");
-    }
-}

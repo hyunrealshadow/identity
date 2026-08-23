@@ -82,6 +82,25 @@ impl TokenService {
             ClientAuthorizationData::AuthorizationCode(data) => data,
             _ => return Err(AppError::from_code(TokenErrorCode::DeserializeCodeFailed)),
         };
+        let (session_acr, session_amr) = if let Some(session_repo) = &self.session_repo {
+            let session = session_repo
+                .find_by_oid(data.session_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::AuthCodeInvalid).with_source(error)
+                })?
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+            let active = session.status == crate::domain::auth::SessionStatus::ACTIVE
+                && session.revoked_at.is_none()
+                && session.expires_at.is_none_or(|expires_at| expires_at > now)
+                && session.user_oid.to_string() == data.user_oid;
+            if !active {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            (session.effective_acr(now).map(str::to_owned), session.amr)
+        } else {
+            (data.acr.clone(), data.amr.clone())
+        };
         let protected_session_id = self
             .protected_session_id(data.session_oid, data.protected_session_id.as_deref())
             .await?;
@@ -185,7 +204,8 @@ impl TokenService {
                 scope: &data.scope,
                 claims: data.claims.as_ref(),
                 auth_time: data.auth_time,
-                acr: data.acr.as_deref(),
+                acr: session_acr.as_deref(),
+                amr: &session_amr,
             })
             .await?;
         let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
@@ -200,7 +220,8 @@ impl TokenService {
                     user: &user,
                     nonce: data.nonce.as_deref(),
                     auth_time: data.auth_time,
-                    acr: data.acr.as_deref(),
+                    acr: session_acr.as_deref(),
+                    amr: &session_amr,
                     access_token: Some(&access_token),
                     protected_session_id: Some(&protected_session_id),
                 })
@@ -244,6 +265,8 @@ impl TokenService {
                     session_oid: data.session_oid,
                     protected_session_id: Some(&protected_session_id),
                     auth_time: data.auth_time,
+                    acr: session_acr.as_deref(),
+                    amr: &session_amr,
                     rotated_from: None,
                 })
                 .await?,
@@ -327,7 +350,7 @@ impl TokenService {
                 ));
             }
         };
-        if let Some(session_repo) = &self.session_repo {
+        let (session_acr, session_amr) = if let Some(session_repo) = &self.session_repo {
             let session = session_repo
                 .find_by_oid(refresh_data.session_oid)
                 .await
@@ -342,7 +365,10 @@ impl TokenService {
             if !session_is_active {
                 return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
             }
-        }
+            (session.effective_acr(now).map(str::to_owned), session.amr)
+        } else {
+            (refresh_data.acr.clone(), refresh_data.amr.clone())
+        };
         let protected_session_id = self
             .protected_session_id(
                 refresh_data.session_oid,
@@ -424,7 +450,8 @@ impl TokenService {
                 scope: &scope,
                 claims: None,
                 auth_time: refresh_data.auth_time,
-                acr: None,
+                acr: session_acr.as_deref(),
+                amr: &session_amr,
             })
             .await?;
         let signed_id_token = self
@@ -438,7 +465,8 @@ impl TokenService {
                 user: &user,
                 nonce: None,
                 auth_time: refresh_data.auth_time,
-                acr: None,
+                acr: session_acr.as_deref(),
+                amr: &session_amr,
                 access_token: Some(&access_token),
                 protected_session_id: Some(&protected_session_id),
             })
@@ -470,6 +498,8 @@ impl TokenService {
                 session_oid: refresh_data.session_oid,
                 protected_session_id: Some(&protected_session_id),
                 auth_time: refresh_data.auth_time,
+                acr: session_acr.as_deref(),
+                amr: &session_amr,
                 rotated_from: Some(rotated_from.as_str()),
             })
             .await?,

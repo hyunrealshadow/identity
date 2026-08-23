@@ -10,6 +10,7 @@ interface ProgressiveFormProps {
   children: ReactNode
   className?: string
   enhancementErrorMessage: string
+  noValidate?: boolean
 }
 
 export function ProgressiveForm({
@@ -17,6 +18,7 @@ export function ProgressiveForm({
   children,
   className,
   enhancementErrorMessage,
+  noValidate = false,
 }: ProgressiveFormProps) {
   // `undefined` = idle, otherwise the `value` of the clicked submitter
   // (null when the submitter carries no value attribute).
@@ -57,6 +59,7 @@ export function ProgressiveForm({
       method="post"
       className={className}
       aria-busy={isPending}
+      noValidate={noValidate}
       onSubmit={enhance}
     >
       <FormPendingContext

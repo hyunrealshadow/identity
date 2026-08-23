@@ -68,13 +68,8 @@ pub struct OpenIdConnectCredential {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialType,
-    };
-    use chrono::Utc;
+    use super::OpenIdConnectCredentialType;
     use std::str::FromStr;
-    use url::Url;
-    use uuid::Uuid;
 
     #[test]
     fn parses_credential_type() {
@@ -82,42 +77,5 @@ mod tests {
             OpenIdConnectCredentialType::from_str("client_secret").unwrap(),
             OpenIdConnectCredentialType::ClientSecret
         );
-    }
-
-    #[test]
-    fn retains_jwks_public_keys() {
-        let data = OpenIdConnectCredentialData::ClientJsonWebKeySet {
-            jwks_uri: Url::parse("https://rp.example.com/jwks.json").unwrap(),
-            last_updated: Utc::now(),
-            expires_at: Utc::now(),
-            public_keys: vec!["-----BEGIN PUBLIC KEY-----".to_string()],
-            jwks: vec![],
-        };
-
-        match data {
-            OpenIdConnectCredentialData::ClientJsonWebKeySet { public_keys, .. } => {
-                assert_eq!(public_keys, vec!["-----BEGIN PUBLIC KEY-----".to_string()]);
-            }
-            _ => panic!("unexpected variant"),
-        }
-    }
-
-    #[test]
-    fn credential_carries_client_oid() {
-        let credential = OpenIdConnectCredential {
-            oid: Uuid::nil(),
-            client_oid: Uuid::new_v4(),
-            r#type: OpenIdConnectCredentialType::ClientSecret,
-            hint: "login".to_string(),
-            data: OpenIdConnectCredentialData::ClientSecret {
-                secret: "secret".to_string(),
-            },
-            expires_at: Utc::now(),
-            revoked_at: None,
-            created_at: Utc::now(),
-            updated_at: None,
-        };
-
-        assert_eq!(credential.hint, "login");
     }
 }

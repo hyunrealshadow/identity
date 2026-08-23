@@ -3,7 +3,7 @@ import {
   clearAuthorizationCookie,
   elevatedAccessToken,
 } from './oauth.server'
-import { requestLocale } from './i18n.server'
+import { forwardRequestContext } from './request-context.server'
 
 const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
 
@@ -13,18 +13,27 @@ export interface GraphqlError {
     kind?: string
     code?: string | number
     requiredScope?: string
+    acr_values?: string
+    max_age?: number
     fields?: Array<{ field: string; code: number; message: string }>
   }
 }
 
 export class GraphqlRequestError extends Error {
   readonly errors: Array<GraphqlError>
+  readonly challenge?: StepUpChallenge
 
-  constructor(errors: Array<GraphqlError>) {
+  constructor(errors: Array<GraphqlError>, challenge?: StepUpChallenge) {
     super(errors[0]?.message ?? 'GraphQL request failed')
     this.name = 'GraphqlRequestError'
     this.errors = errors
+    this.challenge = challenge
   }
+}
+
+export interface StepUpChallenge {
+  acrValues?: string
+  maxAge?: number
 }
 
 export async function identityGraphql<T>(
@@ -37,23 +46,34 @@ export async function identityGraphql<T>(
       ? ((await elevatedAccessToken()) ?? (await accessToken()))
       : await accessToken()
   if (!token) return
-  const response = await fetch(new URL('/graphql', API_URL), {
-    method: 'POST',
-    headers: {
+  const headers = forwardRequestContext(
+    new Headers({
       accept: 'application/graphql-response+json, application/json',
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
-      'accept-language': requestLocale(),
-    },
+    }),
+  )
+  const response = await fetch(new URL('/graphql', API_URL), {
+    method: 'POST',
+    headers,
     body: JSON.stringify({ query, variables }),
   })
-  if (response.status === 401) {
-    await clearAuthorizationCookie()
-    return
-  }
   const payload = (await response.json()) as {
     data?: T
     errors?: Array<GraphqlError>
+  }
+  if (response.status === 401) {
+    const challenge = parseStepUpChallenge(
+      response.headers.get('www-authenticate'),
+    )
+    if (challenge) {
+      throw new GraphqlRequestError(
+        payload.errors ?? [{ message: 'Step-up authentication is required' }],
+        challenge,
+      )
+    }
+    await clearAuthorizationCookie()
+    return
   }
   if (!response.ok || payload.errors?.length) {
     throw new GraphqlRequestError(
@@ -61,4 +81,26 @@ export async function identityGraphql<T>(
     )
   }
   return payload.data
+}
+
+export function parseStepUpChallenge(
+  value: string | null,
+): StepUpChallenge | undefined {
+  if (!value?.startsWith('Bearer ')) return
+  const error = quotedParameter(value, 'error')
+  if (error !== 'insufficient_user_authentication') return
+  const maxAgeValue = quotedParameter(value, 'max_age')
+  const maxAge = maxAgeValue === undefined ? undefined : Number(maxAgeValue)
+  return {
+    acrValues: quotedParameter(value, 'acr_values'),
+    maxAge:
+      maxAge !== undefined && Number.isInteger(maxAge) && maxAge >= 0
+        ? maxAge
+        : undefined,
+  }
+}
+
+function quotedParameter(value: string, name: string) {
+  const match = value.match(new RegExp(`(?:^|[,\\s])${name}="([^"]*)"`))
+  return match?.[1]
 }

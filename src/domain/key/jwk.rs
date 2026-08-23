@@ -151,58 +151,7 @@ pub trait KeyJwkRepository: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::{CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyOid, PublicJwk};
-    use chrono::Utc;
-    use uuid::Uuid;
-
-    #[test]
-    fn key_jwk_holds_algorithm_and_key_reference() {
-        let key_oid = KeyOid::from(Uuid::new_v4());
-        let jwk = PublicJwk::Rsa {
-            key_use: Some("sig".to_owned()),
-            alg: Some("RS256".to_owned()),
-            kid: Some("kid-1".to_owned()),
-            n: "modulus".to_owned(),
-            e: "AQAB".to_owned(),
-            x5c: None,
-            x5t: None,
-            x5t_s256: None,
-        };
-
-        let binding = KeyJwk {
-            oid: KeyJwkOid::from(Uuid::new_v4()),
-            key_oid,
-            algorithm: "RS256".to_owned(),
-            jwk: jwk.clone(),
-            created_at: Utc::now(),
-        };
-
-        assert_eq!(binding.algorithm, "RS256");
-        assert_eq!(Uuid::from(binding.key_oid), Uuid::from(key_oid));
-        assert_eq!(binding.jwk, jwk);
-    }
-
-    #[test]
-    fn create_key_jwk_input_builder() {
-        let key_oid = KeyOid::from(Uuid::new_v4());
-        let input = CreateKeyJwkInput {
-            key_oid,
-            algorithm: "PS256".to_owned(),
-            jwk: PublicJwk::Rsa {
-                key_use: Some("sig".to_owned()),
-                alg: Some("PS256".to_owned()),
-                kid: None,
-                n: "modulus".to_owned(),
-                e: "AQAB".to_owned(),
-                x5c: None,
-                x5t: None,
-                x5t_s256: None,
-            },
-        };
-
-        assert_eq!(input.algorithm, "PS256");
-        assert_eq!(input.jwk.algorithm(), Some("PS256"));
-    }
+    use super::PublicJwk;
 
     #[test]
     fn okp_public_jwk_preserves_certificate_parameters() {

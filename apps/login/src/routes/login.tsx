@@ -1,6 +1,5 @@
 import {
   Alert,
-  Avatar,
   FieldError,
   Input,
   Label,
@@ -9,14 +8,18 @@ import {
 import {
   Outlet,
   createFileRoute,
+  redirect,
   useRouterState,
 } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { ChevronRight, Plus } from 'lucide-react'
+import { useState } from 'react'
 
+import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
+import { beginAuthorization } from '#/lib/authorization-flow'
 import {
   errorMessage,
   IdentityApiError,
@@ -71,6 +74,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         error: pageError ?? translate(locale, 'missingLogin'),
         fieldError: identifierError,
         formValues: flash?.values ?? {},
+        challengeUri: undefined,
       }
     }
 
@@ -83,7 +87,10 @@ const loadLoginPage = createServerFn({ method: 'GET' })
       ])
 
       return {
-        accounts: status.prompt === 'login' ? [] : active.accounts,
+        accounts:
+          status.prompt === 'login' || status.requires_reauthentication
+            ? []
+            : active.accounts,
         csrfToken: active.csrf_token,
         loginId,
         locale: requestLocale(status.ui_locales),
@@ -91,6 +98,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         error: pageError,
         fieldError: identifierError,
         formValues: flash?.values ?? {},
+        challengeUri: status.challenge_uri,
       }
     } catch (error) {
       const locale = requestLocale()
@@ -103,6 +111,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         error: pageError ?? errorMessage(error, locale),
         fieldError: identifierError,
         formValues: flash?.values ?? {},
+        challengeUri: undefined,
       }
     }
   })
@@ -119,7 +128,16 @@ export const Route = createFileRoute('/login')({
     loginId: search.login_id ?? '',
     uiLocales: search.ui_locales,
   }),
-  loader: ({ deps }) => loadLoginPage({ data: deps }),
+  loader: async ({ deps, location }) => {
+    if (!deps.loginId) {
+      throw redirect({ href: await beginAuthorization() })
+    }
+    const page = await loadLoginPage({ data: deps })
+    if (location.pathname === '/login' && page.challengeUri) {
+      throw redirect({ href: page.challengeUri })
+    }
+    return page
+  },
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -223,6 +241,7 @@ function LoginRoute() {
 function LoginPage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
+  const [identifierError, setIdentifierError] = useState(data.fieldError)
   const loginId = data.loginId
   const showAccounts = data.accounts.length > 0 && search.no_accounts !== '1'
   const visibleError = search.error ?? data.error
@@ -263,9 +282,7 @@ function LoginPage() {
                 fullWidth
                 className="group h-auto justify-start gap-3 px-4 py-3 text-left hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-14px_rgba(0,0,0,0.3)]"
               >
-                <Avatar size="sm">
-                  <Avatar.Fallback>{account.name.slice(0, 1)}</Avatar.Fallback>
-                </Avatar>
+                <AccountAvatar name={account.name} picture={account.picture} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">
                     {account.name}
@@ -295,15 +312,16 @@ function LoginPage() {
           <input type="hidden" name="login_id" value={loginId} />
           <input type="hidden" name="csrf_token" value={data.csrfToken} />
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
-          <TextField isRequired fullWidth name="identifier" isInvalid={!!data.fieldError}>
+          <TextField isRequired fullWidth name="identifier" isInvalid={!!identifierError}>
             <Label>{t('identifier')}</Label>
             <Input
               autoFocus
               defaultValue={data.formValues.identifier ?? search.identifier}
               autoComplete="username"
               placeholder="name@example.com"
+              onChange={() => setIdentifierError(undefined)}
             />
-            <FieldError>{data.fieldError}</FieldError>
+            <FieldError>{identifierError}</FieldError>
           </TextField>
           <SubmitButton fullWidth>
             {t('next')}

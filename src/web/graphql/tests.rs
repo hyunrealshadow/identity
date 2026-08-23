@@ -28,6 +28,7 @@ use identity_infrastructure::{
     config::{AppEnvironment, GraphqlConfig, HealthChecksConfig},
     crypto::key::AsymmetricKeyGeneratorImpl,
     database::entity::{client, client_authorization, key, setting, user},
+    graphql::id::{GlobalId, GlobalIdType},
     services::AppServices,
     settings::AppRuntimeSettings,
     web::tera::{build_i18n, build_tera},
@@ -44,7 +45,13 @@ use sea_orm::{DatabaseBackend, MockDatabase};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{RESOURCE_AUDIENCE, id::NodeId, router};
+use super::{RESOURCE_AUDIENCE, router};
+
+struct UserGlobalId;
+
+impl GlobalIdType for UserGlobalId {
+    const TYPE_NAME: &'static str = "User";
+}
 
 struct GraphqlFixture {
     service: Service,
@@ -72,13 +79,14 @@ async fn graphql_http_accepts_a_valid_resource_access_token() {
     let fixture = fixture(FixtureOptions::default()).await;
     let mut response = graphql_post(
         &fixture,
-        "query { viewer { account { id username email } } }",
+        "query { viewer { account { id username email birthdate } } }",
     )
     .await;
 
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let body: Value = response.take_json().await.unwrap();
     assert_eq!(body["data"]["viewer"]["account"]["username"], "ada");
+    assert!(body["data"]["viewer"]["account"]["birthdate"].is_null());
     assert!(body.get("errors").is_none());
 }
 
@@ -135,7 +143,7 @@ async fn graphql_http_reports_the_required_scope() {
 #[tokio::test]
 async fn graphql_http_hides_nodes_owned_by_another_user() {
     let fixture = fixture(FixtureOptions::default()).await;
-    let foreign_id = NodeId::User(Uuid::new_v4()).encode();
+    let foreign_id = GlobalId::<UserGlobalId>::new(Uuid::new_v4()).encode();
     let query = format!("query {{ node(id: \"{foreign_id}\") {{ id }} }}");
     let mut response = graphql_post(&fixture, &query).await;
 

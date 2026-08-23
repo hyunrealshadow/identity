@@ -2352,6 +2352,7 @@ name = "identity-infrastructure"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "async-graphql",
  "async-trait",
  "base64",
  "chacha20poly1305",

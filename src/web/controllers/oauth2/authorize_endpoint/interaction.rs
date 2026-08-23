@@ -109,6 +109,13 @@ where
     };
 
     if has_prompt(request.prompt.as_ref(), PromptValue::Login) {
+        record_selection(
+            authorization_request_id,
+            selected_session.session_oid,
+            selected_session.user_oid,
+            SelectionSource::Reauthentication,
+        )
+        .await?;
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 
@@ -116,9 +123,31 @@ where
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 
+    if request.acr_values.as_ref().is_some_and(|requested| {
+        selected_session
+            .acr
+            .as_ref()
+            .is_none_or(|acr| !requested.iter().any(|value| value == acr))
+    }) {
+        if has_prompt(request.prompt.as_ref(), PromptValue::None) {
+            return Ok(FlowDecision::OAuthError {
+                request: Box::new(request.clone()),
+                error: OAuthErrorCode::UnmetAuthenticationRequirements,
+            });
+        }
+        record_selection(
+            authorization_request_id,
+            selected_session.session_oid,
+            selected_session.user_oid,
+            SelectionSource::Reauthentication,
+        )
+        .await?;
+        return Ok(FlowDecision::LoginRequired { login_id });
+    }
+
     if let Some(max_age) = request.max_age {
         let session_age = chrono::Utc::now()
-            .signed_duration_since(selected_session.created_at)
+            .signed_duration_since(selected_session.authenticated_at)
             .num_seconds();
         if session_age > max_age as i64 {
             if has_prompt(request.prompt.as_ref(), PromptValue::None) {
@@ -127,6 +156,13 @@ where
                     error: OAuthErrorCode::LoginRequired,
                 });
             }
+            record_selection(
+                authorization_request_id,
+                selected_session.session_oid,
+                selected_session.user_oid,
+                SelectionSource::Reauthentication,
+            )
+            .await?;
             return Ok(FlowDecision::LoginRequired { login_id });
         }
     }
@@ -222,10 +258,13 @@ mod tests {
             user_oid: Uuid::new_v4(),
             user_name: "alice".to_string(),
             user_email: "alice@example.com".to_string(),
+            user_picture: None,
             last_active_at: Some(created_at),
             expires_at: None,
             created_at,
-            acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
+            authenticated_at: created_at,
+            acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
+            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
         }
     }
 
@@ -236,20 +275,26 @@ mod tests {
             user_oid: Uuid::new_v4(),
             user_name: "alice".to_string(),
             user_email: "alice@example.com".to_string(),
+            user_picture: None,
             last_active_at: Some(Utc::now()),
             expires_at: None,
             created_at: Utc::now(),
-            acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
+            authenticated_at: Utc::now(),
+            acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
+            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
         };
         let other = ActiveSession {
             session_oid: SessionOid(Uuid::new_v4()),
             user_oid: Uuid::new_v4(),
             user_name: "bob".to_string(),
             user_email: "bob@example.com".to_string(),
+            user_picture: None,
             last_active_at: Some(Utc::now()),
             expires_at: None,
             created_at: Utc::now(),
-            acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
+            authenticated_at: Utc::now(),
+            acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
+            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
         };
 
         let sessions = [other, matching.clone()];
@@ -364,8 +409,51 @@ mod tests {
 
     #[tokio::test]
     async fn determine_authorize_flow_requires_login_when_max_age_is_exceeded() {
+        let recorded = Arc::new(Mutex::new(None));
         let request = request(None, Some(60));
         let session = active_session(Utc::now() - Duration::seconds(120));
+        let authorization_request_id = Uuid::new_v4();
+
+        let decision = determine_authorize_flow_with_selection_recorder(
+            &request,
+            std::slice::from_ref(&session),
+            authorization_request_id,
+            "login-123".to_string(),
+            {
+                let recorded = recorded.clone();
+                move |authorization_request_id, session_oid, user_oid, source| {
+                    let recorded = recorded.clone();
+                    async move {
+                        *recorded.lock().unwrap() =
+                            Some((authorization_request_id, session_oid, user_oid, source));
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            decision,
+            FlowDecision::LoginRequired { login_id } if login_id == "login-123"
+        ));
+        assert_eq!(
+            *recorded.lock().unwrap(),
+            Some((
+                authorization_request_id,
+                session.session_oid,
+                session.user_oid,
+                SelectionSource::Reauthentication,
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn determine_authorize_flow_reuses_old_session_after_recent_reauthentication() {
+        let request = request(None, Some(60));
+        let mut session = active_session(Utc::now() - Duration::hours(12));
+        session.authenticated_at = Utc::now();
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
@@ -377,10 +465,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(matches!(
-            decision,
-            FlowDecision::LoginRequired { login_id } if login_id == "login-123"
-        ));
+        assert!(matches!(decision, FlowDecision::Continue { .. }));
     }
 
     #[tokio::test]

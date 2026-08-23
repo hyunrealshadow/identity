@@ -8,15 +8,15 @@ import {
 import { createServerFn } from '@tanstack/react-start'
 
 import appCss from '../styles.css?url'
-import { identityJson } from '#/lib/identity.server'
-import type { InstallationStatusResponse } from '#/lib/identity-types'
+import { cachedInstallationStatus } from '#/lib/installation-status.server'
 
 const loadInstallationStatus = createServerFn({ method: 'GET' }).handler(
-  () => identityJson<InstallationStatusResponse>('/installation/status'),
+  () => cachedInstallationStatus(),
 )
 
 export const Route = createRootRoute({
-  beforeLoad: async ({ location }) => {
+  staleTime: Infinity,
+  loader: async ({ location }) => {
     const { installed } = await loadInstallationStatus()
     const isInstallRoute = location.pathname === '/install'
 
@@ -26,6 +26,7 @@ export const Route = createRootRoute({
     if (installed && isInstallRoute) {
       throw redirect({ to: '/' })
     }
+    return { installed }
   },
   head: () => ({
     meta: [
@@ -46,6 +47,11 @@ export const Route = createRootRoute({
         href: appCss,
       },
     ],
+    scripts: [
+      {
+        children: `document.documentElement.classList.replace('no-js','js')`,
+      },
+    ],
   }),
   shellComponent: RootDocument,
 })
@@ -62,7 +68,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   })
 
   return (
-    <html lang={locale}>
+    <html lang={locale} className="no-js" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

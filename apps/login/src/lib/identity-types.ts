@@ -27,6 +27,7 @@ export interface AccountItem {
   id: string
   name: string
   email: string
+  picture?: string
   last_active_at?: string
 }
 
@@ -39,13 +40,17 @@ export interface ActiveAccountsResponse {
 export interface UserDisplayInfo {
   name: string
   email: string
+  picture?: string
 }
 
 export interface LoginStatusResponse {
   id: string
   status: string
   user?: UserDisplayInfo
+  credential_types: Array<string>
   prompt: string
+  requires_reauthentication: boolean
+  challenge_uri?: string
   ui_locales?: Array<string>
   continue_uri?: string
 }

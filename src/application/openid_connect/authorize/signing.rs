@@ -22,6 +22,7 @@ pub(super) struct SignImplicitIdTokenInput<'a> {
     pub nonce: &'a str,
     pub auth_time: i64,
     pub acr: Option<&'a str>,
+    pub amr: &'a [String],
     pub access_token: Option<&'a str>,
     pub code: Option<&'a str>,
     pub protected_session_id: Option<&'a str>,
@@ -43,6 +44,7 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
     pub claims: Option<&'a ClaimsRequest>,
     pub auth_time: i64,
     pub acr: Option<&'a str>,
+    pub amr: &'a [String],
 }
 
 impl AuthorizeService {
@@ -110,10 +112,7 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
         payload
-            .set_claim(
-                JwtClaimNames::AMR,
-                Some(serde_json::json!(amr_values(input.acr))),
-            )
+            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
@@ -139,7 +138,6 @@ impl AuthorizeService {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;
         }
-
         if let Some(access_token) = input.access_token {
             let at_hash = front_channel_hash(access_token, input.alg).map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
@@ -281,6 +279,11 @@ impl AuthorizeService {
                     AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
                 })?;
         }
+        payload
+            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+            })?;
         if let Some(claims_value) = input.claims {
             payload
                 .set_claim(
@@ -336,13 +339,6 @@ impl AuthorizeService {
         .map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::EncryptionFailed).with_source(error)
         })
-    }
-}
-
-fn amr_values(acr: Option<&str>) -> Vec<&'static str> {
-    match acr {
-        Some(identity_domain::auth::ACR_MFA) => vec!["pwd", "otp"],
-        _ => vec!["pwd"],
     }
 }
 

@@ -1,5 +1,3 @@
-mod cursor;
-mod id;
 mod schema;
 #[cfg(test)]
 mod tests;
@@ -179,8 +177,39 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             return;
         }
     };
-    res.status_code(StatusCode::OK);
+    if let Some(challenge) = step_up_challenge(&response) {
+        res.status_code(StatusCode::UNAUTHORIZED);
+        if let Ok(value) = HeaderValue::from_str(&challenge) {
+            res.headers_mut().insert(header::WWW_AUTHENTICATE, value);
+        }
+    } else {
+        res.status_code(StatusCode::OK);
+    }
     res.render(salvo::prelude::Json(response));
+}
+
+fn step_up_challenge(response: &async_graphql::Response) -> Option<String> {
+    let extensions = response.errors.iter().find_map(|error| {
+        error.extensions.as_ref().filter(|extensions| {
+            matches!(
+                extensions.get("code"),
+                Some(async_graphql::Value::String(code))
+                    if code == "insufficient_user_authentication"
+            )
+        })
+    })?;
+    let mut parameters = vec![
+        "Bearer realm=\"graphql\"".to_owned(),
+        "error=\"insufficient_user_authentication\"".to_owned(),
+        "error_description=\"A different authentication level or more recent authentication is required\"".to_owned(),
+    ];
+    if let Some(async_graphql::Value::String(acr_values)) = extensions.get("acr_values") {
+        parameters.push(format!("acr_values=\"{acr_values}\""));
+    }
+    if let Some(async_graphql::Value::Number(max_age)) = extensions.get("max_age") {
+        parameters.push(format!("max_age=\"{max_age}\""));
+    }
+    Some(parameters.join(", "))
 }
 
 async fn parse_graphql_request(
@@ -298,10 +327,27 @@ pub fn shares_listener(graphql: &GraphqlConfig, server: &ServerConfig) -> bool {
 
 #[cfg(test)]
 mod unit_tests {
-    use async_graphql::Request as GraphqlRequest;
+    use async_graphql::{ErrorExtensionValues, Request as GraphqlRequest, Response, ServerError};
     use identity_infrastructure::config::{GraphqlConfig, GraphqlServerConfig, ServerConfig};
 
-    use super::{bind_address, is_mutation, shares_listener};
+    use super::{bind_address, is_mutation, shares_listener, step_up_challenge};
+
+    #[test]
+    fn formats_rfc9470_step_up_challenge_from_graphql_error() {
+        let mut extensions = ErrorExtensionValues::default();
+        extensions.set("code", "insufficient_user_authentication");
+        extensions.set("acr_values", "urn:identity:acr:aal2");
+        extensions.set("max_age", 3600_u64);
+        let mut error = ServerError::new("recent authentication is required", None);
+        error.extensions = Some(extensions);
+        let response = Response::from_errors(vec![error]);
+
+        let challenge = step_up_challenge(&response).expect("step-up challenge");
+
+        assert!(challenge.contains("error=\"insufficient_user_authentication\""));
+        assert!(challenge.contains("acr_values=\"urn:identity:acr:aal2\""));
+        assert!(challenge.contains("max_age=\"3600\""));
+    }
 
     #[test]
     fn graphql_listener_inherits_main_address_by_default() {

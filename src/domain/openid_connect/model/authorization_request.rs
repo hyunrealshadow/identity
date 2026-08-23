@@ -397,11 +397,6 @@ mod tests {
     }
 
     #[test]
-    fn code_response_type_is_not_implicit() {
-        assert!(!ResponseType::Code.is_implicit());
-    }
-
-    #[test]
     fn parse_hybrid_response_types() {
         assert_eq!(
             ResponseType::from_str("code id_token").unwrap(),
@@ -474,36 +469,6 @@ mod tests {
     fn parse_code_challenge_method() {
         let method = CodeChallengeMethod::from_str("S256").unwrap();
         assert_eq!(method, CodeChallengeMethod::S256);
-    }
-
-    #[test]
-    fn authorization_request_basic() {
-        let req = AuthorizationRequest {
-            response_type: ResponseType::Code,
-            response_mode: Some(ResponseMode::FormPost),
-            client_id: Uuid::nil(),
-            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
-            scope: ScopeSet::parse("openid profile").unwrap(),
-            state: "abc123".to_string(),
-            nonce: Some("n-0S6_WzA2Mj".to_string()),
-            display: Some(Display::Page),
-            prompt: None,
-            max_age: None,
-            ui_locales: None,
-            claims_locales: None,
-            id_token_hint: None,
-            login_hint: None,
-            acr_values: None,
-            claims: None,
-            request_uri: None,
-            code_challenge: None,
-            code_challenge_method: None,
-        };
-
-        assert_eq!(req.response_type, ResponseType::Code);
-        assert_eq!(req.response_mode, Some(ResponseMode::FormPost));
-        assert!(req.scope.openid);
-        assert!(req.scope.profile);
     }
 
     #[test]

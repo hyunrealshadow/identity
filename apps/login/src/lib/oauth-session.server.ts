@@ -32,10 +32,10 @@ export interface OAuthTokenSession {
 export interface MfaUiSession {
   mfa_enrollment?: {
     secret: string
-    otpauth_uri: string
+    otp_auth_uri: string
     enrollment_token: string
+    recovery_codes: Array<string>
   }
-  recovery_codes?: Array<string>
 }
 
 export interface AccountFlashSession {

@@ -69,8 +69,9 @@ export function formErrorResponse(
   message: string,
   values: Record<string, string | undefined>,
   field?: string,
+  destination = pathname,
 ) {
-  const response = navigationResponse(request, new URL(pathname, request.url).toString())
+  const response = navigationResponse(request, new URL(destination, request.url).toString())
   response.headers.append(
     'set-cookie',
     `${flashCookieName(pathname)}=${serializeFlash({ message, values, field })}; Path=${pathname}; Max-Age=60; HttpOnly; Secure; SameSite=Lax`,
@@ -84,8 +85,9 @@ export function formValidationErrorResponse(
   message: string,
   values: Record<string, string | undefined>,
   fields: Record<string, string>,
+  destination = pathname,
 ) {
-  const response = navigationResponse(request, new URL(pathname, request.url).toString())
+  const response = navigationResponse(request, new URL(destination, request.url).toString())
   response.headers.append(
     'set-cookie',
     `${flashCookieName(pathname)}=${serializeFlash({ message, values, fields })}; Path=${pathname}; Max-Age=60; HttpOnly; Secure; SameSite=Lax`,

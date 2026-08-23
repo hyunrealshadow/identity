@@ -19,12 +19,10 @@ btn-sign-up = 注册
 # 错误页面
 error-404-title = 页面未找到
 error-404-message = 您查找的页面不存在或已被移动。
-error-page-badge = 请求错误
-error-page-title = 请求处理失败
+error-page-title = 发生了一些错误
 error-page-details = 错误详情
-error-page-http-status = HTTP 状态
+error-page-error-type = 错误类型
 error-page-error-code = 错误代码
 error-page-description = 错误描述
-error-page-detail = 详情
-error-page-retry = 重新发起请求
-error-page-back = 返回应用
+error-page-additional-info = 补充信息
+error-page-support-hint = 如果问题持续出现，请记下上方错误代码并联系支持人员。

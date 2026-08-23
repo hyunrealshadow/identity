@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect, Set, TransactionTrait,
+    QueryOrder, QuerySelect, SelectTwo, Set, TransactionTrait,
     sea_query::{Expr, SimpleExpr},
 };
 use uuid::Uuid;
@@ -20,6 +20,7 @@ use identity_domain::auth::{
 use identity_domain::client_authorization::ClientAuthorizationType;
 
 fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
+    let amr = serde_json::from_value(m.amr.clone()).unwrap_or_default();
     Session {
         oid: SessionOid(m.oid),
         user_oid,
@@ -38,6 +39,7 @@ fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
         created_at: m.created_at.with_timezone(&Utc),
         acr: m.acr,
         acr_expires_at: m.acr_expires_at.map(|value| value.with_timezone(&Utc)),
+        amr,
     }
 }
 
@@ -101,7 +103,7 @@ impl SessionRepositoryImpl {
             .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))
     }
 
-    pub async fn list_page_by_user_oid(
+    pub async fn list_active_page_by_user_oid(
         &self,
         user_oid: Uuid,
         after: Option<SessionSortKey>,
@@ -109,10 +111,7 @@ impl SessionRepositoryImpl {
         limit: usize,
         direction: SessionPageDirection,
     ) -> Result<SessionPage, SessionRepositoryError> {
-        let mut query = SessionEntity::find()
-            .inner_join(UserEntity)
-            .select_also(UserEntity)
-            .filter(user::Column::Oid.eq(user_oid));
+        let mut query = active_session_page_query(user_oid);
         if let Some(after) = after {
             query = query.filter(session_cursor_condition(after, CursorComparison::After));
         }
@@ -152,6 +151,14 @@ impl SessionRepositoryImpl {
             before.is_some(),
         ))
     }
+}
+
+fn active_session_page_query(user_oid: Uuid) -> SelectTwo<session::Entity, user::Entity> {
+    SessionEntity::find()
+        .inner_join(UserEntity)
+        .select_also(UserEntity)
+        .filter(user::Column::Oid.eq(user_oid))
+        .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
 }
 
 fn build_session_page(
@@ -243,22 +250,30 @@ impl SessionRepository for SessionRepositoryImpl {
             .into_iter()
             .filter_map(|(s, u)| {
                 let u = u?; // inner join guarantees Some, but be safe
+                let created_at = s.created_at.with_timezone(&Utc);
+                let authenticated_at = s
+                    .authenticated_at
+                    .map(|value| value.with_timezone(&Utc))
+                    .unwrap_or(created_at);
                 Some(ActiveSession {
                     session_oid: SessionOid(s.oid),
                     user_oid: u.oid,
                     user_name: u.name,
                     user_email: u.email,
+                    user_picture: u.picture,
                     last_active_at: Some(s.last_active_at.with_timezone(&Utc)),
                     expires_at: decode_nonnullable_expiry(s.expires_at),
-                    created_at: s.created_at.with_timezone(&Utc),
-                    acr: if s.acr.as_deref() == Some(identity_domain::auth::ACR_MFA)
+                    created_at,
+                    authenticated_at,
+                    acr: if s.acr.as_deref() == Some(identity_domain::auth::ACR_AAL2)
                         && s.acr_expires_at
                             .is_some_and(|expires_at| expires_at.with_timezone(&Utc) <= Utc::now())
                     {
-                        Some(identity_domain::auth::ACR_PASSWORD.to_owned())
+                        Some(identity_domain::auth::ACR_AAL1.to_owned())
                     } else {
                         s.acr
                     },
+                    amr: serde_json::from_value(s.amr).unwrap_or_default(),
                 })
             })
             .collect())
@@ -286,11 +301,13 @@ impl SessionRepository for SessionRepositoryImpl {
             user_agent: Set(input.user_agent),
             ip_address: Set(input.ip_address),
             last_active_at: Set(now.into()),
+            authenticated_at: Set(Some(now.into())),
             expires_at: Set(encode_nonnullable_expiry(input.expires_at)),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
             acr: Set(input.acr),
             acr_expires_at: Set(input.acr_expires_at.map(Into::into)),
+            amr: Set(serde_json::json!(input.amr)),
             ..Default::default()
         };
         let model = active
@@ -300,21 +317,82 @@ impl SessionRepository for SessionRepositoryImpl {
         Ok(session_to_domain(model, input.user_oid))
     }
 
-    async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError> {
-        let model = SessionEntity::find()
+    async fn touch_active_by_oid(&self, oid: SessionOid) -> Result<bool, SessionRepositoryError> {
+        let now = Utc::now();
+        let result = SessionEntity::update_many()
+            .col_expr(
+                session::Column::LastActiveAt,
+                Expr::value(now.fixed_offset()),
+            )
+            .col_expr(
+                session::Column::UpdatedAt,
+                Expr::value(Some(now.fixed_offset())),
+            )
             .filter(session::Column::Oid.eq(Uuid::from(oid)))
-            .one(&self.db)
-            .await
-            .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
-            .ok_or(SessionRepositoryError::SessionNotFound)?;
-
-        let mut active: session::ActiveModel = model.into();
-        active.last_active_at = Set(Utc::now().into());
-        active
-            .update(&self.db)
+            .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
+            .filter(session::Column::RevokedAt.is_null())
+            .filter(session::Column::ExpiresAt.gt(now.fixed_offset()))
+            .exec(&self.db)
             .await
             .map_err(|e| SessionRepositoryError::TouchFailed(Box::new(e)))?;
-        Ok(())
+        Ok(result.rows_affected == 1)
+    }
+
+    async fn reauthenticate_by_oid(
+        &self,
+        oid: SessionOid,
+        expected_user_oid: Uuid,
+        acr: &str,
+        acr_expires_at: DateTime<Utc>,
+        amr: &[String],
+    ) -> Result<Session, SessionRepositoryError> {
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
+        lock_session(&transaction, oid)
+            .await
+            .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
+
+        let Some((session_model, Some(user_model))) = SessionEntity::find()
+            .filter(session::Column::Oid.eq(Uuid::from(oid)))
+            .inner_join(UserEntity)
+            .select_also(UserEntity)
+            .one(&transaction)
+            .await
+            .map_err(|error| SessionRepositoryError::QueryFailed(Box::new(error)))?
+        else {
+            return Err(SessionRepositoryError::SessionNotFound);
+        };
+
+        let now = Utc::now();
+        let is_active = session_model.status == SessionStatus::ACTIVE
+            && session_model.revoked_at.is_none()
+            && decode_nonnullable_expiry(session_model.expires_at)
+                .is_none_or(|expires_at| expires_at > now)
+            && user_model.oid == expected_user_oid;
+        if !is_active {
+            return Err(SessionRepositoryError::SessionNotFound);
+        }
+
+        let mut active: session::ActiveModel = session_model.into();
+        active.last_active_at = Set(now.into());
+        active.authenticated_at = Set(Some(now.into()));
+        active.acr = Set(Some(acr.to_owned()));
+        active.acr_expires_at = Set(Some(acr_expires_at.into()));
+        active.amr = Set(serde_json::json!(amr));
+        active.updated_at = Set(Some(now.into()));
+        let model = active
+            .update(&transaction)
+            .await
+            .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
+
+        Ok(session_to_domain(model, expected_user_oid))
     }
 
     async fn revoke_by_oid(
@@ -384,17 +462,65 @@ impl SessionRepository for SessionRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use sea_orm::{DbBackend, EntityTrait as _, QueryFilter as _, QueryTrait as _};
+    use sea_orm::{
+        DatabaseBackend, DbBackend, EntityTrait as _, MockDatabase, MockExecResult,
+        QueryFilter as _, QueryTrait as _,
+    };
 
     use super::{
-        CursorComparison, SessionPageItem, SessionSortKey, session_cursor_condition,
-        session_to_domain,
+        CursorComparison, SessionPageItem, SessionSortKey, active_session_page_query,
+        session_cursor_condition, session_to_domain,
     };
     use chrono::{DateTime, Utc};
     use uuid::Uuid;
 
     use crate::database::entity::session;
-    use identity_domain::auth::{SessionOid, SessionStatus, model::Session};
+    use identity_domain::auth::{
+        SessionOid, SessionStatus, model::Session, repository::SessionRepository as _,
+    };
+
+    #[tokio::test]
+    async fn touch_active_session_is_guarded_by_the_complete_lifecycle_condition() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            }])
+            .into_connection();
+        let repo = super::SessionRepositoryImpl::new(db);
+
+        let touched = repo
+            .touch_active_by_oid(SessionOid(Uuid::new_v4()))
+            .await
+            .unwrap();
+
+        assert!(touched);
+        let statements = format!("{:?}", repo.db.into_transaction_log());
+        assert!(statements.contains("status"), "{statements}");
+        assert!(statements.contains("active"), "{statements}");
+        assert!(statements.contains("revoked_at"), "{statements}");
+        assert!(statements.contains("IS NULL"), "{statements}");
+        assert!(statements.contains("expires_at"), "{statements}");
+        assert!(statements.contains('>'), "{statements}");
+    }
+
+    #[tokio::test]
+    async fn touch_active_session_reports_when_the_session_is_not_touchable() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 0,
+            }])
+            .into_connection();
+        let repo = super::SessionRepositoryImpl::new(db);
+
+        let touched = repo
+            .touch_active_by_oid(SessionOid(Uuid::new_v4()))
+            .await
+            .unwrap();
+
+        assert!(!touched);
+    }
 
     #[test]
     fn session_to_domain_wraps_required_timestamps_in_some() {
@@ -408,6 +534,7 @@ mod tests {
             status: SessionStatus::ACTIVE.to_owned(),
             acr: None,
             acr_expires_at: None,
+            amr: serde_json::json!([]),
             device_name: None,
             device_type: None,
             os_name: None,
@@ -419,6 +546,7 @@ mod tests {
             country: None,
             city: None,
             last_active_at,
+            authenticated_at: Some(created_at),
             expires_at,
             revoked_at: None,
             created_at,
@@ -449,6 +577,15 @@ mod tests {
         assert!(statement.contains(r#""session"."last_active_at" <"#));
         assert!(statement.contains(r#""session"."id" <"#));
         assert!(statement.contains(" OR "));
+    }
+
+    #[test]
+    fn active_session_page_query_excludes_revoked_sessions() {
+        let statement = active_session_page_query(Uuid::new_v4())
+            .build(DbBackend::Postgres)
+            .to_string();
+
+        assert!(statement.contains(r#""session"."status" = 'active'"#));
     }
 
     #[test]
@@ -517,6 +654,7 @@ mod tests {
             created_at: now,
             acr: None,
             acr_expires_at: None,
+            amr: Vec::new(),
         }
     }
 

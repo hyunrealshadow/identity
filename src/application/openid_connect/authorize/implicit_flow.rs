@@ -20,12 +20,14 @@ struct CreateFrontChannelAccessTokenInput<'a> {
     claims: Option<&'a ClaimsRequest>,
     auth_time: i64,
     acr: Option<&'a str>,
+    amr: &'a [String],
 }
 
 #[derive(Clone, Copy)]
 pub(super) struct AuthenticationContext<'a> {
     pub auth_time: Option<i64>,
     pub acr: Option<&'a str>,
+    pub amr: &'a [String],
 }
 
 impl AuthorizeService {
@@ -114,6 +116,7 @@ impl AuthorizeService {
                         claims: claims.as_ref(),
                         auth_time: auth_time_val,
                         acr: authentication.acr,
+                        amr: authentication.amr,
                     })
                     .await?,
                 ),
@@ -133,6 +136,7 @@ impl AuthorizeService {
             nonce,
             auth_time: auth_time_val,
             acr: authentication.acr,
+            amr: authentication.amr,
             access_token: access_token.as_deref(),
             code: None,
             protected_session_id: Some(protected_session_id),
@@ -204,6 +208,7 @@ impl AuthorizeService {
                 protected_session_id,
                 authentication.auth_time,
                 authentication.acr,
+                authentication.amr,
             )
             .await?;
 
@@ -247,6 +252,7 @@ impl AuthorizeService {
                         .auth_time
                         .unwrap_or_else(|| chrono::Utc::now().timestamp()),
                     acr: authentication.acr,
+                    amr: authentication.amr,
                 })
                 .await?,
             )
@@ -279,6 +285,7 @@ impl AuthorizeService {
                     .auth_time
                     .unwrap_or_else(|| chrono::Utc::now().timestamp()),
                 acr: authentication.acr,
+                amr: authentication.amr,
                 access_token: access_token.as_deref(),
                 code: Some(&code),
                 protected_session_id: Some(protected_session_id),
@@ -366,6 +373,7 @@ impl AuthorizeService {
             claims: input.claims,
             auth_time: input.auth_time,
             acr: input.acr,
+            amr: input.amr,
         })
     }
 }

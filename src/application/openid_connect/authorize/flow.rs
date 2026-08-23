@@ -202,6 +202,24 @@ impl AuthorizeService {
         source: SelectionSource,
     ) -> Result<(), AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
+        let stored = self
+            .load_stored_authorization_request(login.client_authorization_oid)
+            .await?;
+        let selected_user_oid = user_oid.to_string();
+        let is_reauthentication =
+            stored.interaction.selection_source == Some(SelectionSource::Reauthentication);
+        if is_reauthentication
+            && (stored.interaction.selected_session_oid != Some(session_oid)
+                || stored.interaction.selected_user_oid.as_deref()
+                    != Some(selected_user_oid.as_str()))
+        {
+            return Err(Self::interaction_conflict());
+        }
+        let source = if is_reauthentication {
+            SelectionSource::Reauthentication
+        } else {
+            source
+        };
         self.record_authorization_selection(
             login.client_authorization_oid,
             session_oid,
@@ -210,6 +228,18 @@ impl AuthorizeService {
             source,
         )
         .await?;
+        if source == SelectionSource::Reauthentication {
+            self.login_repo
+                .bind_user(
+                    login.oid,
+                    user_oid,
+                    identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED,
+                )
+                .await
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
+                })?;
+        }
         self.login_repo
             .bind_session(login.oid, session_oid)
             .await
@@ -343,6 +373,7 @@ impl AuthorizeService {
         auth_time: Option<i64>,
         acr: Option<String>,
     ) -> Result<Url, AppError> {
+        let amr = default_amr_for_acr(acr.as_deref());
         self.approve_authorization_request_with_protected_session_id(
             authorization_request_id,
             session_oid,
@@ -350,6 +381,7 @@ impl AuthorizeService {
             None,
             auth_time,
             acr,
+            amr,
         )
         .await
     }
@@ -362,6 +394,7 @@ impl AuthorizeService {
         protected_session_id: Option<String>,
         auth_time: Option<i64>,
         acr: Option<String>,
+        amr: Vec<String>,
     ) -> Result<Url, AppError> {
         let stored = self
             .load_stored_authorization_request(authorization_request_id)
@@ -388,6 +421,7 @@ impl AuthorizeService {
                 super::implicit_flow::AuthenticationContext {
                     auth_time,
                     acr: acr.as_deref(),
+                    amr: &amr,
                 },
             )
             .await?
@@ -401,6 +435,7 @@ impl AuthorizeService {
                 super::implicit_flow::AuthenticationContext {
                     auth_time,
                     acr: acr.as_deref(),
+                    amr: &amr,
                 },
             )
             .await?
@@ -412,6 +447,7 @@ impl AuthorizeService {
                 &protected_session_id,
                 auth_time,
                 acr.as_deref(),
+                &amr,
             )
             .await?
         };
@@ -430,6 +466,7 @@ impl AuthorizeService {
         protected_session_id: &str,
         auth_time: Option<i64>,
         acr: Option<&str>,
+        amr: &[String],
     ) -> Result<Url, AppError> {
         let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
@@ -443,6 +480,7 @@ impl AuthorizeService {
                 protected_session_id,
                 auth_time,
                 acr,
+                amr,
             )
             .await?;
 
@@ -467,6 +505,7 @@ impl AuthorizeService {
         protected_session_id: &str,
         auth_time: Option<i64>,
         acr: Option<&str>,
+        amr: &[String],
     ) -> Result<(String, Uuid), AppError> {
         let record = self
             .client_authorization_repo
@@ -486,6 +525,7 @@ impl AuthorizeService {
                         session_oid,
                         protected_session_id: Some(protected_session_id.to_string()),
                         acr: acr.map(str::to_owned),
+                        amr: amr.to_vec(),
                         redirect_uri: request.redirect_uri.clone(),
                         auth_time,
                         claims: request
@@ -552,6 +592,7 @@ impl AuthorizeService {
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
+        let amr = default_amr_for_acr(login.acr.as_deref());
         self.approve_authorization_request_with_protected_session_id(
             login.client_authorization_oid,
             session_oid,
@@ -559,6 +600,7 @@ impl AuthorizeService {
             protected_session_id,
             auth_time,
             login.acr,
+            amr,
         )
         .await
     }
@@ -571,6 +613,15 @@ impl AuthorizeService {
         self.deny_authorization_request(login.client_authorization_oid)
             .await
     }
+}
+
+fn default_amr_for_acr(acr: Option<&str>) -> Vec<String> {
+    let mut methods = vec![identity_domain::auth::AMR_PASSWORD.to_owned()];
+    if acr == Some(identity_domain::auth::ACR_AAL2) {
+        methods.push(identity_domain::auth::AMR_OTP.to_owned());
+        methods.push(identity_domain::auth::AMR_MFA.to_owned());
+    }
+    methods
 }
 
 pub(super) fn session_state_for_authorize_response(

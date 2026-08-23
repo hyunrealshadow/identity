@@ -68,31 +68,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn openid_configuration_returns_provider_metadata() {
-        let service = OpenIdProviderService::new(Arc::new(TestInstallationSetting(Arc::new(
-            InstallationState {
-                initialized: true,
-                domain: Some("identity.example.com".to_owned()),
-                first_user_oid: None,
-                first_key_oid: None,
-                initialized_at: None,
-            },
-        ))));
-
-        let metadata = openid_configuration_document(&service).await.unwrap();
-
-        assert_eq!(metadata.issuer.as_str(), "https://identity.example.com/");
-        assert_eq!(
-            metadata.authorization_endpoint.as_str(),
-            "https://identity.example.com/oauth2/authorize"
-        );
-        assert_eq!(
-            metadata.jwks_uri.as_str(),
-            "https://identity.example.com/.well-known/keys"
-        );
-    }
-
-    #[tokio::test]
     async fn discovery_contract_contains_expected_fields() {
         let service = OpenIdProviderService::new(Arc::new(TestInstallationSetting(Arc::new(
             InstallationState {
@@ -109,8 +84,16 @@ mod tests {
 
         assert_eq!(json["issuer"], "https://identity.example.com/");
         assert_eq!(
+            json["authorization_endpoint"],
+            "https://identity.example.com/oauth2/authorize"
+        );
+        assert_eq!(
             json["token_endpoint"],
             "https://identity.example.com/oauth2/token"
+        );
+        assert_eq!(
+            json["jwks_uri"],
+            "https://identity.example.com/.well-known/keys"
         );
         assert_eq!(
             json["end_session_endpoint"],
@@ -132,8 +115,8 @@ mod tests {
         assert_eq!(
             json["acr_values_supported"],
             serde_json::json!([
-                identity_domain::auth::ACR_PASSWORD,
-                identity_domain::auth::ACR_MFA
+                identity_domain::auth::ACR_AAL1,
+                identity_domain::auth::ACR_AAL2
             ])
         );
         assert_eq!(

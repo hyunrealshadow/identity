@@ -6,7 +6,7 @@ use sea_orm_migration::{
         MigrationTrait, SchemaManager, Table,
     },
     schema::{
-        big_integer, pk_auto, string, string_null, timestamp_with_time_zone,
+        big_integer, json_binary, pk_auto, string, string_null, timestamp_with_time_zone,
         timestamp_with_time_zone_null, uuid_uniq,
     },
 };
@@ -23,6 +23,7 @@ pub enum Session {
     Status,
     Acr,
     AcrExpiresAt,
+    Amr,
     DeviceName,
     DeviceType,
     OsName,
@@ -34,6 +35,7 @@ pub enum Session {
     Country,
     City,
     LastActiveAt,
+    AuthenticatedAt,
     ExpiresAt,
     RevokedAt,
     CreatedAt,
@@ -54,6 +56,7 @@ impl MigrationTrait for Migration {
                     .col(string(Session::Status))
                     .col(string_null(Session::Acr))
                     .col(timestamp_with_time_zone_null(Session::AcrExpiresAt))
+                    .col(json_binary(Session::Amr))
                     .col(string_null(Session::DeviceName))
                     .col(string_null(Session::DeviceType))
                     .col(string_null(Session::OsName))
@@ -65,6 +68,7 @@ impl MigrationTrait for Migration {
                     .col(string_null(Session::Country))
                     .col(string_null(Session::City))
                     .col(timestamp_with_time_zone(Session::LastActiveAt))
+                    .col(timestamp_with_time_zone_null(Session::AuthenticatedAt))
                     .col(timestamp_with_time_zone(Session::ExpiresAt))
                     .col(timestamp_with_time_zone_null(Session::RevokedAt))
                     .col(

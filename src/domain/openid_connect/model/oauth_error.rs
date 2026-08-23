@@ -21,6 +21,7 @@ pub enum OAuthErrorCode {
     RequestNotSupported,
     RequestUriNotSupported,
     RegistrationNotSupported,
+    UnmetAuthenticationRequirements,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -78,6 +78,7 @@ pub struct CheckSessionPageData {
 #[derive(Debug, Clone, Serialize)]
 pub struct ErrorPageData {
     pub status_code: u16,
+    pub oauth_error_code: Option<String>,
     pub error_code: Option<u32>,
     pub title: String,
     pub message: String,

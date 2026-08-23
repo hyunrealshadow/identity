@@ -14,7 +14,9 @@ pub enum TotpError {
 }
 
 pub trait TotpVerifier: Send + Sync {
-    fn verify(&self, otp_data: &OtpCredentialData, code: &str) -> Result<bool, TotpError>;
+    /// Returns the matching TOTP counter. Persistence must atomically consume
+    /// this counter before authentication is considered successful.
+    fn verify(&self, otp_data: &OtpCredentialData, code: &str) -> Result<Option<u64>, TotpError>;
 }
 
 #[cfg(test)]

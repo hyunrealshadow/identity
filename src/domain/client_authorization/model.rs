@@ -53,6 +53,8 @@ pub struct AuthorizationCodeData {
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub acr: Option<String>,
+    #[serde(default)]
+    pub amr: Vec<String>,
     pub redirect_uri: String,
     pub auth_time: Option<i64>,
     pub claims: Option<ClaimsRequest>,
@@ -66,6 +68,9 @@ pub struct RefreshTokenData {
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub auth_time: Option<i64>,
+    pub acr: Option<String>,
+    #[serde(default)]
+    pub amr: Vec<String>,
     pub rotated_from: Option<String>,
 }
 
@@ -119,6 +124,7 @@ pub enum SelectionSource {
     Auto,
     AccountPicker,
     FreshLogin,
+    Reauthentication,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, Display, AsRefStr)]
@@ -179,6 +185,7 @@ mod tests {
             session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: Some("protected-session".to_string()),
             acr: Some("urn:mfa".to_string()),
+            amr: vec!["pwd".to_string(), "otp".to_string(), "mfa".to_string()],
             redirect_uri: "https://client.example.com/callback".to_string(),
             auth_time: Some(1234567890),
             claims: None,
@@ -201,6 +208,8 @@ mod tests {
             session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: Some("protected-session".to_string()),
             auth_time: Some(1234567890),
+            acr: Some("urn:identity:acr:aal1".to_string()),
+            amr: vec!["pwd".to_string()],
             rotated_from: Some(uuid::Uuid::nil().to_string()),
         };
 
@@ -224,6 +233,8 @@ mod tests {
             session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: None,
             auth_time: None,
+            acr: None,
+            amr: Vec::new(),
             rotated_from: None,
         };
 

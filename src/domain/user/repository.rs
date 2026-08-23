@@ -41,6 +41,9 @@ pub enum UserCredentialRepositoryError {
     #[error("failed to update password credential")]
     UpdatePasswordFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
+    #[error("failed to consume TOTP counter")]
+    ConsumeTotpFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+
     #[error("failed to replace credentials")]
     ReplaceFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
@@ -95,6 +98,14 @@ pub trait UserCredentialRepository: Send + Sync {
         credential_oid: UserCredentialOid,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError>;
+
+    /// Atomically stores `counter` in the OTP credential's JSONB data only if
+    /// it is greater than the previously consumed counter.
+    async fn consume_totp_counter(
+        &self,
+        credential_oid: UserCredentialOid,
+        counter: u64,
+    ) -> Result<bool, UserCredentialRepositoryError>;
 
     /// Atomically replaces one or more credential groups owned by the user.
     async fn replace_by_user_oid(

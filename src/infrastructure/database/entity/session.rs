@@ -13,6 +13,8 @@ pub struct Model {
     pub status: String,
     pub acr: Option<String>,
     pub acr_expires_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(column_type = "JsonBinary")]
+    pub amr: Json,
     pub device_name: Option<String>,
     pub device_type: Option<String>,
     pub os_name: Option<String>,
@@ -24,6 +26,7 @@ pub struct Model {
     pub country: Option<String>,
     pub city: Option<String>,
     pub last_active_at: DateTimeWithTimeZone,
+    pub authenticated_at: Option<DateTimeWithTimeZone>,
     pub expires_at: DateTimeWithTimeZone,
     pub revoked_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,

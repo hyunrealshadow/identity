@@ -7,6 +7,7 @@ pub mod config;
 pub mod context;
 pub mod crypto;
 pub mod database;
+pub mod graphql;
 pub mod i18n;
 pub mod lifecycle;
 pub mod observability;

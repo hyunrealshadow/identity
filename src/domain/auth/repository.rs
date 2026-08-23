@@ -25,6 +25,9 @@ pub enum SessionRepositoryError {
     #[error("failed to update session activity")]
     TouchFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
+    #[error("failed to reauthenticate session")]
+    ReauthenticateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+
     #[error("failed to revoke session")]
     RevokeFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -70,6 +73,7 @@ pub struct CreateSessionInput {
     pub expires_at: Option<DateTime<Utc>>,
     pub acr: Option<String>,
     pub acr_expires_at: Option<DateTime<Utc>>,
+    pub amr: Vec<String>,
 }
 
 // ─── SessionRepository ───────────────────────────────────────────────────────
@@ -91,8 +95,23 @@ pub trait SessionRepository: Send + Sync {
     /// Create a new session and return it.
     async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError>;
 
-    /// Update `last_active_at` for a session (identified by OID).
-    async fn touch_by_oid(&self, oid: SessionOid) -> Result<(), SessionRepositoryError>;
+    /// Atomically refresh the authentication context of an existing active
+    /// session. The expected user prevents a login interaction from upgrading
+    /// a session owned by another account.
+    async fn reauthenticate_by_oid(
+        &self,
+        oid: SessionOid,
+        expected_user_oid: Uuid,
+        acr: &str,
+        acr_expires_at: DateTime<Utc>,
+        amr: &[String],
+    ) -> Result<Session, SessionRepositoryError>;
+
+    /// Atomically update `last_active_at` when the session is still active,
+    /// unrevoked, and unexpired.
+    ///
+    /// Returns `false` when no touchable session matched the OID.
+    async fn touch_active_by_oid(&self, oid: SessionOid) -> Result<bool, SessionRepositoryError>;
 
     /// Atomically revokes the session and all authorization artifacts derived
     /// from it (authorization codes, access tokens, and refresh tokens).

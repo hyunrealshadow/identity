@@ -11,6 +11,7 @@ import {
   identityJson,
 } from '#/lib/identity.server'
 import type { InstallResponse } from '#/lib/identity-types'
+import { markInstallationComplete } from '#/lib/installation-status.server'
 import { translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 import {
@@ -119,6 +120,7 @@ export const Route = createFileRoute('/install')({
             result.client_secret,
             applicationUrl,
           )
+          markInstallationComplete()
           return navigationResponse(request, '/')
         } catch (error) {
           if (error instanceof IdentityApiError && error.fields.length > 0) {

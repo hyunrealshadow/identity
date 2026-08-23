@@ -9,12 +9,14 @@ import type {
 } from './identity-types'
 import type { Locale } from './i18n'
 import { translate } from './i18n'
+import { forwardRequestContext } from './request-context.server'
 
 const DEFAULT_IDENTITY_URL = 'https://localhost:5150'
 const SESSION_COOKIE_NAME = 'identity.sessions'
 const SESSION_HEADER_NAME = 'x-sessions'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60
+const TERMINAL_LOGIN_ERROR_CODES = new Set([11004, 11005])
 
 export class IdentityApiError extends Error {
   readonly code?: number
@@ -35,6 +37,14 @@ export class IdentityApiError extends Error {
   }
 }
 
+export function isTerminalLoginError(error: unknown) {
+  return (
+    error instanceof IdentityApiError &&
+    error.code !== undefined &&
+    TERMINAL_LOGIN_ERROR_CODES.has(error.code)
+  )
+}
+
 function apiBaseUrl() {
   const url = new URL(process.env.IDENTITY_API_URL ?? DEFAULT_IDENTITY_URL)
   if (url.protocol !== 'https:') {
@@ -43,12 +53,11 @@ function apiBaseUrl() {
   return url
 }
 
-function requestHeaders() {
-  const headers = new Headers({ accept: 'application/json' })
-  const language = getRequestHeader('accept-language')
-  const sessions = requestSessionIds()
+function requestHeaders(sessions = requestSessionIds()) {
+  const headers = forwardRequestContext(
+    new Headers({ accept: 'application/json' }),
+  )
 
-  if (language) headers.set('accept-language', language)
   headers.set(SESSION_HEADER_NAME, JSON.stringify(sessions))
 
   return headers
@@ -89,6 +98,11 @@ function responseSessionIds(value: unknown): Array<string> | undefined {
   return sessions
 }
 
+function sameSessionIds(current: Array<string>, next: Array<string>) {
+  return current.length === next.length &&
+    current.every((session, index) => session === next[index])
+}
+
 function isBusinessError(value: unknown): value is BusinessErrorResponse {
   if (!value || typeof value !== 'object' || !('error' in value)) return false
   const error = value.error
@@ -122,7 +136,8 @@ export async function identityJson<T>(
     csrfToken?: string
   },
 ) {
-  const headers = requestHeaders()
+  const currentSessions = requestSessionIds()
+  const headers = requestHeaders(currentSessions)
   if (init?.body) headers.set('content-type', 'application/json')
   if (init?.csrfToken) headers.set(CSRF_HEADER_NAME, init.csrfToken)
 
@@ -150,7 +165,9 @@ export async function identityJson<T>(
   }
 
   const sessions = responseSessionIds(payload)
-  if (sessions) storeSessionIds(sessions)
+  if (sessions && !sameSessionIds(currentSessions, sessions)) {
+    storeSessionIds(sessions)
+  }
 
   return payload as T
 }

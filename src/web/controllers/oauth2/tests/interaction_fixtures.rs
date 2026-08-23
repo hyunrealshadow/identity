@@ -241,6 +241,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         status: identity_domain::auth::SessionStatus::ACTIVE.to_owned(),
         acr: None,
         acr_expires_at: None,
+        amr: serde_json::json!([]),
         device_name: None,
         device_type: None,
         os_name: None,
@@ -252,6 +253,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         country: None,
         city: None,
         last_active_at: now.into(),
+        authenticated_at: Some(now.into()),
         expires_at: (now + Duration::days(7)).into(),
         revoked_at: None,
         created_at: now.into(),
@@ -317,40 +319,10 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         .append_query_results([[inserted_authorization_model.clone()]])
         .append_query_results([[inserted_login_model.clone()]])
         .append_query_results([[inserted_login_model]])
-        .append_query_results([[client_model]])
+        .append_query_results([[client_model.clone()]])
+        .append_query_results([[inserted_authorization_model.clone()]])
+        .append_query_results([[(inserted_authorization_model.clone(), Some(client_model))]])
         .append_query_results([[inserted_authorization_model]])
-        .append_query_results([[client_authorization::Model {
-            id: 23,
-            oid: authorization_oid,
-            client_id: 17,
-            r#type: ClientAuthorizationType::AuthorizationRequest.to_string(),
-            data: serde_json::to_value(StoredAuthorizationRequest {
-                request: AuthorizationRequestData {
-                    response_type: "code".to_owned(),
-                    response_mode: None,
-                    client_id: client_oid.to_string(),
-                    redirect_uri: "https://client.example.com/callback".to_owned(),
-                    scope: "openid".to_owned(),
-                    state: "state123".to_owned(),
-                    nonce: None,
-                    prompt: None,
-                    max_age: None,
-                    login_hint: None,
-                    code_challenge: None,
-                    code_challenge_method: None,
-                    acr_values: None,
-                    claims: None,
-                    ui_locales: None,
-                },
-                interaction: AuthorizationInteractionState::default(),
-            })
-            .unwrap(),
-            expires_at: (now + Duration::minutes(10)).into(),
-            completed_at: None,
-            revoked_at: None,
-            created_at: now.into(),
-            updated_at: Some(now.into()),
-        }]])
         .append_exec_results([MockExecResult {
             last_insert_id: 0,
             rows_affected: 1,

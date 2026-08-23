@@ -2,11 +2,11 @@ use http::HeaderMap;
 use salvo::{Depot, Request, Response, handler};
 
 use crate::controllers::{
-    response::{WebResult, app_state, redirect_to_response},
+    response::{WebResult, app_state, error_source_chain, redirect_to_response},
     shared::load_op_active_session_entries,
 };
 use identity_application::error::AppError;
-use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse, ResponseType};
+use identity_domain::openid_connect::{OAuthErrorResponse, ResponseType};
 use identity_infrastructure::AppState;
 use uuid::Uuid;
 
@@ -24,7 +24,7 @@ pub use response::{
 
 use extractor::extract_authorize_request;
 use interaction::determine_authorize_flow;
-use response::render_authorize_error_page;
+use response::{authorize_oauth_error_code, render_authorize_error_page};
 
 async fn render_error(
     ctx: &AppState,
@@ -32,7 +32,12 @@ async fn render_error(
     raw: &RawAuthorizeRequest,
     error: AppError,
 ) -> Response {
-    tracing::warn!(error_code = error.code(), error = %error, "authorize validation error");
+    tracing::warn!(
+        error_code = error.code(),
+        error = %error,
+        source_chain = %error_source_chain(&error),
+        "authorize validation error"
+    );
 
     let can_redirect = raw.redirect_uri.as_deref().is_some_and(|u| !u.is_empty())
         && raw.client_id.as_deref().is_some_and(|c| !c.is_empty());
@@ -60,7 +65,7 @@ async fn render_error(
             return render_authorize_error_page(ctx, headers, raw, error);
         }
 
-        let error_response = OAuthErrorResponse::new(OAuthErrorCode::InvalidRequest);
+        let error_response = OAuthErrorResponse::new(authorize_oauth_error_code(&error));
         let error_response = if let Some(s) = raw.state.clone() {
             error_response.with_state(s)
         } else {
@@ -260,13 +265,22 @@ mod tests {
 
         assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
         let body = response_body_text(response).await;
-        assert!(body.contains("Authorization request is invalid"), "{body}");
+        assert!(body.contains("Something went wrong"), "{body}");
         assert!(body.contains("href=\"/static/css/error.css\""), "{body}");
         assert!(body.contains("E22002"), "{body}");
+        assert!(body.contains("invalid_request"), "{body}");
+        assert!(body.contains("Error type"), "{body}");
+        assert!(!body.contains("OAuth 2.0 error"), "{body}");
+        assert!(!body.contains("HTTP status"), "{body}");
         assert!(
             body.contains("Missing required parameters: client_id, redirect_uri"),
             "{body}"
         );
+        assert!(
+            !body.contains("Review the request parameters and try again."),
+            "{body}"
+        );
+        assert!(!body.contains("Additional information"), "{body}");
     }
 
     #[tokio::test]
@@ -282,7 +296,11 @@ mod tests {
         )
         .await;
 
-        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
+        if response.status_code != Some(StatusCode::SEE_OTHER) {
+            let status = response.status_code;
+            let body = response_body_text(response).await;
+            panic!("expected redirect, got {status:?}: {body}");
+        }
         let location = response
             .headers()
             .get(header::LOCATION)

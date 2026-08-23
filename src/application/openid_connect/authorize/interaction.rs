@@ -17,6 +17,7 @@ pub enum ContinueAction {
         user_oid: uuid::Uuid,
         auth_time: Option<i64>,
         acr: Option<String>,
+        amr: Vec<String>,
     },
     Deny,
 }
@@ -35,9 +36,22 @@ pub fn selected_session_exceeds_max_age(
 ) -> bool {
     request.max_age.is_some_and(|max_age| {
         chrono::Utc::now()
-            .signed_duration_since(selected_session.created_at)
+            .signed_duration_since(selected_session.authenticated_at)
             .num_seconds()
             > i64::from(max_age)
+    })
+}
+
+#[must_use]
+pub fn selected_session_satisfies_acr(
+    request: &AuthorizationRequestData,
+    selected_session: &ActiveSession,
+) -> bool {
+    request.acr_values.as_ref().is_none_or(|requested| {
+        selected_session
+            .acr
+            .as_ref()
+            .is_some_and(|acr| requested.iter().any(|value| value == acr))
     })
 }
 
@@ -60,8 +74,9 @@ fn approve_action(selected_session: &ActiveSession) -> ContinueAction {
     ContinueAction::Approve {
         session_oid: selected_session.session_oid,
         user_oid: selected_session.user_oid,
-        auth_time: Some(selected_session.created_at.timestamp()),
+        auth_time: Some(selected_session.authenticated_at.timestamp()),
         acr: selected_session.acr.clone(),
+        amr: selected_session.amr.clone(),
     }
 }
 
@@ -85,6 +100,14 @@ pub fn determine_continue_action(
 
     if login_required && !login_is_authenticated(login) {
         return continue_login_or_error(stored);
+    }
+
+    if !selected_session_satisfies_acr(&stored.request, selected_session) {
+        return if login_is_authenticated(login) {
+            ContinueAction::OAuthError(OAuthErrorCode::UnmetAuthenticationRequirements)
+        } else {
+            continue_login_or_error(stored)
+        };
     }
 
     if requires_explicit_account_selection

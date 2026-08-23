@@ -1,24 +1,26 @@
 import {
   Alert,
-  Avatar,
   Button,
   FieldError,
   Input,
   Label,
   TextField,
 } from '@heroui/react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 
+import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
+import { RecoveryCodeInput, TotpInput } from '#/components/totp-input'
 import {
   errorMessage,
   IdentityApiError,
   identityJson,
+  isTerminalLoginError,
 } from '#/lib/identity.server'
 import type {
   ActiveAccountsResponse,
@@ -43,6 +45,19 @@ interface ChallengeSearch {
 
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
+}
+
+function challengeDestination(
+  request: Request,
+  loginId: string,
+  credentialType: string,
+  uiLocales?: string,
+) {
+  const destination = new URL('/login/challenge', request.url)
+  if (loginId) destination.searchParams.set('login_id', loginId)
+  destination.searchParams.set('credential_type', credentialType)
+  if (uiLocales) destination.searchParams.set('ui_locales', uiLocales)
+  return destination.toString()
 }
 
 const loadChallengePage = createServerFn({ method: 'GET' })
@@ -86,6 +101,9 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         fieldError: credentialError,
       }
     } catch (error) {
+      if (isTerminalLoginError(error)) {
+        throw redirect({ to: '/login' })
+      }
       const locale = requestLocale()
       return {
         status: undefined,
@@ -119,7 +137,9 @@ export const Route = createFileRoute('/login/challenge')({
         const credentialType = String(
           form.get('credential_type') ?? 'password',
         )
-        const credential = String(form.get('credential') ?? '')
+        const credential = String(
+          form.get('credential') ?? form.get('totp') ?? form.get('otp') ?? '',
+        )
         const csrfToken = String(form.get('csrf_token') ?? '')
         const locale = formLocale(request, form.get('ui_locales'))
         const uiLocales = optionalString(form.get('ui_locales'))
@@ -131,6 +151,7 @@ export const Route = createFileRoute('/login/challenge')({
             translate(locale, 'challengeRequired'),
             { login_id: loginId, credential_type: credentialType, ui_locales: uiLocales },
             loginId ? 'credential' : undefined,
+            challengeDestination(request, loginId, credentialType, uiLocales),
           )
         }
 
@@ -161,6 +182,9 @@ export const Route = createFileRoute('/login/challenge')({
           }
           return navigationResponse(request, result.continue_uri)
         } catch (error) {
+          if (isTerminalLoginError(error)) {
+            return navigationResponse(request, '/login')
+          }
           const values = {
             login_id: loginId,
             credential_type: credentialType,
@@ -178,6 +202,7 @@ export const Route = createFileRoute('/login/challenge')({
                   fieldError.message,
                 ]),
               ),
+              challengeDestination(request, loginId, credentialType, uiLocales),
             )
           }
           return formErrorResponse(
@@ -185,6 +210,8 @@ export const Route = createFileRoute('/login/challenge')({
             '/login/challenge',
             errorMessage(error, locale),
             values,
+            undefined,
+            challengeDestination(request, loginId, credentialType, uiLocales),
           )
         }
       },
@@ -197,6 +224,7 @@ function ChallengePage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
   const [showPassword, setShowPassword] = useState(false)
+  const [credentialError, setCredentialError] = useState(data.fieldError)
   const loginId = data.loginId
   const credentialType =
     search.credential_type === 'otp' ||
@@ -205,9 +233,18 @@ function ChallengePage() {
       : 'password'
   const isOtp = credentialType === 'otp'
   const isRecoveryCode = credentialType === 'recovery_code'
+  const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
+  const alternativeMethods = [
+    { credentialType: 'otp', label: t('useAuthenticatorCode') },
+    { credentialType: 'recovery_code', label: t('useRecoveryCode') },
+  ].filter(
+    (method) =>
+      method.credentialType !== credentialType &&
+      data.status?.credential_types.includes(method.credentialType),
+  )
+  const canSwitchAccount = !data.status?.requires_reauthentication
   const visibleError = search.error ?? data.error
   const user = data.status?.user
-  const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
 
   return (
     <AuthShell
@@ -229,9 +266,7 @@ function ChallengePage() {
     >
       {user ? (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface-secondary p-3">
-          <Avatar size="sm">
-            <Avatar.Fallback>{user.name.slice(0, 1)}</Avatar.Fallback>
-          </Avatar>
+          <AccountAvatar name={user.name} picture={user.picture} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{user.name}</p>
             <p className="truncate text-xs text-muted">{user.email}</p>
@@ -256,6 +291,7 @@ function ChallengePage() {
         action="/login/challenge"
         className="progressive-form space-y-5"
         enhancementErrorMessage={t('enhancedNavigationError')}
+        noValidate
       >
         <input type="hidden" name="login_id" value={loginId} />
         <input
@@ -270,22 +306,48 @@ function ChallengePage() {
         />
         <input type="hidden" name="ui_locales" value={data.uiLocales} />
 
-        {isOtp || isRecoveryCode ? (
-          <TextField isRequired fullWidth name="credential" isInvalid={!!data.fieldError}>
-            <Label>{isRecoveryCode ? t('recoveryCode') : t('otp')}</Label>
-            <Input
-              autoFocus
-              inputMode={isRecoveryCode ? 'text' : 'numeric'}
-              autoComplete={isRecoveryCode ? 'off' : 'one-time-code'}
-              maxLength={isRecoveryCode ? 32 : 8}
-              pattern={isRecoveryCode ? undefined : '[0-9]*'}
-              placeholder={isRecoveryCode ? 'ABCD-EFGH-IJKL-MNOP' : '000000'}
-              className="text-center font-mono text-xl tracking-[0.2em]"
+        {isOtp ? (
+          <div className="grid gap-2">
+            <Label>{t('otp')}</Label>
+            <TotpInput
+              name="totp"
+              type="text"
+              required
+              className="mx-auto"
+              isInvalid={Boolean(credentialError)}
+              aria-invalid={Boolean(credentialError)}
+              aria-describedby={credentialError ? 'login-otp-error' : undefined}
+              onChange={() => setCredentialError(undefined)}
             />
-            <FieldError>{data.fieldError}</FieldError>
-          </TextField>
+            {credentialError ? (
+              <p id="login-otp-error" className="text-xs text-danger">
+                {credentialError}
+              </p>
+            ) : null}
+          </div>
+        ) : isRecoveryCode ? (
+          <div className="grid gap-2">
+            <Label>{t('recoveryCode')}</Label>
+            <RecoveryCodeInput
+              name="credential"
+              type="text"
+              required
+              className="mx-auto"
+              isInvalid={Boolean(credentialError)}
+              aria-invalid={Boolean(credentialError)}
+              aria-describedby={
+                credentialError ? 'login-recovery-code-error' : undefined
+              }
+              onChange={() => setCredentialError(undefined)}
+            />
+            {credentialError ? (
+              <p id="login-recovery-code-error" className="text-xs text-danger">
+                {credentialError}
+              </p>
+            ) : null}
+          </div>
         ) : (
-          <TextField isRequired fullWidth name="credential" isInvalid={!!data.fieldError}>
+          <TextField isRequired fullWidth name="credential" isInvalid={!!credentialError}>
             <Label>{t('password')}</Label>
             <div className="relative">
               <Input
@@ -293,6 +355,7 @@ function ChallengePage() {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 className="pr-12"
+                onChange={() => setCredentialError(undefined)}
               />
               <Button
                 type="button"
@@ -309,7 +372,7 @@ function ChallengePage() {
                 )}
               </Button>
             </div>
-            <FieldError>{data.fieldError}</FieldError>
+            <FieldError>{credentialError}</FieldError>
           </TextField>
         )}
 
@@ -318,22 +381,38 @@ function ChallengePage() {
         </SubmitButton>
       </ProgressiveForm>
 
-      {isOtp || isRecoveryCode ? (
-        <a
-          href={`/login/challenge?login_id=${encodeURIComponent(loginId)}&credential_type=${isRecoveryCode ? 'otp' : 'recovery_code'}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-          className="auth-link mx-auto mt-5 flex w-fit items-center justify-center text-sm font-semibold text-accent"
-        >
-          {isRecoveryCode ? t('useAuthenticatorCode') : t('useRecoveryCode')}
-        </a>
+      {alternativeMethods.length ? (
+        <details className="auth-methods group mt-6 border-t border-border">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between pt-4 text-xs font-medium text-muted transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+            {t('otherVerificationMethods')}
+            <ChevronDown
+              className="size-4 transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="auth-method-options mt-1 grid gap-1 pb-1">
+            {alternativeMethods.map((method) => (
+              <a
+                key={method.credentialType}
+                href={`/login/challenge?login_id=${encodeURIComponent(loginId)}&credential_type=${method.credentialType}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
+                className="flex min-h-9 items-center justify-between rounded-lg bg-surface-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-tertiary"
+              >
+                {method.label}
+              </a>
+            ))}
+          </div>
+        </details>
       ) : null}
 
-      <a
-        href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-        className="auth-link mx-auto mt-5 flex w-fit items-center justify-center gap-1.5 text-sm font-semibold text-accent"
-      >
-        <ArrowLeft className="size-4" aria-hidden="true" />
-        {t('switchAccount')}
-      </a>
+      {canSwitchAccount ? (
+        <a
+          href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
+          className="auth-link mx-auto mt-6 flex w-fit items-center justify-center gap-1.5 text-sm font-semibold text-accent"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {t('switchAccount')}
+        </a>
+      ) : null}
     </AuthShell>
   )
 }

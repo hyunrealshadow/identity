@@ -11,7 +11,9 @@ use identity_domain::{
 };
 use uuid::Uuid;
 
-use crate::openid_connect::authorize::{ContinueAction, determine_continue_action};
+use crate::openid_connect::authorize::{
+    ContinueAction, determine_continue_action, selected_session_exceeds_max_age,
+};
 
 fn request() -> AuthorizationRequestData {
     AuthorizationRequestData {
@@ -64,10 +66,13 @@ fn active_session() -> ActiveSession {
         user_oid: Uuid::new_v4(),
         user_name: "Ada".to_owned(),
         user_email: "ada@example.com".to_owned(),
+        user_picture: None,
         last_active_at: Some(Utc::now()),
         expires_at: None,
         created_at: Utc::now(),
-        acr: Some(identity_domain::auth::ACR_PASSWORD.to_owned()),
+        authenticated_at: Utc::now(),
+        acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
+        amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
     }
 }
 
@@ -87,17 +92,29 @@ fn continue_action_approves_when_consent_is_approved() {
         ContinueAction::Approve {
             session_oid: selected_session.session_oid,
             user_oid: selected_session.user_oid,
-            auth_time: Some(selected_session.created_at.timestamp()),
+            auth_time: Some(selected_session.authenticated_at.timestamp()),
             acr: selected_session.acr.clone(),
+            amr: selected_session.amr.clone(),
         }
     );
 }
 
 #[test]
-fn continue_action_uses_session_acr_instead_of_requested_acr() {
+fn max_age_uses_latest_authentication_instead_of_session_creation() {
+    let mut request = request();
+    request.max_age = Some(60);
+    let mut session = active_session();
+    session.created_at = Utc::now() - chrono::Duration::hours(12);
+    session.authenticated_at = Utc::now();
+
+    assert!(!selected_session_exceeds_max_age(&request, &session));
+}
+
+#[test]
+fn continue_action_rejects_an_authentication_that_does_not_meet_requested_acr() {
     let selected_session = active_session();
     let mut stored = stored(ConsentState::Approved);
-    stored.request.acr_values = Some(vec![identity_domain::auth::ACR_MFA.to_owned()]);
+    stored.request.acr_values = Some(vec![identity_domain::auth::ACR_AAL2.to_owned()]);
 
     let action = determine_continue_action(
         &stored,
@@ -106,11 +123,10 @@ fn continue_action_uses_session_acr_instead_of_requested_acr() {
         false,
     );
 
-    assert!(matches!(
+    assert_eq!(
         action,
-        ContinueAction::Approve { acr, .. }
-            if acr.as_deref() == Some(identity_domain::auth::ACR_PASSWORD)
-    ));
+        ContinueAction::OAuthError(OAuthErrorCode::UnmetAuthenticationRequirements)
+    );
 }
 
 #[test]

@@ -335,7 +335,7 @@ mod tests {
         let plaintexts = vec![b"first".to_vec(), b"second".to_vec()];
 
         let tokens = protector
-            .protect_many("graphql:session-cursor:v2:user", &plaintexts)
+            .protect_many("graphql:cursor:session", &plaintexts)
             .await
             .unwrap();
 
@@ -344,7 +344,7 @@ mod tests {
         for (token, plaintext) in tokens.iter().zip(&plaintexts) {
             assert_eq!(
                 protector
-                    .unprotect("graphql:session-cursor:v2:user", token)
+                    .unprotect("graphql:cursor:session", token)
                     .await
                     .unwrap(),
                 *plaintext
@@ -352,7 +352,7 @@ mod tests {
         }
         assert!(matches!(
             protector
-                .unprotect("graphql:session-cursor:v2:another-user", &tokens[0])
+                .unprotect("graphql:cursor:other", &tokens[0])
                 .await,
             Err(DataProtectionError::InvalidProtectedPayload)
         ));

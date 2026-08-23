@@ -10,17 +10,32 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteRouteImport } from './routes/account/route'
+import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AccountIndexRouteImport } from './routes/account/index'
+import { Route as AccountIdentifiersRouteImport } from './routes/account/identifiers'
+import { Route as AccountProfileRouteImport } from './routes/account/profile'
+import { Route as AccountSecurityRouteImport } from './routes/account/security'
+import { Route as AccountSessionsRouteImport } from './routes/account/sessions'
 import { Route as LoginChallengeRouteImport } from './routes/login.challenge'
-import { Route as OauthCallbackRouteImport } from './routes/oauth.callback'
-import { Route as OauthReauthRouteImport } from './routes/oauth.reauth'
-import { Route as OauthStartRouteImport } from './routes/oauth.start'
+import { Route as AccountMfaSetupRouteImport } from './routes/account/mfa/setup'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRouteRoute = AccountRouteRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CallbackRoute = CallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsentRoute = ConsentRouteImport.update({
@@ -38,99 +53,141 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AccountRouteRoute,
+} as any)
+const AccountIdentifiersRoute = AccountIdentifiersRouteImport.update({
+  id: '/identifiers',
+  path: '/identifiers',
+  getParentRoute: () => AccountRouteRoute,
+} as any)
+const AccountProfileRoute = AccountProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AccountRouteRoute,
+} as any)
+const AccountSecurityRoute = AccountSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AccountRouteRoute,
+} as any)
+const AccountSessionsRoute = AccountSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => AccountRouteRoute,
+} as any)
 const LoginChallengeRoute = LoginChallengeRouteImport.update({
   id: '/challenge',
   path: '/challenge',
   getParentRoute: () => LoginRoute,
 } as any)
-const OauthCallbackRoute = OauthCallbackRouteImport.update({
-  id: '/oauth/callback',
-  path: '/oauth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OauthReauthRoute = OauthReauthRouteImport.update({
-  id: '/oauth/reauth',
-  path: '/oauth/reauth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OauthStartRoute = OauthStartRouteImport.update({
-  id: '/oauth/start',
-  path: '/oauth/start',
-  getParentRoute: () => rootRouteImport,
+const AccountMfaSetupRoute = AccountMfaSetupRouteImport.update({
+  id: '/mfa/setup',
+  path: '/mfa/setup',
+  getParentRoute: () => AccountRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRouteRouteWithChildren
+  '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
+  '/account/identifiers': typeof AccountIdentifiersRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/security': typeof AccountSecurityRoute
+  '/account/sessions': typeof AccountSessionsRoute
   '/login/challenge': typeof LoginChallengeRoute
-  '/oauth/callback': typeof OauthCallbackRoute
-  '/oauth/reauth': typeof OauthReauthRoute
-  '/oauth/start': typeof OauthStartRoute
+  '/account/': typeof AccountIndexRoute
+  '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
+  '/account/identifiers': typeof AccountIdentifiersRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/security': typeof AccountSecurityRoute
+  '/account/sessions': typeof AccountSessionsRoute
   '/login/challenge': typeof LoginChallengeRoute
-  '/oauth/callback': typeof OauthCallbackRoute
-  '/oauth/reauth': typeof OauthReauthRoute
-  '/oauth/start': typeof OauthStartRoute
+  '/account': typeof AccountIndexRoute
+  '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRouteRouteWithChildren
+  '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
+  '/account/identifiers': typeof AccountIdentifiersRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/security': typeof AccountSecurityRoute
+  '/account/sessions': typeof AccountSessionsRoute
   '/login/challenge': typeof LoginChallengeRoute
-  '/oauth/callback': typeof OauthCallbackRoute
-  '/oauth/reauth': typeof OauthReauthRoute
-  '/oauth/start': typeof OauthStartRoute
+  '/account/': typeof AccountIndexRoute
+  '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
+    | '/callback'
     | '/consent'
     | '/install'
     | '/login'
+    | '/account/identifiers'
+    | '/account/profile'
+    | '/account/security'
+    | '/account/sessions'
     | '/login/challenge'
-    | '/oauth/callback'
-    | '/oauth/reauth'
-    | '/oauth/start'
+    | '/account/'
+    | '/account/mfa/setup'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/callback'
     | '/consent'
     | '/install'
     | '/login'
+    | '/account/identifiers'
+    | '/account/profile'
+    | '/account/security'
+    | '/account/sessions'
     | '/login/challenge'
-    | '/oauth/callback'
-    | '/oauth/reauth'
-    | '/oauth/start'
+    | '/account'
+    | '/account/mfa/setup'
   id:
     | '__root__'
     | '/'
+    | '/account'
+    | '/callback'
     | '/consent'
     | '/install'
     | '/login'
+    | '/account/identifiers'
+    | '/account/profile'
+    | '/account/security'
+    | '/account/sessions'
     | '/login/challenge'
-    | '/oauth/callback'
-    | '/oauth/reauth'
-    | '/oauth/start'
+    | '/account/'
+    | '/account/mfa/setup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRouteRoute: typeof AccountRouteRouteWithChildren
+  CallbackRoute: typeof CallbackRoute
   ConsentRoute: typeof ConsentRoute
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
-  OauthCallbackRoute: typeof OauthCallbackRoute
-  OauthReauthRoute: typeof OauthReauthRoute
-  OauthStartRoute: typeof OauthStartRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -140,6 +197,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/callback': {
+      id: '/callback'
+      path: '/callback'
+      fullPath: '/callback'
+      preLoaderRoute: typeof CallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/consent': {
@@ -163,6 +234,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/': {
+      id: '/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
+      parentRoute: typeof AccountRouteRoute
+    }
+    '/account/identifiers': {
+      id: '/account/identifiers'
+      path: '/identifiers'
+      fullPath: '/account/identifiers'
+      preLoaderRoute: typeof AccountIdentifiersRouteImport
+      parentRoute: typeof AccountRouteRoute
+    }
+    '/account/profile': {
+      id: '/account/profile'
+      path: '/profile'
+      fullPath: '/account/profile'
+      preLoaderRoute: typeof AccountProfileRouteImport
+      parentRoute: typeof AccountRouteRoute
+    }
+    '/account/security': {
+      id: '/account/security'
+      path: '/security'
+      fullPath: '/account/security'
+      preLoaderRoute: typeof AccountSecurityRouteImport
+      parentRoute: typeof AccountRouteRoute
+    }
+    '/account/sessions': {
+      id: '/account/sessions'
+      path: '/sessions'
+      fullPath: '/account/sessions'
+      preLoaderRoute: typeof AccountSessionsRouteImport
+      parentRoute: typeof AccountRouteRoute
+    }
     '/login/challenge': {
       id: '/login/challenge'
       path: '/challenge'
@@ -170,29 +276,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginChallengeRouteImport
       parentRoute: typeof LoginRoute
     }
-    '/oauth/callback': {
-      id: '/oauth/callback'
-      path: '/oauth/callback'
-      fullPath: '/oauth/callback'
-      preLoaderRoute: typeof OauthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/oauth/reauth': {
-      id: '/oauth/reauth'
-      path: '/oauth/reauth'
-      fullPath: '/oauth/reauth'
-      preLoaderRoute: typeof OauthReauthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/oauth/start': {
-      id: '/oauth/start'
-      path: '/oauth/start'
-      fullPath: '/oauth/start'
-      preLoaderRoute: typeof OauthStartRouteImport
-      parentRoute: typeof rootRouteImport
+    '/account/mfa/setup': {
+      id: '/account/mfa/setup'
+      path: '/mfa/setup'
+      fullPath: '/account/mfa/setup'
+      preLoaderRoute: typeof AccountMfaSetupRouteImport
+      parentRoute: typeof AccountRouteRoute
     }
   }
 }
+
+interface AccountRouteRouteChildren {
+  AccountIdentifiersRoute: typeof AccountIdentifiersRoute
+  AccountProfileRoute: typeof AccountProfileRoute
+  AccountSecurityRoute: typeof AccountSecurityRoute
+  AccountSessionsRoute: typeof AccountSessionsRoute
+  AccountIndexRoute: typeof AccountIndexRoute
+  AccountMfaSetupRoute: typeof AccountMfaSetupRoute
+}
+
+const AccountRouteRouteChildren: AccountRouteRouteChildren = {
+  AccountIdentifiersRoute: AccountIdentifiersRoute,
+  AccountProfileRoute: AccountProfileRoute,
+  AccountSecurityRoute: AccountSecurityRoute,
+  AccountSessionsRoute: AccountSessionsRoute,
+  AccountIndexRoute: AccountIndexRoute,
+  AccountMfaSetupRoute: AccountMfaSetupRoute,
+}
+
+const AccountRouteRouteWithChildren = AccountRouteRoute._addFileChildren(
+  AccountRouteRouteChildren,
+)
 
 interface LoginRouteChildren {
   LoginChallengeRoute: typeof LoginChallengeRoute
@@ -206,12 +320,11 @@ const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRouteRoute: AccountRouteRouteWithChildren,
+  CallbackRoute: CallbackRoute,
   ConsentRoute: ConsentRoute,
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
-  OauthCallbackRoute: OauthCallbackRoute,
-  OauthReauthRoute: OauthReauthRoute,
-  OauthStartRoute: OauthStartRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

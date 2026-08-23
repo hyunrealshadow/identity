@@ -364,42 +364,19 @@ fn absolute_profile_url(profile_base_url: &str, value: Option<&str>) -> Option<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
 
     fn claims_request(value: serde_json::Value) -> ClaimsRequest {
         serde_json::from_value(value).unwrap()
     }
 
     #[test]
-    fn new_creates_claims_with_sub_only() {
-        let sub = Uuid::new_v4().to_string();
-        let claims = UserInfoClaims::new(sub.clone());
-
-        assert_eq!(claims.sub, sub);
-        assert_eq!(claims.name, None);
-        assert_eq!(claims.given_name, None);
-        assert_eq!(claims.family_name, None);
-        assert_eq!(claims.preferred_username, None);
-        assert_eq!(claims.email, None);
-        assert_eq!(claims.email_verified, None);
-        assert_eq!(claims.updated_at, None);
-    }
-
-    #[test]
-    fn serializes_sub_as_required_field() {
+    fn serializes_required_sub_and_omits_absent_optional_claims() {
         let claims = UserInfoClaims::new("user-123".to_string());
-        let json = serde_json::to_string(&claims).unwrap();
+        let json = serde_json::to_value(&claims).unwrap();
 
-        assert!(json.contains("\"sub\":\"user-123\""));
-    }
-
-    #[test]
-    fn skips_none_claims_in_serialization() {
-        let claims = UserInfoClaims::new("user-123".to_string());
-        let json = serde_json::to_string(&claims).unwrap();
-
-        assert!(!json.contains("name"));
-        assert!(!json.contains("email"));
+        assert_eq!(json["sub"], "user-123");
+        assert!(json.get("name").is_none());
+        assert!(json.get("email").is_none());
     }
 
     use identity_domain::user::{User, UserOid};

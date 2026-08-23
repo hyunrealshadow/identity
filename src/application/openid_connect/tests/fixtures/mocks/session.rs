@@ -20,10 +20,18 @@ mockall::mock! {
         ) -> Result<Vec<ActiveSession>, SessionRepositoryError>;
         async fn create(&self, input: CreateSessionInput)
             -> Result<Session, SessionRepositoryError>;
-        async fn touch_by_oid(
+        async fn reauthenticate_by_oid(
             &self,
             oid: SessionOid,
-        ) -> Result<(), SessionRepositoryError>;
+            expected_user_oid: uuid::Uuid,
+            acr: &str,
+            acr_expires_at: DateTime<Utc>,
+            amr: &[String],
+        ) -> Result<Session, SessionRepositoryError>;
+        async fn touch_active_by_oid(
+            &self,
+            oid: SessionOid,
+        ) -> Result<bool, SessionRepositoryError>;
         async fn revoke_by_oid(
             &self,
             oid: SessionOid,

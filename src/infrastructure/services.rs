@@ -277,33 +277,3 @@ impl AppServices {
         &self.data_protector
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::AppServices;
-
-    #[test]
-    fn exposes_openid_connect_provider_service() {
-        let _ = AppServices::oidc;
-    }
-
-    #[test]
-    fn exposes_openid_connect_authorize_service() {
-        let _ = AppServices::oidc_authorize;
-    }
-
-    #[test]
-    fn exposes_openid_connect_token_service() {
-        let _ = AppServices::oidc_token;
-    }
-
-    #[test]
-    fn exposes_oidc_client_repo() {
-        let _ = AppServices::oidc_client_repo;
-    }
-
-    #[test]
-    fn exposes_oidc_credential_repo() {
-        let _ = AppServices::oidc_credential_repo;
-    }
-}

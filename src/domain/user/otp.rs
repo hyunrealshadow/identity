@@ -5,8 +5,8 @@ use strum::{AsRefStr, Display};
 #[serde(rename_all = "UPPERCASE")]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum OtpAlgorithm {
-    #[default]
     Sha1,
+    #[default]
     Sha256,
     Sha512,
 }
@@ -19,6 +19,9 @@ pub struct OtpCredentialData {
     pub period: u32,
     #[serde(default)]
     pub algorithm: OtpAlgorithm,
+    /// Highest TOTP time-step successfully consumed by the verifier.
+    #[serde(default)]
+    pub last_used_counter: Option<u64>,
 }
 
 fn default_period() -> u32 {
@@ -30,7 +33,7 @@ mod tests {
     use super::OtpAlgorithm;
 
     #[test]
-    fn otp_algorithm_defaults_to_sha1() {
-        assert_eq!(OtpAlgorithm::default(), OtpAlgorithm::Sha1);
+    fn otp_algorithm_defaults_to_sha256() {
+        assert_eq!(OtpAlgorithm::default(), OtpAlgorithm::Sha256);
     }
 }

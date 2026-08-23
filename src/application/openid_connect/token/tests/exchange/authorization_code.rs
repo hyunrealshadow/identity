@@ -2,7 +2,7 @@ use crate::key::asymmetric::AsymmetricKeyService;
 use crate::openid_connect::token::signing::{SignAccessTokenInput, SignIdTokenInput};
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use identity_domain::auth::ACR_PASSWORD;
+use identity_domain::auth::ACR_AAL1;
 use identity_domain::auth::SessionOid;
 use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
 
@@ -44,6 +44,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 session_oid: SessionOid::from(session_oid),
                 protected_session_id: None,
                 acr: None,
+                amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
@@ -128,7 +129,8 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
-                acr: Some(ACR_PASSWORD.to_string()),
+                acr: Some(ACR_AAL1.to_string()),
+                amr: vec!["pwd".to_owned()],
                 auth_time: Some(chrono::Utc::now().timestamp()),
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
@@ -179,6 +181,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
+                amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
@@ -254,6 +257,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
+                amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
@@ -344,6 +348,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
+                amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
@@ -409,6 +414,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                     session_oid: SessionOid::from(Uuid::new_v4()),
                     protected_session_id: None,
                     acr: None,
+                    amr: vec!["pwd".to_owned()],
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
                     claims: None,
@@ -514,6 +520,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
                 acr: None,
+                amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 claims: None,
@@ -599,6 +606,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 claims: None,
                 auth_time: None,
                 acr: None,
+                amr: &["pwd".to_owned()],
             })
             .await
             .unwrap();
@@ -620,6 +628,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 nonce: None,
                 auth_time: None,
                 acr: None,
+                amr: &["pwd".to_owned()],
                 access_token: Some(&access_token),
                 protected_session_id: None,
             })
@@ -629,6 +638,14 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
         let access_payload = decode_jwt_with_alg(&access_token, &public_key, alg);
         let id_payload = decode_jwt_with_alg(&id_token, &public_key, alg);
         assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
+        assert_eq!(
+            access_payload.claim(JwtClaimNames::AMR).unwrap(),
+            &serde_json::json!(["pwd"])
+        );
+        assert_eq!(
+            id_payload.claim(JwtClaimNames::AMR).unwrap(),
+            &serde_json::json!(["pwd"])
+        );
         assert_eq!(
             id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
             &serde_json::json!(expected_at_hash_for_alg(&access_token, alg))

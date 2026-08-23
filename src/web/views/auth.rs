@@ -72,6 +72,8 @@ pub struct AccountItem {
     pub name: String,
     /// Full email (not masked — this is the user's own account list).
     pub email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<String>,
     /// Last active timestamp.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_active_at: Option<DateTime<Utc>>,
@@ -118,7 +120,7 @@ pub struct IdentifierResponse {
     pub status: &'static str,
     /// Credential types available for this user, e.g. `["password"]`.
     pub credential_types: Vec<CredentialType>,
-    /// Masked user display info.
+    /// User display info.
     pub user: UserDisplayInfo,
 }
 
@@ -129,12 +131,22 @@ pub struct LoginStatusResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<UserDisplayInfo>,
+    /// Credential types available to the bound user. Empty before an account
+    /// has been selected.
+    pub credential_types: Vec<CredentialType>,
     /// Prompt value from the original authorization request (`"login"`,
     /// `"consent"`, `"select_account"`, or `"none"`).  Clients use this to
     /// decide whether to offer the account picker (`prompt=login` forbids it).
     /// Defaults to `"select_account"` when the login is not tied to an OIDC
     /// authorization request.
     pub prompt: String,
+    /// The authorization server determined that the selected session must be
+    /// authenticated again because it does not satisfy `max_age` or `acr_values`.
+    pub requires_reauthentication: bool,
+    /// Relative first-party UI URI for the next credential challenge. The
+    /// authorization server owns this policy decision; the UI only follows it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub challenge_uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_locales: Option<Vec<String>>,
     /// Absolute OP `/oauth2/continue?login_id=X` URI, present only when authenticated.
@@ -142,13 +154,15 @@ pub struct LoginStatusResponse {
     pub continue_uri: Option<String>,
 }
 
-/// Masked user info (prevents information leakage).
+/// User information displayed during the first-party login flow.
 #[derive(Debug, Serialize)]
 pub struct UserDisplayInfo {
-    /// Masked email, e.g. `"u***@example.com"`.
+    /// Full email address.
     pub email: String,
     /// User display name.
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<String>,
 }
 
 // ─── Challenge Step ──────────────────────────────────────────────────────────
@@ -200,27 +214,4 @@ pub struct SessionInfo {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<DateTime<Utc>>,
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/// Mask an email address: keep the first character and the domain.
-///
-/// Example: `"user@example.com"` -> `"u***@example.com"`
-pub fn mask_email(email: &str) -> String {
-    if let Some(at_pos) = email.find('@') {
-        let local = &email[..at_pos];
-        let domain = &email[at_pos..];
-        if local.is_empty() {
-            return email.to_owned();
-        }
-        let first = &local[..local
-            .char_indices()
-            .nth(1)
-            .map(|(i, _)| i)
-            .unwrap_or(local.len())];
-        format!("{first}***{domain}")
-    } else {
-        email.to_owned()
-    }
 }

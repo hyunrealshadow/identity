@@ -9,8 +9,9 @@ use crate::{
 };
 use identity_domain::{
     auth::{
-        ACR_EXPIRY, ACR_MFA, ACR_PASSWORD, LOCK_DURATION, LOGIN_EXPIRY, LoginStatus,
-        MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
+        ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, AMR_RECOVERY_CODE,
+        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LOGIN_EXPIRY, LoginStatus, MAX_FAILED_ATTEMPTS,
+        MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
         model::{Login, Session},
         password::{HashOptions, PasswordHashSetting, PasswordHasher, VerifyResult},
         repository::{CreateSessionInput, LoginRepository, SessionRepository},
@@ -96,6 +97,34 @@ impl LoginService {
             .find_by_oid(login_oid)
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
+    }
+
+    /// Return the credential types currently available to the user.
+    ///
+    /// This is also used by the first-party login UI when an authorization
+    /// interaction is already bound to an active session. In that case the UI
+    /// can offer a fresh second-factor challenge without asking for the
+    /// password again.
+    pub async fn credential_types(
+        &self,
+        user_oid: identity_domain::user::UserOid,
+    ) -> Result<Vec<CredentialType>, AppError> {
+        let mut credential_types = Vec::new();
+        for credential_type in [
+            CredentialType::Password,
+            CredentialType::Otp,
+            CredentialType::RecoveryCode,
+        ] {
+            if !self
+                .credential_repo
+                .find_by_user_oid_and_type(user_oid, credential_type.clone())
+                .await?
+                .is_empty()
+            {
+                credential_types.push(credential_type);
+            }
+        }
+        Ok(credential_types)
     }
 
     pub async fn change_password(
@@ -218,21 +247,7 @@ impl LoginService {
             return Err(AppError::from_code(AuthErrorCode::UserLocked));
         }
 
-        // Probe each supported credential type for this user.
-        let mut credential_types = Vec::new();
-        for ct in [
-            CredentialType::Password,
-            CredentialType::Otp,
-            CredentialType::RecoveryCode,
-        ] {
-            let credentials = self
-                .credential_repo
-                .find_by_user_oid_and_type(user.oid, ct.clone())
-                .await?;
-            if !credentials.is_empty() {
-                credential_types.push(ct);
-            }
-        }
+        let credential_types = self.credential_types(user.oid).await?;
 
         // Bind the resolved user onto the existing login record.
         let login = self
@@ -255,15 +270,16 @@ impl LoginService {
     ///
     /// # Password flow
     /// - If the user has an OTP credential: returns [`ChallengeOutcome::MfaRequired`].
-    /// - Otherwise: creates a session with `acr = ACR_PASSWORD` and returns
+    /// - Otherwise: creates a session, or refreshes the bound session during
+    ///   reauthentication, with `acr = ACR_AAL1` and returns
     ///   [`ChallengeOutcome::Authenticated`].
     ///
     /// # OTP flow
     /// The login status MUST already be `mfa_required` (set by a prior
     /// password challenge). Up to [`MAX_OTP_ATTEMPTS`] invalid codes are allowed
     /// per login flow; further attempts return [`AuthErrorCode::TooManyAttempts`]
-    /// and invalidate the login. Creates a session with `acr = ACR_MFA` and an
-    /// `acr_expires_at` of `now + ACR_EXPIRY` on success.
+    /// and invalidate the login. Creates or refreshes the bound session with
+    /// `acr = ACR_AAL2` and an internal expiry on success.
     pub async fn challenge(
         &self,
         login_oid: Uuid,
@@ -436,9 +452,16 @@ impl LoginService {
 
                 if otp_credentials.is_empty() {
                     self.user_repo.reset_failed_attempts(user.oid).await?;
-                    // No MFA — create session immediately with password ACR.
+                    // Complete AAL1 authentication. A forced
+                    // reauthentication upgrades the bound session in place.
                     let session = self
-                        .create_session(user.oid.into(), ctx, ACR_PASSWORD, false)
+                        .complete_session(
+                            &login,
+                            user.oid.into(),
+                            ctx,
+                            ACR_AAL1,
+                            &[AMR_PASSWORD.to_owned()],
+                        )
                         .await?;
 
                     if let Err(e) = self
@@ -447,7 +470,7 @@ impl LoginService {
                             login.oid,
                             LoginStatus::AUTHENTICATED,
                             Some(session.oid),
-                            Some(ACR_PASSWORD),
+                            Some(ACR_AAL1),
                         )
                         .await
                     {
@@ -483,8 +506,11 @@ impl LoginService {
         code: &str,
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
-        // OTP challenge is only valid when the login is in `mfa_required` state.
-        if login.status != LoginStatus::MFA_REQUIRED {
+        // A second factor may follow a password challenge, or it may directly
+        // elevate an authorization interaction that is bound to an existing
+        // session. Never accept OTP as a password replacement for an unbound
+        // login.
+        if !can_challenge_second_factor(&login) {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
 
@@ -520,6 +546,7 @@ impl LoginService {
                     .with_param("credential_type", "otp")
             })?;
 
+        let otp_credential_oid = otp_cred.oid;
         let otp_data: OtpCredentialData = match otp_cred.data {
             CredentialData::Otp(o) => o,
             _ => {
@@ -530,8 +557,16 @@ impl LoginService {
             }
         };
 
-        // Verify the TOTP code.
-        let valid = self.totp_verifier.verify(&otp_data, code)?;
+        // Verify and atomically consume the matching TOTP time-step. The
+        // conditional JSONB update prevents concurrent replay across nodes.
+        let valid = match self.totp_verifier.verify(&otp_data, code)? {
+            Some(counter) => {
+                self.credential_repo
+                    .consume_totp_counter(otp_credential_oid, counter)
+                    .await?
+            }
+            None => false,
+        };
 
         if !valid {
             let login_attempts = self
@@ -558,9 +593,20 @@ impl LoginService {
         }
 
         self.user_repo.reset_failed_attempts(user.oid).await?;
-        // Create session with MFA ACR + expiry.
+        // Complete AAL2 authentication, reusing a bound session when this
+        // login interaction was created for forced reauthentication.
         let session = self
-            .create_session(user.oid.into(), ctx, ACR_MFA, true)
+            .complete_session(
+                &login,
+                user.oid.into(),
+                ctx,
+                ACR_AAL2,
+                &[
+                    AMR_PASSWORD.to_owned(),
+                    AMR_OTP.to_owned(),
+                    AMR_MFA.to_owned(),
+                ],
+            )
             .await?;
 
         if let Err(e) = self
@@ -569,7 +615,7 @@ impl LoginService {
                 login.oid,
                 LoginStatus::AUTHENTICATED,
                 Some(session.oid),
-                Some(ACR_MFA),
+                Some(ACR_AAL2),
             )
             .await
         {
@@ -588,7 +634,7 @@ impl LoginService {
         code: &str,
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
-        if login.status != LoginStatus::MFA_REQUIRED {
+        if !can_challenge_second_factor(&login) {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
         if login.failed_attempts >= MAX_OTP_ATTEMPTS {
@@ -648,7 +694,17 @@ impl LoginService {
         }
         self.user_repo.reset_failed_attempts(user_oid).await?;
         let session = self
-            .create_session(Uuid::from(user_oid), ctx, ACR_MFA, true)
+            .complete_session(
+                &login,
+                Uuid::from(user_oid),
+                ctx,
+                ACR_AAL2,
+                &[
+                    AMR_PASSWORD.to_owned(),
+                    AMR_RECOVERY_CODE.to_owned(),
+                    AMR_MFA.to_owned(),
+                ],
+            )
             .await?;
         if let Err(error) = self
             .login_repo
@@ -656,7 +712,7 @@ impl LoginService {
                 login.oid,
                 LoginStatus::AUTHENTICATED,
                 Some(session.oid),
-                Some(ACR_MFA),
+                Some(ACR_AAL2),
             )
             .await
         {
@@ -678,31 +734,42 @@ impl LoginService {
         }
     }
 
-    /// Create a session for `user_oid` with the given ACR.
-    ///
-    /// When `with_acr_expiry` is `true` the `acr_expires_at` field is set to
-    /// `now + ACR_EXPIRY`; otherwise it is `None`.
+    async fn complete_session(
+        &self,
+        login: &Login,
+        user_oid: Uuid,
+        ctx: SessionContext,
+        acr: &str,
+        amr: &[String],
+    ) -> Result<Session, AppError> {
+        if let Some(session_oid) = login.session_oid {
+            return Ok(self
+                .session_repo
+                .reauthenticate_by_oid(
+                    session_oid,
+                    user_oid,
+                    acr,
+                    authentication_context_expires_at(acr),
+                    amr,
+                )
+                .await?);
+        }
+        self.create_session(user_oid, ctx, acr, amr).await
+    }
+
+    /// Create a session only for a login that is not bound to an existing one.
     async fn create_session(
         &self,
         user_oid: Uuid,
         ctx: SessionContext,
         acr: &str,
-        with_acr_expiry: bool,
+        amr: &[String],
     ) -> Result<Session, AppError> {
-        let expires_at = Utc::now()
+        let now = Utc::now();
+        let expires_at = now
             + chrono::Duration::from_std(SESSION_EXPIRY)
                 .unwrap_or_else(|_| chrono::Duration::days(7));
-
-        let acr_expires_at = if with_acr_expiry {
-            Some(
-                Utc::now()
-                    + chrono::Duration::from_std(ACR_EXPIRY)
-                        .unwrap_or_else(|_| chrono::Duration::seconds(3600)),
-            )
-        } else {
-            None
-        };
-
+        let acr_expires_at = Some(authentication_context_expires_at(acr));
         Ok(self
             .session_repo
             .create(CreateSessionInput {
@@ -718,6 +785,7 @@ impl LoginService {
                 expires_at: Some(expires_at),
                 acr: Some(acr.to_owned()),
                 acr_expires_at,
+                amr: amr.to_vec(),
             })
             .await?)
     }
@@ -739,6 +807,20 @@ impl LoginService {
     }
 }
 
+fn authentication_context_expires_at(acr: &str) -> chrono::DateTime<Utc> {
+    let ttl = if acr == ACR_AAL2 {
+        ELEVATED_AUTHENTICATION_TTL
+    } else {
+        identity_domain::auth::RECENT_AUTHENTICATION_TTL
+    };
+    Utc::now() + chrono::Duration::from_std(ttl).unwrap_or_else(|_| chrono::Duration::minutes(5))
+}
+
+fn can_challenge_second_factor(login: &Login) -> bool {
+    login.status == LoginStatus::MFA_REQUIRED
+        || (login.status == LoginStatus::IDENTIFIER_VERIFIED && login.session_oid.is_some())
+}
+
 fn failed_attempt_lock_until() -> chrono::DateTime<Utc> {
     Utc::now()
         + chrono::Duration::from_std(LOCK_DURATION)
@@ -753,7 +835,8 @@ mod tests {
     use chrono::Utc;
     use identity_domain::{
         auth::{
-            LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
+            ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginStatus, MAX_FAILED_ATTEMPTS,
+            MAX_OTP_ATTEMPTS,
             model::{Login, Session, SessionOid},
             password::{HashOptions, PasswordHashSetting, VerifyResult},
             repository::{
@@ -795,8 +878,8 @@ mod tests {
             &self,
             _otp_data: &OtpCredentialData,
             _code: &str,
-        ) -> Result<bool, identity_domain::auth::totp::TotpError> {
-            Ok(false)
+        ) -> Result<Option<u64>, identity_domain::auth::totp::TotpError> {
+            Ok(None)
         }
     }
 
@@ -904,6 +987,14 @@ mod tests {
             Ok(())
         }
 
+        async fn consume_totp_counter(
+            &self,
+            _credential_oid: UserCredentialOid,
+            _counter: u64,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            Ok(true)
+        }
+
         async fn replace_by_user_oid(
             &self,
             _user_oid: UserOid,
@@ -961,11 +1052,45 @@ mod tests {
                 created_at: Utc::now(),
                 acr: input.acr,
                 acr_expires_at: input.acr_expires_at,
+                amr: input.amr,
             })
         }
 
-        async fn touch_by_oid(&self, _oid: SessionOid) -> Result<(), SessionRepositoryError> {
-            Ok(())
+        async fn reauthenticate_by_oid(
+            &self,
+            oid: SessionOid,
+            expected_user_oid: Uuid,
+            acr: &str,
+            acr_expires_at: chrono::DateTime<Utc>,
+            amr: &[String],
+        ) -> Result<Session, SessionRepositoryError> {
+            Ok(Session {
+                oid,
+                user_oid: expected_user_oid,
+                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
+                device_name: None,
+                device_type: None,
+                os_name: None,
+                os_version: None,
+                browser_name: None,
+                browser_version: None,
+                user_agent: None,
+                ip_address: None,
+                last_active_at: Some(Utc::now()),
+                expires_at: None,
+                revoked_at: None,
+                created_at: Utc::now(),
+                acr: Some(acr.to_owned()),
+                acr_expires_at: Some(acr_expires_at),
+                amr: amr.to_vec(),
+            })
+        }
+
+        async fn touch_active_by_oid(
+            &self,
+            _oid: SessionOid,
+        ) -> Result<bool, SessionRepositoryError> {
+            Ok(true)
         }
 
         async fn revoke_by_oid(
@@ -1134,6 +1259,7 @@ mod tests {
                         digits: 6,
                         period: 30,
                         algorithm: identity_domain::user::OtpAlgorithm::Sha1,
+                        last_used_counter: None,
                     }),
                 }],
             }),
@@ -1156,6 +1282,121 @@ mod tests {
 
     fn assert_error_code(error: AppError, expected: AuthErrorCode) {
         assert_eq!(error.code(), expected.code());
+    }
+
+    #[tokio::test]
+    async fn forced_reauthentication_reuses_the_bound_session() {
+        let user = test_user();
+        let mut login = test_login(Uuid::from(user.oid), 0);
+        let bound_session_oid = SessionOid(Uuid::new_v4());
+        login.session_oid = Some(bound_session_oid);
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins: vec![login.clone()],
+                ..Default::default()
+            })),
+        });
+        let (service, _) = otp_service(login_repo, user);
+
+        let session = service
+            .complete_session(
+                &login,
+                login.user_oid.unwrap(),
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+                ACR_AAL2,
+                &[
+                    AMR_PASSWORD.to_owned(),
+                    AMR_OTP.to_owned(),
+                    AMR_MFA.to_owned(),
+                ],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(session.oid, bound_session_oid);
+        assert_eq!(session.acr.as_deref(), Some(ACR_AAL2));
+    }
+
+    #[tokio::test]
+    async fn bound_reauthentication_can_challenge_otp_without_password() {
+        let user = test_user();
+        let mut login = test_login(Uuid::from(user.oid), 0);
+        login.status = LoginStatus::IDENTIFIER_VERIFIED.to_string();
+        login.session_oid = Some(SessionOid(Uuid::new_v4()));
+        let login_oid = login.oid;
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins: vec![login],
+                ..Default::default()
+            })),
+        });
+        let (service, _) = otp_service(login_repo, user);
+
+        let error = service
+            .challenge(
+                login_oid,
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
+            .await
+            .expect_err("the test verifier rejects the code after state validation");
+
+        assert_error_code(error, AuthErrorCode::InvalidOtp);
+    }
+
+    #[tokio::test]
+    async fn unbound_login_cannot_use_otp_as_a_password_replacement() {
+        let user = test_user();
+        let mut login = test_login(Uuid::from(user.oid), 0);
+        login.status = LoginStatus::IDENTIFIER_VERIFIED.to_string();
+        let login_oid = login.oid;
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins: vec![login],
+                ..Default::default()
+            })),
+        });
+        let (service, _) = otp_service(login_repo, user);
+
+        let error = service
+            .challenge(
+                login_oid,
+                "otp",
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
+            .await
+            .expect_err("unbound login must still verify the password first");
+
+        assert_error_code(error, AuthErrorCode::InvalidLoginState);
     }
 
     #[tokio::test]

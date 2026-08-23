@@ -87,10 +87,33 @@ fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSour
     match (current, next) {
         (Some(SelectionSource::FreshLogin), SelectionSource::AccountPicker) => false,
         (Some(existing), incoming) if existing == incoming => true,
+        (Some(SelectionSource::Reauthentication), _) => false,
         (Some(SelectionSource::Auto), SelectionSource::AccountPicker) => true,
         (Some(SelectionSource::Auto), SelectionSource::FreshLogin) => true,
         (None, _) => true,
         _ => true,
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::can_overwrite_selection;
+    use identity_domain::client_authorization::SelectionSource;
+
+    #[test]
+    fn reauthentication_cannot_be_replaced_by_another_selection_flow() {
+        assert!(!can_overwrite_selection(
+            Some(SelectionSource::Reauthentication),
+            SelectionSource::AccountPicker,
+        ));
+        assert!(!can_overwrite_selection(
+            Some(SelectionSource::Reauthentication),
+            SelectionSource::FreshLogin,
+        ));
+        assert!(can_overwrite_selection(
+            Some(SelectionSource::Reauthentication),
+            SelectionSource::Reauthentication,
+        ));
     }
 }
 
@@ -452,15 +475,5 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ClientAuthorizationRepositoryImpl;
-
-    #[test]
-    fn client_authorization_repo_impl_exists() {
-        let _ = ClientAuthorizationRepositoryImpl::new;
     }
 }

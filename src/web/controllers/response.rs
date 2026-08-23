@@ -20,6 +20,20 @@ pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError)
     localized_error_message(i18n, locale, error.code(), error.params())
 }
 
+pub fn error_source_chain(error: &AppError) -> String {
+    let mut sources = Vec::new();
+    let mut current = error.source();
+    while let Some(source) = current {
+        sources.push(source.to_string());
+        current = source.source();
+    }
+    if sources.is_empty() {
+        "<no source>".to_owned()
+    } else {
+        sources.join(" -> ")
+    }
+}
+
 fn localized_error_message(
     i18n: &I18n,
     locale: &LanguageIdentifier,
@@ -238,7 +252,7 @@ pub fn write_error_response(
     if status.is_server_error() {
         tracing::error!(
             error = %error,
-            source = ?error.source(),
+            source_chain = %error_source_chain(&error),
             code = error.code(),
             "internal error"
         );
@@ -290,7 +304,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
     if status.is_server_error() {
         tracing::error!(
             error = %error,
-            source = ?error.source(),
+            source_chain = %error_source_chain(&error),
             code = error.code(),
             "internal error rendered as html"
         );
@@ -302,6 +316,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
 
     let data = ErrorPageData {
         status_code: status.as_u16(),
+        oauth_error_code: None,
         error_code: Some(error.code()),
         title: i18n.t(&locale, "error-page-title"),
         message,
@@ -371,6 +386,7 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
 
         let data = ErrorPageData {
             status_code: status.as_u16(),
+            oauth_error_code: None,
             error_code: None,
             title: i18n.t(&locale, "error-404-title"),
             message,
@@ -401,7 +417,7 @@ mod tests {
         test::{ResponseExt, TestClient},
     };
 
-    use super::{JsonWebResult, WebResult};
+    use super::{JsonWebResult, WebResult, error_source_chain};
 
     use crate::{
         application::error::{
@@ -461,5 +477,16 @@ mod tests {
             body.contains("\"message\":\"The email address is invalid.\""),
             "{body}"
         );
+    }
+
+    #[test]
+    fn error_source_chain_preserves_internal_error_details() {
+        let error =
+            AppError::from_code(CommonErrorCode::InternalError).with_source(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "database unavailable",
+            ));
+
+        assert_eq!(error_source_chain(&error), "database unavailable");
     }
 }

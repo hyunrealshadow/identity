@@ -10,7 +10,7 @@ use identity_domain::user::{
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
-    TransactionTrait,
+    TransactionTrait, sea_query::Expr,
 };
 
 pub struct UserCredentialRepositoryImpl {
@@ -138,6 +138,39 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(())
     }
 
+    async fn consume_totp_counter(
+        &self,
+        credential_oid: UserCredentialOid,
+        counter: u64,
+    ) -> Result<bool, UserCredentialRepositoryError> {
+        let counter = i64::try_from(counter)
+            .map_err(|error| UserCredentialRepositoryError::ConsumeTotpFailed(Box::new(error)))?;
+        let result = UserCredentialEntity::update_many()
+            .col_expr(
+                user_credential::Column::Data,
+                Expr::cust_with_values(
+                    r#"jsonb_set("user_credential"."data", '{last_used_counter}', to_jsonb($1::bigint), true)"#,
+                    [counter],
+                ),
+            )
+            .col_expr(
+                user_credential::Column::UpdatedAt,
+                Expr::value(Some(Utc::now().fixed_offset())),
+            )
+            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .filter(user_credential::Column::Type.eq("otp"))
+            .filter(Expr::cust_with_values(
+                r#"COALESCE(("user_credential"."data"->>'last_used_counter')::bigint, -1) < $1"#,
+                [counter],
+            ))
+            .exec(&self.db)
+            .await
+            .map_err(|error| {
+                UserCredentialRepositoryError::ConsumeTotpFailed(Box::new(error))
+            })?;
+        Ok(result.rows_affected == 1)
+    }
+
     async fn replace_by_user_oid(
         &self,
         user_oid: UserOid,
@@ -207,5 +240,54 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::DeleteFailed(Box::new(e)))?;
         Ok(result.rows_affected == 1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use identity_domain::user::{UserCredentialOid, repository::UserCredentialRepository as _};
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+    use uuid::Uuid;
+
+    use super::UserCredentialRepositoryImpl;
+
+    #[tokio::test]
+    async fn consume_totp_counter_uses_an_atomic_jsonb_condition() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            }])
+            .into_connection();
+        let repo = UserCredentialRepositoryImpl::new(db);
+
+        let consumed = repo
+            .consume_totp_counter(UserCredentialOid(Uuid::new_v4()), 42)
+            .await
+            .unwrap();
+
+        assert!(consumed);
+        let statements = format!("{:?}", repo.db.into_transaction_log());
+        assert!(statements.contains("jsonb_set"));
+        assert!(statements.contains("last_used_counter"));
+        assert!(statements.contains("<"));
+    }
+
+    #[tokio::test]
+    async fn consume_totp_counter_reports_a_replay_when_no_row_is_updated() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 0,
+            }])
+            .into_connection();
+        let repo = UserCredentialRepositoryImpl::new(db);
+
+        let consumed = repo
+            .consume_totp_counter(UserCredentialOid(Uuid::new_v4()), 42)
+            .await
+            .unwrap();
+
+        assert!(!consumed);
     }
 }

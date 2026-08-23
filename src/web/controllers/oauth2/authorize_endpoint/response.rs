@@ -2,7 +2,7 @@ use http::{HeaderMap, HeaderValue, StatusCode, header};
 use salvo::Response;
 
 use crate::{
-    application::error::AppError,
+    application::error::{AppError, kind::ErrorKind},
     boot::AppState,
     domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, OAuthErrorResponse, ResponseMode,
@@ -149,44 +149,70 @@ pub fn response_mode_from_value(value: Option<&str>) -> Option<ResponseMode> {
     value.and_then(|mode| mode.parse::<ResponseMode>().ok())
 }
 
-pub fn authorize_error_details(
-    i18n: &identity_infrastructure::i18n::I18n,
-    headers: &HeaderMap,
-    _raw: &RawAuthorizeRequest,
-    error: &AppError,
-) -> Vec<String> {
-    let locale = resolve_locale_from_headers(headers);
-    vec![crate::controllers::response::error_message(
-        i18n, &locale, error,
-    )]
+fn authorize_error_status(kind: ErrorKind) -> StatusCode {
+    match kind {
+        ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        ErrorKind::Gone => StatusCode::GONE,
+        _ => StatusCode::BAD_REQUEST,
+    }
+}
+
+pub(super) fn authorize_oauth_error_code(error: &AppError) -> OAuthErrorCode {
+    use identity_application::error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode};
+
+    if error.kind() == ErrorKind::Internal {
+        return OAuthErrorCode::ServerError;
+    }
+
+    match error.code() {
+        code if code == AuthorizeErrorCode::ResponseTypeInvalid.code() => {
+            OAuthErrorCode::UnsupportedResponseType
+        }
+        code if code == AuthorizeErrorCode::ScopeInvalid.code()
+            || code == AuthorizeErrorCode::OpenidScopeRequired.code()
+            || code == AuthorizeErrorCode::ScopeNotAssignedToClient.code() =>
+        {
+            OAuthErrorCode::InvalidScope
+        }
+        code if code == AuthorizeErrorCode::RequestUriInvalid.code()
+            || (AuthorizeErrorCode::RequestUriNotHttps.code()
+                ..=AuthorizeErrorCode::RequestUriReadFailed.code())
+                .contains(&code) =>
+        {
+            OAuthErrorCode::InvalidRequestUri
+        }
+        code if (AuthorizeErrorCode::RequestObjectHeaderInvalid.code()
+            ..=AuthorizeErrorCode::RequestObjectPayloadInvalid.code())
+            .contains(&code) =>
+        {
+            OAuthErrorCode::InvalidRequestObject
+        }
+        code if code == AuthorizeErrorCode::RequestObjectEncryptionUnsupported.code() => {
+            OAuthErrorCode::RequestNotSupported
+        }
+        _ => OAuthErrorCode::InvalidRequest,
+    }
 }
 
 pub fn render_authorize_error_page(
     ctx: &AppState,
     headers: &HeaderMap,
-    raw: &RawAuthorizeRequest,
+    _raw: &RawAuthorizeRequest,
     error: AppError,
 ) -> Response {
-    use identity_application::error::kind::ErrorKind;
-
     let i18n = ctx.resources().i18n();
     let locale = resolve_locale_from_headers(headers);
-
-    let (status, details) = if error.kind() == ErrorKind::Internal {
-        (StatusCode::INTERNAL_SERVER_ERROR, vec![])
-    } else {
-        (
-            StatusCode::BAD_REQUEST,
-            authorize_error_details(i18n, headers, raw, &error),
-        )
-    };
+    let status = authorize_error_status(error.kind());
+    let oauth_error_code = authorize_oauth_error_code(&error);
+    let message = crate::controllers::response::error_message(i18n, &locale, &error);
 
     let data = ErrorPageData {
         status_code: status.as_u16(),
+        oauth_error_code: Some(oauth_error_code.to_string()),
         error_code: Some(error.code()),
-        title: i18n.t(&locale, "authorize-error-title"),
-        message: i18n.t(&locale, "authorize-error-message"),
-        details,
+        title: i18n.t(&locale, "error-page-title"),
+        message,
+        details: Vec::new(),
     };
 
     let mut response = Response::new();
@@ -199,7 +225,7 @@ pub fn render_authorize_error_page(
 
 #[cfg(test)]
 mod tests {
-    use http::HeaderValue;
+    use http::{HeaderValue, StatusCode};
     use identity_application::error::AppError;
     use identity_application::error::codes::common::CommonErrorCode;
     use identity_application::error::kind::ErrorKind;
@@ -208,11 +234,46 @@ mod tests {
     };
     use salvo::test::ResponseExt;
 
+    use super::{authorize_error_status, authorize_oauth_error_code};
+
     #[test]
     fn internal_error_kind_maps_to_500_status() {
         // Verify that ErrorKind::Internal is what CommonErrorCode::InternalError produces
         let error = AppError::from_code(CommonErrorCode::InternalError);
         assert_eq!(error.kind(), ErrorKind::Internal);
+    }
+
+    #[test]
+    fn authorize_error_status_preserves_http_error_semantics() {
+        assert_eq!(
+            authorize_error_status(ErrorKind::Validation),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(authorize_error_status(ErrorKind::Gone), StatusCode::GONE);
+        assert_eq!(
+            authorize_error_status(ErrorKind::Internal),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn authorize_oauth_error_code_maps_protocol_errors() {
+        use identity_application::error::codes::authorize::AuthorizeErrorCode;
+
+        assert_eq!(
+            authorize_oauth_error_code(&AppError::from_code(
+                AuthorizeErrorCode::ResponseTypeInvalid
+            )),
+            OAuthErrorCode::UnsupportedResponseType
+        );
+        assert_eq!(
+            authorize_oauth_error_code(&AppError::from_code(AuthorizeErrorCode::ScopeInvalid)),
+            OAuthErrorCode::InvalidScope
+        );
+        assert_eq!(
+            authorize_oauth_error_code(&AppError::from_code(CommonErrorCode::InternalError)),
+            OAuthErrorCode::ServerError
+        );
     }
 
     #[tokio::test]

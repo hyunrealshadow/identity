@@ -29,6 +29,7 @@ fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSour
     match (current, next) {
         (Some(SelectionSource::FreshLogin), SelectionSource::AccountPicker) => false,
         (Some(existing), incoming) if existing == incoming => true,
+        (Some(SelectionSource::Reauthentication), _) => false,
         (Some(SelectionSource::Auto), SelectionSource::AccountPicker) => true,
         (Some(SelectionSource::Auto), SelectionSource::FreshLogin) => true,
         (None, _) => true,
