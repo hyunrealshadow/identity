@@ -130,7 +130,6 @@ impl LoginService {
     pub async fn change_password(
         &self,
         user_oid: identity_domain::user::UserOid,
-        current_password: &str,
         new_password: &str,
     ) -> Result<(), AppError> {
         if new_password.len() < 12 {
@@ -140,15 +139,6 @@ impl LoginService {
             .with_field_error(
                 "newPassword",
                 AppError::from_code(AuthErrorCode::PasswordTooShort),
-            ));
-        }
-        if current_password == new_password {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::ValidationFailed,
-            )
-            .with_field_error(
-                "newPassword",
-                AppError::from_code(AuthErrorCode::PasswordUnchanged),
             ));
         }
         let credential = self
@@ -168,19 +158,19 @@ impl LoginService {
         };
         let options = self.hash_options.current_value();
         let hasher = Arc::clone(&self.password_hasher);
-        let current_password = current_password.to_owned();
+        let new_password_to_verify = new_password.to_owned();
         let verify_options = options.clone();
         let verified = super::password::run_password_hashing(move || {
-            hasher.verify(&current_password, &stored_password, &verify_options)
+            hasher.verify(&new_password_to_verify, &stored_password, &verify_options)
         })
         .await?;
-        if verified == VerifyResult::Failure {
+        if verified != VerifyResult::Failure {
             return Err(AppError::from_code(
                 crate::error::codes::common::CommonErrorCode::ValidationFailed,
             )
             .with_field_error(
-                "currentPassword",
-                AppError::from_code(AuthErrorCode::InvalidCredential),
+                "newPassword",
+                AppError::from_code(AuthErrorCode::PasswordUnchanged),
             ));
         }
         let hasher = Arc::clone(&self.password_hasher);
@@ -252,7 +242,7 @@ impl LoginService {
         // Bind the resolved user onto the existing login record.
         let login = self
             .login_repo
-            .bind_user(login_oid, user.oid.into(), LoginStatus::IDENTIFIER_VERIFIED)
+            .bind_user(login_oid, user.oid.into())
             .await?;
 
         Ok(IdentifierResult {
@@ -689,7 +679,11 @@ impl LoginService {
             }
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         };
-        if !self.credential_repo.delete_by_oid(matched.oid).await? {
+        if !self
+            .credential_repo
+            .consume_recovery_code_by_oid(matched.oid)
+            .await?
+        {
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         }
         self.user_repo.reset_failed_attempts(user_oid).await?;
@@ -1003,7 +997,24 @@ mod tests {
             Ok(())
         }
 
-        async fn delete_by_oid(
+        async fn enable_totp_if_disabled(
+            &self,
+            _user_oid: UserOid,
+            _otp: identity_domain::user::OtpCredentialData,
+            _recovery_codes: Vec<identity_domain::user::RecoveryCodeCredentialData>,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            Ok(false)
+        }
+
+        async fn replace_recovery_codes_if_totp_enabled(
+            &self,
+            _user_oid: UserOid,
+            _recovery_codes: Vec<identity_domain::user::RecoveryCodeCredentialData>,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            Ok(false)
+        }
+
+        async fn consume_recovery_code_by_oid(
             &self,
             _credential_oid: UserCredentialOid,
         ) -> Result<bool, UserCredentialRepositoryError> {
@@ -1132,7 +1143,6 @@ mod tests {
             &self,
             _login_oid: Uuid,
             _user_oid: Uuid,
-            _status: &str,
         ) -> Result<Login, LoginRepositoryError> {
             Err(LoginRepositoryError::LoginNotFound)
         }
@@ -1211,6 +1221,7 @@ mod tests {
             birthdate: None,
             zoneinfo: None,
             locale: None,
+            theme: None,
             email_verified: true,
             phone_number: None,
             phone_number_verified: None,

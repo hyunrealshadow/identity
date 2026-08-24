@@ -136,9 +136,9 @@ pub(in crate::openid_connect) fn build_test_service(
 pub(in crate::openid_connect) fn stub_key_repo() -> MockallKeyRepository {
     let mut mock = MockallKeyRepository::new();
     mock.expect_find_by_oid().returning(|_| Ok(None));
-    mock.expect_list_available_asymmetric()
+    mock.expect_list_active_asymmetric()
         .returning(|| Ok(vec![]));
-    mock.expect_list_available_symmetric()
+    mock.expect_list_decryptable_symmetric()
         .returning(|| Ok(vec![]));
     mock
 }
@@ -153,7 +153,7 @@ pub(in crate::openid_connect) fn stub_user_repo() -> MockUserRepository {
 
 pub(in crate::openid_connect) fn empty_cred_repo() -> MockOpenIdConnectCredentialRepository {
     let mut mock = MockOpenIdConnectCredentialRepository::new();
-    mock.expect_find_by_client_oid_and_type()
+    mock.expect_find_active_by_client_oid_and_type()
         .returning(|_, _| Ok(vec![]));
     mock
 }

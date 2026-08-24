@@ -130,6 +130,23 @@ fn continue_action_rejects_an_authentication_that_does_not_meet_requested_acr() 
 }
 
 #[test]
+fn continue_action_accepts_aal2_for_an_aal1_request() {
+    let mut selected_session = active_session();
+    selected_session.acr = Some(identity_domain::auth::ACR_AAL2.to_owned());
+    let mut stored = stored(ConsentState::Approved);
+    stored.request.acr_values = Some(vec![identity_domain::auth::ACR_AAL1.to_owned()]);
+
+    let action = determine_continue_action(
+        &stored,
+        &login(LoginStatus::AUTHENTICATED),
+        Some(&selected_session),
+        false,
+    );
+
+    assert!(matches!(action, ContinueAction::Approve { .. }));
+}
+
+#[test]
 fn continue_action_redirects_to_consent_when_pending_and_required() {
     let selected_session = active_session();
 

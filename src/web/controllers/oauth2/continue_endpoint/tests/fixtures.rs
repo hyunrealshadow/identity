@@ -183,6 +183,7 @@ pub(super) async fn continue_state(
         name: "Continue RP".to_owned(),
         names: None,
         description: Some("OIDC relying party".to_owned()),
+        built_in: false,
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -385,6 +386,7 @@ pub(super) async fn continue_state(
                 birthdate: None,
                 zone_info: None,
                 locale: None,
+                preferences: serde_json::json!({}),
                 address_formatted: None,
                 address_street_address: None,
                 address_locality: None,
@@ -452,6 +454,7 @@ pub(super) async fn continue_state(
                 birthdate: None,
                 zone_info: None,
                 locale: None,
+                preferences: serde_json::json!({}),
                 address_formatted: None,
                 address_street_address: None,
                 address_locality: None,

@@ -70,8 +70,8 @@ impl CachedRuntimeKeyRingProvider {
     }
 
     async fn refresh(&self) -> Result<(), AppError> {
-        let symmetric_keys = self.key_repo.list_available_symmetric().await?;
-        let asymmetric_keys = self.key_repo.list_available_asymmetric().await?;
+        let symmetric_keys = self.key_repo.list_decryptable_symmetric().await?;
+        let asymmetric_keys = self.key_repo.list_active_asymmetric().await?;
         let mut signing_key = None;
 
         for key in asymmetric_keys {

@@ -14,6 +14,7 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub names: Option<Json>,
     pub description: Option<String>,
+    pub built_in: bool,
     pub created_at: DateTime,
     pub updated_at: Option<DateTime>,
 }

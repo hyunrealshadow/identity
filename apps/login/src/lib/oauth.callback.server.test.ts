@@ -43,15 +43,20 @@ describe('OAuth callback errors', () => {
     mocks.flow.data.mode = 'signin'
   })
 
-  it('discards a failed sign-in flow and its token session', async () => {
+  it('discards a failed sign-in flow and redirects to the error page', async () => {
     const response = await finishAuthorization(
       new Request(
-        'https://identity.example/callback?error=invalid_request&state=expected-state',
+        'https://identity.example/callback?error=invalid_request&error_description=The+request+is+invalid.&state=expected-state',
       ),
     )
 
-    expect(response.status).toBe(400)
-    await expect(response.text()).resolves.toBe('invalid_request')
+    expect(response.status).toBe(302)
+    const location = new URL(response.headers.get('location')!)
+    expect(location.pathname).toBe('/authorization-error')
+    expect(location.searchParams.get('error')).toBe('invalid_request')
+    expect(location.searchParams.get('error_description')).toBe(
+      'The request is invalid.',
+    )
     expect(mocks.flow.clear).toHaveBeenCalledOnce()
     expect(mocks.authorization.clear).toHaveBeenCalledOnce()
     expect(mocks.mfa.clear).toHaveBeenCalledOnce()

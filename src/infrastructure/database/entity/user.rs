@@ -29,6 +29,7 @@ pub struct Model {
     pub birthdate: Option<String>,
     pub zone_info: Option<String>,
     pub locale: Option<String>,
+    pub preferences: Json,
     pub address_formatted: Option<String>,
     pub address_street_address: Option<String>,
     pub address_locality: Option<String>,

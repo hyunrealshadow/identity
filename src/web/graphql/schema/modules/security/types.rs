@@ -28,7 +28,6 @@ impl AccountSecurity {
 
 #[derive(InputObject)]
 pub(super) struct ChangePasswordInput {
-    pub current_password: String,
     pub new_password: String,
     pub client_mutation_id: Option<String>,
 }

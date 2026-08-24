@@ -36,6 +36,7 @@ export interface MfaUiSession {
     enrollment_token: string
     recovery_codes: Array<string>
   }
+  regenerated_recovery_codes?: Array<string>
 }
 
 export interface AccountFlashSession {

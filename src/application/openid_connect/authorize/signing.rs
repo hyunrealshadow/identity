@@ -51,7 +51,7 @@ impl AuthorizeService {
     pub(super) async fn load_signing_key_impl(&self) -> Result<(String, String, String), AppError> {
         let keys = self
             .key_repo
-            .list_available_asymmetric()
+            .list_active_asymmetric()
             .await
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)

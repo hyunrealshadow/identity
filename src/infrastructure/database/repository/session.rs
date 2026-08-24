@@ -154,11 +154,14 @@ impl SessionRepositoryImpl {
 }
 
 fn active_session_page_query(user_oid: Uuid) -> SelectTwo<session::Entity, user::Entity> {
+    let now = Utc::now().fixed_offset();
     SessionEntity::find()
         .inner_join(UserEntity)
         .select_also(UserEntity)
         .filter(user::Column::Oid.eq(user_oid))
         .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
+        .filter(session::Column::RevokedAt.is_null())
+        .filter(session::Column::ExpiresAt.gt(now))
 }
 
 fn build_session_page(
@@ -240,6 +243,8 @@ impl SessionRepository for SessionRepositoryImpl {
         let rows: Vec<(session::Model, Option<user::Model>)> = SessionEntity::find()
             .filter(session::Column::Oid.is_in(uuids))
             .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
+            .filter(session::Column::RevokedAt.is_null())
+            .filter(session::Column::ExpiresAt.gt(Utc::now().fixed_offset()))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .all(&self.db)
@@ -586,6 +591,8 @@ mod tests {
             .to_string();
 
         assert!(statement.contains(r#""session"."status" = 'active'"#));
+        assert!(statement.contains(r#""session"."revoked_at" IS NULL"#));
+        assert!(statement.contains(r#""session"."expires_at" >"#));
     }
 
     #[test]

@@ -1,11 +1,16 @@
 import { Card } from '@heroui/react'
 import type { ReactNode } from 'react'
 
+import { AppearanceControls } from '#/components/appearance-controls'
+import type { Locale } from '#/lib/i18n'
+
 interface AuthShellProps {
   title: string
   description: string
   children: ReactNode
   lang?: string
+  locale?: Locale
+  showPreferences?: boolean
 }
 
 export function AuthShell({
@@ -13,13 +18,16 @@ export function AuthShell({
   description,
   children,
   lang,
+  locale,
+  showPreferences = false,
 }: AuthShellProps) {
   return (
     <main
       lang={lang}
       className="auth-background flex min-h-screen items-center justify-center px-4 py-10 sm:px-6"
     >
-      <Card className="auth-card relative w-full max-w-[460px] overflow-hidden border border-black/[0.07] bg-white/90 backdrop-blur-xl">
+      {showPreferences && locale ? <AppearanceControls locale={locale} /> : null}
+      <Card className="auth-card relative w-full max-w-[460px] overflow-hidden border border-border bg-surface/90 backdrop-blur-xl">
         <Card.Header className="relative flex flex-col items-center px-7 pb-2 pt-9 text-center sm:px-10">
           <Card.Title className="auth-item auth-delay-1 text-[1.55rem] font-semibold tracking-tight text-foreground">
             {title}

@@ -19,6 +19,7 @@ fn default_user(email: &str) -> User {
         birthdate: None,
         zoneinfo: None,
         locale: None,
+        theme: None,
         email_verified: true,
         phone_number: None,
         phone_number_verified: None,

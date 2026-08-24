@@ -95,8 +95,8 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         status,
         csrfToken: active.csrf_token,
         loginId,
-        locale: requestLocale(status.ui_locales),
-        uiLocales: status.ui_locales?.join(' ') ?? '',
+        locale: requestLocale(uiLocales ? uiLocales.split(' ') : status.ui_locales),
+        uiLocales: uiLocales || status.ui_locales?.join(' ') || '',
         error: pageError,
         fieldError: credentialError,
       }
@@ -234,14 +234,16 @@ function ChallengePage() {
   const isOtp = credentialType === 'otp'
   const isRecoveryCode = credentialType === 'recovery_code'
   const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
-  const alternativeMethods = [
-    { credentialType: 'otp', label: t('useAuthenticatorCode') },
-    { credentialType: 'recovery_code', label: t('useRecoveryCode') },
-  ].filter(
-    (method) =>
-      method.credentialType !== credentialType &&
-      data.status?.credential_types.includes(method.credentialType),
-  )
+  const alternativeMethods = credentialType === 'password'
+    ? []
+    : [
+        { credentialType: 'otp', label: t('useAuthenticatorCode') },
+        { credentialType: 'recovery_code', label: t('useRecoveryCode') },
+      ].filter(
+        (method) =>
+          method.credentialType !== credentialType &&
+          data.status?.credential_types.includes(method.credentialType),
+      )
   const canSwitchAccount = !data.status?.requires_reauthentication
   const visibleError = search.error ?? data.error
   const user = data.status?.user
@@ -249,6 +251,8 @@ function ChallengePage() {
   return (
     <AuthShell
       lang={data.locale}
+      locale={data.locale}
+      showPreferences
       title={
         isRecoveryCode
           ? t('recoveryCodeTitle')

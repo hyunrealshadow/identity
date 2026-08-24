@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteRouteImport } from './routes/account/route'
+import { Route as AppearanceRouteImport } from './routes/appearance'
+import { Route as AuthorizationErrorRouteImport } from './routes/authorization-error'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as InstallRouteImport } from './routes/install'
@@ -31,6 +33,16 @@ const IndexRoute = IndexRouteImport.update({
 const AccountRouteRoute = AccountRouteRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppearanceRoute = AppearanceRouteImport.update({
+  id: '/appearance',
+  path: '/appearance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthorizationErrorRoute = AuthorizationErrorRouteImport.update({
+  id: '/authorization-error',
+  path: '/authorization-error',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CallbackRoute = CallbackRouteImport.update({
@@ -92,6 +104,8 @@ const AccountMfaSetupRoute = AccountMfaSetupRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRouteRouteWithChildren
+  '/appearance': typeof AppearanceRoute
+  '/authorization-error': typeof AuthorizationErrorRoute
   '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
@@ -106,6 +120,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/appearance': typeof AppearanceRoute
+  '/authorization-error': typeof AuthorizationErrorRoute
   '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
@@ -122,6 +138,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRouteRouteWithChildren
+  '/appearance': typeof AppearanceRoute
+  '/authorization-error': typeof AuthorizationErrorRoute
   '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
@@ -139,6 +157,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/appearance'
+    | '/authorization-error'
     | '/callback'
     | '/consent'
     | '/install'
@@ -153,6 +173,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/appearance'
+    | '/authorization-error'
     | '/callback'
     | '/consent'
     | '/install'
@@ -168,6 +190,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/appearance'
+    | '/authorization-error'
     | '/callback'
     | '/consent'
     | '/install'
@@ -184,6 +208,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRouteRoute: typeof AccountRouteRouteWithChildren
+  AppearanceRoute: typeof AppearanceRoute
+  AuthorizationErrorRoute: typeof AuthorizationErrorRoute
   CallbackRoute: typeof CallbackRoute
   ConsentRoute: typeof ConsentRoute
   InstallRoute: typeof InstallRoute
@@ -204,6 +230,20 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AccountRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/appearance': {
+      id: '/appearance'
+      path: '/appearance'
+      fullPath: '/appearance'
+      preLoaderRoute: typeof AppearanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/authorization-error': {
+      id: '/authorization-error'
+      path: '/authorization-error'
+      fullPath: '/authorization-error'
+      preLoaderRoute: typeof AuthorizationErrorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/callback': {
@@ -321,6 +361,8 @@ const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRouteRoute: AccountRouteRouteWithChildren,
+  AppearanceRoute: AppearanceRoute,
+  AuthorizationErrorRoute: AuthorizationErrorRoute,
   CallbackRoute: CallbackRoute,
   ConsentRoute: ConsentRoute,
   InstallRoute: InstallRoute,

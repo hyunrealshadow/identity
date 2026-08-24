@@ -35,6 +35,7 @@ fn hybrid_user(user_oid: Uuid) -> User {
         birthdate: None,
         zoneinfo: None,
         locale: None,
+        theme: None,
         email_verified: true,
         phone_number: None,
         phone_number_verified: None,
@@ -71,6 +72,7 @@ fn id_token_user(user_oid: Uuid) -> User {
         birthdate: None,
         zoneinfo: None,
         locale: None,
+        theme: None,
         email_verified: true,
         phone_number: None,
         phone_number_verified: None,
@@ -157,10 +159,10 @@ fn hybrid_key_repos(
     let k = key.clone();
     key_repo.expect_find_by_oid().returning(move |_| Ok(None));
     key_repo
-        .expect_list_available_asymmetric()
+        .expect_list_active_asymmetric()
         .returning(move || Ok(vec![k.clone()]));
     key_repo
-        .expect_list_available_symmetric()
+        .expect_list_decryptable_symmetric()
         .returning(|| Ok(vec![]));
 
     let mut jwk_repo = MockKeyJwkRepository::new();

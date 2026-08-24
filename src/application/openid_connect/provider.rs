@@ -366,12 +366,9 @@ impl OpenIdProviderService {
     async fn compute_id_token_signing_algos(&self) -> Result<Vec<String>, AppError> {
         let values = match self.key_repo {
             Some(ref key_repo) => {
-                let keys = key_repo
-                    .list_available_asymmetric()
-                    .await
-                    .map_err(|error| {
-                        AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
-                    })?;
+                let keys = key_repo.list_active_asymmetric().await.map_err(|error| {
+                    AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
+                })?;
                 let detected = self
                     .signing_algorithm_detector
                     .as_ref()
@@ -581,9 +578,9 @@ mod tests {
         mock.expect_find_by_oid()
             .returning(move |oid| Ok(k.iter().find(|key| key.oid == oid).cloned()));
         let k = keys;
-        mock.expect_list_available_asymmetric()
+        mock.expect_list_active_asymmetric()
             .returning(move || Ok(k.clone()));
-        mock.expect_list_available_symmetric()
+        mock.expect_list_decryptable_symmetric()
             .returning(|| Ok(vec![]));
         mock
     }
@@ -591,12 +588,12 @@ mod tests {
     fn key_repo_failing() -> MockKeyRepository {
         let mut mock = MockKeyRepository::new();
         mock.expect_find_by_oid().returning(|_| Ok(None));
-        mock.expect_list_available_asymmetric().returning(|| {
+        mock.expect_list_active_asymmetric().returning(|| {
             Err(KeyRepositoryError::ListAvailableFailed(Box::new(
                 sea_orm::DbErr::Custom("boom".to_owned()),
             )))
         });
-        mock.expect_list_available_symmetric()
+        mock.expect_list_decryptable_symmetric()
             .returning(|| Ok(vec![]));
         mock
     }

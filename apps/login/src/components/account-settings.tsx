@@ -5,7 +5,7 @@ export function PageHeading({ title, description }: { title: string; description
 }
 
 export function SettingsCard({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return <Card className="account-card overflow-hidden border border-black/[0.08]"><Card.Header className="border-b border-separator px-5 py-4"><Card.Title className="text-sm font-semibold">{title}</Card.Title>{description ? <Card.Description className="mt-1 text-sm leading-5">{description}</Card.Description> : null}</Card.Header><Card.Content className="p-5">{children}</Card.Content></Card>
+  return <Card className="account-card overflow-hidden border border-border"><Card.Header className="border-b border-separator px-5 py-4"><Card.Title className="text-sm font-semibold">{title}</Card.Title>{description ? <Card.Description className="mt-1 text-sm leading-5">{description}</Card.Description> : null}</Card.Header><Card.Content className="p-5">{children}</Card.Content></Card>
 }
 
 export function SettingsRow({ title, description, detail, action }: { title: string; description?: string; detail?: React.ReactNode; action: React.ReactNode }) {
@@ -17,5 +17,5 @@ export function ProfileField({ name, label, value, error, required = false, type
 }
 
 export function PasswordField({ name, label, error }: { name: string; label: string; error?: string }) {
-  return <TextField isRequired fullWidth isInvalid={Boolean(error)} name={name}><Label>{label}</Label><Input type="password" autoComplete={name === 'current_password' ? 'current-password' : 'new-password'} /><FieldError>{error}</FieldError></TextField>
+  return <TextField isRequired fullWidth isInvalid={Boolean(error)} name={name}><Label>{label}</Label><Input type="password" autoComplete="new-password" /><FieldError>{error}</FieldError></TextField>
 }

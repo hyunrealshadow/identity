@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::key::{Key, KeyData, KeyOid, KeyType};
+use crate::key::{Key, KeyData, KeyOid};
 
 #[derive(Debug, Error)]
 pub enum KeyRepositoryError {
@@ -35,13 +35,15 @@ pub enum KeyRepositoryError {
 pub trait KeyRepository: Send + Sync {
     async fn find_by_oid(&self, oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError>;
 
-    async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
+    /// Lists unrevoked, unexpired asymmetric keys usable for new signatures.
+    async fn list_active_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
 
-    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
+    /// Lists unrevoked symmetric keys, including expired keys retained to
+    /// decrypt payloads created before their encryption lifetime ended.
+    async fn list_decryptable_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
 
     async fn create(
         &self,
-        key_type: KeyType,
         data: &KeyData,
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<Key, KeyRepositoryError>;

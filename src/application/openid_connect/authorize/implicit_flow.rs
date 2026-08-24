@@ -1,4 +1,4 @@
-use super::flow::session_state_for_authorize_response;
+use super::flow::{AuthorizationCodeContext, session_state_for_authorize_response};
 use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
 use super::*;
 use crate::openid_connect::token::resolve_id_token_alg;
@@ -203,12 +203,12 @@ impl AuthorizeService {
         let (code, authorization_code_oid) = self
             .create_authorization_code(
                 request,
-                user_oid,
-                session_oid,
-                protected_session_id,
-                authentication.auth_time,
-                authentication.acr,
-                authentication.amr,
+                AuthorizationCodeContext {
+                    user_oid,
+                    session_oid,
+                    protected_session_id,
+                    authentication,
+                },
             )
             .await?;
 
@@ -340,7 +340,6 @@ impl AuthorizeService {
             .client_authorization_repo
             .create(
                 input.client_id,
-                ClientAuthorizationType::AccessToken,
                 identity_domain::client_authorization::ClientAuthorizationData::AccessToken(
                     identity_domain::client_authorization::AccessTokenData {
                         scope: input.request.scope.clone(),

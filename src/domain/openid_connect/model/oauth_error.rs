@@ -35,6 +35,33 @@ impl fmt::Display for ParseOAuthErrorCodeError {
 
 impl std::error::Error for ParseOAuthErrorCodeError {}
 
+impl OAuthErrorCode {
+    #[must_use]
+    pub const fn description(&self) -> &'static str {
+        match self {
+            Self::InvalidRequest => "The authorization request is invalid.",
+            Self::UnauthorizedClient => "The client is not authorized to make this request.",
+            Self::AccessDenied => "The authorization request was denied.",
+            Self::UnsupportedResponseType => "The requested response type is not supported.",
+            Self::InvalidScope => "The requested scope is invalid or unavailable.",
+            Self::ServerError => "The authorization server could not complete the request.",
+            Self::TemporarilyUnavailable => "The authorization server is temporarily unavailable.",
+            Self::LoginRequired => "The user must sign in to continue.",
+            Self::ConsentRequired => "The user must grant consent to continue.",
+            Self::InteractionRequired => "User interaction is required to continue.",
+            Self::AccountSelectionRequired => "The user must select an account to continue.",
+            Self::InvalidRequestUri => "The request URI is invalid.",
+            Self::InvalidRequestObject => "The request object is invalid.",
+            Self::RequestNotSupported => "The authorization request is not supported.",
+            Self::RequestUriNotSupported => "Request URIs are not supported.",
+            Self::RegistrationNotSupported => "Dynamic client registration is not supported.",
+            Self::UnmetAuthenticationRequirements => {
+                "The authentication performed does not satisfy the requested requirements."
+            }
+        }
+    }
+}
+
 impl FromStr for OAuthErrorCode {
     type Err = ParseOAuthErrorCodeError;
 
@@ -55,9 +82,10 @@ pub struct OAuthErrorResponse {
 
 impl OAuthErrorResponse {
     pub fn new(error: OAuthErrorCode) -> Self {
+        let error_description = Some(error.description().to_owned());
         Self {
             error,
-            error_description: None,
+            error_description,
             error_uri: None,
             state: None,
         }
@@ -73,6 +101,9 @@ impl OAuthErrorResponse {
         {
             let mut query = url.query_pairs_mut();
             query.append_pair("error", self.error.as_ref());
+            if let Some(error_description) = &self.error_description {
+                query.append_pair("error_description", error_description);
+            }
             if let Some(state) = &self.state {
                 query.append_pair("state", state);
             }
@@ -82,12 +113,15 @@ impl OAuthErrorResponse {
 
     pub fn to_fragment_redirect_url(&self, redirect_uri: &url::Url) -> url::Url {
         let mut url = redirect_uri.clone();
-        let mut fragment = format!("error={}", self.error);
-        if let Some(state) = &self.state {
-            use std::fmt::Write;
-            write!(fragment, "&state={state}").unwrap();
+        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+        serializer.append_pair("error", self.error.as_ref());
+        if let Some(error_description) = &self.error_description {
+            serializer.append_pair("error_description", error_description);
         }
-        url.set_fragment(Some(&fragment));
+        if let Some(state) = &self.state {
+            serializer.append_pair("state", state);
+        }
+        url.set_fragment(Some(&serializer.finish()));
         url
     }
 }
@@ -190,7 +224,18 @@ mod tests {
         let url = error.to_fragment_redirect_url(&redirect_uri);
 
         assert_eq!(url.query(), None);
-        assert_eq!(url.fragment(), Some("error=access_denied&state=state123"));
+        let fields = url::form_urlencoded::parse(url.fragment().unwrap().as_bytes())
+            .into_owned()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            fields.get("error").map(String::as_str),
+            Some("access_denied")
+        );
+        assert_eq!(
+            fields.get("error_description").map(String::as_str),
+            Some("The authorization request was denied.")
+        );
+        assert_eq!(fields.get("state").map(String::as_str), Some("state123"));
     }
 
     #[test]
@@ -201,6 +246,12 @@ mod tests {
 
         assert_eq!(url.fragment(), None);
         assert!(url.query().unwrap().contains("error=login_required"));
+        assert_eq!(
+            url.query_pairs()
+                .find(|(name, _)| name == "error_description")
+                .map(|(_, value)| value.into_owned()),
+            Some("The user must sign in to continue.".to_owned())
+        );
         assert!(url.query().unwrap().contains("state=abc"));
     }
 }

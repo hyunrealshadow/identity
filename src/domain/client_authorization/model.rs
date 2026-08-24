@@ -105,6 +105,19 @@ pub enum ClientAuthorizationData {
     RegistrationAccessToken(RegistrationAccessTokenData),
 }
 
+impl ClientAuthorizationData {
+    #[must_use]
+    pub const fn authorization_type(&self) -> ClientAuthorizationType {
+        match self {
+            Self::AuthorizationRequest(_) => ClientAuthorizationType::AuthorizationRequest,
+            Self::AuthorizationCode(_) => ClientAuthorizationType::AuthorizationCode,
+            Self::AccessToken(_) => ClientAuthorizationType::AccessToken,
+            Self::RefreshToken(_) => ClientAuthorizationType::RefreshToken,
+            Self::RegistrationAccessToken(_) => ClientAuthorizationType::RegistrationAccessToken,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AuthorizationInteractionState {
     pub selected_session_oid: Option<SessionOid>,

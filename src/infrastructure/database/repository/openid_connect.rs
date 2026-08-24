@@ -23,7 +23,12 @@ use identity_domain::openid_connect::{
     OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
     OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
     OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
-    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings, OpenIdConnectCredentialData,
+    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
+};
+
+use super::{
+    openid_connect_credential::serialize_data as serialize_credential_data,
+    shared::non_expiring_timestamp,
 };
 
 fn deserialize_optional_string_vec(
@@ -67,6 +72,7 @@ fn to_client(model: client::Model) -> Result<Client, OpenIdConnectClientReposito
         name: model.name,
         names: deserialize_optional_string_vec(model.names.as_ref())?.unwrap_or_default(),
         description: model.description,
+        built_in: model.built_in,
         created_at: DateTime::<Utc>::from_naive_utc_and_offset(model.created_at, Utc),
         updated_at: model
             .updated_at
@@ -185,6 +191,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         name: Set(registration.client.name),
                         names: Set(optional_strings_to_json(Some(registration.client.names))),
                         description: Set(registration.client.description),
+                        built_in: Set(registration.client.built_in),
                         created_at: Set(registration.client.created_at.naive_utc()),
                         updated_at: Set(registration
                             .client
@@ -295,68 +302,27 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         }
                     }
 
-                    if let Some(secret) = registration.client_secret {
-                        client_open_id_connect_credential::ActiveModel {
-                            oid: Set(Uuid::new_v4()),
-                            client_id: Set(client_model.id),
-                            r#type: Set("client_secret".to_owned()),
-                            data: Set(serde_json::json!({ "secret": secret })),
-                            hint: Set(secret),
-                            expires_at: Set((now + Duration::days(365)).into()),
-                            revoked_at: Set(None),
-                            created_at: Set(now.into()),
-                            updated_at: Set(None),
-                            ..Default::default()
-                        }
-                        .insert(txn)
-                        .await?;
-                    }
-
                     for credential in registration.credentials {
-                        let (type_, hint, data) = match credential {
-                            OpenIdConnectCredentialData::ClientSecret { secret } => (
-                                "client_secret".to_owned(),
-                                secret.clone(),
-                                serde_json::json!({ "secret": secret }),
-                            ),
-                            OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } => (
-                                "client_public_key".to_owned(),
-                                jwk.as_ref()
-                                    .and_then(|value| value.key_id())
-                                    .or_else(|| jwk.as_ref().and_then(|value| value.algorithm()))
-                                    .unwrap_or("client_public_key")
-                                    .to_owned(),
-                                serde_json::json!({
-                                    "public_key": public_key,
-                                    "jwk": jwk,
-                                }),
-                            ),
-                            OpenIdConnectCredentialData::ClientJsonWebKeySet {
-                                jwks_uri,
-                                last_updated,
-                                expires_at,
-                                public_keys,
-                                jwks,
-                            } => (
-                                "client_json_web_key_set".to_owned(),
-                                jwks_uri.to_string(),
-                                serde_json::json!({
-                                    "jwks_uri": jwks_uri,
-                                    "last_updated": last_updated,
-                                    "expires_at": expires_at,
-                                    "public_keys": public_keys,
-                                    "jwks": jwks,
-                                }),
-                            ),
+                        let expires_at = match &credential {
+                            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { .. } => {
+                                (now + Duration::days(365)).into()
+                            }
+                            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientPublicKey { .. } => {
+                                non_expiring_timestamp()
+                            }
+                            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientJsonWebKeySet { expires_at, .. } => {
+                                (*expires_at).into()
+                            }
                         };
+                        let serialized = serialize_credential_data(credential);
 
                         client_open_id_connect_credential::ActiveModel {
                             oid: Set(Uuid::new_v4()),
                             client_id: Set(client_model.id),
-                            r#type: Set(type_),
-                            data: Set(data),
-                            hint: Set(hint),
-                            expires_at: Set((now + Duration::days(365)).into()),
+                            r#type: Set(serialized.type_),
+                            data: Set(serialized.data),
+                            hint: Set(serialized.hint),
+                            expires_at: Set(expires_at),
                             revoked_at: Set(None),
                             created_at: Set(now.into()),
                             updated_at: Set(None),
@@ -452,10 +418,16 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             return Err(OpenIdConnectClientRepositoryError::ClientNotFound);
         };
 
-        ClientEntity::delete_by_id(client_model.id)
+        let result = ClientEntity::delete_many()
+            .filter(client::Column::Id.eq(client_model.id))
+            .filter(client::Column::BuiltIn.eq(false))
             .exec(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
+
+        if result.rows_affected == 0 {
+            return Err(OpenIdConnectClientRepositoryError::BuiltInClient);
+        }
 
         Ok(())
     }

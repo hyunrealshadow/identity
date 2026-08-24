@@ -8,16 +8,20 @@ import {
 import { createServerFn } from '@tanstack/react-start'
 
 import appCss from '../styles.css?url'
+import { anonymousThemePreference } from '#/lib/appearance.server'
 import { cachedInstallationStatus } from '#/lib/installation-status.server'
 
-const loadInstallationStatus = createServerFn({ method: 'GET' }).handler(
-  () => cachedInstallationStatus(),
-)
+const initializeAppearance = `(()=>{const d=document.documentElement,p=d.dataset.themePreference,s='identity-theme';let v=p;if(!v){try{v=localStorage.getItem(s)}catch{}}const t=v==='dark'||(v!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';d.dataset.theme=t;d.classList.remove('no-js','light','dark');d.classList.add('js',t)})()`
+
+const loadRootState = createServerFn({ method: 'GET' }).handler(async () => ({
+  ...(await cachedInstallationStatus()),
+  theme: anonymousThemePreference(),
+}))
 
 export const Route = createRootRoute({
   staleTime: Infinity,
   loader: async ({ location }) => {
-    const { installed } = await loadInstallationStatus()
+    const { installed, theme } = await loadRootState()
     const isInstallRoute = location.pathname === '/install'
 
     if (!installed && !isInstallRoute) {
@@ -26,7 +30,7 @@ export const Route = createRootRoute({
     if (installed && isInstallRoute) {
       throw redirect({ to: '/' })
     }
-    return { installed }
+    return { installed, theme }
   },
   head: () => ({
     meta: [
@@ -49,7 +53,7 @@ export const Route = createRootRoute({
     ],
     scripts: [
       {
-        children: `document.documentElement.classList.replace('no-js','js')`,
+        children: initializeAppearance,
       },
     ],
   }),
@@ -66,9 +70,29 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       return 'en-US'
     },
   })
+  const themePreference = useRouterState({
+    select: (state) => {
+      for (const match of [...state.matches].reverse()) {
+        const data = match.loaderData as { theme?: string } | undefined
+        if (data?.theme === 'light' || data?.theme === 'dark' || data?.theme === 'system') {
+          return data.theme
+        }
+      }
+      return undefined
+    },
+  })
+  const serverTheme = themePreference === 'light' || themePreference === 'dark'
+    ? themePreference
+    : undefined
 
   return (
-    <html lang={locale} className="no-js" suppressHydrationWarning>
+    <html
+      lang={locale}
+      className={`no-js${serverTheme ? ` ${serverTheme}` : ''}`}
+      data-theme={serverTheme}
+      data-theme-preference={themePreference}
+      suppressHydrationWarning
+    >
       <head>
         <HeadContent />
       </head>

@@ -1,5 +1,6 @@
 use chrono::{DateTime, FixedOffset, Utc};
 use identity_domain::auth::SessionOid;
+use identity_domain::user::UserOid;
 use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement};
 
 /// Sentinel value used to represent "no expiry" in the database,
@@ -64,9 +65,32 @@ fn session_lock_id(oid: SessionOid) -> i64 {
     i64::from_be_bytes(bytes) ^ 0x5345_5353_494f_4e00_i64
 }
 
+/// Serializes credential-group replacements for one user.
+pub async fn lock_user_credentials<C: ConnectionTrait>(
+    connection: &C,
+    oid: UserOid,
+) -> Result<(), DbErr> {
+    connection
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT pg_advisory_xact_lock($1)",
+            [user_credential_lock_id(oid).into()],
+        ))
+        .await?;
+    Ok(())
+}
+
+fn user_credential_lock_id(oid: UserOid) -> i64 {
+    let uuid = uuid::Uuid::from(oid);
+    let bytes: [u8; 8] = uuid.as_bytes()[..8]
+        .try_into()
+        .expect("UUID always contains eight leading bytes");
+    i64::from_be_bytes(bytes) ^ 0x5553_4552_4352_4544_i64
+}
+
 #[cfg(test)]
 mod tests {
-    use super::session_lock_id;
+    use super::{session_lock_id, user_credential_lock_id};
     use identity_domain::auth::SessionOid;
     use uuid::Uuid;
 
@@ -77,5 +101,24 @@ mod tests {
 
         assert_eq!(session_lock_id(first), session_lock_id(first));
         assert_ne!(session_lock_id(first), session_lock_id(second));
+    }
+
+    #[test]
+    fn user_credential_lock_id_is_stable_and_user_specific() {
+        let first = identity_domain::user::UserOid(
+            Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap(),
+        );
+        let second = identity_domain::user::UserOid(
+            Uuid::parse_str("019c1234-5678-7abd-9def-0123456789ab").unwrap(),
+        );
+
+        assert_eq!(
+            user_credential_lock_id(first),
+            user_credential_lock_id(first)
+        );
+        assert_ne!(
+            user_credential_lock_id(first),
+            user_credential_lock_id(second)
+        );
     }
 }

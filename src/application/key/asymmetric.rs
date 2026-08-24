@@ -8,7 +8,7 @@ use crate::{
     domain::key::{
         CreateKeyJwkInput, KeyJwkRepository, PublicJwk,
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
-        model::{AsymmetricKeyAlgorithm, Key, KeyData, KeyType},
+        model::{AsymmetricKeyAlgorithm, Key, KeyData},
         repository::KeyRepository,
     },
 };
@@ -77,7 +77,7 @@ impl AsymmetricKeyService {
     }
 
     pub async fn list_available(&self) -> Result<Vec<Key>, AppError> {
-        Ok(self.repo.list_available_asymmetric().await?)
+        Ok(self.repo.list_active_asymmetric().await?)
     }
 
     pub async fn list_available_jwks(&self) -> Result<Vec<identity_domain::key::KeyJwk>, AppError> {
@@ -109,11 +109,7 @@ impl AsymmetricKeyService {
 
         let key = self
             .repo
-            .create(
-                KeyType::Asymmetric,
-                &KeyData::Asymmetric(data.clone()),
-                input.expires_at,
-            )
+            .create(&KeyData::Asymmetric(data.clone()), input.expires_at)
             .await?;
 
         if let Some(ref jwk_repo) = self.jwk_repo {
@@ -133,7 +129,11 @@ impl AsymmetricKeyService {
             .await?
             .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
 
-        if key.revoked_at.is_some() {
+        if key.revoked_at.is_some()
+            || key
+                .expires_at
+                .is_some_and(|expires_at| expires_at <= Utc::now())
+        {
             return Err(AppError::from_code(KeyErrorCode::Revoked));
         }
 

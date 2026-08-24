@@ -23,9 +23,12 @@ use crate::{
         client_scope, scope, setting, user, user_credential,
     },
 };
+use identity_domain::openid_connect::OpenIdConnectCredentialData;
 use identity_domain::setting::{
     ConsentUrlSetting, DynamicClientRegistrationSetting, LoginUrlSetting, SettingDefinition,
 };
+
+use crate::infrastructure::database::repository::openid_connect_credential::serialize_data as serialize_credential_data;
 
 use super::Seed;
 
@@ -368,7 +371,15 @@ async fn ensure_conformance_client(
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
     let client_id = if let Some(row) = existing_client {
-        row.id
+        let client_id = row.id;
+        if !row.built_in {
+            let mut active: client::ActiveModel = row.into();
+            active.built_in = Set(true);
+            active.update(db).await.map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?;
+        }
+        client_id
     } else {
         client::ActiveModel {
             oid: Set(client_oid),
@@ -376,6 +387,7 @@ async fn ensure_conformance_client(
             name: Set(spec.name.to_owned()),
             names: Set(None),
             description: Set(None),
+            built_in: Set(true),
             created_at: Set(now.naive_utc()),
             updated_at: Set(None),
             ..Default::default()
@@ -454,7 +466,10 @@ async fn ensure_conformance_client_secret(
     secret: &str,
     now: chrono::DateTime<Utc>,
 ) -> Result<(), AppError> {
-    let secret_json = serde_json::json!({ "secret": secret });
+    let serialized_credential =
+        serialize_credential_data(OpenIdConnectCredentialData::ClientSecret {
+            secret: secret.to_owned(),
+        });
     let expires_at = chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
         .expect("non-expiring timestamp literal is valid");
 
@@ -472,9 +487,9 @@ async fn ensure_conformance_client_secret(
     client_open_id_connect_credential::ActiveModel {
         oid: Set(credential_oid),
         client_id: Set(client_id),
-        r#type: Set("client_secret".to_owned()),
-        data: Set(secret_json),
-        hint: Set("client_secret".to_owned()),
+        r#type: Set(serialized_credential.type_),
+        data: Set(serialized_credential.data),
+        hint: Set(serialized_credential.hint),
         expires_at: Set(expires_at),
         revoked_at: Set(None),
         created_at: Set(now.into()),

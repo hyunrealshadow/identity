@@ -33,11 +33,15 @@ pub(super) fn require_recent_authentication(
         identity_domain::auth::RECENT_AUTHENTICATION_TTL
     }
     .as_secs();
-    if claims
-        .auth_time
-        .is_some_and(|auth_time| now.saturating_sub(auth_time) <= max_age as i64)
-        && claims.acr.is_some()
-        && required_acr.is_none_or(|required| claims.acr.as_deref() == Some(required))
+    if claims.auth_time.is_some_and(|auth_time| {
+        identity_domain::auth::authentication_is_fresh(auth_time, now, max_age)
+    }) && claims.acr.is_some()
+        && required_acr.is_none_or(|required| {
+            claims
+                .acr
+                .as_deref()
+                .is_some_and(|acr| identity_domain::auth::acr_satisfies(acr, required))
+        })
     {
         Ok(())
     } else {

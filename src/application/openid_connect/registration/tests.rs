@@ -60,6 +60,10 @@ fn issuer() -> Url {
 }
 
 fn registered_client(client_oid: ClientOid) -> OpenIdConnectClient {
+    registered_client_with_built_in(client_oid, false)
+}
+
+fn registered_client_with_built_in(client_oid: ClientOid, built_in: bool) -> OpenIdConnectClient {
     OpenIdConnectClient::new(
         Client {
             oid: client_oid,
@@ -67,6 +71,7 @@ fn registered_client(client_oid: ClientOid) -> OpenIdConnectClient {
             name: "Dynamic Client".to_owned(),
             names: vec![],
             description: None,
+            built_in,
             created_at: Utc::now(),
             updated_at: None,
         },
@@ -235,7 +240,9 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
         captured_val.assigned_scopes,
         vec!["openid", "profile", "email"]
     );
-    assert!(captured_val.client_secret.is_some());
+    assert!(captured_val.credentials.iter().any(|credential| {
+        matches!(credential, identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { secret } if response.client_secret.as_ref() == Some(secret))
+    }));
     assert!(!captured_val.registration_access_token.is_empty());
     assert_eq!(
         captured_val.metadata.settings.skip_consent,
@@ -493,6 +500,27 @@ async fn delete_removes_client_found_by_registration_access_token() {
 }
 
 #[tokio::test]
+async fn delete_rejects_built_in_client() {
+    let client_oid = Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap();
+    let found_client = registered_client_with_built_in(client_oid, true);
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    repo.expect_find_by_registration_access_token()
+        .return_once(move |_client_oid: ClientOid, _token: &str| Ok(Some(found_client)));
+    repo.expect_delete_by_oid().never();
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(repo),
+    );
+
+    let error = service
+        .delete(&client_oid.to_string(), "registration-token")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25011);
+}
+
+#[tokio::test]
 async fn register_allows_public_client_none_auth() {
     let captured = Arc::new(std::sync::Mutex::new(None));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -517,7 +545,11 @@ async fn register_allows_public_client_none_auth() {
     assert!(response.client_secret.is_none());
     assert_eq!(response.token_endpoint_auth_method.as_deref(), Some("none"));
     let registration = captured.lock().unwrap().clone().unwrap();
-    assert!(registration.client_secret.is_none());
+    assert!(!registration.client.built_in);
+    assert!(registration.credentials.iter().all(|credential| !matches!(
+        credential,
+        identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { .. }
+    )));
     assert!(registration.metadata.settings.allow_public_client_flow);
 }
 

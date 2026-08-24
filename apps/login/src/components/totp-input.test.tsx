@@ -63,6 +63,7 @@ describe('TotpInput', () => {
     const { container } = render(<TotpInput name="totp" />)
     const input = container.querySelector<HTMLInputElement>('[data-input-otp]')
 
+    expect(container.querySelector('[data-input-otp-group]')).not.toBeNull()
     expect(input?.name).toBe('totp')
     expect(input?.hasAttribute('id')).toBe(false)
     expect(input?.autocomplete).toBe('one-time-code')

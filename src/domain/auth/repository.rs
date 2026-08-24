@@ -52,6 +52,9 @@ pub enum LoginRepositoryError {
     #[error("failed to update login")]
     UpdateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
+    #[error("invalid login state transition")]
+    InvalidTransition,
+
     #[error("failed to increment login failed attempts")]
     IncrementFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 
@@ -137,12 +140,12 @@ pub trait LoginRepository: Send + Sync {
         requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError>;
 
-    /// Bind a resolved user to an existing login and move it forward.
+    /// Atomically bind a resolved user to a newly-created login and transition
+    /// it to `identifier_verified`.
     async fn bind_user(
         &self,
         login_oid: Uuid,
         user_oid: Uuid,
-        status: &str,
     ) -> Result<Login, LoginRepositoryError>;
 
     /// Bind the session selected for this login interaction.

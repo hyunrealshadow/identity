@@ -50,6 +50,7 @@ export interface LoginStatusResponse {
   credential_types: Array<string>
   prompt: string
   requires_reauthentication: boolean
+  login_hint?: string
   challenge_uri?: string
   ui_locales?: Array<string>
   continue_uri?: string

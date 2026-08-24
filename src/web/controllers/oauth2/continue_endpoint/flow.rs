@@ -103,12 +103,14 @@ pub(super) async fn handle_continue(
             .oidc_authorize()
             .approve_authorization_request_with_protected_session_id(
                 authorization_request_id,
-                session_oid,
-                user_oid,
-                selected_protected_session_id,
-                auth_time,
-                acr,
-                amr,
+                identity_application::openid_connect::authorize::AuthorizationApproval {
+                    session_oid,
+                    user_oid,
+                    protected_session_id: selected_protected_session_id,
+                    auth_time,
+                    acr,
+                    amr,
+                },
             )
             .await
             .map(|redirect| {

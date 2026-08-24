@@ -9,3 +9,4 @@ E25007 = { $field } does not support none.
 E25008 = Invalid redirect URI.
 E25009 = Invalid client metadata.
 E25010 = Failed to delete the dynamic client registration.
+E25011 = Built-in clients cannot be deleted.

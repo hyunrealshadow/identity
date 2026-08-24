@@ -70,7 +70,6 @@ impl LoginRepository for MockLoginRepository {
         &self,
         login_oid: uuid::Uuid,
         user_oid: uuid::Uuid,
-        status: &str,
     ) -> Result<Login, LoginRepositoryError> {
         if let Some(err) = self.bind_user_error.lock().unwrap().take() {
             return Err(err);
@@ -83,7 +82,7 @@ impl LoginRepository for MockLoginRepository {
             .ok_or(LoginRepositoryError::LoginNotFound)?;
         login.oid = login_oid;
         login.user_oid = Some(user_oid);
-        login.status = status.to_string();
+        login.status = identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED.to_owned();
         Ok(login)
     }
 

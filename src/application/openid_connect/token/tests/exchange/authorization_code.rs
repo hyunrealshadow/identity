@@ -34,7 +34,6 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     let record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-123".to_string()),
@@ -120,7 +119,6 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
     let record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "email openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
@@ -171,7 +169,6 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
     let record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
@@ -247,7 +244,6 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: None,
@@ -338,7 +334,6 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
     let record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-offline".to_string()),
@@ -404,7 +399,6 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
         let record = repo
             .create(
                 Uuid::nil(),
-                ClientAuthorizationType::AuthorizationCode,
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                     scope: "openid profile".to_string(),
                     nonce: Some(format!("nonce-{alg}")),
@@ -510,7 +504,6 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
     let record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-rs256".to_string()),

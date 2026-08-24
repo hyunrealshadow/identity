@@ -53,6 +53,12 @@ pub fn render_form_post_response(
         name: "error".to_owned(),
         value: error_response.error.to_string(),
     }];
+    if let Some(error_description) = &error_response.error_description {
+        fields.push(FormPostField {
+            name: "error_description".to_owned(),
+            value: error_description.clone(),
+        });
+    }
     if let Some(state) = &error_response.state {
         fields.push(FormPostField {
             name: "state".to_owned(),
@@ -317,6 +323,12 @@ mod tests {
         );
         assert!(
             body.contains("name=\"error\" value=\"login_required\""),
+            "{body}"
+        );
+        assert!(
+            body.contains(
+                "name=\"error_description\" value=\"The user must sign in to continue.\""
+            ),
             "{body}"
         );
         assert!(body.contains("name=\"state\" value=\"state\""), "{body}");

@@ -80,6 +80,10 @@ impl UserNode {
         self.user.locale.as_deref()
     }
 
+    async fn theme(&self) -> Option<&str> {
+        self.user.theme.as_deref()
+    }
+
     async fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
         self.user.created_at
     }
@@ -102,6 +106,7 @@ pub(super) struct UpdateProfileInput {
     pub birthdate: MaybeUndefined<String>,
     pub zone_info: MaybeUndefined<String>,
     pub locale: MaybeUndefined<String>,
+    pub theme: MaybeUndefined<String>,
     pub address_formatted: MaybeUndefined<String>,
     pub address_street_address: MaybeUndefined<String>,
     pub address_locality: MaybeUndefined<String>,
@@ -125,6 +130,7 @@ impl UpdateProfileInput {
             birthdate: patch_value(self.birthdate),
             zone_info: patch_value(self.zone_info),
             locale: patch_value(self.locale),
+            theme: patch_value(self.theme),
             address_formatted: patch_value(self.address_formatted),
             address_street_address: patch_value(self.address_street_address),
             address_locality: patch_value(self.address_locality),

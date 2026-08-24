@@ -14,7 +14,7 @@ use crate::{
         openid_connect::{
             OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
             OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
-            OpenIdConnectClientSettings, SubjectType,
+            OpenIdConnectClientSettings, OpenIdConnectCredentialData, SubjectType,
         },
         setting::DynamicClientRegistrationSetting,
     },
@@ -157,6 +157,11 @@ impl DynamicClientRegistrationService {
         {
             credentials.push(credential);
         }
+        if let Some(secret) = client_secret.as_ref() {
+            credentials.push(OpenIdConnectCredentialData::ClientSecret {
+                secret: secret.clone(),
+            });
+        }
 
         let metadata = OpenIdConnectClientMetadata {
             post_logout_redirect_uris: request.post_logout_redirect_uris.clone(),
@@ -201,6 +206,7 @@ impl DynamicClientRegistrationService {
             name: client_name,
             names: vec![],
             description: None,
+            built_in: false,
             created_at: Utc::now(),
             updated_at: None,
         };
@@ -213,7 +219,6 @@ impl DynamicClientRegistrationService {
                 redirect_uris: request.redirect_uris.clone(),
             }],
             assigned_scopes: assigned_scopes.clone(),
-            client_secret: client_secret.clone(),
             credentials,
             registration_access_token: registration_access_token.clone(),
         };
@@ -320,6 +325,12 @@ impl DynamicClientRegistrationService {
             .ok_or_else(|| {
                 AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
             })?;
+
+        if client.client().built_in {
+            return Err(AppError::from_code(
+                RegistrationErrorCode::BuiltInClientCannotBeDeleted,
+            ));
+        }
 
         self.repo
             .delete_by_oid(client.client().oid)

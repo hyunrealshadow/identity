@@ -99,6 +99,7 @@ impl AuthorizeService {
 }
 
 mod flow;
+pub use flow::AuthorizationApproval;
 mod implicit_flow;
 mod interaction;
 mod protection;

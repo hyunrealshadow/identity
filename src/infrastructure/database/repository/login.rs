@@ -149,7 +149,6 @@ impl LoginRepository for LoginRepositoryImpl {
         &self,
         login_oid: Uuid,
         user_oid: Uuid,
-        status: &str,
     ) -> Result<Login, LoginRepositoryError> {
         let user = UserEntity::find()
             .filter(user::Column::Oid.eq(user_oid))
@@ -158,22 +157,23 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
-        let model = LoginEntity::find()
+        let now = Utc::now();
+        let model = LoginEntity::update_many()
+            .col_expr(login::Column::UserId, Expr::value(Some(user.id)))
+            .col_expr(
+                login::Column::Status,
+                Expr::value(identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED),
+            )
+            .col_expr(login::Column::UpdatedAt, Expr::value(Some(now.naive_utc())))
             .filter(login::Column::Oid.eq(login_oid))
-            .one(&self.db)
+            .filter(login::Column::Status.eq(identity_domain::auth::LoginStatus::CREATED))
+            .filter(login::Column::UserId.is_null())
+            .exec_with_returning(&self.db)
             .await
-            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?
+            .into_iter()
+            .next()
             .ok_or(LoginRepositoryError::LoginNotFound)?;
-
-        let mut active: login::ActiveModel = model.into();
-        active.user_id = Set(Some(user.id));
-        active.status = Set(status.to_owned());
-        active.updated_at = Set(Some(Utc::now().into()));
-
-        let model = active
-            .update(&self.db)
-            .await
-            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
 
         let client_model = ClientEntity::find_by_id(model.client_id)
             .one(&self.db)
@@ -211,9 +211,21 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::LoginNotFound)?;
 
+        if !identity_domain::auth::LoginStatus::can_transition(&model.status, status) {
+            return Err(LoginRepositoryError::InvalidTransition);
+        }
+
         let session_id = if let Some(s_oid) = session_oid {
+            let user_id = model
+                .user_id
+                .ok_or(LoginRepositoryError::InvalidTransition)?;
+            let now = Utc::now();
             let session = SessionEntity::find()
                 .filter(session::Column::Oid.eq(Uuid::from(s_oid)))
+                .filter(session::Column::UserId.eq(user_id))
+                .filter(session::Column::Status.eq(identity_domain::auth::SessionStatus::ACTIVE))
+                .filter(session::Column::RevokedAt.is_null())
+                .filter(session::Column::ExpiresAt.gt(now))
                 .one(&self.db)
                 .await
                 .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
@@ -223,19 +235,34 @@ impl LoginRepository for LoginRepositoryImpl {
             None
         };
 
-        let mut active: login::ActiveModel = model.into();
-        active.status = Set(status.to_owned());
+        if status == identity_domain::auth::LoginStatus::AUTHENTICATED
+            && (session_id.is_none() || acr.is_none())
+        {
+            return Err(LoginRepositoryError::InvalidTransition);
+        }
+
+        let previous_status = model.status;
+        let mut update = LoginEntity::update_many()
+            .col_expr(login::Column::Status, Expr::value(status.to_owned()))
+            .col_expr(
+                login::Column::UpdatedAt,
+                Expr::value(Some(Utc::now().naive_utc())),
+            )
+            .filter(login::Column::Oid.eq(login_oid))
+            .filter(login::Column::Status.eq(previous_status));
         if let Some(sid) = session_id {
-            active.session_id = Set(Some(sid));
+            update = update.col_expr(login::Column::SessionId, Expr::value(Some(sid)));
         }
         if let Some(a) = acr {
-            active.acr = Set(Some(a.to_owned()));
+            update = update.col_expr(login::Column::Acr, Expr::value(Some(a.to_owned())));
         }
-        active.updated_at = Set(Some(Utc::now().into()));
-        active
-            .update(&self.db)
+        let result = update
+            .exec(&self.db)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        if result.rows_affected != 1 {
+            return Err(LoginRepositoryError::InvalidTransition);
+        }
         Ok(())
     }
 

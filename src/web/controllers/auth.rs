@@ -116,7 +116,7 @@ async fn login_status(
         None => (None, Vec::new()),
     };
 
-    let (prompt, requires_reauthentication, ui_locales) = match ctx
+    let (prompt, requires_reauthentication, login_hint, ui_locales) = match ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&id)
@@ -128,9 +128,10 @@ async fn login_status(
                 .prompt
                 .unwrap_or_else(|| "select_account".to_string()),
             c.stored.interaction.selection_source == Some(SelectionSource::Reauthentication),
+            c.stored.request.login_hint,
             c.stored.request.ui_locales,
         ),
-        Err(_) => ("select_account".to_string(), false, None),
+        Err(_) => ("select_account".to_string(), false, None, None),
     };
 
     let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
@@ -154,7 +155,7 @@ async fn login_status(
             };
         Some(login_challenge_uri(
             &id,
-            &credential_type.to_string(),
+            credential_type.as_ref(),
             ui_locales.as_deref(),
         ))
     } else {
@@ -171,6 +172,7 @@ async fn login_status(
             credential_types,
             prompt,
             requires_reauthentication,
+            login_hint,
             challenge_uri,
             ui_locales,
             continue_uri,

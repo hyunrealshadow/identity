@@ -105,7 +105,8 @@ pub fn mock_client_auth_repo_with_state(
     // create
     let s = state.clone();
     mock.expect_create()
-        .returning(move |client_oid, type_, data, expires_at| {
+        .returning(move |client_oid, data, expires_at| {
+            let type_ = data.authorization_type();
             let record = ClientAuthorization {
                 oid: uuid::Uuid::new_v4(),
                 client_oid,
@@ -216,15 +217,6 @@ pub fn mock_client_auth_repo_with_state(
             record.updated_at = Some(now);
             Ok(true)
         });
-
-    // revoke
-    let s = state;
-    mock.expect_revoke().returning(move |oid| {
-        if let Some(record) = s.records.lock().unwrap().get_mut(&oid) {
-            record.revoked_at = Some(chrono::Utc::now());
-        }
-        Ok(())
-    });
 
     mock
 }

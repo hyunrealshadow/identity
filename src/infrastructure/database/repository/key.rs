@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    sea_query::Expr,
+};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -41,12 +44,19 @@ fn serialize_key_data(data: &KeyData) -> Result<Value, KeyRepositoryError> {
 }
 
 pub fn to_domain(model: key::Model) -> Result<Key, KeyRepositoryError> {
+    let key_type = model.r#type.parse().map_err(|error: ParseKeyTypeError| {
+        KeyRepositoryError::InvalidKeyType(error.to_string())
+    })?;
+    let data = deserialize_key_data(&model.data)?;
+    if data.key_type() != key_type {
+        return Err(KeyRepositoryError::InvalidKeyType(format!(
+            "stored type {key_type} does not match key data"
+        )));
+    }
     Ok(Key {
         oid: model.oid.into(),
-        r#type: model.r#type.parse().map_err(|error: ParseKeyTypeError| {
-            KeyRepositoryError::InvalidKeyType(error.to_string())
-        })?,
-        data: deserialize_key_data(&model.data)?,
+        r#type: key_type,
+        data,
         expires_at: decode_nonnullable_expiry(model.expires_at),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
         created_at: DateTime::from_naive_utc_and_offset(model.created_at, Utc),
@@ -65,10 +75,11 @@ impl KeyRepository for KeyRepositoryImpl {
             .transpose()
     }
 
-    async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
+    async fn list_active_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         KeyEntity::find()
             .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
             .filter(key::Column::RevokedAt.is_null())
+            .filter(key::Column::ExpiresAt.gt(Utc::now()))
             .all(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::ListAvailableFailed(Box::new(e)))?
@@ -77,7 +88,7 @@ impl KeyRepository for KeyRepositoryImpl {
             .collect()
     }
 
-    async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
+    async fn list_decryptable_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         KeyEntity::find()
             .filter(key::Column::Type.eq(KeyType::Symmetric.to_string()))
             .filter(key::Column::RevokedAt.is_null())
@@ -91,14 +102,13 @@ impl KeyRepository for KeyRepositoryImpl {
 
     async fn create(
         &self,
-        key_type: KeyType,
         data: &KeyData,
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<Key, KeyRepositoryError> {
         let now = Utc::now();
         let active = key::ActiveModel {
             oid: Set(Uuid::new_v4()),
-            r#type: Set(key_type.to_string()),
+            r#type: Set(data.key_type().to_string()),
             data: Set(serialize_key_data(data)?),
             expires_at: Set(encode_nonnullable_expiry(expires_at)),
             revoked_at: Set(None),
@@ -134,16 +144,27 @@ impl KeyRepository for KeyRepositoryImpl {
             }
         };
 
-        let mut active: key::ActiveModel = model.into();
-        active.data = Set(serialize_key_data(&data)?);
-        active.updated_at = Set(Some(Utc::now().naive_utc()));
-        to_domain(
-            active
-                .update(&self.db)
-                .await
-                .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?,
-        )
-        .map(Some)
+        let now = Utc::now();
+        let updated = KeyEntity::update_many()
+            .col_expr(key::Column::Data, Expr::value(serialize_key_data(&data)?))
+            .col_expr(key::Column::UpdatedAt, Expr::value(Some(now.naive_utc())))
+            .filter(key::Column::Id.eq(model.id))
+            .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
+            .filter(key::Column::RevokedAt.is_null())
+            .filter(key::Column::ExpiresAt.gt(now))
+            .exec_with_returning(&self.db)
+            .await
+            .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?
+            .into_iter()
+            .next();
+        match updated {
+            Some(model) => to_domain(model).map(Some),
+            None => self
+                .find_model_by_oid(oid)
+                .await?
+                .map(to_domain)
+                .transpose(),
+        }
     }
 
     async fn revoke_by_oid(
@@ -151,20 +172,30 @@ impl KeyRepository for KeyRepositoryImpl {
         oid: KeyOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Key>, KeyRepositoryError> {
-        let Some(model) = self.find_model_by_oid(oid).await? else {
-            return Ok(None);
-        };
-
-        let mut active: key::ActiveModel = model.into();
-        active.revoked_at = Set(Some(revoked_at.into()));
-        active.updated_at = Set(Some(Utc::now().naive_utc()));
-        to_domain(
-            active
-                .update(&self.db)
-                .await
-                .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?,
-        )
-        .map(Some)
+        let updated = KeyEntity::update_many()
+            .col_expr(
+                key::Column::RevokedAt,
+                Expr::value(Some(revoked_at.fixed_offset())),
+            )
+            .col_expr(
+                key::Column::UpdatedAt,
+                Expr::value(Some(Utc::now().naive_utc())),
+            )
+            .filter(key::Column::Oid.eq(Uuid::from(oid)))
+            .filter(key::Column::RevokedAt.is_null())
+            .exec_with_returning(&self.db)
+            .await
+            .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?
+            .into_iter()
+            .next();
+        match updated {
+            Some(model) => to_domain(model).map(Some),
+            None => self
+                .find_model_by_oid(oid)
+                .await?
+                .map(to_domain)
+                .transpose(),
+        }
     }
 }
 

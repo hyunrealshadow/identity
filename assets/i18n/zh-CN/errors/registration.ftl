@@ -9,3 +9,4 @@ E25007 = { $field } 不支持 none。
 E25008 = redirect URI 无效。
 E25009 = client metadata 无效。
 E25010 = 删除动态客户端注册失败。
+E25011 = 内置客户端不能删除。

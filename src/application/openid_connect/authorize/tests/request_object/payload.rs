@@ -305,7 +305,7 @@ async fn parse_rs256_request_object_extracts_payload() {
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
     credential_repo
-        .expect_find_by_client_oid_and_type()
+        .expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(creds.clone()));
 
     let service = AuthorizeService::new(AuthorizeServiceDependencies {
@@ -368,7 +368,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
     credential_repo
-        .expect_find_by_client_oid_and_type()
+        .expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(creds.clone()));
     let service = AuthorizeService::new(AuthorizeServiceDependencies {
         client_repo: Arc::new(FoundClientRepository),

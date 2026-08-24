@@ -187,10 +187,10 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         .await
     {
         Ok(_) => {}
-        // `prompt=login` may create a fresh interaction that is already bound
-        // to the user from the OP session. In that state identification is
-        // intentionally rejected, but the conformance-only helper must still
-        // submit the password challenge to prove fresh authentication.
+        // A freshness or ACR challenge may create an interaction already bound
+        // to the selected OP session. In that state identification is rejected,
+        // but the conformance-only helper must still submit the credential
+        // challenge to prove fresh authentication.
         Err(e) if e.code() == AuthErrorCode::InvalidLoginState.code() => {}
         Err(e) => {
             tracing::warn!(error = %e, "auto_login: identify failed");

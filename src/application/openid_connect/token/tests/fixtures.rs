@@ -150,10 +150,10 @@ pub(super) fn key_repo_with_keys(keys: Vec<Key>) -> MockKeyRepository {
     mock.expect_find_by_oid()
         .returning(move |oid| Ok(k.iter().find(|key| key.oid == oid).cloned()));
     let k = keys.clone();
-    mock.expect_list_available_asymmetric()
+    mock.expect_list_active_asymmetric()
         .returning(move || Ok(k.clone()));
     let k = keys;
-    mock.expect_list_available_symmetric()
+    mock.expect_list_decryptable_symmetric()
         .returning(move || Ok(k.clone()));
     mock
 }
@@ -204,7 +204,7 @@ pub(super) fn cred_repo_with(
     credentials: Vec<OpenIdConnectCredential>,
 ) -> MockOpenIdConnectCredentialRepository {
     let mut mock = MockOpenIdConnectCredentialRepository::new();
-    mock.expect_find_by_client_oid_and_type()
+    mock.expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(credentials.clone()));
     mock
 }
@@ -253,6 +253,7 @@ pub(super) fn build_token_service(
                 birthdate: None,
                 zoneinfo: None,
                 locale: None,
+                theme: None,
                 email_verified: true,
                 phone_number: None,
                 phone_number_verified: None,

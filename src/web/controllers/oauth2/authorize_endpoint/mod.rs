@@ -386,7 +386,9 @@ mod tests {
         assert_eq!(location.query(), None);
         assert_eq!(
             location.fragment(),
-            Some("error=login_required&state=state")
+            Some(
+                "error=login_required&error_description=The+user+must+sign+in+to+continue.&state=state"
+            )
         );
     }
 
@@ -427,7 +429,9 @@ mod tests {
         assert_eq!(location.query(), None);
         assert_eq!(
             location.fragment(),
-            Some("error=login_required&state=state")
+            Some(
+                "error=login_required&error_description=The+user+must+sign+in+to+continue.&state=state"
+            )
         );
     }
 }

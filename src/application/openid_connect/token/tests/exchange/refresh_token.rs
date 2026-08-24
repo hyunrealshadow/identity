@@ -24,7 +24,6 @@ async fn exchange_refresh_token_returns_new_access_token() {
     let refresh_record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
@@ -139,6 +138,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 birthdate: None,
                 zoneinfo: None,
                 locale: None,
+                theme: None,
                 email_verified: true,
                 phone_number: None,
                 phone_number_verified: None,
@@ -178,7 +178,6 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
     let refresh_record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh-es256".to_string()),
@@ -274,6 +273,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 birthdate: None,
                 zoneinfo: None,
                 locale: None,
+                theme: None,
                 email_verified: true,
                 phone_number: None,
                 phone_number_verified: None,
@@ -314,7 +314,6 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     let refresh_record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-auth-time".to_string()),
@@ -409,7 +408,6 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
     let refresh_record = repo
         .create(
             Uuid::nil(),
-            ClientAuthorizationType::AuthorizationCode,
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 scope: "openid offline_access".to_string(),
                 nonce: None,

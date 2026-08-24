@@ -37,6 +37,7 @@ pub struct User {
     pub birthdate: Option<String>,
     pub zoneinfo: Option<String>,
     pub locale: Option<String>,
+    pub theme: Option<String>,
     pub email_verified: bool,
     pub phone_number: Option<String>,
     pub phone_number_verified: Option<bool>,

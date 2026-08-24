@@ -68,7 +68,7 @@ impl TokenService {
 
         let keys = self
             .key_repo
-            .list_available_asymmetric()
+            .list_active_asymmetric()
             .await
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
@@ -386,7 +386,6 @@ impl TokenService {
             .client_authorization_repo
             .create(
                 params.client_oid,
-                ClientAuthorizationType::RefreshToken,
                 data,
                 chrono::Utc::now() + chrono::Duration::days(30),
             )
@@ -423,7 +422,6 @@ impl TokenService {
         self.client_authorization_repo
             .create(
                 client_oid,
-                ClientAuthorizationType::AccessToken,
                 data,
                 chrono::Utc::now() + chrono::Duration::hours(1),
             )

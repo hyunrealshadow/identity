@@ -24,10 +24,22 @@ fn normalize_jwk_kid(mut jwk: PublicJwk, oid: Uuid) -> PublicJwk {
     jwk
 }
 
+fn validate_jwk_algorithm(jwk: &PublicJwk, algorithm: &str) -> Result<(), KeyJwkRepositoryError> {
+    if let Some(jwk_algorithm) = jwk.algorithm()
+        && jwk_algorithm != algorithm
+    {
+        return Err(KeyJwkRepositoryError::InvalidPublicJwk(format!(
+            "JWK algorithm {jwk_algorithm} does not match binding algorithm {algorithm}"
+        )));
+    }
+    Ok(())
+}
+
 fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
     let created_at = DateTime::from_naive_utc_and_offset(model.created_at, chrono::Utc);
     let jwk = serde_json::from_value::<PublicJwk>(model.jwk)
         .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
+    validate_jwk_algorithm(&jwk, &model.algorithm)?;
     Ok(KeyJwk {
         oid: KeyJwkOid(model.oid),
         key_oid: KeyOid(model.key_oid),
@@ -52,6 +64,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .into_iter()
             .map(|input| {
                 let oid = Uuid::new_v4();
+                validate_jwk_algorithm(&input.jwk, &input.algorithm)?;
                 let jwk = normalize_jwk_kid(input.jwk, oid);
                 let jwk = serde_json::to_value(jwk)
                     .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
@@ -83,6 +96,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
         KeyJwkEntity::find()
             .inner_join(key::Entity)
             .filter(key::Column::RevokedAt.is_null())
+            .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
             .all(&self.db)
             .await
             .map_err(|e| KeyJwkRepositoryError::ListActiveFailed(Box::new(e)))?
@@ -101,6 +115,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
         KeyJwkEntity::find()
             .inner_join(key::Entity)
             .filter(key::Column::RevokedAt.is_null())
+            .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
             .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))
             .filter(key_jwk::Column::Algorithm.eq(algorithm))
             .one(&self.db)
@@ -176,6 +191,28 @@ mod tests {
         .unwrap();
 
         assert_eq!(binding.jwk.key_id(), Some(binding_oid.to_string().as_str()));
+    }
+
+    #[test]
+    fn key_jwk_repository_rejects_algorithm_mismatch() {
+        let error = super::to_domain(key_jwk::Model {
+            id: 1,
+            oid: Uuid::new_v4(),
+            key_oid: Uuid::new_v4(),
+            algorithm: "ES256".to_owned(),
+            jwk: json!({
+                "kty": "RSA",
+                "alg": "RS256",
+                "use": "sig",
+                "n": "modulus",
+                "e": "AQAB"
+            }),
+            created_at: Utc::now().naive_utc(),
+            updated_at: None,
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("does not match"));
     }
 
     #[tokio::test]

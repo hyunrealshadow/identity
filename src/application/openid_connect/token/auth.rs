@@ -46,7 +46,7 @@ impl TokenService {
 
         let credentials = self
             .credential_repo
-            .find_by_client_oid_and_type(
+            .find_active_by_client_oid_and_type(
                 client.client().oid,
                 OpenIdConnectCredentialType::ClientSecret,
             )
@@ -257,7 +257,7 @@ impl TokenService {
 
         let credentials = self
             .credential_repo
-            .find_by_client_oid_and_type(
+            .find_active_by_client_oid_and_type(
                 client.client().oid,
                 OpenIdConnectCredentialType::ClientPublicKey,
             )
@@ -285,7 +285,7 @@ impl TokenService {
 
         let jwks_credentials = self
             .credential_repo
-            .find_by_client_oid_and_type(
+            .find_active_by_client_oid_and_type(
                 client.client().oid,
                 OpenIdConnectCredentialType::ClientJsonWebKeySet,
             )
@@ -348,7 +348,7 @@ impl TokenService {
 
         let credentials = self
             .credential_repo
-            .find_by_client_oid_and_type(
+            .find_active_by_client_oid_and_type(
                 client.client().oid,
                 OpenIdConnectCredentialType::ClientSecret,
             )

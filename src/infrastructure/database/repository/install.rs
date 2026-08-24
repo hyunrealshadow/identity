@@ -19,6 +19,7 @@ use crate::{
     },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
+        openid_connect::OpenIdConnectCredentialData,
         setting::{
             ConsentUrlSetting, LoginUrlSetting,
             installation::{
@@ -36,7 +37,10 @@ use crate::{
                 client, client_open_id_connect, client_open_id_connect_credential, client_platform,
                 client_scope, key, key_jwk, scope, setting, user, user_credential,
             },
-            repository::shared::{encode_nonnullable_expiry, non_expiring_timestamp},
+            repository::{
+                openid_connect_credential::serialize_data as serialize_credential_data,
+                shared::{encode_nonnullable_expiry, non_expiring_timestamp},
+            },
         },
     },
 };
@@ -159,6 +163,7 @@ impl InstallPersistence for InstallPersistenceImpl {
             description: Set(Some(
                 "Built-in account and session management application".to_owned(),
             )),
+            built_in: Set(true),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),
             ..Default::default()
@@ -236,21 +241,16 @@ impl InstallPersistence for InstallPersistenceImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        let client_secret_hint = input
-            .client_secret
-            .chars()
-            .rev()
-            .take(4)
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect();
+        let serialized_credential =
+            serialize_credential_data(OpenIdConnectCredentialData::ClientSecret {
+                secret: input.client_secret,
+            });
         client_open_id_connect_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(created_client.id),
-            r#type: Set("client_secret".to_owned()),
-            data: Set(serde_json::json!({ "secret": input.client_secret })),
-            hint: Set(client_secret_hint),
+            r#type: Set(serialized_credential.type_),
+            data: Set(serialized_credential.data),
+            hint: Set(serialized_credential.hint),
             expires_at: Set(non_expiring_timestamp()),
             revoked_at: Set(None),
             created_at: Set(now.into()),

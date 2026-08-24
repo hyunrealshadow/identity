@@ -34,6 +34,16 @@ pub enum KeyData {
     Symmetric(SymmetricKeyData),
 }
 
+impl KeyData {
+    #[must_use]
+    pub const fn key_type(&self) -> super::model::KeyType {
+        match self {
+            Self::Asymmetric(_) => super::model::KeyType::Asymmetric,
+            Self::Symmetric(_) => super::model::KeyType::Symmetric,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AsymmetricKeyData, KeyData};

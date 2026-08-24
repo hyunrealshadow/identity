@@ -12,6 +12,11 @@ use identity_domain::user::{
 };
 
 fn to_domain(m: user::Model) -> User {
+    let theme = m
+        .preferences
+        .get("theme")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
     User {
         oid: m.oid.into(),
         email: m.email,
@@ -29,6 +34,7 @@ fn to_domain(m: user::Model) -> User {
         birthdate: m.birthdate,
         zoneinfo: m.zone_info,
         locale: m.locale,
+        theme,
         email_verified: m.email_verified,
         phone_number: m.phone_number,
         phone_number_verified: m.phone_number_verified,
@@ -44,6 +50,23 @@ fn to_domain(m: user::Model) -> User {
         locked_until: m.locked_until.map(chrono::DateTime::<Utc>::from),
         created_at: DateTime::<Utc>::from(m.created_at),
         updated_at: m.updated_at.map(DateTime::<Utc>::from),
+    }
+}
+
+fn update_theme_preference(preferences: &mut serde_json::Value, theme: Option<String>) {
+    if !preferences.is_object() {
+        *preferences = serde_json::json!({});
+    }
+    let object = preferences
+        .as_object_mut()
+        .expect("normalized preference value must be an object");
+    match theme {
+        Some(theme) => {
+            object.insert("theme".to_owned(), serde_json::Value::String(theme));
+        }
+        None => {
+            object.remove("theme");
+        }
     }
 }
 
@@ -79,6 +102,7 @@ impl UserRepositoryImpl {
         else {
             return Ok(None);
         };
+        let mut preferences = model.preferences.clone();
         let mut active: user::ActiveModel = model.into();
         apply_patch!(
             active,
@@ -90,6 +114,10 @@ impl UserRepositoryImpl {
         );
         apply_patch!(active, patch, profile, picture, website, gender);
         apply_patch!(active, patch, birthdate, zone_info, locale);
+        if let Some(theme) = patch.theme.take() {
+            update_theme_preference(&mut preferences, theme);
+            active.preferences = Set(preferences);
+        }
         apply_patch!(
             active,
             patch,
@@ -213,6 +241,7 @@ pub struct UserProfilePatch {
     pub birthdate: Option<Option<String>>,
     pub zone_info: Option<Option<String>>,
     pub locale: Option<Option<String>>,
+    pub theme: Option<Option<String>>,
     pub address_formatted: Option<Option<String>>,
     pub address_street_address: Option<Option<String>>,
     pub address_locality: Option<Option<String>>,
@@ -330,7 +359,7 @@ impl UserRepository for UserRepositoryImpl {
 mod tests {
     use sea_orm::{DatabaseBackend, MockDatabase};
 
-    use super::{UserIdentifierUpdate, UserRepositoryImpl, to_domain};
+    use super::{UserIdentifierUpdate, UserRepositoryImpl, to_domain, update_theme_preference};
     use crate::database::entity::user;
 
     #[test]
@@ -350,6 +379,25 @@ mod tests {
         assert_eq!(user.address_region.as_deref(), Some("CA"));
         assert_eq!(user.address_postal_code.as_deref(), Some("94000"));
         assert_eq!(user.address_country.as_deref(), Some("US"));
+        assert_eq!(user.theme.as_deref(), Some("dark"));
+    }
+
+    #[test]
+    fn updating_theme_preserves_other_json_preferences() {
+        let mut preferences = serde_json::json!({
+            "theme": "light",
+            "compact_navigation": true,
+        });
+
+        update_theme_preference(&mut preferences, Some("dark".to_owned()));
+
+        assert_eq!(preferences["theme"], "dark");
+        assert_eq!(preferences["compact_navigation"], true);
+
+        update_theme_preference(&mut preferences, None);
+
+        assert!(preferences.get("theme").is_none());
+        assert_eq!(preferences["compact_navigation"], true);
     }
 
     #[tokio::test]
@@ -402,6 +450,7 @@ mod tests {
             birthdate: None,
             zone_info: None,
             locale: None,
+            preferences: serde_json::json!({ "theme": "dark" }),
             email_verified: true,
             phone_number: Some("+12025550123".to_string()),
             phone_number_verified: Some(true),

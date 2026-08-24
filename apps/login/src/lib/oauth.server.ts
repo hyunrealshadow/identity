@@ -24,6 +24,8 @@ const REAUTHENTICATION_SCOPES = {
 } as const
 const ACR_AAL1 = 'urn:identity:acr:aal1'
 const ACR_AAL2 = 'urn:identity:acr:aal2'
+const RECENT_AUTHENTICATION_SECONDS = 5 * 60
+const ELEVATED_AUTHENTICATION_SECONDS = 60 * 60
 
 interface TokenResponse {
   access_token: string
@@ -35,6 +37,12 @@ interface TokenResponse {
 interface TokenErrorResponse {
   error?: string
   error_description?: string
+}
+
+interface ReauthenticationRequirements {
+  loginHint: string
+  acrValues?: string
+  maxAge?: number
 }
 
 const pendingTokenExchanges = new Map<string, Promise<TokenResponse>>()
@@ -70,7 +78,7 @@ export async function prepareAuthorization() {
 export async function startReauthorization(
   returnTo: string | undefined,
   purpose: 'password' | 'account' | 'mfa' = 'password',
-  requirements: { acrValues?: string; maxAge?: number } = {},
+  requirements: ReauthenticationRequirements,
 ) {
   return redirect(
     await startAuthorizationFlow(
@@ -90,10 +98,10 @@ export function reauthenticationScope(
 
 export function reauthenticationRequestParameters(
   purpose: 'password' | 'account' | 'mfa',
-  requirements: { acrValues?: string; maxAge?: number } = {},
+  requirements: ReauthenticationRequirements,
 ) {
   return {
-    prompt: 'login',
+    loginHint: requirements.loginHint,
     maxAge: requirements.maxAge ?? 0,
     acrValues:
       requirements.acrValues ?? (purpose === 'mfa' ? ACR_AAL2 : ACR_AAL1),
@@ -104,7 +112,7 @@ async function startAuthorizationFlow(
   mode: OAuthFlowSession['mode'],
   returnTo: string,
   reauthPurpose: 'password' | 'account' | 'mfa' = 'password',
-  requirements: { acrValues?: string; maxAge?: number } = {},
+  requirements?: ReauthenticationRequirements,
 ) {
   const credentials = await loadClientCredentials()
   const state = randomBytes(32).toString('base64url')
@@ -126,13 +134,16 @@ async function startAuthorizationFlow(
     code_challenge_method: 'S256',
   }).toString()
   if (mode === 'reauth') {
+    if (!requirements) {
+      throw new Error('Reauthentication requires a login hint')
+    }
     const parameters = reauthenticationRequestParameters(
       reauthPurpose,
       requirements,
     )
-    authorizeUrl.searchParams.set('prompt', parameters.prompt)
     authorizeUrl.searchParams.set('max_age', String(parameters.maxAge))
     authorizeUrl.searchParams.set('acr_values', parameters.acrValues)
+    authorizeUrl.searchParams.set('login_hint', parameters.loginHint)
   }
 
   const flow = await useOAuthFlowSession()
@@ -165,6 +176,7 @@ export async function finishAuthorization(request: Request) {
     }
     await clearFailedAuthorization(flow)
     return authorizationFailureResponse(
+      request,
       url.searchParams.get('error'),
       url.searchParams.get('error_description'),
     )
@@ -196,7 +208,7 @@ export async function finishAuthorization(request: Request) {
   } catch (error) {
     if (error instanceof OAuthTokenExchangeError) {
       await clearFailedAuthorization(flow)
-      return authorizationFailureResponse(error.oauthError, error.message)
+      return authorizationFailureResponse(request, error.oauthError, error.message)
     }
     throw error
   }
@@ -219,15 +231,16 @@ export async function finishAuthorization(request: Request) {
 }
 
 function authorizationFailureResponse(
+  request: Request,
   error: string | undefined | null,
   description: string | undefined | null,
 ) {
-  const errorType = error || 'invalid_request'
-  const detail = description ? `${errorType}: ${description}` : errorType
-  return new Response(detail, {
-    status: 400,
-    headers: { 'content-type': 'text/plain; charset=utf-8' },
-  })
+  const destination = new URL('/authorization-error', request.url)
+  destination.searchParams.set('error', error || 'invalid_request')
+  if (description?.trim()) {
+    destination.searchParams.set('error_description', description.trim())
+  }
+  return redirect(destination)
 }
 
 async function clearFailedAuthorization(
@@ -287,6 +300,37 @@ export async function elevatedAccessToken() {
   return session.data.elevated_access_token
 }
 
+export async function hasFreshAuthentication(requiredAcr?: string) {
+  const tokens = [await elevatedAccessToken(), await accessToken()]
+  return tokens.some(
+    (token) => token && tokenAuthenticationIsFresh(token, requiredAcr),
+  )
+}
+
+export function tokenAuthenticationIsFresh(
+  token: string,
+  requiredAcr?: string,
+  now = Math.floor(Date.now() / 1000),
+) {
+  try {
+    const encodedPayload = token.split('.')[1]
+    if (!encodedPayload) return false
+    const claims = JSON.parse(
+      Buffer.from(encodedPayload, 'base64url').toString('utf8'),
+    ) as { auth_time?: unknown; acr?: unknown }
+    if (typeof claims.auth_time !== 'number' || typeof claims.acr !== 'string') {
+      return false
+    }
+    if (requiredAcr && claims.acr !== requiredAcr) return false
+    const maxAge = requiredAcr === ACR_AAL2
+      ? ELEVATED_AUTHENTICATION_SECONDS
+      : RECENT_AUTHENTICATION_SECONDS
+    return Math.max(0, now - claims.auth_time) <= maxAge
+  } catch {
+    return false
+  }
+}
+
 export async function clearElevatedAuthorization() {
   await (
     await useAuthorizationSession()
@@ -300,6 +344,7 @@ export async function mfaUiState() {
   const session = await useMfaUiSession()
   return {
     enrollment: session.data.mfa_enrollment,
+    recoveryCodes: session.data.regenerated_recovery_codes,
   }
 }
 
@@ -317,6 +362,13 @@ export async function storeMfaEnrollment(enrollment: {
 export async function clearMfaUiState() {
   await (await useMfaUiSession()).update({
     mfa_enrollment: undefined,
+    regenerated_recovery_codes: undefined,
+  })
+}
+
+export async function storeRegeneratedRecoveryCodes(recoveryCodes: Array<string>) {
+  await (await useMfaUiSession()).update({
+    regenerated_recovery_codes: recoveryCodes,
   })
 }
 

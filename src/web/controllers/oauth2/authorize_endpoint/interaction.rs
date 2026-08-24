@@ -109,13 +109,9 @@ where
     };
 
     if has_prompt(request.prompt.as_ref(), PromptValue::Login) {
-        record_selection(
-            authorization_request_id,
-            selected_session.session_oid,
-            selected_session.user_oid,
-            SelectionSource::Reauthentication,
-        )
-        .await?;
+        // `prompt=login` requires a new authentication ceremony. Do not bind
+        // the interaction to an existing OP session: doing so would turn it
+        // into in-place session reauthentication instead of a fresh login.
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 
@@ -124,10 +120,11 @@ where
     }
 
     if request.acr_values.as_ref().is_some_and(|requested| {
-        selected_session
-            .acr
-            .as_ref()
-            .is_none_or(|acr| !requested.iter().any(|value| value == acr))
+        selected_session.acr.as_ref().is_none_or(|acr| {
+            !requested
+                .iter()
+                .any(|value| identity_domain::auth::acr_satisfies(acr, value))
+        })
     }) {
         if has_prompt(request.prompt.as_ref(), PromptValue::None) {
             return Ok(FlowDecision::OAuthError {
@@ -364,6 +361,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn determine_authorize_flow_accepts_aal2_for_an_aal1_request() {
+        let mut request = request(None, None);
+        request.acr_values = Some(vec![identity_domain::auth::ACR_AAL1.to_owned()]);
+        let mut session = active_session(Utc::now());
+        session.acr = Some(identity_domain::auth::ACR_AAL2.to_owned());
+
+        let decision = determine_authorize_flow_with_selection_recorder(
+            &request,
+            std::slice::from_ref(&session),
+            Uuid::new_v4(),
+            "login-123".to_string(),
+            |_authorization_request_id, _session_oid, _user_oid, _source| async { Ok(()) },
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(decision, FlowDecision::Continue { .. }));
+    }
+
+    #[tokio::test]
     async fn determine_authorize_flow_returns_oauth_error_for_silent_request_without_session() {
         let request = request(Some(HashSet::from([PromptValue::None])), None);
 
@@ -388,6 +405,7 @@ mod tests {
 
     #[tokio::test]
     async fn determine_authorize_flow_requires_login_for_prompt_login() {
+        let recorded = Arc::new(Mutex::new(None));
         let request = request(Some(HashSet::from([PromptValue::Login])), None);
         let session = active_session(Utc::now());
 
@@ -396,7 +414,17 @@ mod tests {
             std::slice::from_ref(&session),
             Uuid::new_v4(),
             "login-123".to_string(),
-            |_authorization_request_id, _session_oid, _user_oid, _source| async { Ok(()) },
+            {
+                let recorded = recorded.clone();
+                move |authorization_request_id, session_oid, user_oid, source| {
+                    let recorded = recorded.clone();
+                    async move {
+                        *recorded.lock().unwrap() =
+                            Some((authorization_request_id, session_oid, user_oid, source));
+                        Ok(())
+                    }
+                }
+            },
         )
         .await
         .unwrap();
@@ -405,6 +433,7 @@ mod tests {
             decision,
             FlowDecision::LoginRequired { login_id } if login_id == "login-123"
         ));
+        assert_eq!(*recorded.lock().unwrap(), None);
     }
 
     #[tokio::test]

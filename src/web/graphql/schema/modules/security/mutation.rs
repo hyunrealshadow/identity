@@ -16,6 +16,10 @@ use crate::graphql::schema::{
 #[derive(Default)]
 pub(crate) struct SecurityMutation;
 
+fn password_change_required_acr(totp_enabled: bool) -> Option<&'static str> {
+    totp_enabled.then_some(identity_domain::auth::ACR_AAL2)
+}
+
 #[Object]
 impl SecurityMutation {
     async fn change_password(
@@ -25,16 +29,19 @@ impl SecurityMutation {
     ) -> Result<ChangePasswordPayload> {
         require_scope(ctx, ApiScope::PasswordChange)?;
         let request = request_context(ctx)?;
-        require_recent_authentication(ctx, None)?;
+        let mfa_status = request
+            .state
+            .services()
+            .mfa()
+            .status(request.claims.user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        require_recent_authentication(ctx, password_change_required_acr(mfa_status.totp_enabled))?;
         request
             .state
             .services()
             .login()
-            .change_password(
-                request.claims.user_oid,
-                &input.current_password,
-                &input.new_password,
-            )
+            .change_password(request.claims.user_oid, &input.new_password)
             .await
             .map_err(|error| app_error(ctx, error))?;
 
@@ -170,5 +177,40 @@ impl SecurityMutation {
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(TotpChangedPayload::new(client_mutation_id))
+    }
+
+    async fn regenerate_recovery_codes(
+        &self,
+        ctx: &Context<'_>,
+        client_mutation_id: Option<String>,
+    ) -> Result<RecoveryCodesPayload> {
+        require_scope(ctx, ApiScope::AccountUpdate)?;
+        require_recent_authentication(ctx, Some(identity_domain::auth::ACR_AAL2))?;
+        let request = request_context(ctx)?;
+        let regenerated = request
+            .state
+            .services()
+            .mfa()
+            .regenerate_recovery_codes(request.claims.user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(RecoveryCodesPayload::new(
+            regenerated.recovery_codes,
+            client_mutation_id,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::password_change_required_acr;
+
+    #[test]
+    fn password_change_requires_aal2_when_totp_is_enabled() {
+        assert_eq!(
+            password_change_required_acr(true),
+            Some(identity_domain::auth::ACR_AAL2)
+        );
+        assert_eq!(password_change_required_acr(false), None);
     }
 }

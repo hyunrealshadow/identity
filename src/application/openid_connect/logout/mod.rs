@@ -340,7 +340,7 @@ impl LogoutService {
     async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
         let keys = self
             .key_repo
-            .list_available_asymmetric()
+            .list_active_asymmetric()
             .await
             .map_err(|error| {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -437,7 +437,7 @@ impl LogoutService {
 
         let keys = self
             .key_repo
-            .list_available_asymmetric()
+            .list_active_asymmetric()
             .await
             .map_err(|error| {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -654,6 +654,7 @@ mod tests {
                 name: "Conformance RP".to_owned(),
                 names: vec![],
                 description: None,
+                built_in: false,
                 created_at: Utc::now(),
                 updated_at: None,
             },
@@ -796,10 +797,10 @@ mod tests {
             .returning(move |oid| Ok((oid == k.oid).then(|| k.clone())));
         let k = signing.key.clone();
         key_repo
-            .expect_list_available_asymmetric()
+            .expect_list_active_asymmetric()
             .returning(move || Ok(vec![k.clone()]));
         key_repo
-            .expect_list_available_symmetric()
+            .expect_list_decryptable_symmetric()
             .returning(|| Ok(vec![]));
 
         let mut jwk_repo = MockKeyJwkRepository::new();

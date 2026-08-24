@@ -19,7 +19,6 @@ export function graphqlFieldErrors(
 
 export function htmlFieldName(field: string) {
   const names: Record<string, string> = {
-    currentPassword: 'current_password',
     newPassword: 'new_password',
     givenName: 'given_name',
     familyName: 'family_name',

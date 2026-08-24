@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 use identity_domain::key::repository::{KeyRepository, KeyRepositoryError};
 use identity_domain::key::{
     CreateKeyJwkInput, Key, KeyData, KeyJwk, KeyJwkRepository, KeyJwkRepositoryError, KeyOid,
-    KeyType,
 };
 
 mockall::mock! {
@@ -26,9 +25,9 @@ mockall::mock! {
     #[async_trait::async_trait]
     impl KeyRepository for KeyRepository {
         async fn find_by_oid(&self, oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError>;
-        async fn list_available_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
-        async fn list_available_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
-        async fn create(&self, key_type: KeyType, data: &KeyData, expires_at: Option<DateTime<Utc>>)
+        async fn list_active_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
+        async fn list_decryptable_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError>;
+        async fn create(&self, data: &KeyData, expires_at: Option<DateTime<Utc>>)
             -> Result<Key, KeyRepositoryError>;
         async fn update_certificate_by_oid(&self, oid: KeyOid, certificate_pem: &str)
             -> Result<Option<Key>, KeyRepositoryError>;

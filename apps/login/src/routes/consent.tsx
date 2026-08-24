@@ -55,8 +55,8 @@ const loadConsentPage = createServerFn({ method: 'GET' })
       )
       return {
         consent,
-        locale: requestLocale(consent.ui_locales),
-        uiLocales: consent.ui_locales?.join(' ') ?? '',
+        locale: requestLocale(uiLocales ? uiLocales.split(' ') : consent.ui_locales),
+        uiLocales: uiLocales || consent.ui_locales?.join(' ') || '',
         error: flash?.message,
       }
     } catch (error) {
@@ -133,6 +133,8 @@ function ConsentPage() {
   return (
     <AuthShell
       lang={data.locale}
+      locale={data.locale}
+      showPreferences
       title={t('consentTitle')}
       description={
         consent
@@ -190,7 +192,7 @@ function ConsentPage() {
               {consent.scopes.map((scope) => (
                 <li
                   key={scope.name}
-                  className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:border-black/15 hover:bg-black/[0.02]"
+                  className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:bg-surface-secondary"
                 >
                   <Check
                     className="mt-0.5 size-4 shrink-0 text-accent"

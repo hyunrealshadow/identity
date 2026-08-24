@@ -42,6 +42,17 @@ pub enum CredentialData {
     RecoveryCode(RecoveryCodeCredentialData),
 }
 
+impl CredentialData {
+    #[must_use]
+    pub const fn credential_type(&self) -> CredentialType {
+        match self {
+            Self::Password(_) => CredentialType::Password,
+            Self::Otp(_) => CredentialType::Otp,
+            Self::RecoveryCode(_) => CredentialType::RecoveryCode,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::CredentialType;

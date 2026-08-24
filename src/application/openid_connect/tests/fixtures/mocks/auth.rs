@@ -18,7 +18,6 @@ mockall::mock! {
         async fn create(
             &self,
             client_oid: ClientOid,
-            type_: ClientAuthorizationType,
             data: ClientAuthorizationData,
             expires_at: DateTime<Utc>,
         ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError>;
@@ -55,10 +54,6 @@ mockall::mock! {
             type_: ClientAuthorizationType,
             now: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
-        async fn revoke(
-            &self,
-            oid: uuid::Uuid,
-        ) -> Result<(), ClientAuthorizationRepositoryError>;
     }
 }
 
@@ -75,7 +70,8 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
 
     let r = records.clone();
     mock.expect_create()
-        .returning(move |client_oid, type_, data, expires_at| {
+        .returning(move |client_oid, data, expires_at| {
+            let type_ = data.authorization_type();
             let record = ClientAuthorization {
                 oid: uuid::Uuid::new_v4(),
                 client_oid,
@@ -137,14 +133,6 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
             record.updated_at = Some(now);
             Ok(true)
         });
-
-    let r = records;
-    mock.expect_revoke().returning(move |oid| {
-        if let Some(record) = r.lock().unwrap().get_mut(&oid) {
-            record.revoked_at = Some(Utc::now());
-        }
-        Ok(())
-    });
 
     mock
 }

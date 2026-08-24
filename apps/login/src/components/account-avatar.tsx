@@ -17,7 +17,7 @@ export function AccountAvatar({ name, picture, size = 'sm', className }: Account
   return (
     <Avatar size={size} className={className}>
       {picture ? <Avatar.Image alt="" src={picture} /> : null}
-      <Avatar.Fallback className={`bg-foreground font-semibold text-white ${fallbackSize}`}>
+      <Avatar.Fallback className={`bg-foreground font-semibold text-background ${fallbackSize}`}>
         {accountInitial(name)}
       </Avatar.Fallback>
     </Avatar>

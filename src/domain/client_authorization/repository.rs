@@ -14,7 +14,6 @@ pub trait ClientAuthorizationRepository: Send + Sync {
     async fn create(
         &self,
         client_oid: ClientOid,
-        type_: ClientAuthorizationType,
         data: ClientAuthorizationData,
         expires_at: DateTime<Utc>,
     ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError>;
@@ -57,8 +56,6 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         type_: ClientAuthorizationType,
         now: DateTime<Utc>,
     ) -> Result<bool, ClientAuthorizationRepositoryError>;
-
-    async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError>;
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -13,6 +13,7 @@ import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { mfaUiState } from '#/lib/oauth.server'
 import { consumeAccountFlash } from '#/lib/oauth-session.server'
+import { applyTheme, type ThemePreference } from '#/lib/appearance'
 
 export interface AccountSession {
   id: string
@@ -31,7 +32,7 @@ export interface AccountSession {
 
 export interface AccountData {
   viewer: {
-    account: { id: string; username: string; email: string; emailVerified: boolean; givenName?: string; familyName?: string; nickname?: string; picture?: string; website?: string; birthdate?: string; locale?: string; createdAt: string }
+    account: { id: string; username: string; email: string; emailVerified: boolean; givenName?: string; familyName?: string; nickname?: string; picture?: string; website?: string; birthdate?: string; locale?: string; theme?: string; createdAt: string }
     sessions: { edges: Array<{ node: AccountSession }> }
     security: { totpEnabled: boolean; recoveryCodesRemaining: number }
   }
@@ -39,7 +40,7 @@ export interface AccountData {
 
 const ACCOUNT_QUERY = `query AccountHome {
   viewer {
-    account { id username email emailVerified givenName familyName nickname picture website birthdate locale createdAt }
+    account { id username email emailVerified givenName familyName nickname picture website birthdate locale theme createdAt }
     sessions(first: 50) { edges { node { id status current deviceName deviceType osName osVersion browserName browserVersion ipAddress lastActiveAt createdAt } } }
     security { totpEnabled recoveryCodesRemaining }
   }
@@ -55,6 +56,7 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
         data?.viewer.account.locale,
         browserLocale,
       ),
+      theme: accountTheme(data?.viewer.account.theme),
       data,
       mfa,
       flash,
@@ -63,6 +65,7 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
   } catch (error) {
     return {
       locale: browserLocale,
+      theme: 'system' as const,
       data: undefined,
       mfa: { enrollment: undefined },
       flash,
@@ -90,6 +93,16 @@ function AccountLayout() {
   const page = Route.useLoaderData()
   const [visibleMessage, setVisibleMessage] = useState(page.flash.message)
   const [visibleError, setVisibleError] = useState(page.flash.error)
+
+  useEffect(() => {
+    applyTheme(page.theme)
+    document.documentElement.dataset.themePreference = page.theme
+    if (page.theme !== 'system') return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const followSystem = () => applyTheme('system')
+    media.addEventListener('change', followSystem)
+    return () => media.removeEventListener('change', followSystem)
+  }, [page.theme])
 
   useEffect(() => {
     setVisibleMessage(page.flash.message)
@@ -146,12 +159,16 @@ function AccountLayout() {
           </aside>
           <section className="min-w-0">
             <div className="mb-5 space-y-3">
-              {visibleMessage ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</Alert.Title></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-black/5 hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
-              {visibleError ? <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{t('accountRequestFailed')}</Alert.Title><Alert.Description>{visibleError}</Alert.Description></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-black/5 hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
+              {visibleMessage ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</Alert.Title></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
+              {visibleError ? <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{t('accountRequestFailed')}</Alert.Title><Alert.Description>{visibleError}</Alert.Description></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
             </div>
             <Outlet />
           </section>
         </div>
     </main>
   )
+}
+
+function accountTheme(value: string | undefined): ThemePreference {
+  return value === 'light' || value === 'dark' ? value : 'system'
 }

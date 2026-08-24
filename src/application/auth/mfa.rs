@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use identity_domain::{
     auth::{totp::TotpError, totp::TotpVerifier},
     user::{
-        CredentialData, CredentialType, OtpCredentialData, RecoveryCodeCredentialData, UserOid,
+        CredentialType, OtpCredentialData, RecoveryCodeCredentialData, UserOid,
         repository::UserCredentialRepository,
     },
 };
@@ -63,13 +63,18 @@ pub struct ConfirmTotpEnrollment {
     pub recovery_codes: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct RegenerateRecoveryCodes {
+    pub recovery_codes: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct PendingTotpEnrollment {
     user_oid: UserOid,
     expires_at: chrono::DateTime<Utc>,
     credential: OtpCredentialData,
     recovery_codes: Vec<String>,
-    recovery_credentials: Vec<CredentialData>,
+    recovery_credentials: Vec<RecoveryCodeCredentialData>,
 }
 
 pub struct MfaService {
@@ -171,18 +176,13 @@ impl MfaService {
         let mut otp_credential = pending.credential;
         otp_credential.last_used_counter = Some(counter);
         let recovery_codes = pending.recovery_codes;
-        self.credential_repo
-            .replace_by_user_oid(
-                user_oid,
-                vec![
-                    (
-                        CredentialType::Otp,
-                        vec![CredentialData::Otp(otp_credential)],
-                    ),
-                    (CredentialType::RecoveryCode, pending.recovery_credentials),
-                ],
-            )
-            .await?;
+        if !self
+            .credential_repo
+            .enable_totp_if_disabled(user_oid, otp_credential, pending.recovery_credentials)
+            .await?
+        {
+            return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
+        }
         Ok(ConfirmTotpEnrollment { recovery_codes })
     }
 
@@ -245,6 +245,21 @@ impl MfaService {
             .await?;
         Ok(())
     }
+
+    pub async fn regenerate_recovery_codes(
+        &self,
+        user_oid: UserOid,
+    ) -> Result<RegenerateRecoveryCodes, AppError> {
+        let (recovery_codes, recovery_credentials) = generate_recovery_codes();
+        if !self
+            .credential_repo
+            .replace_recovery_codes_if_totp_enabled(user_oid, recovery_credentials)
+            .await?
+        {
+            return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
+        }
+        Ok(RegenerateRecoveryCodes { recovery_codes })
+    }
 }
 
 pub fn recovery_code_hash(code: &str) -> String {
@@ -256,7 +271,7 @@ pub fn recovery_code_hash(code: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(normalized.as_bytes()))
 }
 
-fn generate_recovery_codes() -> (Vec<String>, Vec<CredentialData>) {
+fn generate_recovery_codes() -> (Vec<String>, Vec<RecoveryCodeCredentialData>) {
     let codes = (0..RECOVERY_CODE_COUNT)
         .map(|_| {
             const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -271,10 +286,8 @@ fn generate_recovery_codes() -> (Vec<String>, Vec<CredentialData>) {
         .collect::<Vec<_>>();
     let credentials = codes
         .iter()
-        .map(|code| {
-            CredentialData::RecoveryCode(RecoveryCodeCredentialData {
-                hash: recovery_code_hash(code),
-            })
+        .map(|code| RecoveryCodeCredentialData {
+            hash: recovery_code_hash(code),
         })
         .collect();
     (codes, credentials)
@@ -291,7 +304,7 @@ mod tests {
         data_protection::DataProtectionError,
         user::{
             CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData, Password,
-            UserCredential, UserCredentialOid, UserOid,
+            RecoveryCodeCredentialData, UserCredential, UserCredentialOid, UserOid,
             repository::{UserCredentialRepository, UserCredentialRepositoryError},
         },
     };
@@ -447,7 +460,60 @@ mod tests {
             Ok(())
         }
 
-        async fn delete_by_oid(
+        async fn enable_totp_if_disabled(
+            &self,
+            _user_oid: UserOid,
+            otp: OtpCredentialData,
+            recovery_codes: Vec<RecoveryCodeCredentialData>,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            let mut credentials = self.credentials.lock().unwrap();
+            if credentials
+                .iter()
+                .any(|credential| credential.r#type == CredentialType::Otp)
+            {
+                return Ok(false);
+            }
+            credentials.retain(|credential| {
+                !matches!(
+                    credential.r#type,
+                    CredentialType::Otp | CredentialType::RecoveryCode
+                )
+            });
+            credentials.push(UserCredential {
+                oid: UserCredentialOid(Uuid::new_v4()),
+                r#type: CredentialType::Otp,
+                data: CredentialData::Otp(otp),
+            });
+            credentials.extend(recovery_codes.into_iter().map(|data| UserCredential {
+                oid: UserCredentialOid(Uuid::new_v4()),
+                r#type: CredentialType::RecoveryCode,
+                data: CredentialData::RecoveryCode(data),
+            }));
+            Ok(true)
+        }
+
+        async fn replace_recovery_codes_if_totp_enabled(
+            &self,
+            _user_oid: UserOid,
+            recovery_codes: Vec<RecoveryCodeCredentialData>,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            let mut credentials = self.credentials.lock().unwrap();
+            if !credentials
+                .iter()
+                .any(|credential| credential.r#type == CredentialType::Otp)
+            {
+                return Ok(false);
+            }
+            credentials.retain(|credential| credential.r#type != CredentialType::RecoveryCode);
+            credentials.extend(recovery_codes.into_iter().map(|data| UserCredential {
+                oid: UserCredentialOid(Uuid::new_v4()),
+                r#type: CredentialType::RecoveryCode,
+                data: CredentialData::RecoveryCode(data),
+            }));
+            Ok(true)
+        }
+
+        async fn consume_recovery_code_by_oid(
             &self,
             credential_oid: UserCredentialOid,
         ) -> Result<bool, UserCredentialRepositoryError> {
@@ -528,5 +594,50 @@ mod tests {
         assert_eq!(compatible.secret, enrollment.secret);
         assert_eq!(compatible.recovery_codes, enrollment.recovery_codes);
         assert!(compatible.otp_auth_uri.contains("algorithm=SHA1"));
+    }
+
+    #[tokio::test]
+    async fn regenerating_recovery_codes_replaces_only_the_recovery_credentials() {
+        let repo = Arc::new(TestCredentialRepo::default());
+        let service = MfaService::new(
+            repo.clone(),
+            Arc::new(AlwaysValid),
+            Arc::new(TestGenerator),
+            Arc::new(TestProtector),
+        );
+        let user_oid = UserOid(Uuid::new_v4());
+        let enrollment = service
+            .begin_totp_enrollment(user_oid, "example.com", "user@example.com")
+            .await
+            .unwrap();
+        service
+            .confirm_totp_enrollment(user_oid, &enrollment.enrollment_token, "123456")
+            .await
+            .unwrap();
+
+        let regenerated = service.regenerate_recovery_codes(user_oid).await.unwrap();
+
+        assert_eq!(regenerated.recovery_codes.len(), 10);
+        assert_ne!(regenerated.recovery_codes, enrollment.recovery_codes);
+        let status = service.status(user_oid).await.unwrap();
+        assert!(status.totp_enabled);
+        assert_eq!(status.recovery_codes_remaining, 10);
+        let stored = repo.credentials.lock().unwrap();
+        assert_eq!(
+            stored
+                .iter()
+                .filter(|credential| credential.r#type == CredentialType::Otp)
+                .count(),
+            1
+        );
+        assert!(stored.iter().all(|credential| {
+            match &credential.data {
+                CredentialData::RecoveryCode(data) => enrollment
+                    .recovery_codes
+                    .iter()
+                    .all(|code| data.hash != recovery_code_hash(code)),
+                _ => true,
+            }
+        }));
     }
 }

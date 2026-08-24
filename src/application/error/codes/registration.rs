@@ -14,6 +14,7 @@ pub enum RegistrationErrorCode {
     InvalidRedirectUri,
     InvalidClientMetadata,
     ClientDeleteFailed,
+    BuiltInClientCannotBeDeleted,
 }
 
 impl AppErrorCode for RegistrationErrorCode {
@@ -30,6 +31,7 @@ impl AppErrorCode for RegistrationErrorCode {
             Self::InvalidRedirectUri => ErrorKind::Validation,
             Self::InvalidClientMetadata => ErrorKind::Validation,
             Self::ClientDeleteFailed => ErrorKind::Internal,
+            Self::BuiltInClientCannotBeDeleted => ErrorKind::Validation,
         }
     }
 
@@ -46,6 +48,7 @@ impl AppErrorCode for RegistrationErrorCode {
             Self::InvalidRedirectUri => 25008,
             Self::InvalidClientMetadata => 25009,
             Self::ClientDeleteFailed => 25010,
+            Self::BuiltInClientCannotBeDeleted => 25011,
         }
     }
 }

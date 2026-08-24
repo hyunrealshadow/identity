@@ -112,6 +112,7 @@ function SegmentedCodeInput({
       })}
     >
       <div
+        data-input-otp-group
         data-slot="input-otp-group"
         className={slots.group({
           className: ['pointer-events-none items-center', groupClassName]

@@ -8,12 +8,14 @@ const mocks = vi.hoisted(() => ({
   clearMfaUiState: vi.fn(),
   finishLogout: vi.fn(),
   getRequestHeader: vi.fn(),
+  hasFreshAuthentication: vi.fn(),
   identityGraphql: vi.fn(),
   loadClientCredentials: vi.fn(),
   mfaUiState: vi.fn(),
   requestLocale: vi.fn(),
   storeAccountFlash: vi.fn(),
   storeMfaEnrollment: vi.fn(),
+  storeRegeneratedRecoveryCodes: vi.fn(),
   startReauthorization: vi.fn(),
 }))
 
@@ -38,8 +40,10 @@ vi.mock('./oauth.server', () => ({
   clearElevatedAuthorization: mocks.clearElevatedAuthorization,
   clearMfaUiState: mocks.clearMfaUiState,
   finishLogout: mocks.finishLogout,
+  hasFreshAuthentication: mocks.hasFreshAuthentication,
   mfaUiState: mocks.mfaUiState,
   storeMfaEnrollment: mocks.storeMfaEnrollment,
+  storeRegeneratedRecoveryCodes: mocks.storeRegeneratedRecoveryCodes,
   startReauthorization: mocks.startReauthorization,
 }))
 
@@ -57,6 +61,7 @@ beforeEach(() => {
   })
   mocks.requestLocale.mockReturnValue('en-US')
   mocks.identityGraphql.mockResolvedValue({ changed: true })
+  mocks.hasFreshAuthentication.mockResolvedValue(true)
   mocks.mfaUiState.mockResolvedValue({})
   mocks.finishLogout.mockResolvedValue(new Response(null, {
     status: 303,
@@ -87,7 +92,6 @@ describe('executeAccountAction', () => {
     await expect(executeAccountAction({
       action: 'change-password',
       values: {
-        current_password: 'old-password',
         new_password: 'new-password',
         confirm_password: 'different-password',
       },
@@ -99,7 +103,7 @@ describe('executeAccountAction', () => {
     }))
   })
 
-  it('normalizes empty profile values and supports clearing the locale preference', async () => {
+  it('normalizes empty profile values and supports clearing appearance preferences', async () => {
     await expect(executeAccountAction({
       action: 'update-profile',
       values: {
@@ -109,6 +113,7 @@ describe('executeAccountAction', () => {
         website: ' https://example.com ',
         birthdate: '',
         locale: 'browser',
+        theme: 'system',
       },
     })).resolves.toEqual({ ok: true })
 
@@ -122,6 +127,7 @@ describe('executeAccountAction', () => {
           website: 'https://example.com',
           birthdate: null,
           locale: null,
+          theme: null,
         },
       },
       undefined,
@@ -189,14 +195,40 @@ describe('executeAccountAction', () => {
     expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
   })
 
+  it('checks authentication freshness before confirming MFA enrollment', async () => {
+    mocks.hasFreshAuthentication.mockResolvedValue(false)
+
+    const result = await executeAccountAction({
+      action: 'confirm-totp',
+      values: { code: '123456', login_hint: 'alice' },
+    })
+
+    expect(result.redirect).toBe(
+      'https://identity.example.com/oauth2/authorize?state=new',
+    )
+    expect(mocks.startReauthorization).toHaveBeenCalledWith(
+      '/account/security?setup=mfa&step=verify',
+      'account',
+      {
+        loginHint: 'alice',
+        acrValues: 'urn:identity:acr:aal1',
+        maxAge: 300,
+      },
+    )
+    expect(mocks.mfaUiState).not.toHaveBeenCalled()
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+  })
+
   it('propagates RFC 9470 requirements into the reauthentication redirect', async () => {
-    mocks.identityGraphql.mockRejectedValue(new GraphqlRequestError(
-      [{
-        message: 'recent authentication is required',
-        extensions: { code: 'insufficient_user_authentication' },
-      }],
-      { acrValues: 'urn:identity:acr:aal1', maxAge: 300 },
-    ))
+    mocks.identityGraphql
+      .mockRejectedValueOnce(new GraphqlRequestError(
+        [{
+          message: 'recent authentication is required',
+          extensions: { code: 'insufficient_user_authentication' },
+        }],
+        { acrValues: 'urn:identity:acr:aal1', maxAge: 300 },
+      ))
+      .mockResolvedValueOnce({ viewer: { account: { username: 'alice' } } })
 
     const result = await executeAccountAction({ action: 'begin-totp', values: {} })
     expect(result.redirect).toBe(
@@ -205,9 +237,160 @@ describe('executeAccountAction', () => {
     expect(mocks.startReauthorization).toHaveBeenCalledWith(
       '/account/mfa/setup',
       'account',
-      { acrValues: 'urn:identity:acr:aal1', maxAge: 300 },
+      {
+        loginHint: 'alice',
+        acrValues: 'urn:identity:acr:aal1',
+        maxAge: 300,
+      },
+    )
+    expect(mocks.identityGraphql).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('query ReauthenticationLoginHint'),
     )
     expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
+  })
+
+  it('checks AAL2 freshness before showing the MFA removal confirmation', async () => {
+    await expect(executeAccountAction({
+      action: 'prepare-disable-totp',
+      values: {},
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
+      'urn:identity:acr:aal2',
+    )
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+    expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
+  })
+
+  it('checks freshness before showing the password change form', async () => {
+    await expect(executeAccountAction({
+      action: 'prepare-change-password',
+      values: {},
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(undefined)
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+    expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
+  })
+
+  it('requires fresh AAL2 before changing a password when MFA is enabled', async () => {
+    await expect(executeAccountAction({
+      action: 'prepare-change-password',
+      values: { requires_aal2: 'true' },
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
+      'urn:identity:acr:aal2',
+    )
+  })
+
+  it('keeps the password scope when starting AAL2 password reauthentication', async () => {
+    mocks.hasFreshAuthentication.mockResolvedValue(false)
+
+    const result = await executeAccountAction({
+      action: 'prepare-change-password',
+      values: { login_hint: 'alice', requires_aal2: 'true' },
+    })
+
+    expect(result.redirect).toBe(
+      'https://identity.example.com/oauth2/authorize?state=new',
+    )
+    expect(mocks.startReauthorization).toHaveBeenCalledWith(
+      '/account/security?confirm=change-password',
+      'password',
+      {
+        loginHint: 'alice',
+        acrValues: 'urn:identity:acr:aal2',
+        maxAge: 3600,
+      },
+    )
+  })
+
+  it('changes a password without sending the current password', async () => {
+    await expect(executeAccountAction({
+      action: 'change-password',
+      values: {
+        new_password: 'a-new-password',
+        confirm_password: 'a-new-password',
+      },
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.identityGraphql).toHaveBeenCalledWith(
+      expect.stringContaining('mutation ChangePassword'),
+      { input: { newPassword: 'a-new-password' } },
+      { authorization: 'elevated' },
+    )
+  })
+
+  it('starts reauthentication locally when the token is not fresh', async () => {
+    mocks.hasFreshAuthentication.mockResolvedValue(false)
+
+    const result = await executeAccountAction({
+      action: 'prepare-disable-totp',
+      values: { login_hint: 'alice' },
+    })
+
+    expect(result.redirect).toBe(
+      'https://identity.example.com/oauth2/authorize?state=new',
+    )
+    expect(mocks.startReauthorization).toHaveBeenCalledWith(
+      '/account/security?confirm=disable-mfa',
+      'mfa',
+      {
+        loginHint: 'alice',
+        acrValues: 'urn:identity:acr:aal2',
+        maxAge: 3600,
+      },
+    )
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+  })
+
+  it('requires fresh AAL2 before regenerating recovery codes', async () => {
+    mocks.hasFreshAuthentication.mockResolvedValue(false)
+
+    const result = await executeAccountAction({
+      action: 'regenerate-recovery-codes',
+      values: { login_hint: 'alice' },
+    })
+
+    expect(result.redirect).toBe(
+      'https://identity.example.com/oauth2/authorize?state=new',
+    )
+    expect(mocks.startReauthorization).toHaveBeenCalledWith(
+      '/account/security?confirm=recovery-codes',
+      'mfa',
+      {
+        loginHint: 'alice',
+        acrValues: 'urn:identity:acr:aal2',
+        maxAge: 3600,
+      },
+    )
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+  })
+
+  it('stores newly generated recovery codes for their one-time display', async () => {
+    mocks.identityGraphql.mockResolvedValue({
+      regenerateRecoveryCodes: {
+        recoveryCodes: ['NEWA-CODE', 'NEWB-CODE'],
+      },
+    })
+
+    await expect(executeAccountAction({
+      action: 'regenerate-recovery-codes',
+      values: { login_hint: 'alice' },
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.identityGraphql).toHaveBeenCalledWith(
+      expect.stringContaining('mutation RegenerateRecoveryCodes'),
+      undefined,
+      { authorization: 'elevated' },
+    )
+    expect(mocks.storeRegeneratedRecoveryCodes).toHaveBeenCalledWith([
+      'NEWA-CODE',
+      'NEWB-CODE',
+    ])
+    expect(mocks.clearElevatedAuthorization).toHaveBeenCalledOnce()
   })
 
   it('updates a username independently and clears elevated authorization', async () => {

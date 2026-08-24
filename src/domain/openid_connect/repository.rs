@@ -2,8 +2,7 @@ use super::model::client::{
     OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
 };
 use super::model::credential::{
-    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,
-    OpenIdConnectCredentialType,
+    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialType,
 };
 use crate::auth::model::SessionOid;
 use crate::client::model::Client;
@@ -40,6 +39,9 @@ pub enum OpenIdConnectClientRepositoryError {
 
     #[error("openid connect client not found")]
     ClientNotFound,
+
+    #[error("built-in openid connect clients cannot be deleted")]
+    BuiltInClient,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +50,6 @@ pub struct OpenIdConnectClientRegistration {
     pub metadata: OpenIdConnectClientMetadata,
     pub platforms: Vec<OpenIdConnectClientPlatform>,
     pub assigned_scopes: Vec<String>,
-    pub client_secret: Option<String>,
     pub credentials: Vec<OpenIdConnectCredentialData>,
     pub registration_access_token: String,
 }
@@ -119,12 +120,11 @@ pub trait OpenIdConnectClientRegistrationRepository: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait OpenIdConnectCredentialRepository: Send + Sync {
-    async fn find_by_oid(
-        &self,
-        oid: OpenIdConnectCredentialOid,
-    ) -> Result<Option<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError>;
-
-    async fn find_by_client_oid_and_type(
+    /// Find currently usable credentials, newest first.
+    ///
+    /// Expired and revoked credentials must never cross this repository
+    /// boundary into authentication or encryption operations.
+    async fn find_active_by_client_oid_and_type(
         &self,
         client_oid: ClientOid,
         type_: OpenIdConnectCredentialType,
@@ -139,7 +139,9 @@ pub trait OpenIdConnectCredentialRepository: Send + Sync {
             OpenIdConnectCredentialType::ClientJsonWebKeySet,
         ];
         for type_ in types {
-            let results = self.find_by_client_oid_and_type(client_oid, type_).await?;
+            let results = self
+                .find_active_by_client_oid_and_type(client_oid, type_)
+                .await?;
             if let Some(credential) = results.into_iter().next() {
                 return Ok(Some(credential));
             }

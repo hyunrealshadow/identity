@@ -95,32 +95,19 @@ fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSour
     }
 }
 
-#[cfg(test)]
-mod selection_tests {
-    use super::can_overwrite_selection;
-    use identity_domain::client_authorization::SelectionSource;
-
-    #[test]
-    fn reauthentication_cannot_be_replaced_by_another_selection_flow() {
-        assert!(!can_overwrite_selection(
-            Some(SelectionSource::Reauthentication),
-            SelectionSource::AccountPicker,
-        ));
-        assert!(!can_overwrite_selection(
-            Some(SelectionSource::Reauthentication),
-            SelectionSource::FreshLogin,
-        ));
-        assert!(can_overwrite_selection(
-            Some(SelectionSource::Reauthentication),
-            SelectionSource::Reauthentication,
-        ));
-    }
-}
-
-fn selection_update_condition(model: &client_authorization::Model) -> Condition {
+fn selection_update_condition(
+    model: &client_authorization::Model,
+    now: chrono::DateTime<Utc>,
+) -> Condition {
     let mut condition = Condition::all()
         .add(client_authorization::Column::Oid.eq(model.oid))
-        .add(client_authorization::Column::CompletedAt.is_null());
+        .add(
+            client_authorization::Column::Type
+                .eq(ClientAuthorizationType::AuthorizationRequest.to_string()),
+        )
+        .add(client_authorization::Column::CompletedAt.is_null())
+        .add(client_authorization::Column::RevokedAt.is_null())
+        .add(client_authorization::Column::ExpiresAt.gt(now));
 
     condition = if let Some(updated_at) = model.updated_at {
         condition.add(client_authorization::Column::UpdatedAt.eq(updated_at))
@@ -173,10 +160,10 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
     async fn create(
         &self,
         client_oid: ClientOid,
-        type_: ClientAuthorizationType,
         data: ClientAuthorizationData,
         expires_at: chrono::DateTime<Utc>,
     ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
+        let type_ = data.authorization_type();
         let session_oid = match &data {
             ClientAuthorizationData::AuthorizationCode(data) => Some(data.session_oid),
             ClientAuthorizationData::AccessToken(data) => Some(data.session_oid),
@@ -284,6 +271,8 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
 
         if model.r#type != ClientAuthorizationType::AuthorizationRequest.to_string()
             || model.completed_at.is_some()
+            || model.revoked_at.is_some()
+            || model.expires_at.with_timezone(&Utc) <= Utc::now()
         {
             return Ok(false);
         }
@@ -310,7 +299,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 client_authorization::Column::UpdatedAt,
                 SimpleExpr::Value(Some(now).into()),
             )
-            .filter(selection_update_condition(&model))
+            .filter(selection_update_condition(&model, now))
             .exec(&self.db)
             .await
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
@@ -335,6 +324,8 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
 
         if model.r#type != ClientAuthorizationType::AuthorizationRequest.to_string()
             || model.completed_at.is_some()
+            || model.revoked_at.is_some()
+            || model.expires_at.with_timezone(&Utc) <= Utc::now()
         {
             return Ok(false);
         }
@@ -359,7 +350,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 client_authorization::Column::UpdatedAt,
                 SimpleExpr::Value(Some(now).into()),
             )
-            .filter(selection_update_condition(&model))
+            .filter(selection_update_condition(&model, now))
             .exec(&self.db)
             .await
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
@@ -385,7 +376,13 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(
                 Condition::all()
                     .add(client_authorization::Column::Oid.eq(oid))
-                    .add(client_authorization::Column::CompletedAt.is_null()),
+                    .add(
+                        client_authorization::Column::Type
+                            .eq(ClientAuthorizationType::AuthorizationRequest.to_string()),
+                    )
+                    .add(client_authorization::Column::CompletedAt.is_null())
+                    .add(client_authorization::Column::RevokedAt.is_null())
+                    .add(client_authorization::Column::ExpiresAt.gt(now)),
             )
             .exec(&self.db)
             .await
@@ -455,25 +452,26 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
 
         Ok(result.rows_affected == 1)
     }
+}
 
-    async fn revoke(&self, oid: Uuid) -> Result<(), ClientAuthorizationRepositoryError> {
-        let Some(model) = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Oid.eq(oid))
-            .one(&self.db)
-            .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
-        else {
-            return Ok(());
-        };
+#[cfg(test)]
+mod selection_tests {
+    use super::can_overwrite_selection;
+    use identity_domain::client_authorization::SelectionSource;
 
-        let mut active: client_authorization::ActiveModel = model.into();
-        active.revoked_at = Set(Some(Utc::now().into()));
-        active.updated_at = Set(Some(Utc::now().into()));
-        active
-            .update(&self.db)
-            .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
-
-        Ok(())
+    #[test]
+    fn reauthentication_cannot_be_replaced_by_another_selection_flow() {
+        assert!(!can_overwrite_selection(
+            Some(SelectionSource::Reauthentication),
+            SelectionSource::AccountPicker,
+        ));
+        assert!(!can_overwrite_selection(
+            Some(SelectionSource::Reauthentication),
+            SelectionSource::FreshLogin,
+        ));
+        assert!(can_overwrite_selection(
+            Some(SelectionSource::Reauthentication),
+            SelectionSource::Reauthentication,
+        ));
     }
 }

@@ -401,6 +401,7 @@ mod tests {
             birthdate: Some("1970-01-01".to_string()),
             zoneinfo: Some("UTC".to_string()),
             locale: Some("en-US".to_string()),
+            theme: None,
             email_verified: true,
             phone_number: None,
             phone_number_verified: None,

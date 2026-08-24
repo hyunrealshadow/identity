@@ -35,10 +35,14 @@ pub fn selected_session_exceeds_max_age(
     selected_session: &ActiveSession,
 ) -> bool {
     request.max_age.is_some_and(|max_age| {
-        chrono::Utc::now()
-            .signed_duration_since(selected_session.authenticated_at)
-            .num_seconds()
-            > i64::from(max_age)
+        let Ok(max_age) = u64::try_from(max_age) else {
+            return true;
+        };
+        !crate::domain::auth::authentication_is_fresh(
+            selected_session.authenticated_at.timestamp(),
+            chrono::Utc::now().timestamp(),
+            max_age,
+        )
     })
 }
 
@@ -48,10 +52,11 @@ pub fn selected_session_satisfies_acr(
     selected_session: &ActiveSession,
 ) -> bool {
     request.acr_values.as_ref().is_none_or(|requested| {
-        selected_session
-            .acr
-            .as_ref()
-            .is_some_and(|acr| requested.iter().any(|value| value == acr))
+        selected_session.acr.as_ref().is_some_and(|acr| {
+            requested
+                .iter()
+                .any(|value| crate::domain::auth::acr_satisfies(acr, value))
+        })
     })
 }
 

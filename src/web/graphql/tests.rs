@@ -240,6 +240,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
         name: "Login".to_owned(),
         names: None,
         description: None,
+        built_in: false,
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -431,6 +432,7 @@ fn test_user(oid: Uuid, now: chrono::DateTime<Utc>) -> user::Model {
         birthdate: None,
         zone_info: None,
         locale: None,
+        preferences: serde_json::json!({}),
         address_formatted: None,
         address_street_address: None,
         address_locality: None,

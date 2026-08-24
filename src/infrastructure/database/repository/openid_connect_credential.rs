@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
 use serde_json::Value;
 use url::Url;
@@ -9,9 +9,8 @@ use crate::database::entity::{client, client_open_id_connect_credential};
 use identity_domain::client::model::ClientOid;
 use identity_domain::key::PublicJwk;
 use identity_domain::openid_connect::{
-    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,
-    OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
-    OpenIdConnectCredentialType,
+    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
+    OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
 };
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +33,71 @@ struct RawClientJsonWebKeySetData {
     public_keys: Vec<String>,
     #[serde(default)]
     jwks: Vec<PublicJwk>,
+}
+
+pub(crate) struct SerializedCredentialData {
+    pub type_: String,
+    pub data: Value,
+    pub hint: String,
+}
+
+pub(crate) fn serialize_data(credential: OpenIdConnectCredentialData) -> SerializedCredentialData {
+    match credential {
+        OpenIdConnectCredentialData::ClientSecret { secret } => SerializedCredentialData {
+            type_: OpenIdConnectCredentialType::ClientSecret.to_string(),
+            hint: masked_client_secret_hint(&secret),
+            data: serde_json::json!({ "secret": secret }),
+        },
+        OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } => {
+            let hint = jwk
+                .as_ref()
+                .and_then(|value| value.key_id())
+                .or_else(|| jwk.as_ref().and_then(|value| value.algorithm()))
+                .unwrap_or("client_public_key")
+                .to_owned();
+            SerializedCredentialData {
+                type_: OpenIdConnectCredentialType::ClientPublicKey.to_string(),
+                hint,
+                data: serde_json::json!({
+                    "public_key": public_key,
+                    "jwk": jwk,
+                }),
+            }
+        }
+        OpenIdConnectCredentialData::ClientJsonWebKeySet {
+            jwks_uri,
+            last_updated,
+            expires_at,
+            public_keys,
+            jwks,
+        } => SerializedCredentialData {
+            type_: OpenIdConnectCredentialType::ClientJsonWebKeySet.to_string(),
+            hint: jwks_uri.to_string(),
+            data: serde_json::json!({
+                "jwks_uri": jwks_uri,
+                "last_updated": last_updated,
+                "expires_at": expires_at,
+                "public_keys": public_keys,
+                "jwks": jwks,
+            }),
+        },
+    }
+}
+
+fn masked_client_secret_hint(secret: &str) -> String {
+    let suffix = if secret.chars().count() > 4 {
+        secret
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
+    } else {
+        String::new()
+    };
+    format!("••••{suffix}")
 }
 
 fn deserialize_data(
@@ -114,29 +178,7 @@ impl OpenIdConnectCredentialRepositoryImpl {
 
 #[async_trait]
 impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl {
-    async fn find_by_oid(
-        &self,
-        oid: OpenIdConnectCredentialOid,
-    ) -> Result<Option<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError> {
-        let row = client_open_id_connect_credential::Entity::find()
-            .find_also_related(crate::database::entity::client::Entity)
-            .filter(client_open_id_connect_credential::Column::Oid.eq(oid))
-            .one(&self.db)
-            .await
-            .map_err(|e| OpenIdConnectCredentialRepositoryError::QueryFailed(Box::new(e)))?;
-
-        let Some((model, client)) = row else {
-            return Ok(None);
-        };
-
-        let Some(client) = client else {
-            return Err(OpenIdConnectCredentialRepositoryError::MissingClient);
-        };
-
-        to_domain(client.oid, model).map(Some)
-    }
-
-    async fn find_by_client_oid_and_type(
+    async fn find_active_by_client_oid_and_type(
         &self,
         client_oid: ClientOid,
         type_: OpenIdConnectCredentialType,
@@ -146,6 +188,9 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
             .filter(client::Column::Protocol.eq("openid_connect"))
             .inner_join(client_open_id_connect_credential::Entity)
             .filter(client_open_id_connect_credential::Column::Type.eq(type_.to_string()))
+            .filter(client_open_id_connect_credential::Column::RevokedAt.is_null())
+            .filter(client_open_id_connect_credential::Column::ExpiresAt.gt(Utc::now()))
+            .order_by_desc(client_open_id_connect_credential::Column::CreatedAt)
             .select_only()
             .columns([
                 client_open_id_connect_credential::Column::Id,
@@ -173,8 +218,12 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
 
 #[cfg(test)]
 mod tests {
-    use super::deserialize_data;
-    use identity_domain::openid_connect::OpenIdConnectCredentialType;
+    use super::{OpenIdConnectCredentialRepositoryImpl, deserialize_data, serialize_data};
+    use crate::database::entity::client_open_id_connect_credential;
+    use identity_domain::openid_connect::{
+        OpenIdConnectCredentialRepository as _, OpenIdConnectCredentialType,
+    };
+    use sea_orm::{DatabaseBackend, MockDatabase};
     use serde_json::json;
 
     #[test]
@@ -188,5 +237,61 @@ mod tests {
         assert!(
             matches!(data, identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { secret } if secret == "s3cr3t")
         );
+    }
+
+    #[test]
+    fn serializes_client_secret_with_a_masked_hint() {
+        let serialized = serialize_data(
+            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret {
+                secret: "long-secret-value".to_owned(),
+            },
+        );
+
+        assert_eq!(serialized.hint, "••••alue");
+        assert_eq!(serialized.data, json!({"secret": "long-secret-value"}));
+
+        let short = serialize_data(
+            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret {
+                secret: "tiny".to_owned(),
+            },
+        );
+        assert_eq!(short.hint, "••••");
+    }
+
+    #[tokio::test]
+    async fn active_lookup_filters_lifecycle_and_prefers_newest_credentials() {
+        let now = chrono::Utc::now();
+        let model = client_open_id_connect_credential::Model {
+            id: 1,
+            oid: uuid::Uuid::new_v4(),
+            client_id: 1,
+            r#type: "client_secret".to_owned(),
+            data: json!({"secret": "secret"}),
+            hint: "••••cret".to_owned(),
+            expires_at: (now + chrono::Duration::days(1)).into(),
+            revoked_at: None,
+            created_at: now.into(),
+            updated_at: None,
+        };
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![model]])
+            .into_connection();
+        let repo = OpenIdConnectCredentialRepositoryImpl::new(db);
+
+        let credentials = repo
+            .find_active_by_client_oid_and_type(
+                uuid::Uuid::nil(),
+                OpenIdConnectCredentialType::ClientSecret,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(credentials.len(), 1);
+        let statements = format!("{:?}", repo.db.into_transaction_log());
+        assert!(statements.contains("revoked_at"));
+        assert!(statements.contains("expires_at"));
+        assert!(statements.contains("ORDER BY"));
+        assert!(statements.contains("created_at"));
+        assert!(statements.contains("DESC"));
     }
 }

@@ -3,7 +3,8 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::user::{
-    CredentialData, CredentialType, Password, User, UserCredential, UserCredentialOid, UserOid,
+    CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData, User,
+    UserCredential, UserCredentialOid, UserOid,
 };
 
 #[derive(Debug, Error)]
@@ -37,6 +38,12 @@ pub enum UserCredentialRepositoryError {
 
     #[error("failed to serialize credential data")]
     Serialization(#[source] serde_json::Error),
+
+    #[error("failed to deserialize credential data")]
+    Deserialization(#[source] serde_json::Error),
+
+    #[error("credential data does not match credential type {0}")]
+    CredentialTypeMismatch(CredentialType),
 
     #[error("failed to update password credential")]
     UpdatePasswordFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -78,10 +85,11 @@ pub trait UserRepository: Send + Sync {
 
 #[async_trait]
 pub trait UserCredentialRepository: Send + Sync {
-    /// Find credentials for a given user and credential type.
+    /// Find active credentials for a given user and credential type.
     ///
-    /// Rows whose `data` JSON cannot be deserialized into a known
-    /// [`CredentialData`] variant are silently skipped.
+    /// Corrupt credential payloads are returned as repository errors; treating
+    /// them as absent credentials would hide persistence corruption from the
+    /// authentication flow.
     async fn find_by_user_oid_and_type(
         &self,
         user_oid: UserOid,
@@ -114,8 +122,27 @@ pub trait UserCredentialRepository: Send + Sync {
         replacements: Vec<(CredentialType, Vec<CredentialData>)>,
     ) -> Result<(), UserCredentialRepositoryError>;
 
-    /// Deletes one credential. Used to consume a recovery code exactly once.
-    async fn delete_by_oid(
+    /// Enables TOTP and installs its recovery codes only when the user has no
+    /// active OTP credential. The precondition and both replacements are one
+    /// atomic operation.
+    async fn enable_totp_if_disabled(
+        &self,
+        user_oid: UserOid,
+        otp: OtpCredentialData,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<bool, UserCredentialRepositoryError>;
+
+    /// Replaces recovery codes only while an OTP credential exists.
+    /// Implementations must evaluate the precondition and replacement
+    /// atomically with other credential-group replacements for the user.
+    async fn replace_recovery_codes_if_totp_enabled(
+        &self,
+        user_oid: UserOid,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<bool, UserCredentialRepositoryError>;
+
+    /// Atomically consumes one active recovery-code credential.
+    async fn consume_recovery_code_by_oid(
         &self,
         credential_oid: UserCredentialOid,
     ) -> Result<bool, UserCredentialRepositoryError>;

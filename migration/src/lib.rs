@@ -17,6 +17,9 @@ mod m20260426_000002_create_client_scope;
 mod m20260427_000001_create_key_jwk;
 mod m20260428_000001_create_client_platform;
 mod m20260801_000001_session_relay_index;
+mod m20260824_000001_add_user_preferences;
+mod m20260824_000002_add_client_built_in;
+mod m20260824_000003_mask_client_secret_hints;
 
 pub struct Migrator;
 
@@ -39,6 +42,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20260427_000001_create_key_jwk::Migration),
             Box::new(m20260428_000001_create_client_platform::Migration),
             Box::new(m20260801_000001_session_relay_index::Migration),
+            Box::new(m20260824_000001_add_user_preferences::Migration),
+            Box::new(m20260824_000002_add_client_built_in::Migration),
+            Box::new(m20260824_000003_mask_client_secret_hints::Migration),
         ]
     }
 }

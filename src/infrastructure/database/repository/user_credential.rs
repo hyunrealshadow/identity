@@ -5,12 +5,15 @@ use crate::database::entity::{
 use async_trait::async_trait;
 use chrono::Utc;
 use identity_domain::user::{
-    CredentialData, CredentialType, Password, UserCredential, UserCredentialOid, UserOid,
+    CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
+    UserCredential, UserCredentialOid, UserOid,
     repository::{UserCredentialRepository, UserCredentialRepositoryError},
 };
+
+use super::shared::lock_user_credentials;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
-    TransactionTrait, sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
+    QuerySelect, Set, TransactionTrait, sea_query::Expr,
 };
 
 pub struct UserCredentialRepositoryImpl {
@@ -40,6 +43,11 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
             .inner_join(UserCredentialEntity)
             .filter(user_credential::Column::Type.eq(credential_type_str))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
             .select_only()
             .columns([
                 user_credential::Column::Id,
@@ -55,60 +63,25 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?;
 
-        // Deserialize only the requested credential type.
         let credentials = rows
             .into_iter()
-            .filter_map(|m| {
-                let data = match m.r#type.as_str() {
-                    "password" => match serde_json::from_value(m.data) {
-                        Ok(p) => CredentialData::Password(p),
-                        Err(e) => {
-                            tracing::error!(
-                                error = %e,
-                                credential_oid = %m.oid,
-                                "failed to deserialize password credential; skipping"
-                            );
-                            return None;
-                        }
-                    },
-                    "otp" => match serde_json::from_value(m.data) {
-                        Ok(o) => CredentialData::Otp(o),
-                        Err(e) => {
-                            tracing::error!(
-                                error = %e,
-                                credential_oid = %m.oid,
-                                "failed to deserialize otp credential; skipping"
-                            );
-                            return None;
-                        }
-                    },
-                    "recovery_code" => match serde_json::from_value(m.data) {
-                        Ok(r) => CredentialData::RecoveryCode(r),
-                        Err(e) => {
-                            tracing::error!(
-                                error = %e,
-                                credential_oid = %m.oid,
-                                "failed to deserialize recovery_code credential; skipping"
-                            );
-                            return None;
-                        }
-                    },
-                    other => {
-                        tracing::warn!(
-                            credential_oid = %m.oid,
-                            r#type = other,
-                            "unknown credential type; skipping"
-                        );
-                        return None;
+            .map(|m| {
+                let data = match &credential_type {
+                    CredentialType::Password => {
+                        serde_json::from_value(m.data).map(CredentialData::Password)
+                    }
+                    CredentialType::Otp => serde_json::from_value(m.data).map(CredentialData::Otp),
+                    CredentialType::RecoveryCode => {
+                        serde_json::from_value(m.data).map(CredentialData::RecoveryCode)
                     }
                 };
-                Some(UserCredential {
+                Ok(UserCredential {
                     oid: m.oid.into(),
                     r#type: credential_type.clone(),
-                    data,
+                    data: data.map_err(UserCredentialRepositoryError::Deserialization)?,
                 })
             })
-            .collect();
+            .collect::<Result<Vec<_>, UserCredentialRepositoryError>>()?;
 
         Ok(credentials)
     }
@@ -118,23 +91,28 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         credential_oid: UserCredentialOid,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError> {
-        let cred = UserCredentialEntity::find()
-            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
-            .one(&self.db)
-            .await
-            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
-            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
-
         let new_data =
             serde_json::to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
 
-        let mut active: user_credential::ActiveModel = cred.into();
-        active.data = Set(new_data);
-        active.updated_at = Set(Some(Utc::now().into()));
-        active
-            .update(&self.db)
+        let result = UserCredentialEntity::update_many()
+            .col_expr(user_credential::Column::Data, Expr::value(new_data))
+            .col_expr(
+                user_credential::Column::UpdatedAt,
+                Expr::value(Some(Utc::now().fixed_offset())),
+            )
+            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .filter(user_credential::Column::Type.eq("password"))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
+            .exec(&self.db)
             .await
             .map_err(|e| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(e)))?;
+        if result.rows_affected != 1 {
+            return Err(UserCredentialRepositoryError::CredentialNotFound);
+        }
         Ok(())
     }
 
@@ -159,6 +137,11 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             )
             .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
             .filter(user_credential::Column::Type.eq("otp"))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
             .filter(Expr::cust_with_values(
                 r#"COALESCE(("user_credential"."data"->>'last_used_counter')::bigint, -1) < $1"#,
                 [counter],
@@ -176,15 +159,17 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         user_oid: UserOid,
         replacements: Vec<(CredentialType, Vec<CredentialData>)>,
     ) -> Result<(), UserCredentialRepositoryError> {
-        let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
-            .one(&self.db)
-            .await
-            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
-            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         let replacements = replacements
             .into_iter()
             .map(|(credential_type, data)| {
+                if data
+                    .iter()
+                    .any(|value| value.credential_type() != credential_type)
+                {
+                    return Err(UserCredentialRepositoryError::CredentialTypeMismatch(
+                        credential_type,
+                    ));
+                }
                 let serialized = data
                     .into_iter()
                     .map(|data| match data {
@@ -192,16 +177,25 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                         CredentialData::Otp(value) => serde_json::to_value(value),
                         CredentialData::RecoveryCode(value) => serde_json::to_value(value),
                     })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(UserCredentialRepositoryError::Serialization)?;
                 Ok((credential_type.as_ref().to_owned(), serialized))
             })
-            .collect::<Result<Vec<_>, serde_json::Error>>()
-            .map_err(UserCredentialRepositoryError::Serialization)?;
+            .collect::<Result<Vec<_>, UserCredentialRepositoryError>>()?;
         let txn = self
             .db
             .begin()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        lock_user_credentials(&txn, user_oid)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        let user = UserEntity::find()
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .one(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         for (credential_type, serialized) in replacements {
             UserCredentialEntity::delete_many()
                 .filter(user_credential::Column::UserId.eq(user.id))
@@ -230,12 +224,173 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(())
     }
 
-    async fn delete_by_oid(
+    async fn enable_totp_if_disabled(
+        &self,
+        user_oid: UserOid,
+        otp: OtpCredentialData,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<bool, UserCredentialRepositoryError> {
+        let otp =
+            serde_json::to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
+        let recovery_codes = recovery_codes
+            .into_iter()
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(UserCredentialRepositoryError::Serialization)?;
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        lock_user_credentials(&txn, user_oid)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        let user = UserEntity::find()
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .one(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        let totp_exists = UserCredentialEntity::find()
+            .filter(user_credential::Column::UserId.eq(user.id))
+            .filter(user_credential::Column::Type.eq("otp"))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
+            .one(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?
+            .is_some();
+        if totp_exists {
+            txn.commit()
+                .await
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+            return Ok(false);
+        }
+        UserCredentialEntity::delete_many()
+            .filter(user_credential::Column::UserId.eq(user.id))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::Type.eq("otp"))
+                    .add(user_credential::Column::Type.eq("recovery_code")),
+            )
+            .exec(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        user_credential::ActiveModel {
+            oid: Set(uuid::Uuid::new_v4()),
+            user_id: Set(user.id),
+            r#type: Set("otp".to_owned()),
+            data: Set(otp),
+            expires_at: Set(None),
+            created_at: Set(Utc::now().into()),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        for value in recovery_codes {
+            user_credential::ActiveModel {
+                oid: Set(uuid::Uuid::new_v4()),
+                user_id: Set(user.id),
+                r#type: Set("recovery_code".to_owned()),
+                data: Set(value),
+                expires_at: Set(None),
+                created_at: Set(Utc::now().into()),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        }
+        txn.commit()
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        Ok(true)
+    }
+
+    async fn replace_recovery_codes_if_totp_enabled(
+        &self,
+        user_oid: UserOid,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<bool, UserCredentialRepositoryError> {
+        let serialized = recovery_codes
+            .into_iter()
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(UserCredentialRepositoryError::Serialization)?;
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        lock_user_credentials(&txn, user_oid)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        let user = UserEntity::find()
+            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .one(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        let totp_exists = UserCredentialEntity::find()
+            .filter(user_credential::Column::UserId.eq(user.id))
+            .filter(user_credential::Column::Type.eq("otp"))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
+            .one(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?
+            .is_some();
+        if !totp_exists {
+            txn.commit()
+                .await
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+            return Ok(false);
+        }
+        UserCredentialEntity::delete_many()
+            .filter(user_credential::Column::UserId.eq(user.id))
+            .filter(user_credential::Column::Type.eq("recovery_code"))
+            .exec(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        for value in serialized {
+            user_credential::ActiveModel {
+                oid: Set(uuid::Uuid::new_v4()),
+                user_id: Set(user.id),
+                r#type: Set("recovery_code".to_owned()),
+                data: Set(value),
+                expires_at: Set(None),
+                created_at: Set(Utc::now().into()),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        }
+        txn.commit()
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        Ok(true)
+    }
+
+    async fn consume_recovery_code_by_oid(
         &self,
         credential_oid: UserCredentialOid,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let result = UserCredentialEntity::delete_many()
             .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .filter(user_credential::Column::Type.eq("recovery_code"))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
             .exec(&self.db)
             .await
             .map_err(|e| UserCredentialRepositoryError::DeleteFailed(Box::new(e)))?;
@@ -245,7 +400,12 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::user::{UserCredentialOid, repository::UserCredentialRepository as _};
+    use crate::database::entity::user_credential;
+    use chrono::Utc;
+    use identity_domain::user::{
+        CredentialData, CredentialType, OtpCredentialData, UserCredentialOid, UserOid,
+        repository::{UserCredentialRepository as _, UserCredentialRepositoryError},
+    };
     use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
     use uuid::Uuid;
 
@@ -271,6 +431,7 @@ mod tests {
         assert!(statements.contains("jsonb_set"));
         assert!(statements.contains("last_used_counter"));
         assert!(statements.contains("<"));
+        assert!(statements.contains("expires_at"));
     }
 
     #[tokio::test]
@@ -289,5 +450,58 @@ mod tests {
             .unwrap();
 
         assert!(!consumed);
+    }
+
+    #[tokio::test]
+    async fn replacements_reject_data_that_does_not_match_the_declared_type() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let repo = UserCredentialRepositoryImpl::new(db);
+        let otp = OtpCredentialData {
+            secret: "secret".to_owned(),
+            algorithm: identity_domain::user::OtpAlgorithm::Sha1,
+            digits: 6,
+            period: 30,
+            last_used_counter: None,
+        };
+
+        let error = repo
+            .replace_by_user_oid(
+                UserOid(Uuid::new_v4()),
+                vec![(CredentialType::Password, vec![CredentialData::Otp(otp)])],
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            UserCredentialRepositoryError::CredentialTypeMismatch(CredentialType::Password)
+        ));
+    }
+
+    #[tokio::test]
+    async fn corrupt_credential_payload_is_not_treated_as_missing() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([[user_credential::Model {
+                id: 1,
+                oid: Uuid::new_v4(),
+                user_id: 1,
+                r#type: "password".to_owned(),
+                data: serde_json::json!({"unexpected": true}),
+                expires_at: None,
+                created_at: Utc::now().into(),
+                updated_at: None,
+            }]])
+            .into_connection();
+        let repo = UserCredentialRepositoryImpl::new(db);
+
+        let error = repo
+            .find_by_user_oid_and_type(UserOid(Uuid::new_v4()), CredentialType::Password)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            UserCredentialRepositoryError::Deserialization(_)
+        ));
     }
 }

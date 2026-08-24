@@ -33,7 +33,7 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
     credential_repo
-        .expect_find_by_client_oid_and_type()
+        .expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(creds.clone()));
 
     AuthorizeService::new(AuthorizeServiceDependencies {
@@ -76,7 +76,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
     credential_repo
-        .expect_find_by_client_oid_and_type()
+        .expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(creds.clone()));
 
     let key_oid = KeyOid::from(Uuid::new_v4());
@@ -100,10 +100,10 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
         .returning(move |oid| Ok((oid == key_oid).then(|| found_key.clone())));
     let available_key = key.clone();
     key_repo
-        .expect_list_available_asymmetric()
+        .expect_list_active_asymmetric()
         .returning(move || Ok(vec![available_key.clone()]));
     key_repo
-        .expect_list_available_symmetric()
+        .expect_list_decryptable_symmetric()
         .returning(|| Ok(vec![]));
 
     let kid = kid.to_owned();

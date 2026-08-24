@@ -5,6 +5,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { AccountActionForm } from '#/components/account-action-form'
 import { PageHeading, ProfileField, SettingsCard } from '#/components/account-settings'
 import { BROWSER_LOCALE_VALUE } from '#/lib/account-locale'
+import type { ThemePreference } from '#/lib/appearance'
 import { translate } from '#/lib/i18n'
 import { useAccount } from './route'
 
@@ -25,6 +26,7 @@ function ProfilePage() {
           <div className="sm:col-span-2"><ProfileField name="website" label={t('accountWebsite')} value={account.website} error={flash.fields?.website} type="url" /></div>
           <ProfileDatePicker account={account} error={flash.fields?.birthdate} t={t} />
           <ProfileLocaleSelect account={account} t={t} />
+          <ProfileThemeSelect account={account} t={t} />
           <div className="flex justify-end sm:col-span-2"><Button type="submit">{t('accountSaveProfile')}</Button></div>
         </AccountActionForm>
       </SettingsCard>
@@ -41,6 +43,11 @@ function ProfileDatePicker({ account, error, t }: { account: Account; error?: st
 
 function ProfileLocaleSelect({ account, t }: { account: Account; t: Translator }) {
   return <Select fullWidth name="locale" defaultValue={account.locale ?? BROWSER_LOCALE_VALUE} placeholder={t('accountLocaleBrowser')}><Label>{t('accountLocale')}</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id={BROWSER_LOCALE_VALUE} textValue={t('accountLocaleBrowser')}>{t('accountLocaleBrowser')}<ListBox.ItemIndicator /></ListBox.Item><ListBox.Item id="en-US" textValue="English (United States)">English (United States)<ListBox.ItemIndicator /></ListBox.Item><ListBox.Item id="zh-CN" textValue="中文（简体）">中文（简体）<ListBox.ItemIndicator /></ListBox.Item></ListBox></Select.Popover></Select>
+}
+
+function ProfileThemeSelect({ account, t }: { account: Account; t: Translator }) {
+  const preference: ThemePreference = account.theme === 'light' || account.theme === 'dark' ? account.theme : 'system'
+  return <Select fullWidth name="theme" defaultValue={preference}><Label>{t('accountTheme')}</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="system" textValue={t('accountThemeSystem')}>{t('accountThemeSystem')}<ListBox.ItemIndicator /></ListBox.Item><ListBox.Item id="light" textValue={t('accountThemeLight')}>{t('accountThemeLight')}<ListBox.ItemIndicator /></ListBox.Item><ListBox.Item id="dark" textValue={t('accountThemeDark')}>{t('accountThemeDark')}<ListBox.ItemIndicator /></ListBox.Item></ListBox></Select.Popover></Select>
 }
 
 function parseOptionalDate(value?: string) {

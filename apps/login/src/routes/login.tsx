@@ -74,6 +74,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         error: pageError ?? translate(locale, 'missingLogin'),
         fieldError: identifierError,
         formValues: flash?.values ?? {},
+        loginHint: undefined,
         challengeUri: undefined,
       }
     }
@@ -93,11 +94,12 @@ const loadLoginPage = createServerFn({ method: 'GET' })
             : active.accounts,
         csrfToken: active.csrf_token,
         loginId,
-        locale: requestLocale(status.ui_locales),
-        uiLocales: status.ui_locales?.join(' ') ?? '',
+        locale: requestLocale(uiLocales ? uiLocales.split(' ') : status.ui_locales),
+        uiLocales: uiLocales || status.ui_locales?.join(' ') || '',
         error: pageError,
         fieldError: identifierError,
         formValues: flash?.values ?? {},
+        loginHint: status.login_hint,
         challengeUri: status.challenge_uri,
       }
     } catch (error) {
@@ -111,6 +113,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         error: pageError ?? errorMessage(error, locale),
         fieldError: identifierError,
         formValues: flash?.values ?? {},
+        loginHint: undefined,
         challengeUri: undefined,
       }
     }
@@ -250,6 +253,8 @@ function LoginPage() {
   return (
     <AuthShell
       lang={data.locale}
+      locale={data.locale}
+      showPreferences
       title={showAccounts ? t('chooseAccount') : t('signIn')}
       description={
         showAccounts
@@ -316,7 +321,9 @@ function LoginPage() {
             <Label>{t('identifier')}</Label>
             <Input
               autoFocus
-              defaultValue={data.formValues.identifier ?? search.identifier}
+              defaultValue={
+                data.formValues.identifier ?? search.identifier ?? data.loginHint
+              }
               autoComplete="username"
               placeholder="name@example.com"
               onChange={() => setIdentifierError(undefined)}

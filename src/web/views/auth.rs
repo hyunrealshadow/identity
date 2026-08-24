@@ -143,6 +143,9 @@ pub struct LoginStatusResponse {
     /// The authorization server determined that the selected session must be
     /// authenticated again because it does not satisfy `max_age` or `acr_values`.
     pub requires_reauthentication: bool,
+    /// Identifier supplied by the RP to target the intended account/session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_hint: Option<String>,
     /// Relative first-party UI URI for the next credential challenge. The
     /// authorization server owns this policy decision; the UI only follows it.
     #[serde(skip_serializing_if = "Option::is_none")]

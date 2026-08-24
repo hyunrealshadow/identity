@@ -46,6 +46,7 @@ mod tests {
             "SHA256",
             "SHA512",
             "disableTotp(",
+            "regenerateRecoveryCodes(",
             "recoveryCodesRemaining: Int!",
         ] {
             assert!(sdl.contains(field), "schema is missing {field}");

@@ -214,7 +214,7 @@ impl AuthorizeService {
                 .collect()
         } else {
             self.key_repo
-                .list_available_asymmetric()
+                .list_active_asymmetric()
                 .await
                 .map_err(|error| {
                     AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
@@ -248,7 +248,7 @@ impl AuthorizeService {
     ) -> Result<jwt::JwtPayload, AppError> {
         let credentials = self
             .credential_repo
-            .find_by_client_oid_and_type(
+            .find_active_by_client_oid_and_type(
                 client.client().oid,
                 OpenIdConnectCredentialType::ClientPublicKey,
             )
@@ -274,7 +274,7 @@ impl AuthorizeService {
 
         let jwks_credentials = self
             .credential_repo
-            .find_by_client_oid_and_type(
+            .find_active_by_client_oid_and_type(
                 client.client().oid,
                 OpenIdConnectCredentialType::ClientJsonWebKeySet,
             )
