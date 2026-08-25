@@ -25,7 +25,7 @@ use crate::{
         openid_connect::{
             ClaimsRequest, OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
             ScopeSet,
-            model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
+            model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
             model::credential::OpenIdConnectCredentialData,
         },
         user::{UserOid, repository::UserRepository},
@@ -119,12 +119,12 @@ impl UserInfoService {
             })?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let Some(alg) = client.metadata().userinfo_signed_response_alg.as_deref() else {
+        let Some(alg) = client.metadata().userinfo_signed_response_alg else {
             return Ok(None);
         };
-        if alg == "none" {
+        let identity_domain::key::JwsAlgorithm::Asymmetric(alg) = alg else {
             return Err(AppError::from_code(CommonErrorCode::InternalError));
-        }
+        };
 
         let (key_id, private_key) = self.load_signing_key_for_alg(alg).await?;
         let mut header = JwsHeader::new();
@@ -160,13 +160,17 @@ impl UserInfoService {
             })?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let Some(alg) = client.metadata().userinfo_encrypted_response_alg.as_deref() else {
+        let Some(alg) = client
+            .metadata()
+            .userinfo_encrypted_response_alg
+            .map(|value| value.as_str())
+        else {
             return Ok(None);
         };
         let enc = client
             .metadata()
             .userinfo_encrypted_response_enc
-            .as_deref()
+            .map(|value| value.as_str())
             .unwrap_or("A128CBC-HS256");
 
         let credential = self
@@ -202,6 +206,11 @@ impl UserInfoService {
         let alg = header
             .claim(JwtClaimNames::ALG)
             .and_then(|v| v.as_str())
+            .and_then(|value| {
+                value
+                    .parse::<identity_domain::key::JwaSigningAlgorithm>()
+                    .ok()
+            })
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         let kid = header
@@ -274,9 +283,10 @@ impl UserInfoService {
         let token_use = payload
             .claim(JwtClaimNames::TOKEN_USE)
             .and_then(|v| v.as_str())
+            .and_then(|value| value.parse::<TokenUse>().ok())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        if token_use != TokenUseValues::ACCESS_TOKEN {
+        if token_use != TokenUse::AccessToken {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 
@@ -369,14 +379,14 @@ impl UserInfoService {
         &self,
         token: &str,
         key: &identity_domain::key::Key,
-        alg: &str,
+        alg: identity_domain::key::JwaSigningAlgorithm,
     ) -> Result<(jwt::JwtPayload, JwsHeader), AppError> {
         let public_key = match &key.data {
             KeyData::Asymmetric(data) => data.public_key.as_bytes(),
             _ => return Err(AppError::from_code(CommonErrorCode::InternalError)),
         };
 
-        let verifier = asymmetric_verifier_from_pem(alg, public_key)
+        let verifier = asymmetric_verifier_from_pem(alg.as_str(), public_key)
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
         let (payload, header) = jwt::decode_with_verifier(token, verifier.as_ref())
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
@@ -384,11 +394,17 @@ impl UserInfoService {
         Ok((payload, header))
     }
 
-    async fn load_signing_key_for_alg(&self, alg: &str) -> Result<(String, String), AppError> {
+    async fn load_signing_key_for_alg(
+        &self,
+        alg: identity_domain::key::JwaSigningAlgorithm,
+    ) -> Result<(String, String), AppError> {
         let keys = self.key_service.list_available().await?;
         let bindings = self.key_service.list_available_jwks().await?;
 
-        for binding in bindings.iter().filter(|binding| binding.algorithm == alg) {
+        for binding in bindings
+            .iter()
+            .filter(|binding| binding.algorithm == identity_domain::key::JwkAlgorithm::Signing(alg))
+        {
             let Some(key) = keys.iter().find(|key| key.oid == binding.key_oid) else {
                 continue;
             };
@@ -435,8 +451,8 @@ fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppErro
 
 fn build_user_info_signer(
     private_key_pem: &str,
-    alg: &str,
+    alg: identity_domain::key::JwaSigningAlgorithm,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
-    asymmetric_signer_from_pem(alg, private_key_pem.as_bytes())
+    asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes())
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
 }

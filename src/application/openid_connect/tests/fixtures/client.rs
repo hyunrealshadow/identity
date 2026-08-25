@@ -50,7 +50,7 @@ pub(in crate::openid_connect) fn test_metadata(
         request_object_signing_alg: None,
         request_object_encryption_alg: None,
         request_object_encryption_enc: None,
-        token_endpoint_auth_method: token_endpoint_auth_method.map(str::to_owned),
+        token_endpoint_auth_method: token_endpoint_auth_method.map(|value| value.parse().unwrap()),
         token_endpoint_auth_signing_alg: None,
         default_max_age: None,
         require_auth_time: None,

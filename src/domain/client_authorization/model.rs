@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
-use crate::openid_connect::{AuthorizationRequestData, ClaimsRequest};
+use crate::openid_connect::{AuthorizationRequestData, ClaimsRequest, CodeChallengeMethod};
 
 pub type ClientAuthorizationOid = Uuid;
 
@@ -47,7 +47,7 @@ pub struct AuthorizationCodeData {
     pub scope: String,
     pub nonce: Option<String>,
     pub code_challenge: Option<String>,
-    pub code_challenge_method: Option<String>,
+    pub code_challenge_method: Option<CodeChallengeMethod>,
     pub user_oid: String,
     pub session_oid: SessionOid,
     #[serde(default)]
@@ -169,6 +169,7 @@ mod tests {
         AccessTokenData, AuthorizationCodeData, ClientAuthorizationType, RefreshTokenData,
         SessionOid,
     };
+    use crate::openid_connect::CodeChallengeMethod;
     use std::str::FromStr;
 
     #[test]
@@ -193,7 +194,7 @@ mod tests {
             scope: "openid profile".to_string(),
             nonce: Some("nonce123".to_string()),
             code_challenge: Some("challenge123".to_string()),
-            code_challenge_method: Some("S256".to_string()),
+            code_challenge_method: Some(CodeChallengeMethod::S256),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: SessionOid(uuid::Uuid::nil()),
             protected_session_id: Some("protected-session".to_string()),

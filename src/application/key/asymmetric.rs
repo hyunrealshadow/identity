@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     application::error::{AppError, codes::key::KeyErrorCode},
     domain::key::{
-        CreateKeyJwkInput, KeyJwkRepository, PublicJwk,
+        CreateKeyJwkInput, JwkAlgorithm, KeyJwkRepository, PublicJwk,
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
         model::{AsymmetricKeyAlgorithm, Key, KeyData},
         repository::KeyRepository,
@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct GeneratedKeyJwk {
-    pub algorithm: String,
+    pub algorithm: JwkAlgorithm,
     pub jwk: PublicJwk,
 }
 

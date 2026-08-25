@@ -33,16 +33,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         user_oid: UserOid,
         credential_type: CredentialType,
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError> {
-        let credential_type_str = match credential_type {
-            CredentialType::Password => "password",
-            CredentialType::Otp => "otp",
-            CredentialType::RecoveryCode => "recovery_code",
-        };
-
         let rows = UserEntity::find()
             .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
             .inner_join(UserCredentialEntity)
-            .filter(user_credential::Column::Type.eq(credential_type_str))
+            .filter(user_credential::Column::Type.eq(credential_type.as_ref()))
             .filter(
                 Condition::any()
                     .add(user_credential::Column::ExpiresAt.is_null())
@@ -77,7 +71,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 };
                 Ok(UserCredential {
                     oid: m.oid.into(),
-                    r#type: credential_type.clone(),
+                    r#type: credential_type,
                     data: data.map_err(UserCredentialRepositoryError::Deserialization)?,
                 })
             })
@@ -101,7 +95,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
-            .filter(user_credential::Column::Type.eq("password"))
+            .filter(user_credential::Column::Type.eq(CredentialType::Password.as_ref()))
             .filter(
                 Condition::any()
                     .add(user_credential::Column::ExpiresAt.is_null())
@@ -136,7 +130,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
-            .filter(user_credential::Column::Type.eq("otp"))
+            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
             .filter(
                 Condition::any()
                     .add(user_credential::Column::ExpiresAt.is_null())
@@ -253,7 +247,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         let totp_exists = UserCredentialEntity::find()
             .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq("otp"))
+            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
             .filter(
                 Condition::any()
                     .add(user_credential::Column::ExpiresAt.is_null())
@@ -273,8 +267,8 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .filter(user_credential::Column::UserId.eq(user.id))
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::Type.eq("otp"))
-                    .add(user_credential::Column::Type.eq("recovery_code")),
+                    .add(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
+                    .add(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref())),
             )
             .exec(&txn)
             .await
@@ -282,7 +276,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         user_credential::ActiveModel {
             oid: Set(uuid::Uuid::new_v4()),
             user_id: Set(user.id),
-            r#type: Set("otp".to_owned()),
+            r#type: Set(CredentialType::Otp.to_string()),
             data: Set(otp),
             expires_at: Set(None),
             created_at: Set(Utc::now().into()),
@@ -295,7 +289,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             user_credential::ActiveModel {
                 oid: Set(uuid::Uuid::new_v4()),
                 user_id: Set(user.id),
-                r#type: Set("recovery_code".to_owned()),
+                r#type: Set(CredentialType::RecoveryCode.to_string()),
                 data: Set(value),
                 expires_at: Set(None),
                 created_at: Set(Utc::now().into()),
@@ -337,7 +331,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         let totp_exists = UserCredentialEntity::find()
             .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq("otp"))
+            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
             .filter(
                 Condition::any()
                     .add(user_credential::Column::ExpiresAt.is_null())
@@ -355,7 +349,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         }
         UserCredentialEntity::delete_many()
             .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq("recovery_code"))
+            .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
             .exec(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -363,7 +357,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             user_credential::ActiveModel {
                 oid: Set(uuid::Uuid::new_v4()),
                 user_id: Set(user.id),
-                r#type: Set("recovery_code".to_owned()),
+                r#type: Set(CredentialType::RecoveryCode.to_string()),
                 data: Set(value),
                 expires_at: Set(None),
                 created_at: Set(Utc::now().into()),
@@ -385,7 +379,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
     ) -> Result<bool, UserCredentialRepositoryError> {
         let result = UserCredentialEntity::delete_many()
             .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
-            .filter(user_credential::Column::Type.eq("recovery_code"))
+            .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
             .filter(
                 Condition::any()
                     .add(user_credential::Column::ExpiresAt.is_null())

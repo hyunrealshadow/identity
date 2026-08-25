@@ -346,14 +346,14 @@ async fn register_accepts_supported_request_object_encryption_metadata() {
         registration
             .metadata
             .request_object_encryption_alg
-            .as_deref(),
+            .map(|value| value.as_str()),
         Some("RSA-OAEP-256")
     );
     assert_eq!(
         registration
             .metadata
             .request_object_encryption_enc
-            .as_deref(),
+            .map(|value| value.as_str()),
         Some("A256GCM")
     );
 }

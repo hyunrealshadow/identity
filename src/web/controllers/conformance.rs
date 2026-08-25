@@ -210,7 +210,12 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     let session = match ctx
         .services()
         .login()
-        .challenge(login_oid, "password", &body.password, sess_ctx)
+        .challenge(
+            login_oid,
+            identity_domain::user::CredentialType::Password,
+            &body.password,
+            sess_ctx,
+        )
         .await
     {
         Ok(ChallengeOutcome::Authenticated { session, .. }) => session,

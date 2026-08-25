@@ -10,7 +10,7 @@ use identity_domain::{
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
         model::AsymmetricKeyAlgorithm,
     },
-    openid_connect::model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
+    openid_connect::model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
     setting::{
         consent_url::ConsentUrlSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
@@ -335,10 +335,7 @@ fn access_token(
         .set_claim(JwtClaimNames::SID, Some(json!("protected-session")))
         .unwrap();
     payload
-        .set_claim(
-            JwtClaimNames::TOKEN_USE,
-            Some(json!(TokenUseValues::ACCESS_TOKEN)),
-        )
+        .set_claim(JwtClaimNames::TOKEN_USE, Some(json!(TokenUse::AccessToken)))
         .unwrap();
     let signer = RS256.signer_from_pem(private_key.as_bytes()).unwrap();
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()

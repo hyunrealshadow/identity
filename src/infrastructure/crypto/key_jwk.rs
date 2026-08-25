@@ -28,6 +28,9 @@ impl KeyJwkGenerator for KeyJwkGeneratorImpl {
                 let jwk = serde_json::from_value::<PublicJwk>(jwk_value).map_err(|error| {
                     AppError::from_code(KeyErrorCode::JwkSerializationFailed).with_source(error)
                 })?;
+                let algorithm = algorithm
+                    .parse()
+                    .map_err(|_| AppError::from_code(KeyErrorCode::UnsupportedAlgorithm))?;
                 Ok(GeneratedKeyJwk { algorithm, jwk })
             })
             .collect()

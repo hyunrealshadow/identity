@@ -36,7 +36,7 @@ impl FromStr for SubjectType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum TokenEndpointAuthMethod {
     ClientSecretBasic,
@@ -44,6 +44,42 @@ pub enum TokenEndpointAuthMethod {
     ClientSecretJwt,
     PrivateKeyJwt,
     None,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[strum(serialize_all = "snake_case")]
+pub enum ClaimType {
+    Normal,
+    Aggregated,
+    Distributed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid OpenID Connect claim type")]
+pub struct ParseClaimTypeError;
+
+impl FromStr for ClaimType {
+    type Err = ParseClaimTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::iter()
+            .find(|variant| variant.as_ref() == value)
+            .ok_or(ParseClaimTypeError)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid token endpoint authentication method")]
+pub struct ParseTokenEndpointAuthMethodError;
+
+impl FromStr for TokenEndpointAuthMethod {
+    type Err = ParseTokenEndpointAuthMethodError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::iter()
+            .find(|variant| variant.as_ref() == value)
+            .ok_or(ParseTokenEndpointAuthMethodError)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

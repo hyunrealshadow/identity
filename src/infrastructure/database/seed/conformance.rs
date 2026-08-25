@@ -15,6 +15,11 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
+use identity_domain::{
+    openid_connect::{GrantType, ResponseType, TokenEndpointAuthMethod},
+    user::CredentialType,
+};
+
 use crate::{
     application::error::AppError,
     application::error::codes::common::CommonErrorCode,
@@ -86,9 +91,9 @@ struct ConformanceClientSpec {
     credential_oid: &'static str,
     name: &'static str,
     secret: &'static str,
-    token_endpoint_auth_method: &'static str,
-    grant_types: &'static [&'static str],
-    response_types: &'static [&'static str],
+    token_endpoint_auth_method: TokenEndpointAuthMethod,
+    grant_types: &'static [GrantType],
+    response_types: &'static [ResponseType],
 }
 
 struct ConformanceOidcMetadataValues {
@@ -176,7 +181,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         let _ = user_credential::ActiveModel {
             oid: Set(user_cred_oid),
             user_id: Set(created_user.id),
-            r#type: Set("password".to_owned()),
+            r#type: Set(CredentialType::Password.to_string()),
             data: Set(password_json),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
@@ -301,54 +306,70 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             credential_oid: BASIC_CLIENT_CRED_OID,
             name: CONFORMANCE_BASIC_CLIENT_NAME,
             secret: CONFORMANCE_BASIC_CLIENT_SECRET,
-            token_endpoint_auth_method: "client_secret_basic",
-            grant_types: &["authorization_code", "refresh_token"],
-            response_types: &["code"],
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
+            response_types: &[ResponseType::Code],
         },
         ConformanceClientSpec {
             oid: BASIC_CLIENT_POST_OID,
             credential_oid: BASIC_CLIENT_POST_CRED_OID,
             name: "OpenID Conformance Suite (Basic client_secret_post)",
             secret: CONFORMANCE_BASIC_CLIENT_POST_SECRET,
-            token_endpoint_auth_method: "client_secret_post",
-            grant_types: &["authorization_code", "refresh_token"],
-            response_types: &["code"],
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretPost,
+            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
+            response_types: &[ResponseType::Code],
         },
         ConformanceClientSpec {
             oid: IMPLICIT_CLIENT_OID,
             credential_oid: IMPLICIT_CLIENT_CRED_OID,
             name: CONFORMANCE_IMPLICIT_CLIENT_NAME,
             secret: CONFORMANCE_IMPLICIT_CLIENT_SECRET,
-            token_endpoint_auth_method: "client_secret_basic",
-            grant_types: &["implicit"],
-            response_types: &["id_token", "id_token token"],
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[GrantType::Implicit],
+            response_types: &[ResponseType::IdToken, ResponseType::TokenIdToken],
         },
         ConformanceClientSpec {
             oid: IMPLICIT_CLIENT_POST_OID,
             credential_oid: IMPLICIT_CLIENT_POST_CRED_OID,
             name: "OpenID Conformance Suite (Implicit client_secret_post)",
             secret: CONFORMANCE_IMPLICIT_CLIENT_POST_SECRET,
-            token_endpoint_auth_method: "client_secret_post",
-            grant_types: &["implicit"],
-            response_types: &["id_token", "id_token token"],
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretPost,
+            grant_types: &[GrantType::Implicit],
+            response_types: &[ResponseType::IdToken, ResponseType::TokenIdToken],
         },
         ConformanceClientSpec {
             oid: HYBRID_CLIENT_OID,
             credential_oid: HYBRID_CLIENT_CRED_OID,
             name: CONFORMANCE_HYBRID_CLIENT_NAME,
             secret: CONFORMANCE_HYBRID_CLIENT_SECRET,
-            token_endpoint_auth_method: "client_secret_basic",
-            grant_types: &["authorization_code", "implicit", "refresh_token"],
-            response_types: &["code id_token", "code token", "code id_token token"],
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[
+                GrantType::AuthorizationCode,
+                GrantType::Implicit,
+                GrantType::RefreshToken,
+            ],
+            response_types: &[
+                ResponseType::CodeIdToken,
+                ResponseType::CodeToken,
+                ResponseType::CodeTokenIdToken,
+            ],
         },
         ConformanceClientSpec {
             oid: HYBRID_CLIENT_POST_OID,
             credential_oid: HYBRID_CLIENT_POST_CRED_OID,
             name: "OpenID Conformance Suite (Hybrid client_secret_post)",
             secret: CONFORMANCE_HYBRID_CLIENT_POST_SECRET,
-            token_endpoint_auth_method: "client_secret_post",
-            grant_types: &["authorization_code", "implicit", "refresh_token"],
-            response_types: &["code id_token", "code token", "code id_token token"],
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretPost,
+            grant_types: &[
+                GrantType::AuthorizationCode,
+                GrantType::Implicit,
+                GrantType::RefreshToken,
+            ],
+            response_types: &[
+                ResponseType::CodeIdToken,
+                ResponseType::CodeToken,
+                ResponseType::CodeTokenIdToken,
+            ],
         },
     ]
 }
@@ -447,9 +468,14 @@ async fn ensure_conformance_oidc_metadata(
 
 fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> ConformanceOidcMetadataValues {
     ConformanceOidcMetadataValues {
-        grant_types: serde_json::json!(spec.grant_types),
+        grant_types: serde_json::json!(
+            spec.grant_types
+                .iter()
+                .map(|value| value.as_str())
+                .collect::<Vec<_>>()
+        ),
         response_types: serde_json::json!(spec.response_types),
-        token_endpoint_auth_method: Some(spec.token_endpoint_auth_method.to_owned()),
+        token_endpoint_auth_method: Some(spec.token_endpoint_auth_method.to_string()),
         post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
         frontchannel_logout_uri: Some(conformance_frontchannel_logout_uri()),
         frontchannel_logout_session_required: Some(true),

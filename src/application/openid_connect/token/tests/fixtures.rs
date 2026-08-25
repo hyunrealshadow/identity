@@ -166,7 +166,7 @@ pub(super) fn jwk_repo_with_bindings(bindings: Vec<KeyJwk>) -> MockKeyJwkReposit
     mock.expect_find_active_by_key_oid_and_algorithm()
         .returning(move |oid, alg| {
             Ok(b.iter()
-                .find(|b| b.key_oid == oid && b.algorithm == alg)
+                .find(|b| b.key_oid == oid && b.algorithm.as_str() == alg.as_str())
                 .cloned())
         });
     mock

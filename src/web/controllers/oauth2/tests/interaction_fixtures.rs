@@ -136,7 +136,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         r#type: ClientAuthorizationType::AuthorizationRequest.to_string(),
         data: serde_json::to_value(StoredAuthorizationRequest {
             request: AuthorizationRequestData {
-                response_type: "code".to_owned(),
+                response_type: "code".parse().unwrap(),
                 response_mode: None,
                 client_id: client_oid.to_string(),
                 redirect_uri: "https://client.example.com/callback".to_owned(),
@@ -168,7 +168,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         client_authorization_id: inserted_authorization_model.id,
         session_id: None,
         user_id: None,
-        status: LoginStatus::CREATED.to_owned(),
+        status: LoginStatus::CREATED.to_string(),
         failure_reason: None,
         failed_attempts: 0,
         acr: None,
@@ -239,7 +239,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         id: 43,
         oid: selected_session_oid,
         user_id: 47,
-        status: identity_domain::auth::SessionStatus::ACTIVE.to_owned(),
+        status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
         acr: None,
         acr_expires_at: None,
         amr: serde_json::json!([]),

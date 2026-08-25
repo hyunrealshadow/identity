@@ -5,7 +5,6 @@ use sea_orm::DatabaseConnection;
 use tera::Tera;
 
 use identity_application::install::{InstallInput, InstallService};
-use identity_domain::key::AsymmetricKeyAlgorithm;
 use identity_infrastructure::auth::password::PasswordHasherImpl;
 use identity_infrastructure::crypto::certificate_generator::CertificateGeneratorImpl;
 use identity_infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
@@ -137,8 +136,7 @@ impl AppBuilder {
             "auto install: config values"
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
-        let key_algorithm = parse_install_algorithm(cfg.key_algorithm.as_str())
-            .unwrap_or(AsymmetricKeyAlgorithm::EcdsaP256);
+        let key_algorithm = cfg.key_algorithm.clone();
         let svc = build_install_service(&settings, db.clone());
 
         let domain = install_domain(cfg, &self.config);
@@ -235,21 +233,6 @@ fn build_install_service(
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         persistence: Arc::new(InstallPersistenceImpl::new(db)),
         runtime_key_ring: settings.key_ring(),
-    }
-}
-
-fn parse_install_algorithm(raw: &str) -> Option<AsymmetricKeyAlgorithm> {
-    match raw {
-        "ecdsa-p256" => Some(AsymmetricKeyAlgorithm::EcdsaP256),
-        "ecdsa-p384" => Some(AsymmetricKeyAlgorithm::EcdsaP384),
-        "ecdsa-p521" => Some(AsymmetricKeyAlgorithm::EcdsaP521),
-        "ecdsa-secp256k1" => Some(AsymmetricKeyAlgorithm::EcdsaSecp256k1),
-        "ed25519" => Some(AsymmetricKeyAlgorithm::Ed25519),
-        "ed448" => Some(AsymmetricKeyAlgorithm::Ed448),
-        "rsa-2048" => Some(AsymmetricKeyAlgorithm::Rsa { bits: 2048 }),
-        "rsa-3072" => Some(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
-        "rsa-4096" => Some(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
-        _ => None,
     }
 }
 

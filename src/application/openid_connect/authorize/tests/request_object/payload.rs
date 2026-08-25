@@ -220,8 +220,8 @@ async fn parse_encrypted_request_object_rejects_malformed_protected_header() {
 async fn parse_encrypted_request_object_enforces_registered_alg_and_enc() {
     let service = authorize_service_with_public_key(signing_keypair().1);
     let mut metadata = test_metadata(None, None);
-    metadata.request_object_encryption_alg = Some("RSA-OAEP-256".to_owned());
-    metadata.request_object_encryption_enc = Some("A256GCM".to_owned());
+    metadata.request_object_encryption_alg = Some("RSA-OAEP-256".parse().unwrap());
+    metadata.request_object_encryption_enc = Some("A256GCM".parse().unwrap());
     let client = OpenIdConnectClient::new(
         test_client(TEST_CLIENT_ID),
         metadata,
@@ -386,7 +386,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
         http_client: crate::openid_connect::remote::test_http_client(),
     });
     let mut metadata = test_metadata(None, None);
-    metadata.request_object_signing_alg = Some("RS384".to_owned());
+    metadata.request_object_signing_alg = Some("RS384".parse().unwrap());
     let client = OpenIdConnectClient::new(
         test_client(TEST_CLIENT_ID),
         metadata,

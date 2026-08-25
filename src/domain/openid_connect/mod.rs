@@ -7,16 +7,18 @@ pub use model::authorization_request::{
     ResponseType,
 };
 pub use model::client::{
-    InvalidOpenIdConnectClientError, OpenIdConnectClient, OpenIdConnectClientMetadata,
-    OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
-    pairwise_subject_identifier,
+    ClientAssertionType, GrantType, InvalidOpenIdConnectClientError, OpenIdConnectClient,
+    OpenIdConnectClientMetadata, OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType,
+    OpenIdConnectClientSettings, pairwise_subject_identifier,
 };
 pub use model::credential::{
     OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,
     OpenIdConnectCredentialType,
 };
 pub use model::oauth_error::{OAuthErrorCode, OAuthErrorResponse};
-pub use model::provider::{OpenIdProviderMetadata, SubjectType, TokenEndpointAuthMethod};
+pub use model::provider::{
+    ClaimType, OpenIdProviderMetadata, SubjectType, TokenEndpointAuthMethod,
+};
 pub use model::scope::{API_RESOURCE, ApiScope, ScopeParseError, ScopeSet};
 pub use repository::{
     OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,

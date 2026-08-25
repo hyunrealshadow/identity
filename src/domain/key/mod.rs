@@ -6,10 +6,13 @@ pub mod material;
 pub mod model;
 pub mod repository;
 
-pub use algorithm::{AsymmetricKeyAlgorithm, JwaAlgorithmParseError, JwaSigningAlgorithm};
+pub use algorithm::{
+    AsymmetricKeyAlgorithm, JwaAlgorithmParseError, JwaSigningAlgorithm, JwsAlgorithm,
+};
 pub use encryption_algorithm::{JwaEncryptionAlgorithm, JweContentEncryption};
 pub use jwk::{
-    CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, PublicJwk,
+    CreateKeyJwkInput, JwkAlgorithm, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError,
+    PublicJwk,
 };
 pub use material::{AsymmetricKeyData, KeyData, SymmetricKeyAlgorithm, SymmetricKeyData};
 pub use model::{Key, KeyOid, KeyType, ParseKeyTypeError};

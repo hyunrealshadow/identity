@@ -180,7 +180,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         id: 11,
         oid: session_oid,
         user_id: active_user.id,
-        status: SessionStatus::ACTIVE.to_owned(),
+        status: SessionStatus::ACTIVE.to_string(),
         acr: None,
         acr_expires_at: None,
         amr: serde_json::json!([]),
@@ -214,7 +214,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
     };
     let authorization_request = StoredAuthorizationRequest {
         request: AuthorizationRequestData {
-            response_type: "code".to_owned(),
+            response_type: "code".parse().unwrap(),
             response_mode: None,
             client_id: client_oid.to_string(),
             redirect_uri: "https://client.example.com/callback".to_owned(),
@@ -258,7 +258,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         client_authorization_id: authorization_model.id,
         session_id: Some(active_session.id),
         user_id: None,
-        status: LoginStatus::CREATED.to_owned(),
+        status: LoginStatus::CREATED.to_string(),
         failure_reason: None,
         failed_attempts: 0,
         acr: None,

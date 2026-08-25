@@ -285,7 +285,7 @@ impl LogoutService {
                 let logout_token = self.sign_logout_token(
                     &key_id,
                     &private_key,
-                    &alg,
+                    alg,
                     &issuer,
                     client.client().oid,
                     protected_session_id,
@@ -337,7 +337,7 @@ impl LogoutService {
         Ok(())
     }
 
-    async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
+    async fn load_signing_key(&self) -> Result<(String, String, JwaSigningAlgorithm), AppError> {
         let keys = self
             .key_repo
             .list_active_asymmetric()
@@ -359,7 +359,7 @@ impl LogoutService {
 
                 let Some(binding) = self
                     .key_jwk_repo
-                    .find_active_by_key_oid_and_algorithm(key.oid, alg.as_str())
+                    .find_active_by_key_oid_and_algorithm(key.oid, alg)
                     .await
                     .map_err(|error| {
                         AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -371,7 +371,7 @@ impl LogoutService {
                 return Ok((
                     Uuid::from(binding.oid).to_string(),
                     data.private_key.clone(),
-                    alg.as_str().to_owned(),
+                    alg,
                 ));
             }
         }
@@ -383,7 +383,7 @@ impl LogoutService {
         &self,
         key_id: &str,
         private_key_pem: &str,
-        alg: &str,
+        alg: JwaSigningAlgorithm,
         issuer: &Url,
         audience: Uuid,
         protected_session_id: &str,
@@ -516,15 +516,12 @@ fn audience_client_id(claims: Option<&IdTokenHintClaims>) -> Option<String> {
 
 fn build_logout_token_signer(
     private_key_pem: &str,
-    alg: &str,
+    alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
-    let jwa: JwaSigningAlgorithm = alg
-        .parse()
-        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
     let pem = private_key_pem.as_bytes();
     let err =
         |e: josekit::JoseError| AppError::from_code(CommonErrorCode::InternalError).with_source(e);
-    match jwa {
+    match alg {
         JwaSigningAlgorithm::Rs256 => Ok(Box::new(RS256.signer_from_pem(pem).map_err(err)?)),
         JwaSigningAlgorithm::Rs384 => Ok(Box::new(RS384.signer_from_pem(pem).map_err(err)?)),
         JwaSigningAlgorithm::Rs512 => Ok(Box::new(RS512.signer_from_pem(pem).map_err(err)?)),
@@ -666,8 +663,8 @@ mod tests {
                 frontchannel_logout_session_required: Some(true),
                 backchannel_logout_uri: backchannel_logout_uri.map(|uri| Url::parse(uri).unwrap()),
                 backchannel_logout_session_required: Some(true),
-                response_types: Some(vec!["code".to_owned()]),
-                grant_types: Some(vec!["authorization_code".to_owned()]),
+                response_types: Some(vec!["code".parse().unwrap()]),
+                grant_types: Some(vec!["authorization_code".parse().unwrap()]),
                 contacts: None,
                 logo_uri: None,
                 client_uri: None,
@@ -723,7 +720,7 @@ mod tests {
         let binding = KeyJwk {
             oid: KeyJwkOid(Uuid::new_v4()),
             key_oid,
-            algorithm: "RS256".to_owned(),
+            algorithm: "RS256".parse().unwrap(),
             jwk: PublicJwk::Rsa {
                 key_use: None,
                 alg: Some("RS256".to_owned()),
@@ -814,7 +811,7 @@ mod tests {
             .returning(move |oid, alg| {
                 Ok(b2
                     .iter()
-                    .find(|b| b.key_oid == oid && b.algorithm == alg)
+                    .find(|b| b.key_oid == oid && b.algorithm.as_str() == alg.as_str())
                     .cloned())
             });
 

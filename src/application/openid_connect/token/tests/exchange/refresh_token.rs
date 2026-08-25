@@ -28,7 +28,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
                 code_challenge: Some(s256_challenge("verifier-refresh")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -45,7 +45,6 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -63,7 +62,6 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
-            grant_type: "refresh_token".to_string(),
             refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -73,7 +71,10 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .await
         .unwrap();
 
-    assert_eq!(refreshed.token_type, "Bearer");
+    assert!(matches!(
+        refreshed.token_type,
+        crate::openid_connect::token::TokenType::Bearer
+    ));
     assert!(refreshed.id_token.is_some());
     assert!(refreshed.refresh_token.is_some());
     let rotated_oid = Uuid::from_slice(
@@ -182,7 +183,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh-es256".to_string()),
                 code_challenge: Some(s256_challenge("verifier-refresh-es256")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -199,7 +200,6 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -213,7 +213,6 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
-            grant_type: "refresh_token".to_string(),
             refresh_token: initial.refresh_token.unwrap(),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -318,7 +317,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-auth-time".to_string()),
                 code_challenge: Some(s256_challenge("verifier-auth-time")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -335,7 +334,6 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -360,7 +358,6 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
-            grant_type: "refresh_token".to_string(),
             refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -412,7 +409,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
                 scope: "openid offline_access".to_string(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("verifier-no-auth-time")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -429,7 +426,6 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),

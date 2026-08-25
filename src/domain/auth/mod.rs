@@ -5,25 +5,49 @@ pub mod repository;
 pub mod totp;
 
 use std::time::Duration;
+use std::{fmt, str::FromStr};
 
 // ─── Login Status ────────────────────────────────────────────────────────────
 
-/// Status values for the `login` table.
-pub struct LoginStatus;
+/// Lifecycle state of a login interaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LoginStatus {
+    Created,
+    IdentifierVerified,
+    MfaRequired,
+    Authenticated,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("unknown login status")]
+pub struct ParseLoginStatusError;
 
 impl LoginStatus {
-    pub const CREATED: &'static str = "created";
-    pub const IDENTIFIER_VERIFIED: &'static str = "identifier_verified";
+    pub const CREATED: Self = Self::Created;
+    pub const IDENTIFIER_VERIFIED: Self = Self::IdentifierVerified;
     /// Password verified; awaiting MFA (TOTP) challenge.
-    pub const MFA_REQUIRED: &'static str = "mfa_required";
-    pub const AUTHENTICATED: &'static str = "authenticated";
-    pub const FAILED: &'static str = "failed";
+    pub const MFA_REQUIRED: Self = Self::MfaRequired;
+    pub const AUTHENTICATED: Self = Self::Authenticated;
+    pub const FAILED: Self = Self::Failed;
 
     #[must_use]
-    pub fn can_transition(current: &str, next: &str) -> bool {
-        current == next
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::IdentifierVerified => "identifier_verified",
+            Self::MfaRequired => "mfa_required",
+            Self::Authenticated => "authenticated",
+            Self::Failed => "failed",
+        }
+    }
+
+    #[must_use]
+    pub fn can_transition(self, next: Self) -> bool {
+        self == next
             || matches!(
-                (current, next),
+                (self, next),
                 (Self::CREATED, Self::FAILED)
                     | (
                         Self::IDENTIFIER_VERIFIED,
@@ -34,15 +58,89 @@ impl LoginStatus {
     }
 }
 
+impl fmt::Display for LoginStatus {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for LoginStatus {
+    type Err = ParseLoginStatusError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "created" => Ok(Self::Created),
+            "identifier_verified" => Ok(Self::IdentifierVerified),
+            "mfa_required" => Ok(Self::MfaRequired),
+            "authenticated" => Ok(Self::Authenticated),
+            "failed" => Ok(Self::Failed),
+            _ => Err(ParseLoginStatusError),
+        }
+    }
+}
+
 // ─── Session Status ──────────────────────────────────────────────────────────
 
-/// Status values for the `session` table.
-pub struct SessionStatus;
+/// Lifecycle state of an authenticated session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SessionStatus {
+    Active,
+    Expired,
+    Revoked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("unknown session status")]
+pub struct ParseSessionStatusError;
 
 impl SessionStatus {
-    pub const ACTIVE: &'static str = "active";
-    pub const EXPIRED: &'static str = "expired";
-    pub const REVOKED: &'static str = "revoked";
+    pub const ACTIVE: Self = Self::Active;
+    pub const EXPIRED: Self = Self::Expired;
+    pub const REVOKED: Self = Self::Revoked;
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Expired => "expired",
+            Self::Revoked => "revoked",
+        }
+    }
+}
+
+impl fmt::Display for SessionStatus {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for SessionStatus {
+    type Err = ParseSessionStatusError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "active" => Ok(Self::Active),
+            "expired" => Ok(Self::Expired),
+            "revoked" => Ok(Self::Revoked),
+            _ => Err(ParseSessionStatusError),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LoginFailureReason {
+    InvalidCredential,
+    InvalidOtp,
+}
+
+impl LoginFailureReason {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidCredential => "invalid_credential",
+            Self::InvalidOtp => "invalid_otp",
+        }
+    }
 }
 
 // ─── ACR (Authentication Context Class Reference) ────────────────────────────

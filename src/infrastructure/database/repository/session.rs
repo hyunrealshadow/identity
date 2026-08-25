@@ -19,12 +19,16 @@ use identity_domain::auth::{
 };
 use identity_domain::client_authorization::ClientAuthorizationType;
 
-fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
+fn session_to_domain(m: session::Model, user_oid: Uuid) -> Result<Session, SessionRepositoryError> {
     let amr = serde_json::from_value(m.amr.clone()).unwrap_or_default();
-    Session {
+    let status = m
+        .status
+        .parse()
+        .map_err(|_| SessionRepositoryError::InvalidStoredStatus)?;
+    Ok(Session {
         oid: SessionOid(m.oid),
         user_oid,
-        status: m.status,
+        status,
         device_name: m.device_name,
         device_type: m.device_type,
         os_name: m.os_name,
@@ -40,7 +44,7 @@ fn session_to_domain(m: session::Model, user_oid: Uuid) -> Session {
         acr: m.acr,
         acr_expires_at: m.acr_expires_at.map(|value| value.with_timezone(&Utc)),
         amr,
-    }
+    })
 }
 
 pub struct SessionRepositoryImpl {
@@ -88,19 +92,17 @@ impl SessionRepositoryImpl {
             return Ok(Vec::new());
         };
 
-        SessionEntity::find()
+        let sessions = SessionEntity::find()
             .filter(session::Column::UserId.eq(user.id))
             .order_by_desc(session::Column::LastActiveAt)
             .order_by_desc(session::Column::Id)
             .all(&self.db)
             .await
-            .map(|sessions| {
-                sessions
-                    .into_iter()
-                    .map(|session| session_to_domain(session, user_oid))
-                    .collect()
-            })
-            .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))
+            .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))?;
+        sessions
+            .into_iter()
+            .map(|session| session_to_domain(session, user_oid))
+            .collect()
     }
 
     pub async fn list_active_page_by_user_oid(
@@ -133,16 +135,17 @@ impl SessionRepositoryImpl {
             .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))?;
         let items = rows
             .into_iter()
-            .filter_map(|(session, user)| {
-                user.map(|user| SessionPageItem {
+            .filter_map(|(session, user)| user.map(|user| (session, user)))
+            .map(|(session, user)| {
+                Ok(SessionPageItem {
                     sort_key: SessionSortKey {
                         last_active_at: session.last_active_at.with_timezone(&Utc),
                         id: session.id,
                     },
-                    session: session_to_domain(session, user.oid),
+                    session: session_to_domain(session, user.oid)?,
                 })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, SessionRepositoryError>>()?;
         Ok(build_session_page(
             items,
             limit,
@@ -159,7 +162,7 @@ fn active_session_page_query(user_oid: Uuid) -> SelectTwo<session::Entity, user:
         .inner_join(UserEntity)
         .select_also(UserEntity)
         .filter(user::Column::Oid.eq(user_oid))
-        .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
+        .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
         .filter(session::Column::RevokedAt.is_null())
         .filter(session::Column::ExpiresAt.gt(now))
 }
@@ -229,7 +232,7 @@ impl SessionRepository for SessionRepositoryImpl {
         else {
             return Ok(None);
         };
-        Ok(Some(session_to_domain(s_model, u_model.oid)))
+        Ok(Some(session_to_domain(s_model, u_model.oid)?))
     }
 
     async fn find_active_accounts_by_oids(
@@ -242,7 +245,7 @@ impl SessionRepository for SessionRepositoryImpl {
         let uuids: Vec<Uuid> = oids.iter().map(|oid| Uuid::from(*oid)).collect();
         let rows: Vec<(session::Model, Option<user::Model>)> = SessionEntity::find()
             .filter(session::Column::Oid.is_in(uuids))
-            .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
+            .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
             .filter(session::Column::RevokedAt.is_null())
             .filter(session::Column::ExpiresAt.gt(Utc::now().fixed_offset()))
             .inner_join(UserEntity)
@@ -296,7 +299,7 @@ impl SessionRepository for SessionRepositoryImpl {
         let active = session::ActiveModel {
             oid: Set(Uuid::new_v4()),
             user_id: Set(user.id),
-            status: Set(SessionStatus::ACTIVE.to_owned()),
+            status: Set(SessionStatus::ACTIVE.to_string()),
             device_name: Set(input.device_name),
             device_type: Set(input.device_type),
             os_name: Set(input.os_name),
@@ -319,7 +322,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .insert(&self.db)
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
-        Ok(session_to_domain(model, input.user_oid))
+        session_to_domain(model, input.user_oid)
     }
 
     async fn touch_active_by_oid(&self, oid: SessionOid) -> Result<bool, SessionRepositoryError> {
@@ -334,7 +337,7 @@ impl SessionRepository for SessionRepositoryImpl {
                 Expr::value(Some(now.fixed_offset())),
             )
             .filter(session::Column::Oid.eq(Uuid::from(oid)))
-            .filter(session::Column::Status.eq(SessionStatus::ACTIVE))
+            .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
             .filter(session::Column::RevokedAt.is_null())
             .filter(session::Column::ExpiresAt.gt(now.fixed_offset()))
             .exec(&self.db)
@@ -372,7 +375,7 @@ impl SessionRepository for SessionRepositoryImpl {
         };
 
         let now = Utc::now();
-        let is_active = session_model.status == SessionStatus::ACTIVE
+        let is_active = session_model.status == SessionStatus::ACTIVE.as_str()
             && session_model.revoked_at.is_none()
             && decode_nonnullable_expiry(session_model.expires_at)
                 .is_none_or(|expires_at| expires_at > now)
@@ -397,7 +400,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
 
-        Ok(session_to_domain(model, expected_user_oid))
+        session_to_domain(model, expected_user_oid)
     }
 
     async fn revoke_by_oid(
@@ -426,7 +429,7 @@ impl SessionRepository for SessionRepositoryImpl {
 
         let mut active: session::ActiveModel = s_model.into();
         active.revoked_at = Set(Some(revoked_at.into()));
-        active.status = Set(SessionStatus::REVOKED.to_owned());
+        active.status = Set(SessionStatus::REVOKED.to_string());
         active.updated_at = Set(Some(revoked_at.into()));
         let model = active
             .update(&transaction)
@@ -461,7 +464,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .commit()
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
-        Ok(Some(session_to_domain(model, u_model.oid)))
+        Ok(Some(session_to_domain(model, u_model.oid)?))
     }
 }
 
@@ -536,7 +539,7 @@ mod tests {
             id: 1,
             oid: Uuid::new_v4(),
             user_id: 42,
-            status: SessionStatus::ACTIVE.to_owned(),
+            status: SessionStatus::ACTIVE.to_string(),
             acr: None,
             acr_expires_at: None,
             amr: serde_json::json!([]),
@@ -558,7 +561,7 @@ mod tests {
             updated_at: None,
         };
 
-        let session = session_to_domain(model, Uuid::new_v4());
+        let session = session_to_domain(model, Uuid::new_v4()).unwrap();
 
         assert_eq!(
             session.last_active_at,

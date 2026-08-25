@@ -4,7 +4,7 @@ use crate::domain::{
         model::{ActiveSession, Login, SessionOid},
     },
     client_authorization::{ConsentState, SelectionSource, StoredAuthorizationRequest},
-    openid_connect::{AuthorizationRequestData, OAuthErrorCode},
+    openid_connect::{AuthorizationRequestData, OAuthErrorCode, PromptValue},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,10 +23,11 @@ pub enum ContinueAction {
 }
 
 #[must_use]
-pub fn stored_request_has_prompt(prompt: Option<&str>, value: &str) -> bool {
-    prompt
-        .map(|items| items.split_whitespace().any(|item| item == value))
-        .unwrap_or(false)
+pub fn stored_request_has_prompt(
+    prompt: Option<&std::collections::HashSet<PromptValue>>,
+    value: PromptValue,
+) -> bool {
+    prompt.is_some_and(|items| items.contains(&value))
 }
 
 #[must_use]
@@ -67,7 +68,7 @@ fn login_is_authenticated(login: &Login) -> bool {
 
 #[must_use]
 fn continue_login_or_error(stored: &StoredAuthorizationRequest) -> ContinueAction {
-    if stored_request_has_prompt(stored.request.prompt.as_deref(), "none") {
+    if stored_request_has_prompt(stored.request.prompt.as_ref(), PromptValue::None) {
         ContinueAction::OAuthError(OAuthErrorCode::LoginRequired)
     } else {
         ContinueAction::Login
@@ -97,9 +98,9 @@ pub fn determine_continue_action(
     };
 
     let requires_forced_login =
-        stored_request_has_prompt(stored.request.prompt.as_deref(), "login");
+        stored_request_has_prompt(stored.request.prompt.as_ref(), PromptValue::Login);
     let requires_explicit_account_selection =
-        stored_request_has_prompt(stored.request.prompt.as_deref(), "select_account");
+        stored_request_has_prompt(stored.request.prompt.as_ref(), PromptValue::SelectAccount);
     let login_required = requires_forced_login
         || selected_session_exceeds_max_age(&stored.request, selected_session);
 
@@ -126,7 +127,7 @@ pub fn determine_continue_action(
         ConsentState::Approved => approve_action(selected_session),
         ConsentState::Pending if skip_consent => approve_action(selected_session),
         ConsentState::Pending
-            if stored_request_has_prompt(stored.request.prompt.as_deref(), "none") =>
+            if stored_request_has_prompt(stored.request.prompt.as_ref(), PromptValue::None) =>
         {
             ContinueAction::OAuthError(OAuthErrorCode::ConsentRequired)
         }

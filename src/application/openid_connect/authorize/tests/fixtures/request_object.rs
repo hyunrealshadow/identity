@@ -135,7 +135,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
     let binding = KeyJwk {
         oid: binding_oid,
         key_oid,
-        algorithm: encryption_alg.to_owned(),
+        algorithm: encryption_alg.parse().unwrap(),
         jwk: public_jwk,
         created_at: Utc::now(),
     };

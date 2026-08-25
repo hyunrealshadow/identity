@@ -8,9 +8,13 @@ use crate::{
         setting::runtime::SettingProvider,
     },
     domain::{
-        key::{JwaSigningAlgorithm, Key, KeyData, repository::KeyRepository},
+        key::{
+            JwaEncryptionAlgorithm, JwaSigningAlgorithm, JweContentEncryption, JwsAlgorithm, Key,
+            KeyData, repository::KeyRepository,
+        },
         openid_connect::{
-            ApiScope, OpenIdProviderMetadata, ResponseMode, SubjectType, TokenEndpointAuthMethod,
+            ApiScope, ClaimType, Display, GrantType, OpenIdProviderMetadata, ResponseMode,
+            ResponseType, SubjectType, TokenEndpointAuthMethod,
             model::claim::{JwtClaimNames, StandardScopes},
         },
         setting::{
@@ -23,24 +27,24 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct OpenIdProviderCapabilities {
     pub scopes_supported: Vec<String>,
-    pub response_types_supported: Vec<String>,
+    pub response_types_supported: Vec<ResponseType>,
     pub response_modes_supported: Vec<ResponseMode>,
-    pub grant_types_supported: Vec<String>,
+    pub grant_types_supported: Vec<GrantType>,
     pub acr_values_supported: Vec<String>,
     pub subject_types_supported: Vec<SubjectType>,
-    pub id_token_signing_alg_values_supported: Vec<String>,
-    pub id_token_encryption_alg_values_supported: Vec<String>,
-    pub id_token_encryption_enc_values_supported: Vec<String>,
-    pub userinfo_signing_alg_values_supported: Vec<String>,
-    pub userinfo_encryption_alg_values_supported: Vec<String>,
-    pub userinfo_encryption_enc_values_supported: Vec<String>,
-    pub request_object_signing_alg_values_supported: Vec<String>,
-    pub request_object_encryption_alg_values_supported: Vec<String>,
-    pub request_object_encryption_enc_values_supported: Vec<String>,
+    pub id_token_signing_alg_values_supported: Vec<JwsAlgorithm>,
+    pub id_token_encryption_alg_values_supported: Vec<JwaEncryptionAlgorithm>,
+    pub id_token_encryption_enc_values_supported: Vec<JweContentEncryption>,
+    pub userinfo_signing_alg_values_supported: Vec<JwsAlgorithm>,
+    pub userinfo_encryption_alg_values_supported: Vec<JwaEncryptionAlgorithm>,
+    pub userinfo_encryption_enc_values_supported: Vec<JweContentEncryption>,
+    pub request_object_signing_alg_values_supported: Vec<JwsAlgorithm>,
+    pub request_object_encryption_alg_values_supported: Vec<JwaEncryptionAlgorithm>,
+    pub request_object_encryption_enc_values_supported: Vec<JweContentEncryption>,
     pub token_endpoint_auth_methods_supported: Vec<TokenEndpointAuthMethod>,
-    pub token_endpoint_auth_signing_alg_values_supported: Vec<String>,
-    pub display_values_supported: Vec<String>,
-    pub claim_types_supported: Vec<String>,
+    pub token_endpoint_auth_signing_alg_values_supported: Vec<JwsAlgorithm>,
+    pub display_values_supported: Vec<Display>,
+    pub claim_types_supported: Vec<ClaimType>,
     pub claims_supported: Vec<String>,
     pub claims_locales_supported: Vec<String>,
     pub ui_locales_supported: Vec<String>,
@@ -73,12 +77,12 @@ impl Default for OpenIdProviderCapabilities {
                 ApiScope::PASSWORD_CHANGE.to_owned(),
             ],
             response_types_supported: vec![
-                "code".to_owned(),
-                "id_token".to_owned(),
-                "id_token token".to_owned(),
-                "code id_token".to_owned(),
-                "code token".to_owned(),
-                "code id_token token".to_owned(),
+                ResponseType::Code,
+                ResponseType::IdToken,
+                ResponseType::TokenIdToken,
+                ResponseType::CodeIdToken,
+                ResponseType::CodeToken,
+                ResponseType::CodeTokenIdToken,
             ],
             response_modes_supported: vec![
                 ResponseMode::Query,
@@ -86,54 +90,62 @@ impl Default for OpenIdProviderCapabilities {
                 ResponseMode::FormPost,
             ],
             grant_types_supported: vec![
-                "authorization_code".to_owned(),
-                "implicit".to_owned(),
-                "refresh_token".to_owned(),
+                GrantType::AuthorizationCode,
+                GrantType::Implicit,
+                GrantType::RefreshToken,
             ],
             acr_values_supported: vec![
                 identity_domain::auth::ACR_AAL1.to_owned(),
                 identity_domain::auth::ACR_AAL2.to_owned(),
             ],
             subject_types_supported: vec![SubjectType::Public, SubjectType::Pairwise],
-            id_token_signing_alg_values_supported: vec!["ES256".to_owned()],
+            id_token_signing_alg_values_supported: vec![JwsAlgorithm::Asymmetric(
+                JwaSigningAlgorithm::Es256,
+            )],
             id_token_encryption_alg_values_supported: vec![
-                "RSA-OAEP".to_owned(),
-                "RSA-OAEP-256".to_owned(),
-                "ECDH-ES".to_owned(),
-                "ECDH-ES+A128KW".to_owned(),
-                "ECDH-ES+A256KW".to_owned(),
+                JwaEncryptionAlgorithm::RsaOaep,
+                JwaEncryptionAlgorithm::RsaOaep256,
+                JwaEncryptionAlgorithm::EcdhEs,
+                JwaEncryptionAlgorithm::EcdhEsA128Kw,
+                JwaEncryptionAlgorithm::EcdhEsA256Kw,
             ],
             id_token_encryption_enc_values_supported: vec![
-                "A128CBC-HS256".to_owned(),
-                "A256CBC-HS512".to_owned(),
-                "A128GCM".to_owned(),
-                "A256GCM".to_owned(),
+                JweContentEncryption::A128CbcHs256,
+                JweContentEncryption::A256CbcHs512,
+                JweContentEncryption::A128Gcm,
+                JweContentEncryption::A256Gcm,
             ],
             userinfo_signing_alg_values_supported: vec![],
             userinfo_encryption_alg_values_supported: vec![
-                "RSA-OAEP".to_owned(),
-                "RSA-OAEP-256".to_owned(),
-                "ECDH-ES".to_owned(),
-                "ECDH-ES+A128KW".to_owned(),
-                "ECDH-ES+A256KW".to_owned(),
+                JwaEncryptionAlgorithm::RsaOaep,
+                JwaEncryptionAlgorithm::RsaOaep256,
+                JwaEncryptionAlgorithm::EcdhEs,
+                JwaEncryptionAlgorithm::EcdhEsA128Kw,
+                JwaEncryptionAlgorithm::EcdhEsA256Kw,
             ],
             userinfo_encryption_enc_values_supported: vec![
-                "A128CBC-HS256".to_owned(),
-                "A256CBC-HS512".to_owned(),
-                "A128GCM".to_owned(),
-                "A256GCM".to_owned(),
+                JweContentEncryption::A128CbcHs256,
+                JweContentEncryption::A256CbcHs512,
+                JweContentEncryption::A128Gcm,
+                JweContentEncryption::A256Gcm,
             ],
             request_object_signing_alg_values_supported:
                 supported_request_object_signing_algorithms(),
             request_object_encryption_alg_values_supported:
-                super::jose::request_object_encryption_algorithms(),
+                super::jose::request_object_encryption_algorithms()
+                    .into_iter()
+                    .map(|value| value.parse().expect("supported JWE algorithm"))
+                    .collect(),
             request_object_encryption_enc_values_supported:
-                super::jose::request_object_content_encryption_algorithms(),
+                super::jose::request_object_content_encryption_algorithms()
+                    .into_iter()
+                    .map(|value| value.parse().expect("supported JWE content encryption"))
+                    .collect(),
             token_endpoint_auth_methods_supported: supported_token_endpoint_auth_methods(),
             token_endpoint_auth_signing_alg_values_supported:
                 supported_token_endpoint_auth_signing_algorithms(),
-            display_values_supported: vec!["page".to_owned()],
-            claim_types_supported: vec!["normal".to_owned()],
+            display_values_supported: vec![Display::Page],
+            claim_types_supported: vec![ClaimType::Normal],
             claims_supported: vec![
                 JwtClaimNames::SUB.to_owned(),
                 JwtClaimNames::ISS.to_owned(),
@@ -170,14 +182,18 @@ impl Default for OpenIdProviderCapabilities {
     }
 }
 
-fn supported_request_object_signing_algorithms() -> Vec<String> {
-    let mut algorithms = vec!["none".to_owned()];
+fn supported_request_object_signing_algorithms() -> Vec<JwsAlgorithm> {
+    let mut algorithms = vec![JwsAlgorithm::None];
     algorithms.extend(supported_asymmetric_jws_algorithms());
     algorithms
 }
 
-fn supported_token_endpoint_auth_signing_algorithms() -> Vec<String> {
-    let mut algorithms = vec!["HS256".to_owned(), "HS384".to_owned(), "HS512".to_owned()];
+fn supported_token_endpoint_auth_signing_algorithms() -> Vec<JwsAlgorithm> {
+    let mut algorithms = vec![
+        JwsAlgorithm::Hs256,
+        JwsAlgorithm::Hs384,
+        JwsAlgorithm::Hs512,
+    ];
     algorithms.extend(supported_asymmetric_jws_algorithms());
     algorithms
 }
@@ -192,10 +208,11 @@ fn supported_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
     ]
 }
 
-fn supported_asymmetric_jws_algorithms() -> Vec<String> {
+fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
     JwaSigningAlgorithm::all()
         .iter()
-        .map(|algorithm| algorithm.as_str().to_owned())
+        .copied()
+        .map(JwsAlgorithm::Asymmetric)
         .collect()
 }
 
@@ -212,19 +229,21 @@ pub struct OpenIdProviderService {
 fn detect_id_token_signing_algorithms(
     keys: &[Key],
     detector: &dyn SigningAlgorithmDetector,
-) -> Vec<String> {
-    let mut algos = std::collections::BTreeSet::new();
+) -> Vec<JwsAlgorithm> {
+    let mut algos = Vec::new();
     for key in keys {
         if let KeyData::Asymmetric(_) = key.data {
             algos.extend(
                 detector
                     .detect(key)
                     .into_iter()
-                    .map(|jwa| jwa.as_str().to_owned()),
+                    .map(JwsAlgorithm::Asymmetric),
             );
         }
     }
-    algos.into_iter().collect()
+    algos.sort_unstable_by_key(|algorithm| algorithm.as_str());
+    algos.dedup();
+    algos
 }
 
 impl OpenIdProviderService {
@@ -290,60 +309,58 @@ impl OpenIdProviderService {
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,
             registration_endpoint: self.registration_endpoint(&issuer)?,
             scopes_supported: non_empty(self.capabilities.scopes_supported.clone()),
-            response_types_supported: self.capabilities.response_types_supported.clone(),
+            response_types_supported: to_string_values(&self.capabilities.response_types_supported),
             response_modes_supported: non_empty(to_string_values(
                 &self.capabilities.response_modes_supported,
             )),
-            grant_types_supported: non_empty(self.capabilities.grant_types_supported.clone()),
+            grant_types_supported: non_empty(to_string_values(
+                &self.capabilities.grant_types_supported,
+            )),
             acr_values_supported: non_empty(self.capabilities.acr_values_supported.clone()),
             subject_types_supported: to_string_values(&self.capabilities.subject_types_supported),
-            id_token_signing_alg_values_supported: id_token_algos.clone(),
-            id_token_encryption_alg_values_supported: non_empty(
-                self.capabilities
-                    .id_token_encryption_alg_values_supported
-                    .clone(),
-            ),
-            id_token_encryption_enc_values_supported: non_empty(
-                self.capabilities
-                    .id_token_encryption_enc_values_supported
-                    .clone(),
-            ),
-            userinfo_signing_alg_values_supported: non_empty(id_token_algos),
-            userinfo_encryption_alg_values_supported: non_empty(
-                self.capabilities
-                    .userinfo_encryption_alg_values_supported
-                    .clone(),
-            ),
-            userinfo_encryption_enc_values_supported: non_empty(
-                self.capabilities
-                    .userinfo_encryption_enc_values_supported
-                    .clone(),
-            ),
-            request_object_signing_alg_values_supported: non_empty(
-                self.capabilities
-                    .request_object_signing_alg_values_supported
-                    .clone(),
-            ),
-            request_object_encryption_alg_values_supported: non_empty(
-                self.capabilities
-                    .request_object_encryption_alg_values_supported
-                    .clone(),
-            ),
-            request_object_encryption_enc_values_supported: non_empty(
-                self.capabilities
-                    .request_object_encryption_enc_values_supported
-                    .clone(),
-            ),
+            id_token_signing_alg_values_supported: to_string_values(&id_token_algos),
+            id_token_encryption_alg_values_supported: non_empty(to_string_values(
+                &self.capabilities.id_token_encryption_alg_values_supported,
+            )),
+            id_token_encryption_enc_values_supported: non_empty(to_string_values(
+                &self.capabilities.id_token_encryption_enc_values_supported,
+            )),
+            userinfo_signing_alg_values_supported: non_empty(to_string_values(&id_token_algos)),
+            userinfo_encryption_alg_values_supported: non_empty(to_string_values(
+                &self.capabilities.userinfo_encryption_alg_values_supported,
+            )),
+            userinfo_encryption_enc_values_supported: non_empty(to_string_values(
+                &self.capabilities.userinfo_encryption_enc_values_supported,
+            )),
+            request_object_signing_alg_values_supported: non_empty(to_string_values(
+                &self
+                    .capabilities
+                    .request_object_signing_alg_values_supported,
+            )),
+            request_object_encryption_alg_values_supported: non_empty(to_string_values(
+                &self
+                    .capabilities
+                    .request_object_encryption_alg_values_supported,
+            )),
+            request_object_encryption_enc_values_supported: non_empty(to_string_values(
+                &self
+                    .capabilities
+                    .request_object_encryption_enc_values_supported,
+            )),
             token_endpoint_auth_methods_supported: non_empty(to_string_values(
                 &self.capabilities.token_endpoint_auth_methods_supported,
             )),
-            token_endpoint_auth_signing_alg_values_supported: non_empty(
-                self.capabilities
-                    .token_endpoint_auth_signing_alg_values_supported
-                    .clone(),
-            ),
-            display_values_supported: non_empty(self.capabilities.display_values_supported.clone()),
-            claim_types_supported: non_empty(self.capabilities.claim_types_supported.clone()),
+            token_endpoint_auth_signing_alg_values_supported: non_empty(to_string_values(
+                &self
+                    .capabilities
+                    .token_endpoint_auth_signing_alg_values_supported,
+            )),
+            display_values_supported: non_empty(to_string_values(
+                &self.capabilities.display_values_supported,
+            )),
+            claim_types_supported: non_empty(to_string_values(
+                &self.capabilities.claim_types_supported,
+            )),
             claims_supported: non_empty(self.capabilities.claims_supported.clone()),
             service_documentation: Some(endpoint_url(&issuer, "/docs/openid-connect")?),
             claims_locales_supported: non_empty(self.capabilities.claims_locales_supported.clone()),
@@ -363,7 +380,7 @@ impl OpenIdProviderService {
         })
     }
 
-    async fn compute_id_token_signing_algos(&self) -> Result<Vec<String>, AppError> {
+    async fn compute_id_token_signing_algos(&self) -> Result<Vec<JwsAlgorithm>, AppError> {
         let values = match self.key_repo {
             Some(ref key_repo) => {
                 let keys = key_repo.list_active_asymmetric().await.map_err(|error| {
@@ -405,15 +422,15 @@ impl OpenIdProviderService {
 }
 
 #[cfg(feature = "allow-none-alg")]
-fn append_conformance_none_alg(mut values: Vec<String>) -> Vec<String> {
-    if !values.contains(&"none".to_owned()) {
-        values.push("none".to_owned());
+fn append_conformance_none_alg(mut values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorithm> {
+    if !values.contains(&JwsAlgorithm::None) {
+        values.push(JwsAlgorithm::None);
     }
     values
 }
 
 #[cfg(not(feature = "allow-none-alg"))]
-fn append_conformance_none_alg(values: Vec<String>) -> Vec<String> {
+fn append_conformance_none_alg(values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorithm> {
     values
 }
 
@@ -1121,15 +1138,15 @@ mod tests {
             let key = make_asymmetric_key(pem);
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(
-                algos.contains(&"RS256".to_owned()),
+                algos.contains(&"RS256".parse().unwrap()),
                 "expected RS256, got: {algos:?}"
             );
             assert!(
-                algos.contains(&"RS384".to_owned()),
+                algos.contains(&"RS384".parse().unwrap()),
                 "expected RS384, got: {algos:?}"
             );
             assert!(
-                algos.contains(&"RS512".to_owned()),
+                algos.contains(&"RS512".parse().unwrap()),
                 "expected RS512, got: {algos:?}"
             );
         }
@@ -1143,15 +1160,15 @@ mod tests {
             ];
             let algos = detect_id_token_signing_algorithms(&keys, &TestSigningAlgorithmDetector);
             assert!(
-                algos.contains(&"PS256".to_owned()),
+                algos.contains(&"PS256".parse().unwrap()),
                 "expected PS256, got: {algos:?}"
             );
             assert!(
-                algos.contains(&"PS384".to_owned()),
+                algos.contains(&"PS384".parse().unwrap()),
                 "expected PS384, got: {algos:?}"
             );
             assert!(
-                algos.contains(&"PS512".to_owned()),
+                algos.contains(&"PS512".parse().unwrap()),
                 "expected PS512, got: {algos:?}"
             );
         }
@@ -1161,9 +1178,9 @@ mod tests {
             let pem = generate_rsa_pem();
             let key = make_asymmetric_key(pem);
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
-            assert!(!algos.contains(&"ES256".to_owned()));
-            assert!(!algos.contains(&"ES256K".to_owned()));
-            assert!(!algos.contains(&"EdDSA".to_owned()));
+            assert!(!algos.contains(&"ES256".parse().unwrap()));
+            assert!(!algos.contains(&"ES256K".parse().unwrap()));
+            assert!(!algos.contains(&"EdDSA".parse().unwrap()));
         }
 
         #[test]
@@ -1172,7 +1189,7 @@ mod tests {
             let key = make_asymmetric_key(pem);
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
             assert!(
-                algos.contains(&"ES256".to_owned()),
+                algos.contains(&"ES256".parse().unwrap()),
                 "expected ES256, got: {algos:?}"
             );
         }
@@ -1181,28 +1198,28 @@ mod tests {
         fn ec_p384_key_detects_es384() {
             let key = make_asymmetric_key(generate_ec_p384_pem());
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
-            assert_eq!(algos, vec!["ES384".to_owned()]);
+            assert_eq!(algos, vec!["ES384".parse().unwrap()]);
         }
 
         #[test]
         fn ec_p521_key_detects_es512() {
             let key = make_asymmetric_key(generate_ec_p521_pem());
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
-            assert_eq!(algos, vec!["ES512".to_owned()]);
+            assert_eq!(algos, vec!["ES512".parse().unwrap()]);
         }
 
         #[test]
         fn ec_secp256k1_key_detects_es256k() {
             let key = make_asymmetric_key(generate_ec_secp256k1_pem());
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
-            assert_eq!(algos, vec!["ES256K".to_owned()]);
+            assert_eq!(algos, vec!["ES256K".parse().unwrap()]);
         }
 
         #[test]
         fn ed25519_key_detects_eddsa() {
             let key = make_asymmetric_key(generate_ed25519_pem());
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
-            assert_eq!(algos, vec!["EdDSA".to_owned()]);
+            assert_eq!(algos, vec!["EdDSA".parse().unwrap()]);
         }
 
         #[test]
@@ -1210,9 +1227,9 @@ mod tests {
             let pem = generate_ec_p256_pem();
             let key = make_asymmetric_key(pem);
             let algos = detect_id_token_signing_algorithms(&[key], &TestSigningAlgorithmDetector);
-            assert!(!algos.contains(&"RS256".to_owned()));
-            assert!(!algos.contains(&"RS384".to_owned()));
-            assert!(!algos.contains(&"EdDSA".to_owned()));
+            assert!(!algos.contains(&"RS256".parse().unwrap()));
+            assert!(!algos.contains(&"RS384".parse().unwrap()));
+            assert!(!algos.contains(&"EdDSA".parse().unwrap()));
         }
 
         #[test]
@@ -1224,11 +1241,11 @@ mod tests {
                 &[rsa_key, ps_key, ec_key],
                 &TestSigningAlgorithmDetector,
             );
-            assert!(algos.contains(&"RS256".to_owned()));
-            assert!(algos.contains(&"RS384".to_owned()));
-            assert!(algos.contains(&"RS512".to_owned()));
-            assert!(algos.contains(&"PS256".to_owned()));
-            assert!(algos.contains(&"ES256".to_owned()));
+            assert!(algos.contains(&"RS256".parse().unwrap()));
+            assert!(algos.contains(&"RS384".parse().unwrap()));
+            assert!(algos.contains(&"RS512".parse().unwrap()));
+            assert!(algos.contains(&"PS256".parse().unwrap()));
+            assert!(algos.contains(&"ES256".parse().unwrap()));
         }
     }
 }

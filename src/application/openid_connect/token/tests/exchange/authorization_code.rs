@@ -38,7 +38,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some(s256_challenge("verifier-123")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(session_oid),
                 protected_session_id: None,
@@ -56,7 +56,6 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     let code = STANDARD.encode(record.oid.as_bytes());
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -68,7 +67,10 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         .await
         .unwrap();
 
-    assert_eq!(result.token_type, "Bearer");
+    assert!(matches!(
+        result.token_type,
+        crate::openid_connect::token::TokenType::Bearer
+    ));
     assert!(result.id_token.is_some());
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (access_payload, _) = jwt::decode_with_verifier(&result.access_token, &verifier).unwrap();
@@ -123,7 +125,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 scope: "email openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some(s256_challenge("verifier-123")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -140,7 +142,6 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -173,7 +174,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
                 scope: "openid profile".to_string(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("expected-verifier")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -191,7 +192,6 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
     let code = STANDARD.encode(record.oid.as_bytes());
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -248,7 +248,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
                 scope: "openid profile".to_string(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("verifier-789")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -266,7 +266,6 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let code = STANDARD.encode(record.oid.as_bytes());
     let first_response = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: code.clone(),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -284,7 +283,6 @@ async fn exchange_authorization_code_rejects_reused_code() {
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -338,7 +336,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-offline".to_string()),
                 code_challenge: Some(s256_challenge("verifier-offline")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -355,7 +353,6 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -403,7 +400,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                     scope: "openid profile".to_string(),
                     nonce: Some(format!("nonce-{alg}")),
                     code_challenge: Some(s256_challenge(&format!("verifier-{alg}"))),
-                    code_challenge_method: Some("S256".to_string()),
+                    code_challenge_method: Some("S256".parse().unwrap()),
                     user_oid: user_oid.to_string(),
                     session_oid: SessionOid::from(Uuid::new_v4()),
                     protected_session_id: None,
@@ -420,7 +417,6 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
 
         let result = service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
-                grant_type: "authorization_code".to_string(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_string()),
                 client_id: Some(Uuid::nil().to_string()),
@@ -457,7 +453,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
     let binding = KeyJwk {
         oid: KeyJwkOid::from(binding_oid),
         key_oid: key.oid,
-        algorithm: "RS256".to_owned(),
+        algorithm: "RS256".parse().unwrap(),
         jwk: PublicJwk::Rsa {
             key_use: Some("sig".to_owned()),
             alg: Some("RS256".to_owned()),
@@ -508,7 +504,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-rs256".to_string()),
                 code_challenge: Some(s256_challenge("verifier-rs256")),
-                code_challenge_method: Some("S256".to_string()),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -525,7 +521,6 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
-            grant_type: "authorization_code".to_string(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -589,7 +584,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 token_id: &access_record.oid.to_string(),
                 key_id: &key_id,
                 private_key_pem: &private_key,
-                alg,
+                alg: alg.parse().unwrap(),
                 issuer: &issuer,
                 audience: &Uuid::nil().to_string(),
                 client_id: &Uuid::nil().to_string(),
@@ -613,7 +608,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             .sign_id_token(SignIdTokenInput {
                 key_id: &key_id,
                 private_key_pem: &private_key,
-                alg,
+                alg: alg.parse().unwrap(),
                 issuer: &issuer,
                 audience: &Uuid::nil().to_string(),
                 client: &client,

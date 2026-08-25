@@ -8,21 +8,16 @@ impl TokenService {
         &self,
         params: AuthorizationCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
-        if params.grant_type != "authorization_code" {
-            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
-                .with_param("grant_type", params.grant_type));
-        }
-
         let client_id = resolve_client_id(
             params.client_id,
-            params.client_assertion_type.as_deref(),
+            params.client_assertion_type,
             params.client_assertion.as_deref(),
         )?;
         let authenticated_client_oid = self
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
-                params.client_assertion_type.as_deref(),
+                params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
             .await?;
@@ -120,7 +115,8 @@ impl TokenService {
             .settings
             .allow_public_client_flow
             && (data.code_challenge.as_deref().is_none_or(str::is_empty)
-                || data.code_challenge_method.as_deref() != Some("S256"))
+                || data.code_challenge_method
+                    != Some(identity_domain::openid_connect::CodeChallengeMethod::S256))
         {
             return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
                 .with_param("code_challenge_method", "S256 required for public client"));
@@ -128,7 +124,7 @@ impl TokenService {
 
         verify_pkce(
             data.code_challenge.as_deref(),
-            data.code_challenge_method.as_deref(),
+            data.code_challenge_method,
             verifier,
         )?;
 
@@ -164,11 +160,8 @@ impl TokenService {
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
         let id_token_alg = resolve_id_token_alg(
-            &signing_alg,
-            authenticated_client
-                .metadata()
-                .id_token_signed_response_alg
-                .as_deref(),
+            signing_alg,
+            authenticated_client.metadata().id_token_signed_response_alg,
         );
         let audience = client_id.clone();
         let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&data.scope)
@@ -195,7 +188,7 @@ impl TokenService {
                 token_id: &access_token_record.oid.to_string(),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
-                alg: &signing_alg,
+                alg: signing_alg,
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id: &client_id_str,
@@ -213,7 +206,7 @@ impl TokenService {
                 .sign_id_token(SignIdTokenInput {
                     key_id: &signing_key_id,
                     private_key_pem: &signing_key_pem,
-                    alg: &id_token_alg,
+                    alg: id_token_alg,
                     issuer: &issuer,
                     audience: &audience,
                     client: &authenticated_client,
@@ -229,14 +222,12 @@ impl TokenService {
             let id_token = match authenticated_client
                 .metadata()
                 .id_token_encrypted_response_alg
-                .as_deref()
             {
                 Some(alg) => {
                     let enc = authenticated_client
                         .metadata()
                         .id_token_encrypted_response_enc
-                        .as_deref()
-                        .unwrap_or("A128CBC-HS256");
+                        .unwrap_or(JweContentEncryption::A128CbcHs256);
                     self.encrypt_token(&signed, &authenticated_client, alg, enc)
                         .await?
                 }
@@ -279,7 +270,7 @@ impl TokenService {
             access_token,
             id_token,
             refresh_token,
-            token_type: "Bearer".to_string(),
+            token_type: TokenType::Bearer,
             expires_in: 3600,
             scope: data.scope,
         })
@@ -289,21 +280,16 @@ impl TokenService {
         &self,
         params: RefreshTokenGrantParams,
     ) -> Result<TokenResponse, AppError> {
-        if params.grant_type != "refresh_token" {
-            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
-                .with_param("grant_type", params.grant_type));
-        }
-
         let client_id = resolve_client_id(
             params.client_id,
-            params.client_assertion_type.as_deref(),
+            params.client_assertion_type,
             params.client_assertion.as_deref(),
         )?;
         let authenticated_client_oid = self
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
-                params.client_assertion_type.as_deref(),
+                params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
             .await?;
@@ -441,7 +427,7 @@ impl TokenService {
                 token_id: &access_token_record.oid.to_string(),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
-                alg: &signing_alg,
+                alg: signing_alg,
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id: &client_id,
@@ -458,7 +444,7 @@ impl TokenService {
             .sign_id_token(SignIdTokenInput {
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
-                alg: &signing_alg,
+                alg: identity_domain::key::JwsAlgorithm::Asymmetric(signing_alg),
                 issuer: &issuer,
                 audience: &client_id,
                 client: &authenticated_client,
@@ -475,14 +461,12 @@ impl TokenService {
             match authenticated_client
                 .metadata()
                 .id_token_encrypted_response_alg
-                .as_deref()
             {
                 Some(alg) => {
                     let enc = authenticated_client
                         .metadata()
                         .id_token_encrypted_response_enc
-                        .as_deref()
-                        .unwrap_or("A128CBC-HS256");
+                        .unwrap_or(JweContentEncryption::A128CbcHs256);
                     self.encrypt_token(&signed_id_token, &authenticated_client, alg, enc)
                         .await?
                 }
@@ -509,7 +493,7 @@ impl TokenService {
             access_token,
             id_token,
             refresh_token,
-            token_type: "Bearer".to_string(),
+            token_type: TokenType::Bearer,
             expires_in: 3600,
             scope,
         })
@@ -535,14 +519,15 @@ impl TokenService {
 
 fn resolve_client_id(
     client_id: Option<String>,
-    client_assertion_type: Option<&str>,
+    client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     client_assertion: Option<&str>,
 ) -> Result<String, AppError> {
     if let Some(client_id) = client_id {
         return Ok(client_id);
     }
 
-    if client_assertion_type == Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
+    if client_assertion_type
+        == Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer)
         && let Some(assertion) = client_assertion
     {
         return client_id_from_assertion(assertion);
@@ -551,18 +536,21 @@ fn resolve_client_id(
     Err(AppError::from_code(TokenErrorCode::ClientIdRequired))
 }
 
-pub(crate) fn resolve_id_token_alg(fallback: &str, client_alg: Option<&str>) -> String {
+pub(crate) fn resolve_id_token_alg(
+    fallback: identity_domain::key::JwaSigningAlgorithm,
+    client_alg: Option<identity_domain::key::JwsAlgorithm>,
+) -> identity_domain::key::JwsAlgorithm {
     #[cfg(feature = "allow-none-alg")]
-    if client_alg == Some("none") {
-        return "none".to_owned();
+    if client_alg == Some(identity_domain::key::JwsAlgorithm::None) {
+        return identity_domain::key::JwsAlgorithm::None;
     }
 
     #[cfg(not(feature = "allow-none-alg"))]
-    if client_alg == Some("none") {
-        return fallback.to_owned();
+    if client_alg == Some(identity_domain::key::JwsAlgorithm::None) {
+        return identity_domain::key::JwsAlgorithm::Asymmetric(fallback);
     }
 
-    fallback.to_owned()
+    identity_domain::key::JwsAlgorithm::Asymmetric(fallback)
 }
 
 #[cfg(test)]
@@ -581,7 +569,7 @@ mod tests {
 
         let client_id = resolve_client_id(
             Some("request-client".to_owned()),
-            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .unwrap();
@@ -598,7 +586,7 @@ mod tests {
 
         let client_id = resolve_client_id(
             None,
-            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .unwrap();

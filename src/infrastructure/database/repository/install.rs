@@ -19,7 +19,10 @@ use crate::{
     },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
-        openid_connect::OpenIdConnectCredentialData,
+        openid_connect::{
+            GrantType, OpenIdConnectCredentialData, ResponseType, SubjectType,
+            TokenEndpointAuthMethod,
+        },
         setting::{
             ConsentUrlSetting, LoginUrlSetting,
             installation::{
@@ -29,6 +32,7 @@ use crate::{
             },
             model::SettingDefinition,
         },
+        user::CredentialType,
     },
     infrastructure::{
         crypto::key::generate_all_jwks_for_key,
@@ -145,7 +149,7 @@ impl InstallPersistence for InstallPersistenceImpl {
         user_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
             user_id: Set(created_user.id),
-            r#type: Set("password".to_owned()),
+            r#type: Set(CredentialType::Password.to_string()),
             data: Set(password_json),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
@@ -178,13 +182,15 @@ impl InstallPersistence for InstallPersistenceImpl {
             post_logout_redirect_uris: Set(Some(serde_json::json!([input
                 .application_url
                 .as_str()]))),
-            response_types: Set(Some(serde_json::json!(["code"]))),
+            response_types: Set(Some(serde_json::json!([ResponseType::Code]))),
             grant_types: Set(Some(serde_json::json!([
-                "authorization_code",
-                "refresh_token"
+                GrantType::AuthorizationCode.as_str(),
+                GrantType::RefreshToken.as_str()
             ]))),
-            subject_type: Set(Some("public".to_owned())),
-            token_endpoint_auth_method: Set(Some("client_secret_basic".to_owned())),
+            subject_type: Set(Some(SubjectType::Public.to_string())),
+            token_endpoint_auth_method: Set(Some(
+                TokenEndpointAuthMethod::ClientSecretBasic.to_string(),
+            )),
             settings: Set(serde_json::json!({
                 "skip_consent": true,
                 "allow_public_client_flow": false

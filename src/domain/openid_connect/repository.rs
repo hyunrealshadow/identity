@@ -31,6 +31,14 @@ pub enum OpenIdConnectClientRepositoryError {
     #[error("failed to parse openid connect subject type")]
     ParseSubjectType(#[source] crate::openid_connect::model::provider::ParseSubjectTypeError),
 
+    #[error("failed to parse token endpoint authentication method")]
+    ParseTokenEndpointAuthMethod(
+        #[source] crate::openid_connect::model::provider::ParseTokenEndpointAuthMethodError,
+    ),
+
+    #[error("invalid openid connect metadata value for {field}: {value}")]
+    InvalidMetadataValue { field: &'static str, value: String },
+
     #[error("invalid openid connect client")]
     InvalidClient(#[source] crate::openid_connect::model::client::InvalidOpenIdConnectClientError),
 

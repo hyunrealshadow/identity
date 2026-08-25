@@ -14,7 +14,7 @@ struct CreateFrontChannelAccessTokenInput<'a> {
     authorization_code_oid: Option<Uuid>,
     signing_key_id: &'a str,
     signing_key_pem: &'a str,
-    signing_alg: &'a str,
+    signing_alg: identity_domain::key::JwaSigningAlgorithm,
     issuer: &'a Url,
     audience: &'a str,
     claims: Option<&'a ClaimsRequest>,
@@ -74,10 +74,8 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
-        let id_token_alg = resolve_id_token_alg(
-            &signing_alg,
-            client.metadata().id_token_signed_response_alg.as_deref(),
-        );
+        let id_token_alg =
+            resolve_id_token_alg(signing_alg, client.metadata().id_token_signed_response_alg);
         let audience = client_id.to_string();
         let auth_time_val = authentication
             .auth_time
@@ -110,7 +108,7 @@ impl AuthorizeService {
                         authorization_code_oid: None,
                         signing_key_id: &signing_key_id,
                         signing_key_pem: &signing_key_pem,
-                        signing_alg: &signing_alg,
+                        signing_alg,
                         issuer: &issuer,
                         audience: access_token_audience,
                         claims: claims.as_ref(),
@@ -129,7 +127,7 @@ impl AuthorizeService {
         let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: &signing_key_id,
             private_key_pem: &signing_key_pem,
-            alg: &id_token_alg,
+            alg: id_token_alg,
             issuer: &issuer,
             audience: &audience,
             user: &user,
@@ -144,13 +142,12 @@ impl AuthorizeService {
             claims_request: claims.as_ref(),
         })?;
 
-        let id_token = match client.metadata().id_token_encrypted_response_alg.as_deref() {
+        let id_token = match client.metadata().id_token_encrypted_response_alg {
             Some(alg) => {
                 let enc = client
                     .metadata()
                     .id_token_encrypted_response_enc
-                    .as_deref()
-                    .unwrap_or("A128CBC-HS256");
+                    .unwrap_or(JweContentEncryption::A128CbcHs256);
                 self.encrypt_id_token(&signed_id_token, &client, alg, enc)
                     .await?
             }
@@ -214,10 +211,8 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
-        let id_token_alg = resolve_id_token_alg(
-            &signing_alg,
-            client.metadata().id_token_signed_response_alg.as_deref(),
-        );
+        let id_token_alg =
+            resolve_id_token_alg(signing_alg, client.metadata().id_token_signed_response_alg);
         let audience = client_id.to_string();
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
@@ -244,7 +239,7 @@ impl AuthorizeService {
                     authorization_code_oid: Some(authorization_code_oid),
                     signing_key_id: &signing_key_id,
                     signing_key_pem: &signing_key_pem,
-                    signing_alg: &signing_alg,
+                    signing_alg,
                     issuer: &issuer,
                     audience: access_token_audience,
                     claims: claims.as_ref(),
@@ -276,7 +271,7 @@ impl AuthorizeService {
             let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
-                alg: &id_token_alg,
+                alg: id_token_alg,
                 issuer: &issuer,
                 audience: &audience,
                 user: &user,
@@ -292,20 +287,17 @@ impl AuthorizeService {
                 scope: &scope,
                 claims_request: claims.as_ref(),
             })?;
-            Some(
-                match client.metadata().id_token_encrypted_response_alg.as_deref() {
-                    Some(alg) => {
-                        let enc = client
-                            .metadata()
-                            .id_token_encrypted_response_enc
-                            .as_deref()
-                            .unwrap_or("A128CBC-HS256");
-                        self.encrypt_id_token(&signed_id_token, &client, alg, enc)
-                            .await?
-                    }
-                    None => signed_id_token,
-                },
-            )
+            Some(match client.metadata().id_token_encrypted_response_alg {
+                Some(alg) => {
+                    let enc = client
+                        .metadata()
+                        .id_token_encrypted_response_enc
+                        .unwrap_or(JweContentEncryption::A128CbcHs256);
+                    self.encrypt_id_token(&signed_id_token, &client, alg, enc)
+                        .await?
+                }
+                None => signed_id_token,
+            })
         } else {
             None
         };

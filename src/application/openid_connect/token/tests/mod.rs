@@ -116,7 +116,7 @@ fn key_jwk_binding(key: &Key, alg: &str, binding_oid: Uuid) -> KeyJwk {
     KeyJwk {
         oid: KeyJwkOid::from(binding_oid),
         key_oid: key.oid,
-        algorithm: alg.to_owned(),
+        algorithm: alg.parse().unwrap(),
         jwk: serde_json::from_value::<PublicJwk>(serde_json::to_value(jwk).unwrap()).unwrap(),
         created_at: Utc::now(),
     }
@@ -322,7 +322,7 @@ async fn signing_key_provider_avoids_hot_path_repository_queries() {
             Some(RuntimeSigningKey {
                 key_id: Uuid::new_v4().to_string(),
                 private_key_pem,
-                algorithm: "RS256".to_owned(),
+                algorithm: "RS256".parse().unwrap(),
             }),
         )),
     });

@@ -88,7 +88,7 @@ impl CachedRuntimeKeyRingProvider {
             };
             let Some(binding) = self
                 .key_jwk_repo
-                .find_active_by_key_oid_and_algorithm(key.oid, algorithm.as_str())
+                .find_active_by_key_oid_and_algorithm(key.oid, algorithm)
                 .await?
             else {
                 continue;
@@ -97,7 +97,7 @@ impl CachedRuntimeKeyRingProvider {
             signing_key = Some(RuntimeSigningKey {
                 key_id: uuid::Uuid::from(binding.oid).to_string(),
                 private_key_pem: data.private_key.clone(),
-                algorithm: algorithm.as_str().to_owned(),
+                algorithm,
             });
             break;
         }

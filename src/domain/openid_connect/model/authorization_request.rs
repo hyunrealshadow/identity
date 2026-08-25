@@ -11,6 +11,29 @@ use uuid::Uuid;
 
 use crate::openid_connect::ScopeSet;
 
+macro_rules! impl_string_serde {
+    ($type:ty) => {
+        impl Serialize for $type {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(self.as_ref())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $type {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let value = String::deserialize(deserializer)?;
+                value.parse().map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr)]
 pub enum ResponseType {
     #[strum(serialize = "code")]
@@ -28,6 +51,10 @@ pub enum ResponseType {
 }
 
 impl ResponseType {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.as_ref()
+    }
     pub fn is_implicit(&self) -> bool {
         matches!(self, Self::IdToken | Self::TokenIdToken)
     }
@@ -90,6 +117,8 @@ impl FromStr for ResponseType {
     }
 }
 
+impl_string_serde!(ResponseType);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum ResponseMode {
@@ -118,6 +147,8 @@ impl FromStr for ResponseMode {
             .ok_or(ParseResponseModeError)
     }
 }
+
+impl_string_serde!(ResponseMode);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
@@ -149,6 +180,8 @@ impl FromStr for PromptValue {
     }
 }
 
+impl_string_serde!(PromptValue);
+
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum Display {
@@ -179,10 +212,14 @@ impl FromStr for Display {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter, Serialize, Deserialize,
+)]
 pub enum CodeChallengeMethod {
+    #[serde(rename = "S256")]
     #[strum(serialize = "S256")]
     S256,
+    #[serde(rename = "plain")]
     #[strum(serialize = "plain")]
     Plain,
 }
@@ -308,21 +345,22 @@ pub struct AuthorizationRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuthorizationRequestData {
-    pub response_type: String,
+    pub response_type: ResponseType,
     #[serde(default)]
-    pub response_mode: Option<String>,
+    pub response_mode: Option<ResponseMode>,
     pub client_id: String,
     pub redirect_uri: String,
     pub scope: String,
     pub state: String,
     pub nonce: Option<String>,
     #[serde(default)]
-    pub prompt: Option<String>,
+    #[serde(with = "optional_prompt_values")]
+    pub prompt: Option<HashSet<PromptValue>>,
     #[serde(default)]
     pub max_age: Option<i32>,
     pub login_hint: Option<String>,
     pub code_challenge: Option<String>,
-    pub code_challenge_method: Option<String>,
+    pub code_challenge_method: Option<CodeChallengeMethod>,
     pub acr_values: Option<Vec<String>>,
     pub claims: Option<String>,
     #[serde(default)]
@@ -332,22 +370,18 @@ pub struct AuthorizationRequestData {
 impl From<&AuthorizationRequest> for AuthorizationRequestData {
     fn from(value: &AuthorizationRequest) -> Self {
         Self {
-            response_type: value.response_type.to_string(),
-            response_mode: value.response_mode.map(|mode| mode.to_string()),
+            response_type: value.response_type.clone(),
+            response_mode: value.response_mode,
             client_id: value.client_id.to_string(),
             redirect_uri: value.redirect_uri.to_string(),
             scope: value.scope.to_scope_string(),
             state: value.state.clone(),
             nonce: value.nonce.clone(),
-            prompt: value.prompt.as_ref().map(|items| {
-                let mut items = items.iter().map(AsRef::as_ref).collect::<Vec<_>>();
-                items.sort();
-                items.join(" ")
-            }),
+            prompt: value.prompt.clone(),
             max_age: value.max_age,
             login_hint: value.login_hint.clone(),
             code_challenge: value.code_challenge.clone(),
-            code_challenge_method: value.code_challenge_method.as_ref().map(|m| m.to_string()),
+            code_challenge_method: value.code_challenge_method,
             acr_values: value.acr_values.clone(),
             ui_locales: value.ui_locales.clone(),
             claims: value
@@ -355,6 +389,43 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
                 .as_ref()
                 .and_then(|c| serde_json::to_string(c).ok()),
         }
+    }
+}
+
+mod optional_prompt_values {
+    use super::PromptValue;
+    use serde::{Deserialize as _, Deserializer, Serializer};
+    use std::collections::HashSet;
+
+    pub fn serialize<S>(
+        value: &Option<HashSet<PromptValue>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match value {
+            Some(values) => {
+                let mut values = values.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+                values.sort_unstable();
+                serializer.serialize_some(&values.join(" "))
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<HashSet<PromptValue>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<String>::deserialize(deserializer)?
+            .map(|value| {
+                value
+                    .split_whitespace()
+                    .map(|item| item.parse().map_err(serde::de::Error::custom))
+                    .collect()
+            })
+            .transpose()
     }
 }
 
@@ -499,7 +570,7 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let parsed: AuthorizationRequestData = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(parsed.response_type, "code");
+        assert_eq!(parsed.response_type, ResponseType::Code);
         assert_eq!(parsed.scope, "openid email");
         assert_eq!(parsed.nonce.as_deref(), Some("nonce123"));
         assert_eq!(parsed.login_hint, None);
@@ -535,6 +606,12 @@ mod tests {
 
         let data = AuthorizationRequestData::from(&request);
 
-        assert_eq!(data.prompt.as_deref(), Some("consent login"));
+        assert!(
+            data.prompt
+                .as_ref()
+                .unwrap()
+                .contains(&PromptValue::Consent)
+        );
+        assert!(data.prompt.as_ref().unwrap().contains(&PromptValue::Login));
     }
 }

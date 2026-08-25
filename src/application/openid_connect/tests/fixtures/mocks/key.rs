@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use identity_domain::key::repository::{KeyRepository, KeyRepositoryError};
 use identity_domain::key::{
-    CreateKeyJwkInput, Key, KeyData, KeyJwk, KeyJwkRepository, KeyJwkRepositoryError, KeyOid,
+    CreateKeyJwkInput, JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkRepository,
+    KeyJwkRepositoryError, KeyOid,
 };
 
 mockall::mock! {
@@ -12,7 +13,7 @@ mockall::mock! {
         async fn create_batch(&self, inputs: Vec<CreateKeyJwkInput>)
             -> Result<Vec<KeyJwk>, KeyJwkRepositoryError>;
         async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError>;
-        async fn find_active_by_key_oid_and_algorithm(&self, key_oid: KeyOid, algorithm: &str)
+        async fn find_active_by_key_oid_and_algorithm(&self, key_oid: KeyOid, algorithm: JwaSigningAlgorithm)
             -> Result<Option<KeyJwk>, KeyJwkRepositoryError>;
         async fn delete_by_key_oid(&self, key_oid: KeyOid)
             -> Result<(), KeyJwkRepositoryError>;

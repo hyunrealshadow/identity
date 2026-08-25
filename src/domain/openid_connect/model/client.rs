@@ -6,7 +6,91 @@ use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 
 use crate::client::model::Client;
-use crate::openid_connect::model::provider::SubjectType;
+use crate::key::{JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm};
+use crate::openid_connect::ResponseType;
+use crate::openid_connect::model::provider::{SubjectType, TokenEndpointAuthMethod};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GrantType {
+    AuthorizationCode,
+    Implicit,
+    RefreshToken,
+    ClientCredentials,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid grant type")]
+pub struct ParseGrantTypeError;
+
+impl GrantType {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AuthorizationCode => "authorization_code",
+            Self::Implicit => "implicit",
+            Self::RefreshToken => "refresh_token",
+            Self::ClientCredentials => "client_credentials",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ClientAssertionType {
+    JwtBearer,
+}
+
+impl ClientAssertionType {
+    pub const JWT_BEARER_VALUE: &'static str =
+        "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::JwtBearer => Self::JWT_BEARER_VALUE,
+        }
+    }
+}
+
+impl fmt::Display for ClientAssertionType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid OAuth client assertion type")]
+pub struct ParseClientAssertionTypeError;
+
+impl FromStr for ClientAssertionType {
+    type Err = ParseClientAssertionTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            Self::JWT_BEARER_VALUE => Ok(Self::JwtBearer),
+            _ => Err(ParseClientAssertionTypeError),
+        }
+    }
+}
+
+impl fmt::Display for GrantType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for GrantType {
+    type Err = ParseGrantTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "authorization_code" => Ok(Self::AuthorizationCode),
+            "implicit" => Ok(Self::Implicit),
+            "refresh_token" => Ok(Self::RefreshToken),
+            "client_credentials" => Ok(Self::ClientCredentials),
+            _ => Err(ParseGrantTypeError),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct OpenIdConnectClientSettings {
@@ -57,8 +141,8 @@ pub struct OpenIdConnectClientMetadata {
     pub frontchannel_logout_session_required: Option<bool>,
     pub backchannel_logout_uri: Option<Url>,
     pub backchannel_logout_session_required: Option<bool>,
-    pub response_types: Option<Vec<String>>,
-    pub grant_types: Option<Vec<String>>,
+    pub response_types: Option<Vec<ResponseType>>,
+    pub grant_types: Option<Vec<GrantType>>,
     pub contacts: Option<Vec<String>>,
     pub logo_uri: Option<Url>,
     pub client_uri: Option<Url>,
@@ -66,17 +150,17 @@ pub struct OpenIdConnectClientMetadata {
     pub tos_uri: Option<Url>,
     pub sector_identifier_uri: Option<Url>,
     pub subject_type: Option<SubjectType>,
-    pub id_token_signed_response_alg: Option<String>,
-    pub id_token_encrypted_response_alg: Option<String>,
-    pub id_token_encrypted_response_enc: Option<String>,
-    pub userinfo_signed_response_alg: Option<String>,
-    pub userinfo_encrypted_response_alg: Option<String>,
-    pub userinfo_encrypted_response_enc: Option<String>,
-    pub request_object_signing_alg: Option<String>,
-    pub request_object_encryption_alg: Option<String>,
-    pub request_object_encryption_enc: Option<String>,
-    pub token_endpoint_auth_method: Option<String>,
-    pub token_endpoint_auth_signing_alg: Option<String>,
+    pub id_token_signed_response_alg: Option<JwsAlgorithm>,
+    pub id_token_encrypted_response_alg: Option<JwaEncryptionAlgorithm>,
+    pub id_token_encrypted_response_enc: Option<JweContentEncryption>,
+    pub userinfo_signed_response_alg: Option<JwsAlgorithm>,
+    pub userinfo_encrypted_response_alg: Option<JwaEncryptionAlgorithm>,
+    pub userinfo_encrypted_response_enc: Option<JweContentEncryption>,
+    pub request_object_signing_alg: Option<JwsAlgorithm>,
+    pub request_object_encryption_alg: Option<JwaEncryptionAlgorithm>,
+    pub request_object_encryption_enc: Option<JweContentEncryption>,
+    pub token_endpoint_auth_method: Option<TokenEndpointAuthMethod>,
+    pub token_endpoint_auth_signing_alg: Option<JwsAlgorithm>,
     pub default_max_age: Option<i32>,
     pub require_auth_time: Option<bool>,
     pub default_acr_values: Option<Vec<String>>,

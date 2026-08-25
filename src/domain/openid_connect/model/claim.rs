@@ -101,12 +101,24 @@ impl TokenTypeIdentifiers {
 /// RFC 8693 defines token type identifiers as URIs used in protocol parameters,
 /// not as JWT claims. This custom claim is used internally to distinguish
 /// token types within the application.
-pub struct TokenUseValues;
-
-impl TokenUseValues {
-    pub const ACCESS_TOKEN: &'static str = "access_token";
-    pub const REFRESH_TOKEN: &'static str = "refresh_token";
-    pub const ID_TOKEN: &'static str = "id_token";
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    strum::Display,
+    strum::AsRefStr,
+    strum::EnumString,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum TokenUse {
+    AccessToken,
+    RefreshToken,
+    IdToken,
 }
 
 pub struct StandardScopes;
@@ -118,4 +130,18 @@ impl StandardScopes {
     pub const ADDRESS: &'static str = "address";
     pub const PHONE: &'static str = "phone";
     pub const OFFLINE_ACCESS: &'static str = "offline_access";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TokenUse;
+
+    #[test]
+    fn token_use_round_trips_through_json() {
+        let json = serde_json::to_string(&TokenUse::AccessToken).unwrap();
+        let decoded: TokenUse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(json, r#""access_token""#);
+        assert_eq!(decoded, TokenUse::AccessToken);
+    }
 }

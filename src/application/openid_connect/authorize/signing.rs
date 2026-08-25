@@ -7,15 +7,16 @@ use crate::openid_connect::dto::UserInfoClaims;
 use crate::openid_connect::jose::{
     asymmetric_signer_from_pem, encrypt_compact_with_public_jwk, front_channel_hash,
 };
+use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
 use identity_domain::openid_connect::{
     ClaimsRequest,
-    model::claim::{JwtTokenType, TokenUseValues},
+    model::claim::{JwtTokenType, TokenUse},
 };
 
 pub(super) struct SignImplicitIdTokenInput<'a> {
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
-    pub alg: &'a str,
+    pub alg: JwsAlgorithm,
     pub issuer: &'a Url,
     pub audience: &'a str,
     pub user: &'a identity_domain::user::User,
@@ -33,7 +34,7 @@ pub(super) struct SignImplicitIdTokenInput<'a> {
 pub(super) struct SignImplicitAccessTokenInput<'a> {
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
-    pub alg: &'a str,
+    pub alg: JwaSigningAlgorithm,
     pub issuer: &'a Url,
     pub audience: &'a str,
     pub client_id: &'a str,
@@ -48,7 +49,9 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
 }
 
 impl AuthorizeService {
-    pub(super) async fn load_signing_key_impl(&self) -> Result<(String, String, String), AppError> {
+    pub(super) async fn load_signing_key_impl(
+        &self,
+    ) -> Result<(String, String, JwaSigningAlgorithm), AppError> {
         let keys = self
             .key_repo
             .list_active_asymmetric()
@@ -70,7 +73,7 @@ impl AuthorizeService {
 
                 let Some(binding) = self
                     .key_jwk_repo
-                    .find_active_by_key_oid_and_algorithm(key.oid, alg.as_str())
+                    .find_active_by_key_oid_and_algorithm(key.oid, alg)
                     .await
                     .map_err(|error| {
                         AppError::from_code(AuthorizeErrorCode::LoadRequestFailed)
@@ -83,7 +86,7 @@ impl AuthorizeService {
                 return Ok((
                     Uuid::from(binding.oid).to_string(),
                     data.private_key.clone(),
-                    alg.as_str().to_owned(),
+                    alg,
                 ));
             }
         }
@@ -139,9 +142,10 @@ impl AuthorizeService {
                 })?;
         }
         if let Some(access_token) = input.access_token {
-            let at_hash = front_channel_hash(access_token, input.alg).map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
-            })?;
+            let at_hash =
+                front_channel_hash(access_token, input.alg.as_str()).map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+                })?;
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
                 .map_err(|error| {
@@ -149,7 +153,7 @@ impl AuthorizeService {
                 })?;
         }
         if let Some(code) = input.code {
-            let c_hash = front_channel_hash(code, input.alg).map_err(|error| {
+            let c_hash = front_channel_hash(code, input.alg.as_str()).map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
             })?;
             payload
@@ -194,7 +198,7 @@ impl AuthorizeService {
             }
         }
 
-        if input.alg == "none" {
+        if input.alg == JwsAlgorithm::None {
             #[cfg(feature = "allow-none-alg")]
             return Self::sign_unsigned_implicit_id_token(&header, &payload);
 
@@ -202,8 +206,11 @@ impl AuthorizeService {
             return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
         }
 
+        let JwsAlgorithm::Asymmetric(algorithm) = input.alg else {
+            return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
+        };
         let signer: Box<dyn josekit::jws::JwsSigner> =
-            build_signer_for_alg(input.private_key_pem, input.alg)?;
+            build_signer_for_alg(input.private_key_pem, algorithm)?;
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
         })
@@ -259,7 +266,7 @@ impl AuthorizeService {
         payload
             .set_claim(
                 JwtClaimNames::TOKEN_USE,
-                Some(serde_json::json!(TokenUseValues::ACCESS_TOKEN)),
+                Some(serde_json::json!(TokenUse::AccessToken)),
             )
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
@@ -309,8 +316,8 @@ impl AuthorizeService {
         &self,
         signed_jwt: &str,
         client: &OpenIdConnectClient,
-        encryption_alg: &str,
-        content_enc: &str,
+        encryption_alg: JwaEncryptionAlgorithm,
+        content_enc: JweContentEncryption,
     ) -> Result<String, AppError> {
         let credential = self
             .credential_repo
@@ -333,8 +340,8 @@ impl AuthorizeService {
         encrypt_compact_with_public_jwk(
             signed_jwt.as_bytes(),
             public_jwk,
-            encryption_alg,
-            content_enc,
+            encryption_alg.as_str(),
+            content_enc.as_str(),
         )
         .map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::EncryptionFailed).with_source(error)
@@ -344,9 +351,9 @@ impl AuthorizeService {
 
 fn build_signer_for_alg(
     private_key_pem: &str,
-    alg: &str,
+    alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
-    asymmetric_signer_from_pem(alg, private_key_pem.as_bytes()).map_err(|error| {
+    asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes()).map_err(|error| {
         AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
     })
 }

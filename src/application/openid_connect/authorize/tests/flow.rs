@@ -100,7 +100,7 @@ fn hybrid_binding(key_oid: KeyOid, binding_oid: Uuid) -> KeyJwk {
     KeyJwk {
         oid: KeyJwkOid::from(binding_oid),
         key_oid,
-        algorithm: "RS256".to_owned(),
+        algorithm: "RS256".parse().unwrap(),
         jwk: PublicJwk::Rsa {
             key_use: Some("sig".to_owned()),
             alg: Some("RS256".to_owned()),
@@ -176,7 +176,7 @@ fn hybrid_key_repos(
         .returning(move |oid, alg| {
             Ok(b2
                 .iter()
-                .find(|b| b.key_oid == oid && b.algorithm == alg)
+                .find(|b| b.key_oid == oid && b.algorithm.as_str() == alg.as_str())
                 .cloned())
         });
 
@@ -819,7 +819,9 @@ async fn create_authorization_request_persists_prompt() {
         .unwrap();
     let loaded = service.load_authorization_request(oid).await.unwrap();
 
-    assert_eq!(loaded.prompt.as_deref(), Some("consent login"));
+    let prompt = loaded.prompt.unwrap();
+    assert!(prompt.contains(&identity_domain::openid_connect::PromptValue::Consent));
+    assert!(prompt.contains(&identity_domain::openid_connect::PromptValue::Login));
 }
 
 #[tokio::test]
@@ -897,7 +899,7 @@ fn sign_implicit_id_token_includes_scope_claims() {
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
             private_key_pem: std::str::from_utf8(&private_key).unwrap(),
-            alg: "RS256",
+            alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
             user: &user,
@@ -960,7 +962,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
             private_key_pem: std::str::from_utf8(&private_key).unwrap(),
-            alg: "RS256",
+            alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
             user: &user,
@@ -1006,7 +1008,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
             private_key_pem: std::str::from_utf8(&private_key).unwrap(),
-            alg: "RS256",
+            alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
             user: &user,
@@ -1046,7 +1048,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
             private_key_pem: std::str::from_utf8(&private_key).unwrap(),
-            alg: "RS256",
+            alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
             user: &user,

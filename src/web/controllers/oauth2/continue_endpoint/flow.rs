@@ -14,7 +14,7 @@ use crate::{
 use super::response::{
     continue_consent_redirect, continue_login_redirect, continue_oauth_error_response,
 };
-use crate::controllers::oauth2::{finish_authorize_redirect, response_mode_from_value};
+use crate::controllers::oauth2::finish_authorize_redirect;
 
 pub(super) async fn handle_continue(
     ctx: &identity_infrastructure::AppState,
@@ -85,12 +85,7 @@ pub(super) async fn handle_continue(
             .deny_authorization_request(authorization_request_id)
             .await
             .map(|redirect| {
-                finish_authorize_redirect(
-                    ctx,
-                    headers,
-                    &redirect,
-                    response_mode_from_value(stored.request.response_mode.as_deref()),
-                )
+                finish_authorize_redirect(ctx, headers, &redirect, stored.request.response_mode)
             })?,
         ContinueAction::Approve {
             session_oid,
@@ -114,12 +109,7 @@ pub(super) async fn handle_continue(
             )
             .await
             .map(|redirect| {
-                finish_authorize_redirect(
-                    ctx,
-                    headers,
-                    &redirect,
-                    response_mode_from_value(stored.request.response_mode.as_deref()),
-                )
+                finish_authorize_redirect(ctx, headers, &redirect, stored.request.response_mode)
             })?,
     };
 

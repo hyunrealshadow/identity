@@ -76,11 +76,13 @@ impl TokenService {
         &self,
         client_id: &str,
         client_secret: Option<&str>,
-        client_assertion_type: Option<&str>,
+        client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
         client_assertion: Option<&str>,
     ) -> Result<Uuid, AppError> {
-        if let (Some(assertion_type), Some(assertion)) = (client_assertion_type, client_assertion)
-            && assertion_type == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+        if let (
+            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+            Some(assertion),
+        ) = (client_assertion_type, client_assertion)
         {
             let client_oid = Uuid::parse_str(client_id).map_err(|error| {
                 AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
@@ -94,8 +96,8 @@ impl TokenService {
                 })?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
-            return match client.metadata().token_endpoint_auth_method.as_deref() {
-                Some("client_secret_jwt") => {
+            return match client.metadata().token_endpoint_auth_method {
+                Some(identity_domain::openid_connect::TokenEndpointAuthMethod::ClientSecretJwt) => {
                     self.authenticate_client_secret_jwt(client_id, assertion)
                         .await
                 }
@@ -138,7 +140,9 @@ impl TokenService {
             })?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
-        if client.metadata().token_endpoint_auth_method.as_deref() == Some("client_secret_basic") {
+        if client.metadata().token_endpoint_auth_method
+            == Some(identity_domain::openid_connect::TokenEndpointAuthMethod::ClientSecretBasic)
+        {
             self.authenticate_client_secret_basic(client_id, client_secret)
                 .await
         } else {
@@ -244,12 +248,15 @@ impl TokenService {
         let algorithm = header
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
-            .unwrap_or("none");
-        if algorithm == "none" && !cfg!(feature = "allow-none-alg") {
+            .unwrap_or("none")
+            .parse::<JwsAlgorithm>()
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_source(error)
+            })?;
+        if algorithm == JwsAlgorithm::None && !cfg!(feature = "allow-none-alg") {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
-        if let Some(registered_algorithm) =
-            client.metadata().token_endpoint_auth_signing_alg.as_deref()
+        if let Some(registered_algorithm) = client.metadata().token_endpoint_auth_signing_alg
             && registered_algorithm != algorithm
         {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
@@ -335,12 +342,15 @@ impl TokenService {
         let algorithm = header
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
-            .unwrap_or("none");
-        if algorithm == "none" && !cfg!(feature = "allow-none-alg") {
+            .unwrap_or("none")
+            .parse::<JwsAlgorithm>()
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_source(error)
+            })?;
+        if algorithm == JwsAlgorithm::None && !cfg!(feature = "allow-none-alg") {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
-        if let Some(registered_algorithm) =
-            client.metadata().token_endpoint_auth_signing_alg.as_deref()
+        if let Some(registered_algorithm) = client.metadata().token_endpoint_auth_signing_alg
             && registered_algorithm != algorithm
         {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
@@ -377,7 +387,7 @@ struct RemoteJwks {
 
 async fn fetch_and_verify_jwks_uri(
     jwks_uri: &url::Url,
-    algorithm: &str,
+    algorithm: JwsAlgorithm,
     assertion: &str,
 ) -> Result<Option<JwtPayload>, AppError> {
     let client = remote_http_client(RemoteFetchPolicy::new(

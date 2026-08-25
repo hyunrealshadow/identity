@@ -4,14 +4,14 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
-    error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth::AuthErrorCode},
     setting::runtime::SettingProvider,
 };
 use identity_domain::{
     auth::{
         ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, AMR_RECOVERY_CODE,
-        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LOGIN_EXPIRY, LoginStatus, MAX_FAILED_ATTEMPTS,
-        MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
+        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LOGIN_EXPIRY, LoginFailureReason, LoginStatus,
+        MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
         model::{Login, Session},
         password::{HashOptions, PasswordHashSetting, PasswordHasher, VerifyResult},
         repository::{CreateSessionInput, LoginRepository, SessionRepository},
@@ -54,7 +54,7 @@ pub enum ChallengeOutcome {
     /// created immediately with password-only ACR.
     Authenticated { login: Login, session: Box<Session> },
     /// Password was verified and the user has an OTP credential — the client
-    /// MUST call challenge again with `credential_type = "otp"`.
+    /// MUST call challenge again with [`CredentialType::Otp`].
     MfaRequired { login: Login },
 }
 
@@ -117,7 +117,7 @@ impl LoginService {
         ] {
             if !self
                 .credential_repo
-                .find_by_user_oid_and_type(user_oid, credential_type.clone())
+                .find_by_user_oid_and_type(user_oid, credential_type)
                 .await?
                 .is_empty()
             {
@@ -273,7 +273,7 @@ impl LoginService {
     pub async fn challenge(
         &self,
         login_oid: Uuid,
-        credential_type: &str,
+        credential_type: CredentialType,
         credential: &str,
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
@@ -305,16 +305,14 @@ impl LoginService {
         let hash_options = self.hash_options.current_value();
 
         match credential_type {
-            "password" => {
+            CredentialType::Password => {
                 self.challenge_password(login, credential, hash_options.as_ref(), ctx)
                     .await
             }
-            "otp" => self.challenge_otp(login, credential, ctx).await,
-            "recovery_code" => self.challenge_recovery_code(login, credential, ctx).await,
-            _ => Err(
-                AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
-                    .with_param("credential_type", credential_type),
-            ),
+            CredentialType::Otp => self.challenge_otp(login, credential, ctx).await,
+            CredentialType::RecoveryCode => {
+                self.challenge_recovery_code(login, credential, ctx).await
+            }
         }
     }
 
@@ -387,7 +385,7 @@ impl LoginService {
                 self.login_repo
                     .increment_failed_attempts(
                         login.oid,
-                        Some(&AuthErrorCode::InvalidCredential.code().to_string()),
+                        Some(LoginFailureReason::InvalidCredential),
                     )
                     .await?;
 
@@ -561,10 +559,7 @@ impl LoginService {
         if !valid {
             let login_attempts = self
                 .login_repo
-                .increment_failed_attempts(
-                    login.oid,
-                    Some(&AuthErrorCode::InvalidOtp.code().to_string()),
-                )
+                .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidOtp))
                 .await?;
             let user_attempts = self
                 .user_repo
@@ -660,10 +655,7 @@ impl LoginService {
         let Some(matched) = matched else {
             let login_attempts = self
                 .login_repo
-                .increment_failed_attempts(
-                    login.oid,
-                    Some(&AuthErrorCode::InvalidOtp.code().to_string()),
-                )
+                .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidOtp))
                 .await?;
             let user_attempts = self
                 .user_repo
@@ -829,8 +821,8 @@ mod tests {
     use chrono::Utc;
     use identity_domain::{
         auth::{
-            ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginStatus, MAX_FAILED_ATTEMPTS,
-            MAX_OTP_ATTEMPTS,
+            ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus,
+            MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
             model::{Login, Session, SessionOid},
             password::{HashOptions, PasswordHashSetting, VerifyResult},
             repository::{
@@ -1048,7 +1040,7 @@ mod tests {
             Ok(Session {
                 oid: SessionOid(Uuid::new_v4()),
                 user_oid: input.user_oid,
-                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
+                status: identity_domain::auth::SessionStatus::ACTIVE,
                 device_name: input.device_name,
                 device_type: input.device_type,
                 os_name: input.os_name,
@@ -1078,7 +1070,7 @@ mod tests {
             Ok(Session {
                 oid,
                 user_oid: expected_user_oid,
-                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
+                status: identity_domain::auth::SessionStatus::ACTIVE,
                 device_name: None,
                 device_type: None,
                 os_name: None,
@@ -1116,7 +1108,7 @@ mod tests {
     #[derive(Default)]
     struct TestLoginRepoState {
         logins: Vec<Login>,
-        update_status_calls: Vec<(Uuid, String)>,
+        update_status_calls: Vec<(Uuid, LoginStatus)>,
     }
 
     struct TestLoginRepo {
@@ -1150,16 +1142,14 @@ mod tests {
         async fn update_status(
             &self,
             login_oid: Uuid,
-            status: &str,
+            status: LoginStatus,
             _session_oid: Option<SessionOid>,
             _acr: Option<&str>,
         ) -> Result<(), LoginRepositoryError> {
             let mut state = self.state.lock().unwrap();
-            state
-                .update_status_calls
-                .push((login_oid, status.to_owned()));
+            state.update_status_calls.push((login_oid, status));
             if let Some(login) = state.logins.iter_mut().find(|login| login.oid == login_oid) {
-                login.status = status.to_owned();
+                login.status = status;
             }
             Ok(())
         }
@@ -1182,7 +1172,7 @@ mod tests {
         async fn increment_failed_attempts(
             &self,
             login_oid: Uuid,
-            _failure_reason: Option<&str>,
+            _failure_reason: Option<LoginFailureReason>,
         ) -> Result<i32, LoginRepositoryError> {
             let mut state = self.state.lock().unwrap();
             let login = state
@@ -1247,7 +1237,7 @@ mod tests {
             client_authorization_oid: Uuid::new_v4(),
             session_oid: None,
             user_oid: Some(user_oid),
-            status: LoginStatus::MFA_REQUIRED.to_string(),
+            status: LoginStatus::MFA_REQUIRED,
             failed_attempts,
             created_at: Utc::now(),
             acr: None,
@@ -1341,7 +1331,7 @@ mod tests {
     async fn bound_reauthentication_can_challenge_otp_without_password() {
         let user = test_user();
         let mut login = test_login(Uuid::from(user.oid), 0);
-        login.status = LoginStatus::IDENTIFIER_VERIFIED.to_string();
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
         login.session_oid = Some(SessionOid(Uuid::new_v4()));
         let login_oid = login.oid;
         let login_repo = Arc::new(TestLoginRepo {
@@ -1355,7 +1345,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oid,
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,
@@ -1378,7 +1368,7 @@ mod tests {
     async fn unbound_login_cannot_use_otp_as_a_password_replacement() {
         let user = test_user();
         let mut login = test_login(Uuid::from(user.oid), 0);
-        login.status = LoginStatus::IDENTIFIER_VERIFIED.to_string();
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
         let login_oid = login.oid;
         let login_repo = Arc::new(TestLoginRepo {
             state: Arc::new(Mutex::new(TestLoginRepoState {
@@ -1391,7 +1381,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oid,
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,
@@ -1426,7 +1416,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oid,
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,
@@ -1464,7 +1454,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oid,
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,
@@ -1503,7 +1493,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oid,
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,
@@ -1545,7 +1535,7 @@ mod tests {
             let error = service
                 .challenge(
                     *login_oid,
-                    "otp",
+                    CredentialType::Otp,
                     "000000",
                     SessionContext {
                         device_name: None,
@@ -1567,7 +1557,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oids[threshold_index],
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,
@@ -1592,7 +1582,7 @@ mod tests {
         let error = service
             .challenge(
                 login_oids[threshold_index + 1],
-                "otp",
+                CredentialType::Otp,
                 "000000",
                 SessionContext {
                     device_name: None,

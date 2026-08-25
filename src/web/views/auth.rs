@@ -3,6 +3,7 @@
 //! All external `id` fields are encrypted login.oid values.
 
 use chrono::{DateTime, Utc};
+use identity_domain::auth::LoginStatus;
 use serde::{Deserialize, Serialize};
 
 use identity_domain::user::CredentialType;
@@ -117,7 +118,7 @@ pub struct IdentifierResponse {
     /// Encrypted login.oid — must be carried to subsequent steps.
     pub id: String,
     /// Current login flow status.
-    pub status: &'static str,
+    pub status: LoginStatus,
     /// Credential types available for this user, e.g. `["password"]`.
     pub credential_types: Vec<CredentialType>,
     /// User display info.
@@ -128,7 +129,7 @@ pub struct IdentifierResponse {
 pub struct LoginStatusResponse {
     /// Encrypted login.oid.
     pub id: String,
-    pub status: String,
+    pub status: LoginStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<UserDisplayInfo>,
     /// Credential types available to the bound user. Empty before an account
@@ -176,7 +177,7 @@ pub struct ChallengeRequest {
     /// Encrypted login.oid from the identifier step.
     pub id: String,
     /// Credential type, e.g. `"password"`.
-    pub credential_type: String,
+    pub credential_type: CredentialType,
     /// Credential value (plaintext password, etc.).
     pub credential: String,
 }
@@ -192,7 +193,7 @@ pub struct ChallengeRequest {
 #[derive(Debug, Serialize)]
 pub struct ChallengeResponse {
     /// `"authenticated"` or `"mfa_required"`.
-    pub status: &'static str,
+    pub status: LoginStatus,
     /// Present only when `status == "authenticated"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<SessionInfo>,

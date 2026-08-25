@@ -8,6 +8,7 @@ use identity_application::{
     error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
     openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
 };
+use identity_domain::openid_connect::{ClientAssertionType, GrantType};
 
 use crate::controllers::response::{
     AppResponse, app_state, error_message, error_source_chain, insert_no_store_headers,
@@ -168,31 +169,37 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
         .map(|value| value.1.clone())
         .or(form.client_secret);
 
-    let result = match form.grant_type.as_str() {
-        "authorization_code" => {
+    let grant_type = form.grant_type.parse::<GrantType>();
+    let client_assertion_type = form
+        .client_assertion_type
+        .as_deref()
+        .map(str::parse::<ClientAssertionType>)
+        .transpose()
+        .map_err(|_| TokenWebError(AppError::from_code(TokenErrorCode::AssertionVerifyFailed)))?;
+
+    let result = match grant_type {
+        Ok(GrantType::AuthorizationCode) => {
             ctx.services()
                 .oidc_token()
                 .exchange_authorization_code(AuthorizationCodeGrantParams {
-                    grant_type: form.grant_type,
                     code: form.code.unwrap_or_default(),
                     redirect_uri: form.redirect_uri,
                     client_id,
                     client_secret,
-                    client_assertion_type: form.client_assertion_type,
+                    client_assertion_type,
                     client_assertion: form.client_assertion,
                     code_verifier: form.code_verifier,
                 })
                 .await
         }
-        "refresh_token" => {
+        Ok(GrantType::RefreshToken) => {
             ctx.services()
                 .oidc_token()
                 .exchange_refresh_token(RefreshTokenGrantParams {
-                    grant_type: form.grant_type,
                     refresh_token: form.refresh_token.unwrap_or_default(),
                     client_id,
                     client_secret,
-                    client_assertion_type: form.client_assertion_type,
+                    client_assertion_type,
                     client_assertion: form.client_assertion,
                 })
                 .await

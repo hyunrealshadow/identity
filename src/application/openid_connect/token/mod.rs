@@ -17,11 +17,14 @@ use crate::{
             AccessTokenData, ClientAuthorization, ClientAuthorizationData,
             ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
         },
-        key::{KeyData, KeyJwkRepository, repository::KeyRepository},
+        key::{
+            JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
+            repository::KeyRepository,
+        },
         openid_connect::{
             OpenIdConnectClientRepository, OpenIdConnectCredentialData,
             OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,
-            model::claim::{JwtClaimNames, JwtTokenType, TokenUseValues},
+            model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
         },
         user::{UserOid, repository::UserRepository},
     },
@@ -29,23 +32,21 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct AuthorizationCodeGrantParams {
-    pub grant_type: String,
     pub code: String,
     pub redirect_uri: Option<String>,
     pub client_id: Option<String>,
     pub code_verifier: Option<String>,
     pub client_secret: Option<String>,
-    pub client_assertion_type: Option<String>,
+    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RefreshTokenGrantParams {
-    pub grant_type: String,
     pub refresh_token: String,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
-    pub client_assertion_type: Option<String>,
+    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
@@ -56,9 +57,15 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
-    pub token_type: String,
+    pub token_type: TokenType,
     pub expires_in: i32,
     pub scope: String,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub enum TokenType {
+    #[serde(rename = "Bearer")]
+    Bearer,
 }
 
 pub struct TokenService {
@@ -146,7 +153,7 @@ mod serialization_tests {
             access_token: "access".to_owned(),
             id_token: None,
             refresh_token: None,
-            token_type: "Bearer".to_owned(),
+            token_type: TokenType::Bearer,
             expires_in: 3600,
             scope: "openid".to_owned(),
         };

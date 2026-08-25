@@ -183,7 +183,10 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             let now = Utc::now();
             let session_available = SessionEntity::find()
                 .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
-                .filter(session::Column::Status.eq(identity_domain::auth::SessionStatus::ACTIVE))
+                .filter(
+                    session::Column::Status
+                        .eq(identity_domain::auth::SessionStatus::ACTIVE.as_str()),
+                )
                 .filter(session::Column::RevokedAt.is_null())
                 .filter(session::Column::ExpiresAt.gt(now))
                 .one(&transaction)

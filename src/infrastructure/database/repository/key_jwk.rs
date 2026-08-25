@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::database::entity::{key_jwk, key_jwk::Entity as KeyJwkEntity};
 use identity_domain::key::{
-    CreateKeyJwkInput, KeyJwk, KeyJwkOid, KeyJwkRepository, KeyJwkRepositoryError, KeyOid,
-    PublicJwk,
+    CreateKeyJwkInput, JwaSigningAlgorithm, JwkAlgorithm, KeyJwk, KeyJwkOid, KeyJwkRepository,
+    KeyJwkRepositoryError, KeyOid, PublicJwk,
 };
 
 pub struct KeyJwkRepositoryImpl {
@@ -24,9 +24,12 @@ fn normalize_jwk_kid(mut jwk: PublicJwk, oid: Uuid) -> PublicJwk {
     jwk
 }
 
-fn validate_jwk_algorithm(jwk: &PublicJwk, algorithm: &str) -> Result<(), KeyJwkRepositoryError> {
+fn validate_jwk_algorithm(
+    jwk: &PublicJwk,
+    algorithm: JwkAlgorithm,
+) -> Result<(), KeyJwkRepositoryError> {
     if let Some(jwk_algorithm) = jwk.algorithm()
-        && jwk_algorithm != algorithm
+        && jwk_algorithm != algorithm.as_str()
     {
         return Err(KeyJwkRepositoryError::InvalidPublicJwk(format!(
             "JWK algorithm {jwk_algorithm} does not match binding algorithm {algorithm}"
@@ -39,11 +42,15 @@ fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
     let created_at = DateTime::from_naive_utc_and_offset(model.created_at, chrono::Utc);
     let jwk = serde_json::from_value::<PublicJwk>(model.jwk)
         .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
-    validate_jwk_algorithm(&jwk, &model.algorithm)?;
+    let algorithm = model
+        .algorithm
+        .parse()
+        .map_err(|_| KeyJwkRepositoryError::UnsupportedAlgorithm(model.algorithm.clone()))?;
+    validate_jwk_algorithm(&jwk, algorithm)?;
     Ok(KeyJwk {
         oid: KeyJwkOid(model.oid),
         key_oid: KeyOid(model.key_oid),
-        algorithm: model.algorithm,
+        algorithm,
         jwk: normalize_jwk_kid(jwk, model.oid),
         created_at,
     })
@@ -64,7 +71,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .into_iter()
             .map(|input| {
                 let oid = Uuid::new_v4();
-                validate_jwk_algorithm(&input.jwk, &input.algorithm)?;
+                validate_jwk_algorithm(&input.jwk, input.algorithm)?;
                 let jwk = normalize_jwk_kid(input.jwk, oid);
                 let jwk = serde_json::to_value(jwk)
                     .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
@@ -72,7 +79,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
                 Ok(key_jwk::ActiveModel {
                     oid: Set(oid),
                     key_oid: Set(Uuid::from(input.key_oid)),
-                    algorithm: Set(input.algorithm),
+                    algorithm: Set(input.algorithm.to_string()),
                     jwk: Set(jwk),
                     created_at: Set(now.naive_utc()),
                     ..Default::default()
@@ -108,7 +115,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
     async fn find_active_by_key_oid_and_algorithm(
         &self,
         key_oid: KeyOid,
-        algorithm: &str,
+        algorithm: JwaSigningAlgorithm,
     ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
         use crate::database::entity::key;
 
@@ -117,7 +124,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .filter(key::Column::RevokedAt.is_null())
             .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
             .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))
-            .filter(key_jwk::Column::Algorithm.eq(algorithm))
+            .filter(key_jwk::Column::Algorithm.eq(algorithm.as_str()))
             .one(&self.db)
             .await
             .map_err(|e| KeyJwkRepositoryError::ListByKeyFailed(Box::new(e)))?
@@ -140,7 +147,7 @@ mod tests {
     use super::{KeyJwkRepositoryImpl, normalize_jwk_kid};
     use crate::database::entity::key_jwk;
     use chrono::Utc;
-    use identity_domain::key::{KeyJwkRepository, KeyOid, PublicJwk};
+    use identity_domain::key::{JwaSigningAlgorithm, KeyJwkRepository, KeyOid, PublicJwk};
     use sea_orm::{DatabaseBackend, IntoMockRow, MockDatabase};
     use serde_json::json;
     use uuid::Uuid;
@@ -241,7 +248,7 @@ mod tests {
         let repo = KeyJwkRepositoryImpl::new(db);
 
         let binding = repo
-            .find_active_by_key_oid_and_algorithm(KeyOid::from(key_oid), "RS256")
+            .find_active_by_key_oid_and_algorithm(KeyOid::from(key_oid), JwaSigningAlgorithm::Rs256)
             .await
             .unwrap()
             .unwrap();

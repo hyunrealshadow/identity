@@ -15,6 +15,7 @@ use crate::{
             OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
             OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
             OpenIdConnectClientSettings, OpenIdConnectCredentialData, SubjectType,
+            TokenEndpointAuthMethod,
         },
         setting::DynamicClientRegistrationSetting,
     },
@@ -35,9 +36,9 @@ use credential::{client_credentials_from_jwks, client_credentials_from_jwks_uri}
 use response::{registration_client_uri, response_from_client};
 use token::{default_skip_consent, generate_client_secret, generate_registration_access_token};
 use validation::{
-    parse_application_type, reject_none_algorithm, split_scope, validate_initiate_login_uri,
-    validate_request_object_encryption, validate_request_object_signing,
-    validate_sector_identifier_uri,
+    parse_application_type, parse_metadata_value, parse_metadata_values, reject_none_algorithm,
+    split_scope, validate_initiate_login_uri, validate_request_object_encryption,
+    validate_request_object_signing, validate_sector_identifier_uri,
 };
 
 pub struct DynamicClientRegistrationService {
@@ -101,8 +102,14 @@ impl DynamicClientRegistrationService {
         validate_initiate_login_uri(request.initiate_login_uri.as_ref())?;
         let token_auth_method = request
             .token_endpoint_auth_method
-            .clone()
-            .unwrap_or_else(|| "client_secret_basic".to_owned());
+            .as_deref()
+            .unwrap_or("client_secret_basic")
+            .parse::<TokenEndpointAuthMethod>()
+            .map_err(|error| {
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "token_endpoint_auth_method")
+                    .with_source(error)
+            })?;
         reject_none_algorithm(
             "id_token_signed_response_alg",
             request.id_token_signed_response_alg.as_deref(),
@@ -140,7 +147,7 @@ impl DynamicClientRegistrationService {
             request.request_object_encryption_alg.as_deref(),
             request.request_object_encryption_enc.as_deref(),
         )?;
-        let public_client = token_auth_method == "none";
+        let public_client = token_auth_method == TokenEndpointAuthMethod::None;
         let client_secret = (!public_client).then(generate_client_secret);
         let client_secret_expires_at = client_secret
             .as_ref()
@@ -169,8 +176,11 @@ impl DynamicClientRegistrationService {
             frontchannel_logout_session_required: request.frontchannel_logout_session_required,
             backchannel_logout_uri: request.backchannel_logout_uri.clone(),
             backchannel_logout_session_required: request.backchannel_logout_session_required,
-            response_types: request.response_types.clone(),
-            grant_types: request.grant_types.clone(),
+            response_types: parse_metadata_values(
+                "response_types",
+                request.response_types.as_deref(),
+            )?,
+            grant_types: parse_metadata_values("grant_types", request.grant_types.as_deref())?,
             contacts: request.contacts.clone(),
             logo_uri: request.logo_uri.clone(),
             client_uri: request.client_uri.clone(),
@@ -178,17 +188,47 @@ impl DynamicClientRegistrationService {
             tos_uri: request.tos_uri.clone(),
             sector_identifier_uri: request.sector_identifier_uri.clone(),
             subject_type,
-            id_token_signed_response_alg: request.id_token_signed_response_alg.clone(),
-            id_token_encrypted_response_alg: request.id_token_encrypted_response_alg.clone(),
-            id_token_encrypted_response_enc: request.id_token_encrypted_response_enc.clone(),
-            userinfo_signed_response_alg: request.userinfo_signed_response_alg.clone(),
-            userinfo_encrypted_response_alg: request.userinfo_encrypted_response_alg.clone(),
-            userinfo_encrypted_response_enc: request.userinfo_encrypted_response_enc.clone(),
-            request_object_signing_alg: request.request_object_signing_alg.clone(),
-            request_object_encryption_alg: request.request_object_encryption_alg.clone(),
-            request_object_encryption_enc: request.request_object_encryption_enc.clone(),
-            token_endpoint_auth_method: Some(token_auth_method.clone()),
-            token_endpoint_auth_signing_alg: request.token_endpoint_auth_signing_alg.clone(),
+            id_token_signed_response_alg: parse_metadata_value(
+                "id_token_signed_response_alg",
+                request.id_token_signed_response_alg.as_deref(),
+            )?,
+            id_token_encrypted_response_alg: parse_metadata_value(
+                "id_token_encrypted_response_alg",
+                request.id_token_encrypted_response_alg.as_deref(),
+            )?,
+            id_token_encrypted_response_enc: parse_metadata_value(
+                "id_token_encrypted_response_enc",
+                request.id_token_encrypted_response_enc.as_deref(),
+            )?,
+            userinfo_signed_response_alg: parse_metadata_value(
+                "userinfo_signed_response_alg",
+                request.userinfo_signed_response_alg.as_deref(),
+            )?,
+            userinfo_encrypted_response_alg: parse_metadata_value(
+                "userinfo_encrypted_response_alg",
+                request.userinfo_encrypted_response_alg.as_deref(),
+            )?,
+            userinfo_encrypted_response_enc: parse_metadata_value(
+                "userinfo_encrypted_response_enc",
+                request.userinfo_encrypted_response_enc.as_deref(),
+            )?,
+            request_object_signing_alg: parse_metadata_value(
+                "request_object_signing_alg",
+                request.request_object_signing_alg.as_deref(),
+            )?,
+            request_object_encryption_alg: parse_metadata_value(
+                "request_object_encryption_alg",
+                request.request_object_encryption_alg.as_deref(),
+            )?,
+            request_object_encryption_enc: parse_metadata_value(
+                "request_object_encryption_enc",
+                request.request_object_encryption_enc.as_deref(),
+            )?,
+            token_endpoint_auth_method: Some(token_auth_method),
+            token_endpoint_auth_signing_alg: parse_metadata_value(
+                "token_endpoint_auth_signing_alg",
+                request.token_endpoint_auth_signing_alg.as_deref(),
+            )?,
             default_max_age: request.default_max_age,
             require_auth_time: request.require_auth_time,
             default_acr_values: request.default_acr_values.clone(),
@@ -254,7 +294,7 @@ impl DynamicClientRegistrationService {
             request_object_signing_alg: request.request_object_signing_alg,
             request_object_encryption_alg: request.request_object_encryption_alg,
             request_object_encryption_enc: request.request_object_encryption_enc,
-            token_endpoint_auth_method: Some(token_auth_method),
+            token_endpoint_auth_method: Some(token_auth_method.to_string()),
             token_endpoint_auth_signing_alg: request.token_endpoint_auth_signing_alg,
             jwks: request.jwks,
             jwks_uri: request.jwks_uri,

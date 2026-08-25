@@ -1,4 +1,4 @@
-use async_graphql::{ID, InputObject, MaybeUndefined, Object};
+use async_graphql::{Error, ID, InputObject, MaybeUndefined, Object, Result};
 use identity_domain::user::User;
 use identity_infrastructure::{
     database::repository::user::UserProfilePatch,
@@ -81,7 +81,9 @@ impl UserNode {
     }
 
     async fn theme(&self) -> Option<&str> {
-        self.user.theme.as_deref()
+        self.user
+            .theme
+            .map(identity_domain::user::UserTheme::as_str)
     }
 
     async fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
@@ -117,8 +119,16 @@ pub(super) struct UpdateProfileInput {
 }
 
 impl UpdateProfileInput {
-    pub(super) fn into_patch(self) -> UserProfilePatch {
-        UserProfilePatch {
+    pub(super) fn into_patch(self) -> Result<UserProfilePatch> {
+        let theme = patch_value(self.theme)
+            .map(|value| {
+                value
+                    .map(|theme| theme.parse())
+                    .transpose()
+                    .map_err(|_| Error::new("theme must be light or dark"))
+            })
+            .transpose()?;
+        Ok(UserProfilePatch {
             given_name: patch_value(self.given_name),
             family_name: patch_value(self.family_name),
             middle_name: patch_value(self.middle_name),
@@ -130,14 +140,14 @@ impl UpdateProfileInput {
             birthdate: patch_value(self.birthdate),
             zone_info: patch_value(self.zone_info),
             locale: patch_value(self.locale),
-            theme: patch_value(self.theme),
+            theme,
             address_formatted: patch_value(self.address_formatted),
             address_street_address: patch_value(self.address_street_address),
             address_locality: patch_value(self.address_locality),
             address_region: patch_value(self.address_region),
             address_postal_code: patch_value(self.address_postal_code),
             address_country: patch_value(self.address_country),
-        }
+        })
     }
 }
 

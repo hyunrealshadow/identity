@@ -453,7 +453,7 @@ mod tests {
                 credentials.retain(|credential| credential.r#type != credential_type);
                 credentials.extend(values.into_iter().map(|data| UserCredential {
                     oid: UserCredentialOid(Uuid::new_v4()),
-                    r#type: credential_type.clone(),
+                    r#type: credential_type,
                     data,
                 }));
             }

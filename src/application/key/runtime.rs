@@ -3,12 +3,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::{application::error::AppError, domain::data_protection::KeyRing};
+use identity_domain::key::JwaSigningAlgorithm;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeSigningKey {
     pub key_id: String,
     pub private_key_pem: String,
-    pub algorithm: String,
+    pub algorithm: JwaSigningAlgorithm,
 }
 
 pub struct RuntimeKeyRing {

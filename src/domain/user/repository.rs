@@ -21,6 +21,9 @@ pub enum UserRepositoryError {
     #[error("email already exists")]
     EmailExists,
 
+    #[error("database contains an invalid user theme")]
+    InvalidStoredTheme,
+
     #[error("failed to update failed attempts")]
     UpdateFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
 

@@ -84,7 +84,7 @@ async fn authenticate_client_secret_jwt_accepts_hs256_assertion() {
         .authenticate_client(
             "00000000-0000-0000-0000-000000000000",
             None,
-            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .await;
@@ -106,7 +106,7 @@ async fn authenticate_client_secret_jwt_uses_registered_signing_algorithm() {
         .authenticate_client(
             "00000000-0000-0000-0000-000000000000",
             None,
-            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .await;
@@ -128,7 +128,7 @@ async fn authenticate_client_secret_jwt_rejects_unregistered_signing_algorithm()
         .authenticate_client(
             "00000000-0000-0000-0000-000000000000",
             None,
-            Some("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
+            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .await

@@ -1,5 +1,6 @@
 use std::{env, fs};
 
+use identity_domain::key::AsymmetricKeyAlgorithm;
 use ipnet::IpNet;
 use serde::Deserialize;
 use tera::Tera;
@@ -115,7 +116,16 @@ pub struct LoggerConfig {
     #[serde(default = "default_log_level")]
     pub level: String,
     #[serde(default = "default_log_format")]
-    pub format: String,
+    pub format: LogFormat,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LogFormat {
+    #[default]
+    Compact,
+    Json,
+    Pretty,
 }
 
 impl Default for LoggerConfig {
@@ -263,8 +273,11 @@ pub struct InstallConfig {
     pub email: Option<String>,
     pub password: Option<String>,
     pub application_url: Option<String>,
-    #[serde(default = "default_key_algorithm")]
-    pub key_algorithm: String,
+    #[serde(
+        default = "default_key_algorithm",
+        deserialize_with = "deserialize_install_key_algorithm"
+    )]
+    pub key_algorithm: AsymmetricKeyAlgorithm,
 }
 
 impl Default for InstallConfig {
@@ -280,8 +293,42 @@ impl Default for InstallConfig {
     }
 }
 
-fn default_key_algorithm() -> String {
-    "ecdsa-p256".to_owned()
+const fn default_key_algorithm() -> AsymmetricKeyAlgorithm {
+    AsymmetricKeyAlgorithm::EcdsaP256
+}
+
+fn deserialize_install_key_algorithm<'de, D>(
+    deserializer: D,
+) -> Result<AsymmetricKeyAlgorithm, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    match value.as_str() {
+        "ecdsa-p256" => Ok(AsymmetricKeyAlgorithm::EcdsaP256),
+        "ecdsa-p384" => Ok(AsymmetricKeyAlgorithm::EcdsaP384),
+        "ecdsa-p521" => Ok(AsymmetricKeyAlgorithm::EcdsaP521),
+        "ecdsa-secp256k1" => Ok(AsymmetricKeyAlgorithm::EcdsaSecp256k1),
+        "ed25519" => Ok(AsymmetricKeyAlgorithm::Ed25519),
+        "ed448" => Ok(AsymmetricKeyAlgorithm::Ed448),
+        "rsa-2048" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 2048 }),
+        "rsa-3072" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
+        "rsa-4096" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
+        _ => Err(serde::de::Error::unknown_variant(
+            &value,
+            &[
+                "ecdsa-p256",
+                "ecdsa-p384",
+                "ecdsa-p521",
+                "ecdsa-secp256k1",
+                "ed25519",
+                "ed448",
+                "rsa-2048",
+                "rsa-3072",
+                "rsa-4096",
+            ],
+        )),
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -458,8 +505,8 @@ fn default_health_route() -> String {
     "/health".to_owned()
 }
 
-fn default_log_format() -> String {
-    "compact".to_owned()
+const fn default_log_format() -> LogFormat {
+    LogFormat::Compact
 }
 
 fn default_port() -> u16 {
@@ -538,7 +585,7 @@ fn default_graphql_timeout_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnvironment, TlsTermination, render_config_template};
+    use super::{AppConfig, AppEnvironment, LogFormat, TlsTermination, render_config_template};
     use serial_test::serial;
 
     fn set_env(key: &str, value: &str) {
@@ -626,7 +673,7 @@ database:
         .unwrap();
 
         assert_eq!(config.logger.level, "debug");
-        assert_eq!(config.logger.format, "compact");
+        assert_eq!(config.logger.format, LogFormat::Compact);
         assert_eq!(config.server.port, 5150);
         assert_eq!(config.server.binding, "127.0.0.1");
         assert_eq!(config.server.tls.termination, TlsTermination::Direct);

@@ -121,8 +121,14 @@ pub(super) fn response_from_client(
         client_secret: None,
         client_secret_expires_at: None,
         redirect_uris,
-        response_types: metadata.response_types.clone(),
-        grant_types: metadata.grant_types.clone(),
+        response_types: metadata
+            .response_types
+            .as_ref()
+            .map(|values| values.iter().map(ToString::to_string).collect()),
+        grant_types: metadata
+            .grant_types
+            .as_ref()
+            .map(|values| values.iter().map(ToString::to_string).collect()),
         application_type,
         contacts: metadata.contacts.clone(),
         client_name: Some(client.client().name.clone()),
@@ -132,17 +138,39 @@ pub(super) fn response_from_client(
         tos_uri: metadata.tos_uri.clone(),
         sector_identifier_uri: metadata.sector_identifier_uri.clone(),
         subject_type: metadata.subject_type.map(|value| value.to_string()),
-        id_token_signed_response_alg: metadata.id_token_signed_response_alg.clone(),
-        id_token_encrypted_response_alg: metadata.id_token_encrypted_response_alg.clone(),
-        id_token_encrypted_response_enc: metadata.id_token_encrypted_response_enc.clone(),
-        userinfo_signed_response_alg: metadata.userinfo_signed_response_alg.clone(),
-        userinfo_encrypted_response_alg: metadata.userinfo_encrypted_response_alg.clone(),
-        userinfo_encrypted_response_enc: metadata.userinfo_encrypted_response_enc.clone(),
-        request_object_signing_alg: metadata.request_object_signing_alg.clone(),
-        request_object_encryption_alg: metadata.request_object_encryption_alg.clone(),
-        request_object_encryption_enc: metadata.request_object_encryption_enc.clone(),
-        token_endpoint_auth_method: metadata.token_endpoint_auth_method.clone(),
-        token_endpoint_auth_signing_alg: metadata.token_endpoint_auth_signing_alg.clone(),
+        id_token_signed_response_alg: metadata
+            .id_token_signed_response_alg
+            .map(|value| value.to_string()),
+        id_token_encrypted_response_alg: metadata
+            .id_token_encrypted_response_alg
+            .map(|value| value.to_string()),
+        id_token_encrypted_response_enc: metadata
+            .id_token_encrypted_response_enc
+            .map(|value| value.to_string()),
+        userinfo_signed_response_alg: metadata
+            .userinfo_signed_response_alg
+            .map(|value| value.to_string()),
+        userinfo_encrypted_response_alg: metadata
+            .userinfo_encrypted_response_alg
+            .map(|value| value.to_string()),
+        userinfo_encrypted_response_enc: metadata
+            .userinfo_encrypted_response_enc
+            .map(|value| value.to_string()),
+        request_object_signing_alg: metadata
+            .request_object_signing_alg
+            .map(|value| value.to_string()),
+        request_object_encryption_alg: metadata
+            .request_object_encryption_alg
+            .map(|value| value.to_string()),
+        request_object_encryption_enc: metadata
+            .request_object_encryption_enc
+            .map(|value| value.to_string()),
+        token_endpoint_auth_method: metadata
+            .token_endpoint_auth_method
+            .map(|value| value.to_string()),
+        token_endpoint_auth_signing_alg: metadata
+            .token_endpoint_auth_signing_alg
+            .map(|value| value.to_string()),
         jwks: None,
         jwks_uri: None,
         default_max_age: metadata.default_max_age,

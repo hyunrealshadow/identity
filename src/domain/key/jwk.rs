@@ -1,7 +1,63 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::KeyOid;
+use std::{fmt, str::FromStr};
+
+use super::{JwaEncryptionAlgorithm, JwaSigningAlgorithm, KeyOid};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum JwkAlgorithm {
+    Signing(JwaSigningAlgorithm),
+    Encryption(JwaEncryptionAlgorithm),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid JWK algorithm")]
+pub struct ParseJwkAlgorithmError;
+
+impl JwkAlgorithm {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Signing(value) => value.as_str(),
+            Self::Encryption(value) => value.as_str(),
+        }
+    }
+}
+
+impl fmt::Display for JwkAlgorithm {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl From<JwaSigningAlgorithm> for JwkAlgorithm {
+    fn from(value: JwaSigningAlgorithm) -> Self {
+        Self::Signing(value)
+    }
+}
+
+impl From<JwaEncryptionAlgorithm> for JwkAlgorithm {
+    fn from(value: JwaEncryptionAlgorithm) -> Self {
+        Self::Encryption(value)
+    }
+}
+
+impl FromStr for JwkAlgorithm {
+    type Err = ParseJwkAlgorithmError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value
+            .parse::<JwaSigningAlgorithm>()
+            .map(Self::Signing)
+            .or_else(|_| {
+                value
+                    .parse::<JwaEncryptionAlgorithm>()
+                    .map(Self::Encryption)
+            })
+            .map_err(|_| ParseJwkAlgorithmError)
+    }
+}
 
 #[derive(
     Debug,
@@ -21,7 +77,7 @@ pub struct KeyJwkOid(pub uuid::Uuid);
 pub struct KeyJwk {
     pub oid: KeyJwkOid,
     pub key_oid: KeyOid,
-    pub algorithm: String,
+    pub algorithm: JwkAlgorithm,
     pub jwk: PublicJwk,
     pub created_at: DateTime<Utc>,
 }
@@ -122,12 +178,15 @@ pub enum KeyJwkRepositoryError {
 
     #[error("invalid public jwk: {0}")]
     InvalidPublicJwk(String),
+
+    #[error("unsupported JWK signing algorithm: {0}")]
+    UnsupportedAlgorithm(String),
 }
 
 #[derive(Debug, Clone)]
 pub struct CreateKeyJwkInput {
     pub key_oid: KeyOid,
-    pub algorithm: String,
+    pub algorithm: JwkAlgorithm,
     pub jwk: PublicJwk,
 }
 
@@ -143,7 +202,7 @@ pub trait KeyJwkRepository: Send + Sync {
     async fn find_active_by_key_oid_and_algorithm(
         &self,
         key_oid: KeyOid,
-        algorithm: &str,
+        algorithm: JwaSigningAlgorithm,
     ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError>;
 
     async fn delete_by_key_oid(&self, key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError>;

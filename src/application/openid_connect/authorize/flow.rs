@@ -1,5 +1,4 @@
 use super::*;
-use std::str::FromStr;
 
 use identity_domain::auth::SessionOid;
 use identity_domain::client_authorization::{
@@ -429,11 +428,7 @@ impl AuthorizeService {
             None => self.encrypt_session_id(session_oid).await?,
         };
 
-        let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                .with_param("response_type", request.response_type.as_str())
-                .with_source(error)
-        })?;
+        let response_type = request.response_type.clone();
 
         let redirect = if response_type.is_implicit() {
             self.approve_implicit_flow(
@@ -533,7 +528,7 @@ impl AuthorizeService {
                         scope: request.scope.clone(),
                         nonce: request.nonce.clone(),
                         code_challenge: request.code_challenge.clone(),
-                        code_challenge_method: request.code_challenge_method.clone(),
+                        code_challenge_method: request.code_challenge_method,
                         user_oid: user_oid.to_string(),
                         session_oid,
                         protected_session_id: Some(protected_session_id.to_string()),
@@ -578,11 +573,7 @@ impl AuthorizeService {
         })?;
         let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied).with_state(request.state);
 
-        let response_type = ResponseType::from_str(&request.response_type).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                .with_param("response_type", request.response_type.as_str())
-                .with_source(error)
-        })?;
+        let response_type = request.response_type.clone();
 
         let redirect = if response_type.uses_front_channel_response() {
             error.to_fragment_redirect_url(&redirect_uri)

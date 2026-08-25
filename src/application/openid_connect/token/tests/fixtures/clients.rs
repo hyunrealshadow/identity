@@ -51,7 +51,8 @@ impl OpenIdConnectClientRepository for AuthMethodClientRepository {
         oid: ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, Some(self.method));
-        metadata.token_endpoint_auth_signing_alg = self.signing_alg.map(str::to_owned);
+        metadata.token_endpoint_auth_signing_alg =
+            self.signing_alg.map(|value| value.parse().unwrap());
 
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())

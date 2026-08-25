@@ -17,7 +17,7 @@ use crate::openid_connect::authorize::{
 
 fn request() -> AuthorizationRequestData {
     AuthorizationRequestData {
-        response_type: "code".to_owned(),
+        response_type: "code".parse().unwrap(),
         response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_owned(),
@@ -45,14 +45,14 @@ fn stored(consent_state: ConsentState) -> StoredAuthorizationRequest {
     }
 }
 
-fn login(status: &'static str) -> Login {
+fn login(status: LoginStatus) -> Login {
     Login {
         oid: Uuid::new_v4(),
         client_oid: Uuid::new_v4(),
         client_authorization_oid: Uuid::new_v4(),
         session_oid: None,
         user_oid: None,
-        status: status.to_owned(),
+        status,
         failed_attempts: 0,
         acr: None,
         requested_acr: None,
@@ -164,7 +164,11 @@ fn continue_action_redirects_to_consent_when_pending_and_required() {
 fn continue_action_returns_consent_required_for_silent_pending_consent() {
     let selected_session = active_session();
     let mut stored = stored(ConsentState::Pending);
-    stored.request.prompt = Some("none".to_owned());
+    stored.request.prompt = Some(
+        [identity_domain::openid_connect::PromptValue::None]
+            .into_iter()
+            .collect(),
+    );
 
     let action = determine_continue_action(
         &stored,

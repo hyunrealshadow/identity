@@ -29,6 +29,7 @@ use crate::{
     },
     domain::{
         client_authorization::SelectionSource,
+        openid_connect::PromptValue,
         user::model::{CredentialType, UserOid},
     },
     middleware::resolved_client_ip,
@@ -126,12 +127,17 @@ async fn login_status(
             c.stored
                 .request
                 .prompt
-                .unwrap_or_else(|| "select_account".to_string()),
+                .unwrap_or_else(|| [PromptValue::SelectAccount].into_iter().collect()),
             c.stored.interaction.selection_source == Some(SelectionSource::Reauthentication),
             c.stored.request.login_hint,
             c.stored.request.ui_locales,
         ),
-        Err(_) => ("select_account".to_string(), false, None, None),
+        Err(_) => (
+            [PromptValue::SelectAccount].into_iter().collect(),
+            false,
+            None,
+            None,
+        ),
     };
 
     let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
@@ -140,7 +146,8 @@ async fn login_status(
         None
     };
     let challenge_uri = if user.is_some()
-        && (stored_request_has_prompt(Some(prompt.as_str()), "login") || requires_reauthentication)
+        && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
+            || requires_reauthentication)
     {
         let credential_type =
             if requires_reauthentication && credential_types.contains(&CredentialType::Otp) {
@@ -170,7 +177,11 @@ async fn login_status(
             status: login.status,
             user,
             credential_types,
-            prompt,
+            prompt: {
+                let mut values = prompt.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+                values.sort_unstable();
+                values.join(" ")
+            },
             requires_reauthentication,
             login_hint,
             challenge_uri,
@@ -212,9 +223,11 @@ async fn select_account(
         .oidc_authorize()
         .load_continue_context_by_login(&body.login_id)
         .await?;
-    if stored_request_has_prompt(continue_context.stored.request.prompt.as_deref(), "login")
-        || continue_context.stored.interaction.selection_source
-            == Some(SelectionSource::Reauthentication)
+    if stored_request_has_prompt(
+        continue_context.stored.request.prompt.as_ref(),
+        PromptValue::Login,
+    ) || continue_context.stored.interaction.selection_source
+        == Some(SelectionSource::Reauthentication)
     {
         return Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into());
     }
@@ -271,7 +284,7 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
 
     let resp = IdentifierResponse {
         id: protected_id,
-        status: "identifier_verified",
+        status: identity_domain::auth::LoginStatus::IdentifierVerified,
         credential_types: result.credential_types,
         user: UserDisplayInfo {
             email: result.user.email.clone(),
@@ -302,7 +315,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
         .login()
         .challenge(
             login_oid,
-            &body.credential_type,
+            body.credential_type,
             &body.credential,
             session_ctx,
         )
@@ -315,7 +328,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 res,
                 StatusCode::OK,
                 ChallengeResponse {
-                    status: "mfa_required",
+                    status: identity_domain::auth::LoginStatus::MfaRequired,
                     session: None,
                     acr: None,
                     continue_uri: None,
@@ -342,7 +355,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 res,
                 StatusCode::CREATED,
                 ChallengeResponse {
-                    status: "authenticated",
+                    status: identity_domain::auth::LoginStatus::Authenticated,
                     session: Some(SessionInfo {
                         id: selected.protected_session_id.clone(),
                         expires_at: session.expires_at,

@@ -32,7 +32,7 @@ impl SessionNode {
     }
 
     async fn status(&self) -> &str {
-        &self.session.status
+        self.session.status.as_str()
     }
 
     async fn current(&self) -> bool {

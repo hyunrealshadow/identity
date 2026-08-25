@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use super::{LoginStatus, SessionStatus};
+
 #[derive(
     Debug,
     Clone,
@@ -19,7 +21,7 @@ pub struct SessionOid(pub Uuid);
 pub struct Session {
     pub oid: SessionOid,
     pub user_oid: Uuid,
-    pub status: String,
+    pub status: SessionStatus,
     pub device_name: Option<String>,
     pub device_type: Option<String>,
     pub os_name: Option<String>,
@@ -86,7 +88,7 @@ pub struct Login {
     /// step) so that subsequent challenge steps do not need to re-resolve the
     /// identifier string into a user.
     pub user_oid: Option<Uuid>,
-    pub status: String,
+    pub status: LoginStatus,
     pub failed_attempts: i32,
     pub created_at: DateTime<Utc>,
     /// ACR that was granted after the full authentication flow (set when

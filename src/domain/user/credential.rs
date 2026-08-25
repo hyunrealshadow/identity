@@ -19,7 +19,7 @@ pub use super::recovery_code::{RecoveryCodeCredentialData, WebAuthnPublicKeyCred
 )]
 pub struct UserCredentialOid(pub uuid::Uuid);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display, AsRefStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, AsRefStr)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum CredentialType {

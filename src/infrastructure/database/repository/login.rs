@@ -12,7 +12,7 @@ use crate::database::entity::{
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 use identity_domain::auth::{
-    SessionOid,
+    LoginStatus, SessionOid,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
 };
@@ -23,19 +23,23 @@ fn to_domain(
     client_authorization_oid: Uuid,
     session_oid: Option<SessionOid>,
     user_oid: Option<Uuid>,
-) -> Login {
-    Login {
+) -> Result<Login, LoginRepositoryError> {
+    let status = m
+        .status
+        .parse()
+        .map_err(|_| LoginRepositoryError::InvalidStoredStatus)?;
+    Ok(Login {
         oid: m.oid,
         client_oid,
         client_authorization_oid,
         session_oid,
         user_oid,
-        status: m.status,
+        status,
         failed_attempts: m.failed_attempts,
         created_at: chrono::DateTime::<Utc>::from(m.created_at),
         acr: m.acr,
         requested_acr: m.requested_acr,
-    }
+    })
 }
 
 pub struct LoginRepositoryImpl {
@@ -97,7 +101,7 @@ impl LoginRepository for LoginRepositoryImpl {
             client_authorization_model.oid,
             session_oid,
             user_oid,
-        )))
+        )?))
     }
 
     async fn create_pending(
@@ -126,7 +130,7 @@ impl LoginRepository for LoginRepositoryImpl {
             client_id: Set(client.id),
             client_authorization_id: Set(client_authorization_model.id),
             user_id: Set(None),
-            status: Set(identity_domain::auth::LoginStatus::CREATED.to_owned()),
+            status: Set(LoginStatus::CREATED.to_string()),
             failed_attempts: Set(0),
             requested_acr: Set(requested_acr.map(str::to_owned)),
             created_at: Set(now.into()),
@@ -136,13 +140,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .insert(&self.db)
             .await
             .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
-        Ok(to_domain(
-            model,
-            client_oid,
-            client_authorization_oid,
-            None,
-            None,
-        ))
+        to_domain(model, client_oid, client_authorization_oid, None, None)
     }
 
     async fn bind_user(
@@ -162,11 +160,11 @@ impl LoginRepository for LoginRepositoryImpl {
             .col_expr(login::Column::UserId, Expr::value(Some(user.id)))
             .col_expr(
                 login::Column::Status,
-                Expr::value(identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED),
+                Expr::value(LoginStatus::IDENTIFIER_VERIFIED.as_str()),
             )
             .col_expr(login::Column::UpdatedAt, Expr::value(Some(now.naive_utc())))
             .filter(login::Column::Oid.eq(login_oid))
-            .filter(login::Column::Status.eq(identity_domain::auth::LoginStatus::CREATED))
+            .filter(login::Column::Status.eq(LoginStatus::CREATED.as_str()))
             .filter(login::Column::UserId.is_null())
             .exec_with_returning(&self.db)
             .await
@@ -188,19 +186,19 @@ impl LoginRepository for LoginRepositoryImpl {
                 .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::LoginNotFound)?;
 
-        Ok(to_domain(
+        to_domain(
             model,
             client_model.oid,
             client_authorization_model.oid,
             None,
             Some(user_oid),
-        ))
+        )
     }
 
     async fn update_status(
         &self,
         login_oid: Uuid,
-        status: &str,
+        status: LoginStatus,
         session_oid: Option<SessionOid>,
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError> {
@@ -211,7 +209,11 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::LoginNotFound)?;
 
-        if !identity_domain::auth::LoginStatus::can_transition(&model.status, status) {
+        let current_status = model
+            .status
+            .parse::<LoginStatus>()
+            .map_err(|_| LoginRepositoryError::InvalidStoredStatus)?;
+        if !current_status.can_transition(status) {
             return Err(LoginRepositoryError::InvalidTransition);
         }
 
@@ -223,7 +225,10 @@ impl LoginRepository for LoginRepositoryImpl {
             let session = SessionEntity::find()
                 .filter(session::Column::Oid.eq(Uuid::from(s_oid)))
                 .filter(session::Column::UserId.eq(user_id))
-                .filter(session::Column::Status.eq(identity_domain::auth::SessionStatus::ACTIVE))
+                .filter(
+                    session::Column::Status
+                        .eq(identity_domain::auth::SessionStatus::ACTIVE.as_str()),
+                )
                 .filter(session::Column::RevokedAt.is_null())
                 .filter(session::Column::ExpiresAt.gt(now))
                 .one(&self.db)
@@ -235,15 +240,13 @@ impl LoginRepository for LoginRepositoryImpl {
             None
         };
 
-        if status == identity_domain::auth::LoginStatus::AUTHENTICATED
-            && (session_id.is_none() || acr.is_none())
-        {
+        if status == LoginStatus::AUTHENTICATED && (session_id.is_none() || acr.is_none()) {
             return Err(LoginRepositoryError::InvalidTransition);
         }
 
         let previous_status = model.status;
         let mut update = LoginEntity::update_many()
-            .col_expr(login::Column::Status, Expr::value(status.to_owned()))
+            .col_expr(login::Column::Status, Expr::value(status.as_str()))
             .col_expr(
                 login::Column::UpdatedAt,
                 Expr::value(Some(Utc::now().naive_utc())),
@@ -269,7 +272,7 @@ impl LoginRepository for LoginRepositoryImpl {
     async fn increment_failed_attempts(
         &self,
         login_oid: Uuid,
-        failure_reason: Option<&str>,
+        failure_reason: Option<identity_domain::auth::LoginFailureReason>,
     ) -> Result<i32, LoginRepositoryError> {
         let now = Utc::now().naive_utc();
         let mut update = LoginEntity::update_many()
@@ -286,7 +289,7 @@ impl LoginRepository for LoginRepositoryImpl {
         if let Some(reason) = failure_reason {
             update = update.col_expr(
                 login::Column::FailureReason,
-                Expr::value(Option::<String>::Some(reason.to_owned())),
+                Expr::value(Option::<String>::Some(reason.as_str().to_owned())),
             );
         }
 

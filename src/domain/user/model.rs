@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use std::{fmt, str::FromStr};
 
 pub use super::credential::{CredentialData, CredentialType, UserCredential, UserCredentialOid};
 pub use super::otp::{OtpAlgorithm, OtpCredentialData};
@@ -19,6 +20,44 @@ pub use super::recovery_code::{RecoveryCodeCredentialData, WebAuthnPublicKeyCred
 )]
 pub struct UserOid(pub uuid::Uuid);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UserTheme {
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid user theme")]
+pub struct ParseUserThemeError;
+
+impl UserTheme {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+}
+
+impl fmt::Display for UserTheme {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for UserTheme {
+    type Err = ParseUserThemeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "light" => Ok(Self::Light),
+            "dark" => Ok(Self::Dark),
+            _ => Err(ParseUserThemeError),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct User {
     pub oid: UserOid,
@@ -37,7 +76,7 @@ pub struct User {
     pub birthdate: Option<String>,
     pub zoneinfo: Option<String>,
     pub locale: Option<String>,
-    pub theme: Option<String>,
+    pub theme: Option<UserTheme>,
     pub email_verified: bool,
     pub phone_number: Option<String>,
     pub phone_number_verified: Option<bool>,

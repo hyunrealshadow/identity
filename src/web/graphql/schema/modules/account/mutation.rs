@@ -69,7 +69,7 @@ impl AccountMutation {
         let request = request_context(ctx)?;
         let repo = UserRepositoryImpl::new(request.state.resources().db().clone());
         let user = repo
-            .update_profile(request.claims.user_oid, input.clone().into_patch())
+            .update_profile(request.claims.user_oid, input.clone().into_patch()?)
             .await
             .map_err(internal_error)?
             .ok_or_else(|| Error::new("account not found"))?;

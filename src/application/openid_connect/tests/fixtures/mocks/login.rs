@@ -89,7 +89,7 @@ impl LoginRepository for MockLoginRepository {
     async fn update_status(
         &self,
         login_oid: uuid::Uuid,
-        status: &str,
+        status: identity_domain::auth::LoginStatus,
         session_oid: Option<SessionOid>,
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError> {
@@ -120,12 +120,12 @@ impl LoginRepository for MockLoginRepository {
     async fn increment_failed_attempts(
         &self,
         login_oid: uuid::Uuid,
-        failure_reason: Option<&str>,
+        failure_reason: Option<identity_domain::auth::LoginFailureReason>,
     ) -> Result<i32, LoginRepositoryError> {
-        self.increment_failed_attempts_calls
-            .lock()
-            .unwrap()
-            .push((login_oid, failure_reason.map(str::to_owned)));
+        self.increment_failed_attempts_calls.lock().unwrap().push((
+            login_oid,
+            failure_reason.map(|value| value.as_str().to_owned()),
+        ));
         Ok(1)
     }
 
@@ -152,7 +152,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             client_authorization_oid: uuid::Uuid::nil(),
             session_oid: None,
             user_oid: None,
-            status: identity_domain::auth::LoginStatus::CREATED.to_string(),
+            status: identity_domain::auth::LoginStatus::CREATED,
             failed_attempts: 0,
             created_at: Utc::now(),
             acr: None,
@@ -165,7 +165,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             client_authorization_oid: uuid::Uuid::nil(),
             session_oid: None,
             user_oid: None,
-            status: identity_domain::auth::LoginStatus::AUTHENTICATED.to_string(),
+            status: identity_domain::auth::LoginStatus::AUTHENTICATED,
             failed_attempts: 0,
             created_at: Utc::now(),
             acr: None,

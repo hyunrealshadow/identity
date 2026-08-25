@@ -58,7 +58,8 @@ impl OpenIdConnectClientRepository for PublicClientRepository {
         oid: Uuid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
-        metadata.token_endpoint_auth_method = Some("none".to_owned());
+        metadata.token_endpoint_auth_method =
+            Some(identity_domain::openid_connect::TokenEndpointAuthMethod::None);
         metadata.settings.allow_public_client_flow = true;
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())

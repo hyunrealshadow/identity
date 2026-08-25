@@ -2,7 +2,7 @@ use std::{env, sync::Once};
 
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::config::LoggerConfig;
+use crate::config::{LogFormat, LoggerConfig};
 
 static TRACING_INIT: Once = Once::new();
 
@@ -23,10 +23,10 @@ pub fn init_tracing(config: &LoggerConfig) {
 
         let subscriber = fmt().with_env_filter(filter);
 
-        match config.format.as_str() {
-            "json" => subscriber.json().init(),
-            "pretty" => subscriber.pretty().init(),
-            _ => subscriber.compact().init(),
+        match config.format {
+            LogFormat::Json => subscriber.json().init(),
+            LogFormat::Pretty => subscriber.pretty().init(),
+            LogFormat::Compact => subscriber.compact().init(),
         }
     });
 }

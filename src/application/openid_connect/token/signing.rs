@@ -3,6 +3,7 @@ use crate::openid_connect::jose::{
     asymmetric_signer_from_pem, encrypt_compact_with_public_jwk, front_channel_hash,
 };
 use identity_domain::auth::SessionOid;
+use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
 use identity_domain::openid_connect::ClaimsRequest;
 #[cfg(test)]
 use josekit::jws::RS256;
@@ -23,7 +24,7 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub token_id: &'a str,
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
-    pub alg: &'a str,
+    pub alg: JwaSigningAlgorithm,
     pub issuer: &'a url::Url,
     pub audience: &'a str,
     pub client_id: &'a str,
@@ -39,7 +40,7 @@ pub(super) struct SignAccessTokenInput<'a> {
 pub(super) struct SignIdTokenInput<'a> {
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
-    pub alg: &'a str,
+    pub alg: JwsAlgorithm,
     pub issuer: &'a url::Url,
     pub audience: &'a str,
     pub client: &'a identity_domain::openid_connect::OpenIdConnectClient,
@@ -53,7 +54,9 @@ pub(super) struct SignIdTokenInput<'a> {
 }
 
 impl TokenService {
-    pub(super) async fn load_signing_key(&self) -> Result<(String, String, String), AppError> {
+    pub(super) async fn load_signing_key(
+        &self,
+    ) -> Result<(String, String, JwaSigningAlgorithm), AppError> {
         if let Some(provider) = &self.runtime_key_ring {
             let ring = provider.current_value();
             let key = ring
@@ -62,7 +65,7 @@ impl TokenService {
             return Ok((
                 key.key_id.clone(),
                 key.private_key_pem.clone(),
-                key.algorithm.clone(),
+                key.algorithm,
             ));
         }
 
@@ -87,7 +90,7 @@ impl TokenService {
 
                 let Some(binding) = self
                     .key_jwk_repo
-                    .find_active_by_key_oid_and_algorithm(key.oid, alg.as_str())
+                    .find_active_by_key_oid_and_algorithm(key.oid, alg)
                     .await
                     .map_err(|error| {
                         AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
@@ -99,7 +102,7 @@ impl TokenService {
                 return Ok((
                     Uuid::from(binding.oid).to_string(),
                     data.private_key.clone(),
-                    alg.as_str().to_owned(),
+                    alg,
                 ));
             }
         }
@@ -147,7 +150,7 @@ impl TokenService {
         payload
             .set_claim(
                 JwtClaimNames::TOKEN_USE,
-                Some(serde_json::json!(TokenUseValues::ACCESS_TOKEN)),
+                Some(serde_json::json!(TokenUse::AccessToken)),
             )
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
@@ -186,9 +189,9 @@ impl TokenService {
         }
 
         let private_key_pem = input.private_key_pem.to_owned();
-        let alg = input.alg.to_owned();
+        let alg = input.alg;
         tokio::task::spawn_blocking(move || {
-            let signer = build_access_token_signer(&private_key_pem, &alg)?;
+            let signer = build_access_token_signer(&private_key_pem, alg)?;
             jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })
@@ -253,12 +256,13 @@ impl TokenService {
                     AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
                 })?;
         }
-        if input.alg != "none"
+        if input.alg != JwsAlgorithm::None
             && let Some(access_token) = input.access_token
         {
-            let at_hash = front_channel_hash(access_token, input.alg).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })?;
+            let at_hash =
+                front_channel_hash(access_token, input.alg.as_str()).map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+                })?;
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
                 .map_err(|error| {
@@ -276,7 +280,7 @@ impl TokenService {
                 })?;
         }
 
-        if input.alg == "none" {
+        if input.alg == JwsAlgorithm::None {
             #[cfg(feature = "allow-none-alg")]
             return Self::sign_unsigned_id_token(&header, &payload);
 
@@ -285,9 +289,9 @@ impl TokenService {
         }
 
         let private_key_pem = input.private_key_pem.to_owned();
-        let alg = input.alg.to_owned();
+        let alg = input.alg;
         tokio::task::spawn_blocking(move || {
-            let signer = build_id_token_signer(&private_key_pem, &alg)?;
+            let signer = build_id_token_signer(&private_key_pem, alg)?;
             jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
             })
@@ -313,8 +317,8 @@ impl TokenService {
         &self,
         signed_jwt: &str,
         client: &identity_domain::openid_connect::OpenIdConnectClient,
-        encryption_alg: &str,
-        content_enc: &str,
+        encryption_alg: JwaEncryptionAlgorithm,
+        content_enc: JweContentEncryption,
     ) -> Result<String, AppError> {
         let credential = self
             .credential_repo
@@ -336,8 +340,8 @@ impl TokenService {
         encrypt_compact_with_public_jwk(
             signed_jwt.as_bytes(),
             public_jwk,
-            encryption_alg,
-            content_enc,
+            encryption_alg.as_str(),
+            content_enc.as_str(),
         )
         .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))
     }
@@ -345,16 +349,27 @@ impl TokenService {
 
 fn build_access_token_signer(
     private_key_pem: &str,
-    alg: &str,
+    alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
-    build_jws_signer(private_key_pem, alg, TokenErrorCode::SignAccessTokenFailed)
+    build_jws_signer(
+        private_key_pem,
+        alg.as_str(),
+        TokenErrorCode::SignAccessTokenFailed,
+    )
 }
 
 fn build_id_token_signer(
     private_key_pem: &str,
-    alg: &str,
+    alg: JwsAlgorithm,
 ) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
-    build_jws_signer(private_key_pem, alg, TokenErrorCode::SignIdTokenFailed)
+    let JwsAlgorithm::Asymmetric(alg) = alg else {
+        return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
+    };
+    build_jws_signer(
+        private_key_pem,
+        alg.as_str(),
+        TokenErrorCode::SignIdTokenFailed,
+    )
 }
 
 fn build_jws_signer(

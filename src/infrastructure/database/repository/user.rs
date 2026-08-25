@@ -7,17 +7,19 @@ use sea_orm::{
 
 use crate::database::entity::{user, user::Entity as UserEntity};
 use identity_domain::user::{
-    User, UserOid,
+    User, UserOid, UserTheme,
     repository::{UserRepository, UserRepositoryError},
 };
 
-fn to_domain(m: user::Model) -> User {
+fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
     let theme = m
         .preferences
         .get("theme")
         .and_then(serde_json::Value::as_str)
-        .map(str::to_owned);
-    User {
+        .map(str::parse)
+        .transpose()
+        .map_err(|_| UserRepositoryError::InvalidStoredTheme)?;
+    Ok(User {
         oid: m.oid.into(),
         email: m.email,
         email_normalized: m.email_normalized,
@@ -50,10 +52,10 @@ fn to_domain(m: user::Model) -> User {
         locked_until: m.locked_until.map(chrono::DateTime::<Utc>::from),
         created_at: DateTime::<Utc>::from(m.created_at),
         updated_at: m.updated_at.map(DateTime::<Utc>::from),
-    }
+    })
 }
 
-fn update_theme_preference(preferences: &mut serde_json::Value, theme: Option<String>) {
+fn update_theme_preference(preferences: &mut serde_json::Value, theme: Option<UserTheme>) {
     if !preferences.is_object() {
         *preferences = serde_json::json!({});
     }
@@ -62,7 +64,10 @@ fn update_theme_preference(preferences: &mut serde_json::Value, theme: Option<St
         .expect("normalized preference value must be an object");
     match theme {
         Some(theme) => {
-            object.insert("theme".to_owned(), serde_json::Value::String(theme));
+            object.insert(
+                "theme".to_owned(),
+                serde_json::Value::String(theme.to_string()),
+            );
         }
         None => {
             object.remove("theme");
@@ -129,12 +134,11 @@ impl UserRepositoryImpl {
             address_country
         );
         active.updated_at = Set(Some(Utc::now().into()));
-        active
+        let model = active
             .update(&self.db)
             .await
-            .map(to_domain)
-            .map(Some)
-            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
+        to_domain(model).map(Some)
     }
 
     pub async fn update_identifier(
@@ -182,7 +186,7 @@ impl UserRepositoryImpl {
         }
         active.updated_at = Set(Some(Utc::now().into()));
         match active.update(&self.db).await {
-            Ok(model) => Ok(Some(to_domain(model))),
+            Ok(model) => Ok(Some(to_domain(model)?)),
             Err(error) => {
                 match &update {
                     UserIdentifierUpdate::Username { normalized, .. }
@@ -241,7 +245,7 @@ pub struct UserProfilePatch {
     pub birthdate: Option<Option<String>>,
     pub zone_info: Option<Option<String>>,
     pub locale: Option<Option<String>>,
-    pub theme: Option<Option<String>>,
+    pub theme: Option<Option<UserTheme>>,
     pub address_formatted: Option<Option<String>>,
     pub address_street_address: Option<Option<String>>,
     pub address_locality: Option<Option<String>>,
@@ -267,6 +271,7 @@ impl UserRepository for UserRepositoryImpl {
             .map_err(|e| UserRepositoryError::QueryFailed(Box::new(e)))?;
         model
             .map(to_domain)
+            .transpose()?
             .ok_or(UserRepositoryError::UserNotFound)
     }
 
@@ -276,7 +281,7 @@ impl UserRepository for UserRepositoryImpl {
             .one(&self.db)
             .await
             .map_err(|e| UserRepositoryError::QueryFailed(Box::new(e)))?;
-        Ok(model.map(to_domain))
+        model.map(to_domain).transpose()
     }
 
     async fn increment_failed_attempts(
@@ -361,12 +366,13 @@ mod tests {
 
     use super::{UserIdentifierUpdate, UserRepositoryImpl, to_domain, update_theme_preference};
     use crate::database::entity::user;
+    use identity_domain::user::UserTheme;
 
     #[test]
     fn maps_oidc_phone_and_address_claim_fields() {
         let model = user_model();
 
-        let user = to_domain(model);
+        let user = to_domain(model).unwrap();
 
         assert_eq!(user.phone_number.as_deref(), Some("+12025550123"));
         assert_eq!(user.phone_number_verified, Some(true));
@@ -379,7 +385,7 @@ mod tests {
         assert_eq!(user.address_region.as_deref(), Some("CA"));
         assert_eq!(user.address_postal_code.as_deref(), Some("94000"));
         assert_eq!(user.address_country.as_deref(), Some("US"));
-        assert_eq!(user.theme.as_deref(), Some("dark"));
+        assert_eq!(user.theme.map(UserTheme::as_str), Some("dark"));
     }
 
     #[test]
@@ -389,7 +395,7 @@ mod tests {
             "compact_navigation": true,
         });
 
-        update_theme_preference(&mut preferences, Some("dark".to_owned()));
+        update_theme_preference(&mut preferences, Some(UserTheme::Dark));
 
         assert_eq!(preferences["theme"], "dark");
         assert_eq!(preferences["compact_navigation"], true);

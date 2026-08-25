@@ -19,6 +19,7 @@ use crate::database::entity::{
 };
 use identity_domain::auth::SessionOid;
 use identity_domain::client::model::Client;
+use identity_domain::client_authorization::ClientAuthorizationType;
 use identity_domain::openid_connect::{
     OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
     OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
@@ -92,8 +93,14 @@ fn to_metadata(
         frontchannel_logout_session_required: model.frontchannel_logout_session_required,
         backchannel_logout_uri: parse_optional_url(model.backchannel_logout_uri.as_deref())?,
         backchannel_logout_session_required: model.backchannel_logout_session_required,
-        response_types: deserialize_optional_string_vec(model.response_types.as_ref())?,
-        grant_types: deserialize_optional_string_vec(model.grant_types.as_ref())?,
+        response_types: parse_metadata_values(
+            "response_types",
+            deserialize_optional_string_vec(model.response_types.as_ref())?,
+        )?,
+        grant_types: parse_metadata_values(
+            "grant_types",
+            deserialize_optional_string_vec(model.grant_types.as_ref())?,
+        )?,
         contacts: deserialize_optional_string_vec(model.contacts.as_ref())?,
         logo_uri: parse_optional_url(model.logo_uri.as_deref())?,
         client_uri: parse_optional_url(model.client_uri.as_deref())?,
@@ -106,17 +113,52 @@ fn to_metadata(
             .map(str::parse)
             .transpose()
             .map_err(OpenIdConnectClientRepositoryError::ParseSubjectType)?,
-        id_token_signed_response_alg: model.id_token_signed_response_alg,
-        id_token_encrypted_response_alg: model.id_token_encrypted_response_alg,
-        id_token_encrypted_response_enc: model.id_token_encrypted_response_enc,
-        userinfo_signed_response_alg: model.userinfo_signed_response_alg,
-        userinfo_encrypted_response_alg: model.userinfo_encrypted_response_alg,
-        userinfo_encrypted_response_enc: model.userinfo_encrypted_response_enc,
-        request_object_signing_alg: model.request_object_signing_alg,
-        request_object_encryption_alg: model.request_object_encryption_alg,
-        request_object_encryption_enc: model.request_object_encryption_enc,
-        token_endpoint_auth_method: model.token_endpoint_auth_method,
-        token_endpoint_auth_signing_alg: model.token_endpoint_auth_signing_alg,
+        id_token_signed_response_alg: parse_optional_metadata_value(
+            "id_token_signed_response_alg",
+            model.id_token_signed_response_alg,
+        )?,
+        id_token_encrypted_response_alg: parse_optional_metadata_value(
+            "id_token_encrypted_response_alg",
+            model.id_token_encrypted_response_alg,
+        )?,
+        id_token_encrypted_response_enc: parse_optional_metadata_value(
+            "id_token_encrypted_response_enc",
+            model.id_token_encrypted_response_enc,
+        )?,
+        userinfo_signed_response_alg: parse_optional_metadata_value(
+            "userinfo_signed_response_alg",
+            model.userinfo_signed_response_alg,
+        )?,
+        userinfo_encrypted_response_alg: parse_optional_metadata_value(
+            "userinfo_encrypted_response_alg",
+            model.userinfo_encrypted_response_alg,
+        )?,
+        userinfo_encrypted_response_enc: parse_optional_metadata_value(
+            "userinfo_encrypted_response_enc",
+            model.userinfo_encrypted_response_enc,
+        )?,
+        request_object_signing_alg: parse_optional_metadata_value(
+            "request_object_signing_alg",
+            model.request_object_signing_alg,
+        )?,
+        request_object_encryption_alg: parse_optional_metadata_value(
+            "request_object_encryption_alg",
+            model.request_object_encryption_alg,
+        )?,
+        request_object_encryption_enc: parse_optional_metadata_value(
+            "request_object_encryption_enc",
+            model.request_object_encryption_enc,
+        )?,
+        token_endpoint_auth_method: model
+            .token_endpoint_auth_method
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(OpenIdConnectClientRepositoryError::ParseTokenEndpointAuthMethod)?,
+        token_endpoint_auth_signing_alg: parse_optional_metadata_value(
+            "token_endpoint_auth_signing_alg",
+            model.token_endpoint_auth_signing_alg,
+        )?,
         default_max_age: model.default_max_age,
         require_auth_time: model.require_auth_time,
         default_acr_values: deserialize_optional_string_vec(model.default_acr_values.as_ref())?,
@@ -124,6 +166,37 @@ fn to_metadata(
         request_uris: parse_optional_urls(model.request_uris.as_ref())?,
         settings,
     })
+}
+
+fn parse_optional_metadata_value<T: std::str::FromStr>(
+    field: &'static str,
+    value: Option<String>,
+) -> Result<Option<T>, OpenIdConnectClientRepositoryError> {
+    value
+        .map(|value| {
+            value.parse().map_err(
+                |_| OpenIdConnectClientRepositoryError::InvalidMetadataValue { field, value },
+            )
+        })
+        .transpose()
+}
+
+fn parse_metadata_values<T: std::str::FromStr>(
+    field: &'static str,
+    values: Option<Vec<String>>,
+) -> Result<Option<Vec<T>>, OpenIdConnectClientRepositoryError> {
+    values
+        .map(|values| {
+            values
+                .into_iter()
+                .map(|value| {
+                    value.parse().map_err(|_| {
+                        OpenIdConnectClientRepositoryError::InvalidMetadataValue { field, value }
+                    })
+                })
+                .collect()
+        })
+        .transpose()
 }
 
 fn to_platform(
@@ -222,8 +295,12 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         backchannel_logout_session_required: Set(
                             metadata.backchannel_logout_session_required
                         ),
-                        response_types: Set(optional_strings_to_json(metadata.response_types)),
-                        grant_types: Set(optional_strings_to_json(metadata.grant_types)),
+                        response_types: Set(optional_strings_to_json(metadata.response_types.map(
+                            |values| values.into_iter().map(|value| value.to_string()).collect()
+                        ))),
+                        grant_types: Set(optional_strings_to_json(metadata.grant_types.map(
+                            |values| values.into_iter().map(|value| value.to_string()).collect()
+                        ))),
                         contacts: Set(optional_strings_to_json(metadata.contacts)),
                         logo_uri: Set(metadata.logo_uri.map(|value| value.to_string())),
                         client_uri: Set(metadata.client_uri.map(|value| value.to_string())),
@@ -233,26 +310,28 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                             .sector_identifier_uri
                             .map(|value| value.to_string())),
                         subject_type: Set(metadata.subject_type.map(|value| value.to_string())),
-                        id_token_signed_response_alg: Set(metadata.id_token_signed_response_alg),
+                        id_token_signed_response_alg: Set(metadata.id_token_signed_response_alg.map(|value| value.to_string())),
                         id_token_encrypted_response_alg: Set(
-                            metadata.id_token_encrypted_response_alg
+                            metadata.id_token_encrypted_response_alg.map(|value| value.to_string())
                         ),
                         id_token_encrypted_response_enc: Set(
-                            metadata.id_token_encrypted_response_enc
+                            metadata.id_token_encrypted_response_enc.map(|value| value.to_string())
                         ),
-                        userinfo_signed_response_alg: Set(metadata.userinfo_signed_response_alg),
+                        userinfo_signed_response_alg: Set(metadata.userinfo_signed_response_alg.map(|value| value.to_string())),
                         userinfo_encrypted_response_alg: Set(
-                            metadata.userinfo_encrypted_response_alg
+                            metadata.userinfo_encrypted_response_alg.map(|value| value.to_string())
                         ),
                         userinfo_encrypted_response_enc: Set(
-                            metadata.userinfo_encrypted_response_enc
+                            metadata.userinfo_encrypted_response_enc.map(|value| value.to_string())
                         ),
-                        request_object_signing_alg: Set(metadata.request_object_signing_alg),
-                        request_object_encryption_alg: Set(metadata.request_object_encryption_alg),
-                        request_object_encryption_enc: Set(metadata.request_object_encryption_enc),
-                        token_endpoint_auth_method: Set(metadata.token_endpoint_auth_method),
+                        request_object_signing_alg: Set(metadata.request_object_signing_alg.map(|value| value.to_string())),
+                        request_object_encryption_alg: Set(metadata.request_object_encryption_alg.map(|value| value.to_string())),
+                        request_object_encryption_enc: Set(metadata.request_object_encryption_enc.map(|value| value.to_string())),
+                        token_endpoint_auth_method: Set(
+                            metadata.token_endpoint_auth_method.map(|value| value.to_string())
+                        ),
                         token_endpoint_auth_signing_alg: Set(
-                            metadata.token_endpoint_auth_signing_alg
+                            metadata.token_endpoint_auth_signing_alg.map(|value| value.to_string())
                         ),
                         default_max_age: Set(metadata.default_max_age),
                         require_auth_time: Set(metadata.require_auth_time),
@@ -336,7 +415,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                     client_authorization::ActiveModel {
                         oid: Set(Uuid::new_v4()),
                         client_id: Set(client_model.id),
-                        r#type: Set("registration_access_token".to_owned()),
+                        r#type: Set(ClientAuthorizationType::RegistrationAccessToken.to_string()),
                         data: Set(serde_json::json!({ "token": registration_access_token })),
                         expires_at: Set((now + Duration::days(365)).into()),
                         completed_at: Set(None),
@@ -378,7 +457,10 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
 
         let auth_rows = ClientAuthorizationEntity::find()
             .filter(client_authorization::Column::ClientId.eq(client_model.id))
-            .filter(client_authorization::Column::Type.eq("registration_access_token"))
+            .filter(
+                client_authorization::Column::Type
+                    .eq(ClientAuthorizationType::RegistrationAccessToken.to_string()),
+            )
             .filter(client_authorization::Column::RevokedAt.is_null())
             .filter(client_authorization::Column::ExpiresAt.gt(Utc::now()))
             .all(&self.db)

@@ -73,6 +73,8 @@ impl std::fmt::Display for JwaAlgorithmParseError {
     }
 }
 
+impl std::error::Error for JwaAlgorithmParseError {}
+
 impl JwaSigningAlgorithm {
     pub fn as_str(self) -> &'static str {
         self.into()
@@ -135,6 +137,50 @@ impl FromStr for JwaSigningAlgorithm {
         Self::iter()
             .find(|variant| variant.as_ref() == s)
             .ok_or_else(|| JwaAlgorithmParseError(s.to_owned()))
+    }
+}
+
+/// Algorithms accepted in a JOSE `alg` header, including symmetric signing
+/// and the explicitly unsecured value used by request objects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum JwsAlgorithm {
+    None,
+    Hs256,
+    Hs384,
+    Hs512,
+    Asymmetric(JwaSigningAlgorithm),
+}
+
+impl JwsAlgorithm {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Hs256 => "HS256",
+            Self::Hs384 => "HS384",
+            Self::Hs512 => "HS512",
+            Self::Asymmetric(value) => value.as_str(),
+        }
+    }
+}
+
+impl std::fmt::Display for JwsAlgorithm {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for JwsAlgorithm {
+    type Err = JwaAlgorithmParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "none" => Ok(Self::None),
+            "HS256" => Ok(Self::Hs256),
+            "HS384" => Ok(Self::Hs384),
+            "HS512" => Ok(Self::Hs512),
+            _ => value.parse().map(Self::Asymmetric),
+        }
     }
 }
 

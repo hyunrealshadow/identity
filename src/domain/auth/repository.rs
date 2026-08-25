@@ -3,12 +3,18 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::auth::model::{ActiveSession, Login, Session, SessionOid};
+use crate::auth::{
+    LoginFailureReason, LoginStatus,
+    model::{ActiveSession, Login, Session, SessionOid},
+};
 
 #[derive(Debug, Error)]
 pub enum SessionRepositoryError {
     #[error("failed to query session")]
     QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("database contains an unknown session status")]
+    InvalidStoredStatus,
 
     #[error("failed to query active sessions")]
     ListActiveFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -54,6 +60,9 @@ pub enum LoginRepositoryError {
 
     #[error("invalid login state transition")]
     InvalidTransition,
+
+    #[error("database contains an unknown login status")]
+    InvalidStoredStatus,
 
     #[error("failed to increment login failed attempts")]
     IncrementFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -162,7 +171,7 @@ pub trait LoginRepository: Send + Sync {
     async fn update_status(
         &self,
         login_oid: Uuid,
-        status: &str,
+        status: LoginStatus,
         session_oid: Option<SessionOid>,
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError>;
@@ -172,7 +181,7 @@ pub trait LoginRepository: Send + Sync {
     async fn increment_failed_attempts(
         &self,
         login_oid: Uuid,
-        failure_reason: Option<&str>,
+        failure_reason: Option<LoginFailureReason>,
     ) -> Result<i32, LoginRepositoryError>;
 
     /// Reset login `failed_attempts` to zero.

@@ -1,5 +1,38 @@
 use url::Url;
 
+pub(super) fn parse_metadata_value<T: std::str::FromStr>(
+    field: &'static str,
+    value: Option<&str>,
+) -> Result<Option<T>, AppError> {
+    value
+        .map(|value| {
+            value.parse().map_err(|_| {
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", field)
+            })
+        })
+        .transpose()
+}
+
+pub(super) fn parse_metadata_values<T: std::str::FromStr>(
+    field: &'static str,
+    values: Option<&[String]>,
+) -> Result<Option<Vec<T>>, AppError> {
+    values
+        .map(|values| {
+            values
+                .iter()
+                .map(|value| {
+                    value.parse().map_err(|_| {
+                        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                            .with_param("field", field)
+                    })
+                })
+                .collect()
+        })
+        .transpose()
+}
+
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
     domain::{

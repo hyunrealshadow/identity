@@ -68,7 +68,7 @@ impl Default for ContinueFixture {
             login_hint: None,
             max_age: None,
             consent_state: ConsentState::Pending,
-            login_status: LoginStatus::CREATED,
+            login_status: LoginStatus::CREATED.as_str(),
             skip_consent: false,
             session_created_at: None,
             authorization_expires_at: None,
@@ -189,14 +189,19 @@ pub(super) async fn continue_state(
     };
     let authorization_request = StoredAuthorizationRequest {
         request: AuthorizationRequestData {
-            response_type: "code".to_owned(),
+            response_type: "code".parse().unwrap(),
             response_mode: None,
             client_id: client_oid.to_string(),
             redirect_uri: "https://client.example.com/callback".to_owned(),
             scope: "openid".to_owned(),
             state: "state-123".to_owned(),
             nonce: None,
-            prompt: fixture.prompt,
+            prompt: fixture.prompt.map(|value| {
+                value
+                    .split_whitespace()
+                    .map(|item| item.parse().unwrap())
+                    .collect()
+            }),
             max_age: fixture.max_age,
             login_hint: fixture.login_hint,
             code_challenge: None,
@@ -344,7 +349,7 @@ pub(super) async fn continue_state(
                 id: 43,
                 oid: session_oid,
                 user_id: 47,
-                status: identity_domain::auth::SessionStatus::ACTIVE.to_owned(),
+                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
                 acr: None,
                 acr_expires_at: None,
                 amr: serde_json::json!([]),
@@ -412,7 +417,7 @@ pub(super) async fn continue_state(
                 id,
                 oid: session_oid,
                 user_id: id,
-                status: identity_domain::auth::SessionStatus::ACTIVE.to_owned(),
+                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
                 acr: None,
                 acr_expires_at: None,
                 amr: serde_json::json!([]),
