@@ -1,21 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  identityJson: vi.fn(),
+  identityInternalJson: vi.fn(),
 }))
 
 vi.mock('./identity.server', () => ({
-  identityJson: mocks.identityJson,
+  identityInternalJson: mocks.identityInternalJson,
 }))
 
 beforeEach(() => {
   vi.resetModules()
-  mocks.identityJson.mockReset()
+  mocks.identityInternalJson.mockReset()
 })
 
 describe('installation status cache', () => {
   it('shares one request across repeated and concurrent callers', async () => {
-    mocks.identityJson.mockResolvedValue({ installed: true })
+    mocks.identityInternalJson.mockResolvedValue({ installed: true })
     const { cachedInstallationStatus } = await import('./installation-status.server')
 
     const first = cachedInstallationStatus()
@@ -26,19 +26,21 @@ describe('installation status cache', () => {
       { installed: true },
       { installed: true },
     ])
-    expect(mocks.identityJson).toHaveBeenCalledOnce()
-    expect(mocks.identityJson).toHaveBeenCalledWith('/installation/status')
+    expect(mocks.identityInternalJson).toHaveBeenCalledOnce()
+    expect(mocks.identityInternalJson).toHaveBeenCalledWith(
+      '/internal/installation/status',
+    )
   })
 
   it('clears a failed request so a later navigation can retry', async () => {
-    mocks.identityJson
+    mocks.identityInternalJson
       .mockRejectedValueOnce(new Error('temporarily unavailable'))
       .mockResolvedValueOnce({ installed: true })
     const { cachedInstallationStatus } = await import('./installation-status.server')
 
     await expect(cachedInstallationStatus()).rejects.toThrow('temporarily unavailable')
     await expect(cachedInstallationStatus()).resolves.toEqual({ installed: true })
-    expect(mocks.identityJson).toHaveBeenCalledTimes(2)
+    expect(mocks.identityInternalJson).toHaveBeenCalledTimes(2)
   })
 
   it('marks installation complete without another backend request', async () => {
@@ -47,6 +49,6 @@ describe('installation status cache', () => {
     markInstallationComplete()
 
     await expect(cachedInstallationStatus()).resolves.toEqual({ installed: true })
-    expect(mocks.identityJson).not.toHaveBeenCalled()
+    expect(mocks.identityInternalJson).not.toHaveBeenCalled()
   })
 })

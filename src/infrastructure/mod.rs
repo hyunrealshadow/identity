@@ -145,7 +145,12 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
     let tera = build_tera(i18n.loader()).unwrap();
     let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
     let services = Arc::new(
-        AppServices::from_db(db.clone(), settings.as_ref()).expect("services should build"),
+        AppServices::from_db_with_rotation(
+            db.clone(),
+            settings.as_ref(),
+            &config::ClientCredentialRotationConfig::default(),
+        )
+        .expect("services should build"),
     );
 
     AppState::new(

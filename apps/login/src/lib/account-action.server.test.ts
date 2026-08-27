@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   getRequestHeader: vi.fn(),
   hasFreshAuthentication: vi.fn(),
   identityGraphql: vi.fn(),
-  loadClientCredentials: vi.fn(),
+  loadApplicationUrl: vi.fn(),
   mfaUiState: vi.fn(),
   requestLocale: vi.fn(),
   storeAccountFlash: vi.fn(),
@@ -23,8 +23,8 @@ vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeader: mocks.getRequestHeader,
 }))
 
-vi.mock('./client-credentials.server', () => ({
-  loadClientCredentials: mocks.loadClientCredentials,
+vi.mock('./runtime-config.server', () => ({
+  loadApplicationUrl: mocks.loadApplicationUrl,
 }))
 
 vi.mock('./graphql.server', async (importOriginal) => ({
@@ -54,11 +54,7 @@ vi.mock('./oauth-session.server', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getRequestHeader.mockReturnValue(undefined)
-  mocks.loadClientCredentials.mockResolvedValue({
-    application_url: 'https://login.example.com',
-    client_id: 'client',
-    client_secret: 'secret',
-  })
+  mocks.loadApplicationUrl.mockReturnValue('https://login.example.com')
   mocks.requestLocale.mockReturnValue('en-US')
   mocks.identityGraphql.mockResolvedValue({ changed: true })
   mocks.hasFreshAuthentication.mockResolvedValue(true)

@@ -8,6 +8,7 @@ publish = false
 path = "mod.rs"
 
 [dependencies]
+chrono = { workspace = true }
 identity-application = { workspace = true }
 identity-domain = { workspace = true }
 identity-infrastructure = { workspace = true }

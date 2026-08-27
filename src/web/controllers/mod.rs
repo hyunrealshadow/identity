@@ -2,6 +2,7 @@ pub mod auth;
 #[cfg(feature = "oidc-conformance")]
 pub mod conformance;
 pub mod install;
+pub mod login_runtime;
 pub mod oauth2;
 pub mod response;
 pub mod shared;

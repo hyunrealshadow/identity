@@ -40,6 +40,13 @@ the authorization interaction, the browser returns directly to the OP
 `/oauth2/continue` endpoint. Login and consent use native POST forms without
 JavaScript and are progressively enhanced after hydration.
 
+Installation and Login runtime configuration are served on the separate
+internal listener (port `5151` by default). Every internal endpoint requires
+a workload credential: a static token from `internal.workloads.login` or a
+Kubernetes projected ServiceAccount token. Configure Login with
+`IDENTITY_INTERNAL_API_URL` and the matching workload credential, and keep
+this listener off the public ingress.
+
 Identity accepts only two TLS deployment modes under `server.tls.termination`:
 `direct`, where Identity terminates TLS itself, and `upstream`, where a trusted
 reverse proxy terminates TLS. Upstream mode requires

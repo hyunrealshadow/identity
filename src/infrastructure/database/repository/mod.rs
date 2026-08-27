@@ -3,6 +3,7 @@ pub mod install;
 pub mod key;
 pub mod key_jwk;
 pub mod login;
+pub mod login_runtime;
 pub mod openid_connect;
 pub mod openid_connect_credential;
 pub mod session;

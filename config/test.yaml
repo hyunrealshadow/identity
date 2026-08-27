@@ -37,6 +37,18 @@ server:
         path: "assets/static"
       fallback: "assets/static/404.html"
 
+internal:
+  server:
+    binding: 127.0.0.1
+    port: 5151
+  workloads:
+    login:
+      static_tokens:
+        - file: {{ get_env(name="IDENTITY_WORKLOAD_TOKEN_FILE", default="config/secrets/login-workload-token") }}
+
+client_credential_rotation:
+  enable: false
+
 # Worker Configuration
 workers:
   # specifies the worker mode. Options:

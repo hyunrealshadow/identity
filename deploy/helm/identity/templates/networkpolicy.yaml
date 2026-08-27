@@ -1,0 +1,42 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "identity.fullname" . }}-identity
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "identity.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: {{ .Values.identity.service.publicPort }}
+          protocol: TCP
+        - port: {{ .Values.identity.service.healthPort }}
+          protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "identity.loginSelectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.identity.service.internalPort }}
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "identity.fullname" . }}-login
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "identity.loginSelectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: {{ .Values.login.service.port }}
+          protocol: TCP
+{{- end }}

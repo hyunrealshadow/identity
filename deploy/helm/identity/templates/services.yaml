@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "identity.fullname" . }}-identity
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  type: {{ .Values.identity.service.type }}
+  selector:
+    {{- include "identity.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: https
+      appProtocol: https
+      port: {{ .Values.identity.service.publicPort }}
+      targetPort: https
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "identity.fullname" . }}-identity-internal
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "identity.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: internal-https
+      appProtocol: https
+      port: {{ .Values.identity.service.internalPort }}
+      targetPort: internal-https
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "identity.fullname" . }}-login
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+spec:
+  type: {{ .Values.login.service.type }}
+  selector:
+    {{- include "identity.loginSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: https
+      appProtocol: https
+      port: {{ .Values.login.service.port }}
+      targetPort: https

@@ -1,0 +1,123 @@
+name: identity
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: identity
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d identity"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+
+  identity:
+    build:
+      context: ..
+      dockerfile: deploy/docker/identity.Dockerfile
+    image: ${IDENTITY_IMAGE:-identity:local}
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgres://identity:${POSTGRES_PASSWORD}@postgres:5432/identity
+      IDENTITY_PUBLIC_URL: ${IDENTITY_PUBLIC_URL:-https://localhost:5150}
+      LOGIN_PUBLIC_URL: ${LOGIN_PUBLIC_URL:-https://localhost:3000}
+    configs:
+      - source: identity_config
+        target: /app/config/production.yaml
+    secrets:
+      - source: login_workload_token
+        target: login_workload_token
+      - source: identity_tls_cert
+        target: identity_tls_cert
+      - source: identity_tls_key
+        target: identity_tls_key
+    ports:
+      - "${IDENTITY_PORT:-5150}:5150"
+    expose:
+      - "5151"
+      - "8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      frontend:
+        aliases:
+          - identity.localhost
+      backend:
+
+  login:
+    build:
+      context: ..
+      dockerfile: deploy/docker/login.Dockerfile
+    image: ${LOGIN_IMAGE:-identity-login:local}
+    restart: unless-stopped
+    environment:
+      # This URL is used both by the Login server and in browser redirects.
+      # identity.localhost resolves to loopback in browsers and is also a
+      # network alias for the Identity container.
+      IDENTITY_API_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
+      IDENTITY_INTERNAL_API_URL: https://identity:5151
+      IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://localhost:3000}
+      IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
+      IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
+      NODE_EXTRA_CA_CERTS: /run/secrets/identity_ca
+      # Vite treats preview as `serve`; setting this prevents the development
+      # fallback in vite.config.ts from disabling certificate verification.
+      NODE_TLS_REJECT_UNAUTHORIZED: "1"
+    secrets:
+      - source: login_workload_token
+        target: login_workload_token
+      - source: identity_ca
+        target: identity_ca
+    ports:
+      - "${LOGIN_PORT:-3000}:3000"
+    depends_on:
+      identity:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('https').get({host:'127.0.0.1',port:3000,path:'/health/ready',rejectUnauthorized:false},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [frontend]
+
+configs:
+  identity_config:
+    file: ./config/identity.compose.yaml
+
+secrets:
+  login_workload_token:
+    file: ./secrets/login-workload-token
+  identity_tls_cert:
+    file: ./secrets/identity.crt
+  identity_tls_key:
+    file: ./secrets/identity.key
+  identity_ca:
+    file: ./secrets/identity-ca.crt
+
+volumes:
+  postgres_data:
+
+networks:
+  frontend:
+  backend:
+    internal: true

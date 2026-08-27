@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub fn routes() -> Router {
-    Router::with_path("install").post(install_submit)
+    Router::with_path("installation").post(install_submit)
 }
 
 pub fn status_routes() -> Router {
@@ -43,9 +43,6 @@ struct InstallRequest {
 #[derive(Debug, Serialize)]
 struct InstallResponse {
     status: &'static str,
-    restart_required: bool,
-    client_id: uuid::Uuid,
-    client_secret: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,8 +127,7 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
         key_algorithm,
     };
 
-    let output = ctx
-        .services()
+    ctx.services()
         .install()
         .install(input)
         .await
@@ -140,14 +136,10 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
             JsonWebError(error)
         })?;
 
-    ctx.lifecycle().request_shutdown();
     let mut response = json_response(
-        StatusCode::ACCEPTED,
+        StatusCode::CREATED,
         InstallResponse {
             status: "installed",
-            restart_required: true,
-            client_id: output.client_id,
-            client_secret: output.client_secret,
         },
     );
     insert_no_store_headers(&mut response);

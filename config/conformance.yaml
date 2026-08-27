@@ -15,6 +15,18 @@ server:
     key_path: config/tls/server.key
   domain: {{ get_env(name="HOST", default="https://identity:5150") }}
 
+internal:
+  server:
+    binding: {{ get_env(name="INTERNAL_HOST", default="0.0.0.0") }}
+    port: {{ get_env(name="INTERNAL_PORT", default="5151") }}
+  workloads:
+    login:
+      static_tokens:
+        - environment: IDENTITY_WORKLOAD_TOKEN
+
+client_credential_rotation:
+  enable: false
+
 database:
   uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}
   enable_logging: false

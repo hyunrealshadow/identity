@@ -2315,6 +2315,7 @@ dependencies = [
 name = "identity-boot"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "identity-application",
  "identity-domain",
  "identity-infrastructure",
@@ -2382,6 +2383,7 @@ dependencies = [
  "serde_json",
  "serde_yml",
  "serial_test",
+ "sha2 0.11.0",
  "subtle",
  "tera",
  "thiserror 2.0.18",

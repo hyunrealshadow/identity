@@ -15,6 +15,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub server: ServerConfig,
     #[serde(default)]
+    pub internal: InternalConfig,
+    #[serde(default)]
+    pub client_credential_rotation: ClientCredentialRotationConfig,
+    #[serde(default)]
     pub database: DatabaseConfig,
     #[serde(default)]
     pub health: HealthConfig,
@@ -26,6 +30,137 @@ pub struct AppConfig {
     pub install: InstallConfig,
     #[serde(default)]
     pub openid_connect: OpenIdConnectConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClientCredentialRotationConfig {
+    #[serde(default = "default_true")]
+    pub enable: bool,
+    #[serde(default = "default_rotation_check_interval_secs")]
+    pub check_interval_secs: u64,
+    #[serde(default = "default_credential_lifetime_days")]
+    pub credential_lifetime_days: i64,
+    #[serde(default = "default_rotate_before_expiry_days")]
+    pub rotate_before_expiry_days: i64,
+    #[serde(default = "default_retire_after_secs")]
+    pub retire_after_secs: i64,
+}
+
+impl Default for ClientCredentialRotationConfig {
+    fn default() -> Self {
+        Self {
+            enable: true,
+            check_interval_secs: default_rotation_check_interval_secs(),
+            credential_lifetime_days: default_credential_lifetime_days(),
+            rotate_before_expiry_days: default_rotate_before_expiry_days(),
+            retire_after_secs: default_retire_after_secs(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InternalConfig {
+    #[serde(default)]
+    pub server: InternalServerConfig,
+    #[serde(default)]
+    pub workloads: WorkloadsConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InternalServerConfig {
+    #[serde(default = "default_internal_binding")]
+    pub binding: String,
+    #[serde(default = "default_internal_port")]
+    pub port: u16,
+}
+
+impl Default for InternalServerConfig {
+    fn default() -> Self {
+        Self {
+            binding: default_internal_binding(),
+            port: default_internal_port(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkloadsConfig {
+    #[serde(default)]
+    pub login: LoginWorkloadConfig,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LoginWorkloadConfig {
+    #[serde(default)]
+    pub static_tokens: Vec<StaticTokenConfig>,
+    #[serde(default)]
+    pub kubernetes_service_account: KubernetesServiceAccountConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StaticTokenConfig {
+    #[serde(default)]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub environment: Option<String>,
+}
+
+impl StaticTokenConfig {
+    fn has_exactly_one_source(&self) -> bool {
+        self.file
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+            ^ self
+                .environment
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KubernetesServiceAccountConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_internal_token_audience")]
+    pub audience: String,
+    #[serde(default = "default_internal_token_service_account")]
+    pub service_account: String,
+    #[serde(default = "default_internal_token_namespace")]
+    pub namespace: String,
+    #[serde(default = "default_internal_token_issuer")]
+    pub issuer: String,
+    #[serde(default)]
+    pub ca_file: Option<String>,
+    #[serde(default)]
+    pub token_file: Option<String>,
+}
+
+impl Default for KubernetesServiceAccountConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            audience: default_internal_token_audience(),
+            service_account: default_internal_token_service_account(),
+            namespace: default_internal_token_namespace(),
+            issuer: default_internal_token_issuer(),
+            ca_file: None,
+            token_file: None,
+        }
+    }
+}
+
+impl LoginWorkloadConfig {
+    #[must_use]
+    pub fn has_any_authentication(&self) -> bool {
+        !self.static_tokens.is_empty() || self.kubernetes_service_account.enabled
+    }
 }
 
 impl AppConfig {
@@ -89,6 +224,67 @@ impl AppConfig {
         {
             return Err(invalid_config(
                 "server.tls.trusted_proxies must contain at least one proxy network when TLS termination is upstream",
+            )
+            .into());
+        }
+
+        if self.internal.server.binding == self.server.binding
+            && self.internal.server.port == self.server.port
+        {
+            return Err(invalid_config(
+                "internal.server must use a listener distinct from the public server",
+            )
+            .into());
+        }
+        if !self.internal.workloads.login.has_any_authentication() {
+            return Err(invalid_config(
+                "internal.workloads.login must configure at least one authentication method (static_tokens or kubernetes_service_account)",
+            )
+            .into());
+        }
+        if self
+            .internal
+            .workloads
+            .login
+            .static_tokens
+            .iter()
+            .any(|source| !source.has_exactly_one_source())
+        {
+            return Err(invalid_config(
+                "each login static token must configure exactly one of file or environment",
+            )
+            .into());
+        }
+        let kubernetes = &self.internal.workloads.login.kubernetes_service_account;
+        if kubernetes.enabled
+            && (kubernetes.namespace.trim().is_empty()
+                || kubernetes.service_account.trim().is_empty()
+                || kubernetes.audience.trim().is_empty()
+                || kubernetes.issuer.trim().is_empty()
+                || kubernetes
+                    .ca_file
+                    .as_deref()
+                    .is_some_and(|path| path.trim().is_empty())
+                || kubernetes
+                    .token_file
+                    .as_deref()
+                    .is_some_and(|path| path.trim().is_empty()))
+        {
+            return Err(invalid_config(
+                "kubernetes_service_account namespace, service_account, audience, issuer, and configured credential files must not be empty",
+            )
+            .into());
+        }
+        let rotation = &self.client_credential_rotation;
+        if rotation.enable
+            && (rotation.check_interval_secs == 0
+                || rotation.credential_lifetime_days <= 0
+                || rotation.rotate_before_expiry_days <= 0
+                || rotation.credential_lifetime_days <= rotation.rotate_before_expiry_days
+                || rotation.retire_after_secs <= 0)
+        {
+            return Err(invalid_config(
+                "client credential rotation intervals must be positive and credential_lifetime_days must exceed rotate_before_expiry_days",
             )
             .into());
         }
@@ -517,6 +713,46 @@ fn default_binding() -> String {
     "127.0.0.1".to_owned()
 }
 
+fn default_internal_binding() -> String {
+    "127.0.0.1".to_owned()
+}
+
+const fn default_internal_port() -> u16 {
+    5151
+}
+
+const fn default_rotation_check_interval_secs() -> u64 {
+    60
+}
+
+const fn default_credential_lifetime_days() -> i64 {
+    180
+}
+
+const fn default_rotate_before_expiry_days() -> i64 {
+    30
+}
+
+const fn default_retire_after_secs() -> i64 {
+    24 * 60 * 60
+}
+
+fn default_internal_token_audience() -> String {
+    "identity-internal".to_owned()
+}
+
+fn default_internal_token_service_account() -> String {
+    "identity-login".to_owned()
+}
+
+fn default_internal_token_namespace() -> String {
+    "default".to_owned()
+}
+
+fn default_internal_token_issuer() -> String {
+    "https://kubernetes.default.svc.cluster.local".to_owned()
+}
+
 fn default_tls_cert_path() -> String {
     "config/tls/server.crt".to_owned()
 }
@@ -867,6 +1103,109 @@ server:
     termination: upstream
     trusted_proxies:
       - 10.0.0.0/8
+internal:
+  workloads:
+    login:
+      static_tokens:
+        - file: config/secrets/login-workload-token
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        assert!(config.validate_https_contract().is_ok());
+    }
+
+    #[test]
+    fn internal_login_workload_requires_an_authentication_method() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+internal:
+  server:
+    binding: 127.0.0.1
+    port: 5151
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        let error = config.validate_https_contract().unwrap_err();
+
+        assert!(error.to_string().contains("workloads.login"));
+    }
+
+    #[test]
+    fn kubernetes_service_account_authentication_is_accepted() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+internal:
+  workloads:
+    login:
+      kubernetes_service_account:
+        enabled: true
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        assert!(config.validate_https_contract().is_ok());
+        let kubernetes = &config.internal.workloads.login.kubernetes_service_account;
+        assert!(kubernetes.enabled);
+        assert_eq!(kubernetes.audience, "identity-internal");
+        assert_eq!(kubernetes.service_account, "identity-login");
+        assert_eq!(kubernetes.namespace, "default");
+        assert!(kubernetes.ca_file.is_none());
+        assert!(kubernetes.token_file.is_none());
+    }
+
+    #[test]
+    fn kubernetes_service_account_identity_must_be_fully_scoped() {
+        let mut config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+internal:
+  workloads:
+    login:
+      kubernetes_service_account:
+        enabled: true
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+        config
+            .internal
+            .workloads
+            .login
+            .kubernetes_service_account
+            .namespace = " ".to_owned();
+
+        let error = config.validate_https_contract().unwrap_err();
+
+        assert!(error.to_string().contains("namespace"));
+    }
+
+    #[test]
+    fn rotation_can_run_without_an_additional_token() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+internal:
+  workloads:
+    login:
+      static_tokens:
+        - file: config/secrets/login-workload-token
+client_credential_rotation:
+  enable: true
 database:
   uri: postgres://localhost/identity
 "#,

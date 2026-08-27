@@ -22,6 +22,7 @@ services:
       CONSENT_URL: https://localhost:3443/consent
       TLS_DOMAIN: identity
       PORT: "5150"
+      IDENTITY_WORKLOAD_TOKEN: dev-login-workload-token-0123456789abcdef
     ports:
       - "5150:5150"
     depends_on:
@@ -38,6 +39,10 @@ services:
       dockerfile: conformance/login.Dockerfile
     environment:
       IDENTITY_API_URL: https://identity:5150
+      IDENTITY_INTERNAL_API_URL: https://identity:5151
+      IDENTITY_WORKLOAD_TOKEN: dev-login-workload-token-0123456789abcdef
+      IDENTITY_LOGIN_SESSION_SECRET: conformance-login-session-secret-0123456789
+      IDENTITY_PUBLIC_APP_URL: https://localhost:3443
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
     depends_on:
       identity:

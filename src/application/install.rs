@@ -40,12 +40,6 @@ pub struct InstallInput {
     pub key_algorithm: AsymmetricKeyAlgorithm,
 }
 
-#[derive(Debug, Clone)]
-pub struct InstallOutput {
-    pub client_id: Uuid,
-    pub client_secret: String,
-}
-
 pub struct InstallService<R: SettingRepository> {
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub password_hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
@@ -58,6 +52,7 @@ pub struct InstallService<R: SettingRepository> {
     pub certificate_generator: Arc<dyn CertificateGenerator>,
     pub persistence: Arc<dyn InstallPersistence>,
     pub runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+    pub client_secret_lifetime: chrono::Duration,
 }
 
 pub trait CertificateGenerator: Send + Sync {
@@ -78,6 +73,7 @@ pub struct InstallPersistenceInput {
     pub application_url: Url,
     pub client_id: Uuid,
     pub client_secret: String,
+    pub client_secret_lifetime: chrono::Duration,
     pub key_data: identity_domain::key::AsymmetricKeyData,
 }
 
@@ -94,7 +90,7 @@ impl<R: SettingRepository> InstallService<R> {
         *self.installation_initialized.current_value()
     }
 
-    pub async fn install(&self, input: InstallInput) -> Result<InstallOutput, AppError> {
+    pub async fn install(&self, input: InstallInput) -> Result<(), AppError> {
         tracing::info!("install: starting");
         if self.is_initialized() {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
@@ -135,6 +131,7 @@ impl<R: SettingRepository> InstallService<R> {
                 application_url: input.application_url,
                 client_id,
                 client_secret: client_secret.clone(),
+                client_secret_lifetime: self.client_secret_lifetime,
                 key_data,
             })
             .await?;
@@ -155,10 +152,7 @@ impl<R: SettingRepository> InstallService<R> {
             .await?;
         self.runtime_key_ring.refresh_value().await?;
 
-        Ok(InstallOutput {
-            client_id,
-            client_secret,
-        })
+        Ok(())
     }
 }
 
@@ -204,7 +198,6 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
                     .with_param("algorithm", algorithm_name)
             }),
     );
-
     if validation
         .validation()
         .is_some_and(|details| !details.is_empty())

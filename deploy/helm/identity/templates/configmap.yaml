@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "identity.fullname" . }}-config
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+data:
+  production.yaml: |
+    logger:
+      enable: true
+      level: info
+      format: json
+    server:
+      binding: 0.0.0.0
+      port: {{ .Values.identity.service.publicPort }}
+      host: {{ .Values.identity.publicUrl | quote }}
+      tls:
+        termination: direct
+        auto_generate: false
+        cert_path: /etc/identity/tls/tls.crt
+        key_path: /etc/identity/tls/tls.key
+        domain: {{ include "identity.fullname" . }}-identity
+    internal:
+      server:
+        binding: 0.0.0.0
+        port: {{ .Values.identity.service.internalPort }}
+      workloads:
+        login:
+          kubernetes_service_account:
+            enabled: true
+            audience: {{ .Values.identity.workload.audience | quote }}
+            namespace: {{ .Release.Namespace | quote }}
+            service_account: {{ include "identity.loginServiceAccountName" . | quote }}
+            issuer: {{ .Values.identity.workload.issuer | quote }}
+            {{- if .Values.identity.workload.issuerCa.enabled }}
+            ca_file: /etc/identity/kubernetes/ca.crt
+            {{- end }}
+            {{- if .Values.identity.workload.issuerToken.enabled }}
+            token_file: /var/run/secrets/identity-issuer/token
+            {{- end }}
+    client_credential_rotation:
+      enable: {{ .Values.identity.rotation.enabled }}
+      check_interval_secs: {{ .Values.identity.rotation.checkIntervalSeconds }}
+      credential_lifetime_days: {{ .Values.identity.rotation.credentialLifetimeDays }}
+      rotate_before_expiry_days: {{ .Values.identity.rotation.rotateBeforeExpiryDays }}
+      retire_after_secs: {{ .Values.identity.rotation.retireAfterSeconds }}
+    database:
+      uri: {{ "{{ get_env(name=\"DATABASE_URL\") }}" }}
+      enable_logging: false
+      connect_timeout: 500
+      idle_timeout: 500
+      min_connections: 1
+      max_connections: 20
+      auto_migrate: true
+    health:
+      enable: true
+      route: /health
+      server:
+        binding: 0.0.0.0
+        port: {{ .Values.identity.service.healthPort }}
+      checks:
+        database: true
+    graphql:
+      server:
+        binding: 0.0.0.0
+        port: {{ .Values.identity.service.publicPort }}
+      allowed_origins:
+        - {{ .Values.login.publicUrl | quote }}
+    settings:
+      refresh_interval_secs: 30

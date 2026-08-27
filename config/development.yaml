@@ -37,6 +37,22 @@ server:
         path: "assets/static"
       fallback: "assets/static/404.html"
 
+internal:
+  server:
+    binding: localhost
+    port: 5151
+  workloads:
+    login:
+      static_tokens:
+        - file: {{ get_env(name="IDENTITY_WORKLOAD_TOKEN_FILE", default="config/secrets/login-workload-token") }}
+
+client_credential_rotation:
+  enable: true
+  check_interval_secs: 60
+  credential_lifetime_days: 180
+  rotate_before_expiry_days: 30
+  retire_after_secs: 86400
+
 # Worker Configuration
 workers:
   # specifies the worker mode. Options:

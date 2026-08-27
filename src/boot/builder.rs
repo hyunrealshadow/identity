@@ -137,7 +137,11 @@ impl AppBuilder {
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         let key_algorithm = cfg.key_algorithm.clone();
-        let svc = build_install_service(&settings, db.clone());
+        let svc = build_install_service(
+            &settings,
+            db.clone(),
+            &self.config.client_credential_rotation,
+        );
 
         let domain = install_domain(cfg, &self.config);
 
@@ -171,7 +175,18 @@ impl AppBuilder {
             .as_ref()
             .expect("runtime settings must be loaded first");
 
-        self.services = Some(Arc::new(AppServices::from_db(db, settings.as_ref())?));
+        let workload_authenticator =
+            identity_infrastructure::auth::workload::build_login_workload_authenticator(
+                &self.config.internal.workloads.login,
+            )
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+
+        self.services = Some(Arc::new(AppServices::from_db_with_workload_auth(
+            db,
+            settings.as_ref(),
+            &self.config.client_credential_rotation,
+            workload_authenticator,
+        )?));
         Ok(self)
     }
 
@@ -220,6 +235,7 @@ async fn is_installed(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
 fn build_install_service(
     settings: &AppRuntimeSettings,
     db: DatabaseConnection,
+    rotation_config: &identity_infrastructure::config::ClientCredentialRotationConfig,
 ) -> InstallService<identity_infrastructure::database::repository::setting::SettingRepositoryImpl> {
     InstallService {
         password_hasher: Arc::new(PasswordHasherImpl::new()),
@@ -233,6 +249,7 @@ fn build_install_service(
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         persistence: Arc::new(InstallPersistenceImpl::new(db)),
         runtime_key_ring: settings.key_ring(),
+        client_secret_lifetime: chrono::Duration::days(rotation_config.credential_lifetime_days),
     }
 }
 

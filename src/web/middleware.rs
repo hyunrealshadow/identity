@@ -1,9 +1,59 @@
 use std::{net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
-use http::{HeaderValue, header};
+use http::{HeaderValue, StatusCode, header};
 use ipnet::IpNet;
 use salvo::{Depot, FlowCtrl, Handler, Request, Response, handler};
+
+use identity_domain::openid_connect::{AuthenticatedWorkload, WorkloadAuthenticator};
+
+#[derive(Clone)]
+pub struct RequireWorkload {
+    authenticator: Arc<dyn WorkloadAuthenticator>,
+}
+
+impl RequireWorkload {
+    #[must_use]
+    pub fn new(authenticator: Arc<dyn WorkloadAuthenticator>) -> Self {
+        Self { authenticator }
+    }
+}
+
+#[async_trait]
+impl Handler for RequireWorkload {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        let token = req
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .filter(|value| !value.is_empty());
+        let Some(token) = token else {
+            res.status_code(StatusCode::UNAUTHORIZED);
+            ctrl.skip_rest();
+            return;
+        };
+        let Some(workload) = self.authenticator.authenticate(token).await else {
+            res.status_code(StatusCode::UNAUTHORIZED);
+            ctrl.skip_rest();
+            return;
+        };
+        depot.inject(workload);
+        ctrl.call_next(req, depot, res).await;
+    }
+}
+
+/// The workload that the current internal API request was authenticated as.
+#[must_use]
+pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
+    depot.obtain::<AuthenticatedWorkload>().ok().copied()
+}
 
 #[derive(Clone, Debug)]
 pub struct RequireUpstreamHttps {
@@ -184,11 +234,31 @@ pub async fn security_headers_middleware(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
     use http::{StatusCode, header};
     use ipnet::IpNet;
     use salvo::{Response, Router, Service, handler, test::TestClient};
 
-    use super::{RequireUpstreamHttps, resolve_client_ip, security_headers_middleware};
+    use identity_domain::openid_connect::{
+        AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
+    };
+
+    use super::{
+        RequireUpstreamHttps, RequireWorkload, resolve_client_ip, security_headers_middleware,
+    };
+
+    struct StubWorkloadAuthenticator {
+        token: &'static str,
+    }
+
+    #[async_trait]
+    impl WorkloadAuthenticator for StubWorkloadAuthenticator {
+        async fn authenticate(&self, token: &str) -> Option<AuthenticatedWorkload> {
+            (token == self.token).then_some(AuthenticatedWorkload(BuiltInWorkload::Login))
+        }
+    }
 
     #[handler]
     async fn ok(res: &mut Response) {
@@ -277,6 +347,50 @@ mod tests {
             "10.1.2.3:41000",
         )
         .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+    }
+
+    #[tokio::test]
+    async fn internal_token_rejects_missing_or_wrong_token() {
+        let service = Service::new(
+            Router::new()
+                .hoop(RequireWorkload::new(Arc::new(StubWorkloadAuthenticator {
+                    token: "0123456789abcdef0123456789abcdef",
+                })))
+                .push(Router::with_path("install").post(ok)),
+        );
+
+        let missing = TestClient::post("http://127.0.0.1:5800/install")
+            .send(&service)
+            .await;
+        assert_eq!(missing.status_code, Some(StatusCode::UNAUTHORIZED));
+
+        let wrong = TestClient::post("http://127.0.0.1:5800/install")
+            .add_header("authorization", "Bearer wrong-token", true)
+            .send(&service)
+            .await;
+        assert_eq!(wrong.status_code, Some(StatusCode::UNAUTHORIZED));
+    }
+
+    #[tokio::test]
+    async fn internal_token_accepts_matching_bearer_token() {
+        let service = Service::new(
+            Router::new()
+                .hoop(RequireWorkload::new(Arc::new(StubWorkloadAuthenticator {
+                    token: "0123456789abcdef0123456789abcdef",
+                })))
+                .push(Router::with_path("install").post(ok)),
+        );
+
+        let response = TestClient::post("http://127.0.0.1:5800/install")
+            .add_header(
+                "authorization",
+                "Bearer 0123456789abcdef0123456789abcdef",
+                true,
+            )
+            .send(&service)
+            .await;
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
     }

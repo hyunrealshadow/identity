@@ -1,0 +1,264 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "identity.fullname" . }}-identity
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity
+spec:
+  replicas: {{ .Values.identity.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "identity.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "identity.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.identity.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "identity.identityServiceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.identity.podSecurityContext | nindent 8 }}
+      containers:
+        - name: identity
+          image: "{{ .Values.identity.image.repository }}:{{ .Values.identity.image.tag }}"
+          imagePullPolicy: {{ .Values.identity.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.identity.securityContext | nindent 12 }}
+          env:
+            - name: APP_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.identity.database.existingSecret }}
+                  key: {{ .Values.identity.database.urlKey }}
+            {{- with .Values.identity.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: https
+              containerPort: {{ .Values.identity.service.publicPort }}
+              protocol: TCP
+            - name: internal-https
+              containerPort: {{ .Values.identity.service.internalPort }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.identity.service.healthPort }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: health
+              scheme: HTTP
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+              scheme: HTTP
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.identity.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/production.yaml
+              subPath: production.yaml
+              readOnly: true
+            - name: tls
+              mountPath: /etc/identity/tls
+              readOnly: true
+            {{- if .Values.identity.workload.issuerCa.enabled }}
+            - name: kubernetes-issuer-ca
+              mountPath: /etc/identity/kubernetes
+              readOnly: true
+            {{- end }}
+            {{- if .Values.identity.workload.issuerToken.enabled }}
+            - name: kubernetes-issuer-token
+              mountPath: /var/run/secrets/identity-issuer
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "identity.fullname" . }}-config
+        - name: tls
+          secret:
+            secretName: {{ .Values.identity.tls.existingSecret }}
+            items:
+              - key: {{ .Values.identity.tls.certKey }}
+                path: tls.crt
+              - key: {{ .Values.identity.tls.privateKeyKey }}
+                path: tls.key
+        {{- if .Values.identity.workload.issuerCa.enabled }}
+        - name: kubernetes-issuer-ca
+          configMap:
+            name: {{ .Values.identity.workload.issuerCa.configMapName }}
+            items:
+              - key: {{ .Values.identity.workload.issuerCa.key }}
+                path: ca.crt
+        {{- end }}
+        {{- if .Values.identity.workload.issuerToken.enabled }}
+        - name: kubernetes-issuer-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ .Values.identity.workload.issuer | quote }}
+                  expirationSeconds: {{ .Values.identity.workload.issuerToken.expirationSeconds }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.identity.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.identity.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.identity.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "identity.fullname" . }}-login
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+spec:
+  replicas: {{ .Values.login.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "identity.loginSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "identity.loginSelectorLabels" . | nindent 8 }}
+      {{- with .Values.login.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "identity.loginServiceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.login.podSecurityContext | nindent 8 }}
+      containers:
+        - name: login
+          image: "{{ .Values.login.image.repository }}:{{ .Values.login.image.tag }}"
+          imagePullPolicy: {{ .Values.login.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.login.securityContext | nindent 12 }}
+          env:
+            - name: IDENTITY_API_URL
+              value: {{ .Values.identity.publicUrl | quote }}
+            - name: IDENTITY_INTERNAL_API_URL
+              value: {{ printf "https://%s-identity-internal:%v" (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
+            - name: IDENTITY_PUBLIC_APP_URL
+              value: {{ .Values.login.publicUrl | quote }}
+            - name: IDENTITY_LOGIN_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.login.sessionSecret.existingSecret }}
+                  key: {{ .Values.login.sessionSecret.key }}
+            - name: IDENTITY_WORKLOAD_TOKEN_FILE
+              value: /var/run/secrets/identity/token
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/identity/ca/ca.crt
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: "1"
+            {{- with .Values.login.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: https
+              containerPort: {{ .Values.login.service.port }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: https
+              scheme: HTTPS
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: https
+              scheme: HTTPS
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: https
+              scheme: HTTPS
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.login.resources | nindent 12 }}
+          volumeMounts:
+            - name: workload-token
+              mountPath: /var/run/secrets/identity
+              readOnly: true
+            - name: identity-ca
+              mountPath: /etc/identity/ca
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: workload-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ .Values.identity.workload.audience | quote }}
+                  expirationSeconds: {{ .Values.identity.workload.expirationSeconds }}
+        - name: identity-ca
+          secret:
+            secretName: {{ .Values.login.internalCa.existingSecret }}
+            items:
+              - key: {{ .Values.login.internalCa.key }}
+                path: ca.crt
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.login.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.login.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.login.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

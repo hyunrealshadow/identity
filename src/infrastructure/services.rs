@@ -2,8 +2,12 @@ use std::sync::Arc;
 
 use sea_orm::DatabaseConnection;
 
+use crate::config::{ClientCredentialRotationConfig, LoginWorkloadConfig};
 use crate::{
-    auth::{otp::TotpVerifierImpl, password::PasswordHasherImpl},
+    auth::{
+        otp::TotpVerifierImpl, password::PasswordHasherImpl,
+        workload::build_login_workload_authenticator,
+    },
     crypto::{
         certificate_generator::CertificateGeneratorImpl,
         data_protection::XChaCha20DataProtectionCipher, key::AsymmetricKeyGeneratorImpl,
@@ -12,6 +16,7 @@ use crate::{
     database::repository::{
         client_authorization::ClientAuthorizationRepositoryImpl, install::InstallPersistenceImpl,
         key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
+        login_runtime::LoginRuntimeRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
         session::SessionRepositoryImpl, setting::SettingRepositoryImpl, user::UserRepositoryImpl,
@@ -25,6 +30,7 @@ use identity_application::{
     key::asymmetric::AsymmetricKeyService,
     openid_connect::{
         authorize::{AuthorizeService, AuthorizeServiceDependencies},
+        login_runtime::LoginRuntimeService,
         logout::{LogoutService, LogoutServiceDependencies},
         provider::OpenIdProviderService,
         registration::DynamicClientRegistrationService,
@@ -34,8 +40,8 @@ use identity_application::{
     },
 };
 use identity_domain::openid_connect::{
-    OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
-    OpenIdConnectCredentialRepository,
+    LoginRotationPolicy, OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
+    OpenIdConnectCredentialRepository, WorkloadAuthenticator,
 };
 
 use super::settings::AppRuntimeSettings;
@@ -74,6 +80,8 @@ pub struct AppServices {
     oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
     dynamic_client_registration: AppDynamicClientRegistrationService,
+    login_runtime: LoginRuntimeService,
+    workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
     oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     data_protector: Arc<dyn DataProtector>,
@@ -83,6 +91,29 @@ impl AppServices {
     pub fn from_db(
         db: DatabaseConnection,
         settings: &AppRuntimeSettings,
+    ) -> Result<Self, reqwest::Error> {
+        Self::from_db_with_rotation(db, settings, &ClientCredentialRotationConfig::default())
+    }
+
+    pub fn from_db_with_rotation(
+        db: DatabaseConnection,
+        settings: &AppRuntimeSettings,
+        rotation_config: &ClientCredentialRotationConfig,
+    ) -> Result<Self, reqwest::Error> {
+        Self::from_db_with_workload_auth(
+            db,
+            settings,
+            rotation_config,
+            build_login_workload_authenticator(&LoginWorkloadConfig::default())
+                .expect("default login workload authenticator must build"),
+        )
+    }
+
+    pub fn from_db_with_workload_auth(
+        db: DatabaseConnection,
+        settings: &AppRuntimeSettings,
+        rotation_config: &ClientCredentialRotationConfig,
+        workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     ) -> Result<Self, reqwest::Error> {
         let request_uri_http_client = request_uri_http_client()?;
         let backchannel_logout_http_client = backchannel_logout_http_client()?;
@@ -138,6 +169,9 @@ impl AppServices {
                 certificate_generator: Arc::new(CertificateGeneratorImpl),
                 persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
                 runtime_key_ring: settings.key_ring(),
+                client_secret_lifetime: chrono::Duration::days(
+                    rotation_config.credential_lifetime_days,
+                ),
             },
             oidc: OpenIdProviderService::new(settings.installation())
                 .with_dynamic_registration_setting(settings.dynamic_client_registration())
@@ -201,6 +235,20 @@ impl AppServices {
                 settings.dynamic_client_registration(),
                 oidc_client_registration_repo.clone(),
             ),
+            login_runtime: LoginRuntimeService::new(
+                Arc::new(LoginRuntimeRepositoryImpl::new(db.clone())),
+                LoginRotationPolicy {
+                    credential_lifetime: chrono::Duration::days(
+                        rotation_config.credential_lifetime_days,
+                    ),
+                    rotate_before_expiry: chrono::Duration::days(
+                        rotation_config.rotate_before_expiry_days,
+                    ),
+                    retire_after: chrono::Duration::seconds(rotation_config.retire_after_secs),
+                },
+                rotation_config.check_interval_secs.max(1),
+            ),
+            workload_authenticator,
             oidc_client_repo,
             oidc_credential_repo,
             data_protector,
@@ -260,6 +308,16 @@ impl AppServices {
     #[must_use]
     pub fn dynamic_client_registration(&self) -> &AppDynamicClientRegistrationService {
         &self.dynamic_client_registration
+    }
+
+    #[must_use]
+    pub fn login_runtime(&self) -> &LoginRuntimeService {
+        &self.login_runtime
+    }
+
+    #[must_use]
+    pub fn workload_authenticator(&self) -> &Arc<dyn WorkloadAuthenticator> {
+        &self.workload_authenticator
     }
 
     #[must_use]

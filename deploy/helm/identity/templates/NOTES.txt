@@ -1,0 +1,30 @@
+Identity has been installed as {{ include "identity.fullname" . }}.
+
+Identity public URL: {{ .Values.identity.publicUrl }}
+Login public URL: {{ .Values.login.publicUrl }}
+
+The internal Identity listener is available only through:
+  {{ include "identity.fullname" . }}-identity-internal:{{ .Values.identity.service.internalPort }}
+
+Login authenticates there with a projected ServiceAccount token for:
+  system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.loginServiceAccountName" . }}
+
+{{- if .Values.identity.workload.issuerCa.enabled }}
+Identity verifies the Kubernetes issuer with the CA bundle from:
+  ConfigMap/{{ .Values.identity.workload.issuerCa.configMapName }} key {{ .Values.identity.workload.issuerCa.key }}
+{{- end }}
+{{- if .Values.identity.workload.issuerToken.enabled }}
+Identity authenticates same-origin issuer discovery as:
+  system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.identityServiceAccountName" . }}
+{{- end }}
+
+{{- if .Values.gatewayApi.enabled }}
+Gateway API routes reference:
+  Gateway/{{ .Values.gatewayApi.parentRef.name }}{{ with .Values.gatewayApi.parentRef.namespace }} in namespace {{ . }}{{ end }}
+{{- else }}
+Gateway API routes are disabled (gatewayApi.enabled=false).
+{{- end }}
+
+Check rollout state:
+  kubectl rollout status deployment/{{ include "identity.fullname" . }}-identity -n {{ .Release.Namespace }}
+  kubectl rollout status deployment/{{ include "identity.fullname" . }}-login -n {{ .Release.Namespace }}

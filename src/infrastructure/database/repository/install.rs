@@ -43,7 +43,7 @@ use crate::{
             },
             repository::{
                 openid_connect_credential::serialize_data as serialize_credential_data,
-                shared::{encode_nonnullable_expiry, non_expiring_timestamp},
+                shared::encode_nonnullable_expiry,
             },
         },
     },
@@ -257,7 +257,7 @@ impl InstallPersistence for InstallPersistenceImpl {
             r#type: Set(serialized_credential.type_),
             data: Set(serialized_credential.data),
             hint: Set(serialized_credential.hint),
-            expires_at: Set(non_expiring_timestamp()),
+            expires_at: Set((now + input.client_secret_lifetime).into()),
             revoked_at: Set(None),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),

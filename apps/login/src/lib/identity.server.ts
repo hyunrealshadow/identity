@@ -2,6 +2,7 @@ import {
   getRequestHeader,
   setResponseHeader,
 } from '@tanstack/react-start/server'
+import { readFileSync } from 'node:fs'
 
 import type {
   BusinessErrorResponse,
@@ -51,6 +52,40 @@ function apiBaseUrl() {
     throw new Error('IDENTITY_API_URL must use HTTPS')
   }
   return url
+}
+
+function internalApiBaseUrl() {
+  const url = new URL(
+    process.env.IDENTITY_INTERNAL_API_URL ?? 'https://localhost:5151',
+  )
+  if (url.protocol !== 'https:') {
+    throw new Error('IDENTITY_INTERNAL_API_URL must use HTTPS')
+  }
+  return url
+}
+
+function workloadToken() {
+  const file = process.env.IDENTITY_WORKLOAD_TOKEN_FILE
+  const inline = process.env.IDENTITY_WORKLOAD_TOKEN
+  if (!file && !inline) {
+    throw new Error(
+      'IDENTITY_WORKLOAD_TOKEN_FILE or IDENTITY_WORKLOAD_TOKEN must be configured to call the Identity internal API',
+    )
+  }
+  if (file) {
+    return readFileSync(file, 'utf8').trim()
+  }
+  return (inline ?? '').trim()
+}
+
+export async function internalApiToken() {
+  const token = workloadToken()
+  if (token.length < 32) {
+    throw new Error(
+      'The Identity workload token must contain at least 32 characters',
+    )
+  }
+  return token
 }
 
 function requestHeaders(sessions = requestSessionIds()) {
@@ -169,6 +204,40 @@ export async function identityJson<T>(
     storeSessionIds(sessions)
   }
 
+  return payload as T
+}
+
+export async function identityInternalJson<T>(
+  path: string,
+  init?: {
+    method?: 'GET' | 'POST'
+    body?: Record<string, unknown>
+  },
+) {
+  const headers = new Headers({ accept: 'application/json' })
+  headers.set('authorization', `Bearer ${await internalApiToken()}`)
+  if (init?.body) headers.set('content-type', 'application/json')
+  const response = await fetch(new URL(path, internalApiBaseUrl()), {
+    method: init?.method ?? 'GET',
+    headers,
+    body: init?.body ? JSON.stringify(init.body) : undefined,
+    redirect: 'manual',
+  })
+  const payload = (await response.json().catch(() => null)) as unknown
+  if (!response.ok) {
+    if (isBusinessError(payload)) {
+      throw new IdentityApiError(
+        payload.error.message,
+        response.status,
+        payload.error.code,
+        responseFieldErrors(payload.error.fields),
+      )
+    }
+    throw new IdentityApiError(
+      `Identity internal API request failed (${response.status})`,
+      response.status,
+    )
+  }
   return payload as T
 }
 

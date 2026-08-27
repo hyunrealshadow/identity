@@ -1,0 +1,27 @@
+{{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.identity.replicaCount) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "identity.fullname" . }}-identity
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "identity.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.login.replicaCount) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "identity.fullname" . }}-login
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "identity.loginSelectorLabels" . | nindent 6 }}
+{{- end }}

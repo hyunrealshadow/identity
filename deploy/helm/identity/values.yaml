@@ -1,0 +1,119 @@
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+identity:
+  replicaCount: 2
+  image:
+    repository: identity
+    tag: latest
+    pullPolicy: IfNotPresent
+  publicUrl: https://identity.example.com
+  service:
+    type: ClusterIP
+    publicPort: 5150
+    internalPort: 5151
+    healthPort: 8081
+  tls:
+    existingSecret: identity-tls
+    certKey: tls.crt
+    privateKeyKey: tls.key
+  database:
+    existingSecret: identity-database
+    urlKey: url
+  workload:
+    audience: identity-internal
+    expirationSeconds: 3600
+    issuer: https://kubernetes.default.svc.cluster.local
+    issuerCa:
+      enabled: true
+      configMapName: kube-root-ca.crt
+      key: ca.crt
+    issuerToken:
+      enabled: true
+      expirationSeconds: 3600
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  rotation:
+    enabled: true
+    checkIntervalSeconds: 60
+    credentialLifetimeDays: 180
+    rotateBeforeExpiryDays: 30
+    retireAfterSeconds: 86400
+  resources: {}
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
+login:
+  replicaCount: 2
+  image:
+    repository: identity-login
+    tag: latest
+    pullPolicy: IfNotPresent
+  publicUrl: https://account.example.com
+  service:
+    type: ClusterIP
+    port: 3000
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  sessionSecret:
+    existingSecret: identity-login-session
+    key: session-secret
+  internalCa:
+    existingSecret: identity-internal-ca
+    key: ca.crt
+  resources: {}
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: false
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
+gatewayApi:
+  enabled: false
+  parentRef:
+    name: identity
+    namespace: ""
+    sectionName: https
+  identity:
+    enabled: true
+    annotations: {}
+    hostnames:
+      - identity.example.com
+  login:
+    enabled: true
+    annotations: {}
+    hostnames:
+      - account.example.com
+
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: identity
+description: Identity protocol service and its built-in Login BFF
+type: application
+version: 0.2.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"

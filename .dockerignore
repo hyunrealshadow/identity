@@ -8,6 +8,7 @@ debug/
 **/config/local.yaml
 **/config/*.local.yaml
 **/config/production.yaml
+config/secrets/
 
 # SQLite dev databases
 *.sqlite

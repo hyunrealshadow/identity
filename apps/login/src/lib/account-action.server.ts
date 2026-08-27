@@ -7,7 +7,6 @@ import {
   accountReauthenticationReturnTo,
   requiresAccountReauthentication,
 } from './account-reauth'
-import { loadClientCredentials } from './client-credentials.server'
 import { GraphqlRequestError, identityGraphql } from './graphql.server'
 import { translate, type Locale } from './i18n'
 import { requestLocale } from './i18n.server'
@@ -22,6 +21,7 @@ import {
   storeRegeneratedRecoveryCodes,
 } from './oauth.server'
 import { storeAccountFlash } from './oauth-session.server'
+import { loadApplicationUrl } from './runtime-config.server'
 
 export interface AccountActionInput {
   action: string
@@ -37,9 +37,9 @@ export async function executeAccountAction(
   input: AccountActionInput,
 ): Promise<AccountActionResult> {
   const locale = requestLocale()
-  const credentials = await loadClientCredentials()
+  const applicationUrl = loadApplicationUrl()
   const origin = getRequestHeader('origin')
-  if (origin && origin !== new URL(credentials.application_url).origin) {
+  if (origin && origin !== new URL(applicationUrl).origin) {
     await storeAccountFlash({
       error: translate(locale, 'accountInvalidRequestOrigin'),
     })
@@ -49,7 +49,7 @@ export async function executeAccountAction(
   const { action, values } = input
   try {
     if (action === 'logout') {
-      const response = await finishLogout(credentials.application_url)
+      const response = await finishLogout(applicationUrl)
       return { redirect: response.headers.get('location') ?? '/' }
     }
     if (action === 'cancel-totp') {

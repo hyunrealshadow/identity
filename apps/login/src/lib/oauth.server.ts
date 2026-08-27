@@ -1,6 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
-import { loadClientCredentials } from './client-credentials.server'
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
 import {
@@ -12,6 +11,7 @@ import {
   useMfaUiSession,
   storeAccountFlash,
 } from './oauth-session.server'
+import { loadApplicationUrl, loadOAuthClient } from './runtime-config.server'
 
 const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
 const API_RESOURCE = 'urn:identity:graphql'
@@ -114,15 +114,15 @@ async function startAuthorizationFlow(
   reauthPurpose: 'password' | 'account' | 'mfa' = 'password',
   requirements?: ReauthenticationRequirements,
 ) {
-  const credentials = await loadClientCredentials()
+  const oauthClient = await loadOAuthClient()
   const state = randomBytes(32).toString('base64url')
   const verifier = randomBytes(48).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
-  const redirectUri = callbackUrl(credentials.application_url)
+  const redirectUri = callbackUrl(loadApplicationUrl())
   const authorizeUrl = new URL('/oauth2/authorize', API_URL)
   authorizeUrl.search = new URLSearchParams({
     response_type: 'code',
-    client_id: credentials.client_id,
+    client_id: oauthClient.client_id,
     redirect_uri: redirectUri,
     scope:
       mode === 'reauth'
@@ -192,18 +192,18 @@ export async function finishAuthorization(request: Request) {
     })
   }
 
-  const credentials = await loadClientCredentials()
+  const oauthClient = await loadOAuthClient()
   let tokens: TokenResponse
   try {
     tokens = await exchangeToken(
       new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: callbackUrl(credentials.application_url),
+        redirect_uri: callbackUrl(loadApplicationUrl()),
         code_verifier: flow.data.verifier,
       }),
-      credentials.client_id,
-      credentials.client_secret,
+      oauthClient.client_id,
+      oauthClient.client_secret,
     )
   } catch (error) {
     if (error instanceof OAuthTokenExchangeError) {
@@ -227,7 +227,7 @@ export async function finishAuthorization(request: Request) {
   }
   await flow.clear()
 
-  return redirect(new URL(returnTo, credentials.application_url))
+  return redirect(new URL(returnTo, loadApplicationUrl()))
 }
 
 function authorizationFailureResponse(
@@ -379,7 +379,7 @@ export async function accessToken() {
   if (stored.expires_at > Date.now() + 30_000) return stored.access_token
   if (!stored.refresh_token) return
 
-  const credentials = await loadClientCredentials()
+  const oauthClient = await loadOAuthClient()
   let refreshed: TokenResponse
   try {
     refreshed = await exchangeToken(
@@ -387,8 +387,8 @@ export async function accessToken() {
         grant_type: 'refresh_token',
         refresh_token: stored.refresh_token,
       }),
-      credentials.client_id,
-      credentials.client_secret,
+      oauthClient.client_id,
+      oauthClient.client_secret,
     )
   } catch (error) {
     if (

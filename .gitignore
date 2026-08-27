@@ -45,3 +45,7 @@ apps/login/.data/
 # Runtime-generated or operator-provided TLS material
 /config/tls/*.key
 /config/tls/*.crt
+
+# Operator-provided workload credentials
+/config/secrets/
+/deploy/secrets/

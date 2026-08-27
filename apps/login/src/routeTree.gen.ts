@@ -22,6 +22,8 @@ import { Route as AccountIdentifiersRouteImport } from './routes/account/identif
 import { Route as AccountProfileRouteImport } from './routes/account/profile'
 import { Route as AccountSecurityRouteImport } from './routes/account/security'
 import { Route as AccountSessionsRouteImport } from './routes/account/sessions'
+import { Route as HealthLiveRouteImport } from './routes/health.live'
+import { Route as HealthReadyRouteImport } from './routes/health.ready'
 import { Route as LoginChallengeRouteImport } from './routes/login.challenge'
 import { Route as AccountMfaSetupRouteImport } from './routes/account/mfa/setup'
 
@@ -90,6 +92,16 @@ const AccountSessionsRoute = AccountSessionsRouteImport.update({
   path: '/sessions',
   getParentRoute: () => AccountRouteRoute,
 } as any)
+const HealthLiveRoute = HealthLiveRouteImport.update({
+  id: '/health/live',
+  path: '/health/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HealthReadyRoute = HealthReadyRouteImport.update({
+  id: '/health/ready',
+  path: '/health/ready',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginChallengeRoute = LoginChallengeRouteImport.update({
   id: '/challenge',
   path: '/challenge',
@@ -114,6 +126,8 @@ export interface FileRoutesByFullPath {
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
   '/account/sessions': typeof AccountSessionsRoute
+  '/health/live': typeof HealthLiveRoute
+  '/health/ready': typeof HealthReadyRoute
   '/login/challenge': typeof LoginChallengeRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
@@ -130,6 +144,8 @@ export interface FileRoutesByTo {
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
   '/account/sessions': typeof AccountSessionsRoute
+  '/health/live': typeof HealthLiveRoute
+  '/health/ready': typeof HealthReadyRoute
   '/login/challenge': typeof LoginChallengeRoute
   '/account': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
@@ -148,6 +164,8 @@ export interface FileRoutesById {
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
   '/account/sessions': typeof AccountSessionsRoute
+  '/health/live': typeof HealthLiveRoute
+  '/health/ready': typeof HealthReadyRoute
   '/login/challenge': typeof LoginChallengeRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
@@ -167,6 +185,8 @@ export interface FileRouteTypes {
     | '/account/profile'
     | '/account/security'
     | '/account/sessions'
+    | '/health/live'
+    | '/health/ready'
     | '/login/challenge'
     | '/account/'
     | '/account/mfa/setup'
@@ -183,6 +203,8 @@ export interface FileRouteTypes {
     | '/account/profile'
     | '/account/security'
     | '/account/sessions'
+    | '/health/live'
+    | '/health/ready'
     | '/login/challenge'
     | '/account'
     | '/account/mfa/setup'
@@ -200,6 +222,8 @@ export interface FileRouteTypes {
     | '/account/profile'
     | '/account/security'
     | '/account/sessions'
+    | '/health/live'
+    | '/health/ready'
     | '/login/challenge'
     | '/account/'
     | '/account/mfa/setup'
@@ -214,6 +238,8 @@ export interface RootRouteChildren {
   ConsentRoute: typeof ConsentRoute
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
+  HealthLiveRoute: typeof HealthLiveRoute
+  HealthReadyRoute: typeof HealthReadyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -309,6 +335,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountSessionsRouteImport
       parentRoute: typeof AccountRouteRoute
     }
+    '/health/live': {
+      id: '/health/live'
+      path: '/health/live'
+      fullPath: '/health/live'
+      preLoaderRoute: typeof HealthLiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/health/ready': {
+      id: '/health/ready'
+      path: '/health/ready'
+      fullPath: '/health/ready'
+      preLoaderRoute: typeof HealthReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login/challenge': {
       id: '/login/challenge'
       path: '/challenge'
@@ -367,6 +407,8 @@ const rootRouteChildren: RootRouteChildren = {
   ConsentRoute: ConsentRoute,
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
+  HealthLiveRoute: HealthLiveRoute,
+  HealthReadyRoute: HealthReadyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

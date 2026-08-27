@@ -15,12 +15,12 @@ const mocks = vi.hoisted(() => ({
   flash: { data: {}, clear: vi.fn(), update: vi.fn() },
 }))
 
-vi.mock('./client-credentials.server', () => ({
-  loadClientCredentials: vi.fn(async () => ({
-    application_url: 'https://identity.example/',
+vi.mock('./runtime-config.server', () => ({
+  loadOAuthClient: vi.fn(async () => ({
     client_id: 'client',
     client_secret: 'secret',
   })),
+  loadApplicationUrl: vi.fn(() => 'https://identity.example/'),
 }))
 
 vi.mock('./i18n.server', () => ({

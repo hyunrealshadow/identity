@@ -44,6 +44,8 @@ use crate::infrastructure::database::entity::{
 
 pub(super) fn consent_test_config() -> AppConfig {
     AppConfig {
+        internal: Default::default(),
+        client_credential_rotation: Default::default(),
         logger: LoggerConfig::default(),
         server: ServerConfig::default(),
         database: DatabaseConfig::default(),

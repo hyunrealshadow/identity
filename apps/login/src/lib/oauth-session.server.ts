@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { useSession } from '@tanstack/react-start/server'
 
-import { loadClientCredentials } from './client-credentials.server'
+import { loadSessionSecret } from './runtime-config.server'
 
 const AUTH_SESSION_NAME = '__Host-login.account'
 const FLOW_SESSION_NAME = '__Host-login.oauth'
@@ -124,16 +124,15 @@ export async function consumeAccountFlash() {
   return value
 }
 
-export function deriveSessionPassword(clientSecret: string, purpose: string) {
+export function deriveSessionPassword(sessionSecret: string, purpose: string) {
   return createHash('sha256')
     .update('login.cookie:v1\0', 'utf8')
     .update(purpose, 'utf8')
     .update('\0', 'utf8')
-    .update(clientSecret, 'utf8')
+    .update(sessionSecret, 'utf8')
     .digest('hex')
 }
 
 async function sessionPassword(purpose: string) {
-  const { client_secret: clientSecret } = await loadClientCredentials()
-  return deriveSessionPassword(clientSecret, purpose)
+  return deriveSessionPassword(await loadSessionSecret(), purpose)
 }

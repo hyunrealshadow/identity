@@ -1,5 +1,6 @@
 pub mod model;
 pub mod repository;
+pub mod workload;
 
 pub use model::authorization_request::{
     AuthorizationRequest, AuthorizationRequestData, ClaimRequestMap, ClaimRequestSpec,
@@ -24,4 +25,8 @@ pub use repository::{
     OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
     OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
     OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
+};
+pub use workload::{
+    AuthenticatedWorkload, BuiltInWorkload, LoginRotationPolicy, LoginRuntimeConfig,
+    LoginRuntimeRepository, LoginRuntimeRepositoryError, WorkloadAuthenticator,
 };

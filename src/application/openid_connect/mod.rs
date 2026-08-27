@@ -2,6 +2,7 @@ pub mod authorize;
 pub mod dto;
 pub mod jose;
 pub mod jwt_checks;
+pub mod login_runtime;
 pub mod logout;
 pub mod provider;
 pub mod registration;

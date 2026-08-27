@@ -1,0 +1,43 @@
+# Enable the Gateway API provider in K3s' packaged Traefik chart.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    providers:
+      kubernetesGateway:
+        enabled: true
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik
+spec:
+  controllerName: traefik.io/gateway-controller
+---
+# Keep the application Gateway in the release namespace. This lets the
+# listeners use local TLS Secrets and accepts the chart's Routes without
+# cross-namespace grants.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: identity
+  namespace: identity
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: identity-public-tls
+          - kind: Secret
+            name: identity-login-public-tls
+      allowedRoutes:
+        namespaces:
+          from: Same

@@ -20,11 +20,26 @@ use super::AppResult;
 
 /// Start the main HTTP server (and optionally a separate health-check server)
 /// with graceful shutdown support.
-pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) -> AppResult<()> {
+pub async fn start_servers(
+    state: &AppState,
+    config: &AppConfig,
+    app: Router,
+    internal: Router,
+) -> AppResult<()> {
+    if config.client_credential_rotation.enable {
+        spawn_login_runtime_rotation_worker(
+            state.clone(),
+            config.client_credential_rotation.check_interval_secs,
+        );
+    }
     let shared_health = health::shares_listener(&config.health, &config.server);
     let shared_graphql = graphql::shares_listener(&config.graphql, &config.server);
 
     let main_address = format!("{}:{}", config.server.binding, config.server.port);
+    let internal_address = format!(
+        "{}:{}",
+        config.internal.server.binding, config.internal.server.port
+    );
     let environment = state.context().environment().as_str();
 
     let needs_separate_health = config.health.enable && !shared_health;
@@ -38,6 +53,13 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
             servers.spawn(serve_with_shutdown(
                 main_listener,
                 app,
+                Arc::clone(&shutdown),
+            ));
+            let internal_listener = build_upstream_tls_listener(&internal_address).await?;
+            tracing::info!(address = internal_address, "internal API listening");
+            servers.spawn(serve_with_shutdown(
+                internal_listener,
+                internal,
                 Arc::clone(&shutdown),
             ));
             if needs_separate_health {
@@ -86,6 +108,13 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
                 app,
                 Arc::clone(&shutdown),
             ));
+            let internal_listener = build_https_listener(config, &internal_address).await?;
+            tracing::info!(address = internal_address, "internal API listening");
+            servers.spawn(serve_with_shutdown(
+                internal_listener,
+                internal,
+                Arc::clone(&shutdown),
+            ));
             if needs_separate_health {
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
@@ -131,6 +160,29 @@ pub async fn start_servers(state: &AppState, config: &AppConfig, app: Router) ->
     }
 
     Ok(())
+}
+
+fn spawn_login_runtime_rotation_worker(state: AppState, interval_secs: u64) {
+    tokio::spawn(async move {
+        let mut shutdown = state.lifecycle().subscribe_shutdown();
+        let mut interval =
+            tokio::time::interval(std::time::Duration::from_secs(interval_secs.max(1)));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    if let Err(error) = state.services().login_runtime().maintain().await {
+                        tracing::error!(error = %error, "login runtime rotation maintenance failed");
+                    }
+                }
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
 }
 
 async fn serve_with_shutdown<A>(
@@ -274,6 +326,8 @@ mod tests {
         let mut config = AppConfig {
             logger: LoggerConfig::default(),
             server: ServerConfig::default(),
+            internal: Default::default(),
+            client_credential_rotation: Default::default(),
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
             graphql: GraphqlConfig::default(),

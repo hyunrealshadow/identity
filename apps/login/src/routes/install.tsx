@@ -8,7 +8,7 @@ import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
   IdentityApiError,
-  identityJson,
+  identityInternalJson,
 } from '#/lib/identity.server'
 import type { InstallResponse } from '#/lib/identity-types'
 import { markInstallationComplete } from '#/lib/installation-status.server'
@@ -20,7 +20,6 @@ import {
   formValidationErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
-import { persistClientCredentials } from '#/lib/client-credentials.server'
 
 interface InstallSearch {
   error?: string
@@ -102,7 +101,7 @@ export const Route = createFileRoute('/install')({
         }
 
         try {
-          const result = await identityJson<InstallResponse>('/install', {
+          const result = await identityInternalJson<InstallResponse>('/internal/installation', {
             method: 'POST',
             body: {
               username,
@@ -115,11 +114,6 @@ export const Route = createFileRoute('/install')({
               ),
             },
           })
-          await persistClientCredentials(
-            result.client_id,
-            result.client_secret,
-            applicationUrl,
-          )
           markInstallationComplete()
           return navigationResponse(request, '/')
         } catch (error) {

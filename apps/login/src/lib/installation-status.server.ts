@@ -1,12 +1,12 @@
-import { identityJson } from './identity.server'
+import { identityInternalJson } from './identity.server'
 import type { InstallationStatusResponse } from './identity-types'
 
 let installationStatus: Promise<InstallationStatusResponse> | undefined
 
 export function cachedInstallationStatus() {
   if (!installationStatus) {
-    installationStatus = identityJson<InstallationStatusResponse>(
-      '/installation/status',
+    installationStatus = identityInternalJson<InstallationStatusResponse>(
+      '/internal/installation/status',
     ).catch((error) => {
       installationStatus = undefined
       throw error

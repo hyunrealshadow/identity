@@ -20,5 +20,10 @@ async fn main() -> AppResult<()> {
         .build();
 
     let app = web::router::app_router(state.clone(), &config);
-    server::start_servers(&state, &config, app).await
+    let internal = web::router::internal_router(
+        state.clone(),
+        &config,
+        state.services().workload_authenticator().clone(),
+    );
+    server::start_servers(&state, &config, app, internal).await
 }
