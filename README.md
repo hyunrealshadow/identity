@@ -8,11 +8,12 @@ Clean Architecture with dependency inversion:
 
 ```
 src/
-  domain/         — Entities, value objects, repository traits
+  domain/         — Aggregates, value objects, repository traits (no SeaORM)
   application/    — Use cases / services (no I/O)
   infrastructure/ — Repositories (SeaORM), crypto, templating
   web/            — HTTP handlers (Salvo), session management
   boot/           — App assembly, server startup
+migration/         — Immutable ordered schema and data migrations
 ```
 
 PostgreSQL via SeaORM. Interactive login, consent, and installation UI lives in
@@ -93,6 +94,20 @@ and secret are documented in `deploy/README.md`.
 - `sea-orm-cli` for migration management
 
 ### Database
+
+The current persistence model lives in `infrastructure::database::entity`,
+while the `migration` crate remains the immutable database history. Every
+schema change must update the SeaORM entities and add a matching ordered
+migration in the same change. Historical migrations must not depend on the
+current entity definitions.
+
+Application startup runs only the ordered migrator; runtime schema sync is not
+enabled. Development, test, and production databases must all be created and
+upgraded with the ordered migrations. Entity metadata may be used to verify the
+portable part of the schema, but it is not a database-creation API:
+PostgreSQL-specific expression and multi-column non-unique indexes remain
+explicit migration statements because they cannot be represented by portable
+entity metadata.
 
 ```sh
 # run migrations
