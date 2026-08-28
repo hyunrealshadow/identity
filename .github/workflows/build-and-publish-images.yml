@@ -1,17 +1,7 @@
 name: Build and publish container images
 
 on:
-  workflow_dispatch:
-    inputs:
-      platforms:
-        description: Target platforms
-        required: true
-        default: linux/amd64,linux/arm64
-        type: choice
-        options:
-          - linux/amd64,linux/arm64
-          - linux/amd64
-          - linux/arm64
+  workflow_dispatch: {}
 
 concurrency:
   group: publish-container-images
@@ -35,10 +25,10 @@ jobs:
           echo "repository=${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "tag=$(date -u +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
 
-  publish:
-    name: Publish ${{ matrix.name }}
+  build:
+    name: Build ${{ matrix.name }} (${{ matrix.arch }})
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -49,17 +39,32 @@ jobs:
           - name: identity
             suffix: ""
             dockerfile: deploy/docker/identity.Dockerfile
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
           - name: identity-login
             suffix: -login
             dockerfile: deploy/docker/login.Dockerfile
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - name: identity
+            suffix: ""
+            dockerfile: deploy/docker/identity.Dockerfile
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - name: identity-login
+            suffix: -login
+            dockerfile: deploy/docker/login.Dockerfile
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
     env:
       IMAGE: ghcr.io/${{ needs.prepare.outputs.repository }}${{ matrix.suffix }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -76,39 +81,96 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          tags: |
-            type=raw,value=${{ needs.prepare.outputs.tag }}
           labels: |
             org.opencontainers.image.title=${{ matrix.name }}
 
-      - name: Build and push image
+      - name: Build and push platform image
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          platforms: ${{ inputs.platforms }}
-          push: true
+          platforms: ${{ matrix.platform }}
           pull: true
-          tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
           provenance: mode=max
           sbom: true
 
-      - name: Write release summary
+      - name: Export image digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.metadata.outputs.tags }}
         shell: bash
         run: |
-          {
-            echo "### ${{ matrix.name }}"
-            echo
-            echo '```text'
-            echo "$TAGS"
-            echo '```'
-            echo
-            echo "Digest: \`$DIGEST\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.name }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish ${{ matrix.name }} manifest
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: identity
+            suffix: ""
+          - name: identity-login
+            suffix: -login
+    env:
+      IMAGE: ghcr.io/${{ needs.prepare.outputs.repository }}${{ matrix.suffix }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Download platform digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.name }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-platform manifest
+        working-directory: ${{ runner.temp }}/digests
+        shell: bash
+        run: |
+          sources=()
+          for digest in *; do
+            sources+=("$IMAGE@sha256:$digest")
+          done
+
+          if [[ ${#sources[@]} -ne 2 ]]; then
+            echo "Expected two platform digests, found ${#sources[@]}" >&2
+            exit 1
+          fi
+
+          docker buildx imagetools create \
+            --tag "$IMAGE:$TAG" \
+            "${sources[@]}"
+
+      - name: Inspect published image
+        shell: bash
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$TAG"
+          echo "Published \`$IMAGE:$TAG\`" >> "$GITHUB_STEP_SUMMARY"
