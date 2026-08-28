@@ -2,7 +2,8 @@ use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
     prelude::{DbErr, DeriveIden, DeriveMigrationName, Expr, MigrationTrait, SchemaManager, Table},
     schema::{
-        json_binary_null, pk_auto, string, string_null, timestamp, timestamp_null, uuid_uniq,
+        boolean, json_binary_null, pk_auto, string, string_null, timestamp, timestamp_null,
+        uuid_uniq,
     },
 };
 
@@ -18,6 +19,7 @@ pub enum Client {
     Name,
     Names,
     Description,
+    BuiltIn,
     CreatedAt,
     UpdatedAt,
 }
@@ -36,6 +38,7 @@ impl MigrationTrait for Migration {
                     .col(string(Client::Name))
                     .col(json_binary_null(Client::Names))
                     .col(string_null(Client::Description))
+                    .col(boolean(Client::BuiltIn).default(false))
                     .col(
                         timestamp(Client::CreatedAt)
                             .not_null()
