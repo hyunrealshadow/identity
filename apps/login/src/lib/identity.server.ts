@@ -58,8 +58,11 @@ function internalApiBaseUrl() {
   const url = new URL(
     process.env.IDENTITY_INTERNAL_API_URL ?? 'https://localhost:5151',
   )
-  if (url.protocol !== 'https:') {
-    throw new Error('IDENTITY_INTERNAL_API_URL must use HTTPS')
+  const allowHttp = process.env.IDENTITY_INTERNAL_API_ALLOW_HTTP === 'true'
+  if (url.protocol !== 'https:' && !(allowHttp && url.protocol === 'http:')) {
+    throw new Error(
+      'IDENTITY_INTERNAL_API_URL must use HTTPS unless IDENTITY_INTERNAL_API_ALLOW_HTTP=true',
+    )
   }
   return url
 }

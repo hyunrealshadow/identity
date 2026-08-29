@@ -15,6 +15,21 @@ certificate warning in the browser the first time you open it. In development,
 the Vite server also accepts the local Identity server's self-signed
 certificate; production builds retain normal TLS certificate validation.
 
+## Production transport
+
+`pnpm build` uses the official Nitro Node server adapter and `pnpm start` runs
+the generated production server. Production listens on HTTP by default and
+requires the upstream proxy to report `X-Forwarded-Proto: https` or
+`Forwarded: proto=https`; liveness and readiness probes are exempt. Set both
+`NITRO_SSL_CERT_FILE` and `NITRO_SSL_KEY_FILE` to make the production process
+terminate TLS itself. Providing only one file is a startup error.
+
+The internal Identity URL remains HTTPS by default. A deployment that
+intentionally uses the cluster network for transport security must set an
+`http://` `IDENTITY_INTERNAL_API_URL` together with
+`IDENTITY_INTERNAL_API_ALLOW_HTTP=true`; an HTTP URL without that explicit
+opt-in is rejected.
+
 The Rust protocol service must be available to the Start server at
 `IDENTITY_API_URL` (default `https://localhost:5150`). Login and consent APIs
 are proxied server-side; their successful responses send the browser directly

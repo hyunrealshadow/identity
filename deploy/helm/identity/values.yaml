@@ -15,9 +15,11 @@ identity:
     internalPort: 5151
     healthPort: 8081
   tls:
+    enabled: true
     existingSecret: identity-tls
     certKey: tls.crt
     privateKeyKey: tls.key
+    trustedProxies: []
   database:
     existingSecret: identity-database
     urlKey: url
@@ -68,6 +70,11 @@ login:
   service:
     type: ClusterIP
     port: 3000
+  tls:
+    enabled: false
+    existingSecret: identity-login-tls
+    certKey: tls.crt
+    privateKeyKey: tls.key
   serviceAccount:
     create: true
     name: ""

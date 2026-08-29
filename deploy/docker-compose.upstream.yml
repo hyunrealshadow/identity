@@ -1,0 +1,31 @@
+services:
+  identity:
+    environment:
+      IDENTITY_TRUSTED_PROXY: ${IDENTITY_TRUSTED_PROXY:?set IDENTITY_TRUSTED_PROXY to the reverse proxy network in CIDR notation}
+    secrets: !override
+      - source: login_workload_token
+        target: login_workload_token
+
+  login:
+    environment: !override
+      IDENTITY_API_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
+      IDENTITY_INTERNAL_API_URL: http://identity:5151
+      IDENTITY_INTERNAL_API_ALLOW_HTTP: "true"
+      IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
+      IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
+      IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
+      IDENTITY_REQUIRE_UPSTREAM_HTTPS: "true"
+    secrets: !override
+      - source: login_workload_token
+        target: login_workload_token
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get({host:'127.0.0.1',port:3000,path:'/health/ready'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+
+configs:
+  identity_config:
+    file: ./config/identity.compose.upstream.yaml

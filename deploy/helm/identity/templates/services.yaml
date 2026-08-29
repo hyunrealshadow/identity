@@ -10,10 +10,10 @@ spec:
   selector:
     {{- include "identity.selectorLabels" . | nindent 4 }}
   ports:
-    - name: https
-      appProtocol: https
+    - name: {{ ternary "https" "http" .Values.identity.tls.enabled }}
+      appProtocol: {{ ternary "https" "http" .Values.identity.tls.enabled }}
       port: {{ .Values.identity.service.publicPort }}
-      targetPort: https
+      targetPort: {{ ternary "https" "http" .Values.identity.tls.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -27,10 +27,10 @@ spec:
   selector:
     {{- include "identity.selectorLabels" . | nindent 4 }}
   ports:
-    - name: internal-https
-      appProtocol: https
+    - name: {{ ternary "internal-https" "internal-http" .Values.identity.tls.enabled }}
+      appProtocol: {{ ternary "https" "http" .Values.identity.tls.enabled }}
       port: {{ .Values.identity.service.internalPort }}
-      targetPort: internal-https
+      targetPort: {{ ternary "internal-https" "internal-http" .Values.identity.tls.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -44,7 +44,7 @@ spec:
   selector:
     {{- include "identity.loginSelectorLabels" . | nindent 4 }}
   ports:
-    - name: https
-      appProtocol: https
+    - name: {{ ternary "https" "http" .Values.login.tls.enabled }}
+      appProtocol: {{ ternary "https" "http" .Values.login.tls.enabled }}
       port: {{ .Values.login.service.port }}
-      targetPort: https
+      targetPort: {{ ternary "https" "http" .Values.login.tls.enabled }}

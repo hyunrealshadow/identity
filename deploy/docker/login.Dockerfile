@@ -9,6 +9,8 @@ COPY apps/login apps/login
 RUN pnpm --filter login build
 RUN mkdir -p /app/apps/login/node_modules/.vite-temp \
     && chown node:node /app/apps/login/node_modules/.vite-temp
-USER node
+USER 1000:1000
 EXPOSE 3000
-CMD ["pnpm", "--filter", "login", "preview", "--host", "0.0.0.0", "--port", "3000"]
+ENV HOST=0.0.0.0 \
+    PORT=3000
+CMD ["pnpm", "--filter", "login", "start"]

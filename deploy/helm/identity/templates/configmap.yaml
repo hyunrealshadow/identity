@@ -1,3 +1,6 @@
+{{- if and (not .Values.identity.tls.enabled) (empty .Values.identity.tls.trustedProxies) }}
+{{- fail "identity.tls.trustedProxies must contain at least one proxy network when identity.tls.enabled=false" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -15,11 +18,17 @@ data:
       port: {{ .Values.identity.service.publicPort }}
       host: {{ .Values.identity.publicUrl | quote }}
       tls:
+        {{- if .Values.identity.tls.enabled }}
         termination: direct
         auto_generate: false
         cert_path: /etc/identity/tls/tls.crt
         key_path: /etc/identity/tls/tls.key
         domain: {{ include "identity.fullname" . }}-identity
+        {{- else }}
+        termination: upstream
+        trusted_proxies:
+          {{- toYaml .Values.identity.tls.trustedProxies | nindent 10 }}
+        {{- end }}
     internal:
       server:
         binding: 0.0.0.0

@@ -11,10 +11,23 @@
         "publicUrl": { "type": "string", "pattern": "^https://" },
         "tls": {
           "type": "object",
-          "required": ["existingSecret"],
+          "required": ["enabled", "existingSecret", "certKey", "privateKeyKey", "trustedProxies"],
           "properties": {
-            "existingSecret": { "type": "string", "minLength": 1 }
-          }
+            "enabled": { "type": "boolean" },
+            "existingSecret": { "type": "string", "minLength": 1 },
+            "certKey": { "type": "string", "minLength": 1 },
+            "privateKeyKey": { "type": "string", "minLength": 1 },
+            "trustedProxies": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "enabled": { "const": false } } },
+              "then": { "properties": { "trustedProxies": { "minItems": 1 } } }
+            }
+          ]
         },
         "database": {
           "type": "object",
@@ -62,10 +75,20 @@
     },
     "login": {
       "type": "object",
-      "required": ["publicUrl", "sessionSecret", "internalCa"],
+      "required": ["publicUrl", "tls", "sessionSecret", "internalCa"],
       "properties": {
         "replicaCount": { "type": "integer", "minimum": 1 },
         "publicUrl": { "type": "string", "pattern": "^https://" },
+        "tls": {
+          "type": "object",
+          "required": ["enabled", "existingSecret", "certKey", "privateKeyKey"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "existingSecret": { "type": "string", "minLength": 1 },
+            "certKey": { "type": "string", "minLength": 1 },
+            "privateKeyKey": { "type": "string", "minLength": 1 }
+          }
+        },
         "sessionSecret": {
           "type": "object",
           "required": ["existingSecret", "key"],

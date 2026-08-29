@@ -3,6 +3,9 @@ Identity has been installed as {{ include "identity.fullname" . }}.
 Identity public URL: {{ .Values.identity.publicUrl }}
 Login public URL: {{ .Values.login.publicUrl }}
 
+Identity Pod transport: {{ ternary "HTTPS" "HTTP behind a trusted HTTPS proxy" .Values.identity.tls.enabled }}
+Login Pod transport: {{ ternary "HTTPS" "HTTP behind an HTTPS proxy" .Values.login.tls.enabled }}
+
 The internal Identity listener is available only through:
   {{ include "identity.fullname" . }}-identity-internal:{{ .Values.identity.service.internalPort }}
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   IdentityApiError,
+  identityInternalJson,
   identityJson,
   isTerminalLoginError,
 } from './identity.server'
@@ -29,11 +30,17 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.getRequestHeader.mockReturnValue(undefined)
   delete process.env.IDENTITY_API_URL
+  delete process.env.IDENTITY_INTERNAL_API_URL
+  delete process.env.IDENTITY_INTERNAL_API_ALLOW_HTTP
+  delete process.env.IDENTITY_WORKLOAD_TOKEN
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
   delete process.env.IDENTITY_API_URL
+  delete process.env.IDENTITY_INTERNAL_API_URL
+  delete process.env.IDENTITY_INTERNAL_API_ALLOW_HTTP
+  delete process.env.IDENTITY_WORKLOAD_TOKEN
 })
 
 describe('identityJson', () => {
@@ -138,6 +145,31 @@ describe('isTerminalLoginError', () => {
 
   it('keeps retryable credential errors on the challenge page', () => {
     expect(isTerminalLoginError(new IdentityApiError('retry', 401, 11007))).toBe(false)
+  })
+})
+
+describe('identityInternalJson', () => {
+  it('rejects plaintext internal traffic unless it is explicitly enabled', async () => {
+    process.env.IDENTITY_INTERNAL_API_URL = 'http://identity:5151'
+    process.env.IDENTITY_WORKLOAD_TOKEN = 'a'.repeat(32)
+
+    await expect(
+      identityInternalJson('/internal/workloads/self/runtime-configuration'),
+    ).rejects.toThrow('IDENTITY_INTERNAL_API_URL must use HTTPS')
+  })
+
+  it('allows explicitly configured plaintext internal traffic', async () => {
+    process.env.IDENTITY_INTERNAL_API_URL = 'http://identity:5151'
+    process.env.IDENTITY_INTERNAL_API_ALLOW_HTTP = 'true'
+    process.env.IDENTITY_WORKLOAD_TOKEN = 'a'.repeat(32)
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetch)
+
+    await identityInternalJson('/internal/workloads/self/runtime-configuration')
+
+    expect(fetch.mock.calls[0]?.[0]).toEqual(
+      new URL('http://identity:5151/internal/workloads/self/runtime-configuration'),
+    )
   })
 })
 

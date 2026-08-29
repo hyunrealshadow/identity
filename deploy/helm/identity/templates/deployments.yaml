@@ -46,10 +46,10 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           ports:
-            - name: https
+            - name: {{ ternary "https" "http" .Values.identity.tls.enabled }}
               containerPort: {{ .Values.identity.service.publicPort }}
               protocol: TCP
-            - name: internal-https
+            - name: {{ ternary "internal-https" "internal-http" .Values.identity.tls.enabled }}
               containerPort: {{ .Values.identity.service.internalPort }}
               protocol: TCP
             - name: health
@@ -83,9 +83,11 @@ spec:
               mountPath: /app/config/production.yaml
               subPath: production.yaml
               readOnly: true
+            {{- if .Values.identity.tls.enabled }}
             - name: tls
               mountPath: /etc/identity/tls
               readOnly: true
+            {{- end }}
             {{- if .Values.identity.workload.issuerCa.enabled }}
             - name: kubernetes-issuer-ca
               mountPath: /etc/identity/kubernetes
@@ -102,6 +104,7 @@ spec:
         - name: config
           configMap:
             name: {{ include "identity.fullname" . }}-config
+        {{- if .Values.identity.tls.enabled }}
         - name: tls
           secret:
             secretName: {{ .Values.identity.tls.existingSecret }}
@@ -110,6 +113,7 @@ spec:
                 path: tls.crt
               - key: {{ .Values.identity.tls.privateKeyKey }}
                 path: tls.key
+        {{- end }}
         {{- if .Values.identity.workload.issuerCa.enabled }}
         - name: kubernetes-issuer-ca
           configMap:
@@ -181,7 +185,9 @@ spec:
             - name: IDENTITY_API_URL
               value: {{ .Values.identity.publicUrl | quote }}
             - name: IDENTITY_INTERNAL_API_URL
-              value: {{ printf "https://%s-identity-internal:%v" (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
+              value: {{ printf "%s://%s-identity-internal:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
+            - name: IDENTITY_INTERNAL_API_ALLOW_HTTP
+              value: {{ ternary "false" "true" .Values.identity.tls.enabled | quote }}
             - name: IDENTITY_PUBLIC_APP_URL
               value: {{ .Values.login.publicUrl | quote }}
             - name: IDENTITY_LOGIN_SESSION_SECRET
@@ -191,36 +197,46 @@ spec:
                   key: {{ .Values.login.sessionSecret.key }}
             - name: IDENTITY_WORKLOAD_TOKEN_FILE
               value: /var/run/secrets/identity/token
+            - name: IDENTITY_REQUIRE_UPSTREAM_HTTPS
+              value: {{ ternary "false" "true" .Values.login.tls.enabled | quote }}
+            {{- if .Values.identity.tls.enabled }}
             - name: NODE_EXTRA_CA_CERTS
               value: /etc/identity/ca/ca.crt
             - name: NODE_TLS_REJECT_UNAUTHORIZED
               value: "1"
+            {{- end }}
+            {{- if .Values.login.tls.enabled }}
+            - name: NITRO_SSL_CERT_FILE
+              value: /etc/identity/login-tls/tls.crt
+            - name: NITRO_SSL_KEY_FILE
+              value: /etc/identity/login-tls/tls.key
+            {{- end }}
             {{- with .Values.login.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           ports:
-            - name: https
+            - name: {{ ternary "https" "http" .Values.login.tls.enabled }}
               containerPort: {{ .Values.login.service.port }}
               protocol: TCP
           startupProbe:
             httpGet:
               path: /health/live
-              port: https
-              scheme: HTTPS
+              port: {{ ternary "https" "http" .Values.login.tls.enabled }}
+              scheme: {{ ternary "HTTPS" "HTTP" .Values.login.tls.enabled }}
             failureThreshold: 30
             periodSeconds: 5
           readinessProbe:
             httpGet:
               path: /health/ready
-              port: https
-              scheme: HTTPS
+              port: {{ ternary "https" "http" .Values.login.tls.enabled }}
+              scheme: {{ ternary "HTTPS" "HTTP" .Values.login.tls.enabled }}
             periodSeconds: 10
             timeoutSeconds: 3
           livenessProbe:
             httpGet:
               path: /health/live
-              port: https
-              scheme: HTTPS
+              port: {{ ternary "https" "http" .Values.login.tls.enabled }}
+              scheme: {{ ternary "HTTPS" "HTTP" .Values.login.tls.enabled }}
             periodSeconds: 20
             timeoutSeconds: 3
           resources:
@@ -229,9 +245,16 @@ spec:
             - name: workload-token
               mountPath: /var/run/secrets/identity
               readOnly: true
+            {{- if .Values.identity.tls.enabled }}
             - name: identity-ca
               mountPath: /etc/identity/ca
               readOnly: true
+            {{- end }}
+            {{- if .Values.login.tls.enabled }}
+            - name: login-tls
+              mountPath: /etc/identity/login-tls
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -242,12 +265,24 @@ spec:
                   path: token
                   audience: {{ .Values.identity.workload.audience | quote }}
                   expirationSeconds: {{ .Values.identity.workload.expirationSeconds }}
+        {{- if .Values.identity.tls.enabled }}
         - name: identity-ca
           secret:
             secretName: {{ .Values.login.internalCa.existingSecret }}
             items:
               - key: {{ .Values.login.internalCa.key }}
                 path: ca.crt
+        {{- end }}
+        {{- if .Values.login.tls.enabled }}
+        - name: login-tls
+          secret:
+            secretName: {{ .Values.login.tls.existingSecret }}
+            items:
+              - key: {{ .Values.login.tls.certKey }}
+                path: tls.crt
+              - key: {{ .Values.login.tls.privateKeyKey }}
+                path: tls.key
+        {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.login.nodeSelector }}

@@ -18,6 +18,7 @@ variable, Compose secret, Kubernetes Secret, or per-replica volume.
 | Login cookie encryption | Shared `IDENTITY_LOGIN_SESSION_SECRET` | Shared Kubernetes Secret |
 | Built-in OAuth client secret | PostgreSQL; fetched and refreshed in memory | PostgreSQL; fetched and refreshed in memory |
 | Identity TLS | Compose secret files | Existing TLS Secret |
+| Login TLS | Compose secret files | Optional existing TLS Secret or upstream proxy |
 
 The workload credential and the OAuth client secret have separate lifecycles.
 Rotating the workload credential changes who may call the internal API;
@@ -42,11 +43,13 @@ the host.
    docker compose --env-file deploy/.env -f deploy/docker-compose.yml up --build -d
    ```
 
-The default Identity URL is `https://identity.localhost:5150`. The certificate
-must contain `identity.localhost` and `identity` as DNS SANs. Modern browsers
-resolve the reserved `.localhost` suffix to loopback, while Compose resolves
-the same name through the service network alias. If a real DNS name is used,
-it must resolve from both the browser and the Login container.
+The default Identity and Login URLs are `https://identity.localhost:5150` and
+`https://identity.localhost:3000`. Compose mounts the supplied certificate into
+both production servers, so it must contain `identity.localhost` and `identity`
+as DNS SANs. Modern browsers resolve the reserved `.localhost` suffix to
+loopback, while Compose resolves the same name through the service network
+alias. If a real DNS name is used, it must resolve from both the browser and the
+Login container.
 
 All Login replicas must receive the same session secret. Scaling Login does
 not create per-instance OAuth secrets:
@@ -54,6 +57,32 @@ not create per-instance OAuth secrets:
 ```sh
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --scale login=3
 ```
+
+### TLS terminated by an upstream proxy
+
+To run both application containers over HTTP, add the upstream override:
+
+```sh
+docker compose --env-file deploy/.env \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.upstream.yml \
+  up --build -d
+```
+
+The override uses the Compose `!override` merge tag and therefore requires
+Docker Compose 2.24.4 or newer.
+
+Set `IDENTITY_TRUSTED_PROXY` in `deploy/.env` to the CIDR from which the reverse
+proxy connects to the Identity container. Use the proxy container/network CIDR,
+not the public client address range. The external `IDENTITY_PUBLIC_URL` and
+`LOGIN_PUBLIC_URL` must remain HTTPS URLs.
+
+The override removes all application TLS certificate and CA mounts, switches
+Login's internal Identity call to HTTP, and changes its health check to HTTP.
+Public requests to either application are still rejected unless the proxy
+passes `X-Forwarded-Proto: https` or `Forwarded: proto=https`; Identity also
+rejects that header when the direct peer is outside `IDENTITY_TRUSTED_PROXY`.
+Do not expose ports 5150 or 3000 directly to untrusted networks in this mode.
 
 ### Rotating the Compose workload token
 

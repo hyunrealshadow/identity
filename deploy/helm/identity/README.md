@@ -10,12 +10,14 @@ cannot remove identity data or deployment root credentials.
 - Helm 3
 - PostgreSQL reachable from the Identity Pods
 - Identity and Login images pushed to a registry reachable by the cluster
-- An Identity TLS certificate trusted by Login
+- An Identity TLS certificate trusted by Login when
+  `identity.tls.enabled=true`
 - A Kubernetes ServiceAccount issuer with OIDC discovery and JWKS endpoints
   reachable by Identity over HTTPS
 - Gateway API CRDs and a controller when `gatewayApi.enabled=true`
 
-The Identity certificate must cover all names used by Login:
+When Identity terminates TLS itself, its certificate must cover all names used
+by Login:
 
 - the public host from `identity.publicUrl`;
 - `<release>-identity`;
@@ -44,8 +46,17 @@ kubectl -n identity create secret generic identity-internal-ca \
   --from-file=ca.crt=identity-ca.crt
 ```
 
-The CA Secret contains only the issuer certificate chain, never the Identity
-private key. It is mounted into Login through `NODE_EXTRA_CA_CERTS`.
+The two Identity TLS-related Secrets above are needed only when
+`identity.tls.enabled=true`. The CA Secret contains only the issuer certificate
+chain, never the Identity private key. It is mounted into Login through
+`NODE_EXTRA_CA_CERTS`.
+
+When `login.tls.enabled=true`, also create the configured Login TLS Secret:
+
+```sh
+kubectl -n identity create secret tls identity-login-tls \
+  --cert=login.crt --key=login.key
+```
 
 ## Values and installation
 
@@ -57,6 +68,10 @@ identity:
     repository: registry.example.com/identity
     tag: 1.0.0
   publicUrl: https://identity.example.com
+  tls:
+    enabled: false
+    trustedProxies:
+      - 10.42.0.0/16
   workload:
     issuer: https://kubernetes.default.svc.cluster.local
 
@@ -65,6 +80,8 @@ login:
     repository: registry.example.com/identity-login
     tag: 1.0.0
   publicUrl: https://account.example.com
+  tls:
+    enabled: false
 
 gatewayApi:
   enabled: true
@@ -89,12 +106,29 @@ by the platform operator. Set `gatewayApi.enabled=false` (the default) to create
 neither route. The Identity and Login route switches can also be disabled
 independently.
 
-Both Services advertise `appProtocol: https` because their Pods terminate TLS.
-The Gateway controller must support HTTPS backends and trust the certificates
-served by the Pods. With a controller that supports it, use Gateway API
+`identity.tls.enabled` and `login.tls.enabled` independently control whether
+each Pod terminates TLS. Their Services, named ports, and probes advertise and
+use the matching `http` or `https` protocol. When a value is `true`, the
+Gateway controller must support HTTPS backends and trust the certificate served
+by that Pod. With a controller that supports it, use Gateway API
 `BackendTLSPolicy` and a same-namespace CA ConfigMap to express that trust. Do
 not reuse `kube-root-ca.crt` for application TLS; it is reserved for Kubernetes
 internal endpoints.
+
+When TLS is disabled, the public URL still must be HTTPS and the application
+accepts public traffic only when the upstream proxy reports
+`X-Forwarded-Proto: https` or `Forwarded: proto=https`. Identity additionally
+requires the direct peer to belong to `identity.tls.trustedProxies`; the chart
+rejects an empty list in this mode. Login validates the forwarding metadata,
+so restrict its ingress to the Gateway or reverse-proxy Pods with a downstream
+NetworkPolicy. Never expose either plain-HTTP Service directly outside the
+cluster.
+
+The Login-to-Identity internal URL automatically follows
+`identity.tls.enabled`. In HTTP mode the workload bearer token remains required,
+but transport encryption is provided by the cluster rather than the
+application. Use encrypted CNI traffic, a service mesh, or keep Identity TLS
+enabled when the cluster network is not trusted.
 
 Validate and install:
 
@@ -147,7 +181,7 @@ Deployment after rotating that ConfigMap.
 
 The Kubernetes root CA is intentionally scoped to issuer verification. The
 `login.internalCa` Secret remains the separate trust anchor for
-Login-to-Identity HTTPS.
+Login-to-Identity HTTPS and is mounted only when `identity.tls.enabled=true`.
 
 ## k3s Gateway API
 

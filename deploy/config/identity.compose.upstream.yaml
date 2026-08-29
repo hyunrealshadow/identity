@@ -1,0 +1,57 @@
+logger:
+  enable: true
+  level: info
+  format: json
+
+server:
+  binding: 0.0.0.0
+  port: 5150
+  host: {{ get_env(name="IDENTITY_PUBLIC_URL") }}
+  tls:
+    termination: upstream
+    trusted_proxies:
+      - {{ get_env(name="IDENTITY_TRUSTED_PROXY") }}
+
+internal:
+  server:
+    binding: 0.0.0.0
+    port: 5151
+  workloads:
+    login:
+      static_tokens:
+        - file: /run/secrets/login_workload_token
+
+client_credential_rotation:
+  enable: true
+  check_interval_secs: 60
+  credential_lifetime_days: 180
+  rotate_before_expiry_days: 30
+  retire_after_secs: 86400
+
+database:
+  uri: {{ get_env(name="DATABASE_URL") }}
+  enable_logging: false
+  connect_timeout: 500
+  idle_timeout: 500
+  min_connections: 1
+  max_connections: 20
+  auto_migrate: true
+
+health:
+  enable: true
+  route: /health
+  server:
+    binding: 0.0.0.0
+    port: 8081
+  checks:
+    database: true
+
+graphql:
+  server:
+    binding: 0.0.0.0
+    port: 5150
+  allowed_origins:
+    - {{ get_env(name="LOGIN_PUBLIC_URL") }}
+
+settings:
+  refresh_interval_secs: 30

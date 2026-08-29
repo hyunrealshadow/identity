@@ -63,13 +63,7 @@ pub fn internal_router(
     config: &AppConfig,
     authenticator: Arc<dyn WorkloadAuthenticator>,
 ) -> Router {
-    let mut router = Router::new();
-    if config.server.tls.termination == TlsTermination::Upstream {
-        router = router.hoop(RequireUpstreamHttps::new(
-            &config.server.tls.trusted_proxies,
-        ));
-    }
-    router
+    Router::new()
         .hoop(RequireWorkload::new(authenticator))
         .hoop(ResolveClientIp::new(&config.server.tls.trusted_proxies))
         .hoop(security_headers_middleware)

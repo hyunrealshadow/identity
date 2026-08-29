@@ -26,8 +26,8 @@ services:
     environment:
       APP_ENV: production
       DATABASE_URL: postgres://identity:${POSTGRES_PASSWORD}@postgres:5432/identity
-      IDENTITY_PUBLIC_URL: ${IDENTITY_PUBLIC_URL:-https://localhost:5150}
-      LOGIN_PUBLIC_URL: ${LOGIN_PUBLIC_URL:-https://localhost:3000}
+      IDENTITY_PUBLIC_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
+      LOGIN_PUBLIC_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
     configs:
       - source: identity_config
         target: /app/config/production.yaml
@@ -70,18 +70,22 @@ services:
       # network alias for the Identity container.
       IDENTITY_API_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
       IDENTITY_INTERNAL_API_URL: https://identity:5151
-      IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://localhost:3000}
+      IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
       IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
       IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
       NODE_EXTRA_CA_CERTS: /run/secrets/identity_ca
-      # Vite treats preview as `serve`; setting this prevents the development
-      # fallback in vite.config.ts from disabling certificate verification.
       NODE_TLS_REJECT_UNAUTHORIZED: "1"
+      NITRO_SSL_CERT_FILE: /run/secrets/login_tls_cert
+      NITRO_SSL_KEY_FILE: /run/secrets/login_tls_key
     secrets:
       - source: login_workload_token
         target: login_workload_token
       - source: identity_ca
         target: identity_ca
+      - source: identity_tls_cert
+        target: login_tls_cert
+      - source: identity_tls_key
+        target: login_tls_key
     ports:
       - "${LOGIN_PORT:-3000}:3000"
     depends_on:
