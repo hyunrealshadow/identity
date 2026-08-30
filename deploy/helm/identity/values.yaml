@@ -13,6 +13,7 @@ identity:
     type: ClusterIP
     publicPort: 5150
     internalPort: 5151
+    graphqlPort: 5152
     healthPort: 8081
   tls:
     enabled: true
@@ -20,6 +21,7 @@ identity:
     certKey: tls.crt
     privateKeyKey: tls.key
     trustedProxies: []
+    directHttpClients: []
   database:
     existingSecret: identity-database
     urlKey: url

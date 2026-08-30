@@ -221,9 +221,10 @@ impl AppConfig {
 
         if self.server.tls.termination == TlsTermination::Upstream
             && self.server.tls.trusted_proxies.is_empty()
+            && self.server.tls.direct_http_clients.is_empty()
         {
             return Err(invalid_config(
-                "server.tls.trusted_proxies must contain at least one proxy network when TLS termination is upstream",
+                "server.tls must configure at least one trusted_proxies or direct_http_clients network when TLS termination is upstream",
             )
             .into());
         }
@@ -408,6 +409,8 @@ pub struct TlsConfig {
     pub domain: Option<String>,
     #[serde(default)]
     pub trusted_proxies: Vec<IpNet>,
+    #[serde(default)]
+    pub direct_http_clients: Vec<IpNet>,
 }
 
 impl Default for TlsConfig {
@@ -419,6 +422,7 @@ impl Default for TlsConfig {
             key_path: default_tls_key_path(),
             domain: None,
             trusted_proxies: Vec::new(),
+            direct_http_clients: Vec::new(),
         }
     }
 }
@@ -1118,6 +1122,30 @@ database:
     }
 
     #[test]
+    fn https_contract_accepts_an_explicit_direct_http_client() {
+        let config: AppConfig = serde_yml::from_str(
+            r#"
+server:
+  host: https://identity.example.com
+  tls:
+    termination: upstream
+    direct_http_clients:
+      - 10.42.1.7/32
+internal:
+  workloads:
+    login:
+      static_tokens:
+        - file: config/secrets/login-workload-token
+database:
+  uri: postgres://localhost/identity
+"#,
+        )
+        .unwrap();
+
+        assert!(config.validate_https_contract().is_ok());
+    }
+
+    #[test]
     fn internal_login_workload_requires_an_authentication_method() {
         let config: AppConfig = serde_yml::from_str(
             r#"
@@ -1216,7 +1244,7 @@ database:
     }
 
     #[test]
-    fn https_contract_rejects_upstream_tls_without_trusted_proxies() {
+    fn https_contract_rejects_upstream_tls_without_an_allowed_source() {
         let config: AppConfig = serde_yml::from_str(
             r#"
 server:

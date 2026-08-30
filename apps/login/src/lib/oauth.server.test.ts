@@ -11,6 +11,8 @@ import {
 } from './oauth.server'
 
 afterEach(() => {
+  delete process.env.IDENTITY_BACKCHANNEL_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   vi.unstubAllGlobals()
 })
 
@@ -96,6 +98,8 @@ describe('OAuth return locations', () => {
 
 describe('OAuth token exchange', () => {
   it('coalesces concurrent exchanges of the same one-time grant', async () => {
+    process.env.IDENTITY_BACKCHANNEL_API_URL = 'http://identity-server:5150'
+    process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP = 'true'
     let resolveFetch!: (response: Response) => void
     const response = new Promise<Response>((resolve) => {
       resolveFetch = resolve
@@ -118,6 +122,9 @@ describe('OAuth token exchange', () => {
       { access_token: 'access', expires_in: 3600 },
     ])
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toEqual(
+      new URL('http://identity-server:5150/oauth2/token'),
+    )
   })
 
   it('includes and trims the RFC 6749 error description', async () => {

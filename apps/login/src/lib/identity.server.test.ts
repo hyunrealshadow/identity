@@ -30,6 +30,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.getRequestHeader.mockReturnValue(undefined)
   delete process.env.IDENTITY_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   delete process.env.IDENTITY_INTERNAL_API_URL
   delete process.env.IDENTITY_INTERNAL_API_ALLOW_HTTP
   delete process.env.IDENTITY_WORKLOAD_TOKEN
@@ -38,6 +40,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   delete process.env.IDENTITY_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   delete process.env.IDENTITY_INTERNAL_API_URL
   delete process.env.IDENTITY_INTERNAL_API_ALLOW_HTTP
   delete process.env.IDENTITY_WORKLOAD_TOKEN
@@ -134,6 +138,28 @@ describe('identityJson', () => {
 
     await expect(identityJson('/installation/status')).rejects.toThrow(
       'IDENTITY_API_URL must use HTTPS',
+    )
+  })
+
+  it('uses an explicitly enabled HTTP backchannel instead of the public URL', async () => {
+    process.env.IDENTITY_API_URL = 'https://identity.example.com'
+    process.env.IDENTITY_BACKCHANNEL_API_URL = 'http://identity-server:5150'
+    process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP = 'true'
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetch)
+
+    await identityJson('/api/auth/sessions/active')
+
+    expect(fetch.mock.calls[0]?.[0]).toEqual(
+      new URL('http://identity-server:5150/api/auth/sessions/active'),
+    )
+  })
+
+  it('rejects an HTTP backchannel unless it is explicitly enabled', async () => {
+    process.env.IDENTITY_BACKCHANNEL_API_URL = 'http://identity-server:5150'
+
+    await expect(identityJson('/api/auth/sessions/active')).rejects.toThrow(
+      'IDENTITY_BACKCHANNEL_API_URL must use HTTPS',
     )
   })
 })

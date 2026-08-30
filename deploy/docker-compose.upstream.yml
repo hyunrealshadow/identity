@@ -2,6 +2,7 @@ services:
   server:
     environment:
       IDENTITY_TRUSTED_PROXY: ${IDENTITY_TRUSTED_PROXY:?set IDENTITY_TRUSTED_PROXY to the reverse proxy network in CIDR notation}
+      IDENTITY_DIRECT_HTTP_CLIENT: ${IDENTITY_DIRECT_HTTP_CLIENT:?set IDENTITY_DIRECT_HTTP_CLIENT to the Login container address or network in CIDR notation}
     secrets: !override
       - source: login_workload_token
         target: login_workload_token
@@ -9,6 +10,9 @@ services:
   login:
     environment: !override
       IDENTITY_API_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
+      IDENTITY_BACKCHANNEL_API_URL: http://server:5150
+      IDENTITY_BACKCHANNEL_GRAPHQL_URL: http://server:5152
+      IDENTITY_BACKCHANNEL_ALLOW_HTTP: "true"
       IDENTITY_INTERNAL_API_URL: http://server:5151
       IDENTITY_INTERNAL_API_ALLOW_HTTP: "true"
       IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}

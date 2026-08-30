@@ -27,9 +27,11 @@ API. The latter does not require a rollout.
 
 ## Docker Compose
 
-The Compose deployment runs PostgreSQL, Identity, and Login. The internal
-Identity listener (`5151`) and health listener (`8081`) are not published on
-the host.
+The Compose deployment runs PostgreSQL, Identity, and Login. Identity uses four
+separate listeners: public protocol API (`5150`), internal workload API
+(`5151`), GraphQL (`5152`), and health (`8081`). Only the public listener is
+published on the host. Login always reaches Identity through the private
+Compose service name rather than the public DNS name.
 
 1. Copy `deploy/.env.example` to `deploy/.env` and replace both secrets.
 2. Create `deploy/secrets/login-workload-token` with at least 32 random
@@ -73,12 +75,15 @@ The override uses the Compose `!override` merge tag and therefore requires
 Docker Compose 2.24.4 or newer.
 
 Set `IDENTITY_TRUSTED_PROXY` in `deploy/.env` to the CIDR from which the reverse
-proxy connects to the Identity container. Use the proxy container/network CIDR,
-not the public client address range. The external `IDENTITY_PUBLIC_URL` and
-`LOGIN_PUBLIC_URL` must remain HTTPS URLs.
+proxy connects to the Identity container. Set `IDENTITY_DIRECT_HTTP_CLIENT` to
+the Login container IP or its private Docker network CIDR. The former may
+supply forwarded HTTPS metadata; the latter may call the public and GraphQL
+listeners directly over HTTP. Do not use a public client address range. The
+external `IDENTITY_PUBLIC_URL` and `LOGIN_PUBLIC_URL` must remain HTTPS URLs.
 
 The override removes all application TLS certificate and CA mounts, switches
-Login's internal Identity call to HTTP, and changes its health check to HTTP.
+every Login-to-Identity call to the private HTTP service ports, and changes its
+health check to HTTP.
 Public requests to either application are still rejected unless the proxy
 passes `X-Forwarded-Proto: https` or `Forwarded: proto=https`; Identity also
 rejects that header when the direct peer is outside `IDENTITY_TRUSTED_PROXY`.

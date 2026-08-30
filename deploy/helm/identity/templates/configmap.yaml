@@ -1,5 +1,7 @@
 {{- if and (not .Values.identity.tls.enabled) (empty .Values.identity.tls.trustedProxies) }}
-{{- fail "identity.tls.trustedProxies must contain at least one proxy network when identity.tls.enabled=false" }}
+{{- if empty .Values.identity.tls.directHttpClients }}
+{{- fail "identity.tls must configure trustedProxies or directHttpClients when identity.tls.enabled=false" }}
+{{- end }}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap
@@ -28,6 +30,8 @@ data:
         termination: upstream
         trusted_proxies:
           {{- toYaml .Values.identity.tls.trustedProxies | nindent 10 }}
+        direct_http_clients:
+          {{- toYaml .Values.identity.tls.directHttpClients | nindent 10 }}
         {{- end }}
     internal:
       server:
@@ -72,7 +76,7 @@ data:
     graphql:
       server:
         binding: 0.0.0.0
-        port: {{ .Values.identity.service.publicPort }}
+        port: {{ .Values.identity.service.graphqlPort }}
       allowed_origins:
         - {{ .Values.login.publicUrl | quote }}
     settings:

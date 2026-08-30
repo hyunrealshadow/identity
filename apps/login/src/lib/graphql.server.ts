@@ -4,8 +4,7 @@ import {
   elevatedAccessToken,
 } from './oauth.server'
 import { forwardRequestContext } from './request-context.server'
-
-const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
+import { backchannelIdentityGraphqlUrl } from './identity-url.server'
 
 export interface GraphqlError {
   message: string
@@ -53,11 +52,14 @@ export async function identityGraphql<T>(
       'content-type': 'application/json',
     }),
   )
-  const response = await fetch(new URL('/graphql', API_URL), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables }),
-  })
+  const response = await fetch(
+    new URL('/graphql', backchannelIdentityGraphqlUrl()),
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables }),
+    },
+  )
   const payload = (await response.json()) as {
     data?: T
     errors?: Array<GraphqlError>

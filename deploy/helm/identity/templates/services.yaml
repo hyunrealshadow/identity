@@ -14,6 +14,14 @@ spec:
       appProtocol: {{ ternary "https" "http" .Values.identity.tls.enabled }}
       port: {{ .Values.identity.service.publicPort }}
       targetPort: {{ ternary "https" "http" .Values.identity.tls.enabled }}
+    - name: {{ ternary "graphql-https" "graphql-http" .Values.identity.tls.enabled }}
+      appProtocol: {{ ternary "https" "http" .Values.identity.tls.enabled }}
+      port: {{ .Values.identity.service.graphqlPort }}
+      targetPort: {{ ternary "graphql-https" "graphql-http" .Values.identity.tls.enabled }}
+    - name: health
+      appProtocol: http
+      port: {{ .Values.identity.service.healthPort }}
+      targetPort: health
 ---
 apiVersion: v1
 kind: Service

@@ -86,6 +86,7 @@ pub async fn start_servers(
                 let graphql_app = graphql::router(state.clone(), &config.graphql).hoop(
                     identity_web::middleware::RequireUpstreamHttps::new(
                         &config.server.tls.trusted_proxies,
+                        &config.server.tls.direct_http_clients,
                     ),
                 );
                 tracing::info!(

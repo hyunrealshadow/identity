@@ -74,6 +74,7 @@ pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
 #[derive(Clone, Debug)]
 pub struct RequireUpstreamHttps {
     trusted_proxies: Arc<[IpNet]>,
+    direct_http_clients: Arc<[IpNet]>,
 }
 
 #[derive(Clone, Debug)]
@@ -86,24 +87,37 @@ struct ClientIp(Option<IpAddr>);
 
 impl ResolveClientIp {
     #[must_use]
-    pub fn new(trusted_proxies: &[IpNet]) -> Self {
+    pub fn new(trusted_proxies: &[IpNet], direct_http_clients: &[IpNet]) -> Self {
         Self {
-            trusted_proxies: trusted_proxies.into(),
+            trusted_proxies: trusted_proxies
+                .iter()
+                .chain(direct_http_clients)
+                .cloned()
+                .collect(),
         }
     }
 }
 
 impl RequireUpstreamHttps {
     #[must_use]
-    pub fn new(trusted_proxies: &[IpNet]) -> Self {
+    pub fn new(trusted_proxies: &[IpNet], direct_http_clients: &[IpNet]) -> Self {
         Self {
             trusted_proxies: trusted_proxies.into(),
+            direct_http_clients: direct_http_clients.into(),
         }
     }
 
     fn peer_is_trusted(&self, req: &Request) -> bool {
         req.remote_addr().ip().is_some_and(|peer| {
             self.trusted_proxies
+                .iter()
+                .any(|network| network.contains(&peer))
+        })
+    }
+
+    fn peer_can_use_direct_http(&self, req: &Request) -> bool {
+        req.remote_addr().ip().is_some_and(|peer| {
+            self.direct_http_clients
                 .iter()
                 .any(|network| network.contains(&peer))
         })
@@ -204,7 +218,9 @@ impl Handler for RequireUpstreamHttps {
         res: &mut Response,
         ctrl: &mut FlowCtrl,
     ) {
-        if !self.peer_is_trusted(req) || !forwarded_proto_is_https(req) {
+        if !self.peer_can_use_direct_http(req)
+            && (!self.peer_is_trusted(req) || !forwarded_proto_is_https(req))
+        {
             res.status_code(http::StatusCode::BAD_REQUEST);
             ctrl.skip_rest();
             return;
@@ -320,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn upstream_tls_rejects_requests_without_https_forwarding_metadata() {
-        let guard = RequireUpstreamHttps::new(&["127.0.0.1/32".parse::<IpNet>().unwrap()]);
+        let guard = RequireUpstreamHttps::new(&["127.0.0.1/32".parse::<IpNet>().unwrap()], &[]);
         let service = Service::new(
             Router::new()
                 .hoop(guard)
@@ -334,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn upstream_tls_rejects_spoofed_headers_from_untrusted_peer() {
-        let guard = RequireUpstreamHttps::new(&["10.0.0.0/8".parse::<IpNet>().unwrap()]);
+        let guard = RequireUpstreamHttps::new(&["10.0.0.0/8".parse::<IpNet>().unwrap()], &[]);
         let service = Service::new(
             Router::new()
                 .hoop(guard)
@@ -353,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn upstream_tls_accepts_forwarded_https_from_trusted_peer() {
-        let guard = RequireUpstreamHttps::new(&["10.0.0.0/8".parse::<IpNet>().unwrap()]);
+        let guard = RequireUpstreamHttps::new(&["10.0.0.0/8".parse::<IpNet>().unwrap()], &[]);
         let service = Service::new(
             Router::new()
                 .hoop(guard)
@@ -366,6 +382,20 @@ mod tests {
             "10.1.2.3:41000",
         )
         .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+    }
+
+    #[tokio::test]
+    async fn upstream_tls_accepts_plain_http_from_an_explicit_direct_client() {
+        let guard = RequireUpstreamHttps::new(&[], &["10.42.1.7/32".parse::<IpNet>().unwrap()]);
+        let service = Service::new(
+            Router::new()
+                .hoop(guard)
+                .push(Router::with_path("login").get(ok)),
+        );
+
+        let response = send_from_peer(&service, None, "10.42.1.7:41000").await;
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
     }

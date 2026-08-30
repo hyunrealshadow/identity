@@ -22,10 +22,14 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     if config.server.tls.termination == TlsTermination::Upstream {
         router = router.hoop(RequireUpstreamHttps::new(
             &config.server.tls.trusted_proxies,
+            &config.server.tls.direct_http_clients,
         ));
     }
     router = router
-        .hoop(ResolveClientIp::new(&config.server.tls.trusted_proxies))
+        .hoop(ResolveClientIp::new(
+            &config.server.tls.trusted_proxies,
+            &config.server.tls.direct_http_clients,
+        ))
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state.clone()))
         .hoop(salvo::affix_state::inject(
@@ -65,7 +69,10 @@ pub fn internal_router(
 ) -> Router {
     Router::new()
         .hoop(RequireWorkload::new(authenticator))
-        .hoop(ResolveClientIp::new(&config.server.tls.trusted_proxies))
+        .hoop(ResolveClientIp::new(
+            &config.server.tls.trusted_proxies,
+            &config.server.tls.direct_http_clients,
+        ))
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state))
         .push(

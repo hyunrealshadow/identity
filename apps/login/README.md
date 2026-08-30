@@ -24,16 +24,18 @@ requires the upstream proxy to report `X-Forwarded-Proto: https` or
 `NITRO_SSL_CERT_FILE` and `NITRO_SSL_KEY_FILE` to make the production process
 terminate TLS itself. Providing only one file is a startup error.
 
-The internal Identity URL remains HTTPS by default. A deployment that
-intentionally uses the cluster network for transport security must set an
-`http://` `IDENTITY_INTERNAL_API_URL` together with
-`IDENTITY_INTERNAL_API_ALLOW_HTTP=true`; an HTTP URL without that explicit
-opt-in is rejected.
+Identity's browser-visible public URL is configured with `IDENTITY_API_URL`
+(default `https://localhost:5150`) and must use HTTPS. It constructs browser
+authorization redirects; it is not the default route for pod-to-pod or
+container-to-container traffic.
 
-The Rust protocol service must be available to the Start server at
-`IDENTITY_API_URL` (default `https://localhost:5150`). Login and consent APIs
-are proxied server-side; their successful responses send the browser directly
-back to the OP continuation endpoint. The Rust JSON API uses
+Server-side Login, consent, token, and GraphQL calls use
+`IDENTITY_BACKCHANNEL_API_URL` and `IDENTITY_BACKCHANNEL_GRAPHQL_URL`. Set both
+to private Identity Service names. They remain HTTPS by default; a deliberate
+private-network HTTP deployment must additionally set
+`IDENTITY_BACKCHANNEL_ALLOW_HTTP=true`. Successful Login and consent responses
+still send the browser directly to the public OP continuation endpoint. The
+Rust JSON API uses
 `X-Sessions` and `X-CSRF-Token`; API responses return updated values through
 the `sessions` and `csrf_token` JSON fields. The Start server keeps the session
 list in its own secure, HttpOnly first-party cookie and translates it to the API
@@ -46,6 +48,10 @@ workload credential: the file from `IDENTITY_WORKLOAD_TOKEN_FILE` (or the
 inline `IDENTITY_WORKLOAD_TOKEN` for development), which must match Identity's
 `internal.workloads.login` configuration. Do not expose that listener through
 the public ingress.
+
+The internal API also remains HTTPS by default. A private-network HTTP
+deployment must set `IDENTITY_INTERNAL_API_ALLOW_HTTP=true`; an HTTP URL without
+that explicit opt-in is rejected.
 
 Configure the Identity runtime settings to point to the development server:
 

@@ -11,7 +11,7 @@
         "publicUrl": { "type": "string", "pattern": "^https://" },
         "tls": {
           "type": "object",
-          "required": ["enabled", "existingSecret", "certKey", "privateKeyKey", "trustedProxies"],
+          "required": ["enabled", "existingSecret", "certKey", "privateKeyKey", "trustedProxies", "directHttpClients"],
           "properties": {
             "enabled": { "type": "boolean" },
             "existingSecret": { "type": "string", "minLength": 1 },
@@ -20,12 +20,21 @@
             "trustedProxies": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 }
+            },
+            "directHttpClients": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
             }
           },
           "allOf": [
             {
               "if": { "properties": { "enabled": { "const": false } } },
-              "then": { "properties": { "trustedProxies": { "minItems": 1 } } }
+              "then": {
+                "anyOf": [
+                  { "properties": { "trustedProxies": { "minItems": 1 } } },
+                  { "properties": { "directHttpClients": { "minItems": 1 } } }
+                ]
+              }
             }
           ]
         },

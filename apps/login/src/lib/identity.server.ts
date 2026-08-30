@@ -11,8 +11,8 @@ import type {
 import type { Locale } from './i18n'
 import { translate } from './i18n'
 import { forwardRequestContext } from './request-context.server'
+import { backchannelIdentityApiUrl } from './identity-url.server'
 
-const DEFAULT_IDENTITY_URL = 'https://localhost:5150'
 const SESSION_COOKIE_NAME = 'identity.sessions'
 const SESSION_HEADER_NAME = 'x-sessions'
 const CSRF_HEADER_NAME = 'x-csrf-token'
@@ -44,14 +44,6 @@ export function isTerminalLoginError(error: unknown) {
     error.code !== undefined &&
     TERMINAL_LOGIN_ERROR_CODES.has(error.code)
   )
-}
-
-function apiBaseUrl() {
-  const url = new URL(process.env.IDENTITY_API_URL ?? DEFAULT_IDENTITY_URL)
-  if (url.protocol !== 'https:') {
-    throw new Error('IDENTITY_API_URL must use HTTPS')
-  }
-  return url
 }
 
 function internalApiBaseUrl() {
@@ -179,7 +171,7 @@ export async function identityJson<T>(
   if (init?.body) headers.set('content-type', 'application/json')
   if (init?.csrfToken) headers.set(CSRF_HEADER_NAME, init.csrfToken)
 
-  const response = await fetch(new URL(path, apiBaseUrl()), {
+  const response = await fetch(new URL(path, backchannelIdentityApiUrl()), {
     method: init?.method ?? 'GET',
     headers,
     body: init?.body ? JSON.stringify(init.body) : undefined,
@@ -245,7 +237,7 @@ export async function identityInternalJson<T>(
 }
 
 export async function identityResponse(path: string) {
-  const response = await fetch(new URL(path, apiBaseUrl()), {
+  const response = await fetch(new URL(path, backchannelIdentityApiUrl()), {
     headers: requestHeaders(),
     redirect: 'manual',
   })

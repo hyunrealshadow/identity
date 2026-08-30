@@ -20,12 +20,18 @@ vi.mock('./request-context.server', () => ({
 }))
 
 beforeEach(() => {
+  delete process.env.IDENTITY_BACKCHANNEL_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_GRAPHQL_URL
+  delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   mocks.accessToken.mockResolvedValue('access-token')
   mocks.elevatedAccessToken.mockResolvedValue(undefined)
   mocks.clearAuthorizationCookie.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
+  delete process.env.IDENTITY_BACKCHANNEL_API_URL
+  delete process.env.IDENTITY_BACKCHANNEL_GRAPHQL_URL
+  delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
@@ -50,6 +56,22 @@ describe('parseStepUpChallenge', () => {
 })
 
 describe('identityGraphql', () => {
+  it('uses the dedicated internal GraphQL endpoint', async () => {
+    process.env.IDENTITY_BACKCHANNEL_GRAPHQL_URL =
+      'http://identity-server:5152'
+    process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP = 'true'
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: { viewer: true } }))
+    vi.stubGlobal('fetch', fetch)
+
+    await identityGraphql('query Viewer { viewer }')
+
+    expect(fetch.mock.calls[0]?.[0]).toEqual(
+      new URL('http://identity-server:5152/graphql'),
+    )
+  })
+
   it('prefers a valid elevated token for elevated account mutations', async () => {
     mocks.elevatedAccessToken.mockResolvedValue('elevated-token')
     const fetch = vi.fn().mockResolvedValue(jsonResponse({ data: { changed: true } }))

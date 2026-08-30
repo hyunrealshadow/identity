@@ -11,6 +11,8 @@ server:
     termination: upstream
     trusted_proxies:
       - {{ get_env(name="IDENTITY_TRUSTED_PROXY") }}
+    direct_http_clients:
+      - {{ get_env(name="IDENTITY_DIRECT_HTTP_CLIENT") }}
 
 internal:
   server:
@@ -49,7 +51,7 @@ health:
 graphql:
   server:
     binding: 0.0.0.0
-    port: 5150
+    port: 5152
   allowed_origins:
     - {{ get_env(name="LOGIN_PUBLIC_URL") }}
 

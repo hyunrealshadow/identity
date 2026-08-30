@@ -25,6 +25,13 @@ spec:
     - matches:
         - path:
             type: PathPrefix
+            value: /graphql
+      backendRefs:
+        - name: {{ include "identity.fullname" . }}-server
+          port: {{ .Values.identity.service.graphqlPort }}
+    - matches:
+        - path:
+            type: PathPrefix
             value: /
       backendRefs:
         - name: {{ include "identity.fullname" . }}-server

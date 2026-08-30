@@ -72,6 +72,8 @@ identity:
     enabled: false
     trustedProxies:
       - 10.42.0.0/16
+    directHttpClients:
+      - 10.42.0.0/16
   workload:
     issuer: https://kubernetes.default.svc.cluster.local
 
@@ -115,20 +117,27 @@ by that Pod. With a controller that supports it, use Gateway API
 not reuse `kube-root-ca.crt` for application TLS; it is reserved for Kubernetes
 internal endpoints.
 
+Identity always exposes four private Service ports: public protocol API
+(`5150`), internal workload API (`5151`), GraphQL (`5152`), and health
+(`8081`). Login uses those ClusterIP Service endpoints in both TLS modes. Only
+browser redirects use `identity.publicUrl`; Login never hairpins through the
+Gateway or public DNS name.
+
 When TLS is disabled, the public URL still must be HTTPS and the application
 accepts public traffic only when the upstream proxy reports
 `X-Forwarded-Proto: https` or `Forwarded: proto=https`. Identity additionally
-requires the direct peer to belong to `identity.tls.trustedProxies`; the chart
-rejects an empty list in this mode. Login validates the forwarding metadata,
+requires the direct peer to belong to `identity.tls.trustedProxies`. Private
+Login calls over HTTP are allowed only from
+`identity.tls.directHttpClients`. At least one of those lists must be non-empty
+when Identity TLS is disabled. Login validates the forwarding metadata,
 so restrict its ingress to the Gateway or reverse-proxy Pods with a downstream
 NetworkPolicy. Never expose either plain-HTTP Service directly outside the
 cluster.
 
-The Login-to-Identity internal URL automatically follows
-`identity.tls.enabled`. In HTTP mode the workload bearer token remains required,
-but transport encryption is provided by the cluster rather than the
-application. Use encrypted CNI traffic, a service mesh, or keep Identity TLS
-enabled when the cluster network is not trusted.
+All Login-to-Identity backchannel URLs automatically follow
+`identity.tls.enabled`. The internal workload API still requires its bearer
+token in HTTP mode. Use encrypted CNI traffic, a service mesh, or keep Identity
+TLS enabled when the cluster network is not trusted.
 
 Validate and install:
 

@@ -14,6 +14,8 @@ spec:
     - ports:
         - port: {{ .Values.identity.service.publicPort }}
           protocol: TCP
+        - port: {{ .Values.identity.service.graphqlPort }}
+          protocol: TCP
         - port: {{ .Values.identity.service.healthPort }}
           protocol: TCP
     - from:

@@ -228,6 +228,7 @@ mod tests {
             key_path: key_path.to_string_lossy().into_owned(),
             domain: Some("localhost".to_owned()),
             trusted_proxies: Vec::new(),
+            direct_http_clients: Vec::new(),
         }
     }
 

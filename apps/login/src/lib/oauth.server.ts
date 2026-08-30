@@ -12,8 +12,11 @@ import {
   storeAccountFlash,
 } from './oauth-session.server'
 import { loadApplicationUrl, loadOAuthClient } from './runtime-config.server'
+import {
+  backchannelIdentityApiUrl,
+  publicIdentityApiUrl,
+} from './identity-url.server'
 
-const API_URL = process.env.IDENTITY_API_URL ?? 'https://localhost:5150'
 const API_RESOURCE = 'urn:identity:graphql'
 const SCOPES =
   'openid profile email offline_access account session password.change'
@@ -119,7 +122,7 @@ async function startAuthorizationFlow(
   const verifier = randomBytes(48).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
   const redirectUri = callbackUrl(loadApplicationUrl())
-  const authorizeUrl = new URL('/oauth2/authorize', API_URL)
+  const authorizeUrl = new URL('/oauth2/authorize', publicIdentityApiUrl())
   authorizeUrl.search = new URLSearchParams({
     response_type: 'code',
     client_id: oauthClient.client_id,
@@ -464,15 +467,18 @@ async function performTokenExchange(
   clientId: string,
   clientSecret: string,
 ) {
-  const response = await fetch(new URL('/oauth2/token', API_URL), {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      'content-type': 'application/x-www-form-urlencoded',
+  const response = await fetch(
+    new URL('/oauth2/token', backchannelIdentityApiUrl()),
+    {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body,
     },
-    body,
-  })
+  )
   const payload = (await response.json().catch(() => null)) as
     | TokenResponse
     | TokenErrorResponse

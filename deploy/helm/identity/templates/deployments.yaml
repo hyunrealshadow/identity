@@ -52,6 +52,9 @@ spec:
             - name: {{ ternary "internal-https" "internal-http" .Values.identity.tls.enabled }}
               containerPort: {{ .Values.identity.service.internalPort }}
               protocol: TCP
+            - name: {{ ternary "graphql-https" "graphql-http" .Values.identity.tls.enabled }}
+              containerPort: {{ .Values.identity.service.graphqlPort }}
+              protocol: TCP
             - name: health
               containerPort: {{ .Values.identity.service.healthPort }}
               protocol: TCP
@@ -184,6 +187,12 @@ spec:
           env:
             - name: IDENTITY_API_URL
               value: {{ .Values.identity.publicUrl | quote }}
+            - name: IDENTITY_BACKCHANNEL_API_URL
+              value: {{ printf "%s://%s-server:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.publicPort | quote }}
+            - name: IDENTITY_BACKCHANNEL_GRAPHQL_URL
+              value: {{ printf "%s://%s-server:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.graphqlPort | quote }}
+            - name: IDENTITY_BACKCHANNEL_ALLOW_HTTP
+              value: {{ ternary "false" "true" .Values.identity.tls.enabled | quote }}
             - name: IDENTITY_INTERNAL_API_URL
               value: {{ printf "%s://%s-server-internal:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
             - name: IDENTITY_INTERNAL_API_ALLOW_HTTP

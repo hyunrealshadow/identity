@@ -51,7 +51,7 @@ health:
 graphql:
   server:
     binding: 0.0.0.0
-    port: 5150
+    port: 5152
   allowed_origins:
     - {{ get_env(name="LOGIN_PUBLIC_URL") }}
 
