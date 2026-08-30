@@ -1,11 +1,27 @@
 use std::{net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
-use http::{HeaderValue, StatusCode, header};
+use http::{HeaderValue, header};
 use ipnet::IpNet;
 use salvo::{Depot, FlowCtrl, Handler, Request, Response, handler};
 
 use identity_domain::openid_connect::{AuthenticatedWorkload, WorkloadAuthenticator};
+
+use crate::{
+    application::error::{AppError, codes::common::CommonErrorCode},
+    controllers::response::render_app_error_json,
+};
+
+fn render_workload_unauthorized(res: &mut Response, invalid_token: bool) {
+    let challenge = if invalid_token {
+        HeaderValue::from_static("Bearer realm=\"identity-internal\", error=\"invalid_token\"")
+    } else {
+        HeaderValue::from_static("Bearer realm=\"identity-internal\"")
+    };
+    res.headers_mut()
+        .insert(header::WWW_AUTHENTICATE, challenge);
+    render_app_error_json(res, AppError::from_code(CommonErrorCode::Unauthorized));
+}
 
 #[derive(Clone)]
 pub struct RequireWorkload {
@@ -35,12 +51,12 @@ impl Handler for RequireWorkload {
             .and_then(|value| value.strip_prefix("Bearer "))
             .filter(|value| !value.is_empty());
         let Some(token) = token else {
-            res.status_code(StatusCode::UNAUTHORIZED);
+            render_workload_unauthorized(res, false);
             ctrl.skip_rest();
             return;
         };
         let Some(workload) = self.authenticator.authenticate(token).await else {
-            res.status_code(StatusCode::UNAUTHORIZED);
+            render_workload_unauthorized(res, true);
             ctrl.skip_rest();
             return;
         };
@@ -239,7 +255,10 @@ mod tests {
     use async_trait::async_trait;
     use http::{StatusCode, header};
     use ipnet::IpNet;
-    use salvo::{Response, Router, Service, handler, test::TestClient};
+    use salvo::{
+        Response, Router, Service, handler,
+        test::{ResponseExt, TestClient},
+    };
 
     use identity_domain::openid_connect::{
         AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
@@ -361,16 +380,32 @@ mod tests {
                 .push(Router::with_path("install").post(ok)),
         );
 
-        let missing = TestClient::post("http://127.0.0.1:5800/install")
+        let mut missing = TestClient::post("http://127.0.0.1:5800/install")
             .send(&service)
             .await;
         assert_eq!(missing.status_code, Some(StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            missing.headers().get(header::WWW_AUTHENTICATE).unwrap(),
+            "Bearer realm=\"identity-internal\""
+        );
+        let missing_body = missing.take_string().await.unwrap();
+        assert!(missing_body.contains("\"code\":10003"), "{missing_body}");
+        assert!(missing_body.contains("\"message\":"), "{missing_body}");
+        assert!(!missing_body.contains("\"brief\":"), "{missing_body}");
 
-        let wrong = TestClient::post("http://127.0.0.1:5800/install")
+        let mut wrong = TestClient::post("http://127.0.0.1:5800/install")
             .add_header("authorization", "Bearer wrong-token", true)
             .send(&service)
             .await;
         assert_eq!(wrong.status_code, Some(StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            wrong.headers().get(header::WWW_AUTHENTICATE).unwrap(),
+            "Bearer realm=\"identity-internal\", error=\"invalid_token\""
+        );
+        let wrong_body = wrong.take_string().await.unwrap();
+        assert!(wrong_body.contains("\"code\":10003"), "{wrong_body}");
+        assert!(wrong_body.contains("\"message\":"), "{wrong_body}");
+        assert!(!wrong_body.contains("\"brief\":"), "{wrong_body}");
     }
 
     #[tokio::test]
