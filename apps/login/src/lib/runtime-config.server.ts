@@ -105,7 +105,8 @@ export async function runtimeConfigurationReadiness() {
   ) {
     try {
       await loadRuntimeConfiguration()
-    } catch {
+    } catch (error) {
+      console.error('runtime configuration readiness check failed', error)
       // falls through to the snapshot-based assessment below
     }
   }

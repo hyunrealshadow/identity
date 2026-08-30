@@ -9,6 +9,7 @@ vi.mock('./identity.server', () => ({
 }))
 
 beforeEach(() => {
+  vi.useRealTimers()
   vi.resetModules()
   mocks.identityInternalJson.mockReset()
 })
@@ -50,5 +51,23 @@ describe('installation status cache', () => {
 
     await expect(cachedInstallationStatus()).resolves.toEqual({ installed: true })
     expect(mocks.identityInternalJson).not.toHaveBeenCalled()
+  })
+
+  it('refreshes an uninstalled status so another replica observes installation', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-30T00:00:00Z'))
+    mocks.identityInternalJson
+      .mockResolvedValueOnce({ installed: false })
+      .mockResolvedValueOnce({ installed: true })
+    const { cachedInstallationStatus } = await import('./installation-status.server')
+
+    await expect(cachedInstallationStatus()).resolves.toEqual({ installed: false })
+    await expect(cachedInstallationStatus()).resolves.toEqual({ installed: false })
+    expect(mocks.identityInternalJson).toHaveBeenCalledOnce()
+
+    vi.advanceTimersByTime(5_000)
+
+    await expect(cachedInstallationStatus()).resolves.toEqual({ installed: true })
+    expect(mocks.identityInternalJson).toHaveBeenCalledTimes(2)
   })
 })

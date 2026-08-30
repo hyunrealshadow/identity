@@ -12,7 +12,7 @@ server:
     auto_generate: false
     cert_path: /run/secrets/identity_tls_cert
     key_path: /run/secrets/identity_tls_key
-    domain: identity
+    domain: server
 
 internal:
   server:

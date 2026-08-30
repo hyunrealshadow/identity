@@ -2,9 +2,9 @@
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "identity.identityServiceAccountName" -}}
+{{- define "identity.serverServiceAccountName" -}}
 {{- if .Values.identity.serviceAccount.create }}
-{{- default (printf "%s-identity" (include "identity.fullname" .)) .Values.identity.serviceAccount.name | trunc 63 | trimSuffix "-" }}
+{{- default (printf "%s-server" (include "identity.fullname" .)) .Values.identity.serviceAccount.name | trunc 63 | trimSuffix "-" }}
 {{- else }}
 {{- required "identity.serviceAccount.name is required when create=false" .Values.identity.serviceAccount.name }}
 {{- end }}
@@ -25,10 +25,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "identity.selectorLabels" -}}
+{{- define "identity.serverSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "identity.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: identity
+app.kubernetes.io/component: server
 {{- end }}
 
 {{- define "identity.loginSelectorLabels" -}}

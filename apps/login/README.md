@@ -68,9 +68,10 @@ ServiceAccount token or a mounted static token),
 are server-only and are never included in browser JavaScript.
 
 The health endpoints `/health/live` and `/health/ready` report process
-liveness and runtime-configuration readiness (secret within 30 minutes of
-expiry reports unready) so proxies can stop routing traffic before a rotated
-generation expires.
+liveness and application readiness. An uninstalled deployment is ready to
+serve the installer; after installation, readiness requires usable runtime
+configuration (a secret within 30 minutes of expiry reports unready) so proxies
+can stop routing traffic before a rotated generation expires.
 
 When using a custom local hostname, start Vite with `--host`, trust its
 self-signed certificate, and configure the same HTTPS origin in Identity.

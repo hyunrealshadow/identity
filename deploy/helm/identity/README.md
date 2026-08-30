@@ -20,8 +20,8 @@ When Identity terminates TLS itself, its certificate must cover all names used
 by Login:
 
 - the public host from `identity.publicUrl`;
-- `<release>-identity`;
-- `<release>-identity-internal`;
+- `<release>-server`;
+- `<release>-server-internal`;
 - the corresponding namespace-qualified service names if the resolver or TLS
   policy expands them.
 

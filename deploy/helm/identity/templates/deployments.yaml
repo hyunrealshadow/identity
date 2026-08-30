@@ -1,26 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "identity.fullname" . }}-identity
+  name: {{ include "identity.fullname" . }}-server
   labels:
     {{- include "identity.labels" . | nindent 4 }}
-    app.kubernetes.io/component: identity
+    app.kubernetes.io/component: server
 spec:
   replicas: {{ .Values.identity.replicaCount }}
   selector:
     matchLabels:
-      {{- include "identity.selectorLabels" . | nindent 6 }}
+      {{- include "identity.serverSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "identity.selectorLabels" . | nindent 8 }}
+        {{- include "identity.serverSelectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- with .Values.identity.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "identity.identityServiceAccountName" . }}
+      serviceAccountName: {{ include "identity.serverServiceAccountName" . }}
       automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -29,7 +29,7 @@ spec:
       securityContext:
         {{- toYaml .Values.identity.podSecurityContext | nindent 8 }}
       containers:
-        - name: identity
+        - name: server
           image: "{{ .Values.identity.image.repository }}:{{ .Values.identity.image.tag }}"
           imagePullPolicy: {{ .Values.identity.image.pullPolicy }}
           securityContext:
@@ -185,7 +185,7 @@ spec:
             - name: IDENTITY_API_URL
               value: {{ .Values.identity.publicUrl | quote }}
             - name: IDENTITY_INTERNAL_API_URL
-              value: {{ printf "%s://%s-identity-internal:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
+              value: {{ printf "%s://%s-server-internal:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
             - name: IDENTITY_INTERNAL_API_ALLOW_HTTP
               value: {{ ternary "false" "true" .Values.identity.tls.enabled | quote }}
             - name: IDENTITY_PUBLIC_APP_URL

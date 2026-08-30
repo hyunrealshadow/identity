@@ -45,7 +45,7 @@ the host.
 
 The default Identity and Login URLs are `https://identity.localhost:5150` and
 `https://identity.localhost:3000`. Compose mounts the supplied certificate into
-both production servers, so it must contain `identity.localhost` and `identity`
+both production servers, so it must contain `identity.localhost` and `server`
 as DNS SANs. Modern browsers resolve the reserved `.localhost` suffix to
 loopback, while Compose resolves the same name through the service network
 alias. If a real DNS name is used, it must resolve from both the browser and the
@@ -115,6 +115,7 @@ endpoint accepts both generations during the overlap, so instances may update
 independently without per-pod credentials, shared files, or rollout
 coordination.
 
-Login exposes `/health/live` and `/health/ready`. Readiness becomes false when
-it cannot obtain usable runtime configuration or its current OAuth credential
-is close to expiry.
+Login exposes `/health/live` and `/health/ready`. Before installation,
+readiness remains true so the installer is reachable. After installation it
+becomes false when Login cannot obtain usable runtime configuration or its
+current OAuth credential is close to expiry.

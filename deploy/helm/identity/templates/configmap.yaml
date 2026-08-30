@@ -23,7 +23,7 @@ data:
         auto_generate: false
         cert_path: /etc/identity/tls/tls.crt
         key_path: /etc/identity/tls/tls.key
-        domain: {{ include "identity.fullname" . }}-identity
+        domain: {{ include "identity.fullname" . }}-server
         {{- else }}
         termination: upstream
         trusted_proxies:

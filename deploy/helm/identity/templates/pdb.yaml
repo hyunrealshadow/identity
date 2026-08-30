@@ -2,14 +2,14 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "identity.fullname" . }}-identity
+  name: {{ include "identity.fullname" . }}-server
   labels:
     {{- include "identity.labels" . | nindent 4 }}
 spec:
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
-      {{- include "identity.selectorLabels" . | nindent 6 }}
+      {{- include "identity.serverSelectorLabels" . | nindent 6 }}
 {{- end }}
 {{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.login.replicaCount) 1) }}
 ---

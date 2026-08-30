@@ -7,7 +7,7 @@ Identity Pod transport: {{ ternary "HTTPS" "HTTP behind a trusted HTTPS proxy" .
 Login Pod transport: {{ ternary "HTTPS" "HTTP behind an HTTPS proxy" .Values.login.tls.enabled }}
 
 The internal Identity listener is available only through:
-  {{ include "identity.fullname" . }}-identity-internal:{{ .Values.identity.service.internalPort }}
+  {{ include "identity.fullname" . }}-server-internal:{{ .Values.identity.service.internalPort }}
 
 Login authenticates there with a projected ServiceAccount token for:
   system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.loginServiceAccountName" . }}
@@ -18,7 +18,7 @@ Identity verifies the Kubernetes issuer with the CA bundle from:
 {{- end }}
 {{- if .Values.identity.workload.issuerToken.enabled }}
 Identity authenticates same-origin issuer discovery as:
-  system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.identityServiceAccountName" . }}
+  system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.serverServiceAccountName" . }}
 {{- end }}
 
 {{- if .Values.gatewayApi.enabled }}
@@ -29,5 +29,5 @@ Gateway API routes are disabled (gatewayApi.enabled=false).
 {{- end }}
 
 Check rollout state:
-  kubectl rollout status deployment/{{ include "identity.fullname" . }}-identity -n {{ .Release.Namespace }}
+  kubectl rollout status deployment/{{ include "identity.fullname" . }}-server -n {{ .Release.Namespace }}
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-login -n {{ .Release.Namespace }}

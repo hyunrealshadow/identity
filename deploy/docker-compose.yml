@@ -17,7 +17,7 @@ services:
       retries: 20
     networks: [backend]
 
-  identity:
+  server:
     build:
       context: ..
       dockerfile: deploy/docker/identity.Dockerfile
@@ -69,7 +69,7 @@ services:
       # identity.localhost resolves to loopback in browsers and is also a
       # network alias for the Identity container.
       IDENTITY_API_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
-      IDENTITY_INTERNAL_API_URL: https://identity:5151
+      IDENTITY_INTERNAL_API_URL: https://server:5151
       IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
       IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
       IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
@@ -89,7 +89,7 @@ services:
     ports:
       - "${LOGIN_PORT:-3000}:3000"
     depends_on:
-      identity:
+      server:
         condition: service_healthy
     healthcheck:
       test:
