@@ -64,7 +64,7 @@ jobs:
       IMAGE: ghcr.io/${{ needs.prepare.outputs.repository }}${{ matrix.suffix }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -108,7 +108,7 @@ jobs:
           touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
 
       - name: Upload image digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}-${{ matrix.name }}
           path: ${{ runner.temp }}/digests/*
@@ -135,7 +135,7 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - name: Download platform digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: digest-*-${{ matrix.name }}
           path: ${{ runner.temp }}/digests
