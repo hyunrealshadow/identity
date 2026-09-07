@@ -10,6 +10,55 @@ fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
+#[tokio::test]
+async fn expired_authorization_code_has_a_distinct_error() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, _) = rs256_token_service_with_public_key(repo.clone(), user_oid);
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "openid".to_owned(),
+                nonce: None,
+                code_challenge: None,
+                code_challenge_method: None,
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec![],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_owned(),
+                claims: None,
+            }),
+            Utc::now() - chrono::Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+    let error = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_owned()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_owned()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: None,
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 24053);
+    assert!(
+        repo.find_by_oid(record.oid)
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_at
+            .is_none()
+    );
+}
+
 fn rs256_token_service_with_public_key(
     repo: Arc<MockClientAuthorizationRepository>,
     user_oid: Uuid,
@@ -293,7 +342,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         })
         .await;
 
-    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), 24052);
     assert!(
         repo.find_by_oid(Uuid::parse_str(&access_token_jti).unwrap())
             .await

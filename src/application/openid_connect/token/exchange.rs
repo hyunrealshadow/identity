@@ -66,11 +66,11 @@ impl TokenService {
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
                 })?;
-            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeRevoked));
         }
 
         if record.expires_at <= now {
-            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeExpired));
         }
 
         let data = match record.data {
@@ -82,15 +82,26 @@ impl TokenService {
                 .find_by_oid(data.session_oid)
                 .await
                 .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::AuthCodeInvalid).with_source(error)
+                    AppError::from_code(TokenErrorCode::AuthCodeSessionLookupFailed)
+                        .with_source(error)
                 })?
-                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
-            let active = session.status == crate::domain::auth::SessionStatus::ACTIVE
-                && session.revoked_at.is_none()
-                && session.expires_at.is_none_or(|expires_at| expires_at > now)
-                && session.user_oid.to_string() == data.user_oid;
-            if !active {
-                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeSessionNotFound))?;
+            if session.revoked_at.is_some() {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeSessionRevoked));
+            }
+            if session
+                .expires_at
+                .is_some_and(|expires_at| expires_at <= now)
+            {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeSessionExpired));
+            }
+            if session.status != crate::domain::auth::SessionStatus::ACTIVE {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeSessionInactive));
+            }
+            if session.user_oid.to_string() != data.user_oid {
+                return Err(AppError::from_code(
+                    TokenErrorCode::AuthCodeSessionUserMismatch,
+                ));
             }
             (session.effective_acr(now).map(str::to_owned), session.amr)
         } else {
@@ -142,7 +153,7 @@ impl TokenService {
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
                 })?;
-            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeClaimFailed));
         }
 
         let user_oid = Uuid::parse_str(&data.user_oid).map_err(|error| {

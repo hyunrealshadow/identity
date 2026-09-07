@@ -41,6 +41,14 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
         // Authorization code errors → invalid_grant
         c if c == TokenErrorCode::AuthCodeNotFound.code() => "invalid_grant",
         c if c == TokenErrorCode::AuthCodeInvalid.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeRevoked.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeExpired.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeSessionNotFound.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeSessionInactive.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeSessionRevoked.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeSessionExpired.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeSessionUserMismatch.code() => "invalid_grant",
+        c if c == TokenErrorCode::AuthCodeClaimFailed.code() => "invalid_grant",
         c if c == TokenErrorCode::CodeClientMismatch.code() => "invalid_grant",
         c if c == TokenErrorCode::RedirectUriMismatch.code() => "invalid_grant",
         c if c == TokenErrorCode::PkceVerifierMismatch.code() => "invalid_grant",
@@ -239,6 +247,33 @@ mod tests {
     fn app_error_to_rfc6749_maps_refresh_errors_to_invalid_grant() {
         let error = AppError::from_code(TokenErrorCode::RefreshTokenInvalid);
         assert_eq!(app_error_to_rfc6749(&error), "invalid_grant");
+    }
+
+    #[test]
+    fn detailed_authorization_code_errors_map_to_invalid_grant() {
+        for code in [
+            TokenErrorCode::AuthCodeRevoked,
+            TokenErrorCode::AuthCodeExpired,
+            TokenErrorCode::AuthCodeSessionNotFound,
+            TokenErrorCode::AuthCodeSessionInactive,
+            TokenErrorCode::AuthCodeSessionRevoked,
+            TokenErrorCode::AuthCodeSessionExpired,
+            TokenErrorCode::AuthCodeSessionUserMismatch,
+            TokenErrorCode::AuthCodeClaimFailed,
+        ] {
+            let error = AppError::from_code(code);
+            assert_eq!(app_error_to_rfc6749(&error), "invalid_grant", "{code:?}");
+            assert_eq!(
+                super::token_error_status(&error),
+                http::StatusCode::BAD_REQUEST
+            );
+        }
+        let error = AppError::from_code(TokenErrorCode::AuthCodeSessionLookupFailed);
+        assert_eq!(app_error_to_rfc6749(&error), "server_error");
+        assert_eq!(
+            super::token_error_status(&error),
+            http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]

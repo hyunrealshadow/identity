@@ -19,6 +19,25 @@ pub enum TokenErrorCode {
     CodeClientMismatch,
     /// Authorization code is revoked or expired.
     AuthCodeInvalid,
+    /// Authorization code was already consumed or revoked.
+    AuthCodeRevoked,
+    /// Authorization code has expired.
+    AuthCodeExpired,
+    /// Authorization code session was not found.
+    AuthCodeSessionNotFound,
+    /// Authorization code session is not active.
+    AuthCodeSessionInactive,
+    /// Authorization code session was revoked.
+    AuthCodeSessionRevoked,
+    /// Authorization code session has expired.
+    AuthCodeSessionExpired,
+    /// Authorization code session user does not match.
+    AuthCodeSessionUserMismatch,
+    /// Authorization code could not be consumed because it is no longer active.
+    AuthCodeClaimFailed,
+    /// Failed to look up the authorization code session.
+    AuthCodeSessionLookupFailed,
+
     /// Failed to deserialize stored `AuthorizationCodeData`.
     DeserializeCodeFailed,
     /// `redirect_uri` does not match the one stored in the authorization code.
@@ -140,6 +159,16 @@ impl AppErrorCode for TokenErrorCode {
             Self::AuthCodeNotFound => ErrorKind::Validation,
             Self::CodeClientMismatch => ErrorKind::Validation,
             Self::AuthCodeInvalid => ErrorKind::Validation,
+            Self::AuthCodeRevoked => ErrorKind::Validation,
+            Self::AuthCodeExpired => ErrorKind::Validation,
+            Self::AuthCodeSessionNotFound => ErrorKind::Validation,
+            Self::AuthCodeSessionInactive => ErrorKind::Validation,
+            Self::AuthCodeSessionRevoked => ErrorKind::Validation,
+            Self::AuthCodeSessionExpired => ErrorKind::Validation,
+            Self::AuthCodeSessionUserMismatch => ErrorKind::Validation,
+            Self::AuthCodeClaimFailed => ErrorKind::Validation,
+            Self::AuthCodeSessionLookupFailed => ErrorKind::Internal,
+
             Self::DeserializeCodeFailed => ErrorKind::Internal,
             Self::RedirectUriMismatch => ErrorKind::Validation,
             Self::CodeVerifierRequired => ErrorKind::Validation,
@@ -243,6 +272,15 @@ impl AppErrorCode for TokenErrorCode {
             Self::PkceVerifierMismatch => 24049,
             Self::EncryptionKeyNotFound => 24050,
             Self::EncryptionFailed => 24051,
+            Self::AuthCodeRevoked => 24052,
+            Self::AuthCodeExpired => 24053,
+            Self::AuthCodeSessionNotFound => 24054,
+            Self::AuthCodeSessionInactive => 24055,
+            Self::AuthCodeSessionRevoked => 24056,
+            Self::AuthCodeSessionExpired => 24057,
+            Self::AuthCodeSessionUserMismatch => 24058,
+            Self::AuthCodeClaimFailed => 24059,
+            Self::AuthCodeSessionLookupFailed => 24060,
         }
     }
 }
