@@ -8,6 +8,7 @@ use super::model::{
 };
 use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
+use crate::openid_connect::ScopeSet;
 
 #[async_trait]
 pub trait ClientAuthorizationRepository: Send + Sync {
@@ -37,6 +38,13 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         oid: Uuid,
         consent_state: ConsentState,
         decided_at: DateTime<Utc>,
+    ) -> Result<bool, ClientAuthorizationRepositoryError>;
+
+    async fn has_user_consent(
+        &self,
+        user_oid: Uuid,
+        client_oid: ClientOid,
+        requested_scope: &ScopeSet,
     ) -> Result<bool, ClientAuthorizationRepositoryError>;
 
     async fn mark_authorization_request_completed(

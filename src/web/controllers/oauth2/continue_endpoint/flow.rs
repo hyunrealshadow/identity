@@ -49,6 +49,23 @@ pub(super) async fn handle_continue(
     };
     let selected_session = selected_sessions.first();
 
+    let client_skips_consent = ctx.services().oidc_authorize().should_skip_consent(&client);
+    let should_check_user_consent = stored.interaction.consent_state
+        == crate::domain::client_authorization::ConsentState::Pending
+        && !client_skips_consent
+        && !stored.request.prompt.as_ref().is_some_and(|prompt| {
+            prompt.contains(&crate::domain::openid_connect::PromptValue::Consent)
+        });
+    let has_user_consent = match (selected_session, should_check_user_consent) {
+        (Some(session), true) => {
+            ctx.services()
+                .oidc_authorize()
+                .has_user_consent(session.user_oid, client.client().oid, &stored.request.scope)
+                .await?
+        }
+        _ => false,
+    };
+
     let selected_protected_session_id = if let Some(session) = selected_session {
         Some(protect_session_id(ctx, session.session_oid).await?)
     } else {
@@ -72,7 +89,7 @@ pub(super) async fn handle_continue(
         &stored,
         &login,
         selected_session,
-        ctx.services().oidc_authorize().should_skip_consent(&client),
+        client_skips_consent || has_user_consent,
     ) {
         ContinueAction::Login => continue_login_redirect(ctx, login_id)?,
         ContinueAction::OAuthError(error) => {

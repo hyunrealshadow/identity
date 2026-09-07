@@ -15,9 +15,10 @@ mod m20260407_071449_create_login;
 mod m20260426_000001_create_scope;
 mod m20260426_000002_create_client_scope;
 mod m20260427_000001_create_key_jwk;
-mod m20260428_000001_create_client_platform;
+mod m20260428_000001_create_client_open_id_connect_platform;
 mod m20260801_000001_session_relay_index;
 mod m20260824_000001_add_user_preferences;
+mod m20260907_000001_create_user_client_consent;
 
 pub struct Migrator;
 
@@ -38,9 +39,10 @@ impl MigratorTrait for Migrator {
             Box::new(m20260426_000001_create_scope::Migration),
             Box::new(m20260426_000002_create_client_scope::Migration),
             Box::new(m20260427_000001_create_key_jwk::Migration),
-            Box::new(m20260428_000001_create_client_platform::Migration),
+            Box::new(m20260428_000001_create_client_open_id_connect_platform::Migration),
             Box::new(m20260801_000001_session_relay_index::Migration),
             Box::new(m20260824_000001_add_user_preferences::Migration),
+            Box::new(m20260907_000001_create_user_client_consent::Migration),
         ]
     }
 }

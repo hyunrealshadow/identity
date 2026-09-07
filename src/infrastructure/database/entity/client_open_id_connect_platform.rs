@@ -1,16 +1,16 @@
-//! Current SeaORM persistence entity.
+//! OpenID Connect client platform persistence entity.
 
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "client_platform")]
+#[sea_orm(table_name = "client_open_id_connect_platform")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
-    #[sea_orm(unique_key = "idx_client_platform_client_id_platform")]
+    #[sea_orm(unique_key = "idx_client_open_id_connect_platform_client_id_platform")]
     pub client_id: i64,
-    #[sea_orm(unique_key = "idx_client_platform_client_id_platform")]
+    #[sea_orm(unique_key = "idx_client_open_id_connect_platform_client_id_platform")]
     pub platform: String,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub redirect_uris: Option<Json>,

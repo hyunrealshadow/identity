@@ -13,7 +13,8 @@ use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
     client_authorization::Entity as ClientAuthorizationEntity, client_open_id_connect,
     client_open_id_connect::Entity as OpenIdConnectClientEntity, client_open_id_connect_credential,
-    client_platform, client_platform::Entity as ClientPlatformEntity, client_scope,
+    client_open_id_connect_platform,
+    client_open_id_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
     client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
     scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
 };
@@ -200,7 +201,7 @@ fn parse_metadata_values<T: std::str::FromStr>(
 }
 
 fn to_platform(
-    model: client_platform::Model,
+    model: client_open_id_connect_platform::Model,
 ) -> Result<OpenIdConnectClientPlatform, OpenIdConnectClientRepositoryError> {
     Ok(OpenIdConnectClientPlatform {
         platform: model
@@ -351,7 +352,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                     .await?;
 
                     for platform in registration.platforms {
-                        client_platform::ActiveModel {
+                        client_open_id_connect_platform::ActiveModel {
                             client_id: Set(client_model.id),
                             platform: Set(platform.platform.to_string()),
                             redirect_uris: Set(urls_to_json(platform.redirect_uris)),
@@ -538,8 +539,8 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         };
 
         let client_id = client_model.id;
-        let platform_models = ClientPlatformEntity::find()
-            .filter(client_platform::Column::ClientId.eq(client_id))
+        let platform_models = ClientOpenIdConnectPlatformEntity::find()
+            .filter(client_open_id_connect_platform::Column::ClientId.eq(client_id))
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -637,8 +638,10 @@ impl OpenIdConnectClientRepositoryImpl {
             .map(|(client, _)| client.id)
             .collect::<Vec<_>>();
 
-        let platform_models = ClientPlatformEntity::find()
-            .filter(client_platform::Column::ClientId.is_in(matched_client_ids.clone()))
+        let platform_models = ClientOpenIdConnectPlatformEntity::find()
+            .filter(
+                client_open_id_connect_platform::Column::ClientId.is_in(matched_client_ids.clone()),
+            )
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -697,7 +700,9 @@ mod tests {
     };
     use crate::{
         domain::openid_connect::OpenIdConnectClientPlatformType,
-        infrastructure::database::entity::{client_open_id_connect, client_platform},
+        infrastructure::database::entity::{
+            client_open_id_connect, client_open_id_connect_platform,
+        },
     };
     use chrono::Utc;
     use serde_json::json;
@@ -778,8 +783,8 @@ mod tests {
     }
 
     #[test]
-    fn maps_client_platform_redirect_uris() {
-        let platform = to_platform(client_platform::Model {
+    fn maps_client_open_id_connect_platform_redirect_uris() {
+        let platform = to_platform(client_open_id_connect_platform::Model {
             id: 1,
             client_id: 2,
             platform: "web".to_string(),
@@ -797,8 +802,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_client_platform() {
-        let error = to_platform(client_platform::Model {
+    fn rejects_unknown_client_open_id_connect_platform() {
+        let error = to_platform(client_open_id_connect_platform::Model {
             id: 1,
             client_id: 2,
             platform: "ios".to_string(),

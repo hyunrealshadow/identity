@@ -1,7 +1,7 @@
 import { Alert, Chip } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Check, ExternalLink, ShieldCheck } from 'lucide-react'
+import { Check, ExternalLink } from 'lucide-react'
 
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
@@ -158,10 +158,15 @@ function ConsentPage() {
       {consent ? (
         <>
           <div className="mb-5 rounded-xl border border-border bg-surface-secondary p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-sm shadow-black/10">
-                <ShieldCheck className="size-5" aria-hidden="true" />
-              </div>
+            <div className="flex items-center gap-3">
+              {consent.logo_uri ? (
+                <img
+                  src={consent.logo_uri}
+                  alt=""
+                  className="size-10 shrink-0 rounded-xl object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              ) : null}
               <div className="min-w-0">
                 <p className="font-semibold">{consent.client_name}</p>
                 {consent.client_uri ? (
@@ -232,10 +237,10 @@ function ConsentPage() {
               value={consent.csrf_token}
             />
             <input type="hidden" name="ui_locales" value={data.uiLocales} />
-            <SubmitButton name="decision" value="deny" variant="secondary">
+            <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
               {t('deny')}
             </SubmitButton>
-            <SubmitButton name="decision" value="approve">
+            <SubmitButton fullWidth name="decision" value="approve">
               {t('allow')}
             </SubmitButton>
           </ProgressiveForm>

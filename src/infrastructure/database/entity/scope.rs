@@ -28,11 +28,19 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::client_scope::Entity")]
     ClientScope,
+    #[sea_orm(has_many = "super::user_client_consent::Entity")]
+    UserClientConsent,
 }
 
 impl Related<super::client_scope::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientScope.def()
+    }
+}
+
+impl Related<super::user_client_consent::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserClientConsent.def()
     }
 }
 

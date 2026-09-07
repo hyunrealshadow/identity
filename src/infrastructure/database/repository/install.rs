@@ -38,8 +38,9 @@ use crate::{
         crypto::key::generate_all_jwks_for_key,
         database::{
             entity::{
-                client, client_open_id_connect, client_open_id_connect_credential, client_platform,
-                client_scope, key, key_jwk, scope, setting, user, user_credential,
+                client, client_open_id_connect, client_open_id_connect_credential,
+                client_open_id_connect_platform, client_scope, key, key_jwk, scope, setting, user,
+                user_credential,
             },
             repository::{
                 openid_connect_credential::serialize_data as serialize_credential_data,
@@ -177,11 +178,10 @@ impl InstallPersistence for InstallPersistenceImpl {
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
         let callback_url = built_in_callback_url(&input.application_url)?;
+        let logout_url = built_in_logout_url(&input.application_url)?;
         client_open_id_connect::ActiveModel {
             client_id: Set(created_client.id),
-            post_logout_redirect_uris: Set(Some(serde_json::json!([input
-                .application_url
-                .as_str()]))),
+            post_logout_redirect_uris: Set(Some(serde_json::json!([logout_url.as_str()]))),
             response_types: Set(Some(serde_json::json!([ResponseType::Code]))),
             grant_types: Set(Some(serde_json::json!([
                 GrantType::AuthorizationCode.as_str(),
@@ -204,7 +204,7 @@ impl InstallPersistence for InstallPersistenceImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        client_platform::ActiveModel {
+        client_open_id_connect_platform::ActiveModel {
             client_id: Set(created_client.id),
             platform: Set("web".to_owned()),
             redirect_uris: Set(Some(serde_json::json!([callback_url.as_str()]))),
@@ -377,6 +377,12 @@ fn built_in_callback_url(application_url: &url::Url) -> Result<url::Url, AppErro
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
 }
 
+fn built_in_logout_url(application_url: &url::Url) -> Result<url::Url, AppError> {
+    application_url
+        .join("logout")
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+}
+
 async fn installation_state_exists<C>(db: &C) -> Result<bool, AppError>
 where
     C: ConnectionTrait,
@@ -484,6 +490,7 @@ mod tests {
 
     use super::{
         INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock, built_in_callback_url,
+        built_in_logout_url,
     };
 
     #[test]
@@ -493,6 +500,16 @@ mod tests {
         assert_eq!(
             built_in_callback_url(&application_url).unwrap().as_str(),
             "https://identity.example/callback"
+        );
+    }
+
+    #[test]
+    fn built_in_client_uses_top_level_logout_route() {
+        let application_url = url::Url::parse("https://identity.example/").unwrap();
+
+        assert_eq!(
+            built_in_logout_url(&application_url).unwrap().as_str(),
+            "https://identity.example/logout"
         );
     }
 

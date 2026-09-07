@@ -43,6 +43,12 @@ pub(super) async fn consent_api(
         ConsentPageData {
             login_id: query.login_id,
             client_name: loaded.client.client().name.clone(),
+            logo_uri: loaded
+                .client
+                .metadata()
+                .logo_uri
+                .as_ref()
+                .map(url::Url::to_string),
             client_uri: loaded
                 .client
                 .metadata()

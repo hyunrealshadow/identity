@@ -20,6 +20,8 @@ pub struct ScopeDisplay {
 pub struct ConsentPageData {
     pub login_id: String,
     pub client_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logo_uri: Option<String>,
     pub client_uri: Option<String>,
     pub scopes: Vec<ScopeDisplay>,
     pub csrf_token: String,

@@ -35,7 +35,8 @@ use identity_infrastructure::{
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 
 use crate::infrastructure::database::entity::{
-    client, client_authorization, client_open_id_connect, client_platform, key, login, setting,
+    client, client_authorization, client_open_id_connect, client_open_id_connect_platform, key,
+    login, setting,
 };
 
 #[derive(Debug, Clone)]
@@ -51,6 +52,7 @@ pub(super) struct ContinueFixture {
     pub(super) consent_state: ConsentState,
     pub(super) login_status: &'static str,
     pub(super) skip_consent: bool,
+    pub(super) persisted_consent_scopes: Vec<String>,
     pub(super) session_created_at: Option<DateTime<Utc>>,
     pub(super) authorization_expires_at: Option<DateTime<Utc>>,
     pub(super) authorization_completed_at: Option<DateTime<Utc>>,
@@ -70,6 +72,7 @@ impl Default for ContinueFixture {
             consent_state: ConsentState::Pending,
             login_status: LoginStatus::CREATED.as_str(),
             skip_consent: false,
+            persisted_consent_scopes: Vec::new(),
             session_created_at: None,
             authorization_expires_at: None,
             authorization_completed_at: None,
@@ -103,6 +106,10 @@ pub(super) async fn continue_state(
     let authorization_expires_at = fixture
         .authorization_expires_at
         .unwrap_or(now + Duration::minutes(10));
+    let should_query_user_consent = selected_session_oid.is_some()
+        && fixture.consent_state == ConsentState::Pending
+        && !fixture.skip_consent
+        && fixture.prompt.as_deref() != Some("consent");
 
     let password_setting = setting::Model {
         id: 1,
@@ -320,7 +327,7 @@ pub(super) async fn continue_state(
         created_at: now.into(),
         updated_at: None,
     };
-    let platform_model = client_platform::Model {
+    let platform_model = client_open_id_connect_platform::Model {
         id: 37,
         client_id: client_model.id,
         platform: "web".to_owned(),
@@ -514,6 +521,9 @@ pub(super) async fn continue_state(
             Value::String(Some("openid".to_owned())),
         )])]]);
 
+    let consent_user_model = active_session_and_users
+        .first()
+        .map(|(_, user)| user.clone());
     let db = if active_session_and_users.is_empty() {
         db.append_query_results([Vec::<(
             crate::infrastructure::database::entity::session::Model,
@@ -521,6 +531,32 @@ pub(super) async fn continue_state(
         )>::new()])
     } else {
         db.append_query_results([active_session_and_users])
+    };
+
+    let db = if should_query_user_consent {
+        let user = consent_user_model.expect("selected consent session must have a user");
+        let requested_scope_ids = [BTreeMap::from([(
+            "id".to_owned(),
+            Value::BigInt(Some(100)),
+        )])];
+        let granted_scope_ids = fixture
+            .persisted_consent_scopes
+            .iter()
+            .map(|scope| {
+                let scope_id = match scope.as_str() {
+                    "openid" => 100,
+                    "profile" => 101,
+                    other => panic!("missing fixture scope id for {other}"),
+                };
+                BTreeMap::from([("scope_id".to_owned(), Value::BigInt(Some(scope_id)))])
+            })
+            .collect::<Vec<_>>();
+        db.append_query_results([[user]])
+            .append_query_results([[client_model.clone()]])
+            .append_query_results([requested_scope_ids])
+            .append_query_results([granted_scope_ids])
+    } else {
+        db
     };
 
     let db = if should_mock_auto_selection_write {

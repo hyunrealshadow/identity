@@ -31,6 +31,7 @@ async fn consent_get_is_a_json_api_without_content_negotiation() {
     let body = response.take_string().await.unwrap();
     assert!(body.contains("\"login_id\""), "{body}");
     assert!(body.contains("\"client_name\""), "{body}");
+    assert!(!body.contains("\"logo_uri\""), "{body}");
 }
 
 #[tokio::test]
@@ -51,6 +52,7 @@ async fn consent_get_rejects_invalid_stored_scope() {
 #[tokio::test]
 async fn consent_post_accepts_json_and_returns_continue_uri() {
     let (state, protected_login_id, _) = consent_test_state().await;
+    let db = state.resources().db().clone();
     let service = Service::new(app_router(state, &consent_test_config()));
 
     let mut context_response = TestClient::get(format!(
@@ -71,8 +73,8 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
         .send(&service)
         .await;
 
-    assert_eq!(response.status_code, Some(StatusCode::OK));
     let body = response.take_string().await.unwrap();
+    assert_eq!(response.status_code, Some(StatusCode::OK), "{body}");
     assert!(body.contains("\"status\":\"approved\""), "{body}");
     let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert!(
@@ -80,5 +82,10 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
             .as_str()
             .is_some_and(|uri| uri.starts_with("https://identity.example.com/oauth2/continue?")),
         "{body}"
+    );
+    let statements = format!("{:?}", db.into_transaction_log());
+    assert!(
+        statements.contains("INSERT INTO \\\"user_client_consent\\\""),
+        "{statements}"
     );
 }

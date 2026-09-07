@@ -181,6 +181,9 @@ pub fn mock_client_auth_repo_with_state(
             Ok(true)
         });
 
+    mock.expect_has_user_consent()
+        .returning(|_user_oid, _client_oid, _requested_scope| Ok(false));
+
     // mark_authorization_request_completed
     let s = state.clone();
     mock.expect_mark_authorization_request_completed()

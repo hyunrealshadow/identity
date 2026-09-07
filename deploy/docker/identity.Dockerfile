@@ -3,6 +3,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY assets/styles/ assets/styles/
+COPY assets/views/ assets/views/
 RUN pnpm install --frozen-lockfile
 RUN pnpm build:error-css
 

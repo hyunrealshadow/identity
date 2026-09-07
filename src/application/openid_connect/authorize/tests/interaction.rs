@@ -7,7 +7,7 @@ use identity_domain::{
     client_authorization::{
         AuthorizationInteractionState, ConsentState, StoredAuthorizationRequest,
     },
-    openid_connect::{AuthorizationRequestData, OAuthErrorCode},
+    openid_connect::{AuthorizationRequestData, OAuthErrorCode, PromptValue},
 };
 use uuid::Uuid;
 
@@ -156,6 +156,22 @@ fn continue_action_redirects_to_consent_when_pending_and_required() {
         &login(LoginStatus::AUTHENTICATED),
         Some(&selected_session),
         false,
+    );
+
+    assert_eq!(action, ContinueAction::Consent);
+}
+
+#[test]
+fn prompt_consent_forces_confirmation_even_when_consent_was_persisted() {
+    let selected_session = active_session();
+    let mut stored = stored(ConsentState::Pending);
+    stored.request.prompt = Some([PromptValue::Consent].into_iter().collect());
+
+    let action = determine_continue_action(
+        &stored,
+        &login(LoginStatus::AUTHENTICATED),
+        Some(&selected_session),
+        true,
     );
 
     assert_eq!(action, ContinueAction::Consent);

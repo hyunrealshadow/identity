@@ -1,16 +1,17 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set,
-    TransactionTrait,
-    sea_query::{Expr, SimpleExpr},
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
+    QuerySelect, Set, TransactionTrait,
+    sea_query::{Expr, OnConflict, SimpleExpr},
 };
 use uuid::Uuid;
 
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity, session,
-    session::Entity as SessionEntity,
+    client_authorization::Entity as ClientAuthorizationEntity, scope, scope::Entity as ScopeEntity,
+    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
+    user_client_consent, user_client_consent::Entity as UserClientConsentEntity,
 };
 use crate::database::repository::shared::lock_session;
 use identity_domain::{
@@ -22,7 +23,7 @@ use identity_domain::{
         ConsentState, RefreshTokenData, RegistrationAccessTokenData, SelectionSource,
         StoredAuthorizationRequest,
     },
-    openid_connect::AuthorizationRequestData,
+    openid_connect::{AuthorizationRequestData, ScopeSet},
 };
 
 fn parse_stored_authorization_request(
@@ -55,6 +56,17 @@ fn serialize_data(
         ClientAuthorizationData::RegistrationAccessToken(value) => serde_json::to_value(value),
     }
     .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+}
+
+fn scope_ids_cover(mut granted: Vec<i64>, mut requested: Vec<i64>) -> bool {
+    granted.sort_unstable();
+    granted.dedup();
+    requested.sort_unstable();
+    requested.dedup();
+
+    requested
+        .iter()
+        .all(|scope_id| granted.binary_search(scope_id).is_ok())
 }
 
 fn parse_data(
@@ -338,12 +350,38 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             return Ok(false);
         }
 
+        let grant = if consent_state == ConsentState::Approved {
+            let user_oid = stored
+                .interaction
+                .selected_user_oid
+                .as_deref()
+                .ok_or_else(|| {
+                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
+                        "approved consent has no selected user".into(),
+                    )))
+                })?
+                .parse::<Uuid>()
+                .map_err(|error| {
+                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                })?;
+            let scope = ScopeSet::parse(&stored.request.scope).map_err(|error| {
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+            })?;
+            Some((user_oid, scope))
+        } else {
+            None
+        };
+
         stored.interaction.consent_state = consent_state;
         stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
 
         let now = Utc::now();
         let stored_data = serde_json::to_value(stored)
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+        let transaction =
+            self.db.begin().await.map_err(|error| {
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+            })?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::Data,
@@ -354,11 +392,130 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 SimpleExpr::Value(Some(now).into()),
             )
             .filter(selection_update_condition(&model, now))
-            .exec(&self.db)
+            .exec(&transaction)
             .await
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
-        Ok(result.rows_affected == 1)
+        if result.rows_affected != 1 {
+            return Ok(false);
+        }
+
+        if let Some((user_oid, requested_scope)) = grant {
+            let user_id = UserEntity::find()
+                .select_only()
+                .column(user::Column::Id)
+                .filter(user::Column::Oid.eq(user_oid))
+                .into_tuple::<i64>()
+                .one(&transaction)
+                .await
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+                .ok_or_else(|| {
+                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                        sea_orm::DbErr::RecordNotFound(format!("user {user_oid} not found")),
+                    ))
+                })?;
+            let requested_scope_names = requested_scope.names();
+            let mut scope_ids = ScopeEntity::find()
+                .select_only()
+                .column(scope::Column::Id)
+                .filter(scope::Column::Protocol.eq("openid_connect"))
+                .filter(scope::Column::Name.is_in(requested_scope_names.iter().copied()))
+                .into_tuple::<i64>()
+                .all(&transaction)
+                .await
+                .map_err(|error| {
+                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                })?;
+            scope_ids.sort_unstable();
+            scope_ids.dedup();
+            if scope_ids.len() != requested_scope_names.len() {
+                return Err(ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                    sea_orm::DbErr::RecordNotFound(
+                        "one or more consent scopes were not found".to_owned(),
+                    ),
+                )));
+            }
+            let grants = scope_ids
+                .into_iter()
+                .map(|scope_id| user_client_consent::ActiveModel {
+                    scope_id: Set(scope_id),
+                    user_id: Set(user_id),
+                    client_id: Set(model.client_id),
+                    approved_at: Set(decided_at.into()),
+                    ..Default::default()
+                });
+            UserClientConsentEntity::insert_many(grants)
+                .on_conflict(
+                    OnConflict::columns([
+                        user_client_consent::Column::UserId,
+                        user_client_consent::Column::ClientId,
+                        user_client_consent::Column::ScopeId,
+                    ])
+                    .update_column(user_client_consent::Column::ApprovedAt)
+                    .to_owned(),
+                )
+                .exec(&transaction)
+                .await
+                .map_err(|error| {
+                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                })?;
+        }
+
+        transaction
+            .commit()
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        Ok(true)
+    }
+
+    async fn has_user_consent(
+        &self,
+        user_oid: Uuid,
+        client_oid: ClientOid,
+        requested_scope: &ScopeSet,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        let Some(user) = UserEntity::find()
+            .filter(user::Column::Oid.eq(user_oid))
+            .one(&self.db)
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+        else {
+            return Ok(false);
+        };
+        let Some(client) = ClientEntity::find()
+            .filter(client::Column::Oid.eq(Uuid::from(client_oid)))
+            .one(&self.db)
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+        else {
+            return Ok(false);
+        };
+        let requested_scope_names = requested_scope.names();
+        let mut requested_scope_ids = ScopeEntity::find()
+            .select_only()
+            .column(scope::Column::Id)
+            .filter(scope::Column::Protocol.eq("openid_connect"))
+            .filter(scope::Column::Name.is_in(requested_scope_names.iter().copied()))
+            .into_tuple::<i64>()
+            .all(&self.db)
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        requested_scope_ids.sort_unstable();
+        requested_scope_ids.dedup();
+        if requested_scope_ids.len() != requested_scope_names.len() {
+            return Ok(false);
+        }
+
+        let granted_scope_ids = UserClientConsentEntity::find()
+            .select_only()
+            .column(user_client_consent::Column::ScopeId)
+            .filter(user_client_consent::Column::UserId.eq(user.id))
+            .filter(user_client_consent::Column::ClientId.eq(client.id))
+            .into_tuple::<i64>()
+            .all(&self.db)
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        Ok(scope_ids_cover(granted_scope_ids, requested_scope_ids))
     }
 
     async fn mark_authorization_request_completed(
@@ -459,7 +616,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
 
 #[cfg(test)]
 mod selection_tests {
-    use super::can_overwrite_selection;
+    use super::{can_overwrite_selection, scope_ids_cover};
     use identity_domain::client_authorization::SelectionSource;
 
     #[test]
@@ -476,5 +633,11 @@ mod selection_tests {
             Some(SelectionSource::Reauthentication),
             SelectionSource::Reauthentication,
         ));
+    }
+
+    #[test]
+    fn consent_scope_comparison_sorts_deduplicates_and_accepts_subsets() {
+        assert!(scope_ids_cover(vec![3, 1, 2, 2], vec![2, 1, 1]));
+        assert!(!scope_ids_cover(vec![3, 1, 1], vec![1, 2]));
     }
 }

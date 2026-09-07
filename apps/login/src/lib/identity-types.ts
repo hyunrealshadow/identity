@@ -89,6 +89,7 @@ export interface ScopeDisplay {
 export interface ConsentPageData {
   login_id: string
   client_name: string
+  logo_uri?: string
   client_uri?: string
   scopes: Array<ScopeDisplay>
   csrf_token: string

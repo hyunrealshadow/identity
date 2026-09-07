@@ -9,6 +9,7 @@ use identity_domain::client_authorization::{
     ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
     SelectionSource,
 };
+use identity_domain::openid_connect::ScopeSet;
 
 mockall::mock! {
     pub ClientAuthorizationRepository {}
@@ -38,6 +39,12 @@ mockall::mock! {
             oid: uuid::Uuid,
             consent_state: ConsentState,
             decided_at: DateTime<Utc>,
+        ) -> Result<bool, ClientAuthorizationRepositoryError>;
+        async fn has_user_consent(
+            &self,
+            user_oid: uuid::Uuid,
+            client_oid: ClientOid,
+            requested_scope: &ScopeSet,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn mark_authorization_request_completed(
             &self,
@@ -95,6 +102,8 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
         .returning(|_oid, _session_oid, _user_oid, _protected_session_id, _source| Ok(false));
     mock.expect_record_authorization_request_consent()
         .returning(|_oid, _consent_state, _decided_at| Ok(false));
+    mock.expect_has_user_consent()
+        .returning(|_user_oid, _client_oid, _requested_scope| Ok(false));
     mock.expect_mark_authorization_request_completed()
         .returning(|_oid, _completed_at| Ok(false));
 

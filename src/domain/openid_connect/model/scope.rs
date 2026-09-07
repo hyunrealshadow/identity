@@ -161,6 +161,17 @@ impl ScopeSet {
     }
 
     #[must_use]
+    pub fn covers(&self, requested: &Self) -> bool {
+        (!requested.openid || self.openid)
+            && (!requested.profile || self.profile)
+            && (!requested.email || self.email)
+            && (!requested.address || self.address)
+            && (!requested.phone || self.phone)
+            && (!requested.offline_access || self.offline_access)
+            && requested.api.iter().all(|scope| self.allows(*scope))
+    }
+
+    #[must_use]
     pub fn allows(&self, required: ApiScope) -> bool {
         self.api.iter().copied().any(|granted| match granted {
             ApiScope::Account => matches!(
@@ -324,5 +335,14 @@ mod tests {
 
         assert!(scope.allows(ApiScope::PasswordChange));
         assert!(!scope.allows(ApiScope::AccountRead));
+    }
+
+    #[test]
+    fn covers_subset_and_hierarchical_api_scopes() {
+        let granted = ScopeSet::parse("openid profile account").unwrap();
+
+        assert!(granted.covers(&ScopeSet::parse("openid").unwrap()));
+        assert!(granted.covers(&ScopeSet::parse("openid account.read").unwrap()));
+        assert!(!granted.covers(&ScopeSet::parse("openid email").unwrap()));
     }
 }

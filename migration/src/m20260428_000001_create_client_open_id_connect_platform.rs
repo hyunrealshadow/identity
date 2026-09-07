@@ -15,7 +15,7 @@ use sea_orm_migration::{
 pub struct Migration;
 
 #[derive(DeriveIden)]
-pub enum ClientPlatform {
+pub enum ClientOpenIdConnectPlatform {
     Table,
     Id,
     ClientId,
@@ -31,21 +31,26 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(ClientPlatform::Table)
+                    .table(ClientOpenIdConnectPlatform::Table)
                     .if_not_exists()
-                    .col(pk_auto(ClientPlatform::Id).big_integer())
-                    .col(big_integer(ClientPlatform::ClientId))
-                    .col(string(ClientPlatform::Platform))
-                    .col(json_binary_null(ClientPlatform::RedirectUris))
+                    .col(pk_auto(ClientOpenIdConnectPlatform::Id).big_integer())
+                    .col(big_integer(ClientOpenIdConnectPlatform::ClientId))
+                    .col(string(ClientOpenIdConnectPlatform::Platform))
+                    .col(json_binary_null(ClientOpenIdConnectPlatform::RedirectUris))
                     .col(
-                        timestamp_with_time_zone(ClientPlatform::CreatedAt)
+                        timestamp_with_time_zone(ClientOpenIdConnectPlatform::CreatedAt)
                             .default(Expr::current_timestamp()),
                     )
-                    .col(timestamp_with_time_zone_null(ClientPlatform::UpdatedAt))
+                    .col(timestamp_with_time_zone_null(
+                        ClientOpenIdConnectPlatform::UpdatedAt,
+                    ))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_client_platform_client_id")
-                            .from(ClientPlatform::Table, ClientPlatform::ClientId)
+                            .name("fk_client_open_id_connect_platform_client_id")
+                            .from(
+                                ClientOpenIdConnectPlatform::Table,
+                                ClientOpenIdConnectPlatform::ClientId,
+                            )
                             .to(Client::Table, Client::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -57,10 +62,10 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .table(ClientPlatform::Table)
-                    .name("idx_client_platform_client_id_platform")
-                    .col(ClientPlatform::ClientId)
-                    .col(ClientPlatform::Platform)
+                    .table(ClientOpenIdConnectPlatform::Table)
+                    .name("idx_client_open_id_connect_platform_client_id_platform")
+                    .col(ClientOpenIdConnectPlatform::ClientId)
+                    .col(ClientOpenIdConnectPlatform::Platform)
                     .unique()
                     .to_owned(),
             )
@@ -73,14 +78,18 @@ impl MigrationTrait for Migration {
         manager
             .drop_index(
                 Index::drop()
-                    .table(ClientPlatform::Table)
-                    .name("idx_client_platform_client_id_platform")
+                    .table(ClientOpenIdConnectPlatform::Table)
+                    .name("idx_client_open_id_connect_platform_client_id_platform")
                     .to_owned(),
             )
             .await?;
 
         manager
-            .drop_table(Table::drop().table(ClientPlatform::Table).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(ClientOpenIdConnectPlatform::Table)
+                    .to_owned(),
+            )
             .await?;
 
         Ok(())

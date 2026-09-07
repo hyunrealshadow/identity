@@ -125,7 +125,15 @@ pub fn determine_continue_action(
     match stored.interaction.consent_state {
         ConsentState::Denied => ContinueAction::Deny,
         ConsentState::Approved => approve_action(selected_session),
-        ConsentState::Pending if skip_consent => approve_action(selected_session),
+        ConsentState::Pending
+            if skip_consent
+                && !stored_request_has_prompt(
+                    stored.request.prompt.as_ref(),
+                    PromptValue::Consent,
+                ) =>
+        {
+            approve_action(selected_session)
+        }
         ConsentState::Pending
             if stored_request_has_prompt(stored.request.prompt.as_ref(), PromptValue::None) =>
         {

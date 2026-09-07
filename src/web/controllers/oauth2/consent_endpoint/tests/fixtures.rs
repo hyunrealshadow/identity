@@ -343,7 +343,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
         .append_query_results([Vec::<
-            crate::infrastructure::database::entity::client_platform::Model,
+            crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
         >::new()])
         .append_query_results([[openid_scope_row.clone()]])
         .append_query_results([[(active_session.clone(), active_user.clone())]])
@@ -354,7 +354,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), oidc_metadata_model)]])
         .append_query_results([Vec::<
-            crate::infrastructure::database::entity::client_platform::Model,
+            crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
         >::new()])
         .append_query_results([[openid_scope_row]])
         .append_query_results([[(active_session.clone(), active_user.clone())]])
@@ -363,6 +363,33 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[authorization_model.clone()]])
         .append_query_results([[active_session]])
         .append_query_results([[authorization_model]])
+        .append_query_results([[BTreeMap::from([(
+            "id".to_owned(),
+            Value::BigInt(Some(active_user.id)),
+        )])]])
+        .append_query_results([scope
+            .split_whitespace()
+            .enumerate()
+            .map(|(index, _)| {
+                BTreeMap::from([(
+                    "id".to_owned(),
+                    Value::BigInt(Some(100 + i64::try_from(index).unwrap())),
+                )])
+            })
+            .collect::<Vec<_>>()])
+        .append_query_results([scope
+            .split_whitespace()
+            .enumerate()
+            .map(
+                |(index, _)| crate::infrastructure::database::entity::user_client_consent::Model {
+                    id: 41 + i64::try_from(index).unwrap(),
+                    user_id: active_user.id,
+                    client_id: client_model.id,
+                    scope_id: 100 + i64::try_from(index).unwrap(),
+                    approved_at: now.into(),
+                },
+            )
+            .collect::<Vec<_>>()])
         .append_exec_results([MockExecResult {
             last_insert_id: 0,
             rows_affected: 1,

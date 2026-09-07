@@ -61,6 +61,8 @@ pub enum Relation {
     Session,
     #[sea_orm(has_many = "super::user_credential::Entity")]
     UserCredential,
+    #[sea_orm(has_many = "super::user_client_consent::Entity")]
+    UserClientConsent,
 }
 
 impl Related<super::login::Entity> for Entity {
@@ -78,6 +80,12 @@ impl Related<super::session::Entity> for Entity {
 impl Related<super::user_credential::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserCredential.def()
+    }
+}
+
+impl Related<super::user_client_consent::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserClientConsent.def()
     }
 }
 

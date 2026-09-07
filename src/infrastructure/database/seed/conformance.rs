@@ -24,8 +24,8 @@ use crate::{
     application::error::AppError,
     application::error::codes::common::CommonErrorCode,
     infrastructure::database::entity::{
-        client, client_open_id_connect, client_open_id_connect_credential, client_platform,
-        client_scope, scope, setting, user, user_credential,
+        client, client_open_id_connect, client_open_id_connect_credential,
+        client_open_id_connect_platform, client_scope, scope, setting, user, user_credential,
     },
 };
 use identity_domain::openid_connect::OpenIdConnectCredentialData;
@@ -572,9 +572,9 @@ async fn ensure_web_platform_redirect_uri(
     db: &impl sea_orm::ConnectionTrait,
     client_id: i64,
 ) -> Result<(), AppError> {
-    let exists = client_platform::Entity::find()
-        .filter(client_platform::Column::ClientId.eq(client_id))
-        .filter(client_platform::Column::Platform.eq("web"))
+    let exists = client_open_id_connect_platform::Entity::find()
+        .filter(client_open_id_connect_platform::Column::ClientId.eq(client_id))
+        .filter(client_open_id_connect_platform::Column::Platform.eq("web"))
         .one(db)
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
@@ -584,7 +584,7 @@ async fn ensure_web_platform_redirect_uri(
         return Ok(());
     }
 
-    client_platform::ActiveModel {
+    client_open_id_connect_platform::ActiveModel {
         client_id: Set(client_id),
         platform: Set("web".to_owned()),
         redirect_uris: Set(Some(conformance_redirect_uris())),

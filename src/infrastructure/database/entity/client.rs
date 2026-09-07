@@ -31,12 +31,14 @@ pub enum Relation {
     ClientOpenIdConnect,
     #[sea_orm(has_many = "super::client_open_id_connect_credential::Entity")]
     ClientOpenIdConnectCredential,
-    #[sea_orm(has_many = "super::client_platform::Entity")]
-    ClientPlatform,
+    #[sea_orm(has_many = "super::client_open_id_connect_platform::Entity")]
+    ClientOpenIdConnectPlatform,
     #[sea_orm(has_many = "super::client_scope::Entity")]
     ClientScope,
     #[sea_orm(has_many = "super::login::Entity")]
     Login,
+    #[sea_orm(has_many = "super::user_client_consent::Entity")]
+    UserClientConsent,
 }
 
 impl Related<super::client_authorization::Entity> for Entity {
@@ -57,9 +59,9 @@ impl Related<super::client_open_id_connect_credential::Entity> for Entity {
     }
 }
 
-impl Related<super::client_platform::Entity> for Entity {
+impl Related<super::client_open_id_connect_platform::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::ClientPlatform.def()
+        Relation::ClientOpenIdConnectPlatform.def()
     }
 }
 
@@ -72,6 +74,12 @@ impl Related<super::client_scope::Entity> for Entity {
 impl Related<super::login::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Login.def()
+    }
+}
+
+impl Related<super::user_client_consent::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserClientConsent.def()
     }
 }
 

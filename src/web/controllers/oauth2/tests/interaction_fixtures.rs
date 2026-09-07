@@ -34,7 +34,8 @@ use identity_infrastructure::{
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 
 use crate::infrastructure::database::entity::{
-    client, client_authorization, client_open_id_connect, client_platform, key, login, setting,
+    client, client_authorization, client_open_id_connect, client_open_id_connect_platform, key,
+    login, setting,
 };
 
 pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uuid) {
@@ -214,7 +215,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         created_at: now.into(),
         updated_at: None,
     };
-    let platform_model = client_platform::Model {
+    let platform_model = client_open_id_connect_platform::Model {
         id: 37,
         client_id: client_model.id,
         platform: "web".to_owned(),

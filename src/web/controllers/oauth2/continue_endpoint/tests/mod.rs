@@ -145,6 +145,24 @@ async fn continue_skips_consent_when_client_allows_it() {
 }
 
 #[tokio::test]
+async fn continue_skips_consent_when_user_previously_approved_requested_scopes() {
+    let (state, protected_login_id, _) = continue_selected_session_with_fixture(ContinueFixture {
+        persisted_consent_scopes: vec!["openid".to_owned(), "profile".to_owned()],
+        ..ContinueFixture::default()
+    })
+    .await;
+
+    let response = call_continue_with_state(&protected_login_id, state, None).await;
+
+    assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
+    assert_eq!(
+        query_param(location(&response), "state").as_deref(),
+        Some("state-123")
+    );
+    assert!(query_param(location(&response), "code").is_some());
+}
+
+#[tokio::test]
 async fn continue_does_not_select_from_browser_session_transport() {
     let session_oid = uuid::Uuid::new_v4();
     let user_oid = uuid::Uuid::new_v4();

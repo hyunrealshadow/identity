@@ -385,6 +385,24 @@ impl AuthorizeService {
             .await
     }
 
+    pub async fn has_user_consent(
+        &self,
+        user_oid: Uuid,
+        client_oid: identity_domain::client::model::ClientOid,
+        requested_scope: &str,
+    ) -> Result<bool, AppError> {
+        let requested_scope = identity_domain::openid_connect::ScopeSet::parse(requested_scope)
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::DeserializeRequestFailed).with_source(error)
+            })?;
+        self.client_authorization_repo
+            .has_user_consent(user_oid, client_oid, &requested_scope)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+            })
+    }
+
     pub async fn record_authorization_selection(
         &self,
         authorization_request_id: Uuid,
