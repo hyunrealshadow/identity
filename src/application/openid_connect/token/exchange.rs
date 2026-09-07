@@ -4,10 +4,20 @@ use super::*;
 use identity_domain::auth::SessionOid;
 
 impl TokenService {
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            exchange_id = %Uuid::new_v4(),
+            authorization_code_id = tracing::field::Empty,
+            client_oid = tracing::field::Empty
+        ),
+        err(level = "warn")
+    )]
     pub async fn exchange_authorization_code(
         &self,
         params: AuthorizationCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
+        tracing::info!("authorization code exchange started");
         let client_id = resolve_client_id(
             params.client_id,
             params.client_assertion_type,
@@ -40,6 +50,11 @@ impl TokenService {
         let code_oid = Uuid::from_slice(&code_oid_bytes).map_err(|error| {
             AppError::from_code(TokenErrorCode::AuthCodeNotFound).with_source(error)
         })?;
+        tracing::Span::current().record("authorization_code_id", tracing::field::display(code_oid));
+        tracing::Span::current().record(
+            "client_oid",
+            tracing::field::display(authenticated_client_oid),
+        );
 
         let record = self
             .client_authorization_repo
@@ -59,6 +74,11 @@ impl TokenService {
         }
 
         let now = chrono::Utc::now();
+        tracing::info!(
+            revoked_at = ?record.revoked_at,
+            expires_at = %record.expires_at,
+            "authorization code state loaded"
+        );
         if record.revoked_at.is_some() {
             self.client_authorization_repo
                 .revoke_access_tokens_for_authorization_code(record.oid)
@@ -147,6 +167,7 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
             })?;
         if !claimed {
+            tracing::warn!("authorization code consumption failed");
             self.client_authorization_repo
                 .revoke_access_tokens_for_authorization_code(record.oid)
                 .await
@@ -155,6 +176,7 @@ impl TokenService {
                 })?;
             return Err(AppError::from_code(TokenErrorCode::AuthCodeClaimFailed));
         }
+        tracing::info!("authorization code consumed; issuing tokens");
 
         let user_oid = Uuid::parse_str(&data.user_oid).map_err(|error| {
             AppError::from_code(TokenErrorCode::StoredUserOidInvalid).with_source(error)
@@ -277,6 +299,7 @@ impl TokenService {
             None
         };
 
+        tracing::info!("authorization code exchange succeeded; tokens issued");
         Ok(TokenResponse {
             access_token,
             id_token,
