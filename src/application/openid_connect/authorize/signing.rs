@@ -3,7 +3,6 @@ use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::openid_connect::dto::UserInfoClaims;
 use crate::openid_connect::jose::{
     asymmetric_signer_from_pem, encrypt_compact_with_public_jwk, front_channel_hash,
 };
@@ -178,24 +177,16 @@ impl AuthorizeService {
         } else {
             input.scope.clone()
         };
-        let mut standard_claims =
-            UserInfoClaims::from_user_with_profile_base(input.user, input.issuer.as_str());
-        standard_claims.apply_scope_filter_for_id_token(&id_token_scope, input.claims_request);
-        let standard_claims_value = serde_json::to_value(standard_claims).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
-        })?;
-        if let Some(claims) = standard_claims_value.as_object() {
-            for (name, value) in claims {
-                if name == JwtClaimNames::SUB {
-                    continue;
-                }
-                payload
-                    .set_claim(name, Some(value.clone()))
-                    .map_err(|error| {
-                        AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed)
-                            .with_source(error)
-                    })?;
-            }
+        let standard_claims = crate::openid_connect::dto::scoped_standard_claims(
+            input.user,
+            &id_token_scope,
+            input.claims_request,
+            input.issuer.as_str(),
+        );
+        for (name, value) in standard_claims {
+            payload.set_claim(&name, Some(value)).map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed).with_source(error)
+            })?;
         }
 
         if input.alg == JwsAlgorithm::None {

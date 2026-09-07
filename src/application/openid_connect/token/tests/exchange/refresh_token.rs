@@ -16,6 +16,73 @@ fn refresh_token_data(
 }
 
 #[tokio::test]
+async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_token() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, public_key) = build_token_service_with_scoped_claims(repo.clone(), user_oid);
+
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "openid offline_access profile email".to_string(),
+                nonce: Some("nonce-refresh".to_string()),
+                code_challenge: Some(s256_challenge("verifier-refresh")),
+                code_challenge_method: Some("S256".parse().unwrap()),
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec!["pwd".to_owned()],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_string(),
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+
+    let initial = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_string()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_string()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: Some("verifier-refresh".to_string()),
+        })
+        .await
+        .unwrap();
+
+    let refreshed = service
+        .exchange_refresh_token(RefreshTokenGrantParams {
+            refresh_token: initial.refresh_token.unwrap(),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_string()),
+            client_assertion_type: None,
+            client_assertion: None,
+        })
+        .await
+        .unwrap();
+
+    let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (id_payload, _) =
+        jwt::decode_with_verifier(refreshed.id_token.as_ref().unwrap(), &verifier).unwrap();
+
+    assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::NAME).unwrap(),
+        &serde_json::json!("Alg User")
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::EMAIL).unwrap(),
+        &serde_json::json!("alg@example.com")
+    );
+}
+
+#[tokio::test]
 async fn exchange_refresh_token_returns_new_access_token() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();

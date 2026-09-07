@@ -98,6 +98,11 @@ pub struct OpenIdConnectClientSettings {
     pub skip_consent: bool,
     #[serde(default)]
     pub allow_public_client_flow: bool,
+    /// When enabled, the token endpoint includes the standard claims the granted
+    /// scopes cover (`profile`/`email`/`phone`/`address`) in issued ID Tokens,
+    /// matching the implicit-flow behaviour. Defaults to off (current behaviour).
+    #[serde(default)]
+    pub include_scoped_claims_in_id_token: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
@@ -313,6 +318,29 @@ mod tests {
             SubjectType::Pairwise
         );
         assert!("sector".parse::<SubjectType>().is_err());
+    }
+
+    #[test]
+    fn settings_defaults_include_scoped_claims_to_false() {
+        assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_id_token);
+
+        // legacy stored settings without the field must deserialize to false
+        let parsed: OpenIdConnectClientSettings =
+            serde_json::from_value(serde_json::json!({"skip_consent": true})).unwrap();
+        assert!(parsed.skip_consent);
+        assert!(!parsed.include_scoped_claims_in_id_token);
+    }
+
+    #[test]
+    fn settings_roundtrips_include_scoped_claims_flag() {
+        let settings = OpenIdConnectClientSettings {
+            skip_consent: true,
+            allow_public_client_flow: false,
+            include_scoped_claims_in_id_token: true,
+        };
+        let json = serde_json::to_value(&settings).unwrap();
+        let parsed: OpenIdConnectClientSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(parsed, settings);
     }
 
     #[test]

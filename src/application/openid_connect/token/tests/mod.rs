@@ -62,8 +62,8 @@ mod helpers;
 
 use self::fixtures::{
     InMemoryClientRepository, InMemoryDataProtector, InMemoryUserRepository,
-    MockClientAuthorizationRepository, cred_repo_with, jwk_repo_with_bindings, key_repo_with_keys,
-    provider_service, signing_algorithm_detector,
+    MockClientAuthorizationRepository, ScopedClaimsClientRepository, cred_repo_with,
+    jwk_repo_with_bindings, key_repo_with_keys, provider_service, signing_algorithm_detector,
 };
 use crate::key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider, RuntimeSigningKey};
 use crate::openid_connect::tests::fixtures::mocks::{MockKeyJwkRepository, MockKeyRepository};
@@ -292,6 +292,45 @@ fn build_token_service_with_key(
         signing_algorithm_detector: signing_algorithm_detector(),
         data_protector: InMemoryDataProtector::new(),
     })
+}
+
+fn build_token_service_with_scoped_claims(
+    repo: Arc<MockClientAuthorizationRepository>,
+    user_oid: Uuid,
+) -> (TokenService, Vec<u8>) {
+    let key = key_for_algorithm("RS256");
+    let public_key = match &key.data {
+        KeyData::Asymmetric(data) => data.public_key.as_bytes().to_vec(),
+        KeyData::Symmetric(_) => unreachable!("test signing key must be asymmetric"),
+    };
+    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
+    let user = test_user(user_oid);
+    (
+        TokenService::new(TokenServiceDependencies {
+            client_authorization_repo: repo,
+            key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
+            key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
+            user_repo: Arc::new(InMemoryUserRepository { user: user.clone() }),
+            client_repo: Arc::new(ScopedClaimsClientRepository),
+            credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
+                oid: Uuid::new_v4(),
+                client_oid: Uuid::nil(),
+                r#type: OpenIdConnectCredentialType::ClientSecret,
+                hint: "token".to_string(),
+                data: OpenIdConnectCredentialData::ClientSecret {
+                    secret: "secret-123".to_string(),
+                },
+                expires_at: Utc::now() + chrono::Duration::days(1),
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            }])),
+            provider_service: provider_service(),
+            signing_algorithm_detector: signing_algorithm_detector(),
+            data_protector: InMemoryDataProtector::new(),
+        }),
+        public_key,
+    )
 }
 
 struct StaticRuntimeKeyRingProvider {

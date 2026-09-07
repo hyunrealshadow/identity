@@ -237,6 +237,7 @@ impl DynamicClientRegistrationService {
             settings: OpenIdConnectClientSettings {
                 skip_consent: default_skip_consent(),
                 allow_public_client_flow: public_client,
+                include_scoped_claims_in_id_token: false,
             },
         };
 

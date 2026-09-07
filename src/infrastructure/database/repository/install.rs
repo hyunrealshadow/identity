@@ -193,7 +193,8 @@ impl InstallPersistence for InstallPersistenceImpl {
             )),
             settings: Set(serde_json::json!({
                 "skip_consent": true,
-                "allow_public_client_flow": false
+                "allow_public_client_flow": false,
+                "include_scoped_claims_in_id_token": false
             })),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),

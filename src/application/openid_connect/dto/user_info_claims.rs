@@ -361,6 +361,35 @@ fn absolute_profile_url(profile_base_url: &str, value: Option<&str>) -> Option<S
     Some(format!("{base}/{path}"))
 }
 
+/// Standard claims the granted `scope` (and, for the `id_token` section, an
+/// optional `claims_request`) allow, as JSON object entries keyed by claim name.
+/// `sub` is intentionally excluded: both ID Token signing paths set the subject
+/// themselves (`subject_identifier`).
+///
+/// Shared by the implicit/hybrid ID Token signer and the token-endpoint signer
+/// (when `OpenIdConnectClientSettings::include_scoped_claims_in_id_token` is on)
+/// so the scope/essential filtering rules never drift between the two.
+pub fn scoped_standard_claims(
+    user: &identity_domain::user::User,
+    scope: &identity_domain::openid_connect::ScopeSet,
+    claims_request: Option<&ClaimsRequest>,
+    profile_base_url: &str,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut claims = UserInfoClaims::from_user_with_profile_base(user, profile_base_url);
+    claims.apply_scope_filter_for_id_token(scope, claims_request);
+
+    // Serialization of the fully-typed claim struct is infallible (only
+    // String/Option/bool fields); a failure here would indicate a bug and must
+    // not silently drop claims.
+    let mut claims = serde_json::to_value(claims)
+        .expect("UserInfoClaims serialization is infallible")
+        .as_object()
+        .cloned()
+        .expect("UserInfoClaims serializes to an object");
+    claims.remove(JwtClaimNames::SUB);
+    claims
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -670,5 +699,69 @@ mod tests {
 
         assert_eq!(json["address"]["street_address"], "1 Main St");
         assert_eq!(json["address"]["country"], "US");
+    }
+
+    #[test]
+    fn scoped_standard_claims_follows_scope_and_excludes_sub() {
+        let user = full_profile_user();
+        let scope = ScopeSet::parse("profile email").unwrap();
+
+        let claims = scoped_standard_claims(&user, &scope, None, "https://issuer.example.com");
+
+        assert!(!claims.contains_key("sub"));
+        assert_eq!(claims["name"], serde_json::json!("John Doe"));
+        assert_eq!(claims["email"], serde_json::json!("john@example.com"));
+        assert_eq!(claims["email_verified"], serde_json::json!(true));
+        // phone/address claims need their own scopes
+        assert!(!claims.contains_key("phone_number"));
+        assert!(!claims.contains_key("address"));
+    }
+
+    #[test]
+    fn scoped_standard_claims_without_scope_returns_nothing_but_sub_is_excluded() {
+        let user = full_profile_user();
+        let scope = ScopeSet::parse("openid").unwrap();
+
+        let claims = scoped_standard_claims(&user, &scope, None, "https://issuer.example.com");
+
+        assert!(claims.is_empty());
+    }
+
+    fn full_profile_user() -> User {
+        let user_oid = uuid::Uuid::new_v4();
+        User {
+            oid: UserOid::from(user_oid),
+            email: "john@example.com".to_string(),
+            email_normalized: "john@example.com".to_string(),
+            name: "John Doe".to_string(),
+            name_normalized: "john doe".to_string(),
+            given_name: Some("John".to_string()),
+            family_name: Some("Doe".to_string()),
+            middle_name: None,
+            nickname: Some("johnny".to_string()),
+            profile: None,
+            picture: None,
+            website: None,
+            gender: None,
+            birthdate: None,
+            zoneinfo: None,
+            locale: None,
+            theme: None,
+            email_verified: true,
+            phone_number: Some("+12025550123".to_string()),
+            phone_number_verified: Some(true),
+            address_formatted: None,
+            address_street_address: None,
+            address_locality: None,
+            address_region: None,
+            address_postal_code: None,
+            address_country: None,
+            failed_attempts: 0,
+            enabled: true,
+            locked: false,
+            locked_until: None,
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+        }
     }
 }

@@ -211,6 +211,122 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
 }
 
 #[tokio::test]
+async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_token() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, public_key) = build_token_service_with_scoped_claims(repo.clone(), user_oid);
+
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "openid profile email".to_string(),
+                nonce: Some("nonce-123".to_string()),
+                code_challenge: Some(s256_challenge("verifier-123")),
+                code_challenge_method: Some("S256".parse().unwrap()),
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec!["pwd".to_owned()],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_string(),
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+
+    let result = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_string()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_string()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: Some("verifier-123".to_string()),
+        })
+        .await
+        .unwrap();
+
+    let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (id_payload, _) =
+        jwt::decode_with_verifier(result.id_token.as_ref().unwrap(), &verifier).unwrap();
+
+    // profile + email scope → scoped standard claims present (scope-driven, no
+    // claims_request needed). sub stays the raw user oid (public subject type).
+    assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::NAME).unwrap(),
+        &serde_json::json!("Alg User")
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::EMAIL).unwrap(),
+        &serde_json::json!("alg@example.com")
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::EMAIL_VERIFIED).unwrap(),
+        &serde_json::json!(true)
+    );
+    assert_eq!(
+        id_payload.claim(JwtClaimNames::PREFERRED_USERNAME).unwrap(),
+        &serde_json::json!("Alg User")
+    );
+}
+
+#[tokio::test]
+async fn scoped_claims_client_omits_claims_outside_granted_scope_in_code_flow_id_token() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, public_key) = build_token_service_with_scoped_claims(repo.clone(), user_oid);
+
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "openid".to_string(),
+                nonce: Some("nonce-123".to_string()),
+                code_challenge: Some(s256_challenge("verifier-123")),
+                code_challenge_method: Some("S256".parse().unwrap()),
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec!["pwd".to_owned()],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_string(),
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+
+    let result = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_string()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_string()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: Some("verifier-123".to_string()),
+        })
+        .await
+        .unwrap();
+
+    let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (id_payload, _) =
+        jwt::decode_with_verifier(result.id_token.as_ref().unwrap(), &verifier).unwrap();
+
+    assert!(id_payload.claim(JwtClaimNames::NAME).is_none());
+    assert!(id_payload.claim(JwtClaimNames::EMAIL).is_none());
+    assert!(id_payload.claim(JwtClaimNames::EMAIL_VERIFIED).is_none());
+}
+
+#[tokio::test]
 async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
@@ -662,6 +778,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 audience: &Uuid::nil().to_string(),
                 client: &client,
                 user: &test_user(user_oid),
+                scope: "openid profile",
                 nonce: None,
                 auth_time: None,
                 acr: None,

@@ -1,10 +1,11 @@
 use super::*;
+use crate::openid_connect::dto::scoped_standard_claims;
 use crate::openid_connect::jose::{
     asymmetric_signer_from_pem, encrypt_compact_with_public_jwk, front_channel_hash,
 };
 use identity_domain::auth::SessionOid;
 use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
-use identity_domain::openid_connect::ClaimsRequest;
+use identity_domain::openid_connect::{ClaimsRequest, ScopeSet};
 #[cfg(test)]
 use josekit::jws::RS256;
 
@@ -45,6 +46,9 @@ pub(super) struct SignIdTokenInput<'a> {
     pub audience: &'a str,
     pub client: &'a identity_domain::openid_connect::OpenIdConnectClient,
     pub user: &'a identity_domain::user::User,
+    /// Granted scope for the issued token; consulted only when the client
+    /// opts in to scoped standard claims in the ID Token.
+    pub scope: &'a str,
     pub nonce: Option<&'a str>,
     pub auth_time: Option<i64>,
     pub acr: Option<&'a str>,
@@ -278,6 +282,24 @@ impl TokenService {
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
                 })?;
+        }
+
+        if input
+            .client
+            .metadata()
+            .settings
+            .include_scoped_claims_in_id_token
+        {
+            let scope = ScopeSet::parse(input.scope).map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+            })?;
+            let standard_claims =
+                scoped_standard_claims(input.user, &scope, None, input.issuer.as_str());
+            for (name, value) in standard_claims {
+                payload.set_claim(&name, Some(value)).map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
+                })?;
+            }
         }
 
         if input.alg == JwsAlgorithm::None {
