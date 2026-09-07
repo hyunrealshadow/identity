@@ -43,7 +43,10 @@ describe('progressive form responses', () => {
       'Invalid account',
       { login_id: 'protected-login', identifier: 'alice' },
     )
-    const destination = new URL(response.headers.get('location') ?? '')
+    const destination = new URL(
+      response.headers.get('location') ?? '',
+      request.url,
+    )
 
     expect(destination.pathname).toBe('/login')
     expect(destination.search).toBe('')
@@ -51,6 +54,22 @@ describe('progressive form responses', () => {
     expect(response.headers.get('set-cookie')).toContain('Secure')
     expect(response.headers.get('set-cookie')).toContain('SameSite=Lax')
     expect(response.headers.get('set-cookie')).toContain('Max-Age=60')
+  })
+
+  it('does not expose the enhanced handler internal origin', async () => {
+    const request = new Request('http://127.0.0.1:53662/login', {
+      method: 'POST',
+      headers: { 'x-enhanced-form': '1' },
+    })
+
+    const response = formErrorResponse(
+      request,
+      '/login',
+      'Invalid account',
+      { login_id: 'protected-login' },
+    )
+
+    await expect(response.json()).resolves.toMatchObject({ redirect: '/login' })
   })
 
   it('stores multiple field errors in the flash cookie', () => {

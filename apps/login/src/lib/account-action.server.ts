@@ -13,12 +13,14 @@ import { requestLocale } from './i18n.server'
 import {
   clearElevatedAuthorization,
   clearMfaUiState,
+  completeTotpStateChange,
   finishLogout,
   hasFreshAuthentication,
   mfaUiState,
   startReauthorization,
   storeMfaEnrollment,
   storeRegeneratedRecoveryCodes,
+  storeTotpEnabled,
 } from './oauth.server'
 import { storeAccountFlash } from './oauth-session.server'
 import { loadApplicationUrl } from './runtime-config.server'
@@ -57,10 +59,10 @@ export async function executeAccountAction(
       return { ok: true }
     }
     if (action === 'prepare-change-password' || action === 'prepare-disable-totp') {
-      const requiresAal2 =
-        action === 'prepare-disable-totp' ||
-        (action === 'prepare-change-password' && values.requires_aal2 === 'true')
-      const requiredAcr = requiresAal2 ? 'urn:identity:acr:aal2' : undefined
+      const requiredAcr = action === 'prepare-disable-totp'
+        ? 'urn:identity:acr:aal2'
+        : await passwordChangeRequiredAcr()
+      const requiresAal2 = requiredAcr === 'urn:identity:acr:aal2'
       if (await hasFreshAuthentication(requiredAcr)) return { ok: true }
 
       const loginHint = values.login_hint?.trim()
@@ -234,7 +236,7 @@ export async function executeAccountAction(
         },
         { authorization: 'elevated' },
       )
-      await clearMfaUiState()
+      await completeTotpStateChange(true)
       await clearElevatedAuthorization()
     } else if (action === 'disable-totp') {
       await requireGraphql(
@@ -242,7 +244,7 @@ export async function executeAccountAction(
         undefined,
         { authorization: 'elevated' },
       )
-      await clearMfaUiState()
+      await completeTotpStateChange(false)
       await clearElevatedAuthorization()
     } else if (action === 'regenerate-recovery-codes') {
       const requiredAcr = 'urn:identity:acr:aal2'
@@ -334,6 +336,24 @@ async function currentAccountLoginHint() {
   } catch {
     return undefined
   }
+}
+
+async function passwordChangeRequiredAcr() {
+  const knownState = await mfaUiState()
+  if (typeof knownState.totpEnabled === 'boolean') {
+    return knownState.totpEnabled ? 'urn:identity:acr:aal2' : undefined
+  }
+  const data = await requireGraphql<{
+    viewer: { security: { totpEnabled: boolean } }
+  }>(
+    `query PasswordChangeAuthenticationRequirements {
+      viewer { security { totpEnabled } }
+    }`,
+  )
+  await storeTotpEnabled(data.viewer.security.totpEnabled)
+  return data.viewer.security.totpEnabled
+    ? 'urn:identity:acr:aal2'
+    : undefined
 }
 
 async function requireGraphql<T>(

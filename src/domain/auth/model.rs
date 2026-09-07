@@ -91,6 +91,8 @@ pub struct Login {
     pub status: LoginStatus,
     pub failed_attempts: i32,
     pub created_at: DateTime<Utc>,
+    /// Absolute deadline after which this login interaction cannot advance.
+    pub expires_at: DateTime<Utc>,
     /// ACR that was granted after the full authentication flow (set when
     /// transitioning to `authenticated`).
     pub acr: Option<String>,

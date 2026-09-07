@@ -1,33 +1,35 @@
-Identity has been installed as {{ include "identity.fullname" . }}.
+Identity release {{ include "identity.fullname" . }} has been installed.
 
-Identity public URL: {{ .Values.identity.publicUrl }}
-Login public URL: {{ .Values.login.publicUrl }}
+Public URLs:
+  Identity: {{ .Values.identity.publicUrl }}
+  Login: {{ .Values.login.publicUrl }}
 
-Identity Pod transport: {{ ternary "HTTPS" "HTTP behind a trusted HTTPS proxy" .Values.identity.tls.enabled }}
-Login Pod transport: {{ ternary "HTTPS" "HTTP behind an HTTPS proxy" .Values.login.tls.enabled }}
+Service endpoints:
+  Identity API: {{ ternary "https" "http" .Values.identity.tls.enabled }}://{{ include "identity.fullname" . }}-server:{{ .Values.identity.service.publicPort }}
+  Identity GraphQL: {{ ternary "https" "http" .Values.identity.tls.enabled }}://{{ include "identity.fullname" . }}-server:{{ .Values.identity.service.graphqlPort }}/graphql
+  Identity internal API: {{ ternary "https" "http" .Values.identity.tls.enabled }}://{{ include "identity.fullname" . }}-server-internal:{{ .Values.identity.service.internalPort }}
+  Identity health: http://{{ include "identity.fullname" . }}-server:{{ .Values.identity.service.healthPort }}/health
+  Login: {{ ternary "https" "http" .Values.login.tls.enabled }}://{{ include "identity.fullname" . }}-login:{{ .Values.login.service.port }}
 
-The internal Identity listener is available only through:
-  {{ include "identity.fullname" . }}-server-internal:{{ .Values.identity.service.internalPort }}
+Pod transport:
+  Identity: {{ ternary "HTTPS" "HTTP; public traffic requires a trusted HTTPS proxy" .Values.identity.tls.enabled }}
+  Login: {{ ternary "HTTPS" "HTTP; public traffic requires HTTPS forwarding metadata" .Values.login.tls.enabled }}
 
-Login authenticates there with a projected ServiceAccount token for:
-  system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.loginServiceAccountName" . }}
-
+Workload authentication:
+  Login subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.loginServiceAccountName" . }}
+  Kubernetes issuer: {{ .Values.identity.workload.issuer }}
 {{- if .Values.identity.workload.issuerCa.enabled }}
-Identity verifies the Kubernetes issuer with the CA bundle from:
-  ConfigMap/{{ .Values.identity.workload.issuerCa.configMapName }} key {{ .Values.identity.workload.issuerCa.key }}
+  Issuer CA: ConfigMap/{{ .Values.identity.workload.issuerCa.configMapName }} key {{ .Values.identity.workload.issuerCa.key }}
 {{- end }}
 {{- if .Values.identity.workload.issuerToken.enabled }}
-Identity authenticates same-origin issuer discovery as:
-  system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.serverServiceAccountName" . }}
+  Discovery subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.serverServiceAccountName" . }}
 {{- end }}
 
+Gateway API: {{ ternary "enabled" "disabled" .Values.gatewayApi.enabled }}
 {{- if .Values.gatewayApi.enabled }}
-Gateway API routes reference:
-  Gateway/{{ .Values.gatewayApi.parentRef.name }}{{ with .Values.gatewayApi.parentRef.namespace }} in namespace {{ . }}{{ end }}
-{{- else }}
-Gateway API routes are disabled (gatewayApi.enabled=false).
+  Parent: Gateway/{{ .Values.gatewayApi.parentRef.name }}{{ with .Values.gatewayApi.parentRef.namespace }} in namespace {{ . }}{{ end }}
 {{- end }}
 
-Check rollout state:
+Rollout status:
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-server -n {{ .Release.Namespace }}
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-login -n {{ .Release.Namespace }}

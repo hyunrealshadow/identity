@@ -266,6 +266,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         acr: None,
         requested_acr: None,
         created_at: now.into(),
+        expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,
     };
     let oidc_metadata_model = client_open_id_connect::Model {

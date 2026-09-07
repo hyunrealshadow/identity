@@ -18,8 +18,9 @@ use super::{
 };
 use crate::views::auth::{
     AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse, IdentifierRequest,
-    IdentifierResponse, LoginStatusResponse, SelectAccountRequest, SelectAccountResponse,
-    SessionInfo, UserDisplayInfo,
+    IdentifierResponse, LoginStatusResponse, RestartLoginRequest, RestartLoginResponse,
+    SelectAccountRequest, SelectAccountResponse, SessionInfo, SwitchLoginRequest,
+    SwitchLoginResponse, UserDisplayInfo,
 };
 use crate::{
     application::{
@@ -45,6 +46,8 @@ pub fn routes() -> Router {
         .push(Router::with_path("api/auth/login/select").post(select_account))
         .push(Router::with_path("api/auth/login/identifier").post(identifier))
         .push(Router::with_path("api/auth/login/challenge").post(challenge))
+        .push(Router::with_path("api/auth/login/restart").post(restart_login))
+        .push(Router::with_path("api/auth/login/switch").post(switch_login))
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -294,6 +297,42 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     };
 
     render_json(res, StatusCode::OK, resp);
+    Ok(())
+}
+
+#[handler]
+async fn restart_login(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: RestartLoginRequest = parse_json(req).await?;
+    let id = ctx
+        .services()
+        .oidc_authorize()
+        .restart_login_flow(&body.id)
+        .await?;
+
+    render_json(res, StatusCode::CREATED, RestartLoginResponse { id });
+    Ok(())
+}
+
+#[handler]
+async fn switch_login(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: SwitchLoginRequest = parse_json(req).await?;
+    let id = ctx
+        .services()
+        .oidc_authorize()
+        .switch_login_account(&body.id)
+        .await?;
+
+    render_json(res, StatusCode::OK, SwitchLoginResponse { id });
     Ok(())
 }
 

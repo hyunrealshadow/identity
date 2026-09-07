@@ -1,6 +1,6 @@
 use super::*;
 
-use identity_domain::auth::SessionOid;
+use identity_domain::auth::{LoginStatus, SessionOid};
 use identity_domain::client_authorization::{
     ClientAuthorizationData, ConsentState, SelectionSource, StoredAuthorizationRequest,
 };
@@ -113,6 +113,115 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
             })?;
 
+        self.encrypt_login_id(login.oid).await
+    }
+
+    /// Roll the same unfinished login back to identifier entry when the user
+    /// chooses a different account before authentication completes.
+    pub async fn switch_login_account(
+        &self,
+        protected_login_oid: &str,
+    ) -> Result<String, AppError> {
+        let context = self
+            .load_continue_context_by_login(protected_login_oid)
+            .await?;
+        if context.expires_at <= chrono::Utc::now() || context.completed_at.is_some() {
+            return Err(AppError::from_code(
+                AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
+            ));
+        }
+        if context.stored.interaction.selection_source == Some(SelectionSource::Reauthentication)
+            || !matches!(
+                context.login.status,
+                LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+            )
+        {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        }
+
+        self.login_repo
+            .reset_identity(context.login.oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
+            })?;
+        Ok(protected_login_oid.to_owned())
+    }
+
+    /// Create a fresh login record for an authorization interaction whose
+    /// credential challenge can no longer be continued.
+    ///
+    /// The authorization request remains the source of truth. In particular,
+    /// a forced reauthentication keeps its selected subject and session so a
+    /// restart cannot turn into an account switch.
+    pub async fn restart_login_flow(&self, protected_login_oid: &str) -> Result<String, AppError> {
+        let context = self
+            .load_continue_context_by_login(protected_login_oid)
+            .await?;
+        if context.expires_at <= chrono::Utc::now() || context.completed_at.is_some() {
+            return Err(AppError::from_code(
+                AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
+            ));
+        }
+        if context.login.status != identity_domain::auth::LoginStatus::EXPIRED {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        }
+
+        let reauthentication = if context.stored.interaction.selection_source
+            == Some(SelectionSource::Reauthentication)
+        {
+            let user_oid = context
+                .stored
+                .interaction
+                .selected_user_oid
+                .as_deref()
+                .and_then(|value| Uuid::parse_str(value).ok())
+                .ok_or_else(Self::interaction_conflict)?;
+            let session_oid = context
+                .stored
+                .interaction
+                .selected_session_oid
+                .ok_or_else(Self::interaction_conflict)?;
+            Some((user_oid, session_oid))
+        } else {
+            None
+        };
+
+        self.create_replacement_login(&context, reauthentication)
+            .await
+    }
+
+    async fn create_replacement_login(
+        &self,
+        context: &ContinueContext,
+        reauthentication: Option<(Uuid, SessionOid)>,
+    ) -> Result<String, AppError> {
+        let login = self
+            .login_repo
+            .create_pending(
+                context.login.client_oid,
+                context.login.client_authorization_oid,
+                context.login.requested_acr.as_deref(),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
+            })?;
+
+        if let Some((user_oid, session_oid)) = reauthentication {
+            self.login_repo
+                .bind_user(login.oid, user_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
+                })?;
+            self.login_repo
+                .bind_session(login.oid, session_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
+                })?;
+        }
         self.encrypt_login_id(login.oid).await
     }
 

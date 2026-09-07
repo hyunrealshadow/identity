@@ -6,6 +6,7 @@ import { executeAccountAction } from './account-action.server'
 const mocks = vi.hoisted(() => ({
   clearElevatedAuthorization: vi.fn(),
   clearMfaUiState: vi.fn(),
+  completeTotpStateChange: vi.fn(),
   finishLogout: vi.fn(),
   getRequestHeader: vi.fn(),
   hasFreshAuthentication: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   storeAccountFlash: vi.fn(),
   storeMfaEnrollment: vi.fn(),
   storeRegeneratedRecoveryCodes: vi.fn(),
+  storeTotpEnabled: vi.fn(),
   startReauthorization: vi.fn(),
 }))
 
@@ -39,11 +41,13 @@ vi.mock('./i18n.server', () => ({
 vi.mock('./oauth.server', () => ({
   clearElevatedAuthorization: mocks.clearElevatedAuthorization,
   clearMfaUiState: mocks.clearMfaUiState,
+  completeTotpStateChange: mocks.completeTotpStateChange,
   finishLogout: mocks.finishLogout,
   hasFreshAuthentication: mocks.hasFreshAuthentication,
   mfaUiState: mocks.mfaUiState,
   storeMfaEnrollment: mocks.storeMfaEnrollment,
   storeRegeneratedRecoveryCodes: mocks.storeRegeneratedRecoveryCodes,
+  storeTotpEnabled: mocks.storeTotpEnabled,
   startReauthorization: mocks.startReauthorization,
 }))
 
@@ -215,6 +219,22 @@ describe('executeAccountAction', () => {
     expect(mocks.identityGraphql).not.toHaveBeenCalled()
   })
 
+  it('records TOTP as enabled when enrollment succeeds', async () => {
+    mocks.mfaUiState.mockResolvedValue({
+      enrollment: {
+        enrollment_token: 'enrollment-token',
+      },
+    })
+
+    await expect(executeAccountAction({
+      action: 'confirm-totp',
+      values: { code: '123456' },
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.completeTotpStateChange).toHaveBeenCalledWith(true)
+    expect(mocks.clearMfaUiState).not.toHaveBeenCalled()
+  })
+
   it('propagates RFC 9470 requirements into the reauthentication redirect', async () => {
     mocks.identityGraphql
       .mockRejectedValueOnce(new GraphqlRequestError(
@@ -260,20 +280,32 @@ describe('executeAccountAction', () => {
   })
 
   it('checks freshness before showing the password change form', async () => {
+    mocks.identityGraphql.mockResolvedValueOnce({
+      viewer: { security: { totpEnabled: false } },
+    })
+
     await expect(executeAccountAction({
       action: 'prepare-change-password',
       values: {},
     })).resolves.toEqual({ ok: true })
 
     expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(undefined)
-    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+    expect(mocks.identityGraphql).toHaveBeenCalledWith(
+      expect.stringContaining('query PasswordChangeAuthenticationRequirements'),
+      undefined,
+      undefined,
+    )
     expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
   })
 
-  it('requires fresh AAL2 before changing a password when MFA is enabled', async () => {
+  it('requires fresh AAL2 from current account state instead of trusting form input', async () => {
+    mocks.identityGraphql.mockResolvedValueOnce({
+      viewer: { security: { totpEnabled: true } },
+    })
+
     await expect(executeAccountAction({
       action: 'prepare-change-password',
-      values: { requires_aal2: 'true' },
+      values: { requires_aal2: 'false' },
     })).resolves.toEqual({ ok: true })
 
     expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
@@ -281,12 +313,33 @@ describe('executeAccountAction', () => {
     )
   })
 
-  it('keeps the password scope when starting AAL2 password reauthentication', async () => {
+  it('uses the server-side TOTP state immediately after enrollment', async () => {
+    mocks.mfaUiState.mockResolvedValue({ totpEnabled: true })
     mocks.hasFreshAuthentication.mockResolvedValue(false)
 
     const result = await executeAccountAction({
       action: 'prepare-change-password',
-      values: { login_hint: 'alice', requires_aal2: 'true' },
+      values: { login_hint: 'alice' },
+    })
+
+    expect(result.redirect).toBe(
+      'https://identity.example.com/oauth2/authorize?state=new',
+    )
+    expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
+      'urn:identity:acr:aal2',
+    )
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
+  })
+
+  it('keeps the password scope when starting AAL2 password reauthentication', async () => {
+    mocks.hasFreshAuthentication.mockResolvedValue(false)
+    mocks.identityGraphql.mockResolvedValueOnce({
+      viewer: { security: { totpEnabled: true } },
+    })
+
+    const result = await executeAccountAction({
+      action: 'prepare-change-password',
+      values: { login_hint: 'alice' },
     })
 
     expect(result.redirect).toBe(

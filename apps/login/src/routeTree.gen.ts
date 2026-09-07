@@ -17,6 +17,7 @@ import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LogoutRouteImport } from './routes/logout'
 import { Route as AccountIndexRouteImport } from './routes/account/index'
 import { Route as AccountIdentifiersRouteImport } from './routes/account/identifiers'
 import { Route as AccountProfileRouteImport } from './routes/account/profile'
@@ -65,6 +66,11 @@ const InstallRoute = InstallRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogoutRoute = LogoutRouteImport.update({
+  id: '/logout',
+  path: '/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountIndexRoute = AccountIndexRouteImport.update({
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
+  '/logout': typeof LogoutRoute
   '/account/identifiers': typeof AccountIdentifiersRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
@@ -140,6 +147,7 @@ export interface FileRoutesByTo {
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
+  '/logout': typeof LogoutRoute
   '/account/identifiers': typeof AccountIdentifiersRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/consent': typeof ConsentRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
+  '/logout': typeof LogoutRoute
   '/account/identifiers': typeof AccountIdentifiersRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/consent'
     | '/install'
     | '/login'
+    | '/logout'
     | '/account/identifiers'
     | '/account/profile'
     | '/account/security'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/consent'
     | '/install'
     | '/login'
+    | '/logout'
     | '/account/identifiers'
     | '/account/profile'
     | '/account/security'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/consent'
     | '/install'
     | '/login'
+    | '/logout'
     | '/account/identifiers'
     | '/account/profile'
     | '/account/security'
@@ -238,6 +250,7 @@ export interface RootRouteChildren {
   ConsentRoute: typeof ConsentRoute
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
+  LogoutRoute: typeof LogoutRoute
   HealthLiveRoute: typeof HealthLiveRoute
   HealthReadyRoute: typeof HealthReadyRoute
 }
@@ -298,6 +311,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logout': {
+      id: '/logout'
+      path: '/logout'
+      fullPath: '/logout'
+      preLoaderRoute: typeof LogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account/': {
@@ -407,6 +427,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConsentRoute: ConsentRoute,
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
+  LogoutRoute: LogoutRoute,
   HealthLiveRoute: HealthLiveRoute,
   HealthReadyRoute: HealthReadyRoute,
 }

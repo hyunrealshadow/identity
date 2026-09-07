@@ -32,6 +32,7 @@ enum Login {
     Acr,
     RequestedAcr,
     CreatedAt,
+    ExpiresAt,
     UpdatedAt,
 }
 
@@ -54,6 +55,7 @@ impl MigrationTrait for Migration {
                     .col(integer(Login::FailedAttempts).default(0))
                     .col(string_null(Login::Acr))
                     .col(string_null(Login::RequestedAcr))
+                    .col(timestamp_with_time_zone(Login::ExpiresAt))
                     .col(
                         timestamp_with_time_zone(Login::CreatedAt)
                             .default(Expr::current_timestamp()),
@@ -138,6 +140,15 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .table(Login::Table)
+                    .name("idx_login_expires_at")
+                    .col(Login::ExpiresAt)
+                    .to_owned(),
+            )
+            .await?;
         Ok(())
     }
 
@@ -179,6 +190,14 @@ impl MigrationTrait for Migration {
                 Index::drop()
                     .table(Login::Table)
                     .name("idx_login_status")
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .drop_index(
+                Index::drop()
+                    .table(Login::Table)
+                    .name("idx_login_expires_at")
                     .to_owned(),
             )
             .await?;

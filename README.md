@@ -81,7 +81,9 @@ pnpm install --frozen-lockfile
 pnpm build:error-css
 ```
 
-Environment overrides: `APP_ENV`, `PORT`, `HOST`, `DATABASE_URL`.
+Environment overrides: `APP_ENV`, `PORT`, `HOST`, `DATABASE_URL`,
+`IDENTITY_WORKLOAD_TOKEN`. The development Identity server and Login app must
+use the same workload token (at least 32 random bytes).
 
 Deployment examples for persisting the built-in Login application's client ID
 and secret are documented in `deploy/README.md`.

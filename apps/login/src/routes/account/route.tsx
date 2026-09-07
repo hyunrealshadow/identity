@@ -11,7 +11,7 @@ import { beginAuthorization } from '#/lib/authorization-flow'
 import { GraphqlRequestError, identityGraphql } from '#/lib/graphql.server'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
-import { mfaUiState } from '#/lib/oauth.server'
+import { mfaUiState, storeTotpEnabled } from '#/lib/oauth.server'
 import { consumeAccountFlash } from '#/lib/oauth-session.server'
 import { applyTheme, type ThemePreference } from '#/lib/appearance'
 
@@ -51,6 +51,7 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
   const flash = await consumeAccountFlash()
   try {
     const [data, mfa] = await Promise.all([identityGraphql<AccountData>(ACCOUNT_QUERY), mfaUiState()])
+    if (data) await storeTotpEnabled(data.viewer.security.totpEnabled)
     return {
       locale: resolveAccountLocale(
         data?.viewer.account.locale,
@@ -137,7 +138,6 @@ function AccountLayout() {
                 <UserMenu
                   user={{ name: displayName, email: account.email, picture: account.picture }}
                   menuLabel={t('accountMenuLabel')}
-                  manageLabel={t('accountMenuManage')}
                   signOutLabel={t('accountSignOut')}
                   requestFailedLabel={t('accountRequestFailed')}
                 />

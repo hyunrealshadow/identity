@@ -4,6 +4,7 @@ import {
   createRootRoute,
   redirect,
   useRouterState,
+  type ErrorComponentProps,
 } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
@@ -32,6 +33,7 @@ export const Route = createRootRoute({
     }
     return { installed, theme }
   },
+  errorComponent: RootError,
   head: () => ({
     meta: [
       {
@@ -59,6 +61,22 @@ export const Route = createRootRoute({
   }),
   shellComponent: RootDocument,
 })
+
+function RootError({ error }: ErrorComponentProps) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+      <div className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
+        <h1 className="text-lg font-semibold">Unable to continue</h1>
+        <p className="mt-2 text-sm text-muted">
+          {import.meta.env.DEV ? error.message : 'Please try again.'}
+        </p>
+        <a className="mt-5 inline-flex rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href="/">
+          Try again
+        </a>
+      </div>
+    </main>
+  )
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   const locale = useRouterState({

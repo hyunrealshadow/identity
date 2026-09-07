@@ -10,7 +10,7 @@ use crate::{
 use identity_domain::{
     auth::{
         ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, AMR_RECOVERY_CODE,
-        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LOGIN_EXPIRY, LoginFailureReason, LoginStatus,
+        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LoginFailureReason, LoginStatus,
         MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
         model::{Login, Session},
         password::{HashOptions, PasswordHashSetting, PasswordHasher, VerifyResult},
@@ -289,12 +289,10 @@ impl LoginService {
         }
 
         // Check login expiry for all credential types.
-        let expiry_duration = chrono::Duration::from_std(LOGIN_EXPIRY)
-            .unwrap_or_else(|_| chrono::Duration::seconds(300));
-        if Utc::now().signed_duration_since(login.created_at) > expiry_duration {
+        if login.expires_at <= Utc::now() {
             if let Err(e) = self
                 .login_repo
-                .update_status(login.oid, LoginStatus::FAILED, None, None)
+                .update_status(login.oid, LoginStatus::EXPIRED, None, None)
                 .await
             {
                 tracing::error!(error = %e, "failed to update login status on expiry");
@@ -1154,6 +1152,27 @@ mod tests {
             Ok(())
         }
 
+        async fn reset_identity(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
+            let mut state = self.state.lock().unwrap();
+            let login = state
+                .logins
+                .iter_mut()
+                .find(|login| login.oid == login_oid)
+                .ok_or(LoginRepositoryError::LoginNotFound)?;
+            if !matches!(
+                login.status,
+                LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+            ) {
+                return Err(LoginRepositoryError::InvalidTransition);
+            }
+            login.status = LoginStatus::CREATED;
+            login.user_oid = None;
+            login.session_oid = None;
+            login.acr = None;
+            login.failed_attempts = 0;
+            Ok(())
+        }
+
         async fn bind_session(
             &self,
             login_oid: Uuid,
@@ -1240,6 +1259,7 @@ mod tests {
             status: LoginStatus::MFA_REQUIRED,
             failed_attempts,
             created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::minutes(5),
             acr: None,
             requested_acr: None,
         }
@@ -1398,6 +1418,45 @@ mod tests {
             .expect_err("unbound login must still verify the password first");
 
         assert_error_code(error, AuthErrorCode::InvalidLoginState);
+    }
+
+    #[tokio::test]
+    async fn expired_challenge_transitions_login_to_expired() {
+        let user = test_user();
+        let mut login = test_login(Uuid::from(user.oid), 0);
+        login.expires_at = Utc::now() - chrono::Duration::seconds(1);
+        let login_oid = login.oid;
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins: vec![login],
+                ..Default::default()
+            })),
+        });
+        let (service, _) = otp_service(login_repo.clone(), user);
+
+        let error = service
+            .challenge(
+                login_oid,
+                CredentialType::Otp,
+                "000000",
+                SessionContext {
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                },
+            )
+            .await
+            .expect_err("expired login must not evaluate the credential");
+
+        assert_error_code(error, AuthErrorCode::LoginExpired);
+        let state = login_repo.state.lock().unwrap();
+        assert_eq!(state.update_status_calls.len(), 1);
+        assert_eq!(state.update_status_calls[0].1, LoginStatus::EXPIRED);
     }
 
     #[tokio::test]

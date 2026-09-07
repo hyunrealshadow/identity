@@ -30,6 +30,7 @@ export interface OAuthTokenSession {
 }
 
 export interface MfaUiSession {
+  totp_enabled?: boolean
   mfa_enrollment?: {
     secret: string
     otp_auth_uri: string

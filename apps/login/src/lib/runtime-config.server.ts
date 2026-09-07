@@ -92,7 +92,19 @@ export function loadSessionSecret() {
 }
 
 export function loadApplicationUrl() {
-  return process.env.IDENTITY_PUBLIC_APP_URL ?? ''
+  const value =
+    process.env.IDENTITY_PUBLIC_APP_URL ??
+    (process.env.NODE_ENV === 'development'
+      ? 'https://localhost:3000'
+      : undefined)
+  if (!value) {
+    throw new Error('IDENTITY_PUBLIC_APP_URL must be configured')
+  }
+  const url = new URL(value)
+  if (url.protocol !== 'https:') {
+    throw new Error('IDENTITY_PUBLIC_APP_URL must use HTTPS')
+  }
+  return url.toString()
 }
 
 const READY_THRESHOLD_SECONDS = 30 * 60

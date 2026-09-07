@@ -176,6 +176,10 @@ pub trait LoginRepository: Send + Sync {
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError>;
 
+    /// Roll an unfinished credential challenge back to identifier entry while
+    /// preserving the login record and its original expiration time.
+    async fn reset_identity(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError>;
+
     /// Atomically increment login `failed_attempts`, record a failure reason,
     /// and return the resulting count.
     async fn increment_failed_attempts(

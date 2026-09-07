@@ -28,6 +28,8 @@ pub struct Model {
     pub requested_acr: Option<String>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
+    #[sea_orm(indexed)]
+    pub expires_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
 }
 

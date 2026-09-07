@@ -41,7 +41,7 @@ mod tests {
         assert!(user_table.contains("CURRENT_TIMESTAMP"));
 
         assert_eq!(schema.create_index_from_entity(session::Entity).len(), 2);
-        assert_eq!(schema.create_index_from_entity(login::Entity).len(), 5);
+        assert_eq!(schema.create_index_from_entity(login::Entity).len(), 6);
         assert_eq!(
             schema
                 .create_index_from_entity(client_authorization::Entity)

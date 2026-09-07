@@ -53,6 +53,14 @@ export interface LoginStatusResponse {
   continue_uri?: string
 }
 
+export interface RestartLoginResponse {
+  id: string
+}
+
+export interface SwitchLoginResponse {
+  id: string
+}
+
 export interface IdentifierResponse {
   id: string
   status: string

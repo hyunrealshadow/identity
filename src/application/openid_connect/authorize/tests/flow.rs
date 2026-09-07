@@ -220,6 +220,277 @@ async fn create_login_flow_returns_protected_id() {
 }
 
 #[tokio::test]
+async fn restart_login_flow_creates_fresh_login_for_same_authorization() {
+    let login_repo = Arc::new(mock_login_repo());
+    let new_login_oid = login_repo
+        .create_pending_login
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .oid;
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        login_repo.clone(),
+    );
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let old_login_oid = Uuid::new_v4();
+    *login_repo.find_by_oid_result.lock().unwrap() =
+        Some(Some(identity_domain::auth::model::Login {
+            oid: old_login_oid,
+            client_oid: request.client_id,
+            client_authorization_oid: authorization_oid,
+            session_oid: None,
+            user_oid: Some(Uuid::new_v4()),
+            status: identity_domain::auth::LoginStatus::EXPIRED,
+            failed_attempts: 0,
+            created_at: Utc::now() - chrono::Duration::minutes(6),
+            expires_at: Utc::now() - chrono::Duration::minutes(1),
+            acr: None,
+            requested_acr: Some("urn:identity:aal2".to_owned()),
+        }));
+    let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
+
+    let restarted_id = service.restart_login_flow(&old_login_id).await.unwrap();
+
+    assert_eq!(
+        service.decrypt_login_id(&restarted_id).await.unwrap(),
+        new_login_oid
+    );
+    assert!(login_repo.bind_session_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn switch_login_account_resets_the_same_login_for_same_authorization() {
+    let login_repo = Arc::new(mock_login_repo());
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        login_repo.clone(),
+    );
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let old_login_oid = Uuid::new_v4();
+    let original_expires_at = Utc::now() + chrono::Duration::minutes(5);
+    *login_repo.find_by_oid_result.lock().unwrap() =
+        Some(Some(identity_domain::auth::model::Login {
+            oid: old_login_oid,
+            client_oid: request.client_id,
+            client_authorization_oid: authorization_oid,
+            session_oid: Some(SessionOid(Uuid::new_v4())),
+            user_oid: Some(Uuid::new_v4()),
+            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED,
+            failed_attempts: 2,
+            created_at: Utc::now(),
+            expires_at: original_expires_at,
+            acr: Some("urn:identity:aal1".to_owned()),
+            requested_acr: Some("urn:identity:aal2".to_owned()),
+        }));
+    let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
+
+    let switched_id = service.switch_login_account(&old_login_id).await.unwrap();
+
+    assert_eq!(switched_id, old_login_id);
+    assert_eq!(
+        service.decrypt_login_id(&switched_id).await.unwrap(),
+        old_login_oid
+    );
+    assert_eq!(
+        login_repo.reset_identity_calls.lock().unwrap().as_slice(),
+        &[old_login_oid]
+    );
+    assert!(login_repo.create_pending_calls.lock().unwrap().is_empty());
+    let reset_login = login_repo
+        .find_by_oid_result
+        .lock()
+        .unwrap()
+        .clone()
+        .flatten()
+        .unwrap();
+    assert_eq!(
+        reset_login.status,
+        identity_domain::auth::LoginStatus::CREATED
+    );
+    assert_eq!(reset_login.expires_at, original_expires_at);
+    assert_eq!(
+        reset_login.requested_acr.as_deref(),
+        Some("urn:identity:aal2")
+    );
+    assert!(reset_login.user_oid.is_none());
+    assert!(reset_login.session_oid.is_none());
+    assert!(reset_login.acr.is_none());
+    assert_eq!(reset_login.failed_attempts, 0);
+}
+
+#[tokio::test]
+async fn switch_login_account_rejects_forced_reauthentication() {
+    let login_repo = Arc::new(mock_login_repo());
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        login_repo.clone(),
+    );
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let selected_session_oid = SessionOid(Uuid::new_v4());
+    let selected_user_oid = Uuid::new_v4();
+    service
+        .record_authorization_selection(
+            authorization_oid,
+            selected_session_oid,
+            selected_user_oid,
+            Some("protected-session".to_owned()),
+            SelectionSource::Reauthentication,
+        )
+        .await
+        .unwrap();
+    let login_oid = Uuid::new_v4();
+    *login_repo.find_by_oid_result.lock().unwrap() =
+        Some(Some(identity_domain::auth::model::Login {
+            oid: login_oid,
+            client_oid: request.client_id,
+            client_authorization_oid: authorization_oid,
+            session_oid: Some(selected_session_oid),
+            user_oid: Some(selected_user_oid),
+            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED,
+            failed_attempts: 0,
+            created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::minutes(5),
+            acr: None,
+            requested_acr: None,
+        }));
+    let login_id = service.encrypt_login_id(login_oid).await.unwrap();
+
+    let error = service.switch_login_account(&login_id).await.unwrap_err();
+
+    assert_eq!(error.code(), 11005);
+    assert!(login_repo.reset_identity_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn restart_login_flow_preserves_reauthentication_subject_and_session() {
+    let login_repo = Arc::new(mock_login_repo());
+    let new_login_oid = login_repo
+        .create_pending_login
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .oid;
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        login_repo.clone(),
+    );
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let selected_session_oid = SessionOid(Uuid::new_v4());
+    let selected_user_oid = Uuid::new_v4();
+    service
+        .record_authorization_selection(
+            authorization_oid,
+            selected_session_oid,
+            selected_user_oid,
+            Some("protected-session".to_owned()),
+            SelectionSource::Reauthentication,
+        )
+        .await
+        .unwrap();
+    let old_login_oid = Uuid::new_v4();
+    *login_repo.find_by_oid_result.lock().unwrap() =
+        Some(Some(identity_domain::auth::model::Login {
+            oid: old_login_oid,
+            client_oid: request.client_id,
+            client_authorization_oid: authorization_oid,
+            session_oid: Some(selected_session_oid),
+            user_oid: Some(selected_user_oid),
+            status: identity_domain::auth::LoginStatus::EXPIRED,
+            failed_attempts: 0,
+            created_at: Utc::now() - chrono::Duration::minutes(6),
+            expires_at: Utc::now() - chrono::Duration::minutes(1),
+            acr: None,
+            requested_acr: Some("urn:identity:aal2".to_owned()),
+        }));
+    let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
+
+    let restarted_id = service.restart_login_flow(&old_login_id).await.unwrap();
+
+    assert_eq!(
+        service.decrypt_login_id(&restarted_id).await.unwrap(),
+        new_login_oid
+    );
+    assert_eq!(
+        login_repo.bind_session_calls.lock().unwrap().as_slice(),
+        &[(new_login_oid, selected_session_oid)]
+    );
+}
+
+#[tokio::test]
+async fn restart_login_flow_rejects_a_login_that_is_still_in_progress() {
+    let login_repo = Arc::new(mock_login_repo());
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        login_repo.clone(),
+    );
+    let (request, _) = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap();
+    let authorization_oid = service
+        .create_authorization_request(&request)
+        .await
+        .unwrap();
+    let old_login_oid = Uuid::new_v4();
+    *login_repo.find_by_oid_result.lock().unwrap() =
+        Some(Some(identity_domain::auth::model::Login {
+            oid: old_login_oid,
+            client_oid: request.client_id,
+            client_authorization_oid: authorization_oid,
+            session_oid: None,
+            user_oid: Some(Uuid::new_v4()),
+            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED.to_owned(),
+            failed_attempts: 0,
+            created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::minutes(5),
+            acr: None,
+            requested_acr: None,
+        }));
+    let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
+
+    let error = service.restart_login_flow(&old_login_id).await.unwrap_err();
+
+    assert_eq!(error.code(), 11005);
+    assert!(login_repo.bind_session_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn load_authorization_request_returns_stored_data() {
     let (service, _) = default_authorize_service_with_request_repo();
 

@@ -174,6 +174,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         acr: None,
         requested_acr: None,
         created_at: now.into(),
+        expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,
     };
     let oidc_metadata_model = client_open_id_connect::Model {

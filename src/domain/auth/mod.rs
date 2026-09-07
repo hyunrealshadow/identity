@@ -17,6 +17,7 @@ pub enum LoginStatus {
     IdentifierVerified,
     MfaRequired,
     Authenticated,
+    Expired,
     Failed,
 }
 
@@ -30,6 +31,7 @@ impl LoginStatus {
     /// Password verified; awaiting MFA (TOTP) challenge.
     pub const MFA_REQUIRED: Self = Self::MfaRequired;
     pub const AUTHENTICATED: Self = Self::Authenticated;
+    pub const EXPIRED: Self = Self::Expired;
     pub const FAILED: Self = Self::Failed;
 
     #[must_use]
@@ -39,6 +41,7 @@ impl LoginStatus {
             Self::IdentifierVerified => "identifier_verified",
             Self::MfaRequired => "mfa_required",
             Self::Authenticated => "authenticated",
+            Self::Expired => "expired",
             Self::Failed => "failed",
         }
     }
@@ -48,12 +51,15 @@ impl LoginStatus {
         self == next
             || matches!(
                 (self, next),
-                (Self::CREATED, Self::FAILED)
+                (Self::CREATED, Self::EXPIRED | Self::FAILED)
                     | (
                         Self::IDENTIFIER_VERIFIED,
-                        Self::MFA_REQUIRED | Self::AUTHENTICATED | Self::FAILED
+                        Self::MFA_REQUIRED | Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
                     )
-                    | (Self::MFA_REQUIRED, Self::AUTHENTICATED | Self::FAILED)
+                    | (
+                        Self::MFA_REQUIRED,
+                        Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
+                    )
             )
     }
 }
@@ -73,6 +79,7 @@ impl FromStr for LoginStatus {
             "identifier_verified" => Ok(Self::IdentifierVerified),
             "mfa_required" => Ok(Self::MfaRequired),
             "authenticated" => Ok(Self::Authenticated),
+            "expired" => Ok(Self::Expired),
             "failed" => Ok(Self::Failed),
             _ => Err(ParseLoginStatusError),
         }
@@ -249,9 +256,17 @@ mod tests {
             LoginStatus::MFA_REQUIRED,
             LoginStatus::AUTHENTICATED
         ));
+        assert!(LoginStatus::can_transition(
+            LoginStatus::MFA_REQUIRED,
+            LoginStatus::EXPIRED
+        ));
         assert!(!LoginStatus::can_transition(
             LoginStatus::CREATED,
             LoginStatus::AUTHENTICATED
+        ));
+        assert!(!LoginStatus::can_transition(
+            LoginStatus::AUTHENTICATED,
+            LoginStatus::EXPIRED
         ));
         assert!(!LoginStatus::can_transition(
             LoginStatus::AUTHENTICATED,

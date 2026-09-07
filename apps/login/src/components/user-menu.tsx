@@ -1,7 +1,7 @@
 import { Dropdown, Label } from '@heroui/react'
-import { useNavigate, useRouter } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { LogOut, UserRound } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
@@ -16,7 +16,6 @@ export interface AccountMenuUser {
 interface UserMenuProps {
   user: AccountMenuUser
   menuLabel: string
-  manageLabel: string
   signOutLabel: string
   requestFailedLabel: string
 }
@@ -26,17 +25,14 @@ interface UserMenuProps {
  * The account area is SPA-only; sign-out invokes the account server function
  * and follows the provider logout redirect returned by the server.
  */
-export function UserMenu({ user, menuLabel, manageLabel, signOutLabel, requestFailedLabel }: UserMenuProps) {
-  const navigate = useNavigate()
+export function UserMenu({ user, menuLabel, signOutLabel, requestFailedLabel }: UserMenuProps) {
   const router = useRouter()
   const execute = useServerFn(runAccountAction)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [requestError, setRequestError] = useState<string>()
 
   async function onAction(key: React.Key) {
-    if (key === 'manage') {
-      void navigate({ to: '/account/profile' })
-    } else if (key === 'signout') {
+    if (key === 'signout') {
       if (isSigningOut) return
       setIsSigningOut(true)
       setRequestError(undefined)
@@ -68,10 +64,6 @@ export function UserMenu({ user, menuLabel, manageLabel, signOutLabel, requestFa
           <p className="truncate text-xs text-muted">{user.email}</p>
         </div>
         <Dropdown.Menu onAction={(key) => void onAction(key)}>
-          <Dropdown.Item id="manage" textValue={manageLabel}>
-            <UserRound className="size-4 shrink-0 text-muted" aria-hidden="true" />
-            <Label>{manageLabel}</Label>
-          </Dropdown.Item>
           <Dropdown.Item id="signout" textValue={signOutLabel} variant="danger">
             <LogOut className="size-4 shrink-0 text-danger" aria-hidden="true" />
             <Label>{signOutLabel}</Label>

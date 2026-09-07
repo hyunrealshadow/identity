@@ -39,6 +39,7 @@ import {
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
+import { loginChallengeDestination } from '#/lib/login-navigation'
 
 interface LoginSearch {
   login_id?: string
@@ -198,11 +199,10 @@ export const Route = createFileRoute('/login')({
 
           if (!credentialType) throw new Error(translate(locale, 'noCredential'))
 
-          const destination = new URL('/login/challenge', request.url)
-          destination.searchParams.set('login_id', result.id)
-          destination.searchParams.set('credential_type', credentialType)
-          if (uiLocales) destination.searchParams.set('ui_locales', uiLocales)
-          return navigationResponse(request, destination.toString())
+          return navigationResponse(
+            request,
+            loginChallengeDestination(result.id, credentialType, uiLocales),
+          )
         } catch (error) {
           const values = {
             login_id: loginId,
@@ -312,7 +312,7 @@ function LoginPage() {
           </a>
         </div>
       ) : (
-        <ProgressiveForm action="/login" className="progressive-form space-y-5" enhancementErrorMessage={t('enhancedNavigationError')}>
+        <ProgressiveForm action="/login" className="progressive-form space-y-6" enhancementErrorMessage={t('enhancedNavigationError')}>
           <input type="hidden" name="intent" value="identifier" />
           <input type="hidden" name="login_id" value={loginId} />
           <input type="hidden" name="csrf_token" value={data.csrfToken} />

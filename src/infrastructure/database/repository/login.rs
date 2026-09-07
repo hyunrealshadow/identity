@@ -12,7 +12,7 @@ use crate::database::entity::{
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
 };
 use identity_domain::auth::{
-    LoginStatus, SessionOid,
+    LOGIN_EXPIRY, LoginStatus, SessionOid,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
 };
@@ -37,6 +37,7 @@ fn to_domain(
         status,
         failed_attempts: m.failed_attempts,
         created_at: chrono::DateTime::<Utc>::from(m.created_at),
+        expires_at: chrono::DateTime::<Utc>::from(m.expires_at),
         acr: m.acr,
         requested_acr: m.requested_acr,
     })
@@ -125,6 +126,8 @@ impl LoginRepository for LoginRepositoryImpl {
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let now = Utc::now();
+        let expiry_duration = chrono::Duration::from_std(LOGIN_EXPIRY)
+            .unwrap_or_else(|_| chrono::Duration::minutes(5));
         let active = login::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(client.id),
@@ -134,6 +137,7 @@ impl LoginRepository for LoginRepositoryImpl {
             failed_attempts: Set(0),
             requested_acr: Set(requested_acr.map(str::to_owned)),
             created_at: Set(now.into()),
+            expires_at: Set((now + expiry_duration).into()),
             ..Default::default()
         };
         let model = active
@@ -301,6 +305,39 @@ impl LoginRepository for LoginRepositoryImpl {
             .next()
             .ok_or(LoginRepositoryError::LoginNotFound)?;
         Ok(updated.failed_attempts)
+    }
+
+    async fn reset_identity(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
+        let result = LoginEntity::update_many()
+            .col_expr(
+                login::Column::Status,
+                Expr::value(LoginStatus::CREATED.as_str()),
+            )
+            .col_expr(login::Column::UserId, Expr::value(Option::<i64>::None))
+            .col_expr(login::Column::SessionId, Expr::value(Option::<i64>::None))
+            .col_expr(login::Column::Acr, Expr::value(Option::<String>::None))
+            .col_expr(
+                login::Column::FailureReason,
+                Expr::value(Option::<String>::None),
+            )
+            .col_expr(login::Column::FailedAttempts, Expr::value(0))
+            .col_expr(
+                login::Column::UpdatedAt,
+                Expr::value(Some(Utc::now().naive_utc())),
+            )
+            .filter(login::Column::Oid.eq(login_oid))
+            .filter(login::Column::Status.is_in([
+                LoginStatus::IDENTIFIER_VERIFIED.as_str(),
+                LoginStatus::MFA_REQUIRED.as_str(),
+            ]))
+            .exec(&self.db)
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+
+        if result.rows_affected != 1 {
+            return Err(LoginRepositoryError::InvalidTransition);
+        }
+        Ok(())
     }
 
     async fn bind_session(

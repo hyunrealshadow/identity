@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   authorization: { data: {}, clear: vi.fn(), update: vi.fn() },
   mfa: { data: {}, clear: vi.fn(), update: vi.fn() },
   flash: { data: {}, clear: vi.fn(), update: vi.fn() },
+  storeAccountFlash: vi.fn(),
 }))
 
 vi.mock('./runtime-config.server', () => ({
@@ -32,7 +33,7 @@ vi.mock('./oauth-session.server', () => ({
   useAuthorizationSession: vi.fn(async () => mocks.authorization),
   useMfaUiSession: vi.fn(async () => mocks.mfa),
   useAccountFlashSession: vi.fn(async () => mocks.flash),
-  storeAccountFlash: vi.fn(),
+  storeAccountFlash: mocks.storeAccountFlash,
 }))
 
 import { finishAuthorization } from './oauth.server'
@@ -40,7 +41,9 @@ import { finishAuthorization } from './oauth.server'
 describe('OAuth callback errors', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
     mocks.flow.data.mode = 'signin'
+    mocks.flow.data.return_to = '/'
   })
 
   it('discards a failed sign-in flow and redirects to the error page', async () => {
@@ -89,5 +92,32 @@ describe('OAuth callback errors', () => {
     expect(response.status).toBe(400)
     expect(mocks.flow.clear).not.toHaveBeenCalled()
     expect(mocks.authorization.clear).not.toHaveBeenCalled()
+  })
+
+  it('opens the password form after reauthentication without a resubmit notice', async () => {
+    mocks.flow.data.mode = 'reauth'
+    mocks.flow.data.return_to = '/account/security?confirm=change-password'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      access_token: 'elevated-token',
+      expires_in: 3600,
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })))
+
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=authorization-code&state=expected-state',
+      ),
+    )
+
+    expect(response.headers.get('location')).toBe(
+      'https://identity.example/account/security?confirm=change-password',
+    )
+    expect(mocks.authorization.update).toHaveBeenCalledWith({
+      elevated_access_token: 'elevated-token',
+      elevated_expires_at: expect.any(Number),
+    })
+    expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
   })
 })

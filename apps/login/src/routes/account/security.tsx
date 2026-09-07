@@ -41,7 +41,7 @@ function SecurityPage() {
       <PageHeading title={t('accountSecurity')} description={t('accountSecurityDescription')} />
       <div className="space-y-4">
         <SettingsCard title={t('accountPassword')} description={t('accountPasswordDescription')}>
-          <SettingsRow title="••••••••" action={<PasswordModal flash={flash} loginHint={loginHint} requiresAal2={security.totpEnabled} openForm={search.confirm === 'change-password'} t={t} />} />
+          <SettingsRow title="••••••••" action={<PasswordModal flash={flash} loginHint={loginHint} openForm={search.confirm === 'change-password'} t={t} />} />
         </SettingsCard>
         <SettingsCard title={t('accountMfaRowTitle')} description={t('accountMfaDescription')}>
           <div className="divide-y divide-separator">
@@ -75,7 +75,7 @@ type Flash = ReturnType<typeof useAccount>['flash']
 type Mfa = ReturnType<typeof useAccount>['mfa']
 type Translator = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) => string
 
-function PasswordModal({ flash, loginHint, requiresAal2, openForm, t }: { flash: Flash; loginHint: string; requiresAal2: boolean; openForm: boolean; t: Translator }) {
+function PasswordModal({ flash, loginHint, openForm, t }: { flash: Flash; loginHint: string; openForm: boolean; t: Translator }) {
   const modal = useOverlayState()
   const navigate = useNavigate()
 
@@ -85,7 +85,7 @@ function PasswordModal({ flash, loginHint, requiresAal2, openForm, t }: { flash:
     void navigate({ to: '/account/security', replace: true })
   }, [openForm])
 
-  return <><AccountActionForm action="prepare-change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}><input type="hidden" name="login_hint" value={loginHint} /><input type="hidden" name="requires_aal2" value={String(requiresAal2)} /><Button type="submit" variant="secondary">{t('accountChangePassword')}</Button></AccountActionForm><Modal state={modal}><Modal.Backdrop isDismissable={false}><Modal.Container size="lg"><Modal.Dialog>{({ close }) => <><Modal.CloseTrigger aria-label={t('close')} /><Modal.Header><Modal.Heading>{t('accountChangePassword')}</Modal.Heading></Modal.Header><Modal.Body><AccountActionForm action="change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={close} className="grid gap-4"><input type="hidden" name="login_hint" value={loginHint} /><PasswordField name="new_password" label={t('accountNewPassword')} error={flash.fields?.new_password} /><PasswordField name="confirm_password" label={t('accountConfirmPassword')} error={flash.fields?.confirm_password} /><div className="flex justify-end"><Button type="submit">{t('accountChangePassword')}</Button></div></AccountActionForm></Modal.Body></>}</Modal.Dialog></Modal.Container></Modal.Backdrop></Modal></>
+  return <><AccountActionForm action="prepare-change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}><input type="hidden" name="login_hint" value={loginHint} /><Button type="submit" variant="secondary">{t('accountChangePassword')}</Button></AccountActionForm><Modal state={modal}><Modal.Backdrop isDismissable={false}><Modal.Container size="lg"><Modal.Dialog>{({ close }) => <><Modal.CloseTrigger aria-label={t('close')} /><Modal.Header><Modal.Heading>{t('accountChangePassword')}</Modal.Heading></Modal.Header><Modal.Body><AccountActionForm action="change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={close} className="grid gap-4"><input type="hidden" name="login_hint" value={loginHint} /><PasswordField name="new_password" label={t('accountNewPassword')} error={flash.fields?.new_password} /><PasswordField name="confirm_password" label={t('accountConfirmPassword')} error={flash.fields?.confirm_password} /><div className="flex justify-end"><Button type="submit">{t('accountChangePassword')}</Button></div></AccountActionForm></Modal.Body></>}</Modal.Dialog></Modal.Container></Modal.Backdrop></Modal></>
 }
 
 function MfaSetupAction({ flash, mfa, loginHint, openSetup, initialStep, t }: { flash: Flash; mfa: Mfa; loginHint: string; openSetup: boolean; initialStep?: 3; t: Translator }) {
@@ -374,6 +374,7 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
                 name="code"
                 value={code}
                 onChange={retryVerification}
+                autoFocus
                 isInvalid={Boolean(visibleCodeError)}
                 aria-describedby={visibleCodeError ? 'mfa-code-error' : undefined}
               />

@@ -15,10 +15,12 @@ pub struct MockLoginRepository {
     pub find_by_oid_result: std::sync::Mutex<Option<Option<Login>>>,
     pub create_pending_login: std::sync::Mutex<Option<Login>>,
     pub create_pending_error: std::sync::Mutex<Option<LoginRepositoryError>>,
+    pub create_pending_calls: std::sync::Mutex<Vec<uuid::Uuid>>,
     pub bind_user_login: std::sync::Mutex<Option<Login>>,
     pub bind_user_error: std::sync::Mutex<Option<LoginRepositoryError>>,
     pub bind_session_calls: std::sync::Mutex<Vec<BindSessionCall>>,
     pub update_status_calls: std::sync::Mutex<Vec<UpdateStatusCall>>,
+    pub reset_identity_calls: std::sync::Mutex<Vec<uuid::Uuid>>,
     pub increment_failed_attempts_calls: std::sync::Mutex<Vec<(uuid::Uuid, Option<String>)>>,
     pub reset_failed_attempts_calls: std::sync::Mutex<Vec<uuid::Uuid>>,
 }
@@ -29,10 +31,12 @@ impl Default for MockLoginRepository {
             find_by_oid_result: std::sync::Mutex::new(None),
             create_pending_login: std::sync::Mutex::new(None),
             create_pending_error: std::sync::Mutex::new(None),
+            create_pending_calls: std::sync::Mutex::new(Vec::new()),
             bind_user_login: std::sync::Mutex::new(None),
             bind_user_error: std::sync::Mutex::new(None),
             bind_session_calls: std::sync::Mutex::new(Vec::new()),
             update_status_calls: std::sync::Mutex::new(Vec::new()),
+            reset_identity_calls: std::sync::Mutex::new(Vec::new()),
             increment_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
             reset_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
         }
@@ -51,6 +55,10 @@ impl LoginRepository for MockLoginRepository {
         client_authorization_oid: uuid::Uuid,
         requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError> {
+        self.create_pending_calls
+            .lock()
+            .unwrap()
+            .push(client_authorization_oid);
         if let Some(err) = self.create_pending_error.lock().unwrap().take() {
             return Err(err);
         }
@@ -99,6 +107,18 @@ impl LoginRepository for MockLoginRepository {
             session_oid,
             acr.map(str::to_owned),
         ));
+        Ok(())
+    }
+
+    async fn reset_identity(&self, login_oid: uuid::Uuid) -> Result<(), LoginRepositoryError> {
+        self.reset_identity_calls.lock().unwrap().push(login_oid);
+        if let Some(Some(login)) = self.find_by_oid_result.lock().unwrap().as_mut() {
+            login.status = identity_domain::auth::LoginStatus::CREATED;
+            login.user_oid = None;
+            login.session_oid = None;
+            login.acr = None;
+            login.failed_attempts = 0;
+        }
         Ok(())
     }
 
@@ -155,10 +175,12 @@ pub fn mock_login_repo() -> MockLoginRepository {
             status: identity_domain::auth::LoginStatus::CREATED,
             failed_attempts: 0,
             created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::minutes(5),
             acr: None,
             requested_acr: None,
         })),
         create_pending_error: std::sync::Mutex::new(None),
+        create_pending_calls: std::sync::Mutex::new(Vec::new()),
         bind_user_login: std::sync::Mutex::new(Some(Login {
             oid: uuid::Uuid::nil(),
             client_oid: uuid::Uuid::nil(),
@@ -168,12 +190,14 @@ pub fn mock_login_repo() -> MockLoginRepository {
             status: identity_domain::auth::LoginStatus::AUTHENTICATED,
             failed_attempts: 0,
             created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::minutes(5),
             acr: None,
             requested_acr: None,
         })),
         bind_user_error: std::sync::Mutex::new(None),
         bind_session_calls: std::sync::Mutex::new(Vec::new()),
         update_status_calls: std::sync::Mutex::new(Vec::new()),
+        reset_identity_calls: std::sync::Mutex::new(Vec::new()),
         increment_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
         reset_failed_attempts_calls: std::sync::Mutex::new(Vec::new()),
     }

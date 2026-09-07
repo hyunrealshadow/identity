@@ -23,6 +23,36 @@ async function importModule() {
 }
 
 describe('login runtime configuration', () => {
+  it('defaults the public application URL during development', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('IDENTITY_PUBLIC_APP_URL', undefined)
+
+    const { loadApplicationUrl } = await importModule()
+
+    expect(loadApplicationUrl()).toBe('https://localhost:3000/')
+  })
+
+  it('requires an explicit public application URL in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('IDENTITY_PUBLIC_APP_URL', undefined)
+
+    const { loadApplicationUrl } = await importModule()
+
+    expect(() => loadApplicationUrl()).toThrow(
+      'IDENTITY_PUBLIC_APP_URL must be configured',
+    )
+  })
+
+  it('requires the public application URL to use HTTPS', async () => {
+    vi.stubEnv('IDENTITY_PUBLIC_APP_URL', 'http://login.example.test')
+
+    const { loadApplicationUrl } = await importModule()
+
+    expect(() => loadApplicationUrl()).toThrow(
+      'IDENTITY_PUBLIC_APP_URL must use HTTPS',
+    )
+  })
+
   it('loads the runtime configuration through the internal API with the workload token', async () => {
     vi.stubEnv(
       'IDENTITY_WORKLOAD_TOKEN',

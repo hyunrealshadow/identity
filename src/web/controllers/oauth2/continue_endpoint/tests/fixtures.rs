@@ -276,6 +276,7 @@ pub(super) async fn continue_state(
         acr: None,
         requested_acr: None,
         created_at: now.into(),
+        expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,
     };
     let oidc_metadata_model = client_open_id_connect::Model {

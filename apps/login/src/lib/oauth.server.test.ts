@@ -4,6 +4,7 @@ import {
   callbackUrl,
   exchangeToken,
   OAuthTokenExchangeError,
+  providerLogoutUrl,
   reauthenticationRequestParameters,
   reauthenticationScope,
   safeReturnTo,
@@ -11,6 +12,7 @@ import {
 } from './oauth.server'
 
 afterEach(() => {
+  delete process.env.IDENTITY_API_URL
   delete process.env.IDENTITY_BACKCHANNEL_API_URL
   delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   vi.unstubAllGlobals()
@@ -70,6 +72,7 @@ describe('local authentication freshness', () => {
     expect(tokenAuthenticationIsFresh(token({ auth_time: 399, acr: aal2 }), aal2, 4_000)).toBe(false)
     expect(tokenAuthenticationIsFresh(token({ auth_time: 4_000, acr: 'urn:identity:acr:aal1' }), aal2, 4_000)).toBe(false)
   })
+
 })
 
 describe('OAuth return locations', () => {
@@ -93,6 +96,32 @@ describe('OAuth return locations', () => {
   it('uses the fallback for missing or invalid values', () => {
     expect(safeReturnTo(undefined, '/account')).toBe('/account')
     expect(safeReturnTo('account/security', '/account')).toBe('/account')
+  })
+})
+
+describe('RP-initiated logout', () => {
+  it('redirects the browser to the public Identity logout endpoint', () => {
+    process.env.IDENTITY_API_URL = 'https://id.example.com'
+
+    expect(
+      providerLogoutUrl(
+        'https://login.example.com',
+        'client-id',
+        'id-token',
+      ).toString(),
+    ).toBe(
+      'https://id.example.com/oauth2/logout?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Flogin.example.com%2Flogout&id_token_hint=id-token',
+    )
+  })
+
+  it('still ends the provider session when the local ID token is missing', () => {
+    process.env.IDENTITY_API_URL = 'https://id.example.com'
+
+    expect(
+      providerLogoutUrl('https://login.example.com', 'client-id').toString(),
+    ).toBe(
+      'https://id.example.com/oauth2/logout?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Flogin.example.com%2Flogout',
+    )
   })
 })
 

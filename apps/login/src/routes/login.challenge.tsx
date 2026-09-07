@@ -6,7 +6,7 @@ import {
   Label,
   TextField,
 } from '@heroui/react'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { ArrowLeft, ChevronDown, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
@@ -26,6 +26,8 @@ import type {
   ActiveAccountsResponse,
   ChallengeResponse,
   LoginStatusResponse,
+  RestartLoginResponse,
+  SwitchLoginResponse,
 } from '#/lib/identity-types'
 import {
   consumeFormFlash,
@@ -35,11 +37,13 @@ import {
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
+import { loginChallengeDestination } from '#/lib/login-navigation'
 
 interface ChallengeSearch {
   login_id?: string
   credential_type?: string
   error?: string
+  restart?: string
   ui_locales?: string
 }
 
@@ -47,21 +51,14 @@ function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
 }
 
-function challengeDestination(
-  request: Request,
-  loginId: string,
-  credentialType: string,
-  uiLocales?: string,
-) {
-  const destination = new URL('/login/challenge', request.url)
-  if (loginId) destination.searchParams.set('login_id', loginId)
-  destination.searchParams.set('credential_type', credentialType)
-  if (uiLocales) destination.searchParams.set('ui_locales', uiLocales)
-  return destination.toString()
-}
-
 const loadChallengePage = createServerFn({ method: 'GET' })
-  .validator((data: { loginId: string; uiLocales?: string }) => data)
+  .validator(
+    (data: {
+      loginId: string
+      restart?: string
+      uiLocales?: string
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const flash = consumeFormFlash('/login/challenge')
     const loginId = data.loginId || flash?.values.login_id || ''
@@ -81,28 +78,73 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         uiLocales,
         error: pageError ?? translate(locale, 'missingLogin'),
         fieldError: credentialError,
+        restartRequired: false,
+        restartUnavailable: false,
       }
     }
 
+    let csrfToken = ''
     try {
-      const [active, status] = await Promise.all([
-        identityJson<ActiveAccountsResponse>('/api/auth/sessions/active'),
-        identityJson<LoginStatusResponse>(
-          `/api/auth/login/${encodeURIComponent(loginId)}`,
-        ),
-      ])
+      const active = await identityJson<ActiveAccountsResponse>(
+        '/api/auth/sessions/active',
+      )
+      csrfToken = active.csrf_token
+      if (data.restart === 'required' || data.restart === 'unavailable') {
+        const locale = requestLocale(uiLocales.split(' '))
+        const restartUnavailable = data.restart === 'unavailable'
+        return {
+          status: undefined,
+          csrfToken,
+          loginId,
+          locale,
+          uiLocales,
+          error:
+            pageError ??
+            translate(
+              locale,
+              restartUnavailable
+                ? 'authorizationRestartUnavailable'
+                : 'challengeExpiredDescription',
+            ),
+          fieldError: undefined,
+          restartRequired: true,
+          restartUnavailable,
+        }
+      }
+      const status = await identityJson<LoginStatusResponse>(
+        `/api/auth/login/${encodeURIComponent(loginId)}`,
+      )
+      const locale = requestLocale(
+        uiLocales ? uiLocales.split(' ') : status.ui_locales,
+      )
+      const restartRequired = status.status === 'expired'
       return {
         status,
-        csrfToken: active.csrf_token,
+        csrfToken,
         loginId,
-        locale: requestLocale(uiLocales ? uiLocales.split(' ') : status.ui_locales),
+        locale,
         uiLocales: uiLocales || status.ui_locales?.join(' ') || '',
-        error: pageError,
+        error: restartRequired
+          ? translate(locale, 'challengeExpiredDescription')
+          : pageError,
         fieldError: credentialError,
+        restartRequired,
+        restartUnavailable: false,
       }
     } catch (error) {
       if (isTerminalLoginError(error)) {
-        throw redirect({ to: '/login' })
+        const locale = requestLocale(uiLocales.split(' '))
+        return {
+          status: undefined,
+          csrfToken,
+          loginId,
+          locale,
+          uiLocales,
+          error: pageError ?? translate(locale, 'challengeExpiredDescription'),
+          fieldError: undefined,
+          restartRequired: true,
+          restartUnavailable: false,
+        }
       }
       const locale = requestLocale()
       return {
@@ -113,6 +155,8 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         uiLocales,
         error: pageError ?? errorMessage(error, locale),
         fieldError: credentialError,
+        restartRequired: false,
+        restartUnavailable: false,
       }
     }
   })
@@ -122,10 +166,12 @@ export const Route = createFileRoute('/login/challenge')({
     login_id: optionalString(search.login_id),
     credential_type: optionalString(search.credential_type),
     error: optionalString(search.error),
+    restart: optionalString(search.restart),
     ui_locales: optionalString(search.ui_locales),
   }),
   loaderDeps: ({ search }) => ({
     loginId: search.login_id ?? '',
+    restart: search.restart,
     uiLocales: search.ui_locales,
   }),
   loader: ({ deps }) => loadChallengePage({ data: deps }),
@@ -133,6 +179,7 @@ export const Route = createFileRoute('/login/challenge')({
     handlers: {
       POST: async ({ request }) => {
         const form = await request.formData()
+        const intent = String(form.get('intent') ?? '')
         const loginId = String(form.get('login_id') ?? '')
         const credentialType = String(
           form.get('credential_type') ?? 'password',
@@ -144,6 +191,78 @@ export const Route = createFileRoute('/login/challenge')({
         const locale = formLocale(request, form.get('ui_locales'))
         const uiLocales = optionalString(form.get('ui_locales'))
 
+        if (intent === 'restart') {
+          if (!loginId) {
+            return formErrorResponse(
+              request,
+              '/login/challenge',
+              translate(locale, 'missingLoginShort'),
+              {},
+            )
+          }
+          try {
+            const result = await identityJson<RestartLoginResponse>(
+              '/api/auth/login/restart',
+              {
+                method: 'POST',
+                csrfToken,
+                body: { id: loginId },
+              },
+            )
+            const search = new URLSearchParams({ login_id: result.id })
+            if (uiLocales) search.set('ui_locales', uiLocales)
+            return navigationResponse(request, `/login?${search}`)
+          } catch (error) {
+            const restartUnavailable =
+              error instanceof IdentityApiError && error.code === 22005
+            return formErrorResponse(
+              request,
+              '/login/challenge',
+              restartUnavailable
+                ? translate(locale, 'authorizationRestartUnavailable')
+                : errorMessage(error, locale),
+              { login_id: loginId, ui_locales: uiLocales },
+              undefined,
+              loginChallengeDestination(
+                loginId,
+                credentialType,
+                uiLocales,
+                restartUnavailable ? 'unavailable' : 'required',
+              ),
+            )
+          }
+        }
+
+        if (intent === 'switch') {
+          try {
+            const result = await identityJson<SwitchLoginResponse>(
+              '/api/auth/login/switch',
+              {
+                method: 'POST',
+                csrfToken,
+                body: { id: loginId },
+              },
+            )
+            const search = new URLSearchParams({
+              login_id: result.id,
+              no_accounts: '1',
+            })
+            if (uiLocales) search.set('ui_locales', uiLocales)
+            return navigationResponse(request, `/login?${search}`)
+          } catch (error) {
+            return formErrorResponse(
+              request,
+              '/login/challenge',
+              errorMessage(error, locale),
+              {
+                login_id: loginId,
+                credential_type: credentialType,
+                ui_locales: uiLocales,
+              },
+            )
+          }
+        }
+
         if (!loginId || !credential) {
           return formErrorResponse(
             request,
@@ -151,7 +270,7 @@ export const Route = createFileRoute('/login/challenge')({
             translate(locale, 'challengeRequired'),
             { login_id: loginId, credential_type: credentialType, ui_locales: uiLocales },
             loginId ? 'credential' : undefined,
-            challengeDestination(request, loginId, credentialType, uiLocales),
+            loginChallengeDestination(loginId, credentialType, uiLocales),
           )
         }
 
@@ -170,11 +289,10 @@ export const Route = createFileRoute('/login/challenge')({
           )
 
           if (result.status === 'mfa_required') {
-            const destination = new URL('/login/challenge', request.url)
-            destination.searchParams.set('login_id', loginId)
-            destination.searchParams.set('credential_type', 'otp')
-            if (uiLocales) destination.searchParams.set('ui_locales', uiLocales)
-            return navigationResponse(request, destination.toString())
+            return navigationResponse(
+              request,
+              loginChallengeDestination(loginId, 'otp', uiLocales),
+            )
           }
 
           if (!result.continue_uri) {
@@ -183,7 +301,22 @@ export const Route = createFileRoute('/login/challenge')({
           return navigationResponse(request, result.continue_uri)
         } catch (error) {
           if (isTerminalLoginError(error)) {
-            return navigationResponse(request, '/login')
+            const restart =
+              error instanceof IdentityApiError && error.code === 11004
+                ? 'required'
+                : undefined
+            return formErrorResponse(
+              request,
+              '/login/challenge',
+              translate(locale, 'challengeExpiredDescription'),
+              {
+                login_id: loginId,
+                credential_type: credentialType,
+                ui_locales: uiLocales,
+              },
+              undefined,
+              loginChallengeDestination(loginId, credentialType, uiLocales, restart),
+            )
           }
           const values = {
             login_id: loginId,
@@ -202,7 +335,7 @@ export const Route = createFileRoute('/login/challenge')({
                   fieldError.message,
                 ]),
               ),
-              challengeDestination(request, loginId, credentialType, uiLocales),
+              loginChallengeDestination(loginId, credentialType, uiLocales),
             )
           }
           return formErrorResponse(
@@ -211,7 +344,7 @@ export const Route = createFileRoute('/login/challenge')({
             errorMessage(error, locale),
             values,
             undefined,
-            challengeDestination(request, loginId, credentialType, uiLocales),
+            loginChallengeDestination(loginId, credentialType, uiLocales),
           )
         }
       },
@@ -247,6 +380,12 @@ function ChallengePage() {
   const canSwitchAccount = !data.status?.requires_reauthentication
   const visibleError = search.error ?? data.error
   const user = data.status?.user
+  const restartRequired =
+    search.restart === 'required' ||
+    search.restart === 'unavailable' ||
+    data.restartRequired
+  const restartUnavailable =
+    search.restart === 'unavailable' || data.restartUnavailable
 
   return (
     <AuthShell
@@ -254,14 +393,20 @@ function ChallengePage() {
       locale={data.locale}
       showPreferences
       title={
-        isRecoveryCode
+        restartRequired
+          ? t('challengeExpiredTitle')
+          : isRecoveryCode
           ? t('recoveryCodeTitle')
           : isOtp
             ? t('otpTitle')
             : t('passwordTitle')
       }
       description={
-        isRecoveryCode
+        restartUnavailable
+          ? t('authorizationRestartUnavailable')
+          : restartRequired
+          ? t('challengeExpiredDescription')
+          : isRecoveryCode
           ? t('recoveryCodeDescription')
           : isOtp
           ? t('otpDescription')
@@ -285,18 +430,40 @@ function ChallengePage() {
         >
           <Alert.Indicator />
           <Alert.Content>
-            <Alert.Title>{t('verificationFailed')}</Alert.Title>
+            <Alert.Title>
+              {restartRequired
+                ? t('challengeExpiredTitle')
+                : t('verificationFailed')}
+            </Alert.Title>
             <Alert.Description>{visibleError}</Alert.Description>
           </Alert.Content>
         </Alert>
       ) : null}
 
-      <ProgressiveForm
-        action="/login/challenge"
-        className="progressive-form space-y-5"
-        enhancementErrorMessage={t('enhancedNavigationError')}
-        noValidate
-      >
+      {restartRequired && !restartUnavailable ? (
+        <ProgressiveForm
+          action="/login/challenge"
+          className="progressive-form"
+          enhancementErrorMessage={t('enhancedNavigationError')}
+        >
+          <input type="hidden" name="intent" value="restart" />
+          <input type="hidden" name="login_id" value={loginId} />
+          <input
+            type="hidden"
+            name="credential_type"
+            value={credentialType}
+          />
+          <input type="hidden" name="csrf_token" value={data.csrfToken} />
+          <input type="hidden" name="ui_locales" value={data.uiLocales} />
+          <SubmitButton fullWidth>{t('restartSignIn')}</SubmitButton>
+        </ProgressiveForm>
+      ) : !restartRequired ? (
+        <ProgressiveForm
+          action="/login/challenge"
+          className="progressive-form space-y-6"
+          enhancementErrorMessage={t('enhancedNavigationError')}
+          noValidate
+        >
         <input type="hidden" name="login_id" value={loginId} />
         <input
           type="hidden"
@@ -317,7 +484,10 @@ function ChallengePage() {
               name="totp"
               type="text"
               required
-              className="mx-auto"
+              autoFocus
+              className="w-full"
+              groupClassName="w-full justify-between"
+              slotClassName="flex-none"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
               aria-describedby={credentialError ? 'login-otp-error' : undefined}
@@ -336,6 +506,7 @@ function ChallengePage() {
               name="credential"
               type="text"
               required
+              autoFocus
               className="mx-auto"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
@@ -383,9 +554,10 @@ function ChallengePage() {
         <SubmitButton fullWidth>
           {isOtp || isRecoveryCode ? t('verify') : t('login')}
         </SubmitButton>
-      </ProgressiveForm>
+        </ProgressiveForm>
+      ) : null}
 
-      {alternativeMethods.length ? (
+      {!restartRequired && alternativeMethods.length ? (
         <details className="auth-methods group mt-6 border-t border-border">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between pt-4 text-xs font-medium text-muted transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
             {t('otherVerificationMethods')}
@@ -408,14 +580,30 @@ function ChallengePage() {
         </details>
       ) : null}
 
-      {canSwitchAccount ? (
-        <a
-          href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-          className="auth-link mx-auto mt-6 flex w-fit items-center justify-center gap-1.5 text-sm font-semibold text-accent"
+      {!restartRequired && canSwitchAccount ? (
+        <ProgressiveForm
+          action="/login/challenge"
+          className="mt-6"
+          enhancementErrorMessage={t('enhancedNavigationError')}
         >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          {t('switchAccount')}
-        </a>
+          <input type="hidden" name="login_id" value={loginId} />
+          <input
+            type="hidden"
+            name="credential_type"
+            value={credentialType}
+          />
+          <input type="hidden" name="csrf_token" value={data.csrfToken} />
+          <input type="hidden" name="ui_locales" value={data.uiLocales} />
+          <SubmitButton
+            name="intent"
+            value="switch"
+            variant="ghost"
+            className="auth-link mx-auto flex w-fit items-center justify-center gap-1.5 text-sm font-semibold text-accent"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {t('switchAccount')}
+          </SubmitButton>
+        </ProgressiveForm>
       ) : null}
     </AuthShell>
   )

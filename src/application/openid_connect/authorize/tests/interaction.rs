@@ -57,6 +57,7 @@ fn login(status: LoginStatus) -> Login {
         acr: None,
         requested_acr: None,
         created_at: Utc::now(),
+        expires_at: Utc::now() + chrono::Duration::minutes(5),
     }
 }
 

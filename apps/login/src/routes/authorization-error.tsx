@@ -52,7 +52,7 @@ function AuthorizationErrorPage() {
       </div>
       <Link
         to="/"
-        className="mt-6 flex min-h-10 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
+        className="mt-6 flex min-h-9 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
       >
         {t('authorizationRetry')}
       </Link>

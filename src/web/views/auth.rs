@@ -158,6 +158,34 @@ pub struct LoginStatusResponse {
     pub continue_uri: Option<String>,
 }
 
+/// `POST /api/auth/login/restart` request.
+#[derive(Debug, Deserialize)]
+pub struct RestartLoginRequest {
+    /// Encrypted login.oid for the challenge that can no longer continue.
+    pub id: String,
+}
+
+/// `POST /api/auth/login/restart` response.
+#[derive(Debug, Serialize)]
+pub struct RestartLoginResponse {
+    /// Encrypted oid of the newly-created login record.
+    pub id: String,
+}
+
+/// `POST /api/auth/login/switch` request.
+#[derive(Debug, Deserialize)]
+pub struct SwitchLoginRequest {
+    /// Encrypted login.oid currently bound to the account being replaced.
+    pub id: String,
+}
+
+/// `POST /api/auth/login/switch` response.
+#[derive(Debug, Serialize)]
+pub struct SwitchLoginResponse {
+    /// Encrypted oid of the same login record, now reset to identifier entry.
+    pub id: String,
+}
+
 /// User information displayed during the first-party login flow.
 #[derive(Debug, Serialize)]
 pub struct UserDisplayInfo {

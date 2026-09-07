@@ -25,9 +25,9 @@ fn token_digest(token: &str) -> Vec<u8> {
 }
 
 /// Builds the authenticator chain for the Login workload from configuration.
-/// Static tokens come from the configured files (plus the
-/// `IDENTITY_WORKLOAD_TOKEN` environment variable for local development);
-/// the Kubernetes ServiceAccount adapter is appended when enabled.
+/// Static tokens come from configured files, named process environment
+/// variables, or template-resolved inline values; the Kubernetes
+/// ServiceAccount adapter is appended when enabled.
 pub fn build_login_workload_authenticator(
     config: &LoginWorkloadConfig,
 ) -> Result<Arc<dyn WorkloadAuthenticator>, String> {
@@ -39,7 +39,7 @@ pub fn build_login_workload_authenticator(
             .filter_map(|source| source.file.as_deref())
             .map(PathBuf::from)
             .collect::<Vec<_>>();
-        let inline_tokens = config
+        let mut inline_tokens = config
             .static_tokens
             .iter()
             .filter_map(|source| source.environment.as_deref())
@@ -48,6 +48,12 @@ pub fn build_login_workload_authenticator(
                     .map_err(|error| format!("failed to read static token from {name}: {error}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
+        inline_tokens.extend(
+            config
+                .static_tokens
+                .iter()
+                .filter_map(|source| source.token.clone()),
+        );
         adapters.push(Arc::new(StaticTokenWorkloadAuthenticator::new(
             files,
             inline_tokens,

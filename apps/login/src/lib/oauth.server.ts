@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
+import { PASSWORD_CHANGE_CONTINUATION } from './account-reauth'
 import {
   type OAuthFlowSession,
   type OAuthTokenSession,
@@ -224,7 +225,9 @@ export async function finishAuthorization(request: Request) {
       elevated_access_token: tokens.access_token,
       elevated_expires_at: Date.now() + tokens.expires_in * 1000,
     })
-    await storeAccountFlash({ message: 'reauthenticated' })
+    if (returnTo !== PASSWORD_CHANGE_CONTINUATION) {
+      await storeAccountFlash({ message: 'reauthenticated' })
+    }
   } else {
     await authorization.update(toStoredTokens(tokens))
   }
@@ -271,24 +274,34 @@ export async function finishLogout(applicationUrl: string) {
     typeof authorization.data.id_token === 'string'
       ? authorization.data.id_token
       : undefined
+  const oauthClient = await loadOAuthClient()
   await authorization.clear()
   await (await useMfaUiSession()).clear()
   await (await useAccountFlashSession()).clear()
-  if (idToken) {
-    const logoutUrl = new URL('/oauth2/logout', API_URL)
-    logoutUrl.search = new URLSearchParams({
-      id_token_hint: idToken,
-      post_logout_redirect_uri: new URL('/', applicationUrl).toString(),
-    }).toString()
-    return new Response(null, {
-      status: 303,
-      headers: { location: logoutUrl.toString() },
-    })
-  }
+  const logoutUrl = providerLogoutUrl(
+    applicationUrl,
+    oauthClient.client_id,
+    idToken,
+  )
   return new Response(null, {
     status: 303,
-    headers: { location: new URL('/', applicationUrl).toString() },
+    headers: { location: logoutUrl.toString() },
   })
+}
+
+export function providerLogoutUrl(
+  applicationUrl: string,
+  clientId: string,
+  idToken?: string,
+) {
+  const logoutUrl = new URL('/oauth2/logout', publicIdentityApiUrl())
+  const parameters = new URLSearchParams({
+    client_id: clientId,
+    post_logout_redirect_uri: new URL('/logout', applicationUrl).toString(),
+  })
+  if (idToken) parameters.set('id_token_hint', idToken)
+  logoutUrl.search = parameters.toString()
+  return logoutUrl
 }
 
 export async function elevatedAccessToken() {
@@ -346,9 +359,24 @@ export async function clearElevatedAuthorization() {
 export async function mfaUiState() {
   const session = await useMfaUiSession()
   return {
+    totpEnabled: session.data.totp_enabled,
     enrollment: session.data.mfa_enrollment,
     recoveryCodes: session.data.regenerated_recovery_codes,
   }
+}
+
+export async function storeTotpEnabled(enabled: boolean) {
+  await (await useMfaUiSession()).update({
+    totp_enabled: enabled,
+  })
+}
+
+export async function completeTotpStateChange(enabled: boolean) {
+  await (await useMfaUiSession()).update({
+    totp_enabled: enabled,
+    mfa_enrollment: undefined,
+    regenerated_recovery_codes: undefined,
+  })
 }
 
 export async function storeMfaEnrollment(enrollment: {

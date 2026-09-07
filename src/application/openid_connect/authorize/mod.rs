@@ -8,7 +8,13 @@ use uuid::Uuid;
 use crate::{
     application::{
         data_protection::DataProtector,
-        error::{AppError, codes::authorize::AuthorizeErrorCode},
+        error::{
+            AppError,
+            codes::{
+                auth::AuthErrorCode, authorize::AuthorizeErrorCode,
+                authorize_http::AuthorizeHttpErrorCode,
+            },
+        },
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
     domain::{

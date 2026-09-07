@@ -44,7 +44,7 @@ internal:
   workloads:
     login:
       static_tokens:
-        - file: {{ get_env(name="IDENTITY_WORKLOAD_TOKEN_FILE", default="config/secrets/login-workload-token") }}
+        - token: {{ get_env(name="IDENTITY_WORKLOAD_TOKEN") }}
 
 client_credential_rotation:
   enable: true

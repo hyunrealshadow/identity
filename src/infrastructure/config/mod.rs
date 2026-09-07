@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::{env, fmt, fs};
 
 use identity_domain::key::AsymmetricKeyAlgorithm;
 use ipnet::IpNet;
@@ -102,24 +102,39 @@ pub struct LoginWorkloadConfig {
     pub kubernetes_service_account: KubernetesServiceAccountConfig,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StaticTokenConfig {
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
     pub environment: Option<String>,
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+impl fmt::Debug for StaticTokenConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StaticTokenConfig")
+            .field("file", &self.file)
+            .field("environment", &self.environment)
+            .field("token", &self.token.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
 }
 
 impl StaticTokenConfig {
     fn has_exactly_one_source(&self) -> bool {
-        self.file
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-            ^ self
-                .environment
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty())
+        [
+            self.file.as_deref(),
+            self.environment.as_deref(),
+            self.token.as_deref(),
+        ]
+        .into_iter()
+        .filter(|value| value.is_some_and(|value| !value.trim().is_empty()))
+        .count()
+            == 1
     }
 }
 
@@ -252,7 +267,7 @@ impl AppConfig {
             .any(|source| !source.has_exactly_one_source())
         {
             return Err(invalid_config(
-                "each login static token must configure exactly one of file or environment",
+                "each login static token must configure exactly one of file, environment, or token",
             )
             .into());
         }
@@ -825,7 +840,10 @@ fn default_graphql_timeout_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnvironment, LogFormat, TlsTermination, render_config_template};
+    use super::{
+        AppConfig, AppEnvironment, LogFormat, StaticTokenConfig, TlsTermination,
+        render_config_template,
+    };
     use serial_test::serial;
 
     fn set_env(key: &str, value: &str) {
@@ -900,6 +918,23 @@ mod tests {
         let result = render_config_template(r#"value: {{ get_env(name="TEST_RENDER_ENV") }}"#);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn render_template_reads_inline_workload_token() {
+        const TOKEN: &str = "local-token-with-at-least-32-characters";
+        set_env("TEST_WORKLOAD_TOKEN", TOKEN);
+
+        let rendered =
+            render_config_template(r#"token: {{ get_env(name="TEST_WORKLOAD_TOKEN") }}"#).unwrap();
+        let config = serde_yml::from_str::<StaticTokenConfig>(&rendered).unwrap();
+
+        remove_env("TEST_WORKLOAD_TOKEN");
+
+        assert_eq!(config.token.as_deref(), Some(TOKEN));
+        assert!(config.has_exactly_one_source());
+        assert!(!format!("{config:?}").contains(TOKEN));
     }
 
     #[test]
