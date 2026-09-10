@@ -28,6 +28,7 @@ impl UserCredentialRepositoryImpl {
 
 #[async_trait]
 impl UserCredentialRepository for UserCredentialRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_user_oid_and_type"))]
     async fn find_by_user_oid_and_type(
         &self,
         user_oid: UserOid,
@@ -80,6 +81,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(credentials)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_password_by_oid"))]
     async fn update_password_by_oid(
         &self,
         credential_oid: UserCredentialOid,
@@ -110,6 +112,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "consume_totp_counter"))]
     async fn consume_totp_counter(
         &self,
         credential_oid: UserCredentialOid,
@@ -148,6 +151,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(result.rows_affected == 1)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "replace_by_user_oid"))]
     async fn replace_by_user_oid(
         &self,
         user_oid: UserOid,
@@ -218,6 +222,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "enable_totp_if_disabled"))]
     async fn enable_totp_if_disabled(
         &self,
         user_oid: UserOid,
@@ -305,6 +310,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(true)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "replace_recovery_codes_if_totp_enabled"))]
     async fn replace_recovery_codes_if_totp_enabled(
         &self,
         user_oid: UserOid,
@@ -373,6 +379,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(true)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "consume_recovery_code_by_oid"))]
     async fn consume_recovery_code_by_oid(
         &self,
         credential_oid: UserCredentialOid,

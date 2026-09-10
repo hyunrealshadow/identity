@@ -1,7 +1,13 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use http::StatusCode;
 use salvo::{Depot, Response, Router, handler};
 use sea_orm::ConnectionTrait;
 use serde::Serialize;
+
+/// Whether the last probe result matched the current one. Only transitions are
+/// recorded as key events; successful probes stay out of traces and INFO logs.
+static DATABASE_HEALTHY: AtomicBool = AtomicBool::new(true);
 
 use crate::{
     boot::AppState,
@@ -48,6 +54,20 @@ async fn health_handler(depot: &mut Depot, res: &mut Response) {
         let result = check_database(&state).await;
         if result.status != "ok" {
             ok = false;
+        }
+        let healthy = result.status == "ok";
+        let previous = DATABASE_HEALTHY.swap(healthy, Ordering::Relaxed);
+        if previous != healthy {
+            use identity_application::observability::{BusinessEvent, EventValue};
+            let event = BusinessEvent::business("health.status.changed")
+                .severity(if healthy {
+                    identity_application::observability::EventSeverity::Info
+                } else {
+                    identity_application::observability::EventSeverity::Warn
+                })
+                .outcome(if healthy { "ok" } else { "error" })
+                .attribute("check", EventValue::Text("database".to_owned()));
+            identity_application::observability::event_sink().emit(event);
         }
         checks.database = Some(result);
     }

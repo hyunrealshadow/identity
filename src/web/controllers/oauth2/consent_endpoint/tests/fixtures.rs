@@ -51,6 +51,7 @@ pub(super) fn consent_test_config() -> AppConfig {
         database: DatabaseConfig::default(),
         health: HealthConfig::default(),
         graphql: Default::default(),
+        observability: Default::default(),
         openid_connect: Default::default(),
         settings: SettingsConfig::default(),
         install: Default::default(),

@@ -28,6 +28,14 @@ use identity_domain::{
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
 
+/// Result of a password change that also revokes other sessions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PasswordChangeOutcome {
+    pub password_changed: bool,
+    pub revoked_other_sessions: u32,
+    pub session_revocation_failures: u32,
+}
+
 /// Device and network context for session creation.
 pub struct SessionContext {
     pub device_name: Option<String>,
@@ -68,6 +76,7 @@ pub struct LoginService {
     password_hasher: Arc<dyn PasswordHasher>,
     totp_verifier: Arc<dyn TotpVerifier>,
     hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
+    events: Arc<dyn crate::observability::EventSink>,
 }
 
 impl LoginService {
@@ -89,7 +98,15 @@ impl LoginService {
             password_hasher,
             totp_verifier,
             hash_options,
+            events: Arc::new(crate::observability::NoopEventSink),
         }
+    }
+
+    /// Attach the key event and audit sink.
+    #[must_use]
+    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+        self.events = events;
+        self
     }
 
     pub async fn get(&self, login_oid: Uuid) -> Result<Login, AppError> {
@@ -182,7 +199,48 @@ impl LoginService {
         self.credential_repo
             .update_password_by_oid(credential.oid, &password)
             .await?;
+        self.events.emit(
+            crate::observability::BusinessEvent::audit("account.credential.changed")
+                .outcome("success")
+                .attribute(
+                    "user_oid",
+                    crate::observability::EventValue::Pseudonymized {
+                        purpose: "user_oid",
+                        value: uuid::Uuid::from(user_oid).to_string(),
+                    },
+                )
+                .attribute(
+                    "change_category",
+                    crate::observability::EventValue::Text("password".to_owned()),
+                ),
+        );
         Ok(())
+    }
+
+    /// Change the password and revoke every other session of the account.
+    ///
+    /// The outcome distinguishes the completed password change from partial
+    /// session revocation failures so callers never report that the password
+    /// was not changed when it was, and audit events can describe both steps.
+    #[tracing::instrument(skip_all, name = "account.password.change")]
+    pub async fn change_password_with_session_revocation(
+        &self,
+        user_oid: identity_domain::user::UserOid,
+        new_password: &str,
+        current_session: identity_domain::auth::SessionOid,
+    ) -> Result<PasswordChangeOutcome, AppError> {
+        self.change_password(user_oid, new_password).await?;
+        let revocation = super::session::revoke_other_sessions_with(
+            self.session_repo.as_ref(),
+            Uuid::from(user_oid),
+            current_session,
+        )
+        .await?;
+        Ok(PasswordChangeOutcome {
+            password_changed: true,
+            revoked_other_sessions: revocation.revoked,
+            session_revocation_failures: revocation.failure_count(),
+        })
     }
 
     /// Fetch the user associated with a login by their OID.
@@ -198,6 +256,7 @@ impl LoginService {
 
     /// Step 1: Verify the identifier (email or username) and bind the
     /// resolved user onto an existing login flow.
+    #[tracing::instrument(skip_all, name = "authentication.identify")]
     pub async fn identify(
         &self,
         login_oid: Uuid,
@@ -270,7 +329,116 @@ impl LoginService {
     /// per login flow; further attempts return [`AuthErrorCode::TooManyAttempts`]
     /// and invalidate the login. Creates or refreshes the bound session with
     /// `acr = ACR_AAL2` and an internal expiry on success.
+    #[tracing::instrument(skip_all, name = "authentication.challenge")]
     pub async fn challenge(
+        &self,
+        login_oid: Uuid,
+        credential_type: CredentialType,
+        credential: &str,
+        ctx: SessionContext,
+    ) -> Result<ChallengeOutcome, AppError> {
+        let result = self
+            .challenge_inner(login_oid, credential_type, credential, ctx)
+            .await;
+        self.record_authentication_result(credential_type, &result);
+        result
+    }
+
+    /// Emit the authentication result and session establishment events. The
+    /// events never carry credentials, OTP codes or recovery codes.
+    fn record_authentication_result(
+        &self,
+        credential_type: CredentialType,
+        result: &Result<ChallengeOutcome, AppError>,
+    ) {
+        use crate::observability::{BusinessEvent, EventValue};
+
+        let factor = match credential_type {
+            CredentialType::Password => "password",
+            CredentialType::Otp => "otp",
+            CredentialType::RecoveryCode => "recovery_code",
+        };
+        match result {
+            Ok(ChallengeOutcome::Authenticated { login, session }) => {
+                let user_oid = login
+                    .user_oid
+                    .map(|oid| oid.to_string())
+                    .unwrap_or_default();
+                self.events.emit(
+                    BusinessEvent::audit("authentication.result")
+                        .outcome("success")
+                        .reason("authenticated")
+                        .attribute("factor", EventValue::Text(factor.to_owned()))
+                        .attribute(
+                            "user_oid",
+                            EventValue::Pseudonymized {
+                                purpose: "user_oid",
+                                value: user_oid.clone(),
+                            },
+                        )
+                        .attribute(
+                            "session_oid",
+                            EventValue::Pseudonymized {
+                                purpose: "session_oid",
+                                value: session.oid.0.to_string(),
+                            },
+                        )
+                        .attribute(
+                            "acr",
+                            EventValue::Text(session.acr.clone().unwrap_or_default()),
+                        ),
+                );
+                self.events.emit(
+                    BusinessEvent::business("session.established")
+                        .outcome("success")
+                        .attribute(
+                            "user_oid",
+                            EventValue::Pseudonymized {
+                                purpose: "user_oid",
+                                value: user_oid,
+                            },
+                        )
+                        .attribute(
+                            "session_oid",
+                            EventValue::Pseudonymized {
+                                purpose: "session_oid",
+                                value: session.oid.0.to_string(),
+                            },
+                        ),
+                );
+            }
+            Ok(ChallengeOutcome::MfaRequired { login }) => {
+                self.events.emit(
+                    BusinessEvent::audit("authentication.result")
+                        .outcome("success")
+                        .reason("mfa_required")
+                        .attribute("factor", EventValue::Text(factor.to_owned()))
+                        .attribute(
+                            "user_oid",
+                            EventValue::Pseudonymized {
+                                purpose: "user_oid",
+                                value: login
+                                    .user_oid
+                                    .map(|oid| oid.to_string())
+                                    .unwrap_or_default(),
+                            },
+                        ),
+                );
+            }
+            Err(error) => {
+                let (outcome, reason) = authentication_outcome(error);
+                self.events.emit(
+                    BusinessEvent::audit("authentication.result")
+                        .outcome(outcome)
+                        .reason(reason)
+                        .attribute("factor", EventValue::Text(factor.to_owned()))
+                        .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
+                );
+            }
+        }
+    }
+
+    async fn challenge_inner(
         &self,
         login_oid: Uuid,
         credential_type: CredentialType,
@@ -791,6 +959,27 @@ impl LoginService {
     }
 }
 
+/// Bounded reason categories for authentication failures. Expected credential
+/// rejections stay `rejected`; only unexpected internal failures are
+/// `failure`.
+fn authentication_outcome(error: &AppError) -> (&'static str, &'static str) {
+    use crate::error::code::AppErrorCode as _;
+
+    match error.code() {
+        code if code == AuthErrorCode::InvalidCredential.code() => {
+            ("rejected", "invalid_credential")
+        }
+        code if code == AuthErrorCode::InvalidOtp.code() => ("rejected", "invalid_credential"),
+        code if code == AuthErrorCode::TooManyAttempts.code() => ("rejected", "too_many_attempts"),
+        code if code == AuthErrorCode::UserLocked.code() => ("rejected", "account_locked"),
+        code if code == AuthErrorCode::UserDisabled.code() => ("rejected", "account_disabled"),
+        code if code == AuthErrorCode::LoginExpired.code() => ("rejected", "login_expired"),
+        code if code == AuthErrorCode::InvalidLoginState.code() => ("rejected", "invalid_state"),
+        code if code == AuthErrorCode::UserNotFound.code() => ("rejected", "not_found"),
+        _ => crate::observability::error_outcome(error),
+    }
+}
+
 fn authentication_context_expires_at(acr: &str) -> chrono::DateTime<Utc> {
     let ttl = if acr == ACR_AAL2 {
         ELEVATED_AUTHENTICATION_TTL
@@ -941,6 +1130,22 @@ mod tests {
             user.locked = false;
             user.locked_until = None;
             Ok(())
+        }
+
+        async fn update_identifier(
+            &self,
+            _oid: UserOid,
+            _update: identity_domain::user::repository::UserIdentifierUpdate,
+        ) -> Result<Option<User>, UserRepositoryError> {
+            unimplemented!("identifier updates are not part of this test double")
+        }
+
+        async fn update_profile(
+            &self,
+            _oid: UserOid,
+            _patch: identity_domain::user::repository::UserProfilePatch,
+        ) -> Result<Option<User>, UserRepositoryError> {
+            unimplemented!("profile updates are not part of this test double")
         }
     }
 
@@ -1100,6 +1305,29 @@ mod tests {
             _revoked_at: chrono::DateTime<chrono::Utc>,
         ) -> Result<Option<Session>, SessionRepositoryError> {
             Ok(None)
+        }
+
+        async fn list_by_user_oid(
+            &self,
+            _user_oid: Uuid,
+        ) -> Result<Vec<Session>, SessionRepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn list_active_page_by_user_oid(
+            &self,
+            _user_oid: Uuid,
+            _after: Option<identity_domain::auth::repository::SessionSortKey>,
+            _before: Option<identity_domain::auth::repository::SessionSortKey>,
+            _limit: usize,
+            _direction: identity_domain::auth::repository::SessionPageDirection,
+        ) -> Result<identity_domain::auth::repository::SessionPage, SessionRepositoryError>
+        {
+            Ok(identity_domain::auth::repository::SessionPage {
+                items: Vec::new(),
+                has_previous_page: false,
+                has_next_page: false,
+            })
         }
     }
 

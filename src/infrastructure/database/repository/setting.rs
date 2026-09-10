@@ -57,6 +57,7 @@ where
 
 #[async_trait]
 impl SettingRepository for SettingRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "get"))]
     async fn get<S>(&self) -> Result<Option<SettingEntry<S::Value>>, SettingRepositoryError>
     where
         S: SettingDefinition,
@@ -70,6 +71,7 @@ impl SettingRepository for SettingRepositoryImpl {
             .transpose()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "upsert"))]
     async fn upsert<S>(
         &self,
         value: &S::Value,

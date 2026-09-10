@@ -199,6 +199,22 @@ impl UserRepository for InMemoryUserRepository {
     async fn reset_failed_attempts(&self, _user_oid: UserOid) -> Result<(), UserRepositoryError> {
         Ok(())
     }
+
+    async fn update_identifier(
+        &self,
+        _oid: UserOid,
+        _update: identity_domain::user::repository::UserIdentifierUpdate,
+    ) -> Result<Option<User>, UserRepositoryError> {
+        Ok(None)
+    }
+
+    async fn update_profile(
+        &self,
+        _oid: UserOid,
+        _patch: identity_domain::user::repository::UserProfilePatch,
+    ) -> Result<Option<User>, UserRepositoryError> {
+        Ok(None)
+    }
 }
 
 pub(super) fn cred_repo_with(

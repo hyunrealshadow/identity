@@ -8,7 +8,7 @@ use sea_orm::{
 use crate::database::entity::{user, user::Entity as UserEntity};
 use identity_domain::user::{
     User, UserOid, UserTheme,
-    repository::{UserRepository, UserRepositoryError},
+    repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
 
 fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
@@ -94,6 +94,7 @@ impl UserRepositoryImpl {
         Self { db }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_profile"))]
     pub async fn update_profile(
         &self,
         oid: UserOid,
@@ -141,6 +142,7 @@ impl UserRepositoryImpl {
         to_domain(model).map(Some)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_identifier"))]
     pub async fn update_identifier(
         &self,
         oid: UserOid,
@@ -210,6 +212,7 @@ impl UserRepositoryImpl {
         }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "identifier_exists"))]
     async fn identifier_exists(
         &self,
         column: user::Column,
@@ -226,36 +229,9 @@ impl UserRepositoryImpl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UserIdentifierUpdate {
-    Username { value: String, normalized: String },
-    Email { value: String, normalized: String },
-}
-
-#[derive(Debug, Default)]
-pub struct UserProfilePatch {
-    pub given_name: Option<Option<String>>,
-    pub family_name: Option<Option<String>>,
-    pub middle_name: Option<Option<String>>,
-    pub nickname: Option<Option<String>>,
-    pub profile: Option<Option<String>>,
-    pub picture: Option<Option<String>>,
-    pub website: Option<Option<String>>,
-    pub gender: Option<Option<String>>,
-    pub birthdate: Option<Option<String>>,
-    pub zone_info: Option<Option<String>>,
-    pub locale: Option<Option<String>>,
-    pub theme: Option<Option<UserTheme>>,
-    pub address_formatted: Option<Option<String>>,
-    pub address_street_address: Option<Option<String>>,
-    pub address_locality: Option<Option<String>>,
-    pub address_region: Option<Option<String>>,
-    pub address_postal_code: Option<Option<String>>,
-    pub address_country: Option<Option<String>>,
-}
-
 #[async_trait]
 impl UserRepository for UserRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_identifier"))]
     async fn find_by_identifier(&self, identifier: &str) -> Result<User, UserRepositoryError> {
         use sea_orm::Condition;
         let normalized = identity_domain::user::normalization::normalize_identifier(identifier)
@@ -275,6 +251,7 @@ impl UserRepository for UserRepositoryImpl {
             .ok_or(UserRepositoryError::UserNotFound)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
         let model = UserEntity::find()
             .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
@@ -284,6 +261,7 @@ impl UserRepository for UserRepositoryImpl {
         model.map(to_domain).transpose()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "increment_failed_attempts"))]
     async fn increment_failed_attempts(
         &self,
         user_oid: UserOid,
@@ -337,6 +315,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(attempts)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_failed_attempts"))]
     async fn reset_failed_attempts(&self, user_oid: UserOid) -> Result<(), UserRepositoryError> {
         let oid = uuid::Uuid::from(user_oid);
         UserEntity::update_many()
@@ -358,15 +337,33 @@ impl UserRepository for UserRepositoryImpl {
             .map_err(|e| UserRepositoryError::ResetFailedAttempts(Box::new(e)))?;
         Ok(())
     }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_identifier"))]
+    async fn update_identifier(
+        &self,
+        oid: UserOid,
+        update: UserIdentifierUpdate,
+    ) -> Result<Option<User>, UserRepositoryError> {
+        UserRepositoryImpl::update_identifier(self, oid, update).await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_profile"))]
+    async fn update_profile(
+        &self,
+        oid: UserOid,
+        patch: UserProfilePatch,
+    ) -> Result<Option<User>, UserRepositoryError> {
+        UserRepositoryImpl::update_profile(self, oid, patch).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use sea_orm::{DatabaseBackend, MockDatabase};
 
-    use super::{UserIdentifierUpdate, UserRepositoryImpl, to_domain, update_theme_preference};
+    use super::{UserRepositoryImpl, to_domain, update_theme_preference};
     use crate::database::entity::user;
-    use identity_domain::user::UserTheme;
+    use identity_domain::user::{UserTheme, repository::UserIdentifierUpdate};
 
     #[test]
     fn maps_oidc_phone_and_address_claim_fields() {

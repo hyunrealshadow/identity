@@ -73,6 +73,7 @@ pub struct AuthorizeService {
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     http_client: reqwest::Client,
     data_protector: Arc<dyn DataProtector>,
+    events: Arc<dyn crate::observability::EventSink>,
 }
 
 pub struct AuthorizeServiceDependencies {
@@ -103,7 +104,15 @@ impl AuthorizeService {
             signing_algorithm_detector: deps.signing_algorithm_detector,
             http_client: deps.http_client,
             data_protector: deps.data_protector,
+            events: Arc::new(crate::observability::NoopEventSink),
         }
+    }
+
+    /// Attach the key event and audit sink.
+    #[must_use]
+    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+        self.events = events;
+        self
     }
 }
 

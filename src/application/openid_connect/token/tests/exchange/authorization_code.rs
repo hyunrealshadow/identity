@@ -811,3 +811,152 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             .unwrap();
     }
 }
+
+/// Records emitted key events so exchange outcome and consumption events can
+/// be asserted without an observability pipeline.
+#[derive(Default)]
+struct RecordingSink {
+    events: std::sync::Mutex<Vec<crate::observability::BusinessEvent>>,
+}
+
+impl RecordingSink {
+    fn names(&self) -> Vec<&'static str> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|event| event.name)
+            .collect()
+    }
+
+    fn outcome_of(&self, name: &str) -> Option<&'static str> {
+        let events = self.events.lock().unwrap();
+        events
+            .iter()
+            .find(|event| event.name == name)
+            .and_then(|event| event.outcome)
+    }
+}
+
+impl crate::observability::EventSink for RecordingSink {
+    fn emit(&self, event: crate::observability::BusinessEvent) {
+        self.events.lock().unwrap().push(event);
+    }
+}
+
+#[tokio::test]
+async fn successful_exchange_emits_consumption_and_issuance_events() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, _) = rs256_token_service_with_public_key(repo.clone(), user_oid);
+    let sink = Arc::new(RecordingSink::default());
+    let service = service.with_events(sink.clone());
+
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "openid".to_owned(),
+                nonce: None,
+                code_challenge: Some(s256_challenge("verifier-123")),
+                code_challenge_method: Some("S256".parse().unwrap()),
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec![],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_owned(),
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+
+    service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_owned()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_owned()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: Some("verifier-123".to_owned()),
+        })
+        .await
+        .unwrap();
+
+    let names = sink.names();
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| **name == "authorization_code.consumed")
+            .count(),
+        1
+    );
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| **name == "token.issuance.result")
+            .count(),
+        1
+    );
+    assert_eq!(
+        sink.outcome_of("authorization_code.consumed"),
+        Some("success")
+    );
+    assert_eq!(sink.outcome_of("token.issuance.result"), Some("success"));
+    let events = sink.events.lock().unwrap();
+    let issuance = events
+        .iter()
+        .find(|event| event.name == "token.issuance.result")
+        .unwrap();
+    assert!(issuance.attributes.iter().any(|(key, value)| {
+        *key == "authorization_code_id"
+            && *value == crate::observability::EventValue::Text(record.oid.to_string())
+    }));
+    // The user identifier is pseudonymized, never raw.
+    assert!(issuance.attributes.iter().any(|(key, value)| {
+        *key == "user_oid"
+            && matches!(
+                value,
+                crate::observability::EventValue::Pseudonymized { purpose, .. } if *purpose == "user_oid"
+            )
+    }));
+}
+
+#[tokio::test]
+async fn failed_exchange_emits_a_single_rejected_issuance_event() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, _) = rs256_token_service_with_public_key(repo.clone(), user_oid);
+    let sink = Arc::new(RecordingSink::default());
+    let service = service.with_events(sink.clone());
+
+    let error = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(Uuid::new_v4().as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_owned()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_owned()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: None,
+        })
+        .await
+        .unwrap_err();
+
+    assert!(error.code() > 0);
+    let names = sink.names();
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| **name == "token.issuance.result")
+            .count(),
+        1
+    );
+    assert_eq!(sink.outcome_of("token.issuance.result"), Some("rejected"));
+    // No code was ever consumed, so no consumption event is fabricated.
+    assert!(!names.contains(&"authorization_code.consumed"));
+}

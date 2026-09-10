@@ -178,6 +178,7 @@ impl OpenIdConnectCredentialRepositoryImpl {
 
 #[async_trait]
 impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_active_by_client_oid_and_type"))]
     async fn find_active_by_client_oid_and_type(
         &self,
         client_oid: ClientOid,

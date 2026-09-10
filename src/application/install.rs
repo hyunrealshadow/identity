@@ -90,14 +90,32 @@ impl<R: SettingRepository> InstallService<R> {
         *self.installation_initialized.current_value()
     }
 
+    #[tracing::instrument(skip_all, name = "install")]
     pub async fn install(&self, input: InstallInput) -> Result<(), AppError> {
-        tracing::info!("install: starting");
+        let result = self.install_inner(input).await;
+        use crate::observability::{BusinessEvent, EventValue};
+        let event = match &result {
+            Ok(()) => BusinessEvent::audit("install.result")
+                .outcome("success")
+                .attribute("stage", EventValue::Text("completed".to_owned())),
+            Err(error) => {
+                let (outcome, reason) = crate::observability::error_outcome(error);
+                BusinessEvent::audit("install.result")
+                    .outcome(outcome)
+                    .reason(reason)
+                    .attribute("error_code", EventValue::Integer(i64::from(error.code())))
+            }
+        };
+        crate::observability::event_sink().emit(event);
+        result
+    }
+
+    async fn install_inner(&self, input: InstallInput) -> Result<(), AppError> {
         if self.is_initialized() {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
 
         let input = validate_install_input(input)?;
-        tracing::info!("install: validations passed, persisting");
 
         let hash_options = self.password_hash_options.current_value();
         let password_hasher = Arc::clone(&self.password_hasher);
@@ -136,7 +154,6 @@ impl<R: SettingRepository> InstallService<R> {
             })
             .await?;
 
-        tracing::info!("install: persistence done, writing settings");
         self.installation_initialized.set(true).await?;
         self.installation_domain
             .set(installation_state.domain.clone())

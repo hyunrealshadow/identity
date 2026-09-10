@@ -55,6 +55,7 @@ impl LoginRepositoryImpl {
 
 #[async_trait]
 impl LoginRepository for LoginRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Login>, LoginRepositoryError> {
         let Some(model) = LoginEntity::find()
             .filter(login::Column::Oid.eq(oid))
@@ -105,6 +106,7 @@ impl LoginRepository for LoginRepositoryImpl {
         )?))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create_pending"))]
     async fn create_pending(
         &self,
         client_oid: Uuid,
@@ -147,6 +149,7 @@ impl LoginRepository for LoginRepositoryImpl {
         to_domain(model, client_oid, client_authorization_oid, None, None)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "bind_user"))]
     async fn bind_user(
         &self,
         login_oid: Uuid,
@@ -199,6 +202,7 @@ impl LoginRepository for LoginRepositoryImpl {
         )
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_status"))]
     async fn update_status(
         &self,
         login_oid: Uuid,
@@ -273,6 +277,7 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "increment_failed_attempts"))]
     async fn increment_failed_attempts(
         &self,
         login_oid: Uuid,
@@ -307,6 +312,7 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(updated.failed_attempts)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_identity"))]
     async fn reset_identity(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
         let result = LoginEntity::update_many()
             .col_expr(
@@ -340,6 +346,7 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "bind_session"))]
     async fn bind_session(
         &self,
         login_oid: Uuid,
@@ -370,6 +377,7 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_failed_attempts"))]
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
         let now = Utc::now().naive_utc();
         LoginEntity::update_many()

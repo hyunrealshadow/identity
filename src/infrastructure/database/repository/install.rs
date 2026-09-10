@@ -66,6 +66,7 @@ impl InstallPersistenceImpl {
 
 #[async_trait]
 impl InstallPersistence for InstallPersistenceImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "persist_installation"))]
     async fn persist_installation(
         &self,
         input: InstallPersistenceInput,

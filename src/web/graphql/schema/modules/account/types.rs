@@ -1,9 +1,6 @@
 use async_graphql::{Error, ID, InputObject, MaybeUndefined, Object, Result};
-use identity_domain::user::User;
-use identity_infrastructure::{
-    database::repository::user::UserProfilePatch,
-    graphql::id::{GlobalId, GlobalIdType},
-};
+use identity_domain::user::{User, repository::UserProfilePatch};
+use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 pub(crate) struct UserGlobalId;

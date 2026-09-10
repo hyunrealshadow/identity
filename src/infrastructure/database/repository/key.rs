@@ -23,6 +23,7 @@ impl KeyRepositoryImpl {
         Self { db }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_model_by_oid"))]
     async fn find_model_by_oid(
         &self,
         oid: KeyOid,
@@ -68,6 +69,7 @@ pub fn to_domain(model: key::Model) -> Result<Key, KeyRepositoryError> {
 
 #[async_trait]
 impl KeyRepository for KeyRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(&self, oid: KeyOid) -> Result<Option<Key>, KeyRepositoryError> {
         self.find_model_by_oid(oid)
             .await?
@@ -75,6 +77,7 @@ impl KeyRepository for KeyRepositoryImpl {
             .transpose()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_active_asymmetric"))]
     async fn list_active_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         KeyEntity::find()
             .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
@@ -88,6 +91,7 @@ impl KeyRepository for KeyRepositoryImpl {
             .collect()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_decryptable_symmetric"))]
     async fn list_decryptable_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         KeyEntity::find()
             .filter(key::Column::Type.eq(KeyType::Symmetric.to_string()))
@@ -100,6 +104,7 @@ impl KeyRepository for KeyRepositoryImpl {
             .collect()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
     async fn create(
         &self,
         data: &KeyData,
@@ -125,6 +130,7 @@ impl KeyRepository for KeyRepositoryImpl {
         )
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_certificate_by_oid"))]
     async fn update_certificate_by_oid(
         &self,
         oid: KeyOid,
@@ -167,6 +173,7 @@ impl KeyRepository for KeyRepositoryImpl {
         }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_by_oid"))]
     async fn revoke_by_oid(
         &self,
         oid: KeyOid,

@@ -82,6 +82,7 @@ pub struct MfaService {
     verifier: Arc<dyn TotpVerifier>,
     generator: Arc<dyn TotpEnrollmentGenerator>,
     data_protector: Arc<dyn DataProtector>,
+    events: Arc<dyn crate::observability::EventSink>,
 }
 
 impl MfaService {
@@ -97,7 +98,29 @@ impl MfaService {
             verifier,
             generator,
             data_protector,
+            events: Arc::new(crate::observability::NoopEventSink),
         }
+    }
+
+    /// Attach the key event and audit sink.
+    #[must_use]
+    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+        self.events = events;
+        self
+    }
+
+    /// Record a security-relevant MFA state change. Secrets, OTP codes and
+    /// recovery codes are never included.
+    fn record_mfa_change(&self, event: &'static str, user_oid: UserOid, outcome: &'static str) {
+        use crate::observability::{BusinessEvent, EventValue};
+        self.events
+            .emit(BusinessEvent::audit(event).outcome(outcome).attribute(
+                "user_oid",
+                EventValue::Pseudonymized {
+                    purpose: "user_oid",
+                    value: uuid::Uuid::from(user_oid).to_string(),
+                },
+            ));
     }
 
     pub async fn status(&self, user_oid: UserOid) -> Result<MfaStatus, AppError> {
@@ -117,6 +140,7 @@ impl MfaService {
         })
     }
 
+    #[tracing::instrument(skip_all, name = "mfa.enrollment.begin")]
     pub async fn begin_totp_enrollment(
         &self,
         user_oid: UserOid,
@@ -143,6 +167,7 @@ impl MfaService {
             .data_protector
             .protect(ENROLLMENT_PURPOSE, &plaintext)
             .await?;
+        self.record_mfa_change("mfa.enrollment.started", user_oid, "success");
         Ok(BeginTotpEnrollment {
             secret: generated.credential.secret,
             otp_auth_uri: generated.otp_auth_uri,
@@ -151,6 +176,7 @@ impl MfaService {
         })
     }
 
+    #[tracing::instrument(skip_all, name = "mfa.enrollment.confirm")]
     pub async fn confirm_totp_enrollment(
         &self,
         user_oid: UserOid,
@@ -183,9 +209,11 @@ impl MfaService {
         {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
         }
+        self.record_mfa_change("mfa.enrollment.confirmed", user_oid, "success");
         Ok(ConfirmTotpEnrollment { recovery_codes })
     }
 
+    #[tracing::instrument(skip_all, name = "mfa.enrollment.change_algorithm")]
     pub async fn change_totp_enrollment_algorithm(
         &self,
         user_oid: UserOid,
@@ -230,6 +258,7 @@ impl MfaService {
         })
     }
 
+    #[tracing::instrument(skip_all, name = "mfa.disable")]
     pub async fn disable_totp(&self, user_oid: UserOid) -> Result<(), AppError> {
         if !self.status(user_oid).await?.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
@@ -243,9 +272,11 @@ impl MfaService {
                 ],
             )
             .await?;
+        self.record_mfa_change("mfa.disabled", user_oid, "success");
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "mfa.recovery_codes.regenerate")]
     pub async fn regenerate_recovery_codes(
         &self,
         user_oid: UserOid,
@@ -258,6 +289,7 @@ impl MfaService {
         {
             return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
         }
+        self.record_mfa_change("mfa.recovery_codes.regenerated", user_oid, "success");
         Ok(RegenerateRecoveryCodes { recovery_codes })
     }
 }

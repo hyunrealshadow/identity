@@ -169,6 +169,7 @@ impl ClientAuthorizationRepositoryImpl {
 
 #[async_trait]
 impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
     async fn create(
         &self,
         client_oid: ClientOid,
@@ -249,6 +250,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         to_domain(model, client_oid)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(
         &self,
         oid: Uuid,
@@ -267,6 +269,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(Some(to_domain(request_model, client_model.oid)?))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_authorization_request_selection"))]
     async fn update_authorization_request_selection(
         &self,
         oid: Uuid,
@@ -322,6 +325,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(result.rows_affected == 1)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_authorization_request_consent"))]
     async fn record_authorization_request_consent(
         &self,
         oid: Uuid,
@@ -468,6 +472,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(true)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "has_user_consent"))]
     async fn has_user_consent(
         &self,
         user_oid: Uuid,
@@ -483,7 +488,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             return Ok(false);
         };
         let Some(client) = ClientEntity::find()
-            .filter(client::Column::Oid.eq(Uuid::from(client_oid)))
+            .filter(client::Column::Oid.eq(client_oid))
             .one(&self.db)
             .await
             .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
@@ -518,6 +523,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(scope_ids_cover(granted_scope_ids, requested_scope_ids))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "mark_authorization_request_completed"))]
     async fn mark_authorization_request_completed(
         &self,
         oid: Uuid,
@@ -551,6 +557,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(result.rows_affected == 1)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_access_tokens_for_authorization_code"))]
     async fn revoke_access_tokens_for_authorization_code(
         &self,
         authorization_code_oid: Uuid,
@@ -584,6 +591,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_if_active"))]
     async fn revoke_if_active(
         &self,
         oid: Uuid,

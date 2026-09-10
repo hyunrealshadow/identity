@@ -78,6 +78,7 @@ pub struct LogoutService {
     key_jwk_repo: Arc<dyn KeyJwkRepository>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     http_client: reqwest::Client,
+    events: Arc<dyn crate::observability::EventSink>,
 }
 
 pub struct LogoutServiceDependencies {
@@ -98,6 +99,7 @@ impl LogoutService {
             key_jwk_repo: deps.key_jwk_repo,
             signing_algorithm_detector: deps.signing_algorithm_detector,
             http_client: deps.http_client,
+            events: Arc::new(crate::observability::NoopEventSink),
         }
     }
 
@@ -107,7 +109,59 @@ impl LogoutService {
         self
     }
 
+    /// Attach the key event and audit sink.
+    #[must_use]
+    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+        self.events = events;
+        self
+    }
+
+    #[tracing::instrument(skip_all, name = "logout.rp_initiated")]
     pub async fn rp_initiated_logout(
+        &self,
+        request: RpInitiatedLogoutRequest,
+    ) -> Result<LogoutOutcome, AppError> {
+        use crate::observability::{BusinessEvent, EventValue};
+
+        let session_oid = request.session_oid;
+        let result = self.rp_initiated_logout_inner(request).await;
+        let mut event = BusinessEvent::audit("logout.local.result");
+        match &result {
+            Ok(outcome) => {
+                event = event.outcome("success").attribute(
+                    "logout_kind",
+                    EventValue::Text(
+                        match outcome {
+                            LogoutOutcome::LoggedOut => "logged_out",
+                            LogoutOutcome::Redirect { .. } => "redirect",
+                            LogoutOutcome::FrontChannel { .. } => "frontchannel",
+                        }
+                        .to_owned(),
+                    ),
+                );
+            }
+            Err(error) => {
+                let (outcome, reason) = crate::observability::error_outcome(error);
+                event = event
+                    .outcome(outcome)
+                    .reason(reason)
+                    .attribute("error_code", EventValue::Integer(i64::from(error.code())));
+            }
+        }
+        if let Some(session_oid) = session_oid {
+            event = event.attribute(
+                "session_oid",
+                EventValue::Pseudonymized {
+                    purpose: "session_oid",
+                    value: session_oid.0.to_string(),
+                },
+            );
+        }
+        self.events.emit(event);
+        result
+    }
+
+    async fn rp_initiated_logout_inner(
         &self,
         request: RpInitiatedLogoutRequest,
     ) -> Result<LogoutOutcome, AppError> {
@@ -309,32 +363,63 @@ impl LogoutService {
             .await?;
 
         for notification in notifications {
-            match self
-                .http_client
-                .post(notification.logout_uri.clone())
-                .form(&[("logout_token", notification.logout_token.as_str())])
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {}
-                Ok(response) => {
-                    tracing::warn!(
-                        client_id = %notification.client_id,
-                        status = %response.status(),
-                        "back-channel logout request returned non-success status"
-                    );
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        client_id = %notification.client_id,
-                        error = %error,
-                        "back-channel logout request failed"
-                    );
-                }
-            }
+            self.notify_backchannel_logout(&notification).await;
         }
 
         Ok(())
+    }
+
+    /// One span and one result event per back-channel target. A failing target
+    /// is reported as an observed notification result; it never claims that the
+    /// remote session was actually revoked.
+    async fn notify_backchannel_logout(&self, notification: &BackChannelLogoutNotification) {
+        use tracing::Instrument as _;
+
+        let trace = crate::observability::outbound_trace();
+        let mut headers = http::HeaderMap::new();
+        trace.inject(&notification.logout_uri, &mut headers);
+        let span = trace.client_span("POST", &notification.logout_uri);
+        let result = self
+            .http_client
+            .post(notification.logout_uri.clone())
+            .headers(headers)
+            .form(&[("logout_token", notification.logout_token.as_str())])
+            .send()
+            .instrument(span.clone())
+            .await;
+
+        let (outcome, reason) = match &result {
+            Ok(response) if response.status().is_success() => ("success", None),
+            Ok(response) => {
+                span.record("http.response.status_code", response.status().as_u16());
+                tracing::warn!(
+                    client_id = %notification.client_id,
+                    status = %response.status(),
+                    "back-channel logout request returned non-success status"
+                );
+                ("failure", Some("non_success_status"))
+            }
+            Err(error) => {
+                tracing::warn!(
+                    client_id = %notification.client_id,
+                    error = %error,
+                    "back-channel logout request failed"
+                );
+                ("failure", Some("transport_error"))
+            }
+        };
+
+        use crate::observability::{BusinessEvent, EventValue};
+        let mut event = BusinessEvent::audit("logout.backchannel.result")
+            .outcome(outcome)
+            .attribute(
+                "client_oid",
+                EventValue::Text(notification.client_id.to_string()),
+            );
+        if let Some(reason) = reason {
+            event = event.reason(reason);
+        }
+        self.events.emit(event);
     }
 
     async fn load_signing_key(&self) -> Result<(String, String, JwaSigningAlgorithm), AppError> {

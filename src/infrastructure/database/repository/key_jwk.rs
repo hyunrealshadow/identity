@@ -58,6 +58,7 @@ fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
 
 #[async_trait]
 impl KeyJwkRepository for KeyJwkRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create_batch"))]
     async fn create_batch(
         &self,
         inputs: Vec<CreateKeyJwkInput>,
@@ -98,6 +99,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .collect::<Result<_, _>>()?)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_active"))]
     async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
         use crate::database::entity::key;
         KeyJwkEntity::find()
@@ -112,6 +114,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .collect()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_active_by_key_oid_and_algorithm"))]
     async fn find_active_by_key_oid_and_algorithm(
         &self,
         key_oid: KeyOid,
@@ -132,6 +135,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .transpose()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "delete_by_key_oid"))]
     async fn delete_by_key_oid(&self, key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
         key_jwk::Entity::delete_many()
             .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))

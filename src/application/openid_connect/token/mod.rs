@@ -80,6 +80,7 @@ pub struct TokenService {
     data_protector: Arc<dyn DataProtector>,
     runtime_key_ring: Option<Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>>,
     session_repo: Option<Arc<dyn SessionRepository>>,
+    events: Arc<dyn crate::observability::EventSink>,
 }
 
 pub struct TokenServiceDependencies {
@@ -108,7 +109,17 @@ impl TokenService {
             data_protector: deps.data_protector,
             runtime_key_ring: None,
             session_repo: None,
+            events: Arc::new(crate::observability::NoopEventSink),
         }
+    }
+
+    /// Attach the key event and audit sink. Without an attached sink, business
+    /// events are dropped silently, which keeps tests and tools independent
+    /// from the observability pipeline.
+    #[must_use]
+    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+        self.events = events;
+        self
     }
 
     #[must_use]

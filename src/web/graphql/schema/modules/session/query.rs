@@ -2,11 +2,8 @@ use async_graphql::{
     Context, Error, Object, Result,
     connection::{Connection, Edge, query},
 };
-use identity_domain::openid_connect::ApiScope;
-use identity_infrastructure::{
-    database::repository::session::{SessionPageDirection, SessionRepositoryImpl},
-    graphql::cursor::{ProtectedCursor, protect_many, unprotect},
-};
+use identity_domain::{auth::repository::SessionPageDirection, openid_connect::ApiScope};
+use identity_infrastructure::graphql::cursor::{ProtectedCursor, protect_many, unprotect};
 use uuid::Uuid;
 
 use super::{cursor::SessionCursor, types::SessionNode};
@@ -31,7 +28,7 @@ impl SessionViewer {
         require_scope(ctx, ApiScope::SessionRead)?;
         let request = request_context(ctx)?;
         let max_page_size = ctx.data_opt::<usize>().copied().unwrap_or(100);
-        let repo = SessionRepositoryImpl::new(request.state.resources().db().clone());
+        let state = request.state.clone();
         let current_session_oid = request.claims.session_oid;
         let user_oid = Uuid::from(request.claims.user_oid);
         let data_protector = request.state.services().data_protector().clone();
@@ -74,8 +71,10 @@ impl SessionViewer {
                     ),
                     None => None,
                 };
-                let page = repo
-                    .list_active_page_by_user_oid(user_oid, after, before, requested, direction)
+                let page = state
+                    .services()
+                    .session()
+                    .list_active_sessions_page(user_oid, after, before, requested, direction)
                     .await
                     .map_err(internal_error)?;
                 let cursor_payloads = page

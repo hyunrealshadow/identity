@@ -20,7 +20,6 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
             error = %error,
             source = ?error.source(),
             code = error.code(),
-            request_id = request.request_id,
             "graphql application error"
         );
     }
@@ -63,7 +62,6 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
     Error::new(message).extend_with(|_, extensions| {
         extensions.set("kind", kind);
         extensions.set("code", error.code());
-        extensions.set("requestId", request.request_id.as_str());
         extensions.set(
             "fields",
             async_graphql::Value::from_json(serde_json::Value::Array(fields))

@@ -76,6 +76,7 @@ async fn latest_secret<C: ConnectionTrait>(
 
 #[async_trait]
 impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "login_runtime_config"))]
     async fn login_runtime_config(
         &self,
         now: DateTime<Utc>,
@@ -111,6 +112,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         }))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "rotate_if_due"))]
     async fn rotate_if_due(
         &self,
         now: DateTime<Utc>,

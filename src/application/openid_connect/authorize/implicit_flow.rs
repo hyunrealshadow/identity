@@ -174,9 +174,11 @@ impl AuthorizeService {
         Ok(url)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn approve_hybrid_flow(
         &self,
         request: &AuthorizationRequestData,
+        authorization_request_id: Uuid,
         session_oid: SessionOid,
         protected_session_id: &str,
         user_oid: Uuid,
@@ -201,6 +203,7 @@ impl AuthorizeService {
             .create_authorization_code(
                 request,
                 AuthorizationCodeContext {
+                    authorization_request_id,
                     user_oid,
                     session_oid,
                     protected_session_id,

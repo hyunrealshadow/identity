@@ -174,11 +174,23 @@ pub async fn fetch_document_after_url_validation(
     url: &Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, RemoteFetchError> {
+    use tracing::Instrument as _;
+
+    let fetch_url = fetchable_url(url);
+    let trace = crate::observability::outbound_trace();
+    // JWKS and request_uri targets never receive internal trace context unless
+    // the deployment explicitly allow-lists their origin.
+    let mut headers = http::HeaderMap::new();
+    trace.inject(&fetch_url, &mut headers);
+    let span = trace.client_span("GET", &fetch_url);
     let mut response = client
-        .get(fetchable_url(url))
+        .get(fetch_url)
+        .headers(headers)
         .send()
+        .instrument(span.clone())
         .await
         .map_err(RemoteFetchError::FetchFailed)?;
+    span.record("http.response.status_code", response.status().as_u16());
 
     if response.status() != reqwest::StatusCode::OK {
         return Err(RemoteFetchError::NotOk);

@@ -96,7 +96,19 @@ where
 
         if current.as_ref() != value {
             *current = Arc::new(value.clone());
+            // Configuration version changes are key events; unchanged rounds
+            // only keep their span and metrics.
+            self.emit_changed();
         }
+    }
+
+    fn emit_changed(&self) {
+        use crate::observability::{BusinessEvent, EventValue};
+        crate::observability::event_sink().emit(
+            BusinessEvent::business("configuration.changed")
+                .outcome("applied")
+                .attribute("setting_key", EventValue::Text(S::KEY.to_owned())),
+        );
     }
 
     fn read_current(&self) -> RwLockReadGuard<'_, Arc<S::Value>> {
@@ -183,9 +195,18 @@ impl SettingsRefresher {
             loop {
                 ticker.tick().await;
 
+                let round = tracing::info_span!(
+                    "settings.refresh.round",
+                    setting_count = self.settings.len(),
+                );
                 for setting in &self.settings {
+                    let _entered = round.enter();
                     if let Err(error) = setting.refresh_value().await {
-                        tracing::warn!(key = setting.key(), error = %error, "failed to refresh setting");
+                        tracing::warn!(
+                            key = setting.key(),
+                            error = %error,
+                            "failed to refresh setting"
+                        );
                     }
                 }
             }

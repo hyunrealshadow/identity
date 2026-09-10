@@ -38,6 +38,34 @@ pub enum SessionRepositoryError {
     RevokeFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
+/// Stable sort key for session pagination.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionSortKey {
+    pub last_active_at: DateTime<Utc>,
+    pub id: i64,
+}
+
+/// Direction of a cursor page request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionPageDirection {
+    Forward,
+    Backward,
+}
+
+/// One page of sessions with the cursors needed by the adapter.
+#[derive(Debug)]
+pub struct SessionPage {
+    pub items: Vec<SessionPageItem>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+}
+
+#[derive(Debug)]
+pub struct SessionPageItem {
+    pub session: Session,
+    pub sort_key: SessionSortKey,
+}
+
 #[derive(Debug, Error)]
 pub enum LoginRepositoryError {
     #[error("failed to query login")]
@@ -95,6 +123,24 @@ pub trait SessionRepository: Send + Sync {
     /// Find a session by its OID.
     async fn find_by_oid(&self, oid: SessionOid)
     -> Result<Option<Session>, SessionRepositoryError>;
+
+    /// List every session belonging to a user, newest first. Used by security
+    /// mutations that revoke other sessions; ownership is enforced by the
+    /// application use case that consumes this list.
+    async fn list_by_user_oid(
+        &self,
+        user_oid: Uuid,
+    ) -> Result<Vec<Session>, SessionRepositoryError>;
+
+    /// Cursor page over the user's active sessions.
+    async fn list_active_page_by_user_oid(
+        &self,
+        user_oid: Uuid,
+        after: Option<SessionSortKey>,
+        before: Option<SessionSortKey>,
+        limit: usize,
+        direction: SessionPageDirection,
+    ) -> Result<SessionPage, SessionRepositoryError>;
 
     /// Find multiple active sessions by their OIDs, joined with user data.
     ///

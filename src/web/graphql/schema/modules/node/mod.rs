@@ -1,10 +1,6 @@
 use async_graphql::{Context, Error, ID, Interface, Object, Result};
-use identity_domain::{
-    auth::SessionOid, openid_connect::ApiScope, user::repository::UserRepository,
-};
-use identity_infrastructure::{
-    database::repository::user::UserRepositoryImpl, graphql::id::DecodedGlobalId,
-};
+use identity_domain::{auth::SessionOid, openid_connect::ApiScope};
+use identity_infrastructure::graphql::id::DecodedGlobalId;
 use uuid::Uuid;
 
 use super::{
@@ -13,7 +9,7 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::{request_context, require_scope},
-    error::internal_error,
+    error::app_error,
 };
 
 #[derive(Default)]
@@ -53,14 +49,14 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
         if oid != Uuid::from(request.claims.user_oid) {
             return Ok(None);
         }
-        let repo = UserRepositoryImpl::new(request.state.resources().db().clone());
-        Ok(repo
-            .find_by_oid(request.claims.user_oid)
+        let user = request
+            .state
+            .services()
+            .account()
+            .find_user(request.claims.user_oid)
             .await
-            .map_err(internal_error)?
-            .map(UserNode::from)
-            .map(Box::new)
-            .map(Node::from))
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(user.map(UserNode::from).map(Box::new).map(Node::from))
     } else if decoded.is::<SessionGlobalId>() {
         let oid = decoded
             .into_typed::<SessionGlobalId>()
@@ -71,12 +67,10 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .state
             .services()
             .session()
-            .session_repo
-            .find_by_oid(SessionOid(oid))
+            .find_owned(SessionOid(oid), Uuid::from(request.claims.user_oid))
             .await
-            .map_err(internal_error)?;
+            .map_err(|error| app_error(ctx, error))?;
         Ok(session
-            .filter(|session| session.user_oid == Uuid::from(request.claims.user_oid))
             .map(|session| SessionNode::new(session, request.claims.session_oid))
             .map(Box::new)
             .map(Node::from))

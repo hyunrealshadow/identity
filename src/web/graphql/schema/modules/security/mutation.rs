@@ -1,7 +1,5 @@
 use async_graphql::{Context, Object, Result};
 use identity_domain::openid_connect::ApiScope;
-use identity_infrastructure::database::repository::session::SessionRepositoryImpl;
-use uuid::Uuid;
 
 use super::types::{
     BeginTotpEnrollmentPayload, ChangePasswordInput, ChangePasswordPayload,
@@ -10,7 +8,7 @@ use super::types::{
 };
 use crate::graphql::schema::{
     authorization::{request_context, require_recent_authentication, require_scope},
-    error::{app_error, internal_error},
+    error::app_error,
 };
 
 #[derive(Default)]
@@ -37,33 +35,22 @@ impl SecurityMutation {
             .await
             .map_err(|error| app_error(ctx, error))?;
         require_recent_authentication(ctx, password_change_required_acr(mfa_status.totp_enabled))?;
-        request
+        let outcome = request
             .state
             .services()
             .login()
-            .change_password(request.claims.user_oid, &input.new_password)
+            .change_password_with_session_revocation(
+                request.claims.user_oid,
+                &input.new_password,
+                request.claims.session_oid,
+            )
             .await
             .map_err(|error| app_error(ctx, error))?;
-
-        let repo = SessionRepositoryImpl::new(request.state.resources().db().clone());
-        let sessions = repo
-            .list_by_user_oid(Uuid::from(request.claims.user_oid))
-            .await
-            .map_err(internal_error)?;
-        for session in sessions
-            .into_iter()
-            .filter(|session| session.oid != request.claims.session_oid)
-            .filter(|session| session.revoked_at.is_none())
-        {
-            request
-                .state
-                .services()
-                .session()
-                .revoke(session.oid)
-                .await
-                .map_err(internal_error)?;
-        }
-        Ok(ChangePasswordPayload::new(input.client_mutation_id))
+        Ok(ChangePasswordPayload::new(
+            outcome.revoked_other_sessions,
+            outcome.session_revocation_failures,
+            input.client_mutation_id,
+        ))
     }
 
     async fn begin_totp_enrollment(

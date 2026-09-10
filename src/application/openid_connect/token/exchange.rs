@@ -1,23 +1,38 @@
 use super::signing::StoreRefreshTokenParams;
 use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
+use crate::observability::{BusinessEvent, EventValue};
 use identity_domain::auth::SessionOid;
 
 impl TokenService {
     #[tracing::instrument(
         skip_all,
         fields(
-            exchange_id = %Uuid::new_v4(),
             authorization_code_id = tracing::field::Empty,
             client_oid = tracing::field::Empty
-        ),
-        err(level = "warn")
+        )
     )]
     pub async fn exchange_authorization_code(
         &self,
         params: AuthorizationCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
-        tracing::info!("authorization code exchange started");
+        let result = self.exchange_authorization_code_inner(params).await;
+        if let Err(error) = &result {
+            let (outcome, reason) = issuance_result(error);
+            self.events.emit(
+                BusinessEvent::business("token.issuance.result")
+                    .outcome(outcome)
+                    .reason(reason)
+                    .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
+            );
+        }
+        result
+    }
+
+    async fn exchange_authorization_code_inner(
+        &self,
+        params: AuthorizationCodeGrantParams,
+    ) -> Result<TokenResponse, AppError> {
         let client_id = resolve_client_id(
             params.client_id,
             params.client_assertion_type,
@@ -74,7 +89,7 @@ impl TokenService {
         }
 
         let now = chrono::Utc::now();
-        tracing::info!(
+        tracing::debug!(
             revoked_at = ?record.revoked_at,
             expires_at = %record.expires_at,
             "authorization code state loaded"
@@ -167,7 +182,6 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
             })?;
         if !claimed {
-            tracing::warn!("authorization code consumption failed");
             self.client_authorization_repo
                 .revoke_access_tokens_for_authorization_code(record.oid)
                 .await
@@ -176,7 +190,19 @@ impl TokenService {
                 })?;
             return Err(AppError::from_code(TokenErrorCode::AuthCodeClaimFailed));
         }
-        tracing::info!("authorization code consumed; issuing tokens");
+        self.events.emit(
+            BusinessEvent::business("authorization_code.consumed")
+                .outcome("success")
+                .attribute(
+                    "authorization_code_id",
+                    EventValue::Text(record.oid.to_string()),
+                )
+                .attribute(
+                    "client_oid",
+                    EventValue::Text(record.client_oid.to_string()),
+                ),
+        );
+        tracing::debug!("authorization code consumed; issuing tokens");
 
         let user_oid = Uuid::parse_str(&data.user_oid).map_err(|error| {
             AppError::from_code(TokenErrorCode::StoredUserOidInvalid).with_source(error)
@@ -300,7 +326,32 @@ impl TokenService {
             None
         };
 
-        tracing::info!("authorization code exchange succeeded; tokens issued");
+        self.events.emit(
+            BusinessEvent::business("token.issuance.result")
+                .outcome("success")
+                .attribute(
+                    "authorization_code_id",
+                    EventValue::Text(record.oid.to_string()),
+                )
+                .attribute(
+                    "client_oid",
+                    EventValue::Text(record.client_oid.to_string()),
+                )
+                .attribute(
+                    "user_oid",
+                    EventValue::Pseudonymized {
+                        purpose: "user_oid",
+                        value: data.user_oid.clone(),
+                    },
+                )
+                .attribute(
+                    "session_oid",
+                    EventValue::Pseudonymized {
+                        purpose: "session_oid",
+                        value: data.session_oid.0.to_string(),
+                    },
+                ),
+        );
         Ok(TokenResponse {
             access_token,
             id_token,
@@ -311,7 +362,25 @@ impl TokenService {
         })
     }
 
+    #[tracing::instrument(skip_all, name = "token.refresh")]
     pub async fn exchange_refresh_token(
+        &self,
+        params: RefreshTokenGrantParams,
+    ) -> Result<TokenResponse, AppError> {
+        let result = self.exchange_refresh_token_inner(params).await;
+        if let Err(error) = &result {
+            let (outcome, reason) = issuance_result(error);
+            self.events.emit(
+                BusinessEvent::business("token.refresh.result")
+                    .outcome(outcome)
+                    .reason(reason)
+                    .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
+            );
+        }
+        result
+    }
+
+    async fn exchange_refresh_token_inner(
         &self,
         params: RefreshTokenGrantParams,
     ) -> Result<TokenResponse, AppError> {
@@ -416,6 +485,16 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
             })?;
         if !claimed {
+            // The conditional update found the token already consumed or
+            // revoked: a genuine reuse judgment, not every invalid_grant.
+            self.events.emit(
+                BusinessEvent::audit("refresh_token.reuse_detected")
+                    .outcome("detected")
+                    .attribute(
+                        "client_oid",
+                        EventValue::Text(authenticated_client_oid.to_string()),
+                    ),
+            );
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
 
@@ -525,6 +604,36 @@ impl TokenService {
             .await?,
         );
 
+        self.events.emit(
+            BusinessEvent::business("token.refresh.result")
+                .outcome("success")
+                .attribute(
+                    "client_oid",
+                    EventValue::Text(authenticated_client_oid.to_string()),
+                )
+                .attribute(
+                    "user_oid",
+                    EventValue::Pseudonymized {
+                        purpose: "user_oid",
+                        value: refresh_data.user_oid.clone(),
+                    },
+                )
+                .attribute(
+                    "session_oid",
+                    EventValue::Pseudonymized {
+                        purpose: "session_oid",
+                        value: refresh_data.session_oid.0.to_string(),
+                    },
+                ),
+        );
+        self.events.emit(
+            BusinessEvent::business("refresh_token.rotated")
+                .outcome("success")
+                .attribute(
+                    "client_oid",
+                    EventValue::Text(authenticated_client_oid.to_string()),
+                ),
+        );
         Ok(TokenResponse {
             access_token,
             id_token,
@@ -587,6 +696,22 @@ pub(crate) fn resolve_id_token_alg(
     }
 
     identity_domain::key::JwsAlgorithm::Asymmetric(fallback)
+}
+
+/// Bounded outcome/reason categories for issuance result events. The numeric
+/// error code carries the specific cause; free-form error text never becomes a
+/// metric or event name.
+fn issuance_result(error: &AppError) -> (&'static str, &'static str) {
+    match error.kind() {
+        crate::error::kind::ErrorKind::Internal => ("failure", "system_error"),
+        crate::error::kind::ErrorKind::Unauthorized => ("rejected", "client_authentication"),
+        crate::error::kind::ErrorKind::Forbidden => ("rejected", "forbidden"),
+        crate::error::kind::ErrorKind::Conflict => ("rejected", "grant_conflict"),
+        crate::error::kind::ErrorKind::Gone => ("rejected", "grant_expired"),
+        crate::error::kind::ErrorKind::Validation => ("rejected", "invalid_grant"),
+        crate::error::kind::ErrorKind::NotFound => ("rejected", "not_found"),
+        crate::error::kind::ErrorKind::RateLimit => ("rejected", "rate_limited"),
+    }
 }
 
 #[cfg(test)]

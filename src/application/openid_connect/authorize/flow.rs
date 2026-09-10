@@ -31,6 +31,7 @@ pub struct AuthorizationApproval {
 
 #[derive(Clone, Copy)]
 pub(super) struct AuthorizationCodeContext<'a> {
+    pub authorization_request_id: Uuid,
     pub user_oid: Uuid,
     pub session_oid: SessionOid,
     pub protected_session_id: &'a str,
@@ -75,6 +76,7 @@ impl AuthorizeService {
         }
     }
 
+    #[tracing::instrument(skip_all, name = "authorization.request.create")]
     pub async fn create_authorization_request(
         &self,
         request: &AuthorizationRequest,
@@ -95,6 +97,18 @@ impl AuthorizeService {
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
             })?;
+        self.events.emit(
+            crate::observability::BusinessEvent::business("authorization.request.created")
+                .outcome("success")
+                .attribute(
+                    "authorization_request_id",
+                    crate::observability::EventValue::Text(record.oid.to_string()),
+                )
+                .attribute(
+                    "client_oid",
+                    crate::observability::EventValue::Text(request.client_id.to_string()),
+                ),
+        );
 
         Ok(record.oid)
     }
@@ -432,11 +446,17 @@ impl AuthorizeService {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, name = "consent.record")]
     pub async fn record_consent_decision(
         &self,
         authorization_request_id: Uuid,
         consent_state: ConsentState,
     ) -> Result<(), AppError> {
+        let decision = match consent_state {
+            ConsentState::Approved => "granted",
+            ConsentState::Denied => "denied",
+            _ => "recorded",
+        };
         let updated = self
             .client_authorization_repo
             .record_authorization_request_consent(
@@ -452,6 +472,15 @@ impl AuthorizeService {
         if !updated {
             return Err(Self::interaction_conflict());
         }
+
+        self.events.emit(
+            crate::observability::BusinessEvent::business("consent.decision")
+                .outcome(decision)
+                .attribute(
+                    "authorization_request_id",
+                    crate::observability::EventValue::Text(authorization_request_id.to_string()),
+                ),
+        );
 
         Ok(())
     }
@@ -533,7 +562,72 @@ impl AuthorizeService {
         .await
     }
 
+    #[tracing::instrument(skip_all, name = "authorization.approve")]
     pub async fn approve_authorization_request_with_protected_session_id(
+        &self,
+        authorization_request_id: Uuid,
+        approval: AuthorizationApproval,
+    ) -> Result<Url, AppError> {
+        let user_oid = approval.user_oid;
+        let session_oid = approval.session_oid;
+        let result = self
+            .approve_authorization_request_inner(authorization_request_id, approval)
+            .await;
+        match &result {
+            Ok(_) => self.events.emit(
+                crate::observability::BusinessEvent::business("authorization.flow.result")
+                    .outcome("granted")
+                    .attribute(
+                        "authorization_request_id",
+                        crate::observability::EventValue::Text(
+                            authorization_request_id.to_string(),
+                        ),
+                    )
+                    .attribute(
+                        "user_oid",
+                        crate::observability::EventValue::Pseudonymized {
+                            purpose: "user_oid",
+                            value: user_oid.to_string(),
+                        },
+                    )
+                    .attribute(
+                        "session_oid",
+                        crate::observability::EventValue::Pseudonymized {
+                            purpose: "session_oid",
+                            value: session_oid.0.to_string(),
+                        },
+                    ),
+            ),
+            Err(error) => {
+                let (outcome, reason) = crate::observability::error_outcome(error);
+                self.events.emit(
+                    crate::observability::BusinessEvent::business("authorization.flow.result")
+                        .outcome(outcome)
+                        .reason(reason)
+                        .attribute(
+                            "authorization_request_id",
+                            crate::observability::EventValue::Text(
+                                authorization_request_id.to_string(),
+                            ),
+                        )
+                        .attribute(
+                            "session_oid",
+                            crate::observability::EventValue::Pseudonymized {
+                                purpose: "session_oid",
+                                value: session_oid.0.to_string(),
+                            },
+                        )
+                        .attribute(
+                            "error_code",
+                            crate::observability::EventValue::Integer(i64::from(error.code())),
+                        ),
+                );
+            }
+        }
+        result
+    }
+
+    async fn approve_authorization_request_inner(
         &self,
         authorization_request_id: Uuid,
         approval: AuthorizationApproval,
@@ -574,6 +668,7 @@ impl AuthorizeService {
         } else if response_type.uses_front_channel_response() {
             self.approve_hybrid_flow(
                 &request,
+                authorization_request_id,
                 session_oid,
                 &protected_session_id,
                 user_oid,
@@ -589,6 +684,7 @@ impl AuthorizeService {
             self.approve_code_flow(
                 &request,
                 AuthorizationCodeContext {
+                    authorization_request_id,
                     user_oid,
                     session_oid,
                     protected_session_id: &protected_session_id,
@@ -638,6 +734,7 @@ impl AuthorizeService {
         context: AuthorizationCodeContext<'_>,
     ) -> Result<(String, Uuid), AppError> {
         let AuthorizationCodeContext {
+            authorization_request_id,
             user_oid,
             session_oid,
             protected_session_id,
@@ -685,9 +782,41 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
             })?;
 
+        self.events.emit(
+            crate::observability::BusinessEvent::business("authorization_code.created")
+                .outcome("success")
+                .attribute(
+                    "authorization_request_id",
+                    crate::observability::EventValue::Text(authorization_request_id.to_string()),
+                )
+                .attribute(
+                    "authorization_code_id",
+                    crate::observability::EventValue::Text(record.oid.to_string()),
+                )
+                .attribute(
+                    "client_oid",
+                    crate::observability::EventValue::Text(record.client_oid.to_string()),
+                )
+                .attribute(
+                    "user_oid",
+                    crate::observability::EventValue::Pseudonymized {
+                        purpose: "user_oid",
+                        value: user_oid.to_string(),
+                    },
+                )
+                .attribute(
+                    "session_oid",
+                    crate::observability::EventValue::Pseudonymized {
+                        purpose: "session_oid",
+                        value: session_oid.0.to_string(),
+                    },
+                ),
+        );
+
         Ok((protected_code, record.oid))
     }
 
+    #[tracing::instrument(skip_all, name = "authorization.deny")]
     pub async fn deny_authorization_request(
         &self,
         authorization_request_id: Uuid,
@@ -710,6 +839,16 @@ impl AuthorizeService {
 
         self.mark_authorization_request_completed(authorization_request_id)
             .await?;
+
+        self.events.emit(
+            crate::observability::BusinessEvent::business("authorization.flow.result")
+                .outcome("denied")
+                .reason("access_denied")
+                .attribute(
+                    "authorization_request_id",
+                    crate::observability::EventValue::Text(authorization_request_id.to_string()),
+                ),
+        );
 
         Ok(redirect)
     }

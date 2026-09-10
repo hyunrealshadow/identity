@@ -34,13 +34,21 @@ pub(super) struct ChangePasswordInput {
 
 pub(super) struct ChangePasswordPayload {
     changed: bool,
+    revoked_other_sessions: u32,
+    session_revocation_failures: u32,
     client_mutation_id: Option<String>,
 }
 
 impl ChangePasswordPayload {
-    pub(super) fn new(client_mutation_id: Option<String>) -> Self {
+    pub(super) fn new(
+        revoked_other_sessions: u32,
+        session_revocation_failures: u32,
+        client_mutation_id: Option<String>,
+    ) -> Self {
         Self {
             changed: true,
+            revoked_other_sessions,
+            session_revocation_failures,
             client_mutation_id,
         }
     }
@@ -50,6 +58,17 @@ impl ChangePasswordPayload {
 impl ChangePasswordPayload {
     async fn changed(&self) -> bool {
         self.changed
+    }
+
+    /// Number of other sessions that were revoked after the password change.
+    async fn revoked_other_sessions(&self) -> u32 {
+        self.revoked_other_sessions
+    }
+
+    /// Sessions that could not be revoked. A non-zero value means the password
+    /// change succeeded but the revocation batch partially failed.
+    async fn session_revocation_failures(&self) -> u32 {
+        self.session_revocation_failures
     }
 
     async fn client_mutation_id(&self) -> Option<&str> {

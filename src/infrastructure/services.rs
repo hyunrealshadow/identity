@@ -23,8 +23,11 @@ use crate::{
         user_credential::UserCredentialRepositoryImpl,
     },
 };
+use identity_application::observability::EventSink;
 use identity_application::{
-    auth::{login::LoginService, mfa::MfaService, session::SessionService},
+    auth::{
+        account::AccountService, login::LoginService, mfa::MfaService, session::SessionService,
+    },
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
     key::asymmetric::AsymmetricKeyService,
@@ -50,6 +53,8 @@ pub type AppLoginService = LoginService;
 
 pub type AppSessionService = SessionService;
 
+pub type AppAccountService = AccountService;
+
 pub type AppMfaService = MfaService;
 
 pub type AppKeyService = AsymmetricKeyService;
@@ -67,9 +72,9 @@ pub type AppOpenIdLogoutService = LogoutService;
 pub type AppOpenIdUserInfoService = UserInfoService;
 
 pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
-
 pub struct AppServices {
     login: AppLoginService,
+    account: AppAccountService,
     session: AppSessionService,
     mfa: AppMfaService,
     key: AppKeyService,
@@ -85,6 +90,7 @@ pub struct AppServices {
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
     oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     data_protector: Arc<dyn DataProtector>,
+    events: Arc<dyn EventSink>,
 }
 
 impl AppServices {
@@ -131,6 +137,8 @@ impl AppServices {
         let user_credential_repo = Arc::new(UserCredentialRepositoryImpl::new(db.clone()));
         let totp = Arc::new(TotpVerifierImpl);
 
+        let events = crate::observability::events::sink();
+
         Ok(Self {
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
@@ -140,16 +148,19 @@ impl AppServices {
                 Arc::new(PasswordHasherImpl::new()),
                 totp.clone(),
                 settings.password_hash_options(),
-            ),
-            session: SessionService {
-                session_repo: Arc::new(SessionRepositoryImpl::new(db.clone())),
-            },
+            )
+            .with_events(Arc::clone(&events)),
+            session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
+                .with_events(Arc::clone(&events)),
+            account: AccountService::new(Arc::new(UserRepositoryImpl::new(db.clone())))
+                .with_events(Arc::clone(&events)),
             mfa: MfaService::new(
                 user_credential_repo,
                 totp.clone(),
                 totp,
                 data_protector.clone(),
-            ),
+            )
+            .with_events(Arc::clone(&events)),
             key: AsymmetricKeyService::new(
                 key_repo.clone(),
                 Arc::new(AsymmetricKeyGeneratorImpl),
@@ -191,7 +202,8 @@ impl AppServices {
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
                 http_client: request_uri_http_client.clone(),
-            }),
+            })
+            .with_events(Arc::clone(&events)),
             oidc_token: TokenService::new(TokenServiceDependencies {
                 client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
                     db.clone(),
@@ -206,7 +218,8 @@ impl AppServices {
                 data_protector: data_protector.clone(),
             })
             .with_runtime_key_ring(settings.key_ring())
-            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone()))),
+            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
+            .with_events(Arc::clone(&events)),
             oidc_logout: LogoutService::new(LogoutServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
                 provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
@@ -214,7 +227,8 @@ impl AppServices {
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 http_client: backchannel_logout_http_client,
-            }),
+            })
+            .with_events(Arc::clone(&events)),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 oidc_client_repo.clone(),
@@ -234,7 +248,8 @@ impl AppServices {
             dynamic_client_registration: DynamicClientRegistrationService::new(
                 settings.dynamic_client_registration(),
                 oidc_client_registration_repo.clone(),
-            ),
+            )
+            .with_events(Arc::clone(&events)),
             login_runtime: LoginRuntimeService::new(
                 Arc::new(LoginRuntimeRepositoryImpl::new(db.clone())),
                 LoginRotationPolicy {
@@ -252,6 +267,7 @@ impl AppServices {
             oidc_client_repo,
             oidc_credential_repo,
             data_protector,
+            events,
         })
     }
 
@@ -263,6 +279,19 @@ impl AppServices {
     #[must_use]
     pub fn session(&self) -> &AppSessionService {
         &self.session
+    }
+
+    #[must_use]
+    pub fn account(&self) -> &AppAccountService {
+        &self.account
+    }
+
+    /// Key event and audit sink. Business use cases should receive this sink
+    /// at construction; the accessor exists for adapters that must emit an
+    /// audit fact at the boundary.
+    #[must_use]
+    pub fn events(&self) -> &Arc<dyn EventSink> {
+        &self.events
     }
 
     #[must_use]

@@ -1,9 +1,6 @@
 use async_graphql::{Context, Error, ID, Object, Result};
 use identity_domain::{auth::SessionOid, openid_connect::ApiScope};
-use identity_infrastructure::{
-    database::repository::session::SessionRepositoryImpl, graphql::id::GlobalId,
-};
-use uuid::Uuid;
+use identity_infrastructure::graphql::id::GlobalId;
 
 use super::{
     SessionGlobalId,
@@ -11,7 +8,7 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::{request_context, require_scope},
-    error::internal_error,
+    error::{app_error, internal_error},
 };
 
 #[derive(Default)]
@@ -34,21 +31,9 @@ impl SessionMutation {
             .state
             .services()
             .session()
-            .session_repo
-            .find_by_oid(SessionOid(oid))
+            .revoke_for_user(SessionOid(oid), uuid::Uuid::from(request.claims.user_oid))
             .await
-            .map_err(internal_error)?
-            .ok_or_else(|| Error::new("session not found"))?;
-        if session.user_oid != Uuid::from(request.claims.user_oid) {
-            return Err(Error::new("session not found"));
-        }
-        let session = request
-            .state
-            .services()
-            .session()
-            .revoke(session.oid)
-            .await
-            .map_err(internal_error)?;
+            .map_err(|error| app_error(ctx, error))?;
         Ok(RevokeSessionPayload::new(
             SessionNode::new(session, request.claims.session_oid),
             client_mutation_id,
@@ -62,29 +47,25 @@ impl SessionMutation {
     ) -> Result<RevokeOtherSessionsPayload> {
         require_scope(ctx, ApiScope::SessionRevoke)?;
         let request = request_context(ctx)?;
-        let repo = SessionRepositoryImpl::new(request.state.resources().db().clone());
-        let sessions = repo
-            .list_by_user_oid(Uuid::from(request.claims.user_oid))
+        let outcome = request
+            .state
+            .services()
+            .session()
+            .revoke_other_sessions(
+                uuid::Uuid::from(request.claims.user_oid),
+                request.claims.session_oid,
+            )
             .await
             .map_err(internal_error)?;
-        let mut revoked_count = 0;
-        for session in sessions
-            .into_iter()
-            .filter(|session| session.oid != request.claims.session_oid)
-            .filter(|session| session.status == identity_domain::auth::SessionStatus::ACTIVE)
-            .filter(|session| session.revoked_at.is_none())
-        {
-            request
-                .state
-                .services()
-                .session()
-                .revoke(session.oid)
-                .await
-                .map_err(internal_error)?;
-            revoked_count += 1;
+        if outcome.has_failures() {
+            tracing::warn!(
+                target: "identity.graphql",
+                failed = outcome.failure_count(),
+                "session revocation batch partially failed"
+            );
         }
         Ok(RevokeOtherSessionsPayload::new(
-            revoked_count,
+            outcome.revoked as i32,
             client_mutation_id,
         ))
     }

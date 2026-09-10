@@ -70,6 +70,8 @@ impl CachedRuntimeKeyRingProvider {
     }
 
     async fn refresh(&self) -> Result<(), AppError> {
+        let span = tracing::info_span!("key.ring.refresh");
+        let _entered = span.enter();
         let symmetric_keys = self.key_repo.list_decryptable_symmetric().await?;
         let asymmetric_keys = self.key_repo.list_active_asymmetric().await?;
         let mut signing_key = None;
@@ -102,6 +104,11 @@ impl CachedRuntimeKeyRingProvider {
             break;
         }
 
+        let previous_signing_key = self
+            .current_value()
+            .signing_key()
+            .map(|key| key.key_id.clone());
+        let next_signing_key = signing_key.as_ref().map(|key| key.key_id.clone());
         let value = Arc::new(RuntimeKeyRing::new(
             KeyRing::new(symmetric_keys),
             signing_key,
@@ -110,6 +117,14 @@ impl CachedRuntimeKeyRingProvider {
             .value
             .write()
             .unwrap_or_else(|error| error.into_inner()) = value;
+        if previous_signing_key != next_signing_key {
+            use identity_application::observability::{BusinessEvent, EventValue};
+            let mut event = BusinessEvent::business("key.ring.changed").outcome("applied");
+            if let Some(key_id) = next_signing_key {
+                event = event.attribute("key_id", EventValue::Text(key_id));
+            }
+            identity_application::observability::event_sink().emit(event);
+        }
         Ok(())
     }
 }

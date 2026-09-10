@@ -1,8 +1,6 @@
 use chrono::{DateTime, TimeZone as _, Utc};
-use identity_infrastructure::{
-    database::repository::session::SessionSortKey,
-    graphql::cursor::{CursorPayload, InvalidCursor},
-};
+use identity_domain::auth::repository::SessionSortKey;
+use identity_infrastructure::graphql::cursor::{CursorPayload, InvalidCursor};
 
 const VERSION: u8 = 2;
 const PLAINTEXT_SIZE: usize = 17;

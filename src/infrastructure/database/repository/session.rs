@@ -15,7 +15,10 @@ use crate::database::entity::{
 use identity_domain::auth::{
     SessionOid, SessionStatus,
     model::{ActiveSession, Session},
-    repository::{CreateSessionInput, SessionRepository, SessionRepositoryError},
+    repository::{
+        CreateSessionInput, SessionPage, SessionPageDirection, SessionPageItem, SessionRepository,
+        SessionRepositoryError, SessionSortKey,
+    },
 };
 use identity_domain::client_authorization::ClientAuthorizationType;
 
@@ -51,34 +54,12 @@ pub struct SessionRepositoryImpl {
     db: DatabaseConnection,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct SessionSortKey {
-    pub last_active_at: DateTime<Utc>,
-    pub id: i64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionPageDirection {
-    Forward,
-    Backward,
-}
-
-pub struct SessionPage {
-    pub items: Vec<SessionPageItem>,
-    pub has_previous_page: bool,
-    pub has_next_page: bool,
-}
-
-pub struct SessionPageItem {
-    pub session: Session,
-    pub sort_key: SessionSortKey,
-}
-
 impl SessionRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_by_user_oid"))]
     pub async fn list_by_user_oid(
         &self,
         user_oid: Uuid,
@@ -105,6 +86,7 @@ impl SessionRepositoryImpl {
             .collect()
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_active_page_by_user_oid"))]
     pub async fn list_active_page_by_user_oid(
         &self,
         user_oid: Uuid,
@@ -218,6 +200,7 @@ fn session_cursor_condition(cursor: SessionSortKey, comparison: CursorComparison
 
 #[async_trait]
 impl SessionRepository for SessionRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(
         &self,
         oid: SessionOid,
@@ -235,6 +218,30 @@ impl SessionRepository for SessionRepositoryImpl {
         Ok(Some(session_to_domain(s_model, u_model.oid)?))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_by_user_oid"))]
+    async fn list_by_user_oid(
+        &self,
+        user_oid: Uuid,
+    ) -> Result<Vec<Session>, SessionRepositoryError> {
+        SessionRepositoryImpl::list_by_user_oid(self, user_oid).await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_active_page_by_user_oid"))]
+    async fn list_active_page_by_user_oid(
+        &self,
+        user_oid: Uuid,
+        after: Option<SessionSortKey>,
+        before: Option<SessionSortKey>,
+        limit: usize,
+        direction: SessionPageDirection,
+    ) -> Result<SessionPage, SessionRepositoryError> {
+        SessionRepositoryImpl::list_active_page_by_user_oid(
+            self, user_oid, after, before, limit, direction,
+        )
+        .await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_active_accounts_by_oids"))]
     async fn find_active_accounts_by_oids(
         &self,
         oids: &[SessionOid],
@@ -287,6 +294,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .collect())
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
     async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError> {
         let user = UserEntity::find()
             .filter(user::Column::Oid.eq(input.user_oid))
@@ -325,6 +333,7 @@ impl SessionRepository for SessionRepositoryImpl {
         session_to_domain(model, input.user_oid)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "touch_active_by_oid"))]
     async fn touch_active_by_oid(&self, oid: SessionOid) -> Result<bool, SessionRepositoryError> {
         let now = Utc::now();
         let result = SessionEntity::update_many()
@@ -346,6 +355,7 @@ impl SessionRepository for SessionRepositoryImpl {
         Ok(result.rows_affected == 1)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reauthenticate_by_oid"))]
     async fn reauthenticate_by_oid(
         &self,
         oid: SessionOid,
@@ -403,6 +413,7 @@ impl SessionRepository for SessionRepositoryImpl {
         session_to_domain(model, expected_user_oid)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_by_oid"))]
     async fn revoke_by_oid(
         &self,
         oid: SessionOid,

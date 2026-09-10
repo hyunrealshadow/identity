@@ -8,13 +8,12 @@ use async_graphql::{
     parser::{parse_query, types::OperationType},
 };
 use http::{HeaderValue, Method, StatusCode, header};
-use identity_domain::user::repository::UserRepository;
 use identity_infrastructure::{
     AppState,
     config::{GraphqlConfig, ServerConfig},
-    database::repository::user::UserRepositoryImpl,
 };
 use salvo::{Depot, Request, Response, Router, handler, writing::Text};
+use tracing::Instrument;
 
 use self::schema::{ApiSchema, RESOURCE_AUDIENCE, RequestContext, build_schema};
 
@@ -134,11 +133,19 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             return;
         }
     };
-    let user_repo = UserRepositoryImpl::new(state.resources().db().clone());
-    let user = match user_repo.find_by_oid(claims.user_oid).await {
+    let user = match state.services().account().find_user(claims.user_oid).await {
         Ok(Some(user)) if user.enabled && !user.locked => user,
-        _ => {
+        Ok(_) => {
             write_unauthorized(res, "invalid access token");
+            return;
+        }
+        Err(error) => {
+            tracing::error!(target: "identity.graphql", error = %error, "access token user lookup failed");
+            write_protocol_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal server error",
+            );
             return;
         }
     };
@@ -151,23 +158,28 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         );
         return;
     };
+    let operation_type = if is_mutation(&graphql_request) {
+        "mutation"
+    } else {
+        "query"
+    };
+    let operation_name = graphql_request.operation_name.clone().unwrap_or_default();
     let request = graphql_request
         .data(RequestContext {
             state,
             claims,
             user,
             locale: crate::infrastructure::i18n::resolve_locale_from_headers(req.headers()),
-            request_id: req
-                .headers()
-                .get("x-request-id")
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned)
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         })
         .data(config.max_page_size);
+    let operation_span = tracing::info_span!(
+        "graphql.operation",
+        graphql.operation.type = %operation_type,
+        graphql.operation.name = %operation_name,
+    );
     let response = match tokio::time::timeout(
         std::time::Duration::from_secs(config.timeout_secs),
-        schema.execute(request),
+        schema.execute(request).instrument(operation_span),
     )
     .await
     {

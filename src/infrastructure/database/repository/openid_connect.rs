@@ -249,6 +249,7 @@ fn urls_to_json(value: Vec<Url>) -> Option<Value> {
 
 #[async_trait]
 impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
     async fn create(
         &self,
         registration: OpenIdConnectClientRegistration,
@@ -441,6 +442,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         Ok(client_oid)
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_registration_access_token"))]
     async fn find_by_registration_access_token(
         &self,
         client_oid: identity_domain::client::model::ClientOid,
@@ -487,6 +489,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "delete_by_oid"))]
     async fn delete_by_oid(
         &self,
         client_oid: identity_domain::client::model::ClientOid,
@@ -518,6 +521,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
 
 #[async_trait]
 impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(
         &self,
         oid: identity_domain::client::model::ClientOid,
@@ -568,6 +572,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         ))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_frontchannel_logout_clients_by_session_oid"))]
     async fn find_frontchannel_logout_clients_by_session_oid(
         &self,
         session_oid: SessionOid,
@@ -576,6 +581,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
             .await
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_backchannel_logout_clients_by_session_oid"))]
     async fn find_backchannel_logout_clients_by_session_oid(
         &self,
         session_oid: SessionOid,
@@ -591,6 +597,7 @@ enum LogoutChannel {
 }
 
 impl OpenIdConnectClientRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_logout_clients_by_session_oid"))]
     async fn find_logout_clients_by_session_oid(
         &self,
         session_oid: SessionOid,

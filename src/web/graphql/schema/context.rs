@@ -7,5 +7,4 @@ pub struct RequestContext {
     pub claims: TokenClaims,
     pub user: User,
     pub locale: unic_langid::LanguageIdentifier,
-    pub request_id: String,
 }

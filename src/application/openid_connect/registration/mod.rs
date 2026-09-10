@@ -44,6 +44,7 @@ use validation::{
 pub struct DynamicClientRegistrationService {
     enabled: Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>,
     repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
+    events: Arc<dyn crate::observability::EventSink>,
 }
 
 impl DynamicClientRegistrationService {
@@ -52,9 +53,30 @@ impl DynamicClientRegistrationService {
         enabled: Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>,
         repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
     ) -> Self {
-        Self { enabled, repo }
+        Self {
+            enabled,
+            repo,
+            events: Arc::new(crate::observability::NoopEventSink),
+        }
     }
 
+    /// Attach the key event and audit sink.
+    #[must_use]
+    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+        self.events = events;
+        self
+    }
+
+    fn record_client_change(&self, event: &'static str, client_oid: Uuid, outcome: &'static str) {
+        use crate::observability::{BusinessEvent, EventValue};
+        self.events.emit(
+            BusinessEvent::audit(event)
+                .outcome(outcome)
+                .attribute("client_oid", EventValue::Text(client_oid.to_string())),
+        );
+    }
+
+    #[tracing::instrument(skip_all, name = "client.register")]
     pub async fn register(
         &self,
         request: DynamicClientRegistrationRequest,
@@ -268,6 +290,7 @@ impl DynamicClientRegistrationService {
         })?;
         let registration_client_uri = registration_client_uri(issuer, client_id)?;
 
+        self.record_client_change("client.registered", client_id, "success");
         Ok(DynamicClientRegistrationResponse {
             client_id: client_id.to_string(),
             registration_access_token: Some(registration_access_token),
@@ -342,6 +365,7 @@ impl DynamicClientRegistrationService {
         response_from_client(&client, Some(registration_access_token.to_owned()), issuer)
     }
 
+    #[tracing::instrument(skip_all, name = "client.delete")]
     pub async fn delete(
         &self,
         client_id: &str,
@@ -373,12 +397,11 @@ impl DynamicClientRegistrationService {
             ));
         }
 
-        self.repo
-            .delete_by_oid(client.client().oid)
-            .await
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::ClientDeleteFailed).with_source(error)
-            })?;
+        let client_oid = client.client().oid;
+        self.repo.delete_by_oid(client_oid).await.map_err(|error| {
+            AppError::from_code(RegistrationErrorCode::ClientDeleteFailed).with_source(error)
+        })?;
+        self.record_client_change("client.deleted", client_oid, "success");
 
         Ok(())
     }

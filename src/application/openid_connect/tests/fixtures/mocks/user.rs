@@ -19,6 +19,16 @@ mockall::mock! {
         ) -> Result<i32, UserRepositoryError>;
         async fn reset_failed_attempts(&self, user_oid: UserOid)
             -> Result<(), UserRepositoryError>;
+        async fn update_identifier(
+            &self,
+            oid: UserOid,
+            update: identity_domain::user::repository::UserIdentifierUpdate,
+        ) -> Result<Option<User>, UserRepositoryError>;
+        async fn update_profile(
+            &self,
+            oid: UserOid,
+            patch: identity_domain::user::repository::UserProfilePatch,
+        ) -> Result<Option<User>, UserRepositoryError>;
     }
 }
 

@@ -37,5 +37,17 @@ mockall::mock! {
             oid: SessionOid,
             revoked_at: DateTime<Utc>,
         ) -> Result<Option<Session>, SessionRepositoryError>;
+        async fn list_by_user_oid(
+            &self,
+            user_oid: uuid::Uuid,
+        ) -> Result<Vec<Session>, SessionRepositoryError>;
+        async fn list_active_page_by_user_oid(
+            &self,
+            user_oid: uuid::Uuid,
+            after: Option<identity_domain::auth::repository::SessionSortKey>,
+            before: Option<identity_domain::auth::repository::SessionSortKey>,
+            limit: usize,
+            direction: identity_domain::auth::repository::SessionPageDirection,
+        ) -> Result<identity_domain::auth::repository::SessionPage, SessionRepositoryError>;
     }
 }
