@@ -1,4 +1,5 @@
 import { identityInternalJson } from './identity.server'
+import { emitEvent } from './observability.server'
 
 export interface RuntimeConfiguration {
   version: number
@@ -39,8 +40,17 @@ async function refreshRuntimeConfiguration() {
   const value = await identityInternalJson<RuntimeConfiguration>(
     '/internal/workloads/self/runtime-configuration',
   )
+  const previousGeneration = snapshot?.oauth_client.generation
   snapshot = value
   snapshotAt = Date.now()
+  if (previousGeneration !== undefined && previousGeneration !== value.oauth_client.generation) {
+    // Login observes the credential generation change; Identity owns the
+    // rotation fact itself.
+    emitEvent('login.runtime_configuration.changed', {
+      outcome: 'applied',
+      attributes: { generation: value.oauth_client.generation },
+    })
+  }
   return value
 }
 

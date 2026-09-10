@@ -12,6 +12,7 @@ import {
   useMfaUiSession,
   storeAccountFlash,
 } from './oauth-session.server'
+import { emitEvent, fetchWithSpan, withSpan } from './observability.server'
 import { loadApplicationUrl, loadOAuthClient } from './runtime-config.server'
 import {
   backchannelIdentityApiUrl,
@@ -163,6 +164,21 @@ async function startAuthorizationFlow(
 }
 
 export async function finishAuthorization(request: Request) {
+  const result = await finishAuthorizationInner(request)
+  emitEvent('login.callback.result', {
+    outcome: result.status >= 300 && result.status < 400 ? 'success' : 'rejected',
+    reason:
+      result.status >= 300 && result.status < 400
+        ? undefined
+        : result.status === 400
+          ? 'invalid_callback'
+          : 'provider_error',
+    category: 'audit',
+  })
+  return result
+}
+
+async function finishAuthorizationInner(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const returnedState = url.searchParams.get('state')
@@ -269,6 +285,7 @@ export async function clearAuthorizationCookie() {
 }
 
 export async function finishLogout(applicationUrl: string) {
+  emitEvent('logout.local.result', { outcome: 'success', category: 'audit' })
   const authorization = await useAuthorizationSession()
   const idToken =
     typeof authorization.data.id_token === 'string'
@@ -477,9 +494,44 @@ export async function exchangeToken(
     .update(body.toString())
     .digest('base64url')
   const pending = pendingTokenExchanges.get(exchangeKey)
-  if (pending) return pending
+  if (pending) {
+    // Diagnostic detail only: the caller waits on the single real exchange.
+    console.debug('oauth token exchange merged with an in-flight exchange')
+    return withSpan(
+      'token.exchange.wait',
+      'internal',
+      { 'oauth.grant_type': body.get('grant_type') ?? 'unknown' },
+      async () => pending,
+    )
+  }
 
-  const exchange = performTokenExchange(body, clientId, clientSecret)
+  // Exactly one real execution span and one event per authorization code
+  // exchange, even when several requests are merged onto it.
+  const exchange = withSpan(
+    'token.exchange',
+    'internal',
+    { 'oauth.grant_type': body.get('grant_type') ?? 'unknown' },
+    async () => {
+      const result = await performTokenExchange(body, clientId, clientSecret)
+      emitEvent('token.exchange.observed', {
+        outcome: 'success',
+        attributes: { 'oauth.grant_type': body.get('grant_type') ?? 'unknown' },
+      })
+      return result
+    },
+  ).catch((error: unknown) => {
+    const reason =
+      error instanceof OAuthTokenExchangeError
+        ? error.oauthError ?? 'exchange_failed'
+        : 'system_error'
+    emitEvent('token.exchange.observed', {
+      outcome: 'rejected',
+      reason,
+      severity: error instanceof OAuthTokenExchangeError ? 'info' : 'error',
+      attributes: { 'oauth.grant_type': body.get('grant_type') ?? 'unknown' },
+    })
+    throw error
+  })
   pendingTokenExchanges.set(exchangeKey, exchange)
   try {
     return await exchange
@@ -495,7 +547,7 @@ async function performTokenExchange(
   clientId: string,
   clientSecret: string,
 ) {
-  const response = await fetch(
+  const response = await fetchWithSpan(
     new URL('/oauth2/token', backchannelIdentityApiUrl()),
     {
       method: 'POST',
@@ -513,8 +565,11 @@ async function performTokenExchange(
     | null
   if (!response.ok || !payload || !('access_token' in payload)) {
     const grant = body.get('grant_type') ?? 'unknown grant'
-    const oauthError = payload?.error?.trim()
-    const description = payload?.error_description?.trim()
+    const oauthError = payload && 'error' in payload ? payload.error?.trim() : undefined
+    const description =
+      payload && 'error_description' in payload
+        ? payload.error_description?.trim()
+        : undefined
     throw new OAuthTokenExchangeError(
       grant,
       response.status,

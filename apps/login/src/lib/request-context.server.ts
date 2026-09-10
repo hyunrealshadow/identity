@@ -10,7 +10,6 @@ const FORWARDED_CONTEXT_HEADERS = [
   'x-forwarded-for',
   'x-forwarded-proto',
   'x-real-ip',
-  'x-request-id',
 ] as const
 
 /**

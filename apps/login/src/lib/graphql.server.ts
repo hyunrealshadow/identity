@@ -5,6 +5,7 @@ import {
 } from './oauth.server'
 import { forwardRequestContext } from './request-context.server'
 import { backchannelIdentityGraphqlUrl } from './identity-url.server'
+import { fetchWithSpan } from './observability.server'
 
 export interface GraphqlError {
   message: string
@@ -52,7 +53,7 @@ export async function identityGraphql<T>(
       'content-type': 'application/json',
     }),
   )
-  const response = await fetch(
+  const response = await fetchWithSpan(
     new URL('/graphql', backchannelIdentityGraphqlUrl()),
     {
       method: 'POST',

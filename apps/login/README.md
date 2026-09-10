@@ -85,3 +85,34 @@ self-signed certificate, and configure the same HTTPS origin in Identity.
 All state-changing interactions are native HTML form POSTs. Client JavaScript
 intercepts the same forms only to provide enhanced navigation; disabling
 JavaScript preserves the complete login and consent flow.
+
+## Observability
+
+Login server-side observability is opt-in and exports OTLP/HTTP JSON to the
+collector configured by the deployment. Spans and key events never contain
+credentials, cookies, authorization codes, tokens or raw PII.
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `IDENTITY_LOGIN_OTLP_ENABLE` | Enable OTLP export of spans and key events | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector base URL | none (required when enabled) |
+| `OTEL_SERVICE_NAME` | `service.name` resource attribute | `identity-login` |
+| `IDENTITY_LOGIN_ENVIRONMENT` | `deployment.environment.name` | `NODE_ENV` |
+| `IDENTITY_LOGIN_TRACE_SAMPLE_RATIO` | Trace export ratio, `0`-`1` | `1` |
+| `IDENTITY_LOGIN_METRICS_ENABLE` | Serve pipeline metrics on `/health/metrics` | `false` |
+
+Coverage:
+
+- every non-probe inbound request gets one `http.server` span; a valid browser
+  `traceparent` is recorded as a span link, never as the local parent, because
+  browser traffic is untrusted;
+- `fetchWithSpan` wraps real outbound calls to Identity with an `http.client`
+  span and injects the active W3C context from that client span;
+- `token.exchange` runs once per authorization code even when concurrent
+  callbacks merge onto a shared promise; waiting callers get a
+  `token.exchange.wait` span and a DEBUG line instead of a second exchange;
+- key events: `login.callback.result`, `token.exchange.observed` (the observed
+  remote result, not Identity's consumption fact), `logout.local.result`,
+  `login.runtime_configuration.changed`;
+- queues are bounded and drop instead of blocking; drops and export failures
+  are visible on `/health/metrics`.

@@ -10,6 +10,7 @@ import type {
 } from './identity-types'
 import type { Locale } from './i18n'
 import { translate } from './i18n'
+import { fetchWithSpan } from './observability.server'
 import { forwardRequestContext } from './request-context.server'
 import { backchannelIdentityApiUrl } from './identity-url.server'
 
@@ -171,12 +172,15 @@ export async function identityJson<T>(
   if (init?.body) headers.set('content-type', 'application/json')
   if (init?.csrfToken) headers.set(CSRF_HEADER_NAME, init.csrfToken)
 
-  const response = await fetch(new URL(path, backchannelIdentityApiUrl()), {
-    method: init?.method ?? 'GET',
-    headers,
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    redirect: 'manual',
-  })
+  const response = await fetchWithSpan(
+    new URL(path, backchannelIdentityApiUrl()),
+    {
+      method: init?.method ?? 'GET',
+      headers,
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+      redirect: 'manual',
+    },
+  )
 
   const payload = (await response.json().catch(() => null)) as unknown
   if (!response.ok) {
@@ -212,12 +216,15 @@ export async function identityInternalJson<T>(
   const headers = new Headers({ accept: 'application/json' })
   headers.set('authorization', `Bearer ${await internalApiToken()}`)
   if (init?.body) headers.set('content-type', 'application/json')
-  const response = await fetch(new URL(path, internalApiBaseUrl()), {
-    method: init?.method ?? 'GET',
-    headers,
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    redirect: 'manual',
-  })
+  const response = await fetchWithSpan(
+    new URL(path, internalApiBaseUrl()),
+    {
+      method: init?.method ?? 'GET',
+      headers,
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+      redirect: 'manual',
+    },
+  )
   const payload = (await response.json().catch(() => null)) as unknown
   if (!response.ok) {
     if (isBusinessError(payload)) {
@@ -237,10 +244,13 @@ export async function identityInternalJson<T>(
 }
 
 export async function identityResponse(path: string) {
-  const response = await fetch(new URL(path, backchannelIdentityApiUrl()), {
-    headers: requestHeaders(),
-    redirect: 'manual',
-  })
+  const response = await fetchWithSpan(
+    new URL(path, backchannelIdentityApiUrl()),
+    {
+      headers: requestHeaders(),
+      redirect: 'manual',
+    },
+  )
   const headers = new Headers()
   const omitted = new Set([
     'connection',
