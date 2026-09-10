@@ -42,6 +42,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.identity.database.existingSecret }}
                   key: {{ .Values.identity.database.urlKey }}
+            {{- if .Values.identity.observability.pii.existingSecret }}
+            - name: IDENTITY_PII_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.identity.observability.pii.existingSecret }}
+                  key: {{ .Values.identity.observability.pii.key }}
+            {{- end }}
             {{- with .Values.identity.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -206,6 +213,18 @@ spec:
                   key: {{ .Values.login.sessionSecret.key }}
             - name: IDENTITY_WORKLOAD_TOKEN_FILE
               value: /var/run/secrets/identity/token
+            - name: OTEL_SERVICE_NAME
+              value: identity-login
+            - name: IDENTITY_LOGIN_OTLP_ENABLE
+              value: {{ .Values.login.observability.otlp.enabled | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.login.observability.otlp.endpoint | quote }}
+            {{- with .Values.login.observability.sampling.traceRatio }}
+            - name: IDENTITY_LOGIN_TRACE_SAMPLE_RATIO
+              value: {{ . | quote }}
+            {{- end }}
+            - name: IDENTITY_LOGIN_METRICS_ENABLE
+              value: {{ .Values.login.observability.selfMetrics.enabled | quote }}
             - name: IDENTITY_REQUIRE_UPSTREAM_HTTPS
               value: {{ ternary "false" "true" .Values.login.tls.enabled | quote }}
             {{- if .Values.identity.tls.enabled }}

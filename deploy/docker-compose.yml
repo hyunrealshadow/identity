@@ -73,6 +73,10 @@ services:
       IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
       IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
       IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
+      OTEL_SERVICE_NAME: identity-login
+      IDENTITY_LOGIN_OTLP_ENABLE: ${IDENTITY_LOGIN_OTLP_ENABLE:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      IDENTITY_LOGIN_METRICS_ENABLE: ${IDENTITY_LOGIN_METRICS_ENABLE:-false}
       NODE_EXTRA_CA_CERTS: /run/secrets/identity_ca
       NODE_TLS_REJECT_UNAUTHORIZED: "1"
       NITRO_SSL_CERT_FILE: /run/secrets/login_tls_cert

@@ -15,6 +15,36 @@ data:
       enable: true
       level: info
       format: json
+    observability:
+      enable: true
+      console: {{ .Values.identity.observability.console }}
+      otlp:
+        enable: {{ .Values.identity.observability.otlp.enabled }}
+        endpoint: {{ .Values.identity.observability.otlp.endpoint | quote }}
+        timeout_ms: {{ .Values.identity.observability.otlp.timeoutMs | int64 }}
+        compression: {{ .Values.identity.observability.otlp.compression }}
+      {{- with .Values.identity.observability.sampling.traceRatio }}
+      sampling:
+        trace_ratio: {{ . }}
+      {{- end }}
+      trace_context:
+        trusted_gateways:
+          {{- toYaml .Values.identity.observability.traceContext.trustedGateways | nindent 10 }}
+        trust_verified_workload: {{ .Values.identity.observability.traceContext.trustVerifiedWorkload }}
+        propagate_to_origins:
+          {{- toYaml .Values.identity.observability.traceContext.propagateToOrigins | nindent 10 }}
+      {{- if .Values.identity.observability.pii.existingSecret }}
+      pii:
+        hmac_key:
+          environment: IDENTITY_PII_HMAC_KEY
+        hmac_key_version: {{ .Values.identity.observability.pii.keyVersion | quote }}
+      {{- end }}
+      events:
+        queue_capacity: {{ .Values.identity.observability.events.queueCapacity | int64 }}
+        queue_bytes: {{ .Values.identity.observability.events.queueBytes | int64 }}
+      self_metrics:
+        enable: {{ .Values.identity.observability.selfMetrics.enabled }}
+        route: {{ .Values.identity.observability.selfMetrics.route | quote }}
     server:
       binding: 0.0.0.0
       port: {{ .Values.identity.service.publicPort }}

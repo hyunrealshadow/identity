@@ -46,6 +46,37 @@ identity:
     credentialLifetimeDays: 180
     rotateBeforeExpiryDays: 30
     retireAfterSeconds: 86400
+  observability:
+    # Console output is optional in production; OTLP is the primary channel.
+    console: false
+    otlp:
+      enabled: true
+      endpoint: http://otel-collector.observability.svc.cluster.local:4318
+      timeoutMs: 10000
+      compression: none
+    sampling:
+      # null uses the production default of 10%.
+      traceRatio: null
+    traceContext:
+      # Default: trust no network; only workload-authenticated requests may
+      # continue an inbound trace.
+      trustedGateways: []
+      trustVerifiedWorkload: true
+      # Origins allowed to receive W3C context on outbound calls. Empty means
+      # no outbound target inherits internal context.
+      propagateToOrigins: []
+    pii:
+      # Name an existing Secret containing the HMAC pseudonymization key. When
+      # empty, PII fields render as [REDACTED].
+      existingSecret: ""
+      key: hmac-key
+      keyVersion: v1
+    events:
+      queueCapacity: 8192
+      queueBytes: 16777216
+    selfMetrics:
+      enabled: true
+      route: /internal/observability/metrics
   resources: {}
   podAnnotations: {}
   podSecurityContext:
@@ -87,6 +118,16 @@ login:
   internalCa:
     existingSecret: identity-internal-ca
     key: ca.crt
+  observability:
+    otlp:
+      # Login exports server/client spans and key events to the collector.
+      enabled: false
+      endpoint: http://otel-collector.observability.svc.cluster.local:4318
+    sampling:
+      # null keeps the pipeline default of 100% for login server spans.
+      traceRatio: null
+    selfMetrics:
+      enabled: false
   resources: {}
   podAnnotations: {}
   podSecurityContext:

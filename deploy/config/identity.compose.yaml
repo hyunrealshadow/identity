@@ -2,6 +2,17 @@ logger:
   enable: true
   level: info
   format: json
+observability:
+  enable: true
+  # Keep readable container logs; OTLP export is opt-in per deployment.
+  console: true
+  otlp:
+    enable: {{ get_env(name="IDENTITY_OTLP_ENABLE", default="false") }}
+    endpoint: {{ get_env(name="OTEL_EXPORTER_OTLP_ENDPOINT", default="http://otel-collector:4318") }}
+  trace_context:
+    trusted_gateways: []
+    trust_verified_workload: true
+    propagate_to_origins: []
 
 server:
   binding: 0.0.0.0

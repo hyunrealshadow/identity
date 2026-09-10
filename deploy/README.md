@@ -124,3 +124,47 @@ Login exposes `/health/live` and `/health/ready`. Before installation,
 readiness remains true so the installer is reachable. After installation it
 becomes false when Login cannot obtain usable runtime configuration or its
 current OAuth credential is close to expiry.
+
+## Observability
+
+Identity exports traces, structured logs and key business/audit events over
+OTLP/HTTP (protobuf) to a collector. Login exports its server-side spans and
+key events over OTLP/HTTP JSON. Set `identity.observability.otlp.enabled` and
+`login.observability.otlp.enabled` (or the Compose variables) to point both at
+the same collector. Login still treats browser-provided `traceparent` as
+untrusted and starts a new trace with a link; Identity trusts only verified
+workload identity or configured gateway networks.
+
+| Setting | Compose | Helm |
+| --- | --- | --- |
+| OTLP endpoint | `IDENTITY_OTLP_ENABLE`, `OTEL_EXPORTER_OTLP_ENDPOINT` | `identity.observability.otlp.*` |
+| Console output | `observability.console` (`true` by default outside production) | `identity.observability.console` |
+| Trace sampling | production default 10%, override `observability.sampling.trace_ratio` | `identity.observability.sampling.traceRatio` |
+| Trace trust | `observability.trace_context.trusted_gateways`; workload-verified internal calls are trusted when `trust_verified_workload` is true | `identity.observability.traceContext.*` |
+| PII pseudonymization | `observability.pii.hmac_key.environment` / `file` | `identity.observability.pii.existingSecret` + `key` (mounted as `IDENTITY_PII_HMAC_KEY`) |
+| Self-metrics | internal listener `/internal/observability/metrics` | `identity.observability.selfMetrics.*` |
+| Login OTLP | `IDENTITY_LOGIN_OTLP_ENABLE`, `OTEL_EXPORTER_OTLP_ENDPOINT` | `login.observability.otlp.*` |
+| Login self-metrics | `IDENTITY_LOGIN_METRICS_ENABLE` → `/health/metrics` | `login.observability.selfMetrics.enabled` |
+
+Deployment responsibilities:
+
+- Configure `identity.observability.otlp.endpoint` (or the standard
+  `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable) to point at a reachable
+  collector. Export failures are counted on the self-metrics endpoint and never
+  block requests.
+- Route `identity.event.category = audit` log records to the audit store and
+  the rest to diagnostic storage. Retention targets (7-day traces, 14-day
+  diagnostics, 90-day business/audit records) are enforced by the storage
+  backend, not by the application.
+- Grant diagnostic and audit query permissions separately.
+- Trace trust is configured independently from proxy/IP trust. Only add
+  networks to `trusted_gateways` when that path clears externally supplied
+  `traceparent`/`tracestate` headers or authenticates the caller as a verified
+  service.
+- The `[REDACTED]` fallback applies when the HMAC key is missing or cannot be
+  read; authentication continues with redacted PII output.
+- Login key events (`login.callback.result`, `token.exchange.observed`,
+  `logout.local.result`, `login.runtime_configuration.changed`) are exported
+  only when `IDENTITY_LOGIN_OTLP_ENABLE=true`; the pipeline is bounded and
+  drops instead of blocking, with drops exported on `/health/metrics` when
+  `IDENTITY_LOGIN_METRICS_ENABLE=true`.
