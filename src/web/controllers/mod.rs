@@ -4,6 +4,7 @@ pub mod conformance;
 pub mod install;
 pub mod login_runtime;
 pub mod oauth2;
+pub mod observability;
 pub mod response;
 pub mod shared;
 pub mod well_known;

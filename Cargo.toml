@@ -38,10 +38,22 @@ serde_json = { version = "1" }
 serial_test = { version = "3.1.1" }
 strum = { version = "0.28.0", features = ["derive"] }
 derive_more = { version = "2", features = ["from", "into"] }
+hmac = { version = "0.13.0" }
+opentelemetry = "0.32"
+opentelemetry-appender-tracing = { version = "0.32", default-features = false }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+  "http-proto",
+  "reqwest-blocking-client",
+  "logs",
+  "metrics",
+  "trace",
+] }
+opentelemetry_sdk = "0.32"
 sha2 = { version = "0.11.0" }
 subtle = { version = "2" }
 tera = { version = "1.20" }
 thiserror = { version = "2.0.18" }
+tracing-opentelemetry = "0.33.0"
 tokio = { version = "1.45", default-features = false, features = [
   "rt-multi-thread",
   "macros",

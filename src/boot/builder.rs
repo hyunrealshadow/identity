@@ -54,11 +54,11 @@ impl AppBuilder {
         })
     }
 
-    /// Initialize the tracing/logging subscriber.
-    #[must_use]
-    pub fn init_tracing(self) -> Self {
-        observability::init_tracing(&self.config.logger);
-        self
+    /// Initialize observability (console output, OTLP pipelines, PII policy,
+    /// W3C trace context and the non-blocking event/audit sink).
+    pub fn init_tracing(self) -> AppResult<Self> {
+        observability::init(&self.config, &self.environment)?;
+        Ok(self)
     }
 
     /// Connect to the database and optionally run migrations and seeds.

@@ -65,8 +65,13 @@ pub async fn start_servers(
             if needs_separate_health {
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
-                let health_app =
-                    health::router(&config.health).hoop(salvo::affix_state::inject(state.clone()));
+                let health_app = health::router(&config.health)
+                    .hoop(salvo::affix_state::inject(state.clone()))
+                    .hoop(identity_web::middleware::TraceContextMiddleware::new(
+                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
+                            config.observability.trace_context.clone(),
+                        ),
+                    ));
 
                 tracing::info!(
                     environment,
@@ -83,12 +88,16 @@ pub async fn start_servers(
             if needs_separate_graphql {
                 let graphql_address = graphql::bind_address(&config.graphql, &config.server);
                 let graphql_listener = build_upstream_tls_listener(&graphql_address).await?;
-                let graphql_app = graphql::router(state.clone(), &config.graphql).hoop(
-                    identity_web::middleware::RequireUpstreamHttps::new(
+                let graphql_app = graphql::router(state.clone(), &config.graphql)
+                    .hoop(identity_web::middleware::RequireUpstreamHttps::new(
                         &config.server.tls.trusted_proxies,
                         &config.server.tls.direct_http_clients,
-                    ),
-                );
+                    ))
+                    .hoop(identity_web::middleware::TraceContextMiddleware::new(
+                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
+                            config.observability.trace_context.clone(),
+                        ),
+                    ));
                 tracing::info!(
                     environment,
                     address = graphql_address.as_str(),
@@ -119,8 +128,13 @@ pub async fn start_servers(
             if needs_separate_health {
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
-                let health_app =
-                    health::router(&config.health).hoop(salvo::affix_state::inject(state.clone()));
+                let health_app = health::router(&config.health)
+                    .hoop(salvo::affix_state::inject(state.clone()))
+                    .hoop(identity_web::middleware::TraceContextMiddleware::new(
+                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
+                            config.observability.trace_context.clone(),
+                        ),
+                    ));
 
                 tracing::info!(
                     environment,
@@ -137,7 +151,13 @@ pub async fn start_servers(
             if needs_separate_graphql {
                 let graphql_address = graphql::bind_address(&config.graphql, &config.server);
                 let graphql_listener = build_https_listener(config, &graphql_address).await?;
-                let graphql_app = graphql::router(state.clone(), &config.graphql);
+                let graphql_app = graphql::router(state.clone(), &config.graphql).hoop(
+                    identity_web::middleware::TraceContextMiddleware::new(
+                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
+                            config.observability.trace_context.clone(),
+                        ),
+                    ),
+                );
                 tracing::info!(
                     environment,
                     address = graphql_address.as_str(),
@@ -172,8 +192,24 @@ fn spawn_login_runtime_rotation_worker(state: AppState, interval_secs: u64) {
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    if let Err(error) = state.services().login_runtime().maintain().await {
-                        tracing::error!(error = %error, "login runtime rotation maintenance failed");
+                    let span = tracing::info_span!("login_runtime.rotation.round");
+                    let _entered = span.enter();
+                    match state.services().login_runtime().maintain().await {
+                        Ok(rotated) if rotated > 0 => {
+                            use identity_application::observability::{BusinessEvent, EventValue};
+                            identity_application::observability::event_sink().emit(
+                                BusinessEvent::audit("login_runtime.credential.rotated")
+                                    .outcome("rotated")
+                                    .attribute(
+                                        "generation_count",
+                                        EventValue::Integer(i64::try_from(rotated).unwrap_or(i64::MAX)),
+                                    ),
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            tracing::error!(error = %error, "login runtime rotation maintenance failed");
+                        }
                     }
                 }
                 changed = shutdown.changed() => {
@@ -332,6 +368,7 @@ mod tests {
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
             graphql: GraphqlConfig::default(),
+            observability: Default::default(),
             openid_connect: Default::default(),
             settings: SettingsConfig::default(),
             install: Default::default(),

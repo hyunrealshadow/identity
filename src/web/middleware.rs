@@ -6,6 +6,12 @@ use ipnet::IpNet;
 use salvo::{Depot, FlowCtrl, Handler, Request, Response, handler};
 
 use identity_domain::openid_connect::{AuthenticatedWorkload, WorkloadAuthenticator};
+use identity_infrastructure::observability::context::{
+    self as trace_context, ParentDecision, TraceTrustPolicy,
+};
+use opentelemetry::trace::Status;
+use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
@@ -69,6 +75,80 @@ impl Handler for RequireWorkload {
 #[must_use]
 pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
     depot.obtain::<AuthenticatedWorkload>().ok().copied()
+}
+
+/// Extracts W3C trace context, decides whether it may be continued and wraps
+/// the rest of the request in a server span. Invalid headers never fail the
+/// request; untrusted contexts become links instead of parents.
+#[derive(Clone, Debug)]
+pub struct TraceContextMiddleware {
+    policy: TraceTrustPolicy,
+}
+
+impl TraceContextMiddleware {
+    #[must_use]
+    pub fn new(policy: TraceTrustPolicy) -> Self {
+        Self { policy }
+    }
+}
+
+#[async_trait]
+impl Handler for TraceContextMiddleware {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        let extracted = trace_context::extract(req.headers());
+        let peer = req.remote_addr().ip();
+        // Only a verified workload identity counts as trust; the authenticated
+        // subject of a user-facing request does not.
+        let verified_workload = depot.obtain::<AuthenticatedWorkload>().is_ok();
+        let trusted = self.policy.trusts_inbound(peer, verified_workload);
+        let decision = extracted.parent_decision(trusted);
+
+        let method = req.method().as_str().to_owned();
+        let path = req.uri().path().to_owned();
+        let client_address = peer.map(|ip| ip.to_string()).unwrap_or_default();
+        let span = tracing::info_span!(
+            "http.server",
+            otel.kind = "server",
+            http.request.method = %method,
+            url.path = %path,
+            client.address = %client_address,
+            http.route = tracing::field::Empty,
+            http.response.status_code = tracing::field::Empty,
+        );
+        match decision {
+            ParentDecision::ContinueInbound(parent) => {
+                let _ = span.set_parent(parent);
+            }
+            ParentDecision::NewTraceWithLink(span_context) => span.add_link(span_context),
+            ParentDecision::NewTrace => {}
+        }
+
+        let request_span = span.clone();
+        async { ctrl.call_next(req, depot, res).await }
+            .instrument(span)
+            .await;
+
+        request_span.record("http.route", req.matched_path());
+        if let Some(status) = res.status_code {
+            request_span.record("http.response.status_code", status.as_u16());
+            if status.is_server_error() {
+                request_span.set_status(Status::error(
+                    status
+                        .canonical_reason()
+                        .unwrap_or("server error")
+                        .to_owned(),
+                ));
+            } else {
+                request_span.set_status(Status::Ok);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -279,9 +359,13 @@ mod tests {
     use identity_domain::openid_connect::{
         AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
     };
+    use identity_infrastructure::observability::context::TraceTrustPolicy;
+    use opentelemetry::trace::TracerProvider;
+    use tracing_subscriber::layer::SubscriberExt;
 
     use super::{
-        RequireUpstreamHttps, RequireWorkload, resolve_client_ip, security_headers_middleware,
+        RequireUpstreamHttps, RequireWorkload, TraceContextMiddleware, resolve_client_ip,
+        security_headers_middleware,
     };
 
     struct StubWorkloadAuthenticator {
@@ -490,6 +574,145 @@ mod tests {
             resolve_client_ip(&request, &["10.0.0.0/8".parse::<IpNet>().unwrap()]),
             Some("203.0.113.10".parse().unwrap())
         );
+    }
+
+    const VALID_TRACEPARENT: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+    #[derive(Clone, Debug, Default)]
+    struct CapturingSpanExporter {
+        spans: Arc<std::sync::Mutex<Vec<opentelemetry_sdk::trace::SpanData>>>,
+    }
+
+    impl opentelemetry_sdk::trace::SpanExporter for CapturingSpanExporter {
+        async fn export(
+            &self,
+            batch: Vec<opentelemetry_sdk::trace::SpanData>,
+        ) -> opentelemetry_sdk::error::OTelSdkResult {
+            self.spans.lock().unwrap().extend(batch);
+            Ok(())
+        }
+    }
+
+    fn trace_policy(trusted_gateway: bool) -> TraceTrustPolicy {
+        let config = identity_infrastructure::config::TraceContextConfig {
+            trusted_gateways: if trusted_gateway {
+                vec!["127.0.0.1/32".parse::<IpNet>().unwrap()]
+            } else {
+                Vec::new()
+            },
+            trust_verified_workload: false,
+            propagate_to_origins: Vec::new(),
+        };
+        TraceTrustPolicy::new(config)
+    }
+
+    async fn send_with_trace_middleware(
+        policy: TraceTrustPolicy,
+        traceparent: Option<&str>,
+    ) -> (
+        Option<StatusCode>,
+        Arc<std::sync::Mutex<Vec<opentelemetry_sdk::trace::SpanData>>>,
+    ) {
+        let exporter = CapturingSpanExporter::default();
+        let spans = Arc::clone(&exporter.spans);
+        let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+            .with_simple_exporter(exporter)
+            .build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("middleware-test")));
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let service = Service::new(
+            Router::new()
+                .hoop(TraceContextMiddleware::new(policy))
+                .push(Router::with_path("authorize").get(ok)),
+        );
+        let builder = TestClient::get("http://127.0.0.1:5800/authorize");
+        let mut request = match traceparent {
+            Some(value) => builder.add_header("traceparent", value, true).build(),
+            None => builder.build(),
+        };
+        *request.remote_addr_mut() = "127.0.0.1:41000"
+            .parse::<std::net::SocketAddr>()
+            .expect("valid test peer")
+            .into();
+        let response = service.handle(request).await;
+        (response.status_code, spans)
+    }
+
+    #[tokio::test]
+    async fn trusted_inbound_trace_becomes_the_local_parent() {
+        let (status, spans) =
+            send_with_trace_middleware(trace_policy(true), Some(VALID_TRACEPARENT)).await;
+        assert_eq!(status, Some(StatusCode::OK));
+
+        let spans = spans.lock().unwrap();
+        let server = spans
+            .iter()
+            .find(|span| span.name == "http.server")
+            .expect("server span exported");
+        let inbound_trace =
+            opentelemetry::trace::TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap();
+        let inbound_span = opentelemetry::trace::SpanId::from_hex("00f067aa0ba902b7").unwrap();
+        assert_eq!(server.span_context.trace_id(), inbound_trace);
+        assert_eq!(server.parent_span_id, inbound_span);
+        assert_ne!(server.span_context.span_id(), inbound_span);
+    }
+
+    #[tokio::test]
+    async fn untrusted_inbound_trace_is_linked_not_continued() {
+        let (status, spans) =
+            send_with_trace_middleware(trace_policy(false), Some(VALID_TRACEPARENT)).await;
+        assert_eq!(status, Some(StatusCode::OK));
+
+        let spans = spans.lock().unwrap();
+        let server = spans
+            .iter()
+            .find(|span| span.name == "http.server")
+            .expect("server span exported");
+        let inbound_trace =
+            opentelemetry::trace::TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap();
+        let inbound_span = opentelemetry::trace::SpanId::from_hex("00f067aa0ba902b7").unwrap();
+        assert_ne!(server.span_context.trace_id(), inbound_trace);
+        assert!(server.parent_span_id == opentelemetry::trace::SpanId::INVALID);
+        assert!(
+            server
+                .links
+                .iter()
+                .any(|link| link.span_context.span_id() == inbound_span),
+            "expected a link to the untrusted inbound span"
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_traceparent_never_fails_the_request() {
+        let (status, spans) = send_with_trace_middleware(
+            trace_policy(true),
+            Some("00-00000000000000000000000000000000-00f067aa0ba902b7-01"),
+        )
+        .await;
+        assert_eq!(status, Some(StatusCode::OK));
+
+        let spans = spans.lock().unwrap();
+        let server = spans
+            .iter()
+            .find(|span| span.name == "http.server")
+            .expect("server span exported");
+        assert!(server.links.is_empty());
+    }
+
+    #[tokio::test]
+    async fn requests_without_trace_headers_still_start_a_trace() {
+        let (status, spans) = send_with_trace_middleware(trace_policy(true), None).await;
+        assert_eq!(status, Some(StatusCode::OK));
+
+        let spans = spans.lock().unwrap();
+        let server = spans
+            .iter()
+            .find(|span| span.name == "http.server")
+            .expect("server span exported");
+        assert!(server.span_context.is_valid());
+        assert!(server.links.is_empty());
     }
 
     async fn send_from_peer(

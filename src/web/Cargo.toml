@@ -18,6 +18,7 @@ identity-domain = { workspace = true }
 identity-infrastructure = { workspace = true }
 ipnet = { workspace = true }
 josekit = { workspace = true }
+opentelemetry = { workspace = true }
 rand = { workspace = true }
 salvo = { workspace = true }
 sea-orm = { workspace = true }
@@ -26,6 +27,7 @@ serde_json = { workspace = true }
 subtle = { workspace = true }
 tera = { workspace = true }
 tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 tokio = { workspace = true }
 unic-langid = { workspace = true }
 url = { workspace = true }
@@ -45,5 +47,7 @@ oidc-conformance = [
 [dev-dependencies]
 chrono = { workspace = true }
 identity-infrastructure = { workspace = true, features = ["test-support"] }
+opentelemetry_sdk = { workspace = true }
 tokio = { workspace = true }
+tracing-subscriber = "0.3"
 uuid = { workspace = true }

@@ -16,6 +16,7 @@ chacha20poly1305 = { workspace = true }
 chrono = { workspace = true }
 fluent-templates = { version = "0.14.0", features = ["tera"] }
 hex = { version = "0.4" }
+hmac = { workspace = true }
 http = { workspace = true }
 icu_list = { version = "2.2", features = ["compiled_data"] }
 icu_locale_core = "2.0"
@@ -27,6 +28,10 @@ ipnet = { workspace = true }
 include_dir = { version = "0.7" }
 josekit = { workspace = true }
 migration = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-appender-tracing = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 openssl = { workspace = true }
 password-hash = { version = "0.6.1", features = ["rand_core"] }
 rand = { workspace = true }
@@ -46,6 +51,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 unic-langid = { workspace = true }
 url = { workspace = true }

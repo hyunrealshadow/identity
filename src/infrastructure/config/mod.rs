@@ -8,10 +8,20 @@ use url::Url;
 
 pub type ConfigResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
+mod observability;
+
+pub use observability::{
+    DiagnosticsPipelineConfig, EventsPipelineConfig, ObservabilityConfig, OtlpCompression,
+    OtlpConfig, PiiConfig, SamplingConfig, SecretSourceConfig, SelfMetricsConfig,
+    TraceContextConfig,
+};
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
     pub logger: LoggerConfig,
+    #[serde(default)]
+    pub observability: ObservabilityConfig,
     #[serde(default)]
     pub server: ServerConfig,
     #[serde(default)]
@@ -187,6 +197,7 @@ impl AppConfig {
         let config: Self = serde_yml::from_str(&rendered)?;
         let config = config.normalized();
         config.validate_https_contract()?;
+        config.observability.validate()?;
 
         Ok((config, environment))
     }

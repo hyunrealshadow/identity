@@ -8,11 +8,13 @@ use crate::health;
 use identity_domain::openid_connect::WorkloadAuthenticator;
 use identity_infrastructure::AppState;
 use identity_infrastructure::config::{AppConfig, TlsTermination};
+use identity_infrastructure::observability::context::TraceTrustPolicy;
 
 use super::{
     controllers,
     middleware::{
-        RequireUpstreamHttps, RequireWorkload, ResolveClientIp, security_headers_middleware,
+        RequireUpstreamHttps, RequireWorkload, ResolveClientIp, TraceContextMiddleware,
+        security_headers_middleware,
     },
 };
 
@@ -30,6 +32,9 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
             &config.server.tls.trusted_proxies,
             &config.server.tls.direct_http_clients,
         ))
+        .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+            config.observability.trace_context.clone(),
+        )))
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state.clone()))
         .hoop(salvo::affix_state::inject(
@@ -67,19 +72,41 @@ pub fn internal_router(
     config: &AppConfig,
     authenticator: Arc<dyn WorkloadAuthenticator>,
 ) -> Router {
+    let mut internal = Router::with_path("internal")
+        .push(controllers::install::status_routes())
+        .push(controllers::install::routes())
+        .push(controllers::login_runtime::routes());
+    if config.observability.self_metrics.enable {
+        internal = internal.push(
+            Router::with_path(internal_relative_route(
+                &config.observability.self_metrics.route,
+            ))
+            .get(controllers::observability::observability_metrics),
+        );
+    }
+
     Router::new()
         .hoop(RequireWorkload::new(authenticator))
         .hoop(ResolveClientIp::new(
             &config.server.tls.trusted_proxies,
             &config.server.tls.direct_http_clients,
         ))
+        .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+            config.observability.trace_context.clone(),
+        )))
         .hoop(security_headers_middleware)
         .hoop(salvo::affix_state::inject(state))
-        .push(
-            Router::with_path("internal")
-                .push(controllers::install::status_routes())
-                .push(controllers::install::routes())
-                .push(controllers::login_runtime::routes()),
-        )
+        .push(internal)
         .goal(handle_404)
+}
+
+/// Convert the configured self-metrics route into a path relative to the
+/// internal listener, which is mounted under `internal`.
+fn internal_relative_route(route: &str) -> String {
+    let relative = route.trim_start_matches('/');
+    relative
+        .strip_prefix("internal/")
+        .unwrap_or(relative)
+        .trim_end_matches('/')
+        .to_owned()
 }
