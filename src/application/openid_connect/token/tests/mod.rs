@@ -20,8 +20,8 @@ use sha2::{Digest, Sha256, Sha384, Sha512};
 use uuid::Uuid;
 
 use super::{
-    AuthorizationCodeGrantParams, RefreshTokenGrantParams, TokenService, TokenServiceDependencies,
-    verify_pkce,
+    AuthorizationCodeGrantParams, DeviceCodeGrantParams, RefreshTokenGrantParams, TokenService,
+    TokenServiceDependencies, verify_pkce,
 };
 use crate::{
     application::{
@@ -268,6 +268,9 @@ fn build_token_service_with_key(
 ) -> TokenService {
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
     TokenService::new(TokenServiceDependencies {
+        device_repo: Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
         client_authorization_repo: repo,
         key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -307,6 +310,7 @@ fn build_token_service_with_scoped_claims(
     let user = test_user(user_oid);
     (
         TokenService::new(TokenServiceDependencies {
+            device_repo: Arc::new(crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new()),
             client_authorization_repo: repo,
             key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
             key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -367,6 +371,9 @@ async fn signing_key_provider_avoids_hot_path_repository_queries() {
     });
 
     let service = TokenService::new(TokenServiceDependencies {
+        device_repo: Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
         client_authorization_repo: Arc::new(MockClientAuthorizationRepository::new()),
         key_repo: Arc::new(MockKeyRepository::new()),
         key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),

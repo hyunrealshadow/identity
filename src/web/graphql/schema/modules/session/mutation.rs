@@ -53,7 +53,9 @@ impl SessionMutation {
             .session()
             .revoke_other_sessions(
                 uuid::Uuid::from(request.claims.user_oid),
-                request.claims.session_oid,
+                request.claims.session_oid.ok_or_else(|| {
+                    Error::new("this token was not issued from a browser session")
+                })?,
             )
             .await
             .map_err(internal_error)?;

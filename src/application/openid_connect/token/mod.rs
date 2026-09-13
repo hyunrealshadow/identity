@@ -15,18 +15,20 @@ use crate::{
         auth::repository::SessionRepository,
         client_authorization::{
             AccessTokenData, ClientAuthorization, ClientAuthorizationData,
-            ClientAuthorizationRepository, ClientAuthorizationType, RefreshTokenData,
+            ClientAuthorizationRepository, ClientAuthorizationType, DeviceAuthorizationRepository,
+            DevicePollOutcome, DeviceRequestStatus, PreparedAuthorizationRecord, RefreshTokenData,
+            device_code_digest,
         },
         key::{
             JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
             repository::KeyRepository,
         },
         openid_connect::{
-            GrantType, OpenIdConnectClientRepository, OpenIdConnectCredentialData,
-            OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,
+            GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
+            OpenIdConnectCredentialRepository, ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
         },
-        user::{UserOid, repository::UserRepository},
+        user::{User, UserOid, repository::UserRepository},
     },
 };
 
@@ -36,6 +38,15 @@ pub struct AuthorizationCodeGrantParams {
     pub redirect_uri: Option<String>,
     pub client_id: Option<String>,
     pub code_verifier: Option<String>,
+    pub client_secret: Option<String>,
+    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeviceCodeGrantParams {
+    pub device_code: String,
+    pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
@@ -69,6 +80,8 @@ pub enum TokenType {
 }
 
 pub struct TokenService {
+    client_authentication: Arc<crate::openid_connect::client_authentication::ClientAuthenticator>,
+    device_repo: Arc<dyn DeviceAuthorizationRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_repo: Arc<dyn KeyRepository>,
     key_jwk_repo: Arc<dyn KeyJwkRepository>,
@@ -85,6 +98,7 @@ pub struct TokenService {
 
 pub struct TokenServiceDependencies {
     pub client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
+    pub device_repo: Arc<dyn DeviceAuthorizationRepository>,
     pub key_repo: Arc<dyn KeyRepository>,
     pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
     pub user_repo: Arc<dyn UserRepository>,
@@ -97,7 +111,19 @@ pub struct TokenServiceDependencies {
 
 impl TokenService {
     pub fn new(deps: TokenServiceDependencies) -> Self {
+        let client_authentication = Arc::new(
+            crate::openid_connect::client_authentication::ClientAuthenticator::new(
+                crate::openid_connect::client_authentication::ClientAuthenticatorDependencies {
+                    client_repo: Arc::clone(&deps.client_repo),
+                    credential_repo: Arc::clone(&deps.credential_repo),
+                    provider_service: Arc::clone(&deps.provider_service),
+                },
+            ),
+        );
+
         Self {
+            client_authentication,
+            device_repo: deps.device_repo,
             client_authorization_repo: deps.client_authorization_repo,
             key_repo: deps.key_repo,
             key_jwk_repo: deps.key_jwk_repo,
@@ -138,18 +164,15 @@ impl TokenService {
     }
 }
 
-mod auth;
+mod device;
 mod exchange;
 
 pub(crate) use exchange::resolve_id_token_alg;
 
-mod helpers;
+pub(crate) mod helpers;
 mod signing;
 
-use helpers::{
-    client_id_from_assertion, decode_assertion_with_alg, decode_assertion_with_hmac_alg,
-    decode_assertion_with_jwk, verify_pkce,
-};
+use helpers::{client_id_from_assertion, verify_pkce};
 
 #[cfg(test)]
 mod tests;

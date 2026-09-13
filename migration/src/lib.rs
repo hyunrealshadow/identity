@@ -19,6 +19,7 @@ mod m20260428_000001_create_client_open_id_connect_platform;
 mod m20260801_000001_session_relay_index;
 mod m20260824_000001_add_user_preferences;
 mod m20260907_000001_create_user_client_consent;
+mod m20260913_000001_device_authorization_indexes;
 
 pub struct Migrator;
 
@@ -43,6 +44,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260801_000001_session_relay_index::Migration),
             Box::new(m20260824_000001_add_user_preferences::Migration),
             Box::new(m20260907_000001_create_user_client_consent::Migration),
+            Box::new(m20260913_000001_device_authorization_indexes::Migration),
         ]
     }
 }

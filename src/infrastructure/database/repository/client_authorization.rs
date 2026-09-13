@@ -20,8 +20,8 @@ use identity_domain::{
     client_authorization::{
         AccessTokenData, AuthorizationCodeData, ClientAuthorization, ClientAuthorizationData,
         ClientAuthorizationRepository, ClientAuthorizationRepositoryError, ClientAuthorizationType,
-        ConsentState, RefreshTokenData, RegistrationAccessTokenData, SelectionSource,
-        StoredAuthorizationRequest,
+        ConsentState, DeviceAuthorizationData, DeviceAuthorizationRequestData, RefreshTokenData,
+        RegistrationAccessTokenData, SelectionSource, StoredAuthorizationRequest,
     },
     openid_connect::{AuthorizationRequestData, ScopeSet},
 };
@@ -45,7 +45,7 @@ fn parse_stored_authorization_request(
         })
 }
 
-fn serialize_data(
+pub(super) fn serialize_data(
     data: &ClientAuthorizationData,
 ) -> Result<serde_json::Value, ClientAuthorizationRepositoryError> {
     match data {
@@ -54,6 +54,8 @@ fn serialize_data(
         ClientAuthorizationData::AccessToken(value) => serde_json::to_value(value),
         ClientAuthorizationData::RefreshToken(value) => serde_json::to_value(value),
         ClientAuthorizationData::RegistrationAccessToken(value) => serde_json::to_value(value),
+        ClientAuthorizationData::DeviceAuthorizationRequest(value) => serde_json::to_value(value),
+        ClientAuthorizationData::DeviceAuthorization(value) => serde_json::to_value(value),
     }
     .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
 }
@@ -90,6 +92,16 @@ fn parse_data(
         ClientAuthorizationType::RegistrationAccessToken => {
             serde_json::from_value::<RegistrationAccessTokenData>(data)
                 .map(ClientAuthorizationData::RegistrationAccessToken)
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+        }
+        ClientAuthorizationType::DeviceAuthorizationRequest => {
+            serde_json::from_value::<DeviceAuthorizationRequestData>(data)
+                .map(ClientAuthorizationData::DeviceAuthorizationRequest)
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+        }
+        ClientAuthorizationType::DeviceAuthorization => {
+            serde_json::from_value::<DeviceAuthorizationData>(data)
+                .map(ClientAuthorizationData::DeviceAuthorization)
                 .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
         }
     }
@@ -130,7 +142,7 @@ fn selection_update_condition(
     condition
 }
 
-fn to_domain(
+pub(super) fn to_domain(
     model: client_authorization::Model,
     client_oid: ClientOid,
 ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
@@ -179,8 +191,8 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         let type_ = data.authorization_type();
         let session_oid = match &data {
             ClientAuthorizationData::AuthorizationCode(data) => Some(data.session_oid),
-            ClientAuthorizationData::AccessToken(data) => Some(data.session_oid),
-            ClientAuthorizationData::RefreshToken(data) => Some(data.session_oid),
+            ClientAuthorizationData::AccessToken(data) => data.session_oid,
+            ClientAuthorizationData::RefreshToken(data) => data.session_oid,
             _ => None,
         };
         let transaction =

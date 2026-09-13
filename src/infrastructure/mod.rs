@@ -31,6 +31,7 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         auth::password::PasswordHashSetting,
         setting::{
             consent_url::ConsentUrlSetting,
+            device_authorization::DeviceAuthorizationSetting,
             dynamic_registration::DynamicClientRegistrationSetting,
             installation::{
                 InstallationDomainSetting, InstallationFirstKeyOidSetting,
@@ -107,6 +108,14 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
+    let device_authorization_setting = setting::Model {
+        id: 10,
+        oid: uuid::Uuid::new_v4(),
+        key: DeviceAuthorizationSetting::KEY.to_string(),
+        value: serde_json::to_value(DeviceAuthorizationSetting::default_value()).unwrap(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: None,
+    };
     let login_url_setting = setting::Model {
         id: 8,
         oid: uuid::Uuid::new_v4(),
@@ -135,6 +144,7 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
             vec![dynamic_registration_setting],
             vec![login_url_setting],
             vec![consent_url_setting],
+            vec![device_authorization_setting],
         ])
         .append_query_results([
             Vec::<crate::infrastructure::database::entity::key::Model>::new(),

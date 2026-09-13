@@ -16,6 +16,7 @@ use identity_domain::{
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
     setting::{
         consent_url::ConsentUrlSetting,
+        device_authorization::DeviceAuthorizationSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
@@ -140,6 +141,14 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         oid: uuid::Uuid::new_v4(),
         key: ConsentUrlSetting::KEY.to_string(),
         value: serde_json::to_value(Some("https://ui.example.com/consent".to_owned())).unwrap(),
+        created_at: now.naive_utc(),
+        updated_at: None,
+    };
+    let device_authorization_setting = setting::Model {
+        id: 10,
+        oid: uuid::Uuid::new_v4(),
+        key: DeviceAuthorizationSetting::KEY.to_string(),
+        value: serde_json::to_value(DeviceAuthorizationSetting::default_value()).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -335,6 +344,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[dynamic_registration_setting]])
         .append_query_results([[login_url_setting]])
         .append_query_results([[consent_url_setting]])
+        .append_query_results([[device_authorization_setting]])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[login_model.clone()]])

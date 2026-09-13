@@ -185,6 +185,9 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         Uuid::new_v4(),
     );
     let service = TokenService::new(TokenServiceDependencies {
+        device_repo: Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
         client_authorization_repo: repo.clone(),
         key_repo: Arc::new(key_repo_with_keys(vec![signing_key])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -318,6 +321,9 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         Uuid::new_v4(),
     );
     let service = TokenService::new(TokenServiceDependencies {
+        device_repo: Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
         client_authorization_repo: repo.clone(),
         key_repo: Arc::new(key_repo_with_keys(vec![signing_key])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),

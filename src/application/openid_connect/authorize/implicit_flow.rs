@@ -339,11 +339,12 @@ impl AuthorizeService {
                     identity_domain::client_authorization::AccessTokenData {
                         scope: input.request.scope.clone(),
                         user_oid: input.user_oid.to_string(),
-                        session_oid: input.session_oid,
+                        session_oid: Some(input.session_oid),
                         protected_session_id: Some(input.protected_session_id.to_string()),
                         authorization_code_oid: input
                             .authorization_code_oid
                             .map(|oid| oid.to_string()),
+                        device_authorization_oid: None,
                     },
                 ),
                 chrono::Utc::now() + chrono::Duration::hours(1),

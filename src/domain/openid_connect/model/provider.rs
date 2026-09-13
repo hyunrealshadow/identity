@@ -90,6 +90,9 @@ pub struct OpenIdProviderMetadata {
     pub token_endpoint: Option<Url>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub userinfo_endpoint: Option<Url>,
+    /// RFC 8628 §4: endpoint clients post device authorization requests to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_authorization_endpoint: Option<Url>,
     pub jwks_uri: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registration_endpoint: Option<Url>,
@@ -175,6 +178,9 @@ mod tests {
             userinfo_endpoint: Some(
                 Url::parse("https://identity.example.com/connect/userinfo").unwrap(),
             ),
+            device_authorization_endpoint: Some(
+                Url::parse("https://identity.example.com/oauth2/device_authorization").unwrap(),
+            ),
             jwks_uri: Url::parse("https://identity.example.com/.well-known/keys").unwrap(),
             registration_endpoint: Some(
                 Url::parse("https://identity.example.com/connect/register").unwrap(),
@@ -257,6 +263,7 @@ mod tests {
                 .unwrap(),
             token_endpoint: Some(Url::parse("https://identity.example.com/connect/token").unwrap()),
             userinfo_endpoint: None,
+            device_authorization_endpoint: None,
             jwks_uri: Url::parse("https://identity.example.com/.well-known/keys").unwrap(),
             registration_endpoint: None,
             scopes_supported: Some(vec![]),

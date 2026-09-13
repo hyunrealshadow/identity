@@ -6,7 +6,9 @@ use unic_langid::LanguageIdentifier;
 
 use identity_application::{
     error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
-    openid_connect::token::{AuthorizationCodeGrantParams, RefreshTokenGrantParams},
+    openid_connect::token::{
+        AuthorizationCodeGrantParams, DeviceCodeGrantParams, RefreshTokenGrantParams,
+    },
 };
 use identity_domain::openid_connect::{ClientAssertionType, GrantType};
 
@@ -20,6 +22,7 @@ use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers}
 struct TokenForm {
     grant_type: String,
     code: Option<String>,
+    device_code: Option<String>,
     refresh_token: Option<String>,
     redirect_uri: Option<String>,
     client_id: Option<String>,
@@ -72,6 +75,28 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
         c if c == TokenErrorCode::UnsupportedGrantType.code() => "unsupported_grant_type",
         // Client is not permitted to use the requested grant
         c if c == TokenErrorCode::ClientGrantNotAllowed.code() => "unauthorized_client",
+        // Device authorization grant (RFC 8628 §3.5)
+        c if c == TokenErrorCode::DeviceCodePending.code() => "authorization_pending",
+        c if c == TokenErrorCode::DeviceCodeSlowDown.code() => "slow_down",
+        c if c == TokenErrorCode::DeviceCodeDenied.code()
+            || c == TokenErrorCode::DeviceCodeRevoked.code() =>
+        {
+            "access_denied"
+        }
+        c if c == TokenErrorCode::DeviceCodeExpired.code() => "expired_token",
+        c if c == TokenErrorCode::DeviceCodeNotFound.code()
+            || c == TokenErrorCode::DeviceCodeClientMismatch.code()
+            || c == TokenErrorCode::DeviceCodeUserNotFound.code()
+            || c == TokenErrorCode::DeviceRequestStateInvalid.code() =>
+        {
+            "invalid_grant"
+        }
+        c if c == TokenErrorCode::DeviceRequestLookupFailed.code()
+            || c == TokenErrorCode::DeviceRelationLookupFailed.code()
+            || c == TokenErrorCode::DeviceRedemptionFailed.code() =>
+        {
+            "server_error"
+        }
         // Everything else
         _ => match error.kind() {
             ErrorKind::Validation => "invalid_request",
@@ -153,7 +178,7 @@ impl Writer for TokenWebError {
     }
 }
 
-fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
+pub(super) fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
     let header = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let encoded = header.strip_prefix("Basic ")?;
     let decoded = base64::engine::general_purpose::STANDARD
@@ -199,6 +224,18 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
                     client_assertion_type,
                     client_assertion: form.client_assertion,
                     code_verifier: form.code_verifier,
+                })
+                .await
+        }
+        Ok(GrantType::DeviceCode) => {
+            ctx.services()
+                .oidc_token()
+                .exchange_device_code(DeviceCodeGrantParams {
+                    device_code: form.device_code.unwrap_or_default(),
+                    client_id,
+                    client_secret,
+                    client_assertion_type,
+                    client_assertion: form.client_assertion,
                 })
                 .await
         }
@@ -257,6 +294,63 @@ mod tests {
 
         assert_eq!(app_error_to_rfc6749(&error), "unauthorized_client");
         assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn app_error_to_rfc6749_maps_device_grant_errors() {
+        let cases = [
+            (TokenErrorCode::DeviceCodePending, "authorization_pending"),
+            (TokenErrorCode::DeviceCodeSlowDown, "slow_down"),
+            (TokenErrorCode::DeviceCodeDenied, "access_denied"),
+            (TokenErrorCode::DeviceCodeRevoked, "access_denied"),
+            (TokenErrorCode::DeviceCodeExpired, "expired_token"),
+            (TokenErrorCode::DeviceCodeNotFound, "invalid_grant"),
+            (TokenErrorCode::DeviceCodeClientMismatch, "invalid_grant"),
+            (TokenErrorCode::DeviceCodeUserNotFound, "invalid_grant"),
+        ];
+
+        for (code, expected) in cases {
+            let error = AppError::from_code(code);
+            assert_eq!(app_error_to_rfc6749(&error), expected, "{code:?}");
+            assert_eq!(
+                token_error_status(&error),
+                StatusCode::BAD_REQUEST,
+                "{code:?}"
+            );
+        }
+
+        let internal = AppError::from_code(TokenErrorCode::DeviceRedemptionFailed);
+        assert_eq!(app_error_to_rfc6749(&internal), "server_error");
+        assert_eq!(
+            token_error_status(&internal),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[tokio::test]
+    async fn token_route_dispatches_the_device_code_grant() {
+        use salvo::{
+            Service,
+            test::{ResponseExt, TestClient},
+        };
+
+        let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(
+            identity_infrastructure::test_app_state_with_mock_settings().await,
+        ));
+        let service = Service::new(app);
+        let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/token")
+            .add_header(
+                http::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+                true,
+            )
+            .body("grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=unknown")
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+        let body = response.take_string().await.unwrap();
+        assert!(body.contains("invalid_request"), "{body}");
     }
 
     #[test]

@@ -9,6 +9,13 @@ use crate::auth::model::SessionOid;
 use crate::client::model::ClientOid;
 use crate::openid_connect::{AuthorizationRequestData, ClaimsRequest, CodeChallengeMethod};
 
+pub use super::device::{
+    DeviceAuthorizationApproval, DeviceAuthorizationData, DeviceAuthorizationRequestData,
+    DevicePollOutcome, DeviceRequestStatus, DeviceRequestTransitionError,
+    SLOW_DOWN_INCREMENT_SECONDS, USER_CODE_ALPHABET, USER_CODE_LENGTH, device_code_digest,
+    format_user_code, normalize_user_code,
+};
+
 pub type ClientAuthorizationOid = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
@@ -19,6 +26,8 @@ pub enum ClientAuthorizationType {
     AccessToken,
     RefreshToken,
     RegistrationAccessToken,
+    DeviceAuthorizationRequest,
+    DeviceAuthorization,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +73,10 @@ pub struct AuthorizationCodeData {
 pub struct RefreshTokenData {
     pub scope: String,
     pub user_oid: String,
-    pub session_oid: SessionOid,
+    /// Browser session the token was issued from; `None` for device issued
+    /// tokens, which are bound to a device authorization relation instead.
+    #[serde(default)]
+    pub session_oid: Option<SessionOid>,
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub auth_time: Option<i64>,
@@ -72,16 +84,28 @@ pub struct RefreshTokenData {
     #[serde(default)]
     pub amr: Vec<String>,
     pub rotated_from: Option<String>,
+    /// Device authorization relation this token belongs to, when the token was
+    /// not issued from a browser session.
+    #[serde(default)]
+    pub device_authorization_oid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AccessTokenData {
     pub scope: String,
     pub user_oid: String,
-    pub session_oid: SessionOid,
+    /// Browser session the token was issued from. `None` for tokens issued
+    /// from a device authorization relation, which is independent of the
+    /// browser session that approved it (ADR 0004).
+    #[serde(default)]
+    pub session_oid: Option<SessionOid>,
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub authorization_code_oid: Option<String>,
+    /// Device authorization relation the token was issued from, when the
+    /// token was not issued from a browser session.
+    #[serde(default)]
+    pub device_authorization_oid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -103,6 +127,8 @@ pub enum ClientAuthorizationData {
     AccessToken(AccessTokenData),
     RefreshToken(RefreshTokenData),
     RegistrationAccessToken(RegistrationAccessTokenData),
+    DeviceAuthorizationRequest(DeviceAuthorizationRequestData),
+    DeviceAuthorization(DeviceAuthorizationData),
 }
 
 impl ClientAuthorizationData {
@@ -114,6 +140,10 @@ impl ClientAuthorizationData {
             Self::AccessToken(_) => ClientAuthorizationType::AccessToken,
             Self::RefreshToken(_) => ClientAuthorizationType::RefreshToken,
             Self::RegistrationAccessToken(_) => ClientAuthorizationType::RegistrationAccessToken,
+            Self::DeviceAuthorizationRequest(_) => {
+                ClientAuthorizationType::DeviceAuthorizationRequest
+            }
+            Self::DeviceAuthorization(_) => ClientAuthorizationType::DeviceAuthorization,
         }
     }
 }
@@ -186,6 +216,14 @@ mod tests {
             ClientAuthorizationType::from_str("access_token").unwrap(),
             ClientAuthorizationType::AccessToken
         );
+        assert_eq!(
+            ClientAuthorizationType::from_str("device_authorization_request").unwrap(),
+            ClientAuthorizationType::DeviceAuthorizationRequest
+        );
+        assert_eq!(
+            ClientAuthorizationType::from_str("device_authorization").unwrap(),
+            ClientAuthorizationType::DeviceAuthorization
+        );
     }
 
     #[test]
@@ -219,12 +257,13 @@ mod tests {
         let data = RefreshTokenData {
             scope: "openid offline_access profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: SessionOid(uuid::Uuid::nil()),
+            session_oid: Some(SessionOid(uuid::Uuid::nil())),
             protected_session_id: Some("protected-session".to_string()),
             auth_time: Some(1234567890),
             acr: Some("urn:identity:acr:aal1".to_string()),
             amr: vec!["pwd".to_string()],
             rotated_from: Some(uuid::Uuid::nil().to_string()),
+            device_authorization_oid: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();
@@ -244,12 +283,13 @@ mod tests {
         let data = RefreshTokenData {
             scope: "openid offline_access".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: SessionOid(uuid::Uuid::nil()),
+            session_oid: Some(SessionOid(uuid::Uuid::nil())),
             protected_session_id: None,
             auth_time: None,
             acr: None,
             amr: Vec::new(),
             rotated_from: None,
+            device_authorization_oid: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();
@@ -262,9 +302,10 @@ mod tests {
         let data = AccessTokenData {
             scope: "openid profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: SessionOid(uuid::Uuid::nil()),
+            session_oid: Some(SessionOid(uuid::Uuid::nil())),
             protected_session_id: Some("protected-session".to_string()),
             authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
+            device_authorization_oid: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();

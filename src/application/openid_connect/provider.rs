@@ -93,6 +93,7 @@ impl Default for OpenIdProviderCapabilities {
                 GrantType::AuthorizationCode,
                 GrantType::Implicit,
                 GrantType::RefreshToken,
+                GrantType::DeviceCode,
             ],
             acr_values_supported: vec![
                 identity_domain::auth::ACR_AAL1.to_owned(),
@@ -306,6 +307,7 @@ impl OpenIdProviderService {
             authorization_endpoint: endpoint_url(&issuer, "/oauth2/authorize")?,
             token_endpoint: Some(endpoint_url(&issuer, "/oauth2/token")?),
             userinfo_endpoint: Some(endpoint_url(&issuer, "/oauth2/userinfo")?),
+            device_authorization_endpoint: Some(endpoint_url(&issuer, "/oauth2/device")?),
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,
             registration_endpoint: self.registration_endpoint(&issuer)?,
             scopes_supported: non_empty(self.capabilities.scopes_supported.clone()),
@@ -758,6 +760,36 @@ mod tests {
                 "code token",
                 "code id_token token"
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn default_discovery_advertises_the_device_authorization_endpoint() {
+        let service = OpenIdProviderService::for_test(InstallationState {
+            initialized: true,
+            domain: Some("https://identity.example.com".to_owned()),
+            first_user_oid: None,
+            first_key_oid: None,
+            initialized_at: None,
+        })
+        .await;
+
+        let metadata = service.discovery_metadata().await.unwrap();
+
+        assert_eq!(
+            metadata
+                .device_authorization_endpoint
+                .expect("device authorization endpoint is advertised")
+                .as_str(),
+            "https://identity.example.com/oauth2/device"
+        );
+        assert!(
+            metadata
+                .grant_types_supported
+                .expect("grant types are advertised")
+                .iter()
+                .any(|grant| grant == "urn:ietf:params:oauth:grant-type:device_code"),
+            "discovery must advertise the device_code grant it accepts"
         );
     }
 

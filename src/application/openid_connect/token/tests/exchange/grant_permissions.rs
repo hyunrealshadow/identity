@@ -7,12 +7,13 @@ fn refresh_token_data(user_oid: Uuid) -> RefreshTokenData {
     RefreshTokenData {
         scope: "openid offline_access".to_string(),
         user_oid: user_oid.to_string(),
-        session_oid: SessionOid::from(Uuid::new_v4()),
+        session_oid: Some(SessionOid::from(Uuid::new_v4())),
         protected_session_id: None,
         auth_time: None,
         acr: None,
         amr: vec!["pwd".to_owned()],
         rotated_from: None,
+        device_authorization_oid: None,
     }
 }
 

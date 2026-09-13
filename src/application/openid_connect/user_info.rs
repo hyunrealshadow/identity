@@ -20,6 +20,7 @@ use crate::{
         auth::SessionOid,
         client_authorization::{
             ClientAuthorizationData, ClientAuthorizationRepository, ClientAuthorizationType,
+            DeviceAuthorizationRepository,
         },
         key::KeyData,
         openid_connect::{
@@ -44,12 +45,18 @@ pub struct UserInfoService {
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_service: Arc<AsymmetricKeyService>,
     provider_service: Arc<OpenIdProviderService>,
+    /// Device authorizations, so online validation follows the relation a
+    /// device issued token belongs to. Optional for services that never see
+    /// device tokens.
+    device_repo: Option<Arc<dyn DeviceAuthorizationRepository>>,
 }
 
 pub struct TokenClaims {
     pub user_oid: UserOid,
     pub client_oid: Uuid,
-    pub session_oid: SessionOid,
+    /// Browser session behind the access token; `None` for device issued
+    /// tokens, whose lifecycle follows a device authorization relation.
+    pub session_oid: Option<SessionOid>,
     pub scope: ScopeSet,
     pub claims: Option<ClaimsRequest>,
     pub audience: Vec<String>,
@@ -74,7 +81,46 @@ impl UserInfoService {
             client_authorization_repo,
             key_service,
             provider_service,
+            device_repo: None,
         }
+    }
+
+    /// Attach the device authorization repository, so device issued access
+    /// tokens are validated against their relation.
+    #[must_use]
+    pub fn with_device_repository(
+        mut self,
+        device_repo: Arc<dyn DeviceAuthorizationRepository>,
+    ) -> Self {
+        self.device_repo = Some(device_repo);
+        self
+    }
+
+    /// Fails with `invalid_token` when the relation is revoked, expired, or
+    /// unknown; a service without a device repository skips the check.
+    async fn ensure_device_authorization_active(
+        &self,
+        device_authorization_oid: Uuid,
+    ) -> Result<(), AppError> {
+        let Some(device_repo) = &self.device_repo else {
+            return Ok(());
+        };
+
+        let relation = device_repo
+            .find_device_authorization_by_oid(device_authorization_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
+            })?;
+        let now = chrono::Utc::now();
+        let active = relation
+            .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
+
+        if !active {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+
+        Ok(())
     }
 
     pub async fn get_user_info(
@@ -315,6 +361,18 @@ impl UserInfoService {
         };
         if access_token_data.user_oid != user_oid.to_string() {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        // A device issued access token stays valid only while its relation
+        // does: revocation stops online validation immediately. Self contained
+        // JWTs held by resource servers outside this deployment keep working
+        // until they expire.
+        if let Some(device_authorization_oid) = access_token_data
+            .device_authorization_oid
+            .as_deref()
+            .and_then(|oid| Uuid::parse_str(oid).ok())
+        {
+            self.ensure_device_authorization_active(device_authorization_oid)
+                .await?;
         }
         let client_id = payload
             .claim(JwtClaimNames::CLIENT_ID)

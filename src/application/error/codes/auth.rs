@@ -21,6 +21,8 @@ pub enum AuthErrorCode {
     TotpAlreadyEnabled,
     TotpNotEnabled,
     InvalidTotpEnrollment,
+    /// Withdrawing device authorizations during an account level action failed.
+    DeviceAuthorizationRevocationFailed,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -44,6 +46,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::TotpAlreadyEnabled => ErrorKind::Conflict,
             AuthErrorCode::TotpNotEnabled => ErrorKind::Conflict,
             AuthErrorCode::InvalidTotpEnrollment => ErrorKind::Validation,
+            AuthErrorCode::DeviceAuthorizationRevocationFailed => ErrorKind::Internal,
         }
     }
 
@@ -67,6 +70,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::TotpAlreadyEnabled => 11015,
             AuthErrorCode::TotpNotEnabled => 11016,
             AuthErrorCode::InvalidTotpEnrollment => 11017,
+            AuthErrorCode::DeviceAuthorizationRevocationFailed => 11018,
         }
     }
 }

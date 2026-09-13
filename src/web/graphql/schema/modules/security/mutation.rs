@@ -1,4 +1,4 @@
-use async_graphql::{Context, Object, Result};
+use async_graphql::{Context, Error, Object, Result};
 use identity_domain::openid_connect::ApiScope;
 
 use super::types::{
@@ -42,7 +42,9 @@ impl SecurityMutation {
             .change_password_with_session_revocation(
                 request.claims.user_oid,
                 &input.new_password,
-                request.claims.session_oid,
+                request.claims.session_oid.ok_or_else(|| {
+                    Error::new("this token was not issued from a browser session")
+                })?,
             )
             .await
             .map_err(|error| app_error(ctx, error))?;

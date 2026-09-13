@@ -6,19 +6,20 @@ use crate::openid_connect::jose::{
 use identity_domain::auth::SessionOid;
 use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
 use identity_domain::openid_connect::{ClaimsRequest, ScopeSet};
-#[cfg(test)]
-use josekit::jws::RS256;
 
 pub(super) struct StoreRefreshTokenParams<'a> {
     pub client_oid: Uuid,
     pub scope: &'a str,
     pub user_oid: &'a str,
-    pub session_oid: SessionOid,
+    /// Browser session behind the token; `None` for device issued tokens.
+    pub session_oid: Option<SessionOid>,
     pub protected_session_id: Option<&'a str>,
     pub auth_time: Option<i64>,
     pub acr: Option<&'a str>,
     pub amr: &'a [String],
     pub rotated_from: Option<&'a str>,
+    /// Device authorization relation behind the token, if any.
+    pub device_authorization_oid: Option<Uuid>,
 }
 
 pub(super) struct SignAccessTokenInput<'a> {
@@ -30,7 +31,9 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub audience: &'a str,
     pub client_id: &'a str,
     pub user_oid: &'a Uuid,
-    pub protected_session_id: &'a str,
+    /// `None` for device issued tokens: they have no browser session, so no
+    /// `sid` claim is emitted (a forged one would be a lie).
+    pub protected_session_id: Option<&'a str>,
     pub scope: &'a str,
     pub claims: Option<&'a ClaimsRequest>,
     pub auth_time: Option<i64>,
@@ -143,14 +146,16 @@ impl TokenService {
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
             })?;
-        payload
-            .set_claim(
-                JwtClaimNames::SID,
-                Some(serde_json::json!(input.protected_session_id)),
-            )
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+        if let Some(protected_session_id) = input.protected_session_id {
+            payload
+                .set_claim(
+                    JwtClaimNames::SID,
+                    Some(serde_json::json!(protected_session_id)),
+                )
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+                })?;
+        }
         payload
             .set_claim(
                 JwtClaimNames::TOKEN_USE,
@@ -417,6 +422,7 @@ impl TokenService {
             acr: params.acr.map(str::to_string),
             amr: params.amr.to_vec(),
             rotated_from: params.rotated_from.map(str::to_string),
+            device_authorization_oid: params.device_authorization_oid.map(|oid| oid.to_string()),
         });
 
         let record = self
@@ -439,22 +445,25 @@ impl TokenService {
             })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn create_access_token_record(
         &self,
         client_oid: Uuid,
         scope: &str,
         user_oid: &str,
-        session_oid: SessionOid,
+        session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
         authorization_code_oid: Option<Uuid>,
+        device_authorization_oid: Option<Uuid>,
     ) -> Result<ClientAuthorization, AppError> {
-        let data = ClientAuthorizationData::AccessToken(AccessTokenData {
-            scope: scope.to_string(),
-            user_oid: user_oid.to_string(),
+        let data = self.access_token_data(
+            scope,
+            user_oid,
             session_oid,
-            protected_session_id: protected_session_id.map(str::to_string),
-            authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
-        });
+            protected_session_id,
+            authorization_code_oid,
+            device_authorization_oid,
+        );
 
         self.client_authorization_repo
             .create(
@@ -468,24 +477,24 @@ impl TokenService {
             })
     }
 
-    #[cfg(test)]
-    pub(super) async fn build_client_assertion_for_test(&self, client_id: &str) -> String {
-        let issuer = self.provider_service.issuer().unwrap();
-        let (key_id, private_key, _alg) = self.load_signing_key().await.unwrap();
-        let mut header = JwsHeader::new();
-        header.set_token_type("JWT");
-        header.set_key_id(&key_id);
-
-        let mut payload = JwtPayload::new();
-        let now = std::time::SystemTime::now();
-        payload.set_issuer(client_id);
-        payload.set_subject(client_id);
-        payload.set_audience(vec![issuer.as_str()]);
-        payload.set_issued_at(&now);
-        payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
-        payload.set_jwt_id(Uuid::new_v4().to_string());
-
-        let signer = RS256.signer_from_pem(private_key.as_bytes()).unwrap();
-        jwt::encode_with_signer(&payload, &header, &signer).unwrap()
+    /// Builds the persisted access token record without writing it, so flows
+    /// that must commit consumption and issuance together can prepare it first.
+    pub(super) fn access_token_data(
+        &self,
+        scope: &str,
+        user_oid: &str,
+        session_oid: Option<SessionOid>,
+        protected_session_id: Option<&str>,
+        authorization_code_oid: Option<Uuid>,
+        device_authorization_oid: Option<Uuid>,
+    ) -> ClientAuthorizationData {
+        ClientAuthorizationData::AccessToken(AccessTokenData {
+            scope: scope.to_string(),
+            user_oid: user_oid.to_string(),
+            session_oid,
+            protected_session_id: protected_session_id.map(str::to_string),
+            authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
+            device_authorization_oid: device_authorization_oid.map(|oid| oid.to_string()),
+        })
     }
 }

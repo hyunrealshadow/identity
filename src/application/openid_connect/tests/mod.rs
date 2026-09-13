@@ -1,1 +1,1 @@
-pub(in crate::openid_connect) mod fixtures;
+pub(crate) mod fixtures;

@@ -16,10 +16,13 @@ pub(crate) struct SessionNode {
 }
 
 impl SessionNode {
-    pub(crate) fn new(session: Session, current_session_oid: SessionOid) -> Self {
+    /// `current_session_oid` is the browser session behind the presented
+    /// token; access tokens issued from a device authorization relation have
+    /// none, so no session is reported as current.
+    pub(crate) fn new(session: Session, current_session_oid: Option<SessionOid>) -> Self {
         Self {
             id: GlobalId::<SessionGlobalId>::new(Uuid::from(session.oid)).into(),
-            current: session.oid == current_session_oid,
+            current: current_session_oid == Some(session.oid),
             session,
         }
     }

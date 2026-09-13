@@ -32,6 +32,7 @@ pub async fn start_servers(
             config.client_credential_rotation.check_interval_secs,
         );
     }
+    spawn_device_authorization_cleanup_worker(state.clone());
     let shared_health = health::shares_listener(&config.health, &config.server);
     let shared_graphql = graphql::shares_listener(&config.graphql, &config.server);
 
@@ -209,6 +210,41 @@ fn spawn_login_runtime_rotation_worker(state: AppState, interval_secs: u64) {
                         Ok(_) => {}
                         Err(error) => {
                             tracing::error!(error = %error, "login runtime rotation maintenance failed");
+                        }
+                    }
+                }
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// Expired device requests are tenant data with a ten minute lifetime; a
+/// five minute sweep keeps the table from growing without touching the
+/// long lived device authorizations.
+const DEVICE_AUTHORIZATION_CLEANUP_INTERVAL_SECS: u64 = 300;
+
+fn spawn_device_authorization_cleanup_worker(state: AppState) {
+    tokio::spawn(async move {
+        let mut shutdown = state.lifecycle().subscribe_shutdown();
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            DEVICE_AUTHORIZATION_CLEANUP_INTERVAL_SECS,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    match state.services().oidc_device_authorization().maintain().await {
+                        Ok(removed) if removed > 0 => {
+                            tracing::info!(removed, "device authorization cleanup removed expired requests");
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            tracing::error!(error = %error, "device authorization cleanup failed");
                         }
                     }
                 }

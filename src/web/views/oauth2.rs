@@ -29,10 +29,33 @@ pub struct ConsentPageData {
     pub ui_locales: Option<Vec<String>>,
 }
 
+/// Consent decision submitted by the interaction UI.
+///
+/// The browser flow answers an authorization request (`login_id`), the device
+/// flow answers a user code (`user_code`); exactly one of the two identifies
+/// the interaction.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConsentDecisionPayload {
-    pub login_id: String,
+    #[serde(default)]
+    pub login_id: Option<String>,
+    #[serde(default)]
+    pub user_code: Option<String>,
     pub decision: ConsentDecision,
+}
+
+/// Device verification page data: the same consent UI renders it, addressed by
+/// the user code instead of a login interaction.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceConsentPageData {
+    pub user_code: String,
+    pub status: identity_application::openid_connect::device::DeviceVerificationStatus,
+    pub consent_required: bool,
+    pub client_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logo_uri: Option<String>,
+    pub client_uri: Option<String>,
+    pub scopes: Vec<ScopeDisplay>,
+    pub csrf_token: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

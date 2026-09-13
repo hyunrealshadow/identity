@@ -23,6 +23,7 @@ use identity_domain::{
     setting::model::SettingDefinition,
     setting::{
         consent_url::ConsentUrlSetting,
+        device_authorization::DeviceAuthorizationSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
@@ -49,6 +50,8 @@ pub type AppDynamicClientRegistrationSettingService =
     CachedSetting<DynamicClientRegistrationSetting, SettingRepositoryImpl>;
 pub type AppLoginUrlSettingService = CachedSetting<LoginUrlSetting, SettingRepositoryImpl>;
 pub type AppConsentUrlSettingService = CachedSetting<ConsentUrlSetting, SettingRepositoryImpl>;
+pub type AppDeviceAuthorizationSettingService =
+    CachedSetting<DeviceAuthorizationSetting, SettingRepositoryImpl>;
 
 pub struct CachedRuntimeKeyRingProvider {
     key_repo: Arc<dyn KeyRepository>,
@@ -239,6 +242,7 @@ pub struct AppRuntimeSettings {
     dynamic_client_registration_setting: Arc<AppDynamicClientRegistrationSettingService>,
     login_url_setting: Arc<AppLoginUrlSettingService>,
     consent_url_setting: Arc<AppConsentUrlSettingService>,
+    device_authorization_setting: Arc<AppDeviceAuthorizationSettingService>,
     key_ring: Arc<CachedRuntimeKeyRingProvider>,
 }
 
@@ -293,6 +297,10 @@ impl AppRuntimeSettings {
             consent_url_setting: Arc::new(
                 AppConsentUrlSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
             ),
+            device_authorization_setting: Arc::new(
+                AppDeviceAuthorizationSettingService::new(SettingRepositoryImpl::new(db.clone()))
+                    .await?,
+            ),
             key_ring: Arc::new(CachedRuntimeKeyRingProvider::new(db.clone()).await?),
         })
     }
@@ -308,6 +316,7 @@ impl AppRuntimeSettings {
         refresher.register(Arc::clone(&self.dynamic_client_registration_setting));
         refresher.register(Arc::clone(&self.login_url_setting));
         refresher.register(Arc::clone(&self.consent_url_setting));
+        refresher.register(Arc::clone(&self.device_authorization_setting));
         refresher.register(Arc::clone(&self.key_ring));
         refresher.spawn_detached();
     }
@@ -360,6 +369,11 @@ impl AppRuntimeSettings {
     #[must_use]
     pub fn consent_url(&self) -> Arc<AppConsentUrlSettingService> {
         Arc::clone(&self.consent_url_setting)
+    }
+
+    #[must_use]
+    pub fn device_authorization(&self) -> Arc<AppDeviceAuthorizationSettingService> {
+        Arc::clone(&self.device_authorization_setting)
     }
 
     #[must_use]

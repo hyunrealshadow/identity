@@ -9,6 +9,11 @@ pub(in crate::openid_connect) struct ScopedClaimsClientRepository;
 pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
     pub(in crate::openid_connect) grant_types: Vec<identity_domain::openid_connect::GrantType>,
 }
+
+/// A client whose registration declares `token_endpoint_auth_method: none`;
+/// unlike `PublicFlowClientRepository` it does not enable the browser public
+/// client flow.
+pub(in crate::openid_connect) struct RegisteredPublicClientRepository;
 pub(in crate::openid_connect) struct AuthMethodClientRepository {
     pub(in crate::openid_connect) method: &'static str,
     pub(in crate::openid_connect) signing_alg: Option<&'static str>,
@@ -40,6 +45,21 @@ impl OpenIdConnectClientRepository for RestrictedGrantClientRepository {
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, Some("client_secret_basic"));
         metadata.grant_types = Some(self.grant_types.clone());
+
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for RegisteredPublicClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let metadata = test_metadata(None, Some("none"));
 
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())

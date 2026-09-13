@@ -17,6 +17,7 @@ use identity_domain::{
         repository::{CreateSessionInput, LoginRepository, SessionRepository},
         totp::TotpVerifier,
     },
+    client_authorization::DeviceAuthorizationRepository,
     user::{
         model::{
             CredentialData, CredentialType, OtpCredentialData, Password,
@@ -76,6 +77,10 @@ pub struct LoginService {
     password_hasher: Arc<dyn PasswordHasher>,
     totp_verifier: Arc<dyn TotpVerifier>,
     hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
+    /// Device authorizations, so account level security actions can withdraw
+    /// them. Optional: services built without it simply have no device
+    /// authorizations to revoke.
+    device_repo: Option<Arc<dyn DeviceAuthorizationRepository>>,
     events: Arc<dyn crate::observability::EventSink>,
 }
 
@@ -98,8 +103,20 @@ impl LoginService {
             password_hasher,
             totp_verifier,
             hash_options,
+            device_repo: None,
             events: Arc::new(crate::observability::NoopEventSink),
         }
+    }
+
+    /// Attach the device authorization repository, so account level
+    /// revocation also withdraws device grants.
+    #[must_use]
+    pub fn with_device_repository(
+        mut self,
+        device_repo: Arc<dyn DeviceAuthorizationRepository>,
+    ) -> Self {
+        self.device_repo = Some(device_repo);
+        self
     }
 
     /// Attach the key event and audit sink.
@@ -236,11 +253,55 @@ impl LoginService {
             current_session,
         )
         .await?;
+        let revoked_device_authorizations = self
+            .revoke_device_authorizations(Uuid::from(user_oid))
+            .await?;
+        let mut event = crate::observability::BusinessEvent::audit("account.sessions_revoked")
+            .outcome("success")
+            .attribute(
+                "revoked_sessions",
+                crate::observability::EventValue::Integer(i64::from(revocation.revoked)),
+            )
+            .attribute(
+                "revoked_device_authorizations",
+                crate::observability::EventValue::Integer(i64::from(revoked_device_authorizations)),
+            )
+            .attribute(
+                "user_oid",
+                crate::observability::EventValue::Pseudonymized {
+                    purpose: "user_oid",
+                    value: Uuid::from(user_oid).to_string(),
+                },
+            );
+        if revocation.failure_count() > 0 {
+            event = event.outcome("partial");
+        }
+        self.events.emit(event);
+
         Ok(PasswordChangeOutcome {
             password_changed: true,
             revoked_other_sessions: revocation.revoked,
             session_revocation_failures: revocation.failure_count(),
         })
+    }
+
+    /// Withdraws every device authorization of an account. Browser logouts do
+    /// not call this: a device relation outlives the session that approved it
+    /// (ADR 0004); only account level security actions end it.
+    async fn revoke_device_authorizations(&self, user_oid: Uuid) -> Result<u32, AppError> {
+        let Some(device_repo) = &self.device_repo else {
+            return Ok(0);
+        };
+
+        let revoked = device_repo
+            .revoke_device_authorizations_for_user(user_oid, chrono::Utc::now())
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthErrorCode::DeviceAuthorizationRevocationFailed)
+                    .with_source(error)
+            })?;
+
+        Ok(u32::try_from(revoked).unwrap_or(u32::MAX))
     }
 
     /// Fetch the user associated with a login by their OID.
@@ -1021,7 +1082,7 @@ mod tests {
         user::{
             CredentialData, CredentialType, OtpCredentialData, User, UserCredential,
             UserCredentialOid, UserOid,
-            model::{Argon2Options, Argon2Variant, Argon2Version, Password},
+            model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
             repository::{
                 UserCredentialRepository, UserCredentialRepositoryError, UserRepository,
                 UserRepositoryError,
@@ -1057,6 +1118,35 @@ mod tests {
     }
 
     struct StubPasswordHasher;
+
+    /// Minimal hasher for tests that change a password: it records the
+    /// password instead of running the (deliberately expensive) KDF.
+    struct RecordingPasswordHasher;
+
+    impl identity_domain::auth::password::PasswordHasher for RecordingPasswordHasher {
+        fn hash(
+            &self,
+            password: &str,
+            options: &HashOptions,
+        ) -> Result<Password, identity_domain::auth::password::PasswordHashError> {
+            let HashOptions::Argon2(argon2) = options;
+
+            Ok(Password::Argon2(Argon2Password {
+                hash: password.to_owned(),
+                salt: "test-salt".to_owned(),
+                options: argon2.clone(),
+            }))
+        }
+
+        fn verify(
+            &self,
+            _password: &str,
+            _stored: &Password,
+            _options: &HashOptions,
+        ) -> Result<VerifyResult, identity_domain::auth::password::PasswordHashError> {
+            Ok(VerifyResult::Failure)
+        }
+    }
 
     impl identity_domain::auth::password::PasswordHasher for StubPasswordHasher {
         fn hash(
@@ -1531,6 +1621,74 @@ mod tests {
 
     fn assert_error_code(error: AppError, expected: AuthErrorCode) {
         assert_eq!(error.code(), expected.code());
+    }
+
+    #[tokio::test]
+    async fn password_change_withdraws_every_device_authorization() {
+        let user_oid = Uuid::new_v4();
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins: vec![test_login(user_oid, 0)],
+                update_status_calls: Vec::new(),
+            })),
+        });
+        let argon2_options = Argon2Options {
+            variant: Argon2Variant::Argon2id,
+            version: Argon2Version::Argon2013,
+            time_cost: 1,
+            memory_cost: 19_456,
+            parallelism: 1,
+        };
+        let options = HashOptions::Argon2(argon2_options.clone());
+        let service = LoginService::new(
+            Arc::new(TestUserRepo {
+                user: Arc::new(Mutex::new(test_user())),
+            }),
+            Arc::new(TestCredentialRepo {
+                credentials: vec![UserCredential {
+                    oid: UserCredentialOid(Uuid::new_v4()),
+                    r#type: CredentialType::Password,
+                    data: CredentialData::Password(Password::Argon2(Argon2Password {
+                        hash: "stored-hash".to_owned(),
+                        salt: "stored-salt".to_owned(),
+                        options: argon2_options.clone(),
+                    })),
+                }],
+            }),
+            Arc::new(TestSessionRepo),
+            login_repo,
+            Arc::new(RecordingPasswordHasher),
+            Arc::new(AlwaysInvalidTotp),
+            Arc::new(FixedHashOptions(Arc::new(options))),
+        );
+
+        let mut device_repo =
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new();
+        let (sender, mut revoked_users) = tokio::sync::mpsc::unbounded_channel();
+        device_repo
+            .expect_revoke_device_authorizations_for_user()
+            .returning(move |user_oid, _| {
+                let _ = sender.send(user_oid);
+
+                Ok(2)
+            });
+        let service = service.with_device_repository(Arc::new(device_repo));
+
+        let outcome = service
+            .change_password_with_session_revocation(
+                identity_domain::user::UserOid(user_oid),
+                "a-sufficiently-long-password",
+                SessionOid(Uuid::new_v4()),
+            )
+            .await
+            .unwrap();
+
+        assert!(outcome.password_changed);
+        assert_eq!(
+            revoked_users.try_recv().unwrap(),
+            user_oid,
+            "account level revocation reaches the device authorizations"
+        );
     }
 
     #[tokio::test]

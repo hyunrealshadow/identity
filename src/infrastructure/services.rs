@@ -14,7 +14,8 @@ use crate::{
         key_jwk::KeyJwkGeneratorImpl, signing_algorithm::SigningAlgorithmDetectorImpl,
     },
     database::repository::{
-        client_authorization::ClientAuthorizationRepositoryImpl, install::InstallPersistenceImpl,
+        client_authorization::ClientAuthorizationRepositoryImpl,
+        device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallPersistenceImpl,
         key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
         login_runtime::LoginRuntimeRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
@@ -33,6 +34,8 @@ use identity_application::{
     key::asymmetric::AsymmetricKeyService,
     openid_connect::{
         authorize::{AuthorizeService, AuthorizeServiceDependencies},
+        client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
+        device::{DeviceAuthorizationService, DeviceAuthorizationServiceDependencies},
         login_runtime::LoginRuntimeService,
         logout::{LogoutService, LogoutServiceDependencies},
         provider::OpenIdProviderService,
@@ -72,6 +75,8 @@ pub type AppOpenIdLogoutService = LogoutService;
 pub type AppOpenIdUserInfoService = UserInfoService;
 
 pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
+
+pub type AppDeviceAuthorizationService = DeviceAuthorizationService;
 pub struct AppServices {
     login: AppLoginService,
     account: AppAccountService,
@@ -85,6 +90,7 @@ pub struct AppServices {
     oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
     dynamic_client_registration: AppDynamicClientRegistrationService,
+    device_authorization: AppDeviceAuthorizationService,
     login_runtime: LoginRuntimeService,
     workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
@@ -149,6 +155,7 @@ impl AppServices {
                 totp.clone(),
                 settings.password_hash_options(),
             )
+            .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
@@ -208,6 +215,7 @@ impl AppServices {
                 client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
                     db.clone(),
                 )),
+                device_repo: Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())),
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
@@ -244,10 +252,29 @@ impl AppServices {
                     .with_runtime_key_ring(settings.key_ring()),
                 ),
                 Arc::new(OpenIdProviderService::new(settings.installation())),
-            ),
+            )
+            .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone()))),
             dynamic_client_registration: DynamicClientRegistrationService::new(
                 settings.dynamic_client_registration(),
                 oidc_client_registration_repo.clone(),
+            )
+            .with_events(Arc::clone(&events)),
+            device_authorization: DeviceAuthorizationService::new(
+                DeviceAuthorizationServiceDependencies {
+                    client_authentication: Arc::new(ClientAuthenticator::new(
+                        ClientAuthenticatorDependencies {
+                            client_repo: oidc_client_repo.clone(),
+                            credential_repo: oidc_credential_repo.clone(),
+                            provider_service: Arc::new(OpenIdProviderService::new(
+                                settings.installation(),
+                            )),
+                        },
+                    )),
+                    client_repo: oidc_client_repo.clone(),
+                    device_repo: Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())),
+                    provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                    settings: settings.device_authorization(),
+                },
             )
             .with_events(Arc::clone(&events)),
             login_runtime: LoginRuntimeService::new(
@@ -337,6 +364,11 @@ impl AppServices {
     #[must_use]
     pub fn dynamic_client_registration(&self) -> &AppDynamicClientRegistrationService {
         &self.dynamic_client_registration
+    }
+
+    #[must_use]
+    pub fn oidc_device_authorization(&self) -> &AppDeviceAuthorizationService {
+        &self.device_authorization
     }
 
     #[must_use]

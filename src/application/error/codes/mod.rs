@@ -4,6 +4,7 @@ pub mod authorize;
 pub mod authorize_http;
 pub mod common;
 pub mod data_protection;
+pub mod device;
 pub mod install;
 pub mod key;
 pub mod openid_connect;
@@ -46,6 +47,7 @@ mod tests {
             include_str!("registration.rs"),
             25000..=25099,
         ),
+        ("device", include_str!("device.rs"), 26000..=26099),
     ];
 
     #[test]

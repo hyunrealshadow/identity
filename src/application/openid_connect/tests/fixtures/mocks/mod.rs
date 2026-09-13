@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod client_repo;
 pub mod credential;
+pub mod device;
 pub mod key;
 pub mod login;
 pub mod registration;
@@ -10,6 +11,7 @@ pub mod user;
 
 pub use auth::*;
 pub use credential::*;
+pub use device::*;
 pub use key::*;
 pub use login::*;
 pub use registration::*;

@@ -1,4 +1,6 @@
 pub mod authorize;
+pub mod client_authentication;
+pub mod device;
 pub mod dto;
 pub mod jose;
 pub mod jwt_checks;

@@ -5,6 +5,7 @@ use super::shared::{api_csrf_middleware, browser_csrf_middleware};
 mod authorize_endpoint;
 mod consent_endpoint;
 mod continue_endpoint;
+mod device_authorization_endpoint;
 mod logout_endpoint;
 mod registration_endpoint;
 mod session_endpoint;
@@ -30,6 +31,10 @@ pub fn routes() -> Router {
                 .post(authorize_endpoint::authorize),
         )
         .push(Router::with_path("oauth2/token").post(token_endpoint::token))
+        .push(
+            Router::with_path("oauth2/device")
+                .post(device_authorization_endpoint::device_authorization),
+        )
         .push(Router::with_path("oauth2/register").post(registration_endpoint::register))
         .push(
             Router::with_path("oauth2/register/{client_id}")

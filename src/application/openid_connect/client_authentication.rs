@@ -1,15 +1,75 @@
-use super::*;
+//! OAuth client authentication shared by the endpoints that accept client
+//! credentials (the token endpoint and the device authorization endpoint).
+//!
+//! The rules are the ones the token endpoint always applied: the registered
+//! `token_endpoint_auth_method` decides how a confidential client proves
+//! itself, and clients registered as public clients authenticate with a
+//! `client_id` only. Keeping one implementation means a flow cannot
+//! accidentally accept a weaker method than the registration allows.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use josekit::jwt;
+use josekit::jwt::JwtPayload;
+use uuid::Uuid;
+
+use crate::application::error::{AppError, codes::token::TokenErrorCode};
+use crate::domain::key::JwsAlgorithm;
+use crate::domain::openid_connect::model::claim::JwtClaimNames;
+use crate::domain::openid_connect::{
+    OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectCredentialData,
+    OpenIdConnectCredentialRepository, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+};
 use crate::openid_connect::jwt_checks::{
     JwtTimeValidationError, audience_matches, validate_required_exp_and_optional_window,
 };
+use crate::openid_connect::provider::OpenIdProviderService;
 use crate::openid_connect::remote::{
     DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
     fetch_https_public_document, remote_http_client,
 };
-use std::time::Duration;
+use crate::openid_connect::token::helpers::{
+    decode_assertion_with_alg, decode_assertion_with_hmac_alg, decode_assertion_with_jwk,
+};
 
-impl TokenService {
-    pub(super) async fn authenticate_client_secret_basic(
+pub struct ClientAuthenticator {
+    client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
+    provider_service: Arc<OpenIdProviderService>,
+}
+
+pub struct ClientAuthenticatorDependencies {
+    pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    pub credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
+    pub provider_service: Arc<OpenIdProviderService>,
+}
+
+impl ClientAuthenticator {
+    #[must_use]
+    pub fn new(deps: ClientAuthenticatorDependencies) -> Self {
+        Self {
+            client_repo: deps.client_repo,
+            credential_repo: deps.credential_repo,
+            provider_service: deps.provider_service,
+        }
+    }
+
+    async fn load_client(&self, client_id: &str) -> Result<OpenIdConnectClient, AppError> {
+        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
+            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
+        })?;
+
+        self.client_repo
+            .find_by_oid(client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))
+    }
+
+    pub async fn authenticate_client_secret_basic(
         &self,
         client_id: &str,
         client_secret: &str,
@@ -18,7 +78,7 @@ impl TokenService {
             .await
     }
 
-    pub(super) async fn authenticate_client_secret_post(
+    pub async fn authenticate_client_secret_post(
         &self,
         client_id: &str,
         client_secret: &str,
@@ -72,7 +132,7 @@ impl TokenService {
         Ok(client.client().oid)
     }
 
-    pub(super) async fn authenticate_client(
+    pub async fn authenticate_client(
         &self,
         client_id: &str,
         client_secret: Option<&str>,
@@ -151,7 +211,42 @@ impl TokenService {
         }
     }
 
-    pub(super) async fn authenticate_private_key_jwt(
+    /// Authenticates a client for a flow public clients may use and returns
+    /// the loaded client.
+    ///
+    /// A client registered with `token_endpoint_auth_method: none` proves
+    /// itself with its `client_id` only; every other client must present its
+    /// secret or assertion. The registered method decides, so the check cannot
+    /// be bypassed by omitting credentials.
+    pub async fn authenticate_client_request(
+        &self,
+        client_id: &str,
+        client_secret: Option<&str>,
+        client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+        client_assertion: Option<&str>,
+    ) -> Result<OpenIdConnectClient, AppError> {
+        if client_secret.is_none() && client_assertion.is_none() {
+            let client = self.load_client(client_id).await?;
+            if client.metadata().token_endpoint_auth_method == Some(TokenEndpointAuthMethod::None) {
+                return Ok(client);
+            }
+
+            return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+        }
+
+        let client = self.load_client(client_id).await?;
+        self.authenticate_client(
+            client_id,
+            client_secret,
+            client_assertion_type,
+            client_assertion,
+        )
+        .await?;
+
+        Ok(client)
+    }
+
+    pub async fn authenticate_private_key_jwt(
         &self,
         client_id: &str,
         assertion: &str,
@@ -174,7 +269,7 @@ impl TokenService {
         Ok(client.client().oid)
     }
 
-    pub(super) async fn authenticate_client_secret_jwt(
+    pub async fn authenticate_client_secret_jwt(
         &self,
         client_id: &str,
         assertion: &str,
@@ -237,7 +332,7 @@ impl TokenService {
         Ok(())
     }
 
-    pub(super) async fn verify_client_assertion(
+    pub async fn verify_client_assertion(
         &self,
         client: &identity_domain::openid_connect::OpenIdConnectClient,
         assertion: &str,
@@ -331,7 +426,7 @@ impl TokenService {
         Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed))
     }
 
-    pub(super) async fn verify_client_secret_assertion(
+    pub async fn verify_client_secret_assertion(
         &self,
         client: &identity_domain::openid_connect::OpenIdConnectClient,
         assertion: &str,

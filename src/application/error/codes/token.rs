@@ -150,6 +150,30 @@ pub enum TokenErrorCode {
     EncryptionFailed,
     /// Client registration does not permit the requested grant type.
     ClientGrantNotAllowed,
+    /// No device authorization request matches the presented device code.
+    DeviceCodeNotFound,
+    /// The device request belongs to another client.
+    DeviceCodeClientMismatch,
+    /// The user has not decided yet; the client should keep polling.
+    DeviceCodePending,
+    /// The client polls faster than the advertised interval.
+    DeviceCodeSlowDown,
+    /// The user denied the device authorization request.
+    DeviceCodeDenied,
+    /// The device authorization request expired.
+    DeviceCodeExpired,
+    /// The device authorization relation was revoked.
+    DeviceCodeRevoked,
+    /// The approving user no longer exists or cannot receive tokens.
+    DeviceCodeUserNotFound,
+    /// Stored device authorization request is inconsistent.
+    DeviceRequestStateInvalid,
+    /// Database read of the device authorization request failed.
+    DeviceRequestLookupFailed,
+    /// Database read of the device authorization relation failed.
+    DeviceRelationLookupFailed,
+    /// Committing the device code consumption and token records failed.
+    DeviceRedemptionFailed,
 }
 
 impl AppErrorCode for TokenErrorCode {
@@ -218,6 +242,18 @@ impl AppErrorCode for TokenErrorCode {
             Self::EncryptionKeyNotFound => ErrorKind::Internal,
             Self::EncryptionFailed => ErrorKind::Internal,
             Self::ClientGrantNotAllowed => ErrorKind::Validation,
+            Self::DeviceCodeNotFound => ErrorKind::Validation,
+            Self::DeviceCodeClientMismatch => ErrorKind::Validation,
+            Self::DeviceCodePending => ErrorKind::Validation,
+            Self::DeviceCodeSlowDown => ErrorKind::Validation,
+            Self::DeviceCodeDenied => ErrorKind::Validation,
+            Self::DeviceCodeExpired => ErrorKind::Validation,
+            Self::DeviceCodeRevoked => ErrorKind::Validation,
+            Self::DeviceCodeUserNotFound => ErrorKind::Validation,
+            Self::DeviceRequestStateInvalid => ErrorKind::Internal,
+            Self::DeviceRequestLookupFailed => ErrorKind::Internal,
+            Self::DeviceRelationLookupFailed => ErrorKind::Internal,
+            Self::DeviceRedemptionFailed => ErrorKind::Internal,
         }
     }
 
@@ -285,6 +321,18 @@ impl AppErrorCode for TokenErrorCode {
             Self::AuthCodeClaimFailed => 24059,
             Self::AuthCodeSessionLookupFailed => 24060,
             Self::ClientGrantNotAllowed => 24061,
+            Self::DeviceCodeNotFound => 24062,
+            Self::DeviceCodeClientMismatch => 24063,
+            Self::DeviceCodePending => 24064,
+            Self::DeviceCodeSlowDown => 24065,
+            Self::DeviceCodeDenied => 24066,
+            Self::DeviceCodeExpired => 24067,
+            Self::DeviceCodeRevoked => 24068,
+            Self::DeviceCodeUserNotFound => 24069,
+            Self::DeviceRequestStateInvalid => 24070,
+            Self::DeviceRequestLookupFailed => 24071,
+            Self::DeviceRelationLookupFailed => 24072,
+            Self::DeviceRedemptionFailed => 24073,
         }
     }
 }

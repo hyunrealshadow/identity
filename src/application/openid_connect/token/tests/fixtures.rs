@@ -10,7 +10,8 @@ mod clients;
 
 pub(super) use clients::{
     AuthMethodClientRepository, InMemoryClientRepository, PublicFlowClientRepository,
-    RestrictedGrantClientRepository, ScopedClaimsClientRepository,
+    RegisteredPublicClientRepository, RestrictedGrantClientRepository,
+    ScopedClaimsClientRepository,
 };
 
 pub(super) const CLIENT_SECRET_JWT_SECRET: &str =
@@ -238,6 +239,24 @@ pub(super) fn build_token_service_with_client_repo(
     user_oid: Uuid,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
 ) -> TokenService {
+    build_token_service_with_device_repo(
+        repo.clone(),
+        user_oid,
+        client_repo,
+        Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
+    )
+}
+
+pub(super) fn build_token_service_with_device_repo(
+    repo: Arc<MockClientAuthorizationRepository>,
+    user_oid: Uuid,
+    client_repo: Arc<dyn OpenIdConnectClientRepository>,
+    device_repo: Arc<
+        crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository,
+    >,
+) -> TokenService {
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
@@ -257,6 +276,7 @@ pub(super) fn build_token_service_with_client_repo(
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
 
     TokenService::new(TokenServiceDependencies {
+        device_repo,
         client_authorization_repo: repo,
         key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -305,80 +325,6 @@ pub(super) fn build_token_service_with_client_repo(
                 hint: "token".to_string(),
                 data: OpenIdConnectCredentialData::ClientSecret {
                     secret: "secret-123".to_string(),
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            },
-            OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientPublicKey,
-                hint: "private_key_jwt".to_string(),
-                data: OpenIdConnectCredentialData::ClientPublicKey {
-                    public_key,
-                    jwk: None,
-                },
-                expires_at: Utc::now() + chrono::Duration::days(1),
-                revoked_at: None,
-                created_at: Utc::now(),
-                updated_at: None,
-            },
-        ])),
-        provider_service: provider_service(),
-        signing_algorithm_detector: signing_algorithm_detector(),
-        data_protector: InMemoryDataProtector::new(),
-    })
-}
-
-pub(super) fn build_token_service_with_auth_method(method: &'static str) -> TokenService {
-    build_token_service_with_auth_method_and_alg(method, None)
-}
-
-pub(super) fn build_token_service_with_auth_method_and_alg(
-    method: &'static str,
-    signing_alg: Option<&'static str>,
-) -> TokenService {
-    let repo = Arc::new(mock_client_auth_repo());
-    let user_oid = Uuid::new_v4();
-    let rsa = Rsa::generate(2048).unwrap();
-    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
-    let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
-    let key = Key {
-        oid: KeyOid(Uuid::new_v4()),
-        r#type: KeyType::Asymmetric,
-        data: KeyData::Asymmetric(AsymmetricKeyData {
-            public_key: public_key.clone(),
-            private_key,
-            certificate: None,
-        }),
-        expires_at: None,
-        revoked_at: None,
-        created_at: Utc::now(),
-        updated_at: None,
-    };
-    let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
-
-    TokenService::new(TokenServiceDependencies {
-        client_authorization_repo: repo,
-        key_repo: Arc::new(key_repo_with_keys(vec![key])),
-        key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
-        user_repo: Arc::new(InMemoryUserRepository {
-            user: test_user(user_oid),
-        }),
-        client_repo: Arc::new(AuthMethodClientRepository {
-            method,
-            signing_alg,
-        }),
-        credential_repo: Arc::new(cred_repo_with(vec![
-            OpenIdConnectCredential {
-                oid: Uuid::new_v4(),
-                client_oid: Uuid::nil(),
-                r#type: OpenIdConnectCredentialType::ClientSecret,
-                hint: "token".to_string(),
-                data: OpenIdConnectCredentialData::ClientSecret {
-                    secret: CLIENT_SECRET_JWT_SECRET.to_string(),
                 },
                 expires_at: Utc::now() + chrono::Duration::days(1),
                 revoked_at: None,

@@ -89,3 +89,34 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
         "{statements}"
     );
 }
+
+#[tokio::test]
+async fn consent_route_serves_device_verification_for_a_user_code() {
+    let (state, _, _) = consent_test_state().await;
+    let service = Service::new(app_router(state, &consent_test_config()));
+
+    // No browser session yet: the device branch answers login_required instead
+    // of touching the request.
+    let response = TestClient::get("http://127.0.0.1:5800/oauth2/consent?user_code=WDJB-MJHT")
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+}
+
+#[tokio::test]
+async fn consent_route_rejects_ambiguous_or_missing_interaction_identifiers() {
+    let (state, _, _) = consent_test_state().await;
+    let service = Service::new(app_router(state, &consent_test_config()));
+
+    let both =
+        TestClient::get("http://127.0.0.1:5800/oauth2/consent?login_id=abc&user_code=WDJB-MJHT")
+            .send(&service)
+            .await;
+    assert_ne!(both.status_code, Some(StatusCode::OK));
+
+    let neither = TestClient::get("http://127.0.0.1:5800/oauth2/consent")
+        .send(&service)
+        .await;
+    assert_ne!(neither.status_code, Some(StatusCode::OK));
+}

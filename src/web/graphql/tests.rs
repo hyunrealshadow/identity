@@ -13,6 +13,7 @@ use identity_domain::{
     openid_connect::model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
     setting::{
         consent_url::ConsentUrlSetting,
+        device_authorization::DeviceAuthorizationSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
             InstallationDomainSetting, InstallationFirstKeyOidSetting,
@@ -252,9 +253,10 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
         data: serde_json::to_value(AccessTokenData {
             scope: options.scope.to_owned(),
             user_oid: user_oid.to_string(),
-            session_oid: SessionOid(session_oid),
+            session_oid: Some(SessionOid(session_oid)),
             protected_session_id: Some("protected-session".to_owned()),
             authorization_code_oid: None,
+            device_authorization_oid: None,
         })
         .unwrap(),
         expires_at: (now + Duration::hours(1)).into(),
@@ -388,6 +390,11 @@ fn setting_rows(
         vec![setting_model::<ConsentUrlSetting>(
             9,
             ConsentUrlSetting::default_value(),
+            now,
+        )],
+        vec![setting_model::<DeviceAuthorizationSetting>(
+            10,
+            DeviceAuthorizationSetting::default_value(),
             now,
         )],
     ]

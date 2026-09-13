@@ -383,6 +383,9 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let key_repo = Arc::new(key_repo_with_keys(vec![key.clone()]));
     let user = test_user(user_oid);
     let service = TokenService::new(TokenServiceDependencies {
+        device_repo: Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
         client_authorization_repo: repo.clone(),
         key_repo: key_repo.clone(),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -637,6 +640,9 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
     };
 
     let service = TokenService::new(TokenServiceDependencies {
+        device_repo: Arc::new(
+            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
+        ),
         client_authorization_repo: repo.clone(),
         key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -738,7 +744,8 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 Uuid::nil(),
                 "openid profile",
                 &user_oid.to_string(),
-                SessionOid::from(Uuid::new_v4()),
+                Some(SessionOid::from(Uuid::new_v4())),
+                None,
                 None,
                 None,
             )
@@ -754,7 +761,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 audience: &Uuid::nil().to_string(),
                 client_id: &Uuid::nil().to_string(),
                 user_oid: &user_oid,
-                protected_session_id: &Uuid::new_v4().to_string(),
+                protected_session_id: Some(&Uuid::new_v4().to_string()),
                 scope: "openid profile",
                 claims: None,
                 auth_time: None,

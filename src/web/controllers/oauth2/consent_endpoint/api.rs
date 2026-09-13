@@ -15,6 +15,7 @@ use super::{
     ConsentQuery,
     context::{has_selected_session, load_consent_context},
     decision::handle_consent_decision,
+    device::{device_consent_api, device_consent_submit},
 };
 
 pub(super) async fn consent_api(
@@ -23,8 +24,16 @@ pub(super) async fn consent_api(
 ) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
     let query: ConsentQuery = parse_query(req)?;
+    let headers: http::HeaderMap = req.headers().clone();
 
-    let loaded = load_consent_context(&ctx, &query.login_id).await?;
+    if let Some(user_code) = query.device_target()? {
+        return Ok(device_consent_api(&ctx, &headers, depot, user_code)
+            .await?
+            .into());
+    }
+    let login_id = query.login_id.clone().unwrap_or_default();
+
+    let loaded = load_consent_context(&ctx, &login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
         return Err(AppError::from_code(
@@ -41,7 +50,7 @@ pub(super) async fn consent_api(
     Ok(json_response(
         StatusCode::OK,
         ConsentPageData {
-            login_id: query.login_id,
+            login_id,
             client_name: loaded.client.client().name.clone(),
             logo_uri: loaded
                 .client
@@ -68,6 +77,22 @@ pub(super) async fn consent_api_submit(
     req: &mut Request,
 ) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
+    let headers: http::HeaderMap = req.headers().clone();
     let payload: ConsentDecisionPayload = parse_json(req).await?;
-    handle_consent_decision(ctx, payload.login_id, payload.decision).await
+
+    match (payload.login_id.as_deref(), payload.user_code.as_deref()) {
+        (Some(login_id), None) => {
+            handle_consent_decision(ctx, login_id.to_owned(), payload.decision).await
+        }
+        (None, Some(user_code)) => {
+            Ok(
+                device_consent_submit(&ctx, &headers, user_code, payload.decision)
+                    .await?
+                    .into(),
+            )
+        }
+        _ => Err(AppError::from_code(
+            AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
+        )),
+    }
 }

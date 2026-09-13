@@ -1,5 +1,6 @@
 pub mod consent_url;
 pub mod definition;
+pub mod device_authorization;
 pub mod dynamic_registration;
 pub mod error;
 pub mod installation;
@@ -9,6 +10,7 @@ pub mod repository;
 
 pub use consent_url::ConsentUrlSetting;
 pub use definition::{SettingDefinition, SettingValue};
+pub use device_authorization::{DeviceAuthorizationSetting, DeviceAuthorizationSettings};
 pub use dynamic_registration::DynamicClientRegistrationSetting;
 pub use error::SettingValidationError;
 pub use login_url::LoginUrlSetting;

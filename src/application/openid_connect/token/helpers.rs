@@ -4,7 +4,7 @@ use crate::openid_connect::jose::{
     hmac_verifier_from_bytes,
 };
 
-pub(super) fn decode_assertion_with_alg(
+pub(crate) fn decode_assertion_with_alg(
     alg: JwsAlgorithm,
     assertion: &str,
     public_key_pem: &[u8],
@@ -16,7 +16,7 @@ pub(super) fn decode_assertion_with_alg(
     })
 }
 
-pub(super) fn decode_assertion_with_jwk(
+pub(crate) fn decode_assertion_with_jwk(
     alg: JwsAlgorithm,
     assertion: &str,
     jwk: &identity_domain::key::PublicJwk,
@@ -28,7 +28,7 @@ pub(super) fn decode_assertion_with_jwk(
     })
 }
 
-pub(super) fn decode_assertion_with_hmac_alg(
+pub(crate) fn decode_assertion_with_hmac_alg(
     alg: JwsAlgorithm,
     assertion: &str,
     secret: &[u8],
@@ -40,7 +40,7 @@ pub(super) fn decode_assertion_with_hmac_alg(
     })
 }
 
-pub(super) fn client_id_from_assertion(assertion: &str) -> Result<String, AppError> {
+pub(crate) fn client_id_from_assertion(assertion: &str) -> Result<String, AppError> {
     let payload_segment = assertion
         .split('.')
         .nth(1)
@@ -74,7 +74,7 @@ fn assertion_alg_error(error: josekit::JoseError, alg: JwsAlgorithm) -> AppError
         .with_source(error)
 }
 
-pub(super) fn verify_pkce(
+pub(crate) fn verify_pkce(
     code_challenge: Option<&str>,
     code_challenge_method: Option<identity_domain::openid_connect::CodeChallengeMethod>,
     code_verifier: Option<&str>,

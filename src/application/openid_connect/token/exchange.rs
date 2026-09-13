@@ -39,6 +39,7 @@ impl TokenService {
             params.client_assertion.as_deref(),
         )?;
         let authenticated_client_oid = self
+            .client_authentication
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
@@ -242,9 +243,10 @@ impl TokenService {
                 record.client_oid,
                 &data.scope,
                 &data.user_oid,
-                data.session_oid,
+                Some(data.session_oid),
                 Some(&protected_session_id),
                 Some(record.oid),
+                None,
             )
             .await?;
         let access_token = self
@@ -257,7 +259,7 @@ impl TokenService {
                 audience: access_token_audience,
                 client_id: &client_id_str,
                 user_oid: &user_oid,
-                protected_session_id: &protected_session_id,
+                protected_session_id: Some(&protected_session_id),
                 scope: &data.scope,
                 claims: data.claims.as_ref(),
                 auth_time: data.auth_time,
@@ -315,10 +317,11 @@ impl TokenService {
         {
             Some(
                 self.store_refresh_token(StoreRefreshTokenParams {
+                    device_authorization_oid: None,
                     client_oid: record.client_oid,
                     scope: &refreshable_scope,
                     user_oid: &data.user_oid,
-                    session_oid: data.session_oid,
+                    session_oid: Some(data.session_oid),
                     protected_session_id: Some(&protected_session_id),
                     auth_time: data.auth_time,
                     acr: session_acr.as_deref(),
@@ -395,6 +398,7 @@ impl TokenService {
             params.client_assertion.as_deref(),
         )?;
         let authenticated_client_oid = self
+            .client_authentication
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
@@ -450,9 +454,33 @@ impl TokenService {
                 ));
             }
         };
-        let (session_acr, session_amr) = if let Some(session_repo) = &self.session_repo {
+        // A device issued refresh token follows its device authorization
+        // relation instead of a browser session: revoking the relation stops
+        // refreshing immediately, while a browser logout does not.
+        if let Some(device_authorization_oid) = refresh_data
+            .device_authorization_oid
+            .as_deref()
+            .and_then(|oid| Uuid::parse_str(oid).ok())
+        {
+            let active = self
+                .device_repo
+                .find_device_authorization_by_oid(device_authorization_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::DeviceRelationLookupFailed)
+                        .with_source(error)
+                })?
+                .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
+            if !active {
+                return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+            }
+        }
+
+        let (session_acr, session_amr) = if let (Some(session_repo), Some(refresh_session_oid)) =
+            (&self.session_repo, refresh_data.session_oid)
+        {
             let session = session_repo
-                .find_by_oid(refresh_data.session_oid)
+                .find_by_oid(refresh_session_oid)
                 .await
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::RefreshTokenInvalid).with_source(error)
@@ -469,12 +497,16 @@ impl TokenService {
         } else {
             (refresh_data.acr.clone(), refresh_data.amr.clone())
         };
-        let protected_session_id = self
-            .protected_session_id(
-                refresh_data.session_oid,
-                refresh_data.protected_session_id.as_deref(),
-            )
-            .await?;
+        let protected_session_id = match refresh_data.session_oid {
+            Some(session_oid) => Some(
+                self.protected_session_id(
+                    session_oid,
+                    refresh_data.protected_session_id.as_deref(),
+                )
+                .await?,
+            ),
+            None => None,
+        };
         if authenticated_client_oid.to_string() != client_id
             || refresh_record.client_oid != authenticated_client_oid
         {
@@ -542,8 +574,12 @@ impl TokenService {
                 &scope,
                 &refresh_data.user_oid,
                 refresh_data.session_oid,
-                Some(&protected_session_id),
+                protected_session_id.as_deref(),
                 None,
+                refresh_data
+                    .device_authorization_oid
+                    .as_deref()
+                    .and_then(|oid| oid.parse::<Uuid>().ok()),
             )
             .await?;
         let access_token = self
@@ -556,7 +592,7 @@ impl TokenService {
                 audience: access_token_audience,
                 client_id: &client_id,
                 user_oid: &user_oid,
-                protected_session_id: &protected_session_id,
+                protected_session_id: protected_session_id.as_deref(),
                 scope: &scope,
                 claims: None,
                 auth_time: refresh_data.auth_time,
@@ -579,7 +615,7 @@ impl TokenService {
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
                 access_token: Some(&access_token),
-                protected_session_id: Some(&protected_session_id),
+                protected_session_id: protected_session_id.as_deref(),
             })
             .await?;
         let id_token = Some(
@@ -605,11 +641,15 @@ impl TokenService {
                 scope: &scope,
                 user_oid: &refresh_data.user_oid,
                 session_oid: refresh_data.session_oid,
-                protected_session_id: Some(&protected_session_id),
+                protected_session_id: protected_session_id.as_deref(),
                 auth_time: refresh_data.auth_time,
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
                 rotated_from: Some(rotated_from.as_str()),
+                device_authorization_oid: refresh_data
+                    .device_authorization_oid
+                    .as_deref()
+                    .and_then(|oid| oid.parse::<Uuid>().ok()),
             })
             .await?,
         );
@@ -632,7 +672,10 @@ impl TokenService {
                     "session_oid",
                     EventValue::Pseudonymized {
                         purpose: "session_oid",
-                        value: refresh_data.session_oid.0.to_string(),
+                        value: refresh_data
+                            .session_oid
+                            .map(|oid| oid.0.to_string())
+                            .unwrap_or_default(),
                     },
                 ),
         );
@@ -672,7 +715,7 @@ impl TokenService {
     }
 }
 
-fn resolve_client_id(
+pub(super) fn resolve_client_id(
     client_id: Option<String>,
     client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     client_assertion: Option<&str>,
@@ -711,7 +754,7 @@ pub(crate) fn resolve_id_token_alg(
 /// Bounded outcome/reason categories for issuance result events. The numeric
 /// error code carries the specific cause; free-form error text never becomes a
 /// metric or event name.
-fn issuance_result(error: &AppError) -> (&'static str, &'static str) {
+pub(super) fn issuance_result(error: &AppError) -> (&'static str, &'static str) {
     match error.kind() {
         crate::error::kind::ErrorKind::Internal => ("failure", "system_error"),
         crate::error::kind::ErrorKind::Unauthorized => ("rejected", "client_authentication"),
