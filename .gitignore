@@ -49,3 +49,6 @@ apps/login/.data/
 # Operator-provided workload credentials
 /config/secrets/
 /deploy/secrets/
+
+CONTEXT.md
+docs
