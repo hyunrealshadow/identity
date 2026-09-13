@@ -58,6 +58,13 @@ impl AuthorizeService {
                     .with_source(error)
             })?;
 
+        if !client.allows_response_type(&response_type) {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::ClientGrantNotAllowed)
+                    .with_param("response_type", response_type.to_string()),
+            );
+        }
+
         let redirect_uri = Url::parse(&params.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::RedirectUriInvalid).with_source(error)
         })?;

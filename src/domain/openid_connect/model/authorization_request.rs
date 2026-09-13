@@ -9,7 +9,7 @@ use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 use uuid::Uuid;
 
-use crate::openid_connect::ScopeSet;
+use crate::openid_connect::{GrantType, ScopeSet};
 
 macro_rules! impl_string_serde {
     ($type:ty) => {
@@ -82,6 +82,23 @@ impl ResponseType {
             self,
             Self::TokenIdToken | Self::CodeToken | Self::CodeTokenIdToken
         )
+    }
+
+    /// Grant types a client must be allowed to use for this response type.
+    ///
+    /// The code flow uses `authorization_code`; response types that deliver
+    /// tokens from the authorization endpoint use `implicit`; hybrid
+    /// combinations use both, because they issue an authorization code and
+    /// front-channel tokens in the same response (OIDC Core §3.3).
+    #[must_use]
+    pub const fn required_grants(&self) -> &'static [GrantType] {
+        match self {
+            Self::Code => &[GrantType::AuthorizationCode],
+            Self::IdToken | Self::TokenIdToken => &[GrantType::Implicit],
+            Self::CodeIdToken | Self::CodeToken | Self::CodeTokenIdToken => {
+                &[GrantType::AuthorizationCode, GrantType::Implicit]
+            }
+        }
     }
 }
 

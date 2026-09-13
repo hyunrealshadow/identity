@@ -709,3 +709,154 @@ fn sector_identifier_uris_must_include_registered_redirects() {
         )
     );
 }
+
+fn registration_service() -> (
+    DynamicClientRegistrationService,
+    tokio::sync::mpsc::UnboundedReceiver<OpenIdConnectClientRegistration>,
+) {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    repo.expect_create()
+        .returning(move |registration: OpenIdConnectClientRegistration| {
+            let _ = sender.send(registration);
+            Ok(Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap())
+        });
+
+    (
+        DynamicClientRegistrationService::new(
+            Arc::new(TestRegistrationSetting(true)),
+            Arc::new(repo),
+        ),
+        receiver,
+    )
+}
+
+#[tokio::test]
+async fn register_defaults_to_code_response_and_authorization_code_grant() {
+    let (service, mut captured) = registration_service();
+
+    let response = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.response_types, Some(vec!["code".to_owned()]));
+    assert_eq!(
+        response.grant_types,
+        Some(vec!["authorization_code".to_owned()])
+    );
+
+    let stored = captured.try_recv().unwrap();
+    assert_eq!(
+        stored.metadata.response_types,
+        Some(vec![identity_domain::openid_connect::ResponseType::Code])
+    );
+    assert_eq!(
+        stored.metadata.grant_types,
+        Some(vec![
+            identity_domain::openid_connect::GrantType::AuthorizationCode
+        ])
+    );
+}
+
+#[tokio::test]
+async fn register_keeps_an_explicitly_empty_grant_list_as_no_grants() {
+    let (service, mut captured) = registration_service();
+
+    let response = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                response_types: Some(vec![]),
+                grant_types: Some(vec![]),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.grant_types, Some(vec![]));
+
+    let stored = captured.try_recv().unwrap();
+    assert_eq!(stored.metadata.grant_types, Some(vec![]));
+}
+
+#[tokio::test]
+async fn register_rejects_response_type_without_its_grant() {
+    let (service, _captured) = registration_service();
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                response_types: Some(vec!["id_token".to_owned()]),
+                grant_types: Some(vec!["authorization_code".to_owned()]),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25009);
+}
+
+#[tokio::test]
+async fn register_rejects_hybrid_response_type_without_implicit_grant() {
+    let (service, _captured) = registration_service();
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                response_types: Some(vec!["code id_token".to_owned()]),
+                grant_types: Some(vec!["authorization_code".to_owned()]),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25009);
+}
+
+#[tokio::test]
+async fn register_allows_device_only_client_without_redirect_uris() {
+    let (service, mut captured) = registration_service();
+
+    let response = service
+        .register(
+            DynamicClientRegistrationRequest {
+                redirect_uris: vec![],
+                response_types: Some(vec![]),
+                grant_types: Some(vec![
+                    "urn:ietf:params:oauth:grant-type:device_code".to_owned(),
+                ]),
+                ..DynamicClientRegistrationRequest::default()
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.grant_types,
+        Some(vec![
+            "urn:ietf:params:oauth:grant-type:device_code".to_owned()
+        ])
+    );
+
+    let stored = captured.try_recv().unwrap();
+    assert_eq!(
+        stored.metadata.grant_types,
+        Some(vec![identity_domain::openid_connect::GrantType::DeviceCode])
+    );
+}

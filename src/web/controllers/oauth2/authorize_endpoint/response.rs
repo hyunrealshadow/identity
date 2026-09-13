@@ -196,6 +196,9 @@ pub(super) fn authorize_oauth_error_code(error: &AppError) -> OAuthErrorCode {
         code if code == AuthorizeErrorCode::RequestObjectEncryptionUnsupported.code() => {
             OAuthErrorCode::RequestNotSupported
         }
+        code if code == AuthorizeErrorCode::ClientGrantNotAllowed.code() => {
+            OAuthErrorCode::UnauthorizedClient
+        }
         _ => OAuthErrorCode::InvalidRequest,
     }
 }
@@ -275,6 +278,12 @@ mod tests {
         assert_eq!(
             authorize_oauth_error_code(&AppError::from_code(AuthorizeErrorCode::ScopeInvalid)),
             OAuthErrorCode::InvalidScope
+        );
+        assert_eq!(
+            authorize_oauth_error_code(&AppError::from_code(
+                AuthorizeErrorCode::ClientGrantNotAllowed
+            )),
+            OAuthErrorCode::UnauthorizedClient
         );
         assert_eq!(
             authorize_oauth_error_code(&AppError::from_code(CommonErrorCode::InternalError)),

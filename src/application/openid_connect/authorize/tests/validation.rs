@@ -1,5 +1,6 @@
 use super::fixtures::*;
 use super::*;
+use identity_domain::openid_connect::GrantType;
 
 #[tokio::test]
 async fn validate_request_rejects_missing_openid_scope() {
@@ -84,6 +85,79 @@ async fn confidential_client_rejects_pkce_method_without_challenge() {
     let error = service.validate_request(request).await.unwrap_err();
 
     assert_eq!(error.code(), 23013);
+}
+
+#[tokio::test]
+async fn client_without_code_grant_cannot_request_authorization_code() {
+    let service = build_test_service(
+        Arc::new(RestrictedGrantClientRepository {
+            grant_types: vec![GrantType::DeviceCode],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let error = service
+        .validate_request(params("openid profile"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 23068);
+}
+
+#[tokio::test]
+async fn client_without_implicit_grant_cannot_request_implicit_response_type() {
+    let service = build_test_service(
+        Arc::new(RestrictedGrantClientRepository {
+            grant_types: vec![GrantType::AuthorizationCode],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let mut request = params("openid profile");
+    request.response_type = "id_token".to_owned();
+    request.nonce = Some("nonce".to_owned());
+
+    let error = service.validate_request(request).await.unwrap_err();
+
+    assert_eq!(error.code(), 23068);
+}
+
+#[tokio::test]
+async fn client_without_implicit_grant_cannot_request_hybrid_response_type() {
+    let service = build_test_service(
+        Arc::new(RestrictedGrantClientRepository {
+            grant_types: vec![GrantType::AuthorizationCode],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let mut request = params("openid profile");
+    request.response_type = "code id_token".to_owned();
+    request.nonce = Some("nonce".to_owned());
+
+    let error = service.validate_request(request).await.unwrap_err();
+
+    assert_eq!(error.code(), 23068);
+}
+
+#[tokio::test]
+async fn hybrid_client_with_both_grants_passes_validation() {
+    let service = build_test_service(
+        Arc::new(RestrictedGrantClientRepository {
+            grant_types: vec![GrantType::AuthorizationCode, GrantType::Implicit],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+
+    let mut request = params("openid profile");
+    request.response_type = "code id_token".to_owned();
+    request.nonce = Some("nonce".to_owned());
+
+    assert!(service.validate_request(request).await.is_ok());
 }
 
 #[tokio::test]

@@ -148,6 +148,8 @@ pub enum TokenErrorCode {
     EncryptionKeyNotFound,
     /// JWE encryption of the token failed.
     EncryptionFailed,
+    /// Client registration does not permit the requested grant type.
+    ClientGrantNotAllowed,
 }
 
 impl AppErrorCode for TokenErrorCode {
@@ -215,6 +217,7 @@ impl AppErrorCode for TokenErrorCode {
             Self::PkceVerifierMismatch => ErrorKind::Validation,
             Self::EncryptionKeyNotFound => ErrorKind::Internal,
             Self::EncryptionFailed => ErrorKind::Internal,
+            Self::ClientGrantNotAllowed => ErrorKind::Validation,
         }
     }
 
@@ -281,6 +284,7 @@ impl AppErrorCode for TokenErrorCode {
             Self::AuthCodeSessionUserMismatch => 24058,
             Self::AuthCodeClaimFailed => 24059,
             Self::AuthCodeSessionLookupFailed => 24060,
+            Self::ClientGrantNotAllowed => 24061,
         }
     }
 }

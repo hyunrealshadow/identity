@@ -167,6 +167,8 @@ pub enum AuthorizeErrorCode {
     EncryptionFailed,
     /// Client does not have an `initiate_login_uri`.
     InitiateLoginUriNotRegistered,
+    /// Client registration does not permit a grant required by the request.
+    ClientGrantNotAllowed,
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
@@ -240,6 +242,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::EncryptionKeyNotFound => ErrorKind::Internal,
             Self::EncryptionFailed => ErrorKind::Internal,
             Self::InitiateLoginUriNotRegistered => ErrorKind::Validation,
+            Self::ClientGrantNotAllowed => ErrorKind::Validation,
         }
     }
 
@@ -313,6 +316,7 @@ impl AppErrorCode for AuthorizeErrorCode {
             Self::EncryptionKeyNotFound => 23064,
             Self::EncryptionFailed => 23065,
             Self::InitiateLoginUriNotRegistered => 23067,
+            Self::ClientGrantNotAllowed => 23068,
         }
     }
 }

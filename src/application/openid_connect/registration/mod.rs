@@ -12,10 +12,10 @@ use crate::{
     domain::{
         client::model::{Client, ClientProtocol},
         openid_connect::{
-            OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-            OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
-            OpenIdConnectClientSettings, OpenIdConnectCredentialData, SubjectType,
-            TokenEndpointAuthMethod,
+            DEFAULT_GRANT_TYPES, GrantType, OpenIdConnectClientMetadata,
+            OpenIdConnectClientPlatform, OpenIdConnectClientRegistration,
+            OpenIdConnectClientRegistrationRepository, OpenIdConnectClientSettings,
+            OpenIdConnectCredentialData, ResponseType, SubjectType, TokenEndpointAuthMethod,
         },
         setting::DynamicClientRegistrationSetting,
     },
@@ -36,8 +36,9 @@ use credential::{client_credentials_from_jwks, client_credentials_from_jwks_uri}
 use response::{registration_client_uri, response_from_client};
 use token::{default_skip_consent, generate_client_secret, generate_registration_access_token};
 use validation::{
-    parse_application_type, parse_metadata_value, parse_metadata_values, reject_none_algorithm,
-    split_scope, validate_initiate_login_uri, validate_request_object_encryption,
+    default_response_types, parse_application_type, parse_metadata_value, parse_metadata_values,
+    reject_none_algorithm, split_scope, validate_grant_response_type_consistency,
+    validate_initiate_login_uri, validate_request_object_encryption,
     validate_request_object_signing, validate_sector_identifier_uri,
 };
 
@@ -87,7 +88,23 @@ impl DynamicClientRegistrationService {
                 RegistrationErrorCode::DynamicRegistrationDisabled,
             ));
         }
-        if request.redirect_uris.is_empty() {
+        let response_types = parse_metadata_values::<ResponseType>(
+            "response_types",
+            request.response_types.as_deref(),
+        )?
+        .unwrap_or_else(default_response_types);
+        let grant_types =
+            parse_metadata_values::<GrantType>("grant_types", request.grant_types.as_deref())?
+                .unwrap_or_else(|| DEFAULT_GRANT_TYPES.to_vec());
+        validate_grant_response_type_consistency(&response_types, &grant_types)?;
+
+        // `redirect_uris` is only meaningful for clients that use a redirect
+        // based flow; a device-only client registers without one (RFC 7591 §2
+        // requires it for authorization code clients, RFC 8628 has no redirect).
+        let uses_redirect_flow = grant_types
+            .iter()
+            .any(|grant| matches!(grant, GrantType::AuthorizationCode | GrantType::Implicit));
+        if request.redirect_uris.is_empty() && uses_redirect_flow {
             return Err(AppError::from_code(
                 RegistrationErrorCode::RedirectUrisRequired,
             ));
@@ -198,11 +215,8 @@ impl DynamicClientRegistrationService {
             frontchannel_logout_session_required: request.frontchannel_logout_session_required,
             backchannel_logout_uri: request.backchannel_logout_uri.clone(),
             backchannel_logout_session_required: request.backchannel_logout_session_required,
-            response_types: parse_metadata_values(
-                "response_types",
-                request.response_types.as_deref(),
-            )?,
-            grant_types: parse_metadata_values("grant_types", request.grant_types.as_deref())?,
+            response_types: Some(response_types.clone()),
+            grant_types: Some(grant_types.clone()),
             contacts: request.contacts.clone(),
             logo_uri: request.logo_uri.clone(),
             client_uri: request.client_uri.clone(),
@@ -298,8 +312,8 @@ impl DynamicClientRegistrationService {
             client_secret,
             client_secret_expires_at,
             redirect_uris: request.redirect_uris,
-            response_types: request.response_types,
-            grant_types: request.grant_types,
+            response_types: Some(response_types.iter().map(ToString::to_string).collect()),
+            grant_types: Some(grant_types.iter().map(ToString::to_string).collect()),
             application_type: Some(application_type),
             contacts: request.contacts,
             client_name: request.client_name,

@@ -10,7 +10,7 @@ mod clients;
 
 pub(super) use clients::{
     AuthMethodClientRepository, InMemoryClientRepository, PublicFlowClientRepository,
-    ScopedClaimsClientRepository,
+    RestrictedGrantClientRepository, ScopedClaimsClientRepository,
 };
 
 pub(super) const CLIENT_SECRET_JWT_SECRET: &str =
@@ -230,6 +230,14 @@ pub(super) fn build_token_service(
     repo: Arc<MockClientAuthorizationRepository>,
     user_oid: Uuid,
 ) -> TokenService {
+    build_token_service_with_client_repo(repo, user_oid, Arc::new(InMemoryClientRepository))
+}
+
+pub(super) fn build_token_service_with_client_repo(
+    repo: Arc<MockClientAuthorizationRepository>,
+    user_oid: Uuid,
+    client_repo: Arc<dyn OpenIdConnectClientRepository>,
+) -> TokenService {
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
@@ -288,7 +296,7 @@ pub(super) fn build_token_service(
                 updated_at: None,
             },
         }),
-        client_repo: Arc::new(InMemoryClientRepository),
+        client_repo,
         credential_repo: Arc::new(cred_repo_with(vec![
             OpenIdConnectCredential {
                 oid: Uuid::new_v4(),

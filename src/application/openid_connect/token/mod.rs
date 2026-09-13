@@ -22,7 +22,7 @@ use crate::{
             repository::KeyRepository,
         },
         openid_connect::{
-            OpenIdConnectClientRepository, OpenIdConnectCredentialData,
+            GrantType, OpenIdConnectClientRepository, OpenIdConnectCredentialData,
             OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
         },

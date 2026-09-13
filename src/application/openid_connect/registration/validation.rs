@@ -33,11 +33,43 @@ pub(super) fn parse_metadata_values<T: std::str::FromStr>(
         .transpose()
 }
 
+/// RFC 7591 §2 / OIDC Registration §2 default: the code flow only.
+pub(super) fn default_response_types() -> Vec<ResponseType> {
+    vec![ResponseType::Code]
+}
+
+/// Every registered response type must be backed by the grants it uses:
+/// `code` needs `authorization_code`, implicit and hybrid response types need
+/// `implicit` (hybrid needs both). Inconsistent registrations are rejected so a
+/// client cannot register a response type whose grant it never allows.
+pub(super) fn validate_grant_response_type_consistency(
+    response_types: &[ResponseType],
+    grant_types: &[GrantType],
+) -> Result<(), AppError> {
+    let inconsistent = response_types.iter().any(|response_type| {
+        response_type
+            .required_grants()
+            .iter()
+            .any(|grant| !grant_types.contains(grant))
+    });
+
+    if inconsistent {
+        return Err(
+            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                .with_param("field", "grant_types"),
+        );
+    }
+
+    Ok(())
+}
+
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
     domain::{
         key::JwaSigningAlgorithm,
-        openid_connect::{OpenIdConnectClientPlatformType, model::claim::StandardScopes},
+        openid_connect::{
+            GrantType, OpenIdConnectClientPlatformType, ResponseType, model::claim::StandardScopes,
+        },
     },
     openid_connect::remote::{
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,

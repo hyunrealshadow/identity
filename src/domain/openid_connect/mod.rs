@@ -8,9 +8,9 @@ pub use model::authorization_request::{
     ResponseType,
 };
 pub use model::client::{
-    ClientAssertionType, GrantType, InvalidOpenIdConnectClientError, OpenIdConnectClient,
-    OpenIdConnectClientMetadata, OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType,
-    OpenIdConnectClientSettings, pairwise_subject_identifier,
+    ClientAssertionType, DEFAULT_GRANT_TYPES, GrantType, InvalidOpenIdConnectClientError,
+    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+    OpenIdConnectClientPlatformType, OpenIdConnectClientSettings, pairwise_subject_identifier,
 };
 pub use model::credential::{
     OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialOid,

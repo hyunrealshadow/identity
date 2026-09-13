@@ -4,8 +4,8 @@ use url::Url;
 use identity_domain::{
     client::model::{Client, ClientOid, ClientProtocol},
     openid_connect::{
-        OpenIdConnectClientMetadata, OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType,
-        OpenIdConnectClientSettings,
+        GrantType, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+        OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
     },
 };
 
@@ -33,7 +33,11 @@ pub(in crate::openid_connect) fn test_metadata(
         backchannel_logout_uri: None,
         backchannel_logout_session_required: None,
         response_types: None,
-        grant_types: None,
+        grant_types: Some(vec![
+            GrantType::AuthorizationCode,
+            GrantType::Implicit,
+            GrantType::RefreshToken,
+        ]),
         contacts: None,
         logo_uri: None,
         client_uri: None,

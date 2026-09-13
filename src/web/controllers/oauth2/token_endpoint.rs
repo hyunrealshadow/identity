@@ -70,6 +70,8 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
         c if c == TokenErrorCode::AssertionIssSubMismatch.code() => "invalid_client",
         // Unsupported grant type
         c if c == TokenErrorCode::UnsupportedGrantType.code() => "unsupported_grant_type",
+        // Client is not permitted to use the requested grant
+        c if c == TokenErrorCode::ClientGrantNotAllowed.code() => "unauthorized_client",
         // Everything else
         _ => match error.kind() {
             ErrorKind::Validation => "invalid_request",
@@ -247,6 +249,21 @@ mod tests {
     fn app_error_to_rfc6749_maps_refresh_errors_to_invalid_grant() {
         let error = AppError::from_code(TokenErrorCode::RefreshTokenInvalid);
         assert_eq!(app_error_to_rfc6749(&error), "invalid_grant");
+    }
+
+    #[test]
+    fn app_error_to_rfc6749_maps_grant_permission_to_unauthorized_client() {
+        let error = AppError::from_code(TokenErrorCode::ClientGrantNotAllowed);
+
+        assert_eq!(app_error_to_rfc6749(&error), "unauthorized_client");
+        assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn app_error_to_rfc6749_keeps_unsupported_grant_type_distinct() {
+        let error = AppError::from_code(TokenErrorCode::UnsupportedGrantType);
+
+        assert_eq!(app_error_to_rfc6749(&error), "unsupported_grant_type");
     }
 
     #[test]

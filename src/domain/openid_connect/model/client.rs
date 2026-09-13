@@ -16,6 +16,7 @@ pub enum GrantType {
     Implicit,
     RefreshToken,
     ClientCredentials,
+    DeviceCode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -30,6 +31,7 @@ impl GrantType {
             Self::Implicit => "implicit",
             Self::RefreshToken => "refresh_token",
             Self::ClientCredentials => "client_credentials",
+            Self::DeviceCode => "urn:ietf:params:oauth:grant-type:device_code",
         }
     }
 }
@@ -87,6 +89,7 @@ impl FromStr for GrantType {
             "implicit" => Ok(Self::Implicit),
             "refresh_token" => Ok(Self::RefreshToken),
             "client_credentials" => Ok(Self::ClientCredentials),
+            "urn:ietf:params:oauth:grant-type:device_code" => Ok(Self::DeviceCode),
             _ => Err(ParseGrantTypeError),
         }
     }
@@ -139,7 +142,14 @@ pub struct OpenIdConnectClientPlatform {
     pub redirect_uris: Vec<Url>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Grant types a client may use when its registration omitted `grant_types`.
+///
+/// RFC 7591 §2 defines `authorization_code` as the registration default, so a
+/// stored `None` (legacy rows and registrations that omitted the field) allows
+/// only the code flow. An explicitly registered empty list allows no grant.
+pub const DEFAULT_GRANT_TYPES: [GrantType; 1] = [GrantType::AuthorizationCode];
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct OpenIdConnectClientMetadata {
     pub post_logout_redirect_uris: Option<Vec<Url>>,
     pub frontchannel_logout_uri: Option<Url>,
@@ -172,6 +182,21 @@ pub struct OpenIdConnectClientMetadata {
     pub initiate_login_uri: Option<Url>,
     pub request_uris: Option<Vec<Url>>,
     pub settings: OpenIdConnectClientSettings,
+}
+
+impl OpenIdConnectClientMetadata {
+    /// Grant types this registration permits.
+    ///
+    /// `None` falls back to [`DEFAULT_GRANT_TYPES`]; `Some([])` permits none.
+    #[must_use]
+    pub fn effective_grant_types(&self) -> &[GrantType] {
+        self.grant_types.as_deref().unwrap_or(&DEFAULT_GRANT_TYPES)
+    }
+
+    #[must_use]
+    pub fn allows_grant(&self, grant: GrantType) -> bool {
+        self.effective_grant_types().contains(&grant)
+    }
 }
 
 pub fn pairwise_subject_identifier(
@@ -246,6 +271,22 @@ impl OpenIdConnectClient {
             .any(|assigned| assigned == scope_name)
     }
 
+    /// Whether this client's registration permits the given grant type.
+    #[must_use]
+    pub fn allows_grant(&self, grant: GrantType) -> bool {
+        self.metadata.allows_grant(grant)
+    }
+
+    /// Whether this client may request the given `response_type`, which
+    /// requires every grant the response type relies on.
+    #[must_use]
+    pub fn allows_response_type(&self, response_type: &ResponseType) -> bool {
+        response_type
+            .required_grants()
+            .iter()
+            .all(|grant| self.allows_grant(*grant))
+    }
+
     pub fn subject_identifier(&self, user_oid: uuid::Uuid, issuer: &Url) -> String {
         match self.metadata.subject_type.unwrap_or(SubjectType::Public) {
             SubjectType::Public => user_oid.to_string(),
@@ -286,11 +327,11 @@ impl std::error::Error for InvalidOpenIdConnectClientError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+        GrantType, OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
         OpenIdConnectClientPlatformType, OpenIdConnectClientSettings, pairwise_subject_identifier,
     };
     use crate::client::model::{Client, ClientProtocol};
-    use crate::openid_connect::SubjectType;
+    use crate::openid_connect::{ResponseType, SubjectType};
     use chrono::Utc;
     use url::Url;
 
@@ -550,5 +591,82 @@ mod tests {
         assert!(oidc_client.has_assigned_scope("openid"));
         assert!(oidc_client.has_assigned_scope("email"));
         assert!(!oidc_client.has_assigned_scope("profile"));
+    }
+
+    fn client_with_grant_types(grant_types: Option<Vec<GrantType>>) -> OpenIdConnectClient {
+        let client = Client {
+            oid: uuid::Uuid::nil(),
+            protocol: ClientProtocol::OpenIdConnect,
+            name: "Example RP".to_string(),
+            names: vec![],
+            description: None,
+            built_in: false,
+            created_at: Utc::now(),
+            updated_at: None,
+        };
+        let metadata = OpenIdConnectClientMetadata {
+            grant_types,
+            ..OpenIdConnectClientMetadata::default()
+        };
+
+        OpenIdConnectClient::new(client, metadata, vec![], vec![]).unwrap()
+    }
+
+    #[test]
+    fn omitted_grant_types_default_to_authorization_code() {
+        let client = client_with_grant_types(None);
+
+        assert!(client.allows_grant(GrantType::AuthorizationCode));
+        assert!(!client.allows_grant(GrantType::Implicit));
+        assert!(!client.allows_grant(GrantType::RefreshToken));
+        assert!(!client.allows_grant(GrantType::DeviceCode));
+    }
+
+    #[test]
+    fn empty_grant_types_allow_no_grant() {
+        let client = client_with_grant_types(Some(vec![]));
+
+        assert!(!client.allows_grant(GrantType::AuthorizationCode));
+        assert!(!client.allows_grant(GrantType::Implicit));
+        assert!(!client.allows_grant(GrantType::RefreshToken));
+    }
+
+    #[test]
+    fn explicit_grant_types_allow_only_the_registered_grants() {
+        let client = client_with_grant_types(Some(vec![GrantType::DeviceCode]));
+
+        assert!(client.allows_grant(GrantType::DeviceCode));
+        assert!(!client.allows_grant(GrantType::AuthorizationCode));
+        assert!(!client.allows_grant(GrantType::RefreshToken));
+    }
+
+    #[test]
+    fn hybrid_response_types_require_code_and_implicit_grants() {
+        let code_only = client_with_grant_types(Some(vec![GrantType::AuthorizationCode]));
+        let implicit_only = client_with_grant_types(Some(vec![GrantType::Implicit]));
+        let both = client_with_grant_types(Some(vec![
+            GrantType::AuthorizationCode,
+            GrantType::Implicit,
+        ]));
+
+        assert!(code_only.allows_response_type(&ResponseType::Code));
+        assert!(!code_only.allows_response_type(&ResponseType::IdToken));
+        assert!(!code_only.allows_response_type(&ResponseType::CodeIdToken));
+
+        assert!(implicit_only.allows_response_type(&ResponseType::IdToken));
+        assert!(implicit_only.allows_response_type(&ResponseType::TokenIdToken));
+        assert!(!implicit_only.allows_response_type(&ResponseType::Code));
+        assert!(!implicit_only.allows_response_type(&ResponseType::CodeIdToken));
+
+        assert!(both.allows_response_type(&ResponseType::CodeIdToken));
+        assert!(both.allows_response_type(&ResponseType::CodeTokenIdToken));
+    }
+
+    #[test]
+    fn device_code_grant_uses_the_rfc_8628_urn() {
+        let urn = "urn:ietf:params:oauth:grant-type:device_code";
+
+        assert_eq!(urn.parse::<GrantType>().unwrap(), GrantType::DeviceCode);
+        assert_eq!(GrantType::DeviceCode.to_string(), urn);
     }
 }

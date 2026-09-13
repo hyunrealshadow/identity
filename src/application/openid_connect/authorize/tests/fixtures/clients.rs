@@ -21,6 +21,10 @@ pub(in crate::openid_connect) struct ScopedClientRepository {
     pub(in crate::openid_connect) assigned_scopes: Vec<String>,
 }
 
+pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
+    pub(in crate::openid_connect) grant_types: Vec<identity_domain::openid_connect::GrantType>,
+}
+
 pub(in crate::openid_connect) const TEST_CLIENT_ID: Uuid = Uuid::nil();
 
 #[async_trait]
@@ -30,6 +34,22 @@ impl OpenIdConnectClientRepository for MissingClientRepository {
         _oid: Uuid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         Ok(None)
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for RestrictedGrantClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: Uuid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, None);
+        metadata.grant_types = Some(self.grant_types.clone());
+
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
+        ))
     }
 }
 

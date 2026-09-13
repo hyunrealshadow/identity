@@ -55,6 +55,11 @@ impl TokenService {
             })?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
+        if !authenticated_client.allows_grant(GrantType::AuthorizationCode) {
+            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
+                .with_param("grant_type", GrantType::AuthorizationCode.as_str()));
+        }
+
         let code_oid_bytes = self
             .data_protector
             .unprotect("authorization-code", &params.code)
@@ -405,6 +410,11 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
             })?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+
+        if !authenticated_client.allows_grant(GrantType::RefreshToken) {
+            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
+                .with_param("grant_type", GrantType::RefreshToken.as_str()));
+        }
 
         let refresh_oid_bytes = self
             .data_protector
