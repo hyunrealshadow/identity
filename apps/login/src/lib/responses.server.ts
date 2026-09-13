@@ -63,13 +63,23 @@ export function navigationResponse(request: Request, destination: string) {
   })
 }
 
+function formErrorDestination(
+  pathname: string,
+  values: Record<string, string | undefined>,
+) {
+  // Login route loaders need the authorization context before reading flash cookies.
+  const search = new URLSearchParams()
+  if (values.login_id) search.set('login_id', values.login_id)
+  return search.size ? `${pathname}?${search}` : pathname
+}
+
 export function formErrorResponse(
   request: Request,
   pathname: string,
   message: string,
   values: Record<string, string | undefined>,
   field?: string,
-  destination = pathname,
+  destination = formErrorDestination(pathname, values),
 ) {
   const response = navigationResponse(request, destination)
   response.headers.append(
@@ -85,7 +95,7 @@ export function formValidationErrorResponse(
   message: string,
   values: Record<string, string | undefined>,
   fields: Record<string, string>,
-  destination = pathname,
+  destination = formErrorDestination(pathname, values),
 ) {
   const response = navigationResponse(request, destination)
   response.headers.append(
