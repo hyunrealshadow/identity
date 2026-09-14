@@ -478,6 +478,142 @@ async fn redemption_requires_client_authentication() {
     assert_eq!(error.code(), 24031);
 }
 
+/// Builds a device refresh token whose original authorization had `scope`.
+async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, scope: &str) -> Uuid {
+    let refresh_data = RefreshTokenData {
+        scope: scope.to_owned(),
+        user_oid: Uuid::nil().to_string(),
+        session_oid: None,
+        protected_session_id: None,
+        auth_time: Some(1_700_000_000),
+        acr: None,
+        amr: vec!["pwd".to_owned()],
+        rotated_from: None,
+        device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
+    };
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::RefreshToken(refresh_data),
+            Utc::now() + chrono::Duration::days(30),
+        )
+        .await
+        .unwrap();
+
+    record.oid
+}
+
+#[tokio::test]
+async fn a_device_grant_without_openid_stays_plain_oauth_through_refresh() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let oid = device_refresh_token(&repo, "offline_access").await;
+    let mut device_repo = MockDeviceAuthorizationRepository::new();
+    let live = relation_record(false);
+    device_repo
+        .expect_find_device_authorization_by_oid()
+        .returning(move |_| Ok(Some(live.clone())));
+    let service = build_token_service_with_device_repo(
+        repo,
+        Uuid::nil(),
+        Arc::new(DeviceClientRepository {
+            client: device_client(vec![GrantType::DeviceCode, GrantType::RefreshToken]),
+        }),
+        Arc::new(device_repo),
+    );
+
+    let refreshed = service
+        .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
+            refresh_token: STANDARD.encode(oid.as_bytes()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_owned()),
+            client_assertion_type: None,
+            client_assertion: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.scope, "offline_access");
+    assert!(
+        refreshed.id_token.is_none(),
+        "an authorization that never requested openid may not gain an ID token by refreshing"
+    );
+}
+
+#[tokio::test]
+async fn refresh_cannot_add_openid_the_device_grant_never_requested() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let oid = device_refresh_token(&repo, "offline_access").await;
+    let mut device_repo = MockDeviceAuthorizationRepository::new();
+    let live = relation_record(false);
+    device_repo
+        .expect_find_device_authorization_by_oid()
+        .returning(move |_| Ok(Some(live.clone())));
+    let service = build_token_service_with_device_repo(
+        repo,
+        Uuid::nil(),
+        Arc::new(DeviceClientRepository {
+            client: device_client(vec![GrantType::DeviceCode, GrantType::RefreshToken]),
+        }),
+        Arc::new(device_repo),
+    );
+
+    let error = service
+        .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: Some("openid offline_access".to_owned()),
+            refresh_token: STANDARD.encode(oid.as_bytes()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_owned()),
+            client_assertion_type: None,
+            client_assertion: None,
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.code(),
+        24074,
+        "invalid_scope: a refresh may narrow, never widen"
+    );
+}
+
+#[tokio::test]
+async fn refresh_may_narrow_the_granted_scope() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let oid = device_refresh_token(&repo, "openid offline_access").await;
+    let mut device_repo = MockDeviceAuthorizationRepository::new();
+    let live = relation_record(false);
+    device_repo
+        .expect_find_device_authorization_by_oid()
+        .returning(move |_| Ok(Some(live.clone())));
+    let service = build_token_service_with_device_repo(
+        repo,
+        Uuid::nil(),
+        Arc::new(DeviceClientRepository {
+            client: device_client(vec![GrantType::DeviceCode, GrantType::RefreshToken]),
+        }),
+        Arc::new(device_repo),
+    );
+
+    let refreshed = service
+        .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: Some("openid".to_owned()),
+            refresh_token: STANDARD.encode(oid.as_bytes()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_owned()),
+            client_assertion_type: None,
+            client_assertion: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.scope, "openid");
+    assert!(
+        refreshed.id_token.is_some(),
+        "dropping offline_access keeps the OIDC behavior"
+    );
+}
+
 #[tokio::test]
 async fn refreshing_a_device_token_requires_a_live_relation() {
     let refresh_data = RefreshTokenData {
@@ -517,6 +653,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
@@ -573,6 +710,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),

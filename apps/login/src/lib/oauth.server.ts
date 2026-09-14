@@ -80,8 +80,11 @@ export async function prepareAuthorization() {
   return startSignIn()
 }
 
-export async function startSignIn(returnTo?: string) {
-  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'))
+export async function startSignIn(
+  returnTo?: string,
+  options: { prompt?: 'login' } = {},
+) {
+  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'), options)
 }
 
 export async function startReauthorization(
@@ -93,8 +96,7 @@ export async function startReauthorization(
     await startAuthorizationFlow(
       'reauth',
       safeReturnTo(returnTo, '/?message=reauthenticated'),
-      purpose,
-      requirements,
+      { reauthPurpose: purpose, requirements },
     ),
   )
 }
@@ -120,9 +122,14 @@ export function reauthenticationRequestParameters(
 async function startAuthorizationFlow(
   mode: OAuthFlowSession['mode'],
   returnTo: string,
-  reauthPurpose: 'password' | 'account' | 'mfa' = 'password',
-  requirements?: ReauthenticationRequirements,
+  options?: {
+    prompt?: 'login'
+    reauthPurpose?: 'password' | 'account' | 'mfa'
+    requirements?: ReauthenticationRequirements
+  },
 ) {
+  const reauthPurpose = options?.reauthPurpose ?? 'password'
+  const requirements = options?.requirements
   const oauthClient = await loadOAuthClient()
   const state = randomBytes(32).toString('base64url')
   const verifier = randomBytes(48).toString('base64url')
@@ -142,6 +149,9 @@ async function startAuthorizationFlow(
     code_challenge: challenge,
     code_challenge_method: 'S256',
   }).toString()
+  if (options?.prompt) {
+    authorizeUrl.searchParams.set('prompt', options.prompt)
+  }
   if (mode === 'reauth') {
     if (!requirements) {
       throw new Error('Reauthentication requires a login hint')

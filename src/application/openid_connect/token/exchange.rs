@@ -554,12 +554,12 @@ impl TokenService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
-        let scope = refresh_data
+        let granted_scope = refresh_data
             .scope
             .split_whitespace()
             .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
-            .collect::<Vec<_>>()
-            .join(" ");
+            .collect::<Vec<_>>();
+        let scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
         let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&scope)
             .map(|scope| scope.has_api_scopes())
             .unwrap_or(false)
@@ -600,40 +600,48 @@ impl TokenService {
                 amr: &session_amr,
             })
             .await?;
-        let signed_id_token = self
-            .sign_id_token(SignIdTokenInput {
-                key_id: &signing_key_id,
-                private_key_pem: &signing_key_pem,
-                alg: identity_domain::key::JwsAlgorithm::Asymmetric(signing_alg),
-                issuer: &issuer,
-                audience: &client_id,
-                client: &authenticated_client,
-                user: &user,
-                scope: &scope,
-                nonce: None,
-                auth_time: refresh_data.auth_time,
-                acr: session_acr.as_deref(),
-                amr: &session_amr,
-                access_token: Some(&access_token),
-                protected_session_id: protected_session_id.as_deref(),
-            })
-            .await?;
-        let id_token = Some(
-            match authenticated_client
-                .metadata()
-                .id_token_encrypted_response_alg
-            {
-                Some(alg) => {
-                    let enc = authenticated_client
-                        .metadata()
-                        .id_token_encrypted_response_enc
-                        .unwrap_or(JweContentEncryption::A128CbcHs256);
-                    self.encrypt_token(&signed_id_token, &authenticated_client, alg, enc)
-                        .await?
-                }
-                None => signed_id_token,
-            },
-        );
+        // A refresh never turns a plain OAuth grant into an OIDC one: the
+        // original authorization decides, exactly like the first exchange.
+        let signed_id_token = if scope.split_whitespace().any(|scope| scope == "openid") {
+            let signed = self
+                .sign_id_token(SignIdTokenInput {
+                    key_id: &signing_key_id,
+                    private_key_pem: &signing_key_pem,
+                    alg: identity_domain::key::JwsAlgorithm::Asymmetric(signing_alg),
+                    issuer: &issuer,
+                    audience: &client_id,
+                    client: &authenticated_client,
+                    user: &user,
+                    scope: &scope,
+                    nonce: None,
+                    auth_time: refresh_data.auth_time,
+                    acr: session_acr.as_deref(),
+                    amr: &session_amr,
+                    access_token: Some(&access_token),
+                    protected_session_id: protected_session_id.as_deref(),
+                })
+                .await?;
+
+            Some(
+                match authenticated_client
+                    .metadata()
+                    .id_token_encrypted_response_alg
+                {
+                    Some(alg) => {
+                        let enc = authenticated_client
+                            .metadata()
+                            .id_token_encrypted_response_enc
+                            .unwrap_or(JweContentEncryption::A128CbcHs256);
+                        self.encrypt_token(&signed, &authenticated_client, alg, enc)
+                            .await?
+                    }
+                    None => signed,
+                },
+            )
+        } else {
+            None
+        };
+        let id_token = signed_id_token;
         let rotated_from = refresh_record.oid.to_string();
         let refresh_token = Some(
             self.store_refresh_token(StoreRefreshTokenParams {
@@ -713,6 +721,25 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
             })
     }
+}
+
+/// Applies the optional `scope` narrowing of a refresh request (RFC 6749 §6).
+///
+/// The request may drop scopes, but never add one — not even `openid`, which
+/// would otherwise turn a plain OAuth grant into an OIDC one after the fact.
+/// Without a requested scope the originally granted scope is reused verbatim,
+/// so scopes this service does not classify survive the round trip.
+fn refresh_scope(granted: &[&str], requested: Option<&str>) -> Result<String, AppError> {
+    let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(granted.join(" "));
+    };
+
+    let requested: Vec<&str> = requested.split_whitespace().collect();
+    if requested.is_empty() || requested.iter().any(|scope| !granted.contains(scope)) {
+        return Err(AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed));
+    }
+
+    Ok(requested.join(" "))
 }
 
 pub(crate) fn resolve_client_id(

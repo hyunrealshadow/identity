@@ -58,6 +58,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: initial.refresh_token.unwrap(),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -129,6 +130,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -283,6 +285,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: initial.refresh_token.unwrap(),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -431,6 +434,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),

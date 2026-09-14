@@ -73,3 +73,4 @@ E24070 = The stored device request is inconsistent.
 E24071 = An unexpected error occurred while reading the device request.
 E24072 = An unexpected error occurred while reading the device authorization.
 E24073 = An unexpected error occurred while issuing the device tokens.
+E24074 = A refresh may only ask for scope the original authorization granted.

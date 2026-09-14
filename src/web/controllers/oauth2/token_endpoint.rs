@@ -24,6 +24,8 @@ struct TokenForm {
     code: Option<String>,
     device_code: Option<String>,
     refresh_token: Option<String>,
+    /// Optional narrowing of the granted scope on a refresh (RFC 6749 §6).
+    scope: Option<String>,
     redirect_uri: Option<String>,
     client_id: Option<String>,
     client_secret: Option<String>,
@@ -67,6 +69,7 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
         c if c == TokenErrorCode::ClientNotFound.code() => "invalid_client",
         c if c == TokenErrorCode::ClientCredentialsInvalid.code() => "invalid_client",
         c if c == TokenErrorCode::ClientAuthRequired.code() => "invalid_client",
+        c if c == TokenErrorCode::RefreshScopeNotAllowed.code() => "invalid_scope",
         c if c == TokenErrorCode::AssertionVerifyFailed.code() => "invalid_client",
         c if c == TokenErrorCode::AssertionExpired.code() => "invalid_client",
         c if c == TokenErrorCode::AssertionAudMismatch.code() => "invalid_client",
@@ -244,6 +247,7 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
                 .oidc_token()
                 .exchange_refresh_token(RefreshTokenGrantParams {
                     refresh_token: form.refresh_token.unwrap_or_default(),
+                    scope: form.scope,
                     client_id,
                     client_secret,
                     client_assertion_type,

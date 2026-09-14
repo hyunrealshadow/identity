@@ -95,6 +95,7 @@ async fn refresh_exchange_rejects_client_without_refresh_token_grant() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
@@ -129,6 +130,7 @@ async fn grant_permission_is_checked_before_the_refresh_token_lookup() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
             refresh_token: STANDARD.encode(Uuid::new_v4().as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),

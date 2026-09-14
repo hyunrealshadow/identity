@@ -80,7 +80,13 @@ async function signInLinkIfNeeded(
 
   const { startSignIn } = await import('#/lib/oauth.server')
 
-  return (await startSignIn(devicePath(userCode, uiLocales))).toString()
+  // `prompt=login` keeps the flow interactive: only an actual sign-in hands
+  // this application the session it must present to the provider, so an
+  // existing provider session alone cannot complete it silently and bounce
+  // the user straight back here.
+  return (
+    await startSignIn(devicePath(userCode, uiLocales), { prompt: 'login' })
+  ).toString()
 }
 
 const loadDevicePage = createServerFn({ method: 'GET' })
@@ -347,42 +353,51 @@ function DevicePage() {
         </p>
       </div>
 
-      <section aria-labelledby="device-permissions-title">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 id="device-permissions-title" className="text-sm font-semibold">
-            {t('permissions')}
-          </h2>
-          <Chip size="sm" variant="soft">
-            {t('permissionCount', { count: device.scopes.length })}
-          </Chip>
-        </div>
-        <ul className="auth-stagger-fast space-y-2">
-          {device.scopes.map((scope) => (
-            <li
-              key={scope.name}
-              className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:bg-surface-secondary"
-            >
-              <Check
-                className="mt-0.5 size-4 shrink-0 text-accent"
-                aria-hidden="true"
-              />
-              <span className="min-w-0">
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  {scope.name}
-                  {scope.essential ? (
-                    <Chip size="sm" variant="soft">
-                      {t('required')}
-                    </Chip>
-                  ) : null}
+      {device.consent_required ? (
+        <section aria-labelledby="device-permissions-title">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 id="device-permissions-title" className="text-sm font-semibold">
+              {t('permissions')}
+            </h2>
+            <Chip size="sm" variant="soft">
+              {t('permissionCount', { count: device.scopes.length })}
+            </Chip>
+          </div>
+          <ul className="auth-stagger-fast space-y-2">
+            {device.scopes.map((scope) => (
+              <li
+                key={scope.name}
+                className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:bg-surface-secondary"
+              >
+                <Check
+                  className="mt-0.5 size-4 shrink-0 text-accent"
+                  aria-hidden="true"
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    {scope.name}
+                    {scope.essential ? (
+                      <Chip size="sm" variant="soft">
+                        {t('required')}
+                      </Chip>
+                    ) : null}
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-muted">
+                    {scopeDescription(data.locale, scope.name, scope.description)}
+                  </span>
                 </span>
-                <span className="mt-0.5 block text-xs leading-5 text-muted">
-                  {scopeDescription(data.locale, scope.name, scope.description)}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        // A trusted client (`skip_consent`) already holds the user's consent:
+        // the page confirms the code without repeating the permission list,
+        // and the decision still goes through the CSRF protected POST.
+        <p className="rounded-xl border border-border px-3 py-3 text-xs leading-5 text-muted">
+          {t('deviceTrustedClient')}
+        </p>
+      )}
 
       <ProgressiveForm
         action="/device"

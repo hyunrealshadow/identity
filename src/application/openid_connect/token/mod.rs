@@ -55,6 +55,8 @@ pub struct DeviceCodeGrantParams {
 #[derive(Debug, Clone)]
 pub struct RefreshTokenGrantParams {
     pub refresh_token: String,
+    /// Optional narrowing of the originally granted scope (RFC 6749 §6).
+    pub scope: Option<String>,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,

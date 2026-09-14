@@ -212,6 +212,7 @@ const zhCN = {
   deviceCodeKept: '登录期间会为你保留代码 {code}。',
   deviceVerifyTitle: '批准设备登录',
   deviceVerifyDescription: '{client} 正在请求在你的设备上登录。',
+  deviceTrustedClient: '该应用已获信任：批准时不会再次询问权限。',
   deviceVerifyHint: '只有当设备上的代码与上方一致时才批准。',
   deviceDecisionUnknown: '无法更新该设备请求，请在设备上重新发起。',
   deviceApproved: '已批准',

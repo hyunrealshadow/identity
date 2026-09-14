@@ -210,6 +210,7 @@ const enUS = {
   deviceCodeKept: 'The code {code} is kept for you while you sign in.',
   deviceVerifyTitle: 'Approve device sign-in',
   deviceVerifyDescription: '{client} is asking to sign in on your device.',
+  deviceTrustedClient: 'This application is already trusted: approving does not ask for permissions again.',
   deviceVerifyHint: 'Only approve this if the code on your device matches the one above.',
   deviceDecisionUnknown: 'The device request could not be updated. Start again from your device.',
   deviceApproved: 'Approved',

@@ -174,6 +174,8 @@ pub enum TokenErrorCode {
     DeviceRelationLookupFailed,
     /// Committing the device code consumption and token records failed.
     DeviceRedemptionFailed,
+    /// A refresh asked for scope the original authorization did not grant.
+    RefreshScopeNotAllowed,
 }
 
 impl AppErrorCode for TokenErrorCode {
@@ -254,6 +256,7 @@ impl AppErrorCode for TokenErrorCode {
             Self::DeviceRequestLookupFailed => ErrorKind::Internal,
             Self::DeviceRelationLookupFailed => ErrorKind::Internal,
             Self::DeviceRedemptionFailed => ErrorKind::Internal,
+            Self::RefreshScopeNotAllowed => ErrorKind::Validation,
         }
     }
 
@@ -333,6 +336,7 @@ impl AppErrorCode for TokenErrorCode {
             Self::DeviceRequestLookupFailed => 24071,
             Self::DeviceRelationLookupFailed => 24072,
             Self::DeviceRedemptionFailed => 24073,
+            Self::RefreshScopeNotAllowed => 24074,
         }
     }
 }
