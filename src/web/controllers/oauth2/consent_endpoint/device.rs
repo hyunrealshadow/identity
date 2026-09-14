@@ -17,7 +17,7 @@ use crate::{
     boot::AppState,
     domain::{auth::model::ActiveSession, openid_connect::ScopeSet},
     web::{
-        controllers::shared::{csrf_token, load_op_active_sessions},
+        controllers::shared::{csrf_token, load_active_sessions},
         views::oauth2::{
             ConsentApiResponse, ConsentDecision, DeviceConsentPageData, build_scope_display,
         },
@@ -108,7 +108,10 @@ async fn verification_actor(
     ctx: &AppState,
     headers: &HeaderMap,
 ) -> Result<VerificationActor, AppError> {
-    let sessions = load_op_active_sessions(ctx, headers).await?;
+    // The verification page runs in the login application, so the session
+    // arrives through the login transport (`x-sessions`), exactly like the
+    // other interactions it drives.
+    let sessions = load_active_sessions(ctx, headers).await?;
     let session = sessions.into_iter().next().ok_or_else(|| {
         AppError::from_code(DeviceAuthorizationErrorCode::VerificationLoginRequired)
     })?;

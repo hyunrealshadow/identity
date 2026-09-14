@@ -5,7 +5,7 @@ import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 
-import { RecoveryCodeInput, TotpInput } from './totp-input'
+import { GroupedCodeInput, SegmentedCodeInput, TotpInput } from './totp-input'
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -17,13 +17,13 @@ beforeEach(() => {
   )
 })
 
-describe('RecoveryCodeInput', () => {
-  it('normalizes pasted codes and renders a separator after four characters', () => {
-    const { container } = render(<RecoveryCodeInput name="credential" />)
+describe('GroupedCodeInput', () => {
+  it('normalizes a pasted device code and renders a separator after four characters', () => {
+    const { container } = render(<GroupedCodeInput name="user_code" />)
     const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
 
     act(() => {
-      input.value = 'abcd-efgh'
+      input.value = 'wdjb-mjht'
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
@@ -31,9 +31,33 @@ describe('RecoveryCodeInput', () => {
       container.querySelectorAll('[data-slot="input-otp-slot"]'),
       (slot) => slot.textContent,
     )
-    expect(slots).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])
-    expect(input.value).toBe('ABCDEFGH')
-    expect(container.textContent).toContain('ABCD-EFGH')
+    expect(slots).toEqual(['W', 'D', 'J', 'B', 'M', 'J', 'H', 'T'])
+    expect(input.value).toBe('WDJBMJHT')
+    expect(container.textContent).toContain('WDJB-MJHT')
+  })
+
+  it('renders eight slots with a separator for the server-rendered form', () => {
+    const html = renderToString(<GroupedCodeInput name="user_code" />)
+
+    expect(html.match(/data-slot="input-otp-slot"/g)).toHaveLength(8)
+  })
+})
+
+describe('SegmentedCodeInput', () => {
+  it('renders the shape a caller describes', () => {
+    const { container } = render(
+      <SegmentedCodeInput
+        name="pin"
+        length={4}
+        inputMode="numeric"
+        pattern="^\d+$"
+        autoComplete="off"
+        normalize={(value) => value.replace(/\D/g, '').slice(0, 4)}
+      />,
+    )
+
+    expect(container.querySelectorAll('[data-slot="input-otp-slot"]')).toHaveLength(4)
+    expect(container.textContent).not.toContain('-')
   })
 })
 

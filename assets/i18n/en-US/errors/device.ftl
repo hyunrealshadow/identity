@@ -1,0 +1,21 @@
+# Device authorization errors (26000-26099)
+E26001 = This client is not allowed to use the device authorization grant.
+E26002 = The requested scope could not be read.
+E26003 = The requested scope is not available to this client.
+E26005 = No user code is available right now. Try again in a moment.
+E26006 = An unexpected error occurred while generating the device code.
+E26007 = An unexpected error occurred while storing the device request.
+E26009 = This installation has no usable domain.
+E26010 = The code is unknown, expired, or already answered.
+E26012 = An unexpected error occurred while reading the device request.
+E26013 = An unexpected error occurred due to a data integrity issue.
+E26014 = This request was already answered.
+E26015 = The stored authorization is missing or malformed.
+E26016 = An unexpected error occurred while storing your decision.
+E26017 = An unexpected error occurred while looking up your account.
+E26018 = The approving account was not found.
+E26019 = The code expired before it was answered.
+E26020 = An unexpected error occurred while reading the application registration.
+E26021 = The application registration no longer exists.
+E26022 = Sign in to answer this request.
+E26023 = The configured login address is not usable.

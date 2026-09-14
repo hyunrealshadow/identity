@@ -15,6 +15,7 @@ import { Route as AppearanceRouteImport } from './routes/appearance'
 import { Route as AuthorizationErrorRouteImport } from './routes/authorization-error'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as ConsentRouteImport } from './routes/consent'
+import { Route as DeviceRouteImport } from './routes/device'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LogoutRouteImport } from './routes/logout'
@@ -57,6 +58,11 @@ const CallbackRoute = CallbackRouteImport.update({
 const ConsentRoute = ConsentRouteImport.update({
   id: '/consent',
   path: '/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeviceRoute = DeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InstallRoute = InstallRouteImport.update({
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/authorization-error': typeof AuthorizationErrorRoute
   '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
+  '/device': typeof DeviceRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/authorization-error': typeof AuthorizationErrorRoute
   '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
+  '/device': typeof DeviceRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/authorization-error': typeof AuthorizationErrorRoute
   '/callback': typeof CallbackRoute
   '/consent': typeof ConsentRoute
+  '/device': typeof DeviceRoute
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/authorization-error'
     | '/callback'
     | '/consent'
+    | '/device'
     | '/install'
     | '/login'
     | '/logout'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/authorization-error'
     | '/callback'
     | '/consent'
+    | '/device'
     | '/install'
     | '/login'
     | '/logout'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/authorization-error'
     | '/callback'
     | '/consent'
+    | '/device'
     | '/install'
     | '/login'
     | '/logout'
@@ -260,6 +272,7 @@ export interface RootRouteChildren {
   AuthorizationErrorRoute: typeof AuthorizationErrorRoute
   CallbackRoute: typeof CallbackRoute
   ConsentRoute: typeof ConsentRoute
+  DeviceRoute: typeof DeviceRoute
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
   LogoutRoute: typeof LogoutRoute
@@ -310,6 +323,13 @@ declare module '@tanstack/react-router' {
       path: '/consent'
       fullPath: '/consent'
       preLoaderRoute: typeof ConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/device': {
+      id: '/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof DeviceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/install': {
@@ -445,6 +465,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthorizationErrorRoute: AuthorizationErrorRoute,
   CallbackRoute: CallbackRoute,
   ConsentRoute: ConsentRoute,
+  DeviceRoute: DeviceRoute,
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
   LogoutRoute: LogoutRoute,

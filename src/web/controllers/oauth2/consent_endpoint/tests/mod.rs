@@ -128,6 +128,35 @@ async fn consent_route_serves_device_verification_for_a_user_code() {
 }
 
 #[tokio::test]
+async fn device_verification_reads_the_login_session_transport() {
+    let (state, _, _) = consent_test_state().await;
+    let service = Service::new(app_router(state, &consent_test_config()));
+
+    // The verification page runs inside the login application, so the browser
+    // session reaches the protocol through the login transport. Without it the
+    // page is told to sign in, with it the request is described.
+    let anonymous = TestClient::get("http://127.0.0.1:5800/oauth2/consent?user_code=WDJB-MJHT")
+        .send(&service)
+        .await;
+    assert_eq!(anonymous.status_code, Some(StatusCode::UNAUTHORIZED));
+
+    let identified = TestClient::get("http://127.0.0.1:5800/oauth2/consent?user_code=WDJB-MJHT")
+        .add_header(
+            "x-sessions",
+            "[\"00000000-0000-0000-0000-000000000000\"]",
+            true,
+        )
+        .send(&service)
+        .await;
+
+    assert_ne!(
+        identified.status_code,
+        Some(StatusCode::UNAUTHORIZED),
+        "the session header is what the login application sends"
+    );
+}
+
+#[tokio::test]
 async fn consent_route_rejects_ambiguous_or_missing_interaction_identifiers() {
     let (state, _, _) = consent_test_state().await;
     let service = Service::new(app_router(state, &consent_test_config()));

@@ -29,25 +29,40 @@ type SegmentedCodeInputProps = Omit<
   variant?: 'primary' | 'secondary'
 }
 
-type InternalSegmentedCodeInputProps = SegmentedCodeInputProps & {
+/**
+ * A segmented code field of any shape: the presets below fix `length`,
+ * `separatorAfter` and `normalize` for the codes this app knows, and callers
+ * with another format describe their own.
+ */
+export type SegmentedCodeInputConfig = SegmentedCodeInputProps & {
   autoComplete: string
   inputMode: 'numeric' | 'text'
   length: number
+  /** Renders a dash after this many characters, like `WDJB-MJHT`. */
+  separatorAfter?: number
   normalize: (value: string) => string
   pattern: string
-  separatorAfter?: number
 }
 
 function normalizeTotp(value: string) {
   return value.replace(/\D/g, '').slice(0, 6)
 }
 
-function normalizeRecoveryCode(value: string) {
+/// Codes that are shown (and typed) as two groups of four: recovery codes and
+/// the device codes of `RFC 8628` verification.
+function normalizeGroupedCode(value: string) {
   return value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 8)
 }
 
-/** A segmented code field backed by one stable native input. */
-function SegmentedCodeInput({
+/**
+ * A segmented code field backed by one stable native input.
+ *
+ * The native input is what makes the field work without JavaScript (the form
+ * posts the code) and keeps password managers useful: a pasted, formatted code
+ * is normalized into that input's value instead of being dropped by a
+ * controlled React value.
+ */
+export function SegmentedCodeInput({
   autoComplete,
   autoFocus,
   className,
@@ -68,7 +83,7 @@ function SegmentedCodeInput({
   value,
   variant = 'primary',
   ...props
-}: InternalSegmentedCodeInputProps) {
+}: SegmentedCodeInputConfig) {
   const [internalValue, setInternalValue] = useState(() => normalize(defaultValue))
   const [isFocused, setIsFocused] = useState(false)
   const [isAutofocusPending, setIsAutofocusPending] = useState(
@@ -257,7 +272,7 @@ export function TotpInput(props: SegmentedCodeInputProps) {
   )
 }
 
-export function RecoveryCodeInput(props: SegmentedCodeInputProps) {
+export function GroupedCodeInput(props: SegmentedCodeInputProps) {
   const { className, groupClassName, slotClassName, ...inputProps } = props
   return (
     <SegmentedCodeInput
@@ -272,10 +287,10 @@ export function RecoveryCodeInput(props: SegmentedCodeInputProps) {
         .join(' ')}
       length={8}
       separatorAfter={4}
-      normalize={normalizeRecoveryCode}
+      normalize={normalizeGroupedCode}
       inputMode="text"
       pattern="^[A-Za-z0-9-]+$"
-      autoComplete="off"
+      autoComplete="one-time-code"
     />
   )
 }

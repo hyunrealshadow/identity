@@ -96,6 +96,18 @@ export interface ConsentPageData {
   ui_locales?: Array<string>
 }
 
+export interface DeviceVerificationPageData {
+  user_code: string
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'consumed'
+  consent_required: boolean
+  client_name: string
+  logo_uri?: string
+  client_uri?: string
+  scopes: Array<ScopeDisplay>
+  csrf_token: string
+  ui_locales?: Array<string>
+}
+
 export interface ConsentApiResponse {
   status: 'approved' | 'denied'
   continue_uri?: string

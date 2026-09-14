@@ -15,7 +15,7 @@ import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
-import { RecoveryCodeInput, TotpInput } from '#/components/totp-input'
+import { GroupedCodeInput, TotpInput } from '#/components/totp-input'
 import {
   errorMessage,
   IdentityApiError,
@@ -502,7 +502,7 @@ function ChallengePage() {
         ) : isRecoveryCode ? (
           <div className="grid gap-2">
             <Label>{t('recoveryCode')}</Label>
-            <RecoveryCodeInput
+            <GroupedCodeInput
               name="credential"
               type="text"
               required

@@ -77,7 +77,11 @@ export class OAuthTokenExchangeError extends Error {
 }
 
 export async function prepareAuthorization() {
-  return startAuthorizationFlow('signin', '/')
+  return startSignIn()
+}
+
+export async function startSignIn(returnTo?: string) {
+  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'))
 }
 
 export async function startReauthorization(
