@@ -30,15 +30,14 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
     use identity_domain::{
         auth::password::PasswordHashSetting,
         setting::{
-            consent_url::ConsentUrlSetting,
             device_authorization::DeviceAuthorizationSetting,
+            domain::DomainSetting,
             dynamic_registration::DynamicClientRegistrationSetting,
             installation::{
-                InstallationDomainSetting, InstallationFirstKeyOidSetting,
-                InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
-                InstallationInitializedSetting,
+                InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+                InstallationInitializedAtSetting, InstallationInitializedSetting,
             },
-            login_url::LoginUrlSetting,
+            login_domain::LoginDomainSetting,
             model::SettingDefinition,
         },
     };
@@ -68,10 +67,10 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
-    let installation_domain_setting = setting::Model {
+    let domain_setting = setting::Model {
         id: 3,
         oid: uuid::Uuid::new_v4(),
-        key: InstallationDomainSetting::KEY.to_string(),
+        key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
         created_at: Utc::now().naive_utc(),
         updated_at: None,
@@ -116,19 +115,11 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
-    let login_url_setting = setting::Model {
-        id: 8,
+    let login_domain_setting = setting::Model {
+        id: 12,
         oid: uuid::Uuid::new_v4(),
-        key: LoginUrlSetting::KEY.to_string(),
-        value: serde_json::to_value(LoginUrlSetting::default_value()).unwrap(),
-        created_at: Utc::now().naive_utc(),
-        updated_at: None,
-    };
-    let consent_url_setting = setting::Model {
-        id: 9,
-        oid: uuid::Uuid::new_v4(),
-        key: ConsentUrlSetting::KEY.to_string(),
-        value: serde_json::to_value(ConsentUrlSetting::default_value()).unwrap(),
+        key: LoginDomainSetting::KEY.to_string(),
+        value: serde_json::to_value(LoginDomainSetting::default_value()).unwrap(),
         created_at: Utc::now().naive_utc(),
         updated_at: None,
     };
@@ -136,14 +127,13 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results(vec![
             vec![installation_initialized_setting],
-            vec![installation_domain_setting],
+            vec![domain_setting],
             vec![installation_first_user_oid_setting],
             vec![installation_first_key_oid_setting],
             vec![installation_initialized_at_setting],
             vec![password_setting],
             vec![dynamic_registration_setting],
-            vec![login_url_setting],
-            vec![consent_url_setting],
+            vec![login_domain_setting],
             vec![device_authorization_setting],
         ])
         .append_query_results([

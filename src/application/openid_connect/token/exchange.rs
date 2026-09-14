@@ -715,7 +715,7 @@ impl TokenService {
     }
 }
 
-pub(super) fn resolve_client_id(
+pub(crate) fn resolve_client_id(
     client_id: Option<String>,
     client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     client_assertion: Option<&str>,

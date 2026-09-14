@@ -22,23 +22,22 @@ use identity_domain::{
     key::{KeyData, KeyJwkRepository, repository::KeyRepository},
     setting::model::SettingDefinition,
     setting::{
-        consent_url::ConsentUrlSetting,
         device_authorization::DeviceAuthorizationSetting,
+        domain::DomainSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
-            InstallationDomainSetting, InstallationFirstKeyOidSetting,
-            InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
-            InstallationInitializedSetting, InstallationSetting, InstallationState,
+            InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+            InstallationInitializedAtSetting, InstallationInitializedSetting, InstallationSetting,
+            InstallationState,
         },
-        login_url::LoginUrlSetting,
+        login_domain::LoginDomainSetting,
     },
 };
 
 pub type AppPasswordHashSettingService = CachedSetting<PasswordHashSetting, SettingRepositoryImpl>;
 pub type AppInstallationInitializedSettingService =
     CachedSetting<InstallationInitializedSetting, SettingRepositoryImpl>;
-pub type AppInstallationDomainSettingService =
-    CachedSetting<InstallationDomainSetting, SettingRepositoryImpl>;
+pub type AppDomainSettingService = CachedSetting<DomainSetting, SettingRepositoryImpl>;
 pub type AppInstallationFirstUserOidSettingService =
     CachedSetting<InstallationFirstUserOidSetting, SettingRepositoryImpl>;
 pub type AppInstallationFirstKeyOidSettingService =
@@ -46,10 +45,9 @@ pub type AppInstallationFirstKeyOidSettingService =
 pub type AppInstallationInitializedAtSettingService =
     CachedSetting<InstallationInitializedAtSetting, SettingRepositoryImpl>;
 pub type AppInstallationSettingService = GroupedInstallationSettingProvider<SettingRepositoryImpl>;
+pub type AppLoginDomainSettingService = CachedSetting<LoginDomainSetting, SettingRepositoryImpl>;
 pub type AppDynamicClientRegistrationSettingService =
     CachedSetting<DynamicClientRegistrationSetting, SettingRepositoryImpl>;
-pub type AppLoginUrlSettingService = CachedSetting<LoginUrlSetting, SettingRepositoryImpl>;
-pub type AppConsentUrlSettingService = CachedSetting<ConsentUrlSetting, SettingRepositoryImpl>;
 pub type AppDeviceAuthorizationSettingService =
     CachedSetting<DeviceAuthorizationSetting, SettingRepositoryImpl>;
 
@@ -160,7 +158,7 @@ impl RefreshableSetting for CachedRuntimeKeyRingProvider {
 #[derive(Clone)]
 pub struct GroupedInstallationSettingProvider<R> {
     initialized: Arc<CachedSetting<InstallationInitializedSetting, R>>,
-    domain: Arc<CachedSetting<InstallationDomainSetting, R>>,
+    domain: Arc<CachedSetting<DomainSetting, R>>,
     first_user_oid: Arc<CachedSetting<InstallationFirstUserOidSetting, R>>,
     first_key_oid: Arc<CachedSetting<InstallationFirstKeyOidSetting, R>>,
     initialized_at: Arc<CachedSetting<InstallationInitializedAtSetting, R>>,
@@ -172,7 +170,7 @@ where
 {
     fn new(
         initialized: Arc<CachedSetting<InstallationInitializedSetting, R>>,
-        domain: Arc<CachedSetting<InstallationDomainSetting, R>>,
+        domain: Arc<CachedSetting<DomainSetting, R>>,
         first_user_oid: Arc<CachedSetting<InstallationFirstUserOidSetting, R>>,
         first_key_oid: Arc<CachedSetting<InstallationFirstKeyOidSetting, R>>,
         initialized_at: Arc<CachedSetting<InstallationInitializedAtSetting, R>>,
@@ -235,13 +233,12 @@ pub struct AppRuntimeSettings {
     password_hash_setting: Arc<AppPasswordHashSettingService>,
     installation_setting: Arc<AppInstallationSettingService>,
     installation_initialized_setting: Arc<AppInstallationInitializedSettingService>,
-    installation_domain_setting: Arc<AppInstallationDomainSettingService>,
+    domain_setting: Arc<AppDomainSettingService>,
     installation_first_user_oid_setting: Arc<AppInstallationFirstUserOidSettingService>,
     installation_first_key_oid_setting: Arc<AppInstallationFirstKeyOidSettingService>,
     installation_initialized_at_setting: Arc<AppInstallationInitializedAtSettingService>,
     dynamic_client_registration_setting: Arc<AppDynamicClientRegistrationSettingService>,
-    login_url_setting: Arc<AppLoginUrlSettingService>,
-    consent_url_setting: Arc<AppConsentUrlSettingService>,
+    login_domain_setting: Arc<AppLoginDomainSettingService>,
     device_authorization_setting: Arc<AppDeviceAuthorizationSettingService>,
     key_ring: Arc<CachedRuntimeKeyRingProvider>,
 }
@@ -252,10 +249,8 @@ impl AppRuntimeSettings {
             AppInstallationInitializedSettingService::new(SettingRepositoryImpl::new(db.clone()))
                 .await?,
         );
-        let domain = Arc::new(
-            AppInstallationDomainSettingService::new(SettingRepositoryImpl::new(db.clone()))
-                .await?,
-        );
+        let domain =
+            Arc::new(AppDomainSettingService::new(SettingRepositoryImpl::new(db.clone())).await?);
         let first_user_oid = Arc::new(
             AppInstallationFirstUserOidSettingService::new(SettingRepositoryImpl::new(db.clone()))
                 .await?,
@@ -281,7 +276,7 @@ impl AppRuntimeSettings {
                 Arc::clone(&initialized_at),
             )),
             installation_initialized_setting: initialized,
-            installation_domain_setting: domain,
+            domain_setting: domain,
             installation_first_user_oid_setting: first_user_oid,
             installation_first_key_oid_setting: first_key_oid,
             installation_initialized_at_setting: initialized_at,
@@ -291,11 +286,8 @@ impl AppRuntimeSettings {
                 ))
                 .await?,
             ),
-            login_url_setting: Arc::new(
-                AppLoginUrlSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
-            ),
-            consent_url_setting: Arc::new(
-                AppConsentUrlSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
+            login_domain_setting: Arc::new(
+                AppLoginDomainSettingService::new(SettingRepositoryImpl::new(db.clone())).await?,
             ),
             device_authorization_setting: Arc::new(
                 AppDeviceAuthorizationSettingService::new(SettingRepositoryImpl::new(db.clone()))
@@ -309,13 +301,12 @@ impl AppRuntimeSettings {
         let mut refresher = SettingsRefresher::new(refresh_interval);
         refresher.register(Arc::clone(&self.password_hash_setting));
         refresher.register(Arc::clone(&self.installation_initialized_setting));
-        refresher.register(Arc::clone(&self.installation_domain_setting));
+        refresher.register(Arc::clone(&self.domain_setting));
+        refresher.register(Arc::clone(&self.login_domain_setting));
         refresher.register(Arc::clone(&self.installation_first_user_oid_setting));
         refresher.register(Arc::clone(&self.installation_first_key_oid_setting));
         refresher.register(Arc::clone(&self.installation_initialized_at_setting));
         refresher.register(Arc::clone(&self.dynamic_client_registration_setting));
-        refresher.register(Arc::clone(&self.login_url_setting));
-        refresher.register(Arc::clone(&self.consent_url_setting));
         refresher.register(Arc::clone(&self.device_authorization_setting));
         refresher.register(Arc::clone(&self.key_ring));
         refresher.spawn_detached();
@@ -337,8 +328,14 @@ impl AppRuntimeSettings {
     }
 
     #[must_use]
-    pub fn installation_domain(&self) -> Arc<AppInstallationDomainSettingService> {
-        Arc::clone(&self.installation_domain_setting)
+    pub fn domain(&self) -> Arc<AppDomainSettingService> {
+        Arc::clone(&self.domain_setting)
+    }
+
+    /// Origin of the login application, recorded during installation.
+    #[must_use]
+    pub fn login_domain(&self) -> Arc<AppLoginDomainSettingService> {
+        Arc::clone(&self.login_domain_setting)
     }
 
     #[must_use]
@@ -359,16 +356,6 @@ impl AppRuntimeSettings {
     #[must_use]
     pub fn dynamic_client_registration(&self) -> Arc<AppDynamicClientRegistrationSettingService> {
         Arc::clone(&self.dynamic_client_registration_setting)
-    }
-
-    #[must_use]
-    pub fn login_url(&self) -> Arc<AppLoginUrlSettingService> {
-        Arc::clone(&self.login_url_setting)
-    }
-
-    #[must_use]
-    pub fn consent_url(&self) -> Arc<AppConsentUrlSettingService> {
-        Arc::clone(&self.consent_url_setting)
     }
 
     #[must_use]

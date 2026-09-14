@@ -3,7 +3,9 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::application::error::{code::AppErrorCode, codes::device::DeviceAuthorizationErrorCode};
+use crate::application::error::{
+    code::AppErrorCode, codes::device::DeviceAuthorizationErrorCode, codes::token::TokenErrorCode,
+};
 use crate::application::setting::runtime::SettingProvider;
 use crate::domain::client::model::ClientOid;
 use crate::domain::client_authorization::{
@@ -12,12 +14,14 @@ use crate::domain::client_authorization::{
     device_code_digest,
 };
 use crate::domain::openid_connect::{
-    GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
+    ClientAssertionType, GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
     OpenIdConnectClientRepositoryError, OpenIdConnectCredential, OpenIdConnectCredentialData,
     OpenIdConnectCredentialType, TokenEndpointAuthMethod,
 };
 use crate::domain::setting::installation::{InstallationSetting, InstallationState};
-use crate::domain::setting::{DeviceAuthorizationSetting, DeviceAuthorizationSettings};
+use crate::domain::setting::{
+    DeviceAuthorizationSetting, DeviceAuthorizationSettings, LoginDomainSetting,
+};
 use crate::openid_connect::device::{
     DEVICE_VERIFICATION_PATH, DeviceAuthorizationParams, DeviceAuthorizationService,
     DeviceAuthorizationServiceDependencies, DeviceVerificationDecision, DeviceVerificationStatus,
@@ -43,6 +47,16 @@ struct StaticInstallationProvider {
 impl SettingProvider<InstallationSetting> for StaticInstallationProvider {
     fn current_value(&self) -> Arc<InstallationState> {
         self.value.clone()
+    }
+}
+
+struct StaticLoginDomainProvider {
+    value: Option<String>,
+}
+
+impl SettingProvider<LoginDomainSetting> for StaticLoginDomainProvider {
+    fn current_value(&self) -> Arc<Option<String>> {
+        Arc::new(self.value.clone())
     }
 }
 
@@ -121,7 +135,23 @@ fn build_service(
     client: OpenIdConnectClient,
     device_repo: Arc<MockDeviceAuthorizationRepository>,
 ) -> DeviceAuthorizationService {
-    build_service_with_settings(client, device_repo, DeviceAuthorizationSettings::default())
+    build_service_with_login_domain(client, device_repo, None)
+}
+
+/// Builds the service with the login application domain recorded at install
+/// time.
+fn build_service_with_login_domain(
+    client: OpenIdConnectClient,
+    device_repo: Arc<MockDeviceAuthorizationRepository>,
+    login_domain: Option<&str>,
+) -> DeviceAuthorizationService {
+    build_service_with_credential(
+        client,
+        device_repo,
+        DeviceAuthorizationSettings::default(),
+        client_secret_credential(),
+        login_domain,
+    )
 }
 
 fn build_service_with_settings(
@@ -129,10 +159,26 @@ fn build_service_with_settings(
     device_repo: Arc<MockDeviceAuthorizationRepository>,
     settings: DeviceAuthorizationSettings,
 ) -> DeviceAuthorizationService {
+    build_service_with_credential(
+        client,
+        device_repo,
+        settings,
+        client_secret_credential(),
+        None,
+    )
+}
+
+fn build_service_with_credential(
+    client: OpenIdConnectClient,
+    device_repo: Arc<MockDeviceAuthorizationRepository>,
+    settings: DeviceAuthorizationSettings,
+    credential: OpenIdConnectCredential,
+    login_domain: Option<&str>,
+) -> DeviceAuthorizationService {
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
     credential_repo
         .expect_find_active_by_client_oid_and_type()
-        .returning(|_, _| Ok(vec![client_secret_credential()]));
+        .returning(move |_, _| Ok(vec![credential.clone()]));
 
     let client_repo: Arc<dyn OpenIdConnectClientRepository> =
         Arc::new(DeviceClientRepository { client });
@@ -147,6 +193,9 @@ fn build_service_with_settings(
         client_repo,
         device_repo,
         provider_service: provider_service(),
+        login_domain: Arc::new(StaticLoginDomainProvider {
+            value: login_domain.map(str::to_owned),
+        }),
         settings: Arc::new(StaticDeviceAuthorizationProvider {
             value: Arc::new(settings),
         }),
@@ -215,12 +264,13 @@ async fn request_returns_rfc_8628_fields_and_stores_only_the_digest() {
     assert_eq!(response.interval, 5);
     assert_eq!(
         response.verification_uri,
-        format!("https://identity.example.com{DEVICE_VERIFICATION_PATH}")
+        format!("https://identity.example.com/{DEVICE_VERIFICATION_PATH}"),
+        "without an application URL the issuer host serves the page"
     );
     assert_eq!(
         response.verification_uri_complete,
         format!(
-            "https://identity.example.com{DEVICE_VERIFICATION_PATH}?user_code={}",
+            "https://identity.example.com/{DEVICE_VERIFICATION_PATH}?user_code={}",
             response.user_code
         )
     );
@@ -258,7 +308,6 @@ async fn request_scopes_and_lifetime_come_from_settings() {
         DeviceAuthorizationSettings {
             request_ttl_seconds: 120,
             polling_interval_seconds: 10,
-            ..DeviceAuthorizationSettings::default()
         },
     );
 
@@ -275,6 +324,160 @@ async fn request_scopes_and_lifetime_come_from_settings() {
     assert!(stored.last_polled_at.is_none());
 }
 
+/// Client registered for `private_key_jwt` and the matching credential.
+fn private_key_jwt_client(public_key: String) -> (OpenIdConnectClient, OpenIdConnectCredential) {
+    let mut metadata = test_metadata(None, Some("private_key_jwt"));
+    metadata.grant_types = Some(vec![GrantType::DeviceCode]);
+    let client = OpenIdConnectClient::new(
+        test_client(CLIENT_ID),
+        metadata,
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap();
+    let credential = OpenIdConnectCredential {
+        oid: Uuid::new_v4(),
+        client_oid: CLIENT_ID,
+        r#type: OpenIdConnectCredentialType::ClientPublicKey,
+        hint: "private_key_jwt".to_owned(),
+        data: OpenIdConnectCredentialData::ClientPublicKey {
+            public_key,
+            jwk: None,
+        },
+        expires_at: Utc::now() + chrono::Duration::days(1),
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    };
+
+    (client, credential)
+}
+
+/// An assertion as a confidential client library signs it.
+fn sign_assertion(private_key: &str, client_id: Uuid) -> String {
+    sign_assertion_with_audience(
+        private_key,
+        client_id,
+        "https://identity.example.com/oauth2/token",
+    )
+}
+
+fn sign_assertion_with_audience(private_key: &str, client_id: Uuid, audience: &str) -> String {
+    use josekit::jws::{JwsHeader, RS256};
+    use josekit::jwt::{self, JwtPayload};
+
+    let mut header = JwsHeader::new();
+    header.set_token_type("JWT");
+    let mut payload = JwtPayload::new();
+    let now = std::time::SystemTime::now();
+    payload.set_issuer(client_id.to_string());
+    payload.set_subject(client_id.to_string());
+    payload.set_audience(vec![audience]);
+    payload.set_issued_at(&now);
+    payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
+    payload.set_jwt_id(Uuid::new_v4().to_string());
+
+    jwt::encode_with_signer(
+        &payload,
+        &header,
+        &*RS256.signer_from_pem(private_key.as_bytes()).unwrap(),
+    )
+    .unwrap()
+}
+
+fn key_pair() -> (String, String) {
+    let rsa = openssl::rsa::Rsa::generate(2048).unwrap();
+    let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
+    let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
+
+    (private_key, public_key)
+}
+
+#[tokio::test]
+async fn request_authenticates_a_jwt_client_without_a_separate_client_id() {
+    let (private_key, public_key) = key_pair();
+    let (client, credential) = private_key_jwt_client(public_key);
+    let (device_repo, _created) = accepting_device_repo();
+    let service = build_service_with_credential(
+        client,
+        device_repo,
+        DeviceAuthorizationSettings::default(),
+        credential,
+        None,
+    );
+
+    let response = service
+        .authorize(DeviceAuthorizationParams {
+            // RFC 7523 §2.2: the assertion identifies the client on its own.
+            client_assertion_type: Some(ClientAssertionType::JwtBearer),
+            client_assertion: Some(sign_assertion(&private_key, CLIENT_ID)),
+            ..DeviceAuthorizationParams::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(response.expires_in, 600);
+    assert!(response.verification_uri.ends_with("/device"));
+}
+
+#[tokio::test]
+async fn request_rejects_an_assertion_signed_by_another_key() {
+    let (_, public_key) = key_pair();
+    let (other_private_key, _) = key_pair();
+    let (client, credential) = private_key_jwt_client(public_key);
+    let service = build_service_with_credential(
+        client,
+        Arc::new(MockDeviceAuthorizationRepository::new()),
+        DeviceAuthorizationSettings::default(),
+        credential,
+        None,
+    );
+
+    let error = service
+        .authorize(DeviceAuthorizationParams {
+            client_assertion_type: Some(ClientAssertionType::JwtBearer),
+            client_assertion: Some(sign_assertion(&other_private_key, CLIENT_ID)),
+            ..DeviceAuthorizationParams::default()
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.code(),
+        TokenErrorCode::AssertionVerifyFailed.code(),
+        "an assertion signed by a foreign key authenticates nothing"
+    );
+}
+
+#[tokio::test]
+async fn request_rejects_an_assertion_for_another_audience() {
+    let (private_key, public_key) = key_pair();
+    let (client, credential) = private_key_jwt_client(public_key);
+    let service = build_service_with_credential(
+        client,
+        Arc::new(MockDeviceAuthorizationRepository::new()),
+        DeviceAuthorizationSettings::default(),
+        credential,
+        None,
+    );
+    let foreign_audience = sign_assertion_with_audience(
+        &private_key,
+        CLIENT_ID,
+        "https://other.example.com/oauth2/token",
+    );
+
+    let error = service
+        .authorize(DeviceAuthorizationParams {
+            client_assertion_type: Some(ClientAssertionType::JwtBearer),
+            client_assertion: Some(foreign_audience),
+            ..DeviceAuthorizationParams::default()
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), TokenErrorCode::AssertionAudMismatch.code());
+}
+
 #[tokio::test]
 async fn request_requires_client_id() {
     let service = build_service(
@@ -289,7 +492,8 @@ async fn request_requires_client_id() {
 
     assert_eq!(
         error.code(),
-        DeviceAuthorizationErrorCode::ClientIdRequired.code()
+        24001,
+        "client identification without an assertion is missing a client_id"
     );
 }
 
@@ -504,10 +708,7 @@ async fn describe_reports_the_pending_request_to_the_user() {
         device_repo_with(record),
     );
 
-    let description = service
-        .describe_verification("wdjb-mjht", &verification_user())
-        .await
-        .unwrap();
+    let description = service.describe_verification("wdjb-mjht").await.unwrap();
 
     assert_eq!(description.status, DeviceVerificationStatus::Pending);
     assert_eq!(description.user_code, "WDJB-MJHT");
@@ -520,7 +721,35 @@ async fn describe_reports_the_pending_request_to_the_user() {
 }
 
 #[tokio::test]
-async fn describe_approves_trusted_clients_without_asking() {
+async fn describe_never_changes_authorization_state() {
+    let record = pending_record(
+        "WDJBMJHT",
+        "openid",
+        Utc::now() + chrono::Duration::minutes(10),
+    );
+    // A trusted client would be auto approved by an eager implementation; the
+    // mock panics if the read path calls the approve transition at all.
+    let service = build_service(skip_consent_device_client(), device_repo_with(record));
+
+    let description = service.describe_verification("WDJBMJHT").await.unwrap();
+
+    assert_eq!(
+        description.status,
+        DeviceVerificationStatus::Pending,
+        "a GET style lookup must not approve the request"
+    );
+    assert!(
+        !description.consent_required,
+        "the UI may approve a trusted client without asking the user"
+    );
+    assert_eq!(
+        description.client_uri.as_deref(),
+        Some("https://client.example.com/")
+    );
+}
+
+#[tokio::test]
+async fn trusted_clients_still_approve_through_the_decision_path() {
     let record = pending_record(
         "WDJBMJHT",
         "openid",
@@ -541,18 +770,16 @@ async fn describe_approves_trusted_clients_without_asking() {
 
     let service = build_service(skip_consent_device_client(), Arc::new(device_repo));
 
-    let description = service
-        .describe_verification("WDJBMJHT", &verification_user())
+    let outcome = service
+        .decide_verification(
+            "WDJBMJHT",
+            &verification_user(),
+            DeviceVerificationDecision::Approve,
+        )
         .await
         .unwrap();
 
-    assert_eq!(description.status, DeviceVerificationStatus::Approved);
-    assert!(!description.consent_required);
-    assert_eq!(
-        description.client_uri.as_deref(),
-        Some("https://client.example.com/")
-    );
-
+    assert_eq!(outcome.status, DeviceVerificationStatus::Approved);
     let approval = approvals.try_recv().unwrap();
     assert_eq!(approval.user_oid, verification_user().user_oid.to_string());
     assert_eq!(approval.approved_scope, "openid");
@@ -694,10 +921,7 @@ async fn expired_requests_cannot_be_decided() {
         DeviceAuthorizationErrorCode::RequestExpired.code()
     );
 
-    let description = service
-        .describe_verification("WDJBMJHT", &verification_user())
-        .await
-        .unwrap();
+    let description = service.describe_verification("WDJBMJHT").await.unwrap();
     assert_eq!(description.status, DeviceVerificationStatus::Expired);
 }
 
@@ -709,10 +933,7 @@ async fn unknown_and_malformed_user_codes_are_rejected() {
         .returning(|_| Ok(None));
     let service = build_service(device_client(device_grant(), false), Arc::new(device_repo));
 
-    let unknown = service
-        .describe_verification("WDJBMJHT", &verification_user())
-        .await
-        .unwrap_err();
+    let unknown = service.describe_verification("WDJBMJHT").await.unwrap_err();
     assert_eq!(
         unknown.code(),
         DeviceAuthorizationErrorCode::UserCodeNotFound.code()
@@ -720,12 +941,69 @@ async fn unknown_and_malformed_user_codes_are_rejected() {
 
     // "WDJ" normalizes to fewer characters than a code can have; the lookup
     // never reaches the database.
-    let malformed = service
-        .describe_verification("WDJ", &verification_user())
-        .await
-        .unwrap_err();
+    let malformed = service.describe_verification("WDJ").await.unwrap_err();
     assert_eq!(
         malformed.code(),
         DeviceAuthorizationErrorCode::UserCodeNotFound.code()
     );
+}
+
+#[tokio::test]
+async fn verification_uri_points_at_the_login_application() {
+    let (device_repo, _created) = accepting_device_repo();
+    let service = build_service_with_login_domain(
+        device_client(device_grant(), false),
+        device_repo,
+        Some("https://login.example.com"),
+    );
+
+    let response = service
+        .authorize(params(Some("secret-123"), Some("openid")))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.verification_uri, "https://login.example.com/device",
+        "the login application renders the verification page, wherever it runs"
+    );
+    assert_eq!(
+        response.verification_uri_complete,
+        format!(
+            "https://login.example.com/device?user_code={}",
+            response.user_code
+        )
+    );
+}
+
+#[tokio::test]
+async fn verification_uri_falls_back_to_the_issuer_host() {
+    let (device_repo, _created) = accepting_device_repo();
+    let service = build_service(device_client(device_grant(), false), device_repo);
+
+    let response = service
+        .authorize(params(Some("secret-123"), Some("openid")))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.verification_uri, "https://identity.example.com/device",
+        "an installation without a login domain still answers with a URI"
+    );
+}
+
+#[tokio::test]
+async fn a_malformed_login_domain_fails_the_request() {
+    let (device_repo, _created) = accepting_device_repo();
+    let service = build_service_with_login_domain(
+        device_client(device_grant(), false),
+        device_repo,
+        Some("not a url"),
+    );
+
+    let error = service
+        .authorize(params(Some("secret-123"), Some("openid")))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 26023);
 }

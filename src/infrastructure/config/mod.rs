@@ -530,31 +530,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let value = String::deserialize(deserializer)?;
-    match value.as_str() {
-        "ecdsa-p256" => Ok(AsymmetricKeyAlgorithm::EcdsaP256),
-        "ecdsa-p384" => Ok(AsymmetricKeyAlgorithm::EcdsaP384),
-        "ecdsa-p521" => Ok(AsymmetricKeyAlgorithm::EcdsaP521),
-        "ecdsa-secp256k1" => Ok(AsymmetricKeyAlgorithm::EcdsaSecp256k1),
-        "ed25519" => Ok(AsymmetricKeyAlgorithm::Ed25519),
-        "ed448" => Ok(AsymmetricKeyAlgorithm::Ed448),
-        "rsa-2048" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 2048 }),
-        "rsa-3072" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
-        "rsa-4096" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
-        _ => Err(serde::de::Error::unknown_variant(
-            &value,
-            &[
-                "ecdsa-p256",
-                "ecdsa-p384",
-                "ecdsa-p521",
-                "ecdsa-secp256k1",
-                "ed25519",
-                "ed448",
-                "rsa-2048",
-                "rsa-3072",
-                "rsa-4096",
-            ],
-        )),
-    }
+
+    value.parse().map_err(serde::de::Error::custom)
 }
 
 #[derive(Clone, Debug, Deserialize)]

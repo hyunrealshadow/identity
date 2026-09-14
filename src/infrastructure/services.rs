@@ -15,7 +15,7 @@ use crate::{
     },
     database::repository::{
         client_authorization::ClientAuthorizationRepositoryImpl,
-        device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallPersistenceImpl,
+        device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallRepositoryImpl,
         key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
         login_runtime::LoginRuntimeRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
@@ -179,13 +179,14 @@ impl AppServices {
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 password_hash_options: settings.password_hash_options(),
                 installation_initialized: settings.installation_initialized(),
-                installation_domain: settings.installation_domain(),
+                domain: settings.domain(),
+                login_domain: settings.login_domain(),
                 installation_first_user_oid: settings.installation_first_user_oid(),
                 installation_first_key_oid: settings.installation_first_key_oid(),
                 installation_initialized_at: settings.installation_initialized_at(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
                 certificate_generator: Arc::new(CertificateGeneratorImpl),
-                persistence: Arc::new(InstallPersistenceImpl::new(db.clone())),
+                repository: Arc::new(InstallRepositoryImpl::new(db.clone())),
                 runtime_key_ring: settings.key_ring(),
                 client_secret_lifetime: chrono::Duration::days(
                     rotation_config.credential_lifetime_days,
@@ -261,6 +262,7 @@ impl AppServices {
             .with_events(Arc::clone(&events)),
             device_authorization: DeviceAuthorizationService::new(
                 DeviceAuthorizationServiceDependencies {
+                    login_domain: settings.login_domain(),
                     client_authentication: Arc::new(ClientAuthenticator::new(
                         ClientAuthenticatorDependencies {
                             client_repo: oidc_client_repo.clone(),

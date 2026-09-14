@@ -8,7 +8,7 @@ use identity_application::install::{InstallInput, InstallService};
 use identity_infrastructure::auth::password::PasswordHasherImpl;
 use identity_infrastructure::crypto::certificate_generator::CertificateGeneratorImpl;
 use identity_infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
-use identity_infrastructure::database::repository::install::InstallPersistenceImpl;
+use identity_infrastructure::database::repository::install::InstallRepositoryImpl;
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
     config::{AppConfig, AppEnvironment, InstallConfig},
@@ -136,7 +136,7 @@ impl AppBuilder {
             "auto install: config values"
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
-        let key_algorithm = cfg.key_algorithm.clone();
+        let key_algorithm = cfg.key_algorithm.to_string();
         let svc = build_install_service(
             &settings,
             db.clone(),
@@ -241,13 +241,14 @@ fn build_install_service(
         password_hasher: Arc::new(PasswordHasherImpl::new()),
         password_hash_options: settings.password_hash_options(),
         installation_initialized: settings.installation_initialized(),
-        installation_domain: settings.installation_domain(),
+        domain: settings.domain(),
+        login_domain: settings.login_domain(),
         installation_first_user_oid: settings.installation_first_user_oid(),
         installation_first_key_oid: settings.installation_first_key_oid(),
         installation_initialized_at: settings.installation_initialized_at(),
         key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
         certificate_generator: Arc::new(CertificateGeneratorImpl),
-        persistence: Arc::new(InstallPersistenceImpl::new(db)),
+        repository: Arc::new(InstallRepositoryImpl::new(db)),
         runtime_key_ring: settings.key_ring(),
         client_secret_lifetime: chrono::Duration::days(rotation_config.credential_lifetime_days),
     }

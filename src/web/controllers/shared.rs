@@ -491,41 +491,51 @@ pub fn build_session_context(headers: &HeaderMap, ip_address: Option<String>) ->
     }
 }
 
+/// Routes the login application serves. The interaction URLs are built from
+/// these and the domain recorded during installation, so only the domain has
+/// to be configured.
+const LOGIN_ROUTE: &str = "login";
+const CONSENT_ROUTE: &str = "consent";
+
 /// Redirect to the external login application with the protected interaction ID.
 pub fn login_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
-    interaction_redirect(
-        ctx.settings().login_url().current_value().as_ref(),
-        "login",
-        login_id,
-    )
+    interaction_redirect(ctx, LOGIN_ROUTE, login_id)
 }
 
 /// Redirect to the external consent application with the protected interaction ID.
 pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
-    interaction_redirect(
-        ctx.settings().consent_url().current_value().as_ref(),
-        "consent",
-        login_id,
-    )
+    interaction_redirect(ctx, CONSENT_ROUTE, login_id)
 }
 
 fn interaction_redirect(
-    base: &Option<String>,
-    interaction: &'static str,
+    ctx: &AppState,
+    route: &'static str,
     login_id: &str,
 ) -> Result<Response, AppError> {
-    let base = base.as_deref().filter(|value| !value.trim().is_empty()).ok_or_else(|| {
-        AppError::from_code(
-            crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::InteractionUrlNotConfigured,
-        )
-        .with_param("interaction", interaction)
-    })?;
-    let separator = if base.contains('?') { '&' } else { '?' };
-    let target = format!(
-        "{base}{separator}login_id={}",
-        urlencoding::encode(login_id)
-    );
-    Ok(redirect_to_response(&target))
+    let login_domain = ctx.settings().login_domain().current_value();
+    let login_domain = login_domain
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            AppError::from_code(
+                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
+            )
+            .with_param("route", route)
+        })?;
+    let target = url::Url::parse(login_domain)
+        .and_then(|base| base.join(route))
+        .map_err(|error| {
+            AppError::from_code(
+                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
+            )
+            .with_param("route", route)
+            .with_source(error)
+        })?;
+    let mut target = target;
+    target.query_pairs_mut().append_pair("login_id", login_id);
+
+    Ok(redirect_to_response(target.as_str()))
 }
 
 #[cfg(test)]

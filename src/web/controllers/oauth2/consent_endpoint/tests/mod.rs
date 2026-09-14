@@ -91,6 +91,29 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
 }
 
 #[tokio::test]
+async fn consent_post_without_a_csrf_token_is_rejected() {
+    let (state, protected_login_id, _) = consent_test_state().await;
+    let db = state.resources().db().clone();
+    let service = Service::new(app_router(state, &consent_test_config()));
+
+    // The device approval rides on this same route, so an unprotected POST
+    // must not reach the decision handler for either interaction kind.
+    let response = TestClient::post("http://127.0.0.1:5800/oauth2/consent")
+        .raw_json(format!(
+            r#"{{"login_id":"{protected_login_id}","decision":"approve"}}"#
+        ))
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
+    let statements = format!("{:?}", db.into_transaction_log());
+    assert!(
+        !statements.contains("user_client_consent"),
+        "an unprotected POST must not write consent: {statements}"
+    );
+}
+
+#[tokio::test]
 async fn consent_route_serves_device_verification_for_a_user_code() {
     let (state, _, _) = consent_test_state().await;
     let service = Service::new(app_router(state, &consent_test_config()));

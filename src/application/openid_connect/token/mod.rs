@@ -167,7 +167,7 @@ impl TokenService {
 mod device;
 mod exchange;
 
-pub(crate) use exchange::resolve_id_token_alg;
+pub(crate) use exchange::{resolve_client_id, resolve_id_token_alg};
 
 pub(crate) mod helpers;
 mod signing;

@@ -30,7 +30,7 @@ use crate::{
 };
 use identity_domain::openid_connect::OpenIdConnectCredentialData;
 use identity_domain::setting::{
-    ConsentUrlSetting, DynamicClientRegistrationSetting, LoginUrlSetting, SettingDefinition,
+    DynamicClientRegistrationSetting, LoginDomainSetting, SettingDefinition,
 };
 
 use crate::infrastructure::database::repository::openid_connect_credential::serialize_data as serialize_credential_data;
@@ -123,7 +123,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     let now = Utc::now();
 
     ensure_dynamic_registration_enabled(&txn, now).await?;
-    ensure_interaction_urls(&txn, now).await?;
+    ensure_login_domain(&txn, now).await?;
 
     // ── Test user ──────────────────────────────────────────────────────────
 
@@ -211,17 +211,24 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     Ok(())
 }
 
-async fn ensure_interaction_urls(
+async fn ensure_login_domain(
     db: &impl sea_orm::ConnectionTrait,
     now: chrono::DateTime<Utc>,
 ) -> Result<(), AppError> {
     let login_url =
         std::env::var("LOGIN_URL").unwrap_or_else(|_| "https://login:3443/login".to_owned());
-    let consent_url =
-        std::env::var("CONSENT_URL").unwrap_or_else(|_| "https://login:3443/consent".to_owned());
 
-    ensure_string_setting(db, LoginUrlSetting::KEY, login_url, now).await?;
-    ensure_string_setting(db, ConsentUrlSetting::KEY, consent_url, now).await?;
+    // The login application owns the sign-in, consent and device verification
+    // pages, so only its origin is configured; the routes are fixed.
+    let login_domain = url::Url::parse(&login_url)
+        .ok()
+        .filter(|url| matches!(url.scheme(), "http" | "https"))
+        .map(|url| url.origin().ascii_serialization());
+
+    if let Some(login_domain) = login_domain {
+        ensure_string_setting(db, LoginDomainSetting::KEY, login_domain, now).await?;
+    }
+
     Ok(())
 }
 

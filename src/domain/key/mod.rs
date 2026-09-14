@@ -7,7 +7,8 @@ pub mod model;
 pub mod repository;
 
 pub use algorithm::{
-    AsymmetricKeyAlgorithm, JwaAlgorithmParseError, JwaSigningAlgorithm, JwsAlgorithm,
+    ALL_ASYMMETRIC_KEY_ALGORITHMS, AsymmetricKeyAlgorithm, JwaAlgorithmParseError,
+    JwaSigningAlgorithm, JwsAlgorithm,
 };
 pub use encryption_algorithm::{JwaEncryptionAlgorithm, JweContentEncryption};
 pub use jwk::{

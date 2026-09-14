@@ -5,8 +5,6 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceAuthorizationErrorCode {
     // --- device authorization request ---
-    /// `client_id` parameter is missing from the request.
-    ClientIdRequired,
     /// Client registration does not permit the device code grant.
     GrantNotAllowed,
     /// `scope` parameter could not be parsed.
@@ -21,6 +19,8 @@ pub enum DeviceAuthorizationErrorCode {
     StoreRequestFailed,
     /// The provider issuer is missing or malformed.
     IssuerInvalid,
+    /// The recorded login application domain is malformed.
+    LoginDomainInvalid,
 
     // --- verification interaction ---
     /// The submitted user code is unknown, expired, or already decided.
@@ -52,14 +52,13 @@ pub enum DeviceAuthorizationErrorCode {
 impl AppErrorCode for DeviceAuthorizationErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::ClientIdRequired => ErrorKind::Validation,
             Self::GrantNotAllowed => ErrorKind::Validation,
             Self::ScopeInvalid => ErrorKind::Validation,
             Self::ScopeNotAssignedToClient => ErrorKind::Validation,
             Self::UserCodeUnavailable => ErrorKind::Internal,
             Self::CodeGenerationFailed => ErrorKind::Internal,
             Self::StoreRequestFailed => ErrorKind::Internal,
-            Self::IssuerInvalid => ErrorKind::Internal,
+            Self::IssuerInvalid | Self::LoginDomainInvalid => ErrorKind::Internal,
             Self::UserCodeNotFound => ErrorKind::Validation,
             Self::LoadRequestFailed => ErrorKind::Internal,
             Self::DeserializeRequestFailed => ErrorKind::Internal,
@@ -77,7 +76,6 @@ impl AppErrorCode for DeviceAuthorizationErrorCode {
 
     fn code(self) -> u32 {
         match self {
-            Self::ClientIdRequired => 26000,
             Self::GrantNotAllowed => 26001,
             Self::ScopeInvalid => 26002,
             Self::ScopeNotAssignedToClient => 26003,
@@ -85,6 +83,7 @@ impl AppErrorCode for DeviceAuthorizationErrorCode {
             Self::CodeGenerationFailed => 26006,
             Self::StoreRequestFailed => 26007,
             Self::IssuerInvalid => 26009,
+            Self::LoginDomainInvalid => 26023,
             Self::UserCodeNotFound => 26010,
             Self::LoadRequestFailed => 26012,
             Self::DeserializeRequestFailed => 26013,

@@ -26,6 +26,82 @@ impl AsymmetricKeyAlgorithm {
     }
 }
 
+/// Every algorithm the installation accepts, in the order they are offered.
+pub const ALL_ASYMMETRIC_KEY_ALGORITHMS: &[AsymmetricKeyAlgorithm] = &[
+    AsymmetricKeyAlgorithm::EcdsaP256,
+    AsymmetricKeyAlgorithm::EcdsaP384,
+    AsymmetricKeyAlgorithm::EcdsaP521,
+    AsymmetricKeyAlgorithm::EcdsaSecp256k1,
+    AsymmetricKeyAlgorithm::Ed25519,
+    AsymmetricKeyAlgorithm::Ed448,
+    AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
+    AsymmetricKeyAlgorithm::Rsa { bits: 3072 },
+    AsymmetricKeyAlgorithm::Rsa { bits: 4096 },
+    AsymmetricKeyAlgorithm::X25519,
+    AsymmetricKeyAlgorithm::X448,
+];
+
+impl std::fmt::Display for AsymmetricKeyAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Rsa { bits } => return write!(f, "rsa-{bits}"),
+            Self::EcdsaP256 => "ecdsa-p256",
+            Self::EcdsaP384 => "ecdsa-p384",
+            Self::EcdsaP521 => "ecdsa-p521",
+            Self::EcdsaSecp256k1 => "ecdsa-secp256k1",
+            Self::Ed25519 => "ed25519",
+            Self::Ed448 => "ed448",
+            Self::X25519 => "x25519",
+            Self::X448 => "x448",
+        };
+
+        f.write_str(name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsymmetricKeyAlgorithmParseError(pub String);
+
+impl std::fmt::Display for AsymmetricKeyAlgorithmParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unsupported asymmetric key algorithm: {} (expected one of {})",
+            self.0,
+            ALL_ASYMMETRIC_KEY_ALGORITHMS
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+impl std::error::Error for AsymmetricKeyAlgorithmParseError {}
+
+impl FromStr for AsymmetricKeyAlgorithm {
+    type Err = AsymmetricKeyAlgorithmParseError;
+
+    /// Parses the name an operator or API client writes: `ecdsa-p256`,
+    /// `rsa-2048`, `ed25519`, …, matching [`std::fmt::Display`].
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "ecdsa-p256" => Ok(Self::EcdsaP256),
+            "ecdsa-p384" => Ok(Self::EcdsaP384),
+            "ecdsa-p521" => Ok(Self::EcdsaP521),
+            "ecdsa-secp256k1" => Ok(Self::EcdsaSecp256k1),
+            "ed25519" => Ok(Self::Ed25519),
+            "ed448" => Ok(Self::Ed448),
+            "x25519" => Ok(Self::X25519),
+            "x448" => Ok(Self::X448),
+            "rsa-2048" => Ok(Self::Rsa { bits: 2048 }),
+            "rsa-3072" => Ok(Self::Rsa { bits: 3072 }),
+            "rsa-4096" => Ok(Self::Rsa { bits: 4096 }),
+            _ => Err(AsymmetricKeyAlgorithmParseError(value.to_owned())),
+        }
+    }
+}
+
 #[derive(
     Debug,
     Clone,
@@ -187,6 +263,28 @@ impl FromStr for JwsAlgorithm {
 #[cfg(test)]
 mod tests {
     use super::AsymmetricKeyAlgorithm;
+
+    #[test]
+    fn names_round_trip_through_the_parser() {
+        for algorithm in super::ALL_ASYMMETRIC_KEY_ALGORITHMS {
+            let name = algorithm.to_string();
+            let parsed: AsymmetricKeyAlgorithm = name.parse().unwrap_or_else(|error| {
+                panic!("{name} should parse back: {error}");
+            });
+
+            assert_eq!(&parsed, algorithm, "{name} must round-trip");
+        }
+    }
+
+    #[test]
+    fn unknown_names_report_the_accepted_ones() {
+        let error = "rsa-1024".parse::<AsymmetricKeyAlgorithm>().unwrap_err();
+        let message = error.to_string();
+
+        assert!(message.contains("rsa-1024"), "{message}");
+        assert!(message.contains("ecdsa-p256"), "{message}");
+        assert!(message.contains("rsa-4096"), "{message}");
+    }
 
     #[test]
     fn rejects_rsa_below_2048_bits() {

@@ -12,15 +12,14 @@ use identity_domain::{
     },
     openid_connect::model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
     setting::{
-        consent_url::ConsentUrlSetting,
         device_authorization::DeviceAuthorizationSetting,
+        domain::DomainSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
-            InstallationDomainSetting, InstallationFirstKeyOidSetting,
-            InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
-            InstallationInitializedSetting,
+            InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+            InstallationInitializedAtSetting, InstallationInitializedSetting,
         },
-        login_url::LoginUrlSetting,
+        login_domain::LoginDomainSetting,
         model::SettingDefinition,
     },
 };
@@ -352,7 +351,7 @@ fn setting_rows(
         vec![setting_model::<InstallationInitializedSetting>(
             1, true, now,
         )],
-        vec![setting_model::<InstallationDomainSetting>(
+        vec![setting_model::<DomainSetting>(
             2,
             Some("identity.example.com".to_owned()),
             now,
@@ -382,14 +381,9 @@ fn setting_rows(
             DynamicClientRegistrationSetting::default_value(),
             now,
         )],
-        vec![setting_model::<LoginUrlSetting>(
-            8,
-            LoginUrlSetting::default_value(),
-            now,
-        )],
-        vec![setting_model::<ConsentUrlSetting>(
-            9,
-            ConsentUrlSetting::default_value(),
+        vec![setting_model::<LoginDomainSetting>(
+            11,
+            Some("https://ui.example.com".to_owned()),
             now,
         )],
         vec![setting_model::<DeviceAuthorizationSetting>(

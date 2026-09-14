@@ -31,11 +31,13 @@ pub(super) async fn device_consent_api(
     depot: &Depot,
     user_code: &str,
 ) -> Result<salvo::Response, AppError> {
-    let actor = verification_actor(ctx, headers).await?;
+    // The browser must still be authenticated, but the lookup itself stays
+    // read-only: approving happens only through the CSRF protected POST.
+    verification_actor(ctx, headers).await?;
     let description = ctx
         .services()
         .oidc_device_authorization()
-        .describe_verification(user_code, &actor.user())
+        .describe_verification(user_code)
         .await?;
     let scope = ScopeSet::parse(&description.scopes.join(" ")).unwrap_or_default();
 

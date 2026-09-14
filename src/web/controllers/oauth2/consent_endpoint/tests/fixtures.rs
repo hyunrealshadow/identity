@@ -15,15 +15,14 @@ use identity_domain::{
     },
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
     setting::{
-        consent_url::ConsentUrlSetting,
         device_authorization::DeviceAuthorizationSetting,
+        domain::DomainSetting,
         dynamic_registration::DynamicClientRegistrationSetting,
         installation::{
-            InstallationDomainSetting, InstallationFirstKeyOidSetting,
-            InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
-            InstallationInitializedSetting,
+            InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+            InstallationInitializedAtSetting, InstallationInitializedSetting,
         },
-        login_url::LoginUrlSetting,
+        login_domain::LoginDomainSetting,
         model::SettingDefinition,
     },
 };
@@ -88,10 +87,10 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         created_at: now.naive_utc(),
         updated_at: None,
     };
-    let installation_domain_setting = setting::Model {
+    let domain_setting = setting::Model {
         id: 3,
         oid: uuid::Uuid::new_v4(),
-        key: InstallationDomainSetting::KEY.to_string(),
+        key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
@@ -128,19 +127,11 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         created_at: now.naive_utc(),
         updated_at: None,
     };
-    let login_url_setting = setting::Model {
-        id: 8,
+    let login_domain_setting = setting::Model {
+        id: 12,
         oid: uuid::Uuid::new_v4(),
-        key: LoginUrlSetting::KEY.to_string(),
-        value: serde_json::to_value(Some("https://ui.example.com/login".to_owned())).unwrap(),
-        created_at: now.naive_utc(),
-        updated_at: None,
-    };
-    let consent_url_setting = setting::Model {
-        id: 9,
-        oid: uuid::Uuid::new_v4(),
-        key: ConsentUrlSetting::KEY.to_string(),
-        value: serde_json::to_value(Some("https://ui.example.com/consent".to_owned())).unwrap(),
+        key: LoginDomainSetting::KEY.to_string(),
+        value: serde_json::to_value(Some("https://ui.example.com".to_owned())).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -336,14 +327,13 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[installation_initialized_setting]])
-        .append_query_results([[installation_domain_setting]])
+        .append_query_results([[domain_setting]])
         .append_query_results([[installation_first_user_oid_setting]])
         .append_query_results([[installation_first_key_oid_setting]])
         .append_query_results([[installation_initialized_at_setting]])
         .append_query_results([[password_setting]])
         .append_query_results([[dynamic_registration_setting]])
-        .append_query_results([[login_url_setting]])
-        .append_query_results([[consent_url_setting]])
+        .append_query_results([[login_domain_setting]])
         .append_query_results([[device_authorization_setting]])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[symmetric_key.clone()]])

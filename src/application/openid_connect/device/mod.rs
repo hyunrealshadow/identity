@@ -21,11 +21,12 @@ use crate::{
             normalize_user_code,
         },
         openid_connect::{GrantType, OpenIdConnectClient, OpenIdConnectClientRepository, ScopeSet},
-        setting::DeviceAuthorizationSetting,
+        setting::{DeviceAuthorizationSetting, LoginDomainSetting},
     },
     observability::{BusinessEvent, EventSink, EventValue},
     openid_connect::client_authentication::ClientAuthenticator,
     openid_connect::provider::OpenIdProviderService,
+    openid_connect::token::resolve_client_id,
 };
 
 /// Bytes of entropy behind a device code (RFC 8628 §6.1 recommends at least
@@ -36,13 +37,10 @@ const DEVICE_CODE_BYTES: usize = 32;
 /// enough to place a request even when the space is busy.
 const USER_CODE_ATTEMPTS: usize = 5;
 
-/// Path of the verification interaction, relative to the issuer.
-///
-/// Device verification shares the consent endpoint: the same UI answers both
-/// an authorization request (`login_id`) and a device request (`user_code`).
-/// A device authorization request uses `/oauth2/device`, so the user facing
-/// value points at the interaction API the UI renders.
-pub const DEVICE_VERIFICATION_PATH: &str = "/oauth2/consent";
+/// Path of the device verification page, relative to the installed
+/// application URL: the application that serves `/login` and `/consent` also
+/// serves `/device`.
+pub const DEVICE_VERIFICATION_PATH: &str = "device";
 
 #[derive(Debug, Clone, Default)]
 pub struct DeviceAuthorizationParams {
@@ -115,6 +113,7 @@ pub struct DeviceAuthorizationService {
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     device_repo: Arc<dyn DeviceAuthorizationRepository>,
     provider_service: Arc<OpenIdProviderService>,
+    login_domain: Arc<dyn SettingProvider<LoginDomainSetting>>,
     settings: Arc<dyn SettingProvider<DeviceAuthorizationSetting>>,
     events: Arc<dyn EventSink>,
 }
@@ -124,6 +123,7 @@ pub struct DeviceAuthorizationServiceDependencies {
     pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
     pub device_repo: Arc<dyn DeviceAuthorizationRepository>,
     pub provider_service: Arc<OpenIdProviderService>,
+    pub login_domain: Arc<dyn SettingProvider<LoginDomainSetting>>,
     pub settings: Arc<dyn SettingProvider<DeviceAuthorizationSetting>>,
 }
 
@@ -135,6 +135,7 @@ impl DeviceAuthorizationService {
             client_repo: deps.client_repo,
             device_repo: deps.device_repo,
             provider_service: deps.provider_service,
+            login_domain: deps.login_domain,
             settings: deps.settings,
             events: Arc::new(crate::observability::NoopEventSink),
         }
@@ -153,16 +154,21 @@ impl DeviceAuthorizationService {
         params: DeviceAuthorizationParams,
     ) -> Result<DeviceAuthorizationResponse, AppError> {
         let settings = self.settings.current_value();
-        let client_id = params
-            .client_id
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::ClientIdRequired))?;
+        // A JWT authenticated client may identify itself through the
+        // assertion alone (RFC 7523 §2.2). The unverified subject only locates
+        // the client; the assertion is fully verified before it authenticates
+        // anything (RFC 8628 §3.1 requires client_id only when the request
+        // performs no client authentication).
+        let client_id = resolve_client_id(
+            params.client_id.filter(|value| !value.trim().is_empty()),
+            params.client_assertion_type,
+            params.client_assertion.as_deref(),
+        )?;
 
         let client = self
             .client_authentication
             .authenticate_client_request(
-                client_id,
+                &client_id,
                 params.client_secret.as_deref(),
                 params.client_assertion_type,
                 params.client_assertion.as_deref(),
@@ -187,7 +193,7 @@ impl DeviceAuthorizationService {
             .await?;
 
         let user_code_display = request.user_code_display.clone();
-        let verification_uri = verification_uri(&issuer)?;
+        let verification_uri = self.verification_uri(&issuer)?;
         let verification_uri_complete =
             verification_uri_complete(&verification_uri, &user_code_display);
 
@@ -211,6 +217,25 @@ impl DeviceAuthorizationService {
         })
     }
 
+    /// Page the user opens to enter the code (`RFC 8628` §3.2).
+    ///
+    /// The login application renders it, so the link is built from the login
+    /// domain recorded during installation (`app.login_domain`) — the identity
+    /// service and the login application may well live on different hosts.
+    /// Installations without that record fall back to the issuer.
+    fn verification_uri(&self, issuer: &Url) -> Result<Url, AppError> {
+        let login_domain = self.login_domain.current_value();
+
+        match login_domain
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(base) => device_page(base),
+            None => verification_uri(issuer),
+        }
+    }
+
     /// Housekeeping: drops expired device requests, never their authorization relations.
     ///
     /// Returns the number of removed request rows.
@@ -230,32 +255,23 @@ impl DeviceAuthorizationService {
 
     /// Resolves what the verification UI must show for a user code.
     ///
-    /// Trusted (`skip_consent`) clients are approved here, once the request is
-    /// identified and the user is authenticated; every other client keeps
-    /// `consent_required` and needs [`Self::decide_verification`], because a
-    /// device request is approved per request even when the user consented to
-    /// the client before (RFC 8628 §3.3).
+    /// Read-only by design: a GET carrying the browser session cookie must not
+    /// change authorization state, otherwise a link opened on behalf of the
+    /// user could approve a request without a CSRF protected action. Trusted
+    /// (`skip_consent`) clients still skip the consent *decision* — the UI
+    /// approves them through [`Self::decide_verification`] without asking the
+    /// user, and that write goes through the CSRF protected POST. Every client
+    /// is approved per request, even when the user consented to it before
+    /// (RFC 8628 §3.3).
     #[tracing::instrument(skip_all, name = "device_authorization.verify")]
     pub async fn describe_verification(
         &self,
         user_code: &str,
-        user: &DeviceVerificationUser,
     ) -> Result<DeviceVerificationDescription, AppError> {
         let record = self.resolve_verification(user_code).await?;
         let data = request_data(&record)?;
         let client = self.load_client(record.client_oid).await?;
         let status = verification_status(&record, Utc::now());
-
-        if status == DeviceVerificationStatus::Pending && client.metadata().settings.skip_consent {
-            self.record_decision(&record, &data, user, DeviceVerificationDecision::Approve)
-                .await?;
-
-            return Ok(description(
-                &client,
-                &data,
-                DeviceVerificationStatus::Approved,
-            ));
-        }
 
         Ok(description(&client, &data, status))
     }
@@ -543,6 +559,23 @@ fn generate_user_code() -> String {
     (0..USER_CODE_LENGTH)
         .map(|_| char::from(alphabet[rng.random_range(0..alphabet.len())]))
         .collect()
+}
+
+/// Fallback for installations without an application URL: the issuer host
+/// serves the same page path.
+/// Joins the device page onto the login domain, e.g.
+/// `https://login.example.com` -> `https://login.example.com/device`.
+///
+/// A malformed login domain fails the request rather than silently pointing
+/// users at the wrong host.
+fn device_page(base: &str) -> Result<Url, AppError> {
+    let base = Url::parse(base).map_err(|error| {
+        AppError::from_code(DeviceAuthorizationErrorCode::LoginDomainInvalid).with_source(error)
+    })?;
+
+    base.join(DEVICE_VERIFICATION_PATH).map_err(|error| {
+        AppError::from_code(DeviceAuthorizationErrorCode::LoginDomainInvalid).with_source(error)
+    })
 }
 
 fn verification_uri(issuer: &Url) -> Result<Url, AppError> {

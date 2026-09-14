@@ -476,15 +476,22 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             return Ok(DeviceConsumeOutcome::NotRedeemable);
         };
 
-        let relation_active = ClientAuthorizationEntity::find()
+        // Lock the relation as well: revocation and redemption must serialize
+        // on it, otherwise a revocation that commits between this read and the
+        // token insert would still let the redemption succeed. The request row
+        // is locked first in every path (approve, deny, poll, redeem), and
+        // revocation only ever locks the relation, so the lock order stays
+        // consistent and cannot deadlock.
+        let relation = ClientAuthorizationEntity::find()
             .filter(client_authorization::Column::Oid.eq(relation_oid))
             .filter(client_authorization::Column::Type.eq(device_authorization_type()))
+            .lock_exclusive()
             .one(&transaction)
             .await
-            .map_err(query_failed)?
-            .is_some_and(|relation| {
-                relation.revoked_at.is_none() && relation.expires_at.with_timezone(&Utc) > now
-            });
+            .map_err(query_failed)?;
+        let relation_active = relation.is_some_and(|relation| {
+            relation.revoked_at.is_none() && relation.expires_at.with_timezone(&Utc) > now
+        });
         if !relation_active {
             return Ok(DeviceConsumeOutcome::AuthorizationRevoked);
         }
@@ -1176,6 +1183,90 @@ mod postgres_tests {
                 "another account keeps its authorization"
             );
         }
+
+        drop_client(&db, client_oid).await;
+    }
+
+    /// Reproduces the revocation/redemption interleaving on two connections:
+    /// the redemption must wait for the relation lock, then observe the
+    /// revocation instead of issuing tokens.
+    #[tokio::test]
+    #[ignore = "requires PostgreSQL"]
+    async fn a_revocation_committed_during_redemption_blocks_the_tokens() {
+        let db = test_db().await;
+        let client_oid = new_client_oid();
+        create_client(&db, client_oid).await;
+        let repository = DeviceAuthorizationRepositoryImpl::new(db.clone());
+        let request_oid = create_pending_request(
+            &repository,
+            client_oid,
+            &unique_code("device"),
+            &unique_code("CODE"),
+        )
+        .await;
+
+        let approval = approval();
+        let relation_oid = approval.device_authorization_oid;
+        let user_oid = approval.user_oid.clone();
+        repository
+            .approve_device_request(request_oid, approval, Utc::now())
+            .await
+            .expect("approve request")
+            .expect("relation created");
+
+        // Connection A holds the relation lock, exactly like an in-flight
+        // revocation does before it commits.
+        let revoker = db.begin().await.expect("begin revocation transaction");
+        ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(relation_oid))
+            .lock_exclusive()
+            .one(&revoker)
+            .await
+            .expect("lock relation");
+
+        let record = access_token_record(&user_oid);
+        let redemption = DeviceAuthorizationRepositoryImpl::new(db.clone());
+        let record_for_redemption = record.clone();
+        let redemption = tokio::spawn(async move {
+            redemption
+                .consume_device_request_with_tokens(
+                    request_oid,
+                    vec![record_for_redemption],
+                    Utc::now(),
+                )
+                .await
+        });
+
+        // Give the redemption a chance to reach the relation read: without the
+        // lock it would already commit here.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(
+            count_rows(&db, record.oid).await,
+            0,
+            "the redemption must not commit while the relation is locked"
+        );
+
+        ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::RevokedAt,
+                SimpleExpr::Value(Some(Utc::now()).into()),
+            )
+            .filter(client_authorization::Column::Oid.eq(relation_oid))
+            .exec(&revoker)
+            .await
+            .expect("revoke relation");
+        revoker.commit().await.expect("commit revocation");
+
+        let outcome = redemption
+            .await
+            .expect("redemption task")
+            .expect("redemption result");
+        assert_eq!(outcome, DeviceConsumeOutcome::AuthorizationRevoked);
+        assert_eq!(
+            count_rows(&db, record.oid).await,
+            0,
+            "a revoked authorization issues no tokens"
+        );
 
         drop_client(&db, client_oid).await;
     }

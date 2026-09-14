@@ -15,7 +15,7 @@ use crate::{
             AppError,
             codes::{common::CommonErrorCode, install::InstallErrorCode},
         },
-        install::{InstallPersistence, InstallPersistenceInput},
+        install::{InstallRepository, InstallationData},
     },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
@@ -24,11 +24,11 @@ use crate::{
             TokenEndpointAuthMethod,
         },
         setting::{
-            ConsentUrlSetting, LoginUrlSetting,
+            DomainSetting, LoginDomainSetting,
             installation::{
-                InstallationDomainSetting, InstallationFirstKeyOidSetting,
-                InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
-                InstallationInitializedSetting, InstallationState,
+                InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+                InstallationInitializedAtSetting, InstallationInitializedSetting,
+                InstallationState,
             },
             model::SettingDefinition,
         },
@@ -50,14 +50,14 @@ use crate::{
     },
 };
 
-pub struct InstallPersistenceImpl {
+pub struct InstallRepositoryImpl {
     db: DatabaseConnection,
 }
 
 // Deliberately distinct from the process-lifetime startup guard lock.
 const INSTALL_TRANSACTION_LOCK_ID: i64 = 841_463_791_178_241_512;
 
-impl InstallPersistenceImpl {
+impl InstallRepositoryImpl {
     #[must_use]
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
@@ -65,32 +65,32 @@ impl InstallPersistenceImpl {
 }
 
 #[async_trait]
-impl InstallPersistence for InstallPersistenceImpl {
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "persist_installation"))]
-    async fn persist_installation(
+impl InstallRepository for InstallRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create_installation"))]
+    async fn create_installation(
         &self,
-        input: InstallPersistenceInput,
+        data: InstallationData,
     ) -> Result<InstallationState, AppError> {
         let now = Utc::now();
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
-        let client_oid = input.client_id;
+        let client_oid = data.client_id;
         let normalized_username =
-            identity_domain::user::normalization::normalize_username(&input.username)
+            identity_domain::user::normalization::normalize_username(&data.username)
                 .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
-        let normalized_email = identity_domain::user::normalization::normalize_email(&input.email)
+        let normalized_email = identity_domain::user::normalization::normalize_email(&data.email)
             .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
-        let password_json = serde_json::to_value(&input.password).map_err(|error| {
+        let password_json = serde_json::to_value(&data.password).map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
         let key_json =
-            serde_json::to_value(KeyData::Asymmetric(input.key_data.clone())).map_err(|error| {
+            serde_json::to_value(KeyData::Asymmetric(data.key_data.clone())).map_err(|error| {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
             })?;
 
         let installation_state = InstallationState {
             initialized: true,
-            domain: Some(input.domain.clone()),
+            domain: Some(data.domain.clone()),
             first_user_oid: Some(user_oid),
             first_key_oid: Some(key_oid),
             initialized_at: Some(now),
@@ -131,9 +131,9 @@ impl InstallPersistence for InstallPersistenceImpl {
 
         let created_user = user::ActiveModel {
             oid: Set(user_oid),
-            email: Set(input.email),
+            email: Set(data.email),
             email_normalized: Set(normalized_email),
-            name: Set(input.username),
+            name: Set(data.username),
             name_normalized: Set(normalized_username),
             email_verified: Set(true),
             failed_attempts: Set(0),
@@ -178,8 +178,8 @@ impl InstallPersistence for InstallPersistenceImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        let callback_url = built_in_callback_url(&input.application_url)?;
-        let logout_url = built_in_logout_url(&input.application_url)?;
+        let callback_url = built_in_callback_url(&data.application_url)?;
+        let logout_url = built_in_logout_url(&data.application_url)?;
         client_open_id_connect::ActiveModel {
             client_id: Set(created_client.id),
             post_logout_redirect_uris: Set(Some(serde_json::json!([logout_url.as_str()]))),
@@ -251,7 +251,7 @@ impl InstallPersistence for InstallPersistenceImpl {
 
         let serialized_credential =
             serialize_credential_data(OpenIdConnectCredentialData::ClientSecret {
-                secret: input.client_secret,
+                secret: data.client_secret,
             });
         client_open_id_connect_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
@@ -259,7 +259,7 @@ impl InstallPersistence for InstallPersistenceImpl {
             r#type: Set(serialized_credential.type_),
             data: Set(serialized_credential.data),
             hint: Set(serialized_credential.hint),
-            expires_at: Set((now + input.client_secret_lifetime).into()),
+            expires_at: Set((now + data.client_secret_lifetime).into()),
             revoked_at: Set(None),
             created_at: Set(now.into()),
             updated_at: Set(Some(now.into())),
@@ -284,9 +284,9 @@ impl InstallPersistence for InstallPersistenceImpl {
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
         let jwks = generate_all_jwks_for_key(
-            &input.key_data.private_key,
+            &data.key_data.private_key,
             &key_oid.to_string(),
-            input.key_data.certificate.as_deref(),
+            data.key_data.certificate.as_deref(),
         )
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
         let jwk_models = jwks
@@ -336,22 +336,14 @@ impl InstallPersistence for InstallPersistenceImpl {
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
         upsert_installation_state(&txn, &installation_state).await?;
-        upsert_setting(
-            &txn,
-            LoginUrlSetting::KEY,
-            serde_json::json!(input.application_url.join("login").map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?),
-        )
-        .await?;
-        upsert_setting(
-            &txn,
-            ConsentUrlSetting::KEY,
-            serde_json::json!(input.application_url.join("consent").map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?),
-        )
-        .await?;
+        if let Some(login_domain) = data.login_domain.clone() {
+            upsert_setting(
+                &txn,
+                LoginDomainSetting::KEY,
+                serde_json::json!(login_domain),
+            )
+            .await?;
+        }
 
         txn.commit().await.map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -417,7 +409,7 @@ where
     .await?;
     upsert_setting(
         db,
-        InstallationDomainSetting::KEY,
+        DomainSetting::KEY,
         serde_json::to_value(&state.domain).map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?,

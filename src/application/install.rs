@@ -17,12 +17,16 @@ use crate::{
     },
     domain::{
         auth::password::{PasswordHashSetting, PasswordHasher},
-        key::{AsymmetricKeyAlgorithm, generator::AsymmetricKeyGenerator},
+        key::{
+            AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm,
+            generator::AsymmetricKeyGenerator,
+        },
         setting::{
+            DomainSetting, LoginDomainSetting,
             installation::{
-                InstallationDomainSetting, InstallationFirstKeyOidSetting,
-                InstallationFirstUserOidSetting, InstallationInitializedAtSetting,
-                InstallationInitializedSetting, InstallationState,
+                InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+                InstallationInitializedAtSetting, InstallationInitializedSetting,
+                InstallationState,
             },
             repository::SettingRepository,
         },
@@ -37,20 +41,22 @@ pub struct InstallInput {
     pub password: String,
     pub domain: String,
     pub application_url: String,
-    pub key_algorithm: AsymmetricKeyAlgorithm,
+    /// Wire name of the signing algorithm, e.g. `ecdsa-p256`.
+    pub key_algorithm: String,
 }
 
 pub struct InstallService<R: SettingRepository> {
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub password_hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
     pub installation_initialized: Arc<CachedSetting<InstallationInitializedSetting, R>>,
-    pub installation_domain: Arc<CachedSetting<InstallationDomainSetting, R>>,
+    pub domain: Arc<CachedSetting<DomainSetting, R>>,
+    pub login_domain: Arc<CachedSetting<LoginDomainSetting, R>>,
     pub installation_first_user_oid: Arc<CachedSetting<InstallationFirstUserOidSetting, R>>,
     pub installation_first_key_oid: Arc<CachedSetting<InstallationFirstKeyOidSetting, R>>,
     pub installation_initialized_at: Arc<CachedSetting<InstallationInitializedAtSetting, R>>,
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
     pub certificate_generator: Arc<dyn CertificateGenerator>,
-    pub persistence: Arc<dyn InstallPersistence>,
+    pub repository: Arc<dyn InstallRepository>,
     pub runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
     pub client_secret_lifetime: chrono::Duration,
 }
@@ -64,12 +70,14 @@ pub trait CertificateGenerator: Send + Sync {
     ) -> Result<String, AppError>;
 }
 
+/// Everything the storage layer needs to record a fresh installation.
 #[derive(Debug, Clone)]
-pub struct InstallPersistenceInput {
+pub struct InstallationData {
     pub username: String,
     pub email: String,
     pub password: Password,
     pub domain: String,
+    pub login_domain: Option<String>,
     pub application_url: Url,
     pub client_id: Uuid,
     pub client_secret: String,
@@ -77,11 +85,14 @@ pub struct InstallPersistenceInput {
     pub key_data: identity_domain::key::AsymmetricKeyData,
 }
 
+/// Storage port for a complete installation. The implementation writes the
+/// first user, its credential, the signing key, the built-in client and the
+/// installation settings as one atomic unit.
 #[async_trait]
-pub trait InstallPersistence: Send + Sync {
-    async fn persist_installation(
+pub trait InstallRepository: Send + Sync {
+    async fn create_installation(
         &self,
-        input: InstallPersistenceInput,
+        data: InstallationData,
     ) -> Result<InstallationState, AppError>;
 }
 
@@ -138,14 +149,16 @@ impl<R: SettingRepository> InstallService<R> {
         let mut client_secret_bytes = [0_u8; 32];
         rand::rng().fill(&mut client_secret_bytes);
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
+        let login_domain = login_app_domain(&input.application_url);
 
         let installation_state = self
-            .persistence
-            .persist_installation(InstallPersistenceInput {
+            .repository
+            .create_installation(InstallationData {
                 username: input.username,
                 email: input.email,
                 password,
                 domain: input.domain,
+                login_domain: login_domain.clone(),
                 application_url: input.application_url,
                 client_id,
                 client_secret: client_secret.clone(),
@@ -155,9 +168,8 @@ impl<R: SettingRepository> InstallService<R> {
             .await?;
 
         self.installation_initialized.set(true).await?;
-        self.installation_domain
-            .set(installation_state.domain.clone())
-            .await?;
+        self.domain.set(installation_state.domain.clone()).await?;
+        self.login_domain.set(login_domain).await?;
         self.installation_first_user_oid
             .set(installation_state.first_user_oid)
             .await?;
@@ -202,18 +214,10 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         "application_url",
         normalize_application_url(&input.application_url),
     );
-    let algorithm_name = asymmetric_algorithm_name(&input.key_algorithm);
     let key_algorithm = collect_field(
         &mut validation,
         "key_algorithm",
-        input
-            .key_algorithm
-            .validate()
-            .map(|()| input.key_algorithm)
-            .map_err(|_| {
-                AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
-                    .with_param("algorithm", algorithm_name)
-            }),
+        parse_install_key_algorithm(&input.key_algorithm),
     );
     if validation
         .validation()
@@ -301,27 +305,98 @@ fn normalize_email(email: &str) -> Result<String, AppError> {
     })
 }
 
-fn asymmetric_algorithm_name(algorithm: &AsymmetricKeyAlgorithm) -> String {
-    match algorithm {
-        AsymmetricKeyAlgorithm::Rsa { bits } => format!("rsa({bits})"),
-        AsymmetricKeyAlgorithm::EcdsaP256 => "ecdsa_p256".to_owned(),
-        AsymmetricKeyAlgorithm::EcdsaP384 => "ecdsa_p384".to_owned(),
-        AsymmetricKeyAlgorithm::EcdsaP521 => "ecdsa_p521".to_owned(),
-        AsymmetricKeyAlgorithm::EcdsaSecp256k1 => "ecdsa_secp256k1".to_owned(),
-        AsymmetricKeyAlgorithm::Ed25519 => "ed25519".to_owned(),
-        AsymmetricKeyAlgorithm::Ed448 => "ed448".to_owned(),
-        AsymmetricKeyAlgorithm::X25519 => "x25519".to_owned(),
-        AsymmetricKeyAlgorithm::X448 => "x448".to_owned(),
+/// Origin of the login application, e.g. `https://login.example.com`.
+///
+/// Only http(s) URLs have a usable origin; anything else leaves the setting
+/// empty and lets the configuration stay authoritative.
+fn login_app_domain(application_url: &Url) -> Option<String> {
+    matches!(application_url.scheme(), "http" | "https")
+        .then(|| application_url.origin().ascii_serialization())
+}
+
+/// Parses the algorithm a client asked for and rejects the ones this
+/// installation cannot sign with.
+fn parse_install_key_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, AppError> {
+    let unsupported = || {
+        AppError::from_code(InstallErrorCode::UnsupportedAlgorithm).with_param("algorithm", value)
+    };
+    let algorithm: AsymmetricKeyAlgorithm = value.parse().map_err(|_| unsupported())?;
+    algorithm.validate().map_err(|_| unsupported())?;
+    if JwaSigningAlgorithm::trials_for_key_type(&algorithm).is_empty() {
+        return Err(unsupported());
     }
+
+    Ok(algorithm)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{InstallInput, validate_install_input};
     use crate::application::error::code::AppErrorCode;
-    use crate::{
-        application::error::codes::common::CommonErrorCode, domain::key::AsymmetricKeyAlgorithm,
-    };
+    use crate::application::error::codes::common::CommonErrorCode;
+
+    #[test]
+    fn install_validation_rejects_an_unknown_algorithm_name() {
+        let error = validate_install_input(install_input("rsa-1024"))
+            .expect_err("an unknown algorithm name should fail validation");
+
+        assert_eq!(error.code(), CommonErrorCode::ValidationFailed.code());
+        let details = error.validation().expect("validation details");
+        assert_eq!(
+            details
+                .fields()
+                .iter()
+                .map(|field| (field.field(), field.code()))
+                .collect::<Vec<_>>(),
+            vec![("key_algorithm", 13009)]
+        );
+        assert_eq!(
+            details.fields()[0].params().get("algorithm"),
+            Some("rsa-1024")
+        );
+    }
+
+    #[test]
+    fn install_validation_rejects_an_algorithm_that_cannot_sign() {
+        let error = validate_install_input(install_input("x25519"))
+            .expect_err("a key agreement algorithm cannot be the signing key");
+
+        let details = error.validation().expect("validation details");
+        assert_eq!(
+            details
+                .fields()
+                .iter()
+                .map(|field| (field.field(), field.code()))
+                .collect::<Vec<_>>(),
+            vec![("key_algorithm", 13009)]
+        );
+    }
+
+    #[test]
+    fn install_validation_accepts_every_offered_name() {
+        use crate::domain::key::{ALL_ASYMMETRIC_KEY_ALGORITHMS, AsymmetricKeyAlgorithm};
+
+        for algorithm in ALL_ASYMMETRIC_KEY_ALGORITHMS.iter().filter(|algorithm| {
+            !matches!(
+                algorithm,
+                AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448
+            )
+        }) {
+            validate_install_input(install_input(&algorithm.to_string()))
+                .unwrap_or_else(|error| panic!("{algorithm} should be accepted: {error}"));
+        }
+    }
+
+    fn install_input(key_algorithm: &str) -> InstallInput {
+        InstallInput {
+            username: "admin".to_owned(),
+            email: "admin@example.com".to_owned(),
+            password: "correct horse battery staple".to_owned(),
+            domain: "identity.example.com".to_owned(),
+            application_url: "https://login.example.com".to_owned(),
+            key_algorithm: key_algorithm.to_owned(),
+        }
+    }
 
     #[test]
     fn install_validation_collects_all_invalid_fields() {
@@ -331,7 +406,7 @@ mod tests {
             password: String::new(),
             domain: "invalid domain".to_owned(),
             application_url: "not-a-url".to_owned(),
-            key_algorithm: AsymmetricKeyAlgorithm::EcdsaP256,
+            key_algorithm: "ecdsa-p256".to_owned(),
         })
         .expect_err("invalid form should fail validation");
 

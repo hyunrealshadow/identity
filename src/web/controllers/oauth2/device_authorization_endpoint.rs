@@ -44,11 +44,13 @@ struct DeviceAuthorizationErrorResponse {
 fn device_error_code(error: &AppError) -> &'static str {
     let code = error.code();
 
-    if code == DeviceAuthorizationErrorCode::ClientIdRequired.code() {
-        return "invalid_request";
-    }
     if code == DeviceAuthorizationErrorCode::GrantNotAllowed.code() {
         return "unauthorized_client";
+    }
+    if code == TokenErrorCode::ClientIdRequired.code() {
+        // A missing parameter is an invalid request; only a failed
+        // authentication is an invalid client (RFC 6749 §5.2).
+        return "invalid_request";
     }
     if code == DeviceAuthorizationErrorCode::ScopeInvalid.code()
         || code == DeviceAuthorizationErrorCode::ScopeNotAssignedToClient.code()
@@ -229,7 +231,9 @@ mod tests {
 
     #[test]
     fn missing_client_id_is_an_invalid_request() {
-        let error = AppError::from_code(DeviceAuthorizationErrorCode::ClientIdRequired);
+        // Client identifier resolution is shared with the token endpoint, so
+        // the missing parameter reports the token endpoint's error code.
+        let error = AppError::from_code(TokenErrorCode::ClientIdRequired);
 
         assert_eq!(device_error_code(&error), "invalid_request");
         assert_eq!(device_error_status(&error), StatusCode::BAD_REQUEST);

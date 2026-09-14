@@ -15,15 +15,6 @@ impl SettingDefinition for InstallationInitializedSetting {
     }
 }
 
-pub struct InstallationDomainSetting;
-impl SettingDefinition for InstallationDomainSetting {
-    type Value = Option<String>;
-    const KEY: &'static str = "app.installation.domain";
-    fn default_value() -> Option<String> {
-        None
-    }
-}
-
 pub struct InstallationFirstUserOidSetting;
 impl SettingDefinition for InstallationFirstUserOidSetting {
     type Value = Option<Uuid>;

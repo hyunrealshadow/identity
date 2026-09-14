@@ -93,7 +93,7 @@ impl AsymmetricKeyService {
     ) -> Result<Key, AppError> {
         input.algorithm.validate().map_err(|_| {
             AppError::from_code(KeyErrorCode::UnsupportedAlgorithm)
-                .with_param("algorithm", asymmetric_algorithm_name(&input.algorithm))
+                .with_param("algorithm", input.algorithm.to_string())
         })?;
 
         let spec = AsymmetricKeySpec {
@@ -177,22 +177,6 @@ impl AsymmetricKeyService {
             .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
         self.refresh_runtime_key_ring().await?;
         Ok(key)
-    }
-}
-
-fn asymmetric_algorithm_name(algorithm: &identity_domain::key::AsymmetricKeyAlgorithm) -> String {
-    match algorithm {
-        identity_domain::key::AsymmetricKeyAlgorithm::Rsa { bits } => format!("rsa({bits})"),
-        identity_domain::key::AsymmetricKeyAlgorithm::EcdsaP256 => "ecdsa_p256".to_owned(),
-        identity_domain::key::AsymmetricKeyAlgorithm::EcdsaP384 => "ecdsa_p384".to_owned(),
-        identity_domain::key::AsymmetricKeyAlgorithm::EcdsaP521 => "ecdsa_p521".to_owned(),
-        identity_domain::key::AsymmetricKeyAlgorithm::EcdsaSecp256k1 => {
-            "ecdsa_secp256k1".to_owned()
-        }
-        identity_domain::key::AsymmetricKeyAlgorithm::Ed25519 => "ed25519".to_owned(),
-        identity_domain::key::AsymmetricKeyAlgorithm::Ed448 => "ed448".to_owned(),
-        identity_domain::key::AsymmetricKeyAlgorithm::X25519 => "x25519".to_owned(),
-        identity_domain::key::AsymmetricKeyAlgorithm::X448 => "x448".to_owned(),
     }
 }
 

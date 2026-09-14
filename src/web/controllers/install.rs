@@ -5,12 +5,7 @@ use salvo::{Depot, Request, Router, handler};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::{
-        error::{AppError, codes::common::CommonErrorCode},
-        install::InstallInput,
-        setting::runtime::SettingProvider,
-    },
-    domain::key::AsymmetricKeyAlgorithm,
+    application::install::InstallInput,
     web::controllers::response::{
         AppResponse, JsonWebError, JsonWebResult, app_state, insert_no_store_headers,
         json_response, parse_json,
@@ -93,7 +88,7 @@ async fn installation_status(depot: &mut Depot) -> JsonWebResult<AppResponse> {
     let mut response = json_response(
         StatusCode::OK,
         InstallationStatusResponse {
-            installed: *ctx.settings().installation_initialized().current_value(),
+            installed: ctx.services().install().is_initialized(),
         },
     );
     insert_no_store_headers(&mut response);
@@ -105,26 +100,15 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
     let ctx = app_state(depot).map_err(JsonWebError)?;
     let request: InstallRequest = parse_json(req).await.map_err(JsonWebError)?;
 
-    if *ctx.settings().installation_initialized().current_value() {
-        return Err(identity_application::error::AppError::from_code(
-            identity_application::error::codes::install::InstallErrorCode::AlreadyInitialized,
-        )
-        .into());
-    }
-
-    let key_algorithm = parse_algorithm(&request.key_algorithm).map_err(|error| {
-        JsonWebError(
-            AppError::from_code(CommonErrorCode::ValidationFailed)
-                .with_field_error("key_algorithm", error),
-        )
-    })?;
+    // Everything else — the already-initialized guard and the algorithm name —
+    // belongs to the installation use case, not to the transport.
     let input = InstallInput {
         username: request.username.clone(),
         email: request.email.clone(),
         password: request.password.clone(),
         domain: request.domain.clone(),
         application_url: request.application_url.clone(),
-        key_algorithm,
+        key_algorithm: request.key_algorithm.clone(),
     };
 
     ctx.services()
@@ -144,24 +128,6 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
     );
     insert_no_store_headers(&mut response);
     Ok(response.into())
-}
-
-fn parse_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, AppError> {
-    match value {
-        "ecdsa-p256" => Ok(AsymmetricKeyAlgorithm::EcdsaP256),
-        "ecdsa-p384" => Ok(AsymmetricKeyAlgorithm::EcdsaP384),
-        "ecdsa-p521" => Ok(AsymmetricKeyAlgorithm::EcdsaP521),
-        "ecdsa-secp256k1" => Ok(AsymmetricKeyAlgorithm::EcdsaSecp256k1),
-        "ed25519" => Ok(AsymmetricKeyAlgorithm::Ed25519),
-        "ed448" => Ok(AsymmetricKeyAlgorithm::Ed448),
-        "rsa-2048" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 2048 }),
-        "rsa-3072" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 3072 }),
-        "rsa-4096" => Ok(AsymmetricKeyAlgorithm::Rsa { bits: 4096 }),
-        _ => Err(AppError::from_code(
-            identity_application::error::codes::install::InstallErrorCode::UnsupportedAlgorithm,
-        )
-        .with_param("algorithm", value)),
-    }
 }
 
 #[cfg(test)]
