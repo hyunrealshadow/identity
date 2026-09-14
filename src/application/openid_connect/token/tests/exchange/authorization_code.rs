@@ -162,6 +162,54 @@ async fn exchange_authorization_code_revokes_code_after_success() {
 }
 
 #[tokio::test]
+async fn exchange_authorization_code_without_openid_issues_no_id_token() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let (service, _) = rs256_token_service_with_public_key(repo.clone(), user_oid);
+
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "profile".to_string(),
+                nonce: None,
+                code_challenge: None,
+                code_challenge_method: None,
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec!["pwd".to_owned()],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_string(),
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+
+    let result = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_string()),
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_string()),
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.scope, "profile");
+    assert!(
+        result.id_token.is_none(),
+        "an authorization that never requested openid gets no ID token"
+    );
+}
+
+#[tokio::test]
 async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();

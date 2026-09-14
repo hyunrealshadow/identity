@@ -94,7 +94,11 @@ impl AuthorizeService {
                 .with_param("resource", params.resource.as_deref().unwrap_or_default()));
         }
 
-        if !scope.contains_openid() {
+        // An identity token only exists in OIDC, so the response types that
+        // ask for one demand `openid`. Code and token responses work as plain
+        // OAuth authorizations without it (RFC 6749 §3.1.1); the token
+        // endpoint then issues no ID token for that grant.
+        if response_type.includes_id_token() && !scope.contains_openid() {
             return Err(AppError::from_code(AuthorizeErrorCode::OpenidScopeRequired));
         }
         Self::validate_client_scope_assignment(&client, &scope)?;

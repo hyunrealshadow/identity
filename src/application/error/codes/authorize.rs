@@ -21,7 +21,7 @@ pub enum AuthorizeErrorCode {
     RedirectUriInvalid,
     /// `scope` value could not be parsed.
     ScopeInvalid,
-    /// `openid` scope is required but absent.
+    /// The response type returns an ID token, but `openid` was not requested.
     OpenidScopeRequired,
     /// `display` parameter value could not be parsed.
     DisplayValueInvalid,

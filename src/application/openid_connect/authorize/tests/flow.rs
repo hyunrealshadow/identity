@@ -509,6 +509,37 @@ async fn load_authorization_request_returns_stored_data() {
 }
 
 #[tokio::test]
+async fn validate_request_accepts_a_scope_without_openid() {
+    let (service, _) = default_authorize_service_with_request_repo();
+
+    let (request, _) = service
+        .validate_request(params("profile"))
+        .await
+        .expect("a code request without openid is a plain OAuth authorization");
+
+    assert!(
+        !request.scope.contains_openid(),
+        "the request stays a plain OAuth authorization"
+    );
+}
+
+#[tokio::test]
+async fn validate_request_requires_openid_for_an_id_token_response() {
+    let (service, _) = default_authorize_service_with_request_repo();
+
+    let mut request_params = params("profile");
+    request_params.response_type = "id_token".to_string();
+
+    let error = service.validate_request(request_params).await.unwrap_err();
+
+    assert_eq!(
+        error.code(),
+        23006,
+        "an ID token response is what makes the request OIDC"
+    );
+}
+
+#[tokio::test]
 async fn create_authorization_request_stores_wrapped_request_with_pending_interaction() {
     let (service, _) = default_authorize_service_with_request_repo();
 
