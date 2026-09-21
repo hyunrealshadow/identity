@@ -35,6 +35,11 @@ pub fn routes() -> Router {
             Router::with_path("oauth2/device")
                 .post(device_authorization_endpoint::device_authorization),
         )
+        .push(
+            Router::with_path("oauth2/device/begin")
+                .hoop(api_csrf_middleware())
+                .post(device_authorization_endpoint::begin_verification),
+        )
         .push(Router::with_path("oauth2/register").post(registration_endpoint::register))
         .push(
             Router::with_path("oauth2/register/{client_id}")

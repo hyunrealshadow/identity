@@ -143,8 +143,18 @@ async fn login_status(
         ),
     };
 
+    let is_device = ctx
+        .services()
+        .oidc_device_authorization()
+        .login_request(&login)
+        .await?
+        .is_some();
     let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
-        Some(protocol_continue_uri(&ctx, &id)?)
+        Some(if is_device {
+            format!("/device?login_id={}", urlencoding::encode(&id))
+        } else {
+            protocol_continue_uri(&ctx, &id)?
+        })
     } else {
         None
     };
@@ -219,35 +229,55 @@ async fn select_account(
     let headers: HeaderMap = req.headers().clone();
     let body: SelectAccountRequest = parse_json(req).await?;
 
-    // A forced login or AAL elevation is bound to the original subject. It
-    // must never become an account-selection flow.
-    let continue_context = ctx
+    let device_login = ctx
         .services()
         .oidc_authorize()
-        .load_continue_context_by_login(&body.login_id)
+        .load_login_by_protected_id(&body.login_id)
         .await?;
-    if stored_request_has_prompt(
-        continue_context.stored.request.prompt.as_ref(),
-        PromptValue::Login,
-    ) || continue_context.stored.interaction.selection_source
-        == Some(SelectionSource::Reauthentication)
-    {
-        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into());
+    let is_device = ctx
+        .services()
+        .oidc_device_authorization()
+        .login_request(&device_login)
+        .await?
+        .is_some();
+    // A forced login or AAL elevation is bound to the original subject. It
+    // must never become an account-selection flow.
+    if !is_device {
+        let continue_context = ctx
+            .services()
+            .oidc_authorize()
+            .load_continue_context_by_login(&body.login_id)
+            .await?;
+        if stored_request_has_prompt(
+            continue_context.stored.request.prompt.as_ref(),
+            PromptValue::Login,
+        ) || continue_context.stored.interaction.selection_source
+            == Some(SelectionSource::Reauthentication)
+        {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into());
+        }
     }
 
     let session_oid = unprotect_session_id(&ctx, &body.id).await?;
     let session = ctx.services().session().select_session(session_oid).await?;
     let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
-    ctx.services()
-        .oidc_authorize()
-        .record_selection_by_login(
-            &body.login_id,
-            session.oid,
-            session.user_oid,
-            Some(selected.protected_session_id.clone()),
-            SelectionSource::AccountPicker,
-        )
-        .await?;
+    if is_device {
+        ctx.services()
+            .oidc_device_authorization()
+            .complete_login(&device_login, session.oid)
+            .await?;
+    } else {
+        ctx.services()
+            .oidc_authorize()
+            .record_selection_by_login(
+                &body.login_id,
+                session.oid,
+                session.user_oid,
+                Some(selected.protected_session_id.clone()),
+                SelectionSource::AccountPicker,
+            )
+            .await?;
+    }
 
     let resp = SelectAccountResponse {
         status: "ok",
@@ -256,7 +286,11 @@ async fn select_account(
             expires_at: session.expires_at,
         },
         sessions: selected.protected_session_ids,
-        continue_uri: protocol_continue_uri(&ctx, &body.login_id)?,
+        continue_uri: if is_device {
+            format!("/device?login_id={}", urlencoding::encode(&body.login_id))
+        } else {
+            protocol_continue_uri(&ctx, &body.login_id)?
+        },
     };
 
     render_json(res, StatusCode::OK, resp);
@@ -377,18 +411,40 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
         }
         ChallengeOutcome::Authenticated { session, .. } => {
             let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
-            ctx.services()
+            let login = ctx
+                .services()
                 .oidc_authorize()
-                .record_selection_by_login(
-                    &body.id,
-                    session.oid,
-                    session.user_oid,
-                    Some(selected.protected_session_id.clone()),
-                    SelectionSource::FreshLogin,
-                )
+                .load_login_by_protected_id(&body.id)
                 .await?;
+            let is_device = ctx
+                .services()
+                .oidc_device_authorization()
+                .login_request(&login)
+                .await?
+                .is_some();
+            if is_device {
+                ctx.services()
+                    .oidc_device_authorization()
+                    .complete_login(&login, session.oid)
+                    .await?;
+            } else {
+                ctx.services()
+                    .oidc_authorize()
+                    .record_selection_by_login(
+                        &body.id,
+                        session.oid,
+                        session.user_oid,
+                        Some(selected.protected_session_id.clone()),
+                        SelectionSource::FreshLogin,
+                    )
+                    .await?;
+            }
             let acr = session.acr.clone();
-            let continue_uri = Some(protocol_continue_uri(&ctx, &body.id)?);
+            let continue_uri = Some(if is_device {
+                format!("/device?login_id={}", urlencoding::encode(&body.id))
+            } else {
+                protocol_continue_uri(&ctx, &body.id)?
+            });
 
             render_json(
                 res,

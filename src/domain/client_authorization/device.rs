@@ -99,6 +99,9 @@ pub struct DeviceAuthorizationRequestData {
     pub device_code_digest: String,
     /// Normalized user code used for lookups.
     pub user_code: String,
+    /// Login that consumed the user code. The request stays pending until consent.
+    #[serde(default)]
+    pub claimed_login_oid: Option<Uuid>,
     /// Display form of the user code.
     pub user_code_display: String,
     /// Polling interval advertised to the client.
@@ -233,6 +236,7 @@ mod tests {
         DeviceAuthorizationRequestData {
             scope: "openid profile offline_access".to_owned(),
             device_code_digest: device_code_digest("device-code"),
+            claimed_login_oid: None,
             user_code: "WDJBMJHT".to_owned(),
             user_code_display: "WDJB-MJHT".to_owned(),
             interval_seconds: 5,

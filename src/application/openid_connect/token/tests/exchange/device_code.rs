@@ -37,6 +37,7 @@ fn request_record(
             device_code_digest: identity_domain::client_authorization::device_code_digest(
                 DEVICE_CODE,
             ),
+            claimed_login_oid: None,
             user_code: "WDJBMJHT".to_owned(),
             user_code_display: "WDJB-MJHT".to_owned(),
             interval_seconds: 5,

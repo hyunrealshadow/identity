@@ -65,6 +65,15 @@ pub fn select_active_session<'a>(
     }
 }
 
+/// The account a request explicitly names, if it names one.
+#[must_use]
+fn requested_account(request: &AuthorizationRequest) -> Option<&str> {
+    request
+        .login_hint
+        .as_deref()
+        .filter(|value| !value.is_empty())
+}
+
 pub fn has_prompt(prompt: Option<&HashSet<PromptValue>>, value: PromptValue) -> bool {
     prompt.map(|items| items.contains(&value)).unwrap_or(false)
 }
@@ -116,6 +125,21 @@ where
     }
 
     if requires_account_selection(request.prompt.as_ref()) {
+        return Ok(FlowDecision::LoginRequired { login_id });
+    }
+
+    // Answering as one of several signed-in accounts is a choice only the user
+    // can make. Unless the request names an account (`login_hint`) or asked for
+    // selection explicitly, the interaction goes to the account picker instead
+    // of silently continuing as the first session — and a request that forbids
+    // user interface cannot be answered unambiguously at all.
+    if sessions.len() > 1 && requested_account(request).is_none() {
+        if has_prompt(request.prompt.as_ref(), PromptValue::None) {
+            return Ok(FlowDecision::OAuthError {
+                request: Box::new(request.clone()),
+                error: OAuthErrorCode::AccountSelectionRequired,
+            });
+        }
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 
@@ -378,6 +402,109 @@ mod tests {
         .unwrap();
 
         assert!(matches!(decision, FlowDecision::Continue { .. }));
+    }
+
+    #[tokio::test]
+    async fn determine_authorize_flow_requires_account_selection_for_several_sessions() {
+        let recorded = Arc::new(Mutex::new(None));
+        let request = request(None, None);
+        let first = active_session(Utc::now());
+        let second = active_session(Utc::now());
+
+        let decision = determine_authorize_flow_with_selection_recorder(
+            &request,
+            &[first, second],
+            Uuid::new_v4(),
+            "login-123".to_string(),
+            {
+                let recorded = recorded.clone();
+                move |authorization_request_id, session_oid, user_oid, source| {
+                    let recorded = recorded.clone();
+                    async move {
+                        *recorded.lock().unwrap() =
+                            Some((authorization_request_id, session_oid, user_oid, source));
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            decision,
+            FlowDecision::LoginRequired { login_id } if login_id == "login-123"
+        ));
+        assert_eq!(
+            *recorded.lock().unwrap(),
+            None,
+            "no session may be bound before the user chooses an account"
+        );
+    }
+
+    #[tokio::test]
+    async fn determine_authorize_flow_reports_account_selection_required_for_silent_requests() {
+        let request = request(Some(HashSet::from([PromptValue::None])), None);
+        let first = active_session(Utc::now());
+        let second = active_session(Utc::now());
+
+        let decision = determine_authorize_flow_with_selection_recorder(
+            &request,
+            &[first, second],
+            Uuid::new_v4(),
+            "login-123".to_string(),
+            |_authorization_request_id, _session_oid, _user_oid, _source| async { Ok(()) },
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            decision,
+            FlowDecision::OAuthError {
+                error: OAuthErrorCode::AccountSelectionRequired,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn determine_authorize_flow_binds_the_account_named_by_login_hint() {
+        let recorded = Arc::new(Mutex::new(None));
+        let mut request = request(None, None);
+        request.login_hint = Some("bob@example.com".to_string());
+        let alice = active_session(Utc::now());
+        let mut bob = active_session(Utc::now());
+        bob.user_name = "bob".to_string();
+        bob.user_email = "bob@example.com".to_string();
+
+        let decision = determine_authorize_flow_with_selection_recorder(
+            &request,
+            &[alice, bob.clone()],
+            Uuid::new_v4(),
+            "login-123".to_string(),
+            {
+                let recorded = recorded.clone();
+                move |authorization_request_id, session_oid, user_oid, source| {
+                    let recorded = recorded.clone();
+                    async move {
+                        *recorded.lock().unwrap() =
+                            Some((authorization_request_id, session_oid, user_oid, source));
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(decision, FlowDecision::Continue { .. }));
+        assert_eq!(
+            recorded
+                .lock()
+                .unwrap()
+                .map(|(_, session_oid, _, source)| (session_oid, source)),
+            Some((bob.session_oid, SelectionSource::Auto)),
+        );
     }
 
     #[tokio::test]

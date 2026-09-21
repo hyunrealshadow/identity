@@ -133,7 +133,7 @@ describe('OAuth token exchange', () => {
     const response = new Promise<Response>((resolve) => {
       resolveFetch = resolve
     })
-    const fetchMock = vi.fn(() => response)
+    const fetchMock = vi.fn<(input: unknown) => Promise<Response>>(() => response)
     vi.stubGlobal('fetch', fetchMock)
     const body = new URLSearchParams({
       grant_type: 'refresh_token',

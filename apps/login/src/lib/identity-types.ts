@@ -97,6 +97,7 @@ export interface ConsentPageData {
 }
 
 export interface DeviceVerificationPageData {
+  login_id: string
   user_code: string
   status: 'pending' | 'approved' | 'denied' | 'expired' | 'consumed'
   consent_required: boolean
@@ -106,6 +107,12 @@ export interface DeviceVerificationPageData {
   scopes: Array<ScopeDisplay>
   csrf_token: string
   ui_locales?: Array<string>
+  /** Session answering the request: the account the decision is recorded against. */
+  account: {
+    name: string
+    email: string
+    picture?: string
+  }
 }
 
 export interface ConsentApiResponse {

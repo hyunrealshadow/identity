@@ -29,11 +29,7 @@ pub struct ConsentPageData {
     pub ui_locales: Option<Vec<String>>,
 }
 
-/// Consent decision submitted by the interaction UI.
-///
-/// The browser flow answers an authorization request (`login_id`), the device
-/// flow answers a user code (`user_code`); exactly one of the two identifies
-/// the interaction.
+/// Consent decisions for both flows identify the bound login interaction.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConsentDecisionPayload {
     #[serde(default)]
@@ -43,10 +39,20 @@ pub struct ConsentDecisionPayload {
     pub decision: ConsentDecision,
 }
 
-/// Device verification page data: the same consent UI renders it, addressed by
-/// the user code instead of a login interaction.
+/// Account a device decision is attributed to, so the verification page can
+/// show who is approving instead of leaving it implicit.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceConsentAccount {
+    pub name: String,
+    pub email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<String>,
+}
+
+/// Device verification page data for a session-bound login interaction.
 #[derive(Debug, Clone, Serialize)]
 pub struct DeviceConsentPageData {
+    pub login_id: String,
     pub user_code: String,
     pub status: identity_application::openid_connect::device::DeviceVerificationStatus,
     pub consent_required: bool,
@@ -56,6 +62,9 @@ pub struct DeviceConsentPageData {
     pub client_uri: Option<String>,
     pub scopes: Vec<ScopeDisplay>,
     pub csrf_token: String,
+    /// Session behind the browser that is answering: the account the decision
+    /// is recorded against.
+    pub account: DeviceConsentAccount,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -13,6 +13,7 @@ import {
   storeAccountFlash,
 } from './oauth-session.server'
 import { emitEvent, fetchWithSpan, withSpan } from './observability.server'
+import { providerSessionCookie } from './identity.server'
 import { loadApplicationUrl, loadOAuthClient } from './runtime-config.server'
 import {
   backchannelIdentityApiUrl,
@@ -80,11 +81,8 @@ export async function prepareAuthorization() {
   return startSignIn()
 }
 
-export async function startSignIn(
-  returnTo?: string,
-  options: { prompt?: 'login' } = {},
-) {
-  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'), options)
+export async function startSignIn(returnTo?: string) {
+  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'))
 }
 
 export async function startReauthorization(
@@ -123,7 +121,6 @@ async function startAuthorizationFlow(
   mode: OAuthFlowSession['mode'],
   returnTo: string,
   options?: {
-    prompt?: 'login'
     reauthPurpose?: 'password' | 'account' | 'mfa'
     requirements?: ReauthenticationRequirements
   },
@@ -149,9 +146,6 @@ async function startAuthorizationFlow(
     code_challenge: challenge,
     code_challenge_method: 'S256',
   }).toString()
-  if (options?.prompt) {
-    authorizeUrl.searchParams.set('prompt', options.prompt)
-  }
   if (mode === 'reauth') {
     if (!requirements) {
       throw new Error('Reauthentication requires a login hint')
@@ -263,7 +257,45 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
   }
   await flow.clear()
 
-  return redirect(new URL(returnTo, loadApplicationUrl()))
+  const response = redirect(new URL(returnTo, loadApplicationUrl()))
+  // The callback is the only sign-in path that never touches the login
+  // transport. Without this, a browser whose provider session answered the
+  // authorization silently would return with tokens but no session for the
+  // interactions that read one (the device verification, the consent page).
+  const sessionId = mode === 'reauth' ? undefined : providerSessionId(tokens)
+  const sessionCookie = sessionId ? providerSessionCookie(sessionId) : undefined
+  if (sessionCookie) response.headers.append('set-cookie', sessionCookie)
+  return response
+}
+
+/**
+ * Provider session the authorization belongs to, taken from the `sid` claim.
+ *
+ * The ID Token carries the protected session id there — the same form the
+ * login API returns in `sessions` — and the token comes straight from the
+ * token endpoint over TLS, which is the trust the freshness checks below
+ * already rely on.
+ */
+function providerSessionId(tokens: TokenResponse) {
+  return sidClaim(tokens.id_token) ?? sidClaim(tokens.access_token)
+}
+
+function sidClaim(token: string | undefined) {
+  const sid = tokenClaims(token)?.sid
+  return typeof sid === 'string' && sid.length > 0 ? sid : undefined
+}
+
+function tokenClaims(token: string | undefined) {
+  if (!token) return
+  const encodedPayload = token.split('.')[1]
+  if (!encodedPayload) return
+  try {
+    return JSON.parse(
+      Buffer.from(encodedPayload, 'base64url').toString('utf8'),
+    ) as Record<string, unknown>
+  } catch {
+    return
+  }
 }
 
 function authorizationFailureResponse(
@@ -359,23 +391,17 @@ export function tokenAuthenticationIsFresh(
   requiredAcr?: string,
   now = Math.floor(Date.now() / 1000),
 ) {
-  try {
-    const encodedPayload = token.split('.')[1]
-    if (!encodedPayload) return false
-    const claims = JSON.parse(
-      Buffer.from(encodedPayload, 'base64url').toString('utf8'),
-    ) as { auth_time?: unknown; acr?: unknown }
-    if (typeof claims.auth_time !== 'number' || typeof claims.acr !== 'string') {
-      return false
-    }
-    if (requiredAcr && claims.acr !== requiredAcr) return false
-    const maxAge = requiredAcr === ACR_AAL2
-      ? ELEVATED_AUTHENTICATION_SECONDS
-      : RECENT_AUTHENTICATION_SECONDS
-    return Math.max(0, now - claims.auth_time) <= maxAge
-  } catch {
+  const claims = tokenClaims(token)
+  const authTime = claims?.auth_time
+  const acr = claims?.acr
+  if (typeof authTime !== 'number' || typeof acr !== 'string') {
     return false
   }
+  if (requiredAcr && acr !== requiredAcr) return false
+  const maxAge = requiredAcr === ACR_AAL2
+    ? ELEVATED_AUTHENTICATION_SECONDS
+    : RECENT_AUTHENTICATION_SECONDS
+  return Math.max(0, now - authTime) <= maxAge
 }
 
 export async function clearElevatedAuthorization() {

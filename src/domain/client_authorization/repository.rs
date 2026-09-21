@@ -138,6 +138,20 @@ pub trait DeviceAuthorizationRepository: Send + Sync {
         oid: Uuid,
     ) -> Result<Option<ClientAuthorization>, DeviceAuthorizationRepositoryError>;
 
+    /// Atomically consumes the browser code and binds its winning login to the authenticated session.
+    async fn claim_device_request(
+        &self,
+        request_oid: Uuid,
+        login_oid: Uuid,
+        session_oid: SessionOid,
+        now: DateTime<Utc>,
+    ) -> Result<bool, DeviceAuthorizationRepositoryError> {
+        let _ = (request_oid, login_oid, session_oid, now);
+        Err(DeviceAuthorizationRepositoryError::QueryFailed(Box::new(
+            std::io::Error::other("device login claim not implemented"),
+        )))
+    }
+
     /// Records the polling schedule for a request.
     ///
     /// Locks the request row, so concurrent polls for one device code are

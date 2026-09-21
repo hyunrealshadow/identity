@@ -281,11 +281,7 @@ export async function executeAccountAction(
       throw new AccountActionError(translate(locale, 'accountUnknownAction'))
     }
 
-    if (
-      action !== 'use-legacy-totp' &&
-      action !== 'prepare-disable-totp' &&
-      action !== 'prepare-change-password'
-    ) {
+    if (action !== 'use-legacy-totp') {
       await storeAccountFlash({ message: 'saved' })
     }
     return { ok: true }

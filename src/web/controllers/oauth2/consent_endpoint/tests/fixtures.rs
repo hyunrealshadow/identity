@@ -6,7 +6,8 @@ use chrono::{Duration, Utc};
 use identity_domain::{
     auth::{LoginStatus, SessionOid, SessionStatus, password::PasswordHashSetting},
     client_authorization::{
-        AuthorizationInteractionState, ClientAuthorizationType, ConsentState, SelectionSource,
+        AuthorizationInteractionState, ClientAuthorizationType, ConsentState,
+        DeviceAuthorizationRequestData, DeviceRequestStatus, SelectionSource,
         StoredAuthorizationRequest,
     },
     key::{
@@ -42,6 +43,26 @@ use crate::infrastructure::database::entity::{
     client, client_authorization, client_open_id_connect, key, login, session, setting, user,
 };
 
+/// The user code of the queued device request, as the verification page
+/// receives it.
+pub(super) const DEVICE_USER_CODE: &str = "WDJB-MJHT";
+
+/// The same code as the request stores it for lookups.
+const DEVICE_USER_CODE_NORMALIZED: &str = "WDJBMJHT";
+
+/// Which interaction the queued request-time rows answer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QueuedInteraction {
+    /// The browser consent flow, addressed by a protected `login_id`.
+    Authorization,
+    /// The verification page of a pending device request.
+    DeviceRequest,
+    /// A device decision on top of that page.
+    DeviceDecision,
+    /// A verification attempt whose user code matches no request.
+    UnknownUserCode,
+}
+
 pub(super) fn consent_test_config() -> AppConfig {
     AppConfig {
         internal: Default::default(),
@@ -63,6 +84,28 @@ pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
 }
 
 pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, String, uuid::Uuid) {
+    consent_test_state_for(QueuedInteraction::Authorization, scope).await
+}
+
+/// State whose queued rows answer the verification page of [`DEVICE_USER_CODE`].
+pub(super) async fn device_verification_test_state() -> (AppState, String, uuid::Uuid) {
+    consent_test_state_for(QueuedInteraction::DeviceRequest, "openid profile").await
+}
+
+/// State whose queued rows answer that page and then a decision on it.
+pub(super) async fn device_decision_test_state() -> (AppState, String, uuid::Uuid) {
+    consent_test_state_for(QueuedInteraction::DeviceDecision, "openid profile").await
+}
+
+/// State whose queued rows report that no request carries the entered code.
+pub(super) async fn unknown_user_code_test_state() -> (AppState, String, uuid::Uuid) {
+    consent_test_state_for(QueuedInteraction::UnknownUserCode, "openid profile").await
+}
+
+async fn consent_test_state_for(
+    interaction: QueuedInteraction,
+    scope: &str,
+) -> (AppState, String, uuid::Uuid) {
     let now = Utc::now();
     let client_oid = uuid::Uuid::new_v4();
     let authorization_oid = uuid::Uuid::new_v4();
@@ -270,6 +313,33 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,
     };
+    let device_request_model = client_authorization::Model {
+        id: 41,
+        oid: uuid::Uuid::new_v4(),
+        client_id: client_model.id,
+        r#type: ClientAuthorizationType::DeviceAuthorizationRequest.to_string(),
+        data: serde_json::to_value(DeviceAuthorizationRequestData {
+            scope: scope.to_owned(),
+            device_code_digest: "device-code-digest".to_owned(),
+            claimed_login_oid: None,
+            user_code: DEVICE_USER_CODE_NORMALIZED.to_owned(),
+            user_code_display: DEVICE_USER_CODE.to_owned(),
+            interval_seconds: 5,
+            slow_down_seconds: 0,
+            last_polled_at: None,
+            status: DeviceRequestStatus::Pending,
+            approval: None,
+            denied_by_user_oid: None,
+            decided_at: None,
+            device_authorization_oid: None,
+        })
+        .unwrap(),
+        expires_at: (now + Duration::minutes(10)).into(),
+        completed_at: None,
+        revoked_at: None,
+        created_at: now.into(),
+        updated_at: None,
+    };
     let oidc_metadata_model = client_open_id_connect::Model {
         id: 31,
         client_id: client_model.id,
@@ -325,7 +395,7 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
     let openid_scope_row =
         BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]);
 
-    let db = MockDatabase::new(DatabaseBackend::Postgres)
+    let queued = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[installation_initialized_setting]])
         .append_query_results([[domain_setting]])
         .append_query_results([[installation_first_user_oid_setting]])
@@ -336,66 +406,128 @@ pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, Str
         .append_query_results([[login_domain_setting]])
         .append_query_results([[device_authorization_setting]])
         .append_query_results([[symmetric_key.clone()]])
-        .append_query_results([[symmetric_key.clone()]])
-        .append_query_results([[login_model.clone()]])
-        .append_query_results([[client_model.clone()]])
-        .append_query_results([[authorization_model.clone()]])
-        .append_query_results([[active_session.clone()]])
-        .append_query_results([[(authorization_model.clone(), client_model.clone())]])
-        .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
-        .append_query_results([Vec::<
-            crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
-        >::new()])
-        .append_query_results([[openid_scope_row.clone()]])
-        .append_query_results([[(active_session.clone(), active_user.clone())]])
-        .append_query_results([[login_model.clone()]])
-        .append_query_results([[client_model.clone()]])
-        .append_query_results([[authorization_model.clone()]])
-        .append_query_results([[active_session.clone()]])
-        .append_query_results([[(authorization_model.clone(), client_model.clone())]])
-        .append_query_results([[(client_model.clone(), oidc_metadata_model)]])
-        .append_query_results([Vec::<
-            crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
-        >::new()])
-        .append_query_results([[openid_scope_row]])
-        .append_query_results([[(active_session.clone(), active_user.clone())]])
-        .append_query_results([[login_model.clone()]])
-        .append_query_results([[client_model.clone()]])
-        .append_query_results([[authorization_model.clone()]])
-        .append_query_results([[active_session]])
-        .append_query_results([[authorization_model]])
-        .append_query_results([[BTreeMap::from([(
-            "id".to_owned(),
-            Value::BigInt(Some(active_user.id)),
-        )])]])
-        .append_query_results([scope
-            .split_whitespace()
-            .enumerate()
-            .map(|(index, _)| {
-                BTreeMap::from([(
-                    "id".to_owned(),
-                    Value::BigInt(Some(100 + i64::try_from(index).unwrap())),
-                )])
-            })
-            .collect::<Vec<_>>()])
-        .append_query_results([scope
-            .split_whitespace()
-            .enumerate()
-            .map(
-                |(index, _)| crate::infrastructure::database::entity::user_client_consent::Model {
-                    id: 41 + i64::try_from(index).unwrap(),
-                    user_id: active_user.id,
-                    client_id: client_model.id,
-                    scope_id: 100 + i64::try_from(index).unwrap(),
-                    approved_at: now.into(),
-                },
-            )
-            .collect::<Vec<_>>()])
-        .append_exec_results([MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
+        .append_query_results([[symmetric_key]]);
+
+    // The rows below answer the request under test, in the order that
+    // interaction reads them.
+    let db = match interaction {
+        QueuedInteraction::Authorization => queued
+            .append_query_results([[login_model.clone()]])
+            .append_query_results([[client_model.clone()]])
+            .append_query_results([[authorization_model.clone()]])
+            .append_query_results([[active_session.clone()]])
+            .append_query_results([Vec::<(client_authorization::Model, client::Model)>::new()])
+            .append_query_results([[login_model.clone()]])
+            .append_query_results([[client_model.clone()]])
+            .append_query_results([[authorization_model.clone()]])
+            .append_query_results([[active_session.clone()]])
+            .append_query_results([[(authorization_model.clone(), client_model.clone())]])
+            .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
+            .append_query_results([Vec::<
+                crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+            >::new()])
+            .append_query_results([[openid_scope_row.clone()]])
+            .append_query_results([[(active_session.clone(), active_user.clone())]])
+            .append_query_results([[login_model.clone()]])
+            .append_query_results([[client_model.clone()]])
+            .append_query_results([[authorization_model.clone()]])
+            .append_query_results([[active_session.clone()]])
+            .append_query_results([Vec::<(client_authorization::Model, client::Model)>::new()])
+            .append_query_results([[login_model.clone()]])
+            .append_query_results([[client_model.clone()]])
+            .append_query_results([[authorization_model.clone()]])
+            .append_query_results([[active_session.clone()]])
+            .append_query_results([[(authorization_model.clone(), client_model.clone())]])
+            .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
+            .append_query_results([Vec::<
+                crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+            >::new()])
+            .append_query_results([[openid_scope_row.clone()]])
+            .append_query_results([[(active_session.clone(), active_user.clone())]])
+            .append_query_results([[login_model.clone()]])
+            .append_query_results([[client_model.clone()]])
+            .append_query_results([[authorization_model.clone()]])
+            .append_query_results([[active_session.clone()]])
+            .append_query_results([[authorization_model]])
+            .append_query_results([[BTreeMap::from([(
+                "id".to_owned(),
+                Value::BigInt(Some(active_user.id)),
+            )])]])
+            .append_query_results([scope
+                .split_whitespace()
+                .enumerate()
+                .map(|(index, _)| {
+                    BTreeMap::from([(
+                        "id".to_owned(),
+                        Value::BigInt(Some(100 + i64::try_from(index).unwrap())),
+                    )])
+                })
+                .collect::<Vec<_>>()])
+            .append_query_results([scope
+                .split_whitespace()
+                .enumerate()
+                .map(|(index, _)| {
+                    crate::infrastructure::database::entity::user_client_consent::Model {
+                        id: 41 + i64::try_from(index).unwrap(),
+                        user_id: active_user.id,
+                        client_id: client_model.id,
+                        scope_id: 100 + i64::try_from(index).unwrap(),
+                        approved_at: now.into(),
+                    }
+                })
+                .collect::<Vec<_>>()])
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            }])
+            .into_connection(),
+        QueuedInteraction::DeviceRequest => queued
+            // The code is read first, the browser session second: the
+            // verification page resolves the code before it needs a session.
+            .append_query_results([[(device_request_model, client_model.clone())]])
+            // The description loads the client the request was registered for.
+            .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
+            .append_query_results([Vec::<
+                crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+            >::new()])
+            .append_query_results([[openid_scope_row]])
+            // The browser session arrives through the login transport.
+            .append_query_results([[(active_session, active_user.clone())]])
+            .into_connection(),
+        QueuedInteraction::DeviceDecision => {
+            let mut device_request_model = device_request_model;
+            device_request_model.data["claimed_login_oid"] = serde_json::json!(login_oid);
+            let mut login_model = login_model;
+            login_model.client_authorization_id = device_request_model.id;
+            login_model.user_id = Some(active_user.id);
+            login_model.status = LoginStatus::AUTHENTICATED.to_string();
+            queued
+                .append_query_results([[login_model.clone()]])
+                .append_query_results([[client_model.clone()]])
+                .append_query_results([[device_request_model.clone()]])
+                .append_query_results([[active_user.clone()]])
+                .append_query_results([[active_session.clone()]])
+                .append_query_results([[(device_request_model.clone(), client_model.clone())]])
+                .append_query_results([[(device_request_model.clone(), client_model.clone())]])
+                .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
+                .append_query_results([Vec::<
+                    crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+                >::new()])
+                .append_query_results([[openid_scope_row]])
+                .append_query_results([[(active_session.clone(), active_user.clone())]])
+                .append_query_results([[login_model]])
+                .append_query_results([[client_model.clone()]])
+                .append_query_results([[device_request_model.clone()]])
+                .append_query_results([[active_user]])
+                .append_query_results([[active_session]])
+                .append_query_results([[(device_request_model, client_model)]])
+                .into_connection()
+        }
+        QueuedInteraction::UnknownUserCode => queued
+            // No request carries the code, so the lookup returns nothing.
+            .append_query_results([Vec::<(client_authorization::Model, client::Model)>::new()])
+            .into_connection(),
+    };
 
     let i18n = build_i18n().unwrap();
     let tera = build_tera(i18n.loader()).unwrap();

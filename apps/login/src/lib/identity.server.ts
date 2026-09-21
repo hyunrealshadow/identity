@@ -114,12 +114,30 @@ function requestSessionIds() {
   }
 }
 
-function storeSessionIds(sessions: Array<string>) {
+function sessionCookieValue(sessions: Array<string>) {
   const value = encodeURIComponent(JSON.stringify(sessions))
-  setResponseHeader(
-    'set-cookie',
-    `${SESSION_COOKIE_NAME}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
-  )
+  return `${SESSION_COOKIE_NAME}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`
+}
+
+function storeSessionIds(sessions: Array<string>) {
+  setResponseHeader('set-cookie', sessionCookieValue(sessions))
+}
+
+/**
+ * `Set-Cookie` value that adds the provider session behind an authorization to
+ * the login transport, or `undefined` when the browser already presents it.
+ *
+ * The protected `sid` uses the same form as API `sessions`. Append only an
+ * unknown session, preserving existing order; this does not select an account
+ * or change the session bound to an existing interaction.
+ */
+export function providerSessionCookie(
+  protectedSessionId: string,
+): string | undefined {
+  const current = requestSessionIds()
+  if (current.includes(protectedSessionId)) return undefined
+
+  return sessionCookieValue([...current, protectedSessionId])
 }
 
 function responseSessionIds(value: unknown): Array<string> | undefined {

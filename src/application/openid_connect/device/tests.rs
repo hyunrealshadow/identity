@@ -664,6 +664,7 @@ fn pending_record(user_code: &str, scope: &str, expires_at: DateTime<Utc>) -> Cl
         DeviceAuthorizationRequestData {
             scope: scope.to_owned(),
             device_code_digest: device_code_digest("device-code"),
+            claimed_login_oid: None,
             user_code: user_code.to_owned(),
             user_code_display: crate::domain::client_authorization::format_user_code(user_code),
             interval_seconds: 5,

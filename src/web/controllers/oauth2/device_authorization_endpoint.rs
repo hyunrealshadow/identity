@@ -186,6 +186,49 @@ pub async fn device_authorization(
     Ok(AppResponse(response))
 }
 
+/// Browser entry of the verification flow: exchanges a user code for a fresh
+/// login interaction bound to the device request (CSRF protected POST).
+#[handler]
+pub async fn begin_verification(
+    depot: &mut Depot,
+    req: &mut Request,
+) -> crate::controllers::response::JsonWebResult<AppResponse> {
+    #[derive(Debug, Deserialize)]
+    struct BeginBody {
+        user_code: String,
+    }
+    #[derive(Debug, serde::Serialize)]
+    struct BeginResponse {
+        login_id: String,
+        login_uri: String,
+    }
+
+    let ctx = app_state(depot)?;
+    let body: BeginBody = crate::controllers::response::parse_json(req).await?;
+
+    let (client_oid, request_oid) = ctx
+        .services()
+        .oidc_device_authorization()
+        .begin_verification(&body.user_code)
+        .await?;
+
+    let login_id = ctx
+        .services()
+        .oidc_authorize()
+        .create_login_flow(client_oid, request_oid, None)
+        .await?;
+
+    let mut response = json_response(
+        StatusCode::CREATED,
+        BeginResponse {
+            login_uri: format!("/login?login_id={}", urlencoding::encode(&login_id)),
+            login_id,
+        },
+    );
+    insert_no_store_headers(&mut response);
+    Ok(AppResponse(response))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

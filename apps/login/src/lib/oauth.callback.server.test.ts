@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   flow: {
@@ -14,6 +14,13 @@ const mocks = vi.hoisted(() => ({
   mfa: { data: {}, clear: vi.fn(), update: vi.fn() },
   flash: { data: {}, clear: vi.fn(), update: vi.fn() },
   storeAccountFlash: vi.fn(),
+  getRequestHeader: vi.fn(),
+  setResponseHeader: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeader: mocks.getRequestHeader,
+  setResponseHeader: mocks.setResponseHeader,
 }))
 
 vi.mock('./runtime-config.server', () => ({
@@ -42,6 +49,7 @@ describe('OAuth callback errors', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    mocks.getRequestHeader.mockReturnValue(undefined)
     mocks.flow.data.mode = 'signin'
     mocks.flow.data.return_to = '/'
   })
@@ -119,5 +127,121 @@ describe('OAuth callback errors', () => {
       elevated_expires_at: expect.any(Number),
     })
     expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
+  })
+})
+
+describe('login transport sync after a silent authorization', () => {
+  const token = (claims: Record<string, unknown>) =>
+    `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`
+
+  const configuredCookie = (sessions: Array<string>) =>
+    `identity.sessions=${encodeURIComponent(JSON.stringify(sessions))}`
+
+  const signedIn = (idToken: string) =>
+    vi.fn(async () => new Response(JSON.stringify({
+      access_token: 'access-token',
+      id_token: idToken,
+      expires_in: 3600,
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllGlobals()
+    mocks.getRequestHeader.mockReturnValue(undefined)
+    mocks.flow.data.mode = 'signin'
+    mocks.flow.data.return_to = '/device?user_code=WDJB-MJHT'
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('records the provider session the authorization came from', async () => {
+    vi.stubGlobal('fetch', signedIn(token({ sid: 'protected-session' })))
+
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=authorization-code&state=expected-state',
+      ),
+    )
+
+    // Without this cookie a browser whose provider session answered silently
+    // would return with tokens but no session the interactions can present.
+    const cookie = response.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain(configuredCookie(['protected-session']))
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain('SameSite=Lax')
+  })
+
+  it('appends the session after the ones the browser already presents', async () => {
+    mocks.getRequestHeader.mockImplementation((name: string) =>
+      name === 'cookie' ? configuredCookie(['older-session']) : undefined,
+    )
+    vi.stubGlobal('fetch', signedIn(token({ sid: 'protected-session' })))
+
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=authorization-code&state=expected-state',
+      ),
+    )
+
+    // The order belongs to the backend (`sessions` from the API decides which
+    // entry acts), so recording a session must not reorder the list.
+    expect(response.headers.get('set-cookie')).toContain(
+      configuredCookie(['older-session', 'protected-session']),
+    )
+  })
+
+  it('does not rewrite the cookie when the session is already known', async () => {
+    mocks.getRequestHeader.mockImplementation((name: string) =>
+      name === 'cookie'
+        ? configuredCookie(['older-session', 'protected-session'])
+        : undefined,
+    )
+    vi.stubGlobal('fetch', signedIn(token({ sid: 'protected-session' })))
+
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=authorization-code&state=expected-state',
+      ),
+    )
+
+    expect(response.headers.get('set-cookie')).toBeNull()
+  })
+
+  it('does not rewrite the cookie when the authorization adds no session', async () => {
+    vi.stubGlobal('fetch', signedIn(token({ sub: 'user' })))
+
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=authorization-code&state=expected-state',
+      ),
+    )
+
+    expect(response.headers.get('set-cookie')).toBeNull()
+  })
+
+  it('does not touch the login transport for a reauthentication', async () => {
+    mocks.flow.data.mode = 'reauth'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      access_token: 'elevated-token',
+      id_token: token({ sid: 'protected-session' }),
+      expires_in: 3600,
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })))
+
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=authorization-code&state=expected-state',
+      ),
+    )
+
+    expect(response.headers.get('set-cookie')).toBeNull()
   })
 })

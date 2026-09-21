@@ -276,6 +276,116 @@ impl DeviceAuthorizationService {
         Ok(description(&client, &data, status))
     }
 
+    /// Resolve a device login without interpreting it as an OAuth authorization request.
+    pub async fn login_request(
+        &self,
+        login: &identity_domain::auth::model::Login,
+    ) -> Result<Option<identity_domain::client_authorization::ClientAuthorization>, AppError> {
+        self.device_repo
+            .find_device_request_by_oid(login.client_authorization_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(DeviceAuthorizationErrorCode::LoadRequestFailed)
+                    .with_source(error)
+            })
+    }
+
+    pub async fn begin_verification(&self, user_code: &str) -> Result<(Uuid, Uuid), AppError> {
+        let record = self.resolve_verification(user_code).await?;
+        let data = request_data(&record)?;
+        if record.expires_at <= Utc::now() {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::RequestExpired,
+            ));
+        }
+        if !data.is_pending() || data.claimed_login_oid.is_some() {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::UserCodeNotFound,
+            ));
+        }
+        Ok((record.client_oid, record.oid))
+    }
+
+    pub async fn complete_login(
+        &self,
+        login: &identity_domain::auth::model::Login,
+        session_oid: identity_domain::auth::SessionOid,
+    ) -> Result<(), AppError> {
+        if !self
+            .device_repo
+            .claim_device_request(
+                login.client_authorization_oid,
+                login.oid,
+                session_oid,
+                Utc::now(),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(DeviceAuthorizationErrorCode::StoreDecisionFailed)
+                    .with_source(error)
+            })?
+        {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::UserCodeNotFound,
+            ));
+        }
+        Ok(())
+    }
+
+    async fn bound_request(
+        &self,
+        login: &identity_domain::auth::model::Login,
+    ) -> Result<identity_domain::client_authorization::ClientAuthorization, AppError> {
+        let record = self
+            .login_request(login)
+            .await?
+            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::UserCodeNotFound))?;
+        let data = request_data(&record)?;
+        if data.claimed_login_oid != Some(login.oid)
+            || login.session_oid.is_none()
+            || login.status != identity_domain::auth::LoginStatus::AUTHENTICATED
+        {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::VerificationLoginRequired,
+            ));
+        }
+        if record.revoked_at.is_some() || record.expires_at <= Utc::now() {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::RequestExpired,
+            ));
+        }
+        Ok(record)
+    }
+
+    pub async fn describe_login(
+        &self,
+        login: &identity_domain::auth::model::Login,
+    ) -> Result<DeviceVerificationDescription, AppError> {
+        let record = self.bound_request(login).await?;
+        let client = self.load_client(record.client_oid).await?;
+        Ok(description(
+            &client,
+            &request_data(&record)?,
+            verification_status(&record, Utc::now()),
+        ))
+    }
+
+    pub async fn decide_login(
+        &self,
+        login: &identity_domain::auth::model::Login,
+        user: &DeviceVerificationUser,
+        decision: DeviceVerificationDecision,
+    ) -> Result<(), AppError> {
+        let record = self.bound_request(login).await?;
+        if login.user_oid != Some(user.user_oid) {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::VerificationLoginRequired,
+            ));
+        }
+        self.record_decision(&record, &request_data(&record)?, user, decision)
+            .await
+    }
+
     /// Records the user's decision on a device request.
     #[tracing::instrument(skip_all, name = "device_authorization.decide")]
     pub async fn decide_verification(
@@ -309,14 +419,21 @@ impl DeviceAuthorizationService {
             ));
         }
 
-        self.device_repo
+        let record = self
+            .device_repo
             .find_active_device_request_by_user_code(&normalized)
             .await
             .map_err(|error| {
                 AppError::from_code(DeviceAuthorizationErrorCode::LoadRequestFailed)
                     .with_source(error)
             })?
-            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::UserCodeNotFound))
+            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::UserCodeNotFound))?;
+        if request_data(&record)?.claimed_login_oid.is_some() {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::UserCodeNotFound,
+            ));
+        }
+        Ok(record)
     }
 
     async fn record_decision(
@@ -457,6 +574,7 @@ impl DeviceAuthorizationService {
                 interval_seconds,
                 slow_down_seconds: 0,
                 last_polled_at: None,
+                claimed_login_oid: None,
                 status: DeviceRequestStatus::Pending,
                 approval: None,
                 denied_by_user_oid: None,

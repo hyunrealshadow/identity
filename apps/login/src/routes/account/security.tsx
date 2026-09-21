@@ -328,7 +328,6 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
                         size="sm"
                         variant="ghost"
                         aria-label={secretCopied ? t('accountMfaSecretCopied') : t('accountMfaSecretCopy')}
-                        title={secretCopied ? t('accountMfaSecretCopied') : t('accountMfaSecretCopy')}
                         onPress={() => void copySecret()}
                       >
                         {secretCopied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
@@ -346,7 +345,6 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
                     size="sm"
                     variant="ghost"
                     aria-label={otpAuthCopied ? t('accountMfaOtpAuthCopied') : t('accountMfaOtpAuthCopy')}
-                    title={otpAuthCopied ? t('accountMfaOtpAuthCopied') : t('accountMfaOtpAuthCopy')}
                     onPress={() => void copyOtpAuthUri()}
                   >
                     {otpAuthCopied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}

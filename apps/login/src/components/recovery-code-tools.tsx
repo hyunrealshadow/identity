@@ -48,7 +48,6 @@ export function RecoveryCodeList({ codes, copyLabel, copiedLabel }: RecoveryCode
                 size="sm"
                 variant="ghost"
                 aria-label={copied ? copiedLabel : copyLabel}
-                title={copied ? copiedLabel : copyLabel}
                 onPress={() => void copyCode(code, index)}
               >
                 {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}

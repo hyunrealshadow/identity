@@ -1,5 +1,5 @@
 import { Alert, Chip, FieldError, Label, TextField } from '@heroui/react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { Check, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
@@ -8,15 +8,14 @@ import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput } from '#/components/totp-input'
+import { errorMessage } from '#/lib/identity.server'
 import {
-  errorMessage,
-  IdentityApiError,
-  identityJson,
-} from '#/lib/identity.server'
-import type {
-  ConsentApiResponse,
-  DeviceVerificationPageData,
-} from '#/lib/identity-types'
+  beginDeviceVerification,
+  decideDeviceVerification,
+  deviceInteractionPath,
+  loadDeviceVerification,
+} from '#/lib/device-verification.server'
+import type { DeviceVerificationPageData } from '#/lib/identity-types'
 import {
   consumeFormFlash,
   formErrorResponse,
@@ -25,10 +24,8 @@ import {
 import { scopeDescription, translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 
-/** Error code the identity service answers with when the browser is signed out. */
-const LOGIN_REQUIRED = 26022
-
 interface DeviceSearch {
+  login_id?: string
   user_code?: string
   done?: string
   error?: string
@@ -61,38 +58,11 @@ function decidedOutcome(status: DeviceVerificationPageData['status']) {
   }
 }
 
-function devicePath(userCode: string, uiLocales?: string) {
-  const search = new URLSearchParams()
-  if (userCode) search.set('user_code', userCode)
-  if (uiLocales) search.set('ui_locales', uiLocales)
-  return search.size ? `/device?${search}` : '/device'
-}
-
-/// A link into the sign-in flow, which is itself an authorization request.
-async function signInLinkIfNeeded(
-  error: unknown,
-  userCode: string,
-  uiLocales: string,
-) {
-  if (!(error instanceof IdentityApiError) || error.code !== LOGIN_REQUIRED) {
-    return undefined
-  }
-
-  const { startSignIn } = await import('#/lib/oauth.server')
-
-  // `prompt=login` keeps the flow interactive: only an actual sign-in hands
-  // this application the session it must present to the provider, so an
-  // existing provider session alone cannot complete it silently and bounce
-  // the user straight back here.
-  return (
-    await startSignIn(devicePath(userCode, uiLocales), { prompt: 'login' })
-  ).toString()
-}
-
 const loadDevicePage = createServerFn({ method: 'GET' })
-  .validator((data: { userCode: string; uiLocales?: string }) => data)
+  .validator((data: { userCode: string; loginId: string; uiLocales?: string }) => data)
   .handler(async ({ data }) => {
     const flash = consumeFormFlash('/device')
+    const loginId = data.loginId || flash?.values.login_id || ''
     const userCode = data.userCode || flash?.values.user_code || ''
     const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
     const codeError =
@@ -100,13 +70,14 @@ const loadDevicePage = createServerFn({ method: 'GET' })
       (flash?.field === 'user_code' ? flash.message : undefined)
     const pageError = codeError ? undefined : flash?.message
 
-    if (!userCode) {
+    // Nothing to describe: no code was entered, or the entry form itself
+    // reported the code (it resolves the code before routing here, so looking
+    // it up again would only repeat the same failure).
+    if (!loginId && (!userCode || codeError)) {
       const locale = requestLocale(uiLocales.split(' '))
       return {
         device: undefined,
-        signInHref: undefined,
         userCode,
-        needsSignIn: false,
         locale,
         uiLocales,
         error: pageError,
@@ -114,50 +85,61 @@ const loadDevicePage = createServerFn({ method: 'GET' })
       }
     }
 
-    try {
-      const device = await identityJson<DeviceVerificationPageData>(
-        `/oauth2/consent?user_code=${encodeURIComponent(userCode)}`,
-      )
+    const locale = requestLocale(uiLocales.split(' '))
+    const lookup = loginId
+      ? await loadDeviceVerification(loginId, locale)
+      : await beginDeviceVerification(userCode, locale, uiLocales)
+    if (lookup.status === 'described') {
       return {
-        device,
-        signInHref: undefined,
-        userCode: device.user_code,
-        needsSignIn: false,
+        device: lookup.description,
+        userCode: lookup.description.user_code,
         locale: requestLocale(
-          uiLocales ? uiLocales.split(' ') : device.ui_locales,
+          uiLocales ? uiLocales.split(' ') : lookup.description.ui_locales,
         ),
         uiLocales,
         error: pageError,
         codeError,
       }
-    } catch (error) {
-      const locale = requestLocale(uiLocales.split(' '))
+    }
+
+    if (lookup.status === 'login') {
+      // Go straight to the native account picker/challenge, not an OAuth bounce.
+      throw redirect({ href: lookup.loginUri })
+    }
+
+    if (lookup.status === 'unknown') {
+      // No request carries the code: report it on the entry form, where the
+      // code is still in the field and can be corrected.
       return {
         device: undefined,
         userCode,
-        // The browser has no session yet: the page offers to sign in and come
-        // back to this same code instead of reporting a failure.
-        needsSignIn:
-          error instanceof IdentityApiError && error.code === LOGIN_REQUIRED,
-        // The sign-in itself is an authorization flow: hand the page a link
-        // into it so the button works even before hydration.
-        signInHref: await signInLinkIfNeeded(error, userCode, uiLocales),
         locale,
         uiLocales,
-        error: pageError ?? errorMessage(error, locale),
-        codeError,
+        error: undefined,
+        codeError: translate(locale, 'deviceCodeInvalid'),
       }
+    }
+
+    return {
+      device: undefined,
+      userCode,
+      locale,
+      uiLocales,
+      error: pageError ?? lookup.message,
+      codeError,
     }
   })
 
 export const Route = createFileRoute('/device')({
   validateSearch: (search): DeviceSearch => ({
+    login_id: optionalString(search.login_id),
     user_code: optionalString(search.user_code),
     done: optionalString(search.done),
     error: optionalString(search.error),
     ui_locales: optionalString(search.ui_locales),
   }),
   loaderDeps: ({ search }) => ({
+    loginId: search.login_id ?? '',
     userCode: search.user_code ?? '',
     uiLocales: search.ui_locales,
   }),
@@ -171,10 +153,13 @@ export const Route = createFileRoute('/device')({
         const locale = formLocale(request, form.get('ui_locales'))
         const uiLocales = optionalString(form.get('ui_locales'))
         const code = String(form.get('user_code') ?? '').trim()
+        const loginId = String(form.get('login_id') ?? '')
 
-        // The code entry form only routes to the verification page; the
-        // identity service owns normalization and lookup.
+        // The entered code is resolved here so a code that matches no request
+        // is reported on the entry form itself, instead of sending the browser
+        // to a page that can only ask it to sign in.
         if (form.get('intent') === 'enter-code') {
+          const values = { user_code: code, ui_locales: uiLocales }
           if (!code) {
             return formErrorResponse(
               request,
@@ -185,27 +170,38 @@ export const Route = createFileRoute('/device')({
             )
           }
 
-          return navigationResponse(request, devicePath(code, uiLocales))
+          const lookup = await beginDeviceVerification(code, locale, uiLocales)
+          if (lookup.status === 'unknown') {
+            return formErrorResponse(
+              request,
+              '/device',
+              translate(locale, 'deviceCodeInvalid'),
+              values,
+              'user_code',
+            )
+          }
+          if (lookup.status === 'failed') {
+            return formErrorResponse(request, '/device', lookup.message, values)
+          }
+
+          return navigationResponse(request, lookup.loginUri)
         }
 
         const decision = form.get('decision') === 'deny' ? 'deny' : 'approve'
-        if (!code) {
+        if (!loginId) {
           return formErrorResponse(
             request,
             '/device',
-            translate(locale, 'missingDeviceCodeShort'),
+            translate(locale, 'missingConsentShort'),
             { ui_locales: uiLocales },
           )
         }
 
         try {
-          const result = await identityJson<ConsentApiResponse>(
-            '/oauth2/consent',
-            {
-              method: 'POST',
-              csrfToken: String(form.get('csrf_token') ?? ''),
-              body: { user_code: code, decision },
-            },
+          const result = await decideDeviceVerification(
+            loginId,
+            decision,
+            String(form.get('csrf_token') ?? ''),
           )
           const outcome = deviceOutcome(result.status)
           if (!outcome) {
@@ -221,9 +217,9 @@ export const Route = createFileRoute('/device')({
             request,
             '/device',
             errorMessage(error, locale),
-            { user_code: code, ui_locales: uiLocales },
+            { login_id: loginId, ui_locales: uiLocales },
             undefined,
-            devicePath(code, uiLocales),
+            deviceInteractionPath(loginId, uiLocales),
           )
         }
       },
@@ -270,28 +266,6 @@ function DevicePage() {
         <Chip size="lg" variant="soft" className="mx-auto mt-2 flex w-fit">
           {t(labels[outcome])}
         </Chip>
-      </AuthShell>
-    )
-  }
-
-  if (data.needsSignIn) {
-    return (
-      <AuthShell
-        lang={data.locale}
-        locale={data.locale}
-        showPreferences
-        title={t('deviceSignInTitle')}
-        description={t('deviceSignInDescription')}
-      >
-        <a
-          href={data.signInHref}
-          className="flex min-h-11 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
-        >
-          {t('deviceSignIn')}
-        </a>
-        <p className="mt-4 text-center text-xs leading-5 text-muted">
-          {t('deviceCodeKept', { code: data.userCode })}
-        </p>
       </AuthShell>
     )
   }
@@ -353,6 +327,27 @@ function DevicePage() {
         </p>
       </div>
 
+      {/* Name the account bound by the completed native login interaction. */}
+      <div className="mb-5 flex items-center gap-3 rounded-xl border border-border px-3 py-3">
+        {device.account.picture ? (
+          <img
+            src={device.account.picture}
+            alt=""
+            className="size-9 shrink-0 rounded-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : null}
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">
+            {t('deviceApprovingAs')}
+          </p>
+          <p className="mt-0.5 truncate text-sm font-semibold">
+            {device.account.name}
+          </p>
+          <p className="truncate text-xs text-muted">{device.account.email}</p>
+        </div>
+      </div>
+
       {device.consent_required ? (
         <section aria-labelledby="device-permissions-title">
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -404,7 +399,7 @@ function DevicePage() {
         className="progressive-form mt-6 grid grid-cols-2 gap-3"
         enhancementErrorMessage={t('enhancedNavigationError')}
       >
-        <input type="hidden" name="user_code" value={device.user_code} />
+        <input type="hidden" name="login_id" value={device.login_id} />
         <input type="hidden" name="csrf_token" value={device.csrf_token} />
         {data.uiLocales ? (
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
@@ -467,14 +462,17 @@ function CodeEntryPage({
               type="text"
               required
               autoFocus
+              isInvalid={!!fieldError}
               defaultValue={userCode}
               className="w-full"
               groupClassName="w-full justify-between"
               slotClassName="flex-none"
               onChange={() => setFieldError(undefined)}
             />
+            {/* The field error belongs to the field: only inside `TextField`
+                does it receive the validation state it renders from. */}
+            <FieldError>{fieldError}</FieldError>
           </TextField>
-          <FieldError>{fieldError}</FieldError>
         </div>
         <SubmitButton fullWidth>{t('deviceSubmit')}</SubmitButton>
       </ProgressiveForm>

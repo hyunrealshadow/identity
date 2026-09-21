@@ -59,6 +59,12 @@ fn json_field_equals(field: &str, value: &str) -> SimpleExpr {
     )
 }
 
+fn json_field_is_null(field: &str) -> SimpleExpr {
+    Expr::cust(format!(
+        r#"("client_authorization"."data"->>'{field}') IS NULL"#
+    ))
+}
+
 fn parse_device_request(
     data: serde_json::Value,
 ) -> Result<DeviceAuthorizationRequestData, DeviceAuthorizationRepositoryError> {
@@ -161,6 +167,102 @@ impl DeviceAuthorizationRepositoryImpl {
 
 #[async_trait]
 impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
+    async fn claim_device_request(
+        &self,
+        request_oid: Uuid,
+        login_oid: Uuid,
+        session_oid: identity_domain::auth::SessionOid,
+        now: DateTime<Utc>,
+    ) -> Result<bool, DeviceAuthorizationRepositoryError> {
+        use crate::database::entity::{login, session};
+        let transaction = self.db.begin().await.map_err(query_failed)?;
+        let Some(request) = Self::lock_row(&transaction, request_oid).await? else {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        };
+        if request.r#type != device_request_type()
+            || request.revoked_at.is_some()
+            || request.expires_at <= now
+            || request.completed_at.is_some()
+        {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        }
+        let mut data = parse_device_request(request.data.clone())?;
+        if !data.is_pending() || data.claimed_login_oid.is_some_and(|oid| oid != login_oid) {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        }
+        let Some(login) = login::Entity::find()
+            .filter(login::Column::Oid.eq(login_oid))
+            .lock_exclusive()
+            .one(&transaction)
+            .await
+            .map_err(query_failed)?
+        else {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        };
+        if login.client_authorization_id != request.id
+            || login.client_id != request.client_id
+            || login.expires_at <= now
+            || !matches!(
+                login.status.as_str(),
+                "created" | "identifier_verified" | "authenticated"
+            )
+        {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        }
+        let Some(session) = session::Entity::find()
+            .filter(session::Column::Oid.eq(session_oid.0))
+            .filter(session::Column::Status.eq("active"))
+            .filter(session::Column::RevokedAt.is_null())
+            .filter(session::Column::ExpiresAt.gt(now))
+            .one(&transaction)
+            .await
+            .map_err(query_failed)?
+        else {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        };
+        if data.claimed_login_oid.is_some() {
+            let same =
+                login.session_id == Some(session.id) && login.user_id == Some(session.user_id);
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(same);
+        }
+        if login.status == "authenticated"
+            && (login.session_id != Some(session.id) || login.user_id != Some(session.user_id))
+        {
+            transaction.rollback().await.map_err(query_failed)?;
+            return Ok(false);
+        }
+        login::Entity::update_many()
+            .col_expr(login::Column::SessionId, Expr::value(session.id))
+            .col_expr(login::Column::UserId, Expr::value(session.user_id))
+            .col_expr(login::Column::Status, Expr::value("authenticated"))
+            .col_expr(login::Column::Acr, Expr::value(session.acr))
+            .col_expr(login::Column::UpdatedAt, Expr::value(now))
+            .filter(login::Column::Id.eq(login.id))
+            .exec(&transaction)
+            .await
+            .map_err(query_failed)?;
+        data.claimed_login_oid = Some(login_oid);
+        ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::Data,
+                Expr::value(serde_json::to_value(data).map_err(query_failed)?),
+            )
+            .col_expr(client_authorization::Column::UpdatedAt, Expr::value(now))
+            .filter(client_authorization::Column::Id.eq(request.id))
+            .exec(&transaction)
+            .await
+            .map_err(query_failed)?;
+        transaction.commit().await.map_err(query_failed)?;
+        Ok(true)
+    }
+
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create_device_request"))]
     async fn create_device_request(
         &self,
@@ -244,6 +346,9 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Type.eq(device_request_type()))
             .filter(client_authorization::Column::CompletedAt.is_null())
             .filter(client_authorization::Column::RevokedAt.is_null())
+            // A claimed code is semantically consumed: only an unclaimed
+            // request can still be answered with the code it advertises.
+            .filter(json_field_is_null("claimed_login_oid"))
             .filter(json_field_equals("user_code", user_code))
             .order_by_desc(client_authorization::Column::CreatedAt)
             .inner_join(ClientEntity)
@@ -600,6 +705,10 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
     }
 }
 
+#[cfg(test)]
+#[path = "device_authorization_claim_tests.rs"]
+mod claim_tests;
+
 /// PostgreSQL integration tests for the device authorization state machine.
 ///
 /// Skipped by default because they need a live database; run them with
@@ -688,6 +797,7 @@ mod postgres_tests {
             denied_by_user_oid: None,
             decided_at: None,
             device_authorization_oid: None,
+            claimed_login_oid: None,
         }
     }
 

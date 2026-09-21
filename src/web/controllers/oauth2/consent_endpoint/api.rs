@@ -15,7 +15,7 @@ use super::{
     ConsentQuery,
     context::{has_selected_session, load_consent_context},
     decision::handle_consent_decision,
-    device::{device_consent_api, device_consent_submit},
+    device::{device_consent_api, device_consent_submit, device_login_consent_api},
 };
 
 pub(super) async fn consent_api(
@@ -32,6 +32,24 @@ pub(super) async fn consent_api(
             .into());
     }
     let login_id = query.login_id.clone().unwrap_or_default();
+    let login = ctx
+        .services()
+        .oidc_authorize()
+        .load_login_by_protected_id(&login_id)
+        .await?;
+    if ctx
+        .services()
+        .oidc_device_authorization()
+        .login_request(&login)
+        .await?
+        .is_some()
+    {
+        return Ok(
+            device_login_consent_api(&ctx, &headers, depot, &login_id, &login)
+                .await?
+                .into(),
+        );
+    }
 
     let loaded = load_consent_context(&ctx, &login_id).await?;
 
@@ -82,14 +100,25 @@ pub(super) async fn consent_api_submit(
 
     match (payload.login_id.as_deref(), payload.user_code.as_deref()) {
         (Some(login_id), None) => {
+            let login = ctx
+                .services()
+                .oidc_authorize()
+                .load_login_by_protected_id(login_id)
+                .await?;
+            if ctx
+                .services()
+                .oidc_device_authorization()
+                .login_request(&login)
+                .await?
+                .is_some()
+            {
+                return Ok(
+                    device_consent_submit(&ctx, &headers, &login, payload.decision)
+                        .await?
+                        .into(),
+                );
+            }
             handle_consent_decision(ctx, login_id.to_owned(), payload.decision).await
-        }
-        (None, Some(user_code)) => {
-            Ok(
-                device_consent_submit(&ctx, &headers, user_code, payload.decision)
-                    .await?
-                    .into(),
-            )
         }
         _ => Err(AppError::from_code(
             AuthorizeHttpErrorCode::ContinueInteractionUnavailable,

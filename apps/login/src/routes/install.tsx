@@ -101,7 +101,7 @@ export const Route = createFileRoute('/install')({
         }
 
         try {
-          const result = await identityInternalJson<InstallResponse>('/internal/installation', {
+          await identityInternalJson<InstallResponse>('/internal/installation', {
             method: 'POST',
             body: {
               username,
