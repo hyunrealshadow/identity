@@ -486,7 +486,7 @@ function ChallengePage() {
               required
               autoFocus
               className="w-full"
-              groupClassName="w-full justify-between"
+              groupClassName="w-full justify-between pe-5"
               slotClassName="flex-none"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}

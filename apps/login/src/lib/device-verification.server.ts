@@ -27,7 +27,7 @@ export async function beginDeviceVerification(
       `/oauth2/consent?user_code=${encodeURIComponent(userCode)}`,
     )
     const login = await identityJson<{ login_id: string; login_uri: string }>(
-      '/oauth2/device/begin',
+      '/oauth2/device/login',
       {
         method: 'POST',
         csrfToken: check.csrf_token,

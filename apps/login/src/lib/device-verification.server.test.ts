@@ -50,7 +50,7 @@ describe('beginDeviceVerification', () => {
     expect(fetch.mock.calls[0][1]?.method).toBe('GET')
     expect(fetch.mock.calls[0][1]?.body).toBeUndefined()
     expect(String(fetch.mock.calls[1][0])).toBe(
-      'https://identity.example.com/oauth2/device/begin',
+      'https://identity.example.com/oauth2/device/login',
     )
     const begin = fetch.mock.calls[1][1]
     expect(begin?.method).toBe('POST')

@@ -227,7 +227,7 @@ async fn device_begin_preserves_unknown_code_error_for_the_entry_form() {
         serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
     let (state, _, _) = unknown_user_code_test_state().await;
     let service = Service::new(app_router(state, &consent_test_config()));
-    let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/device/begin")
+    let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/device/login")
         .add_header("x-csrf-token", body["csrf_token"].as_str().unwrap(), true)
         .raw_json(r#"{"user_code":"ZZZZ-ZZZZ"}"#)
         .send(&service)

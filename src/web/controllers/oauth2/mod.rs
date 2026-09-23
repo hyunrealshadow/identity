@@ -36,7 +36,7 @@ pub fn routes() -> Router {
                 .post(device_authorization_endpoint::device_authorization),
         )
         .push(
-            Router::with_path("oauth2/device/begin")
+            Router::with_path("oauth2/device/login")
                 .hoop(api_csrf_middleware())
                 .post(device_authorization_endpoint::begin_verification),
         )
