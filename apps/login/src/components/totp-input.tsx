@@ -290,7 +290,10 @@ export function GroupedCodeInput(props: SegmentedCodeInputProps) {
       normalize={normalizeGroupedCode}
       inputMode="text"
       pattern="^[A-Za-z0-9-]+$"
-      autoComplete="one-time-code"
+      autoComplete="off"
+      data-1p-ignore="true"
+      data-bwignore="true"
+      data-lpignore="true"
     />
   )
 }
