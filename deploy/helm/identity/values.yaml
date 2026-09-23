@@ -47,11 +47,11 @@ identity:
     rotateBeforeExpiryDays: 30
     retireAfterSeconds: 86400
   observability:
-    # Console output is optional in production; OTLP is the primary channel.
-    console: false
+    # Keep container logs available until an OTLP collector is configured.
+    console: true
     otlp:
-      enabled: true
-      endpoint: http://otel-collector.observability.svc.cluster.local:4318
+      enabled: false
+      endpoint: ""
       timeoutMs: 10000
       compression: none
     sampling:
@@ -120,9 +120,9 @@ login:
     key: ca.crt
   observability:
     otlp:
-      # Login exports server/client spans and key events to the collector.
+      # Enable only after setting an endpoint for the collector.
       enabled: false
-      endpoint: http://otel-collector.observability.svc.cluster.local:4318
+      endpoint: ""
     sampling:
       # null keeps the pipeline default of 100% for login server spans.
       traceRatio: null

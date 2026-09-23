@@ -127,11 +127,13 @@ current OAuth credential is close to expiry.
 
 ## Observability
 
-Identity exports traces, structured logs and key business/audit events over
-OTLP/HTTP (protobuf) to a collector. Login exports its server-side spans and
-key events over OTLP/HTTP JSON. Set `identity.observability.otlp.enabled` and
-`login.observability.otlp.enabled` (or the Compose variables) to point both at
-the same collector. Login still treats browser-provided `traceparent` as
+Identity can export traces, structured logs and key business/audit events over
+OTLP/HTTP (protobuf) to a collector. Login can export its server-side spans and
+key events over OTLP/HTTP JSON. Helm leaves both exporters disabled and keeps
+Identity's JSON console logs enabled until collector endpoints are explicitly
+configured. Set `identity.observability.otlp.enabled` and
+`login.observability.otlp.enabled` with their endpoints (or the Compose variables)
+to point both at the collector. Login still treats browser-provided `traceparent` as
 untrusted and starts a new trace with a link; Identity trusts only verified
 workload identity or configured gateway networks.
 

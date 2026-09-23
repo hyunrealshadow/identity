@@ -139,6 +139,11 @@ All Login-to-Identity backchannel URLs automatically follow
 token in HTTP mode. Use encrypted CNI traffic, a service mesh, or keep Identity
 TLS enabled when the cluster network is not trusted.
 
+The chart writes Identity's JSON logs to the container console by default.
+Identity and Login OTLP export are disabled until their respective
+`observability.otlp.enabled` flags and collector endpoints are set. Enabling
+either exporter without an endpoint fails template rendering.
+
 Validate and install:
 
 ```sh

@@ -47,6 +47,7 @@ pub(crate) fn build_providers(
     config: &ObservabilityConfig,
     environment: &AppEnvironment,
     console: bool,
+    console_format: LogFormat,
     excluded_trace_paths: Vec<String>,
 ) -> Result<Providers, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let resource = build_resource(environment);
@@ -86,7 +87,9 @@ pub(crate) fn build_providers(
         );
     }
     if console {
-        events_builder = events_builder.with_simple_exporter(ConsoleLogExporter);
+        events_builder = events_builder.with_simple_exporter(ConsoleLogExporter {
+            format: console_format,
+        });
     }
     let events_logs = events_builder.build();
 
@@ -433,13 +436,19 @@ impl<E: PushMetricExporter> PushMetricExporter for CountingMetricExporter<E> {
 
 /// Prints key events and audit records when the console is enabled. Raw values
 /// are already rendered through the shared PII policy.
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct ConsoleLogExporter;
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConsoleLogExporter {
+    format: LogFormat,
+}
 
 impl LogExporter for ConsoleLogExporter {
     async fn export(&self, batch: LogBatch<'_>) -> OTelSdkResult {
         for (record, _scope) in batch.iter() {
-            println!("{}", format_record(record));
+            let line = match self.format {
+                LogFormat::Json => format_json_record(record),
+                LogFormat::Compact | LogFormat::Pretty => format_record(record),
+            };
+            println!("{line}");
         }
         Ok(())
     }
@@ -473,6 +482,56 @@ fn format_record(record: &opentelemetry_sdk::logs::SdkLogRecord) -> String {
         ));
     }
     line
+}
+
+fn format_json_record(record: &opentelemetry_sdk::logs::SdkLogRecord) -> String {
+    let timestamp = record
+        .timestamp()
+        .map(|time| chrono::DateTime::<chrono::Utc>::from(time).to_rfc3339())
+        .unwrap_or_else(|| "-".to_owned());
+    let level = record
+        .severity_number()
+        .map(|severity| format!("{severity:?}").to_uppercase())
+        .unwrap_or_default();
+    let mut fields = serde_json::Map::new();
+    fields.insert(
+        "message".to_owned(),
+        serde_json::Value::String(record.event_name().unwrap_or("event").to_owned()),
+    );
+    for (key, value) in record.attributes_iter() {
+        fields.insert(key.as_str().to_owned(), any_value_to_json(value));
+    }
+    let mut line = serde_json::json!({
+        "timestamp": timestamp,
+        "level": level,
+        "fields": fields,
+        "target": "identity.events",
+    });
+    if let Some(trace) = record.trace_context() {
+        line["trace_id"] = serde_json::Value::String(trace.trace_id.to_string());
+        line["span_id"] = serde_json::Value::String(trace.span_id.to_string());
+    }
+    line.to_string()
+}
+
+fn any_value_to_json(value: &AnyValue) -> serde_json::Value {
+    match value {
+        AnyValue::String(value) => serde_json::Value::String(value.to_string()),
+        AnyValue::Boolean(value) => serde_json::json!(value),
+        AnyValue::Int(value) => serde_json::json!(value),
+        AnyValue::Double(value) => serde_json::json!(value),
+        AnyValue::Bytes(value) => serde_json::Value::String(format!("{} bytes", value.len())),
+        AnyValue::ListAny(values) => {
+            serde_json::Value::Array(values.iter().map(any_value_to_json).collect())
+        }
+        AnyValue::Map(values) => serde_json::Value::Object(
+            values
+                .iter()
+                .map(|(key, value)| (key.as_str().to_owned(), any_value_to_json(value)))
+                .collect(),
+        ),
+        other => serde_json::Value::String(format!("{other:?}")),
+    }
 }
 
 fn any_value_to_string(value: &AnyValue) -> String {
@@ -558,12 +617,32 @@ impl tracing::field::Visit for InternalTelemetryVisitor {
 
 #[cfg(test)]
 mod tests {
-    use opentelemetry::KeyValue;
     use opentelemetry::trace::SpanKind;
+    use opentelemetry::{
+        KeyValue,
+        logs::{LogRecord, Logger, LoggerProvider, Severity},
+    };
+    use opentelemetry_sdk::logs::SdkLoggerProvider;
     use opentelemetry_sdk::trace::ShouldSample;
 
-    use super::{IdentitySampler, build_sampler};
+    use super::{IdentitySampler, build_sampler, format_json_record};
     use crate::config::{AppEnvironment, ObservabilityConfig};
+
+    #[test]
+    fn business_event_console_json_contains_structured_fields() {
+        let provider = SdkLoggerProvider::builder().build();
+        let mut record = provider.logger("test").create_log_record();
+        record.set_event_name("service.started");
+        record.set_severity_number(Severity::Info);
+        record.add_attribute("identity.event.category", "business");
+        record.add_attribute("environment", "production");
+
+        let value: serde_json::Value = serde_json::from_str(&format_json_record(&record)).unwrap();
+        assert_eq!(value["level"], "INFO");
+        assert_eq!(value["fields"]["message"], "service.started");
+        assert_eq!(value["fields"]["identity.event.category"], "business");
+        assert_eq!(value["fields"]["environment"], "production");
+    }
 
     #[test]
     fn health_root_spans_are_not_sampled() {
@@ -640,7 +719,7 @@ mod otlp_construction_tests {
     use std::time::Duration;
 
     use super::{build_providers, shutdown};
-    use crate::config::{AppEnvironment, ObservabilityConfig};
+    use crate::config::{AppEnvironment, LogFormat, ObservabilityConfig};
 
     /// Building and shutting down the OTLP providers inside a Tokio runtime
     /// must not panic: reqwest's blocking client and the batch processors run
@@ -653,8 +732,14 @@ mod otlp_construction_tests {
         config.otlp.endpoint = "http://127.0.0.1:1".to_owned();
         config.otlp.timeout_ms = 200;
 
-        let providers = build_providers(&config, &AppEnvironment::Development, false, Vec::new())
-            .expect("OTLP providers must build");
+        let providers = build_providers(
+            &config,
+            &AppEnvironment::Development,
+            false,
+            LogFormat::Compact,
+            Vec::new(),
+        )
+        .expect("OTLP providers must build");
         shutdown(&providers, Duration::from_millis(500));
     }
 }
@@ -674,7 +759,7 @@ mod otlp_export_tests {
     };
 
     use super::{build_providers, shutdown};
-    use crate::config::{AppEnvironment, ObservabilityConfig};
+    use crate::config::{AppEnvironment, LogFormat, ObservabilityConfig};
 
     #[derive(Clone, Debug, Default)]
     struct MockCollector {
@@ -751,8 +836,14 @@ mod otlp_export_tests {
         config.otlp.endpoint = endpoint;
         config.diagnostics.schedule_delay_ms = 10;
 
-        let providers = build_providers(&config, &AppEnvironment::Development, false, Vec::new())
-            .expect("OTLP providers must build");
+        let providers = build_providers(
+            &config,
+            &AppEnvironment::Development,
+            false,
+            LogFormat::Compact,
+            Vec::new(),
+        )
+        .expect("OTLP providers must build");
 
         let tracer = providers.tracer.tracer("export-test");
         let mut span = tracer.start("export.test.span");

@@ -215,10 +215,12 @@ spec:
               value: /var/run/secrets/identity/token
             - name: OTEL_SERVICE_NAME
               value: identity-login
+            {{- if .Values.login.observability.otlp.enabled }}
             - name: IDENTITY_LOGIN_OTLP_ENABLE
-              value: {{ .Values.login.observability.otlp.enabled | quote }}
+              value: "true"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.login.observability.otlp.endpoint | quote }}
+              value: {{ required "login.observability.otlp.endpoint is required when OTLP is enabled" .Values.login.observability.otlp.endpoint | quote }}
+            {{- end }}
             {{- with .Values.login.observability.sampling.traceRatio }}
             - name: IDENTITY_LOGIN_TRACE_SAMPLE_RATIO
               value: {{ . | quote }}

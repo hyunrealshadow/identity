@@ -62,7 +62,13 @@ pub fn init(config: &AppConfig, environment: &AppEnvironment) -> ObservabilityRe
     );
 
     let excluded_paths = excluded_trace_paths(config);
-    let providers = pipeline::build_providers(observability, environment, console, excluded_paths)?;
+    let providers = pipeline::build_providers(
+        observability,
+        environment,
+        console,
+        config.logger.format,
+        excluded_paths,
+    )?;
     let tracer = providers.tracer.tracer("identity");
 
     pipeline::init_subscriber(

@@ -18,11 +18,13 @@ data:
     observability:
       enable: true
       console: {{ .Values.identity.observability.console }}
+      {{- if .Values.identity.observability.otlp.enabled }}
       otlp:
-        enable: {{ .Values.identity.observability.otlp.enabled }}
-        endpoint: {{ .Values.identity.observability.otlp.endpoint | quote }}
+        enable: true
+        endpoint: {{ required "identity.observability.otlp.endpoint is required when OTLP is enabled" .Values.identity.observability.otlp.endpoint | quote }}
         timeout_ms: {{ .Values.identity.observability.otlp.timeoutMs | int64 }}
         compression: {{ .Values.identity.observability.otlp.compression }}
+      {{- end }}
       {{- with .Values.identity.observability.sampling.traceRatio }}
       sampling:
         trace_ratio: {{ . }}
