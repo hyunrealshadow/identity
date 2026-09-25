@@ -61,6 +61,12 @@ mockall::mock! {
             type_: ClientAuthorizationType,
             now: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
+        async fn revoke_refresh_token_family(
+            &self,
+            refresh_oid: uuid::Uuid,
+            client_oid: ClientOid,
+            now: DateTime<Utc>,
+        ) -> Result<(), ClientAuthorizationRepositoryError>;
     }
 }
 
@@ -141,6 +147,88 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
             record.revoked_at = Some(now);
             record.updated_at = Some(now);
             Ok(true)
+        });
+
+    let r = records.clone();
+    mock.expect_revoke_refresh_token_family()
+        .returning(move |refresh_oid, client_oid, now| {
+            let mut records = r.lock().unwrap();
+            let Some(start) = records.get(&refresh_oid) else {
+                return Ok(());
+            };
+            if start.client_oid != client_oid
+                || start.type_ != ClientAuthorizationType::RefreshToken
+            {
+                return Ok(());
+            }
+            let mut root_oid = refresh_oid;
+            while let Some(ClientAuthorizationData::RefreshToken(data)) =
+                records.get(&root_oid).map(|record| &record.data)
+            {
+                let Some(parent) = data
+                    .rotated_from
+                    .as_deref()
+                    .and_then(|oid| oid.parse().ok())
+                else {
+                    break;
+                };
+                root_oid = parent;
+            }
+            let (code_oid, device_oid) = match &records[&root_oid].data {
+                ClientAuthorizationData::RefreshToken(data) => (
+                    data.authorization_code_oid.clone(),
+                    data.device_authorization_oid.clone(),
+                ),
+                _ => return Ok(()),
+            };
+            let mut family = std::collections::HashSet::from([root_oid]);
+            loop {
+                let old_len = family.len();
+                for (oid, record) in records.iter() {
+                    if let ClientAuthorizationData::RefreshToken(data) = &record.data {
+                        if data
+                            .rotated_from
+                            .as_deref()
+                            .and_then(|parent| parent.parse().ok())
+                            .is_some_and(|parent| family.contains(&parent))
+                        {
+                            family.insert(*oid);
+                        }
+                    }
+                }
+                if family.len() == old_len {
+                    break;
+                }
+            }
+            for (oid, record) in records.iter_mut() {
+                if record.client_oid != client_oid {
+                    continue;
+                }
+                let revoke = family.contains(oid)
+                    || match &record.data {
+                        ClientAuthorizationData::AccessToken(data) => {
+                            data.refresh_token_oid
+                                .as_deref()
+                                .and_then(|value| value.parse().ok())
+                                .is_some_and(|parent| family.contains(&parent))
+                                || code_oid.as_ref().is_some_and(|code| {
+                                    data.authorization_code_oid.as_ref() == Some(code)
+                                })
+                                || device_oid.as_ref().is_some_and(|device| {
+                                    data.device_authorization_oid.as_ref() == Some(device)
+                                })
+                        }
+                        ClientAuthorizationData::DeviceAuthorization(_) => device_oid
+                            .as_ref()
+                            .is_some_and(|device| device == &oid.to_string()),
+                        _ => false,
+                    };
+                if revoke {
+                    record.revoked_at = Some(now);
+                    record.updated_at = Some(now);
+                }
+            }
+            Ok(())
         });
 
     mock

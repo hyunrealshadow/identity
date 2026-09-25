@@ -821,6 +821,7 @@ mod postgres_tests {
                 session_oid: None,
                 protected_session_id: None,
                 authorization_code_oid: None,
+                refresh_token_oid: None,
                 device_authorization_oid: None,
             }),
             expires_at: Utc::now() + chrono::Duration::minutes(5),

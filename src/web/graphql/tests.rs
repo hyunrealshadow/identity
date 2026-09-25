@@ -255,6 +255,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
             session_oid: Some(SessionOid(session_oid)),
             protected_session_id: Some("protected-session".to_owned()),
             authorization_code_oid: None,
+            refresh_token_oid: None,
             device_authorization_oid: None,
         })
         .unwrap(),

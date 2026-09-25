@@ -344,6 +344,7 @@ impl AuthorizeService {
                         authorization_code_oid: input
                             .authorization_code_oid
                             .map(|oid| oid.to_string()),
+                        refresh_token_oid: None,
                         device_authorization_oid: None,
                     },
                 ),

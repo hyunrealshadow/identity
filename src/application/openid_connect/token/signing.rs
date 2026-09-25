@@ -18,6 +18,7 @@ pub(super) struct StoreRefreshTokenParams<'a> {
     pub acr: Option<&'a str>,
     pub amr: &'a [String],
     pub rotated_from: Option<&'a str>,
+    pub authorization_code_oid: Option<Uuid>,
     /// Device authorization relation behind the token, if any.
     pub device_authorization_oid: Option<Uuid>,
 }
@@ -422,6 +423,7 @@ impl TokenService {
             acr: params.acr.map(str::to_string),
             amr: params.amr.to_vec(),
             rotated_from: params.rotated_from.map(str::to_string),
+            authorization_code_oid: params.authorization_code_oid.map(|oid| oid.to_string()),
             device_authorization_oid: params.device_authorization_oid.map(|oid| oid.to_string()),
         });
 
@@ -494,7 +496,43 @@ impl TokenService {
             session_oid,
             protected_session_id: protected_session_id.map(str::to_string),
             authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
+            refresh_token_oid: None,
             device_authorization_oid: device_authorization_oid.map(|oid| oid.to_string()),
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn create_refresh_access_token_record(
+        &self,
+        client_oid: Uuid,
+        scope: &str,
+        user_oid: &str,
+        session_oid: Option<SessionOid>,
+        protected_session_id: Option<&str>,
+        authorization_code_oid: Option<Uuid>,
+        device_authorization_oid: Option<Uuid>,
+        refresh_token_oid: Uuid,
+    ) -> Result<ClientAuthorization, AppError> {
+        let mut data = self.access_token_data(
+            scope,
+            user_oid,
+            session_oid,
+            protected_session_id,
+            authorization_code_oid,
+            device_authorization_oid,
+        );
+        if let ClientAuthorizationData::AccessToken(access) = &mut data {
+            access.refresh_token_oid = Some(refresh_token_oid.to_string());
+        }
+        self.client_authorization_repo
+            .create(
+                client_oid,
+                data,
+                chrono::Utc::now() + chrono::Duration::hours(1),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+            })
     }
 }

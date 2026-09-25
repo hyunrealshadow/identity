@@ -67,6 +67,16 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         type_: ClientAuthorizationType,
         now: DateTime<Utc>,
     ) -> Result<bool, ClientAuthorizationRepositoryError>;
+
+    /// Terminates the grant behind a replayed refresh token and every token
+    /// issued by its rotation chain. Implementations serialize this with
+    /// concurrent writes into the same chain.
+    async fn revoke_refresh_token_family(
+        &self,
+        refresh_oid: Uuid,
+        client_oid: ClientOid,
+        now: DateTime<Utc>,
+    ) -> Result<(), ClientAuthorizationRepositoryError>;
 }
 
 #[derive(Debug, thiserror::Error)]

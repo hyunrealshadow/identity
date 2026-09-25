@@ -310,10 +310,11 @@ impl TokenService {
             .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
             .collect::<Vec<_>>()
             .join(" ");
-        let refresh_token = if data
-            .scope
-            .split_whitespace()
-            .any(|scope| scope == "offline_access")
+        let refresh_token = if authenticated_client.allows_grant(GrantType::RefreshToken)
+            && data
+                .scope
+                .split_whitespace()
+                .any(|scope| scope == "offline_access")
         {
             Some(
                 self.store_refresh_token(StoreRefreshTokenParams {
@@ -327,6 +328,7 @@ impl TokenService {
                     acr: session_acr.as_deref(),
                     amr: &session_amr,
                     rotated_from: None,
+                    authorization_code_oid: Some(record.oid),
                 })
                 .await?,
             )
@@ -443,7 +445,17 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenNotFound));
         }
         let now = chrono::Utc::now();
-        if refresh_record.revoked_at.is_some() || refresh_record.expires_at <= now {
+        if refresh_record.client_oid != authenticated_client_oid {
+            return Err(AppError::from_code(
+                TokenErrorCode::RefreshTokenClientMismatch,
+            ));
+        }
+        if refresh_record.revoked_at.is_some() {
+            self.revoke_replayed_refresh_token(refresh_record.oid, authenticated_client_oid, now)
+                .await?;
+            return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+        }
+        if refresh_record.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
         let refresh_data = match refresh_record.data {
@@ -507,9 +519,7 @@ impl TokenService {
             ),
             None => None,
         };
-        if authenticated_client_oid.to_string() != client_id
-            || refresh_record.client_oid != authenticated_client_oid
-        {
+        if authenticated_client_oid.to_string() != client_id {
             return Err(AppError::from_code(
                 TokenErrorCode::RefreshTokenClientMismatch,
             ));
@@ -527,16 +537,8 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
             })?;
         if !claimed {
-            // The conditional update found the token already consumed or
-            // revoked: a genuine reuse judgment, not every invalid_grant.
-            self.events.emit(
-                BusinessEvent::audit("refresh_token.reuse_detected")
-                    .outcome("detected")
-                    .attribute(
-                        "client_oid",
-                        EventValue::Text(authenticated_client_oid.to_string()),
-                    ),
-            );
+            self.revoke_replayed_refresh_token(refresh_record.oid, authenticated_client_oid, now)
+                .await?;
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
 
@@ -569,17 +571,21 @@ impl TokenService {
             client_id.as_str()
         };
         let access_token_record = self
-            .create_access_token_record(
+            .create_refresh_access_token_record(
                 authenticated_client_oid,
                 &scope,
                 &refresh_data.user_oid,
                 refresh_data.session_oid,
                 protected_session_id.as_deref(),
-                None,
+                refresh_data
+                    .authorization_code_oid
+                    .as_deref()
+                    .and_then(|oid| oid.parse::<Uuid>().ok()),
                 refresh_data
                     .device_authorization_oid
                     .as_deref()
                     .and_then(|oid| oid.parse::<Uuid>().ok()),
+                refresh_record.oid,
             )
             .await?;
         let access_token = self
@@ -654,6 +660,10 @@ impl TokenService {
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
                 rotated_from: Some(rotated_from.as_str()),
+                authorization_code_oid: refresh_data
+                    .authorization_code_oid
+                    .as_deref()
+                    .and_then(|oid| oid.parse::<Uuid>().ok()),
                 device_authorization_oid: refresh_data
                     .device_authorization_oid
                     .as_deref()
@@ -703,6 +713,26 @@ impl TokenService {
             expires_in: 3600,
             scope,
         })
+    }
+
+    async fn revoke_replayed_refresh_token(
+        &self,
+        refresh_oid: Uuid,
+        client_oid: Uuid,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), AppError> {
+        self.client_authorization_repo
+            .revoke_refresh_token_family(refresh_oid, client_oid, now)
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
+            })?;
+        self.events.emit(
+            BusinessEvent::audit("refresh_token.reuse_detected")
+                .outcome("detected")
+                .attribute("client_oid", EventValue::Text(client_oid.to_string())),
+        );
+        Ok(())
     }
 
     async fn protected_session_id(

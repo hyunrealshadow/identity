@@ -84,6 +84,8 @@ pub struct RefreshTokenData {
     #[serde(default)]
     pub amr: Vec<String>,
     pub rotated_from: Option<String>,
+    #[serde(default)]
+    pub authorization_code_oid: Option<String>,
     /// Device authorization relation this token belongs to, when the token was
     /// not issued from a browser session.
     #[serde(default)]
@@ -102,6 +104,8 @@ pub struct AccessTokenData {
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub authorization_code_oid: Option<String>,
+    #[serde(default)]
+    pub refresh_token_oid: Option<String>,
     /// Device authorization relation the token was issued from, when the
     /// token was not issued from a browser session.
     #[serde(default)]
@@ -263,6 +267,7 @@ mod tests {
             acr: Some("urn:identity:acr:aal1".to_string()),
             amr: vec!["pwd".to_string()],
             rotated_from: Some(uuid::Uuid::nil().to_string()),
+            authorization_code_oid: None,
             device_authorization_oid: None,
         };
 
@@ -289,6 +294,7 @@ mod tests {
             acr: None,
             amr: Vec::new(),
             rotated_from: None,
+            authorization_code_oid: None,
             device_authorization_oid: None,
         };
 
@@ -305,6 +311,7 @@ mod tests {
             session_oid: Some(SessionOid(uuid::Uuid::nil())),
             protected_session_id: Some("protected-session".to_string()),
             authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
+            refresh_token_oid: None,
             device_authorization_oid: None,
         };
 

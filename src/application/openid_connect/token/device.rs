@@ -348,6 +348,7 @@ impl TokenService {
                     acr: approval.acr.clone(),
                     amr: approval.amr.clone(),
                     rotated_from: None,
+                    authorization_code_oid: None,
                     device_authorization_oid: Some(device_authorization_oid.to_string()),
                 }),
                 expires_at: now + chrono::Duration::days(30),

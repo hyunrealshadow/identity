@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
-    QuerySelect, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseBackend, DatabaseConnection,
+    DatabaseTransaction, EntityTrait, QueryFilter, QuerySelect, Set, Statement, TransactionTrait,
     sea_query::{Expr, OnConflict, SimpleExpr},
 };
 use uuid::Uuid;
@@ -173,6 +173,73 @@ pub struct ClientAuthorizationRepositoryImpl {
     db: DatabaseConnection,
 }
 
+async fn lock_refresh_family(
+    transaction: &DatabaseTransaction,
+    refresh_oid: Uuid,
+    client_oid: ClientOid,
+    reject_compromised: bool,
+) -> Result<Uuid, ClientAuthorizationRepositoryError> {
+    let root = transaction
+        .query_one_raw(Statement::from_sql_and_values(
+            DatabaseBackend::Postgres,
+            r#"WITH RECURSIVE ancestors AS (
+                SELECT authorization.oid, authorization.data
+                FROM client_authorization AS authorization
+                JOIN client ON client.id = authorization.client_id
+                WHERE authorization.oid = $1 AND client.oid = $2
+                  AND authorization."type" = 'refresh_token'
+                UNION ALL
+                SELECT parent.oid, parent.data
+                FROM client_authorization AS parent
+                JOIN ancestors ON parent.oid::text = ancestors.data->>'rotated_from'
+                WHERE parent."type" = 'refresh_token'
+            )
+            SELECT oid AS root_oid FROM ancestors
+            WHERE data->>'rotated_from' IS NULL LIMIT 1"#,
+            [refresh_oid.into(), client_oid.into()],
+        ))
+        .await
+        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+        .ok_or_else(|| {
+            ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                sea_orm::DbErr::RecordNotFound("refresh token family not found".into()),
+            ))
+        })?;
+    let root_oid: Uuid = root
+        .try_get("", "root_oid")
+        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+    transaction
+        .query_one_raw(Statement::from_sql_and_values(
+            DatabaseBackend::Postgres,
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            [root_oid.to_string().into()],
+        ))
+        .await
+        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+    if reject_compromised {
+        let row = transaction
+            .query_one_raw(Statement::from_sql_and_values(
+                DatabaseBackend::Postgres,
+                "SELECT COALESCE(data->>'replay_detected', 'false') = 'true' AS compromised FROM client_authorization WHERE oid = $1",
+                [root_oid.into()],
+            ))
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+            .ok_or_else(|| ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
+            )))?;
+        let compromised: bool = row
+            .try_get("", "compromised")
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        if compromised {
+            return Err(ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                sea_orm::DbErr::RecordNotFound("refresh token family was revoked".into()),
+            )));
+        }
+    }
+    Ok(root_oid)
+}
+
 impl ClientAuthorizationRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
@@ -195,6 +262,14 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             ClientAuthorizationData::RefreshToken(data) => data.session_oid,
             _ => None,
         };
+        let family_refresh_oid = match &data {
+            ClientAuthorizationData::RefreshToken(refresh) => refresh.rotated_from.as_deref(),
+            ClientAuthorizationData::AccessToken(access) => access.refresh_token_oid.as_deref(),
+            _ => None,
+        }
+        .map(Uuid::parse_str)
+        .transpose()
+        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
         let transaction =
             self.db.begin().await.map_err(|error| {
                 ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
@@ -226,6 +301,9 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                     )),
                 )));
             }
+        }
+        if let Some(parent_oid) = family_refresh_oid {
+            lock_refresh_family(&transaction, parent_oid, client_oid, true).await?;
         }
         let client_model = ClientEntity::find()
             .filter(client::Column::Oid.eq(client_oid))
@@ -631,6 +709,91 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(result.rows_affected == 1)
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_refresh_token_family"))]
+    async fn revoke_refresh_token_family(
+        &self,
+        refresh_oid: Uuid,
+        client_oid: ClientOid,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<(), ClientAuthorizationRepositoryError> {
+        let transaction =
+            self.db.begin().await.map_err(|error| {
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+            })?;
+        let root_oid = lock_refresh_family(&transaction, refresh_oid, client_oid, false).await?;
+        let root = transaction
+            .query_one_raw(Statement::from_sql_and_values(
+                DatabaseBackend::Postgres,
+                "SELECT data FROM client_authorization WHERE oid = $1",
+                [root_oid.into()],
+            ))
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+            .ok_or_else(|| {
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                    sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
+                ))
+            })?;
+        let data: serde_json::Value = root
+            .try_get("", "data")
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        let authorization_code_oid = data["authorization_code_oid"].as_str().unwrap_or("");
+        let device_authorization_oid = data["device_authorization_oid"].as_str().unwrap_or("");
+
+        transaction
+            .execute_raw(Statement::from_sql_and_values(
+                DatabaseBackend::Postgres,
+                "UPDATE client_authorization SET data = jsonb_set(data, '{replay_detected}', 'true'::jsonb), updated_at = $2 WHERE oid = $1",
+                [root_oid.into(), now.into()],
+            ))
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        transaction
+            .execute_raw(Statement::from_sql_and_values(
+                DatabaseBackend::Postgres,
+                r#"WITH RECURSIVE family AS (
+                    SELECT oid FROM client_authorization WHERE oid = $1
+                    UNION ALL
+                    SELECT child.oid FROM client_authorization AS child
+                    JOIN family ON child.data->>'rotated_from' = family.oid::text
+                    WHERE child."type" = 'refresh_token'
+                )
+                UPDATE client_authorization SET revoked_at = $2, updated_at = $2
+                WHERE client_id = (SELECT id FROM client WHERE oid = $3)
+                  AND revoked_at IS NULL
+                  AND (oid IN (SELECT oid FROM family)
+                    OR ("type" = 'access_token' AND (
+                        data->>'refresh_token_oid' IN (SELECT oid::text FROM family)
+                        OR ($4 <> '' AND data->>'authorization_code_oid' = $4)
+                        OR ($5 <> '' AND data->>'device_authorization_oid' = $5)
+                    )))"#,
+                [
+                    root_oid.into(),
+                    now.into(),
+                    client_oid.into(),
+                    authorization_code_oid.into(),
+                    device_authorization_oid.into(),
+                ],
+            ))
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        if !device_authorization_oid.is_empty() {
+            transaction
+                .execute_raw(Statement::from_sql_and_values(
+                    DatabaseBackend::Postgres,
+                    "UPDATE client_authorization SET revoked_at = $2, updated_at = $2 WHERE oid::text = $1 AND client_id = (SELECT id FROM client WHERE oid = $3) AND \"type\" = 'device_authorization' AND revoked_at IS NULL",
+                    [device_authorization_oid.into(), now.into(), client_oid.into()],
+                ))
+                .await
+                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        }
+        transaction
+            .commit()
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        Ok(())
     }
 }
 

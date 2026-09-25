@@ -490,6 +490,7 @@ async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, sco
         acr: None,
         amr: vec!["pwd".to_owned()],
         rotated_from: None,
+        authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
     };
     let record = repo
@@ -626,6 +627,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
         acr: None,
         amr: vec!["pwd".to_owned()],
         rotated_from: None,
+        authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
     };
     let repo = Arc::new(mock_client_auth_repo());
@@ -683,6 +685,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
         acr: Some("urn:identity:acr:aal1".to_owned()),
         amr: vec!["pwd".to_owned()],
         rotated_from: None,
+        authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
     };
     let repo = Arc::new(mock_client_auth_repo());

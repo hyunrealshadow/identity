@@ -131,7 +131,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
             scope: None,
-            refresh_token: initial_refresh_token,
+            refresh_token: initial_refresh_token.clone(),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
             client_assertion_type: None,
@@ -160,6 +160,42 @@ async fn exchange_refresh_token_returns_new_access_token() {
     assert_eq!(
         rotated_data.rotated_from.as_deref(),
         Some(expected_rotated_from.as_str())
+    );
+
+    let access_payload = refreshed.access_token.split('.').nth(1).unwrap();
+    let access_payload: serde_json::Value =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(access_payload).unwrap()).unwrap();
+    let access_oid = Uuid::parse_str(access_payload["jti"].as_str().unwrap()).unwrap();
+    let access = repo.find_by_oid(access_oid).await.unwrap().unwrap();
+    assert!(access.revoked_at.is_none());
+
+    let error = service
+        .exchange_refresh_token(RefreshTokenGrantParams {
+            scope: None,
+            refresh_token: initial_refresh_token,
+            client_id: Some(Uuid::nil().to_string()),
+            client_secret: Some("secret-123".to_string()),
+            client_assertion_type: None,
+            client_assertion: None,
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 24015);
+    assert!(
+        repo.find_by_oid(rotated_oid)
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_at
+            .is_some()
+    );
+    assert!(
+        repo.find_by_oid(access_oid)
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_at
+            .is_some()
     );
 }
 
