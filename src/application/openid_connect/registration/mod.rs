@@ -149,6 +149,14 @@ impl DynamicClientRegistrationService {
                     .with_param("field", "token_endpoint_auth_method")
                     .with_source(error)
             })?;
+        if grant_types.contains(&GrantType::ClientCredentials)
+            && token_auth_method == TokenEndpointAuthMethod::None
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "token_endpoint_auth_method"),
+            );
+        }
         reject_none_algorithm(
             "id_token_signed_response_alg",
             request.id_token_signed_response_alg.as_deref(),

@@ -860,3 +860,35 @@ async fn register_allows_device_only_client_without_redirect_uris() {
         Some(vec![identity_domain::openid_connect::GrantType::DeviceCode])
     );
 }
+
+#[tokio::test]
+async fn register_client_credentials_requires_confidential_authentication() {
+    let (service, mut captured) = registration_service();
+    let request = DynamicClientRegistrationRequest {
+        redirect_uris: vec![],
+        response_types: Some(vec![]),
+        grant_types: Some(vec!["client_credentials".to_owned()]),
+        ..DynamicClientRegistrationRequest::default()
+    };
+    let response = service.register(request.clone(), &issuer()).await.unwrap();
+    assert_eq!(
+        response.grant_types,
+        Some(vec!["client_credentials".to_owned()])
+    );
+    assert_eq!(
+        captured.try_recv().unwrap().metadata.response_types,
+        Some(vec![])
+    );
+
+    let error = service
+        .register(
+            DynamicClientRegistrationRequest {
+                token_endpoint_auth_method: Some("none".to_owned()),
+                ..request
+            },
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 25009);
+}

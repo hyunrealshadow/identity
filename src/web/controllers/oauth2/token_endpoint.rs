@@ -7,7 +7,8 @@ use unic_langid::LanguageIdentifier;
 use identity_application::{
     error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode, kind::ErrorKind},
     openid_connect::token::{
-        AuthorizationCodeGrantParams, DeviceCodeGrantParams, RefreshTokenGrantParams,
+        AuthorizationCodeGrantParams, ClientCredentialsGrantParams, DeviceCodeGrantParams,
+        RefreshTokenGrantParams,
     },
 };
 use identity_domain::openid_connect::{ClientAssertionType, GrantType};
@@ -70,6 +71,7 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
         c if c == TokenErrorCode::ClientCredentialsInvalid.code() => "invalid_client",
         c if c == TokenErrorCode::ClientAuthRequired.code() => "invalid_client",
         c if c == TokenErrorCode::RefreshScopeNotAllowed.code() => "invalid_scope",
+        c if c == TokenErrorCode::ClientCredentialsScopeNotAllowed.code() => "invalid_scope",
         c if c == TokenErrorCode::AssertionVerifyFailed.code() => "invalid_client",
         c if c == TokenErrorCode::AssertionExpired.code() => "invalid_client",
         c if c == TokenErrorCode::AssertionAudMismatch.code() => "invalid_client",
@@ -255,6 +257,19 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
                 })
                 .await
         }
+        Ok(GrantType::ClientCredentials) => {
+            ctx.services()
+                .oidc_token()
+                .exchange_client_credentials(ClientCredentialsGrantParams {
+                    scope: form.scope,
+                    client_id,
+                    client_secret,
+                    client_secret_basic: basic_auth.is_some(),
+                    client_assertion_type,
+                    client_assertion: form.client_assertion,
+                })
+                .await
+        }
         _ => Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
             .with_param("grant_type", form.grant_type)),
     };
@@ -298,6 +313,12 @@ mod tests {
 
         assert_eq!(app_error_to_rfc6749(&error), "unauthorized_client");
         assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn client_credentials_scope_error_maps_to_invalid_scope() {
+        let error = AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed);
+        assert_eq!(app_error_to_rfc6749(&error), "invalid_scope");
     }
 
     #[test]

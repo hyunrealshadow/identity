@@ -63,6 +63,16 @@ pub struct RefreshTokenGrantParams {
     pub client_assertion: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ClientCredentialsGrantParams {
+    pub scope: Option<String>,
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub client_secret_basic: bool,
+    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion: Option<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TokenResponse {
     pub access_token: String,
@@ -166,6 +176,7 @@ impl TokenService {
     }
 }
 
+mod client_credentials;
 mod device;
 mod exchange;
 

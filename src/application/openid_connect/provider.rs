@@ -93,6 +93,7 @@ impl Default for OpenIdProviderCapabilities {
                 GrantType::AuthorizationCode,
                 GrantType::Implicit,
                 GrantType::RefreshToken,
+                GrantType::ClientCredentials,
                 GrantType::DeviceCode,
             ],
             acr_values_supported: vec![

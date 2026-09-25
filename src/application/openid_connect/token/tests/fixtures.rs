@@ -9,8 +9,8 @@ use crate::openid_connect::tests::fixtures::mocks::{
 mod clients;
 
 pub(super) use clients::{
-    AuthMethodClientRepository, InMemoryClientRepository, PublicFlowClientRepository,
-    RegisteredPublicClientRepository, RestrictedGrantClientRepository,
+    AuthMethodClientRepository, InMemoryClientRepository, MachineClientRepository,
+    PublicFlowClientRepository, RegisteredPublicClientRepository, RestrictedGrantClientRepository,
     ScopedClaimsClientRepository,
 };
 

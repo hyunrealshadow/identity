@@ -20,8 +20,8 @@ use sha2::{Digest, Sha256, Sha384, Sha512};
 use uuid::Uuid;
 
 use super::{
-    AuthorizationCodeGrantParams, DeviceCodeGrantParams, RefreshTokenGrantParams, TokenService,
-    TokenServiceDependencies, verify_pkce,
+    AuthorizationCodeGrantParams, ClientCredentialsGrantParams, DeviceCodeGrantParams,
+    RefreshTokenGrantParams, TokenService, TokenServiceDependencies, verify_pkce,
 };
 use crate::{
     application::{

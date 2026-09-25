@@ -14,6 +14,7 @@ pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
 /// unlike `PublicFlowClientRepository` it does not enable the browser public
 /// client flow.
 pub(in crate::openid_connect) struct RegisteredPublicClientRepository;
+pub(in crate::openid_connect) struct MachineClientRepository;
 pub(in crate::openid_connect) struct AuthMethodClientRepository {
     pub(in crate::openid_connect) method: &'static str,
     pub(in crate::openid_connect) signing_alg: Option<&'static str>,
@@ -64,6 +65,28 @@ impl OpenIdConnectClientRepository for RegisteredPublicClientRepository {
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for MachineClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.grant_types = Some(vec![
+            identity_domain::openid_connect::GrantType::ClientCredentials,
+        ]);
+        Ok(Some(
+            OpenIdConnectClient::new(
+                test_client(oid),
+                metadata,
+                test_platforms(),
+                vec!["account.read".to_owned(), "session.read".to_owned()],
+            )
+            .unwrap(),
         ))
     }
 }
