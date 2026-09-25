@@ -32,7 +32,9 @@ pub(super) fn continue_oauth_error_response(
         AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
     })?;
     let response_type = request.response_type.clone();
-    let error_response = OAuthErrorResponse::new(error).with_state(request.state.clone());
+    let error_response = OAuthErrorResponse::new(error)
+        .with_state(request.state.clone())
+        .with_issuer(ctx.services().oidc_authorize().issuer()?.to_string());
 
     Ok(match request.response_mode {
         Some(identity_domain::openid_connect::ResponseMode::FormPost) => {

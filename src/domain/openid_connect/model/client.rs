@@ -253,11 +253,51 @@ impl OpenIdConnectClient {
     }
 
     pub fn has_redirect_uri(&self, redirect_uri: &Url) -> bool {
+        self.has_redirect_uri_str(redirect_uri.as_str())
+    }
+
+    pub fn has_redirect_uri_str(&self, raw_redirect_uri: &str) -> bool {
+        let Ok(requested) = Url::parse(raw_redirect_uri) else {
+            return false;
+        };
         self.platforms.iter().any(|platform| {
-            platform
-                .redirect_uris
-                .iter()
-                .any(|registered| registered == redirect_uri)
+            platform.redirect_uris.iter().any(|registered| {
+                if registered.as_str() == raw_redirect_uri {
+                    return true;
+                }
+                let raw_host_with_port = match registered.host() {
+                    Some(url::Host::Ipv4(ip)) if ip == std::net::Ipv4Addr::LOCALHOST => {
+                        "http://127.0.0.1:"
+                    }
+                    Some(url::Host::Ipv6(ip)) if ip == std::net::Ipv6Addr::LOCALHOST => {
+                        "http://[::1]:"
+                    }
+                    _ => return false,
+                };
+                if platform.platform != OpenIdConnectClientPlatformType::Native
+                    || registered.scheme() != "http"
+                    || requested.host() != registered.host()
+                {
+                    return false;
+                }
+                let Some(after_host) = raw_redirect_uri.strip_prefix(raw_host_with_port) else {
+                    return false;
+                };
+                let Some(path_start) = after_host.find('/') else {
+                    return false;
+                };
+                if after_host[..path_start].parse::<u16>().is_err() {
+                    return false;
+                }
+                let registered_after_scheme = registered
+                    .as_str()
+                    .strip_prefix("http://")
+                    .expect("registered URI uses HTTP");
+                let Some(registered_path_start) = registered_after_scheme.find('/') else {
+                    return false;
+                };
+                after_host[path_start..] == registered_after_scheme[registered_path_start..]
+            })
         })
     }
 
@@ -518,7 +558,10 @@ mod tests {
                 },
                 OpenIdConnectClientPlatform {
                     platform: OpenIdConnectClientPlatformType::Native,
-                    redirect_uris: vec![Url::parse("com.example.app:/callback").unwrap()],
+                    redirect_uris: vec![
+                        Url::parse("com.example.app:/callback").unwrap(),
+                        Url::parse("http://127.0.0.1:49152/callback?source=app").unwrap(),
+                    ],
                 },
             ],
             vec![],
@@ -529,6 +572,12 @@ mod tests {
             oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/callback").unwrap())
         );
         assert!(oidc_client.has_redirect_uri(&Url::parse("com.example.app:/callback").unwrap()));
+        assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/callback?source=app"));
+        assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:80/callback?source=app"));
+        assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/other?source=app"));
+        assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.2:55000/callback?source=app"));
+        assert!(!oidc_client.has_redirect_uri_str("https://RP.example.com/callback"));
+        assert!(!oidc_client.has_redirect_uri_str("https://rp.example.com:443/callback"));
         assert!(
             !oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/other").unwrap())
         );

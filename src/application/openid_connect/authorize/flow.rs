@@ -720,6 +720,7 @@ impl AuthorizeService {
             .query_pairs_mut()
             .append_pair("code", &protected_code)
             .append_pair("state", &request.state)
+            .append_pair("iss", self.provider_service.issuer()?.as_str())
             .append_pair(
                 "session_state",
                 &session_state_for_authorize_response(request, context.protected_session_id)?,
@@ -827,7 +828,9 @@ impl AuthorizeService {
         let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
         })?;
-        let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied).with_state(request.state);
+        let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
+            .with_state(request.state)
+            .with_issuer(self.provider_service.issuer()?.to_string());
 
         let response_type = request.response_type.clone();
 

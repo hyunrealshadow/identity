@@ -198,11 +198,14 @@ impl AuthorizeService {
             .map(Self::parse_claims_request)
             .transpose()?;
 
+        self.validate_redirect_uri(&client, &params.redirect_uri)?;
+
         let request = AuthorizationRequest {
             response_type,
             response_mode,
             client_id,
             redirect_uri,
+            redirect_uri_raw: params.redirect_uri,
             scope,
             state: params.state,
             nonce: params.nonce,
@@ -225,8 +228,6 @@ impl AuthorizeService {
             code_challenge: params.code_challenge,
             code_challenge_method,
         };
-
-        self.validate_redirect_uri(&client, &request.redirect_uri)?;
 
         Ok((request, client))
     }
@@ -320,9 +321,9 @@ impl AuthorizeService {
     fn validate_redirect_uri(
         &self,
         client: &OpenIdConnectClient,
-        redirect_uri: &Url,
+        redirect_uri: &str,
     ) -> Result<(), AppError> {
-        let allowed = client.has_redirect_uri(redirect_uri);
+        let allowed = client.has_redirect_uri_str(redirect_uri);
 
         if !allowed {
             return Err(AppError::from_code(

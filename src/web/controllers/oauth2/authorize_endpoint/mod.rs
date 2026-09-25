@@ -58,14 +58,19 @@ async fn render_error(
                 .find_by_oid(client_oid)
                 .await
                 .unwrap_or(None);
-            if !client.is_some_and(|c| c.has_redirect_uri(&uri)) {
+            if !client.is_some_and(|c| c.has_redirect_uri_str(redirect_uri)) {
                 return render_authorize_error_page(ctx, headers, raw, error);
             }
         } else {
             return render_authorize_error_page(ctx, headers, raw, error);
         }
 
-        let error_response = OAuthErrorResponse::new(authorize_oauth_error_code(&error));
+        let issuer = match ctx.services().oidc_authorize().issuer() {
+            Ok(issuer) => issuer,
+            Err(error) => return render_authorize_error_page(ctx, headers, raw, error),
+        };
+        let error_response = OAuthErrorResponse::new(authorize_oauth_error_code(&error))
+            .with_issuer(issuer.to_string());
         let error_response = if let Some(s) = raw.state.clone() {
             error_response.with_state(s)
         } else {
@@ -320,6 +325,7 @@ mod tests {
             response_mode: None,
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             scope: ScopeSet::parse("openid").unwrap(),
             state: "state".to_string(),
             nonce: None,
@@ -356,6 +362,7 @@ mod tests {
             response_mode: None,
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             scope: ScopeSet::parse("openid").unwrap(),
             state: "state".to_string(),
             nonce: Some("nonce".to_string()),
@@ -387,7 +394,7 @@ mod tests {
         assert_eq!(
             location.fragment(),
             Some(
-                "error=login_required&error_description=The+user+must+sign+in+to+continue.&state=state"
+                "error=login_required&error_description=The+user+must+sign+in+to+continue.&state=state&iss=https%3A%2F%2Fidentity.example.com%2F"
             )
         );
     }
@@ -399,6 +406,7 @@ mod tests {
             response_mode: None,
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             scope: ScopeSet::parse("openid").unwrap(),
             state: "state".to_string(),
             nonce: Some("nonce".to_string()),
@@ -430,7 +438,7 @@ mod tests {
         assert_eq!(
             location.fragment(),
             Some(
-                "error=login_required&error_description=The+user+must+sign+in+to+continue.&state=state"
+                "error=login_required&error_description=The+user+must+sign+in+to+continue.&state=state&iss=https%3A%2F%2Fidentity.example.com%2F"
             )
         );
     }

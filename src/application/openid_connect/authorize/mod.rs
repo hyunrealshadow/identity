@@ -91,6 +91,10 @@ pub struct AuthorizeServiceDependencies {
 }
 
 impl AuthorizeService {
+    pub fn issuer(&self) -> Result<Url, AppError> {
+        self.provider_service.issuer()
+    }
+
     pub fn new(deps: AuthorizeServiceDependencies) -> Self {
         Self {
             client_repo: deps.client_repo,

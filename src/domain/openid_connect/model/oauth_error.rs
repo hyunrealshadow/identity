@@ -78,6 +78,7 @@ pub struct OAuthErrorResponse {
     pub error_description: Option<String>,
     pub error_uri: Option<String>,
     pub state: Option<String>,
+    pub issuer: Option<String>,
 }
 
 impl OAuthErrorResponse {
@@ -88,11 +89,17 @@ impl OAuthErrorResponse {
             error_description,
             error_uri: None,
             state: None,
+            issuer: None,
         }
     }
 
     pub fn with_state(mut self, state: impl Into<String>) -> Self {
         self.state = Some(state.into());
+        self
+    }
+
+    pub fn with_issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.issuer = Some(issuer.into());
         self
     }
 
@@ -107,6 +114,9 @@ impl OAuthErrorResponse {
             if let Some(state) = &self.state {
                 query.append_pair("state", state);
             }
+            if let Some(issuer) = &self.issuer {
+                query.append_pair("iss", issuer);
+            }
         }
         url
     }
@@ -120,6 +130,9 @@ impl OAuthErrorResponse {
         }
         if let Some(state) = &self.state {
             serializer.append_pair("state", state);
+        }
+        if let Some(issuer) = &self.issuer {
+            serializer.append_pair("iss", issuer);
         }
         url.set_fragment(Some(&serializer.finish()));
         url
@@ -218,8 +231,9 @@ mod tests {
 
     #[test]
     fn to_fragment_redirect_url_places_error_in_fragment() {
-        let error =
-            super::OAuthErrorResponse::new(OAuthErrorCode::AccessDenied).with_state("state123");
+        let error = super::OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
+            .with_state("state123")
+            .with_issuer("https://identity.example.com/");
         let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
         let url = error.to_fragment_redirect_url(&redirect_uri);
 
@@ -236,11 +250,17 @@ mod tests {
             Some("The authorization request was denied.")
         );
         assert_eq!(fields.get("state").map(String::as_str), Some("state123"));
+        assert_eq!(
+            fields.get("iss").map(String::as_str),
+            Some("https://identity.example.com/")
+        );
     }
 
     #[test]
     fn to_redirect_url_places_error_in_query() {
-        let error = super::OAuthErrorResponse::new(OAuthErrorCode::LoginRequired).with_state("abc");
+        let error = super::OAuthErrorResponse::new(OAuthErrorCode::LoginRequired)
+            .with_state("abc")
+            .with_issuer("https://identity.example.com/");
         let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
         let url = error.to_redirect_url(&redirect_uri);
 
@@ -253,5 +273,11 @@ mod tests {
             Some("The user must sign in to continue.".to_owned())
         );
         assert!(url.query().unwrap().contains("state=abc"));
+        assert_eq!(
+            url.query_pairs()
+                .find(|(name, _)| name == "iss")
+                .map(|(_, value)| value.into_owned()),
+            Some("https://identity.example.com/".to_owned())
+        );
     }
 }

@@ -255,6 +255,7 @@ mod tests {
             response_mode: None,
             client_id: Uuid::nil(),
             redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             scope: ScopeSet::parse("openid").unwrap(),
             state: "state123".to_string(),
             nonce: None,

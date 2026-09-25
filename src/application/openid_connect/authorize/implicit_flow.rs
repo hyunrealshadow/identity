@@ -163,6 +163,7 @@ impl AuthorizeService {
             fragment.append_pair("scope", &request.scope);
         }
         fragment.append_pair("state", &request.state);
+        fragment.append_pair("iss", issuer.as_str());
         fragment.append_pair(
             "session_state",
             &session_state_for_authorize_response(request, protected_session_id)?,
@@ -317,6 +318,7 @@ impl AuthorizeService {
             fragment.append_pair("scope", &request.scope);
         }
         fragment.append_pair("state", &request.state);
+        fragment.append_pair("iss", issuer.as_str());
         fragment.append_pair(
             "session_state",
             &session_state_for_authorize_response(request, protected_session_id)?,

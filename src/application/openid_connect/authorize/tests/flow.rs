@@ -817,6 +817,7 @@ async fn approve_authorization_request_returns_redirect_with_code_and_state() {
     assert!(query.contains("code="));
     assert!(query.contains("state=state123"));
     assert!(query.contains("session_state="));
+    assert!(query.contains("iss=https%3A%2F%2F"));
 }
 
 #[tokio::test]

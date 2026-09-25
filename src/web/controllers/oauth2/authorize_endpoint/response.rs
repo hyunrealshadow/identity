@@ -21,7 +21,20 @@ pub fn redirect_oauth_error_response(
     request: &AuthorizationRequest,
     error: OAuthErrorCode,
 ) -> Response {
-    let error_response = OAuthErrorResponse::new(error).with_state(request.state.clone());
+    let issuer = match ctx.services().oidc_authorize().issuer() {
+        Ok(issuer) => issuer,
+        Err(error) => {
+            return render_authorize_error_page(
+                ctx,
+                headers,
+                &RawAuthorizeRequest::default(),
+                error,
+            );
+        }
+    };
+    let error_response = OAuthErrorResponse::new(error)
+        .with_state(request.state.clone())
+        .with_issuer(issuer.to_string());
     let response_mode = request.response_mode.unwrap_or_else(|| {
         if request.response_type.uses_front_channel_response() {
             ResponseMode::Fragment
@@ -63,6 +76,12 @@ pub fn render_form_post_response(
         fields.push(FormPostField {
             name: "state".to_owned(),
             value: state.clone(),
+        });
+    }
+    if let Some(issuer) = &error_response.issuer {
+        fields.push(FormPostField {
+            name: "iss".to_owned(),
+            value: issuer.clone(),
         });
     }
 
@@ -300,6 +319,7 @@ mod tests {
             response_mode: Some(ResponseMode::FormPost),
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             scope: ScopeSet::parse("openid").unwrap(),
             state: "state".to_string(),
             nonce: None,

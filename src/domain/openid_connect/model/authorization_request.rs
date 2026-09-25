@@ -343,6 +343,8 @@ pub struct AuthorizationRequest {
     pub response_mode: Option<ResponseMode>,
     pub client_id: Uuid,
     pub redirect_uri: Url,
+    /// Exact redirect URI value received in the authorization request.
+    pub redirect_uri_raw: String,
     pub scope: ScopeSet,
     pub state: String,
     pub nonce: Option<String>,
@@ -390,7 +392,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             response_type: value.response_type.clone(),
             response_mode: value.response_mode,
             client_id: value.client_id.to_string(),
-            redirect_uri: value.redirect_uri.to_string(),
+            redirect_uri: value.redirect_uri_raw.clone(),
             scope: value.scope.to_scope_string(),
             state: value.state.clone(),
             nonce: value.nonce.clone(),
@@ -565,7 +567,8 @@ mod tests {
             response_type: ResponseType::Code,
             response_mode: None,
             client_id: Uuid::nil(),
-            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri: Url::parse("http://127.0.0.1:80/callback").unwrap(),
+            redirect_uri_raw: "http://127.0.0.1:80/callback".to_owned(),
             scope: ScopeSet::parse("openid email").unwrap(),
             state: "abc123".to_string(),
             nonce: Some("nonce123".to_string()),
@@ -589,6 +592,7 @@ mod tests {
 
         assert_eq!(parsed.response_type, ResponseType::Code);
         assert_eq!(parsed.scope, "openid email");
+        assert_eq!(parsed.redirect_uri, "http://127.0.0.1:80/callback");
         assert_eq!(parsed.nonce.as_deref(), Some("nonce123"));
         assert_eq!(parsed.login_hint, None);
     }
@@ -600,6 +604,7 @@ mod tests {
             response_mode: None,
             client_id: Uuid::nil(),
             redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
+            redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             scope: ScopeSet::parse("openid email").unwrap(),
             state: "abc123".to_string(),
             nonce: Some("nonce123".to_string()),
