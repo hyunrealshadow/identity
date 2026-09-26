@@ -56,7 +56,7 @@ impl InstallFailureLogContext {
 }
 
 fn should_log_install_failure_as_error(error: &identity_application::error::AppError) -> bool {
-    error.kind().http_status().is_server_error()
+    super::response::error_http_status(error.kind()).is_server_error()
 }
 
 fn log_install_failure(error: &identity_application::error::AppError, request: &InstallRequest) {

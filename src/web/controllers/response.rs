@@ -6,7 +6,9 @@ use serde::{Serialize, de::DeserializeOwned};
 use unic_langid::LanguageIdentifier;
 
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode, params::ErrorParams},
+    application::error::{
+        AppError, codes::common::CommonErrorCode, kind::ErrorKind, params::ErrorParams,
+    },
     boot::AppState,
     infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
     infrastructure::web,
@@ -15,6 +17,19 @@ use crate::{
         oauth2::ErrorPageData,
     },
 };
+
+pub fn error_http_status(kind: ErrorKind) -> StatusCode {
+    match kind {
+        ErrorKind::NotFound => StatusCode::NOT_FOUND,
+        ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
+        ErrorKind::Forbidden => StatusCode::FORBIDDEN,
+        ErrorKind::Conflict => StatusCode::CONFLICT,
+        ErrorKind::Validation => StatusCode::UNPROCESSABLE_ENTITY,
+        ErrorKind::RateLimit => StatusCode::TOO_MANY_REQUESTS,
+        ErrorKind::Gone => StatusCode::GONE,
+        ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
 
 pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> String {
     localized_error_message(i18n, locale, error.code(), error.params())
@@ -247,7 +262,7 @@ pub fn write_error_response(
     locale: &LanguageIdentifier,
     error: AppError,
 ) {
-    let status = error.kind().http_status();
+    let status = error_http_status(error.kind());
 
     if status.is_server_error() {
         tracing::error!(
@@ -299,7 +314,7 @@ pub fn render_app_error(res: &mut Response, headers: &HeaderMap, ctx: &AppState,
 }
 
 pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState, error: AppError) {
-    let status = error.kind().http_status();
+    let status = error_http_status(error.kind());
 
     if status.is_server_error() {
         tracing::error!(
@@ -334,7 +349,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
 }
 
 fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
-    let status = error.kind().http_status();
+    let status = error_http_status(error.kind());
     let message = error
         .params()
         .get("message")
