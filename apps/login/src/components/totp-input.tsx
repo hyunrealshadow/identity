@@ -110,12 +110,12 @@ export function SegmentedCodeInput({
   const updateValue = useCallback(
     (nextValue: string) => {
       const normalized = normalize(nextValue)
-      if (normalized === lastValueRef.current) return
-      lastValueRef.current = normalized
       // Keep the real input's DOM value canonical so a form submit carries
-      // the normalized code even when a password manager pasted formatting.
+      // the normalized code and ignored keystrokes cannot fill maxLength.
       const input = inputRef.current
       if (input && input.value !== normalized) input.value = normalized
+      if (normalized === lastValueRef.current) return
+      lastValueRef.current = normalized
       if (controlledValueRef.current === undefined) setInternalValue(normalized)
       onChangeRef.current?.(normalized)
     },

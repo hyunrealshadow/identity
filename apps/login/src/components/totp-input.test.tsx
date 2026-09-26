@@ -36,6 +36,30 @@ describe('GroupedCodeInput', () => {
     expect(container.textContent).toContain('WDJB-MJHT')
   })
 
+  it('does not let repeated separators consume the native input limit', () => {
+    const { container } = render(<GroupedCodeInput name="user_code" />)
+    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+
+    act(() => {
+      input.value = 'WDJBM'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    for (let index = 0; index < 10; index++) {
+      act(() => {
+        input.value += '-'
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      expect(input.value).toBe('WDJBM')
+    }
+
+    act(() => {
+      input.value += 'J'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(input.value).toBe('WDJBMJ')
+    expect(container.textContent).toContain('WDJB-MJ')
+  })
+
   it('renders eight slots with a separator for the server-rendered form', () => {
     const html = renderToString(<GroupedCodeInput name="user_code" />)
 
@@ -67,6 +91,30 @@ afterEach(() => {
 })
 
 describe('TotpInput', () => {
+  it('does not let invalid characters block the sixth digit', () => {
+    const { container } = render(<TotpInput name="totp" />)
+    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+
+    act(() => {
+      input.value = '79436'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    for (let index = 0; index < 10; index++) {
+      act(() => {
+        input.value += '-'
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      expect(input.value).toBe('79436')
+    }
+
+    act(() => {
+      input.value += '4'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(input.value).toBe('794364')
+    expect(container.textContent).toContain('794-364')
+  })
+
   it('synchronizes a value inserted through a native password-manager event', () => {
     const { container } = render(<TotpInput name="totp" />)
     const input = container.querySelector<HTMLInputElement>('[data-input-otp]')
