@@ -236,8 +236,9 @@ export function SegmentedCodeInput({
         autoComplete={autoComplete}
         autoFocus={autoFocus}
         aria-invalid={isInvalid || undefined}
+        // Move password-manager badges beyond the slots without shrinking their layout.
         className={[
-          'absolute inset-0 z-10 h-full w-full cursor-text border-0 bg-transparent text-transparent outline-none shadow-none [caret-color:transparent]',
+          'absolute inset-0 z-10 h-full w-[calc(100%+40px)] cursor-text border-0 bg-transparent text-transparent outline-none shadow-none [caret-color:transparent] [clip-path:inset(0_40px_0_0)]',
           inputClassName,
         ].filter(Boolean).join(' ')}
         onFocus={(event) => {
@@ -255,13 +256,12 @@ export function SegmentedCodeInput({
 }
 
 export function TotpInput(props: SegmentedCodeInputProps) {
-  const { className, groupClassName, inputClassName, slotClassName, ...inputProps } = props
+  const { className, groupClassName, slotClassName, ...inputProps } = props
   return (
     <SegmentedCodeInput
       {...inputProps}
       className={className}
       groupClassName={groupClassName}
-      inputClassName={['box-border pe-10', inputClassName].filter(Boolean).join(' ')}
       slotClassName={slotClassName}
       length={6}
       separatorAfter={3}

@@ -194,6 +194,7 @@ body {
 .no-js [data-input-otp] {
   position: static;
   width: 100%;
+  clip-path: none;
   height: 2.5rem;
   padding: 0 0.75rem;
   color: var(--foreground);
