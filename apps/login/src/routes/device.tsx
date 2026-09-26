@@ -465,7 +465,7 @@ function CodeEntryPage({
               isInvalid={!!fieldError}
               defaultValue={userCode}
               className="w-full"
-              groupClassName="w-full justify-between pe-5"
+              groupClassName="w-full justify-between"
               slotClassName="flex-none"
               onChange={() => setFieldError(undefined)}
             />

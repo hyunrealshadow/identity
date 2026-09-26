@@ -486,7 +486,7 @@ function ChallengePage() {
               required
               autoFocus
               className="w-full"
-              groupClassName="w-full justify-between pe-5"
+              groupClassName="box-border w-full justify-between pe-10"
               slotClassName="flex-none"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
@@ -507,7 +507,9 @@ function ChallengePage() {
               type="text"
               required
               autoFocus
-              className="mx-auto"
+              className="w-full"
+              groupClassName="w-full justify-between"
+              slotClassName="flex-none"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
               aria-describedby={

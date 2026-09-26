@@ -255,12 +255,13 @@ export function SegmentedCodeInput({
 }
 
 export function TotpInput(props: SegmentedCodeInputProps) {
-  const { className, groupClassName, slotClassName, ...inputProps } = props
+  const { className, groupClassName, inputClassName, slotClassName, ...inputProps } = props
   return (
     <SegmentedCodeInput
       {...inputProps}
       className={className}
       groupClassName={groupClassName}
+      inputClassName={['box-border pe-10', inputClassName].filter(Boolean).join(' ')}
       slotClassName={slotClassName}
       length={6}
       separatorAfter={3}
