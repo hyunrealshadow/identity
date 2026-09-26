@@ -280,12 +280,7 @@ export function GroupedCodeInput(props: SegmentedCodeInputProps) {
       {...inputProps}
       className={className}
       groupClassName={['gap-1', groupClassName].filter(Boolean).join(' ')}
-      slotClassName={[
-        'size-8 min-h-8 min-w-8 text-base sm:size-9 sm:min-h-9 sm:min-w-9',
-        slotClassName,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      slotClassName={slotClassName}
       length={8}
       separatorAfter={4}
       normalize={normalizeGroupedCode}
