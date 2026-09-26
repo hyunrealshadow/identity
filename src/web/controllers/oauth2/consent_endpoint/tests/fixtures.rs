@@ -40,7 +40,7 @@ use identity_infrastructure::{
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 
 use crate::infrastructure::database::entity::{
-    client, client_authorization, client_open_id_connect, key, login, session, setting, user,
+    client, client_authorization, client_openid_connect, key, login, session, setting, user,
 };
 
 /// The user code of the queued device request, as the verification page
@@ -340,7 +340,7 @@ async fn consent_test_state_for(
         created_at: now.into(),
         updated_at: None,
     };
-    let oidc_metadata_model = client_open_id_connect::Model {
+    let oidc_metadata_model = client_openid_connect::Model {
         id: 31,
         client_id: client_model.id,
         post_logout_redirect_uris: None,
@@ -424,7 +424,7 @@ async fn consent_test_state_for(
             .append_query_results([[(authorization_model.clone(), client_model.clone())]])
             .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
             .append_query_results([Vec::<
-                crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+                crate::infrastructure::database::entity::client_openid_connect_platform::Model,
             >::new()])
             .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[(active_session.clone(), active_user.clone())]])
@@ -440,7 +440,7 @@ async fn consent_test_state_for(
             .append_query_results([[(authorization_model.clone(), client_model.clone())]])
             .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
             .append_query_results([Vec::<
-                crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+                crate::infrastructure::database::entity::client_openid_connect_platform::Model,
             >::new()])
             .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[(active_session.clone(), active_user.clone())]])
@@ -488,7 +488,7 @@ async fn consent_test_state_for(
             // The description loads the client the request was registered for.
             .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
             .append_query_results([Vec::<
-                crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+                crate::infrastructure::database::entity::client_openid_connect_platform::Model,
             >::new()])
             .append_query_results([[openid_scope_row]])
             // The browser session arrives through the login transport.
@@ -511,7 +511,7 @@ async fn consent_test_state_for(
                 .append_query_results([[(device_request_model.clone(), client_model.clone())]])
                 .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
                 .append_query_results([Vec::<
-                    crate::infrastructure::database::entity::client_open_id_connect_platform::Model,
+                    crate::infrastructure::database::entity::client_openid_connect_platform::Model,
                 >::new()])
                 .append_query_results([[openid_scope_row]])
                 .append_query_results([[(active_session.clone(), active_user.clone())]])

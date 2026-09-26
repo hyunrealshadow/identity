@@ -13,7 +13,7 @@ use identity_domain::openid_connect::{
     OpenIdConnectCredentialData, OpenIdConnectCredentialType,
 };
 
-use crate::database::entity::{client, client_open_id_connect_credential};
+use crate::database::entity::{client, client_openid_connect_credential};
 
 use super::openid_connect_credential::serialize_data;
 
@@ -59,17 +59,17 @@ async fn latest_secret<C: ConnectionTrait>(
     client_id: i64,
     active_only: bool,
     now: DateTime<Utc>,
-) -> Result<Option<client_open_id_connect_credential::Model>, LoginRuntimeRepositoryError> {
-    let mut query = client_open_id_connect_credential::Entity::find()
-        .filter(client_open_id_connect_credential::Column::ClientId.eq(client_id))
+) -> Result<Option<client_openid_connect_credential::Model>, LoginRuntimeRepositoryError> {
+    let mut query = client_openid_connect_credential::Entity::find()
+        .filter(client_openid_connect_credential::Column::ClientId.eq(client_id))
         .filter(
-            client_open_id_connect_credential::Column::Type
+            client_openid_connect_credential::Column::Type
                 .eq(OpenIdConnectCredentialType::ClientSecret.to_string()),
         )
-        .filter(client_open_id_connect_credential::Column::RevokedAt.is_null())
-        .order_by_desc(client_open_id_connect_credential::Column::CreatedAt);
+        .filter(client_openid_connect_credential::Column::RevokedAt.is_null())
+        .order_by_desc(client_openid_connect_credential::Column::CreatedAt);
     if active_only {
-        query = query.filter(client_open_id_connect_credential::Column::ExpiresAt.gt(now));
+        query = query.filter(client_openid_connect_credential::Column::ExpiresAt.gt(now));
     }
     query.one(db).await.map_err(query_error)
 }
@@ -94,10 +94,10 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         else {
             return Ok(None);
         };
-        let generation = client_open_id_connect_credential::Entity::find()
-            .filter(client_open_id_connect_credential::Column::ClientId.eq(client.id))
+        let generation = client_openid_connect_credential::Entity::find()
+            .filter(client_openid_connect_credential::Column::ClientId.eq(client.id))
             .filter(
-                client_open_id_connect_credential::Column::Type
+                client_openid_connect_credential::Column::Type
                     .eq(OpenIdConnectCredentialType::ClientSecret.to_string()),
             )
             .all(&self.db)
@@ -139,7 +139,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         rand::rng().fill(&mut secret_bytes);
         let secret = URL_SAFE_NO_PAD.encode(secret_bytes);
         let serialized = serialize_data(OpenIdConnectCredentialData::ClientSecret { secret });
-        client_open_id_connect_credential::ActiveModel {
+        client_openid_connect_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(client.id),
             r#type: Set(serialized.type_),
@@ -160,16 +160,16 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
             now,
             policy.retire_after,
         ) {
-            client_open_id_connect_credential::Entity::update_many()
+            client_openid_connect_credential::Entity::update_many()
                 .col_expr(
-                    client_open_id_connect_credential::Column::ExpiresAt,
+                    client_openid_connect_credential::Column::ExpiresAt,
                     sea_orm::sea_query::Expr::value(retiring.fixed_offset()),
                 )
                 .col_expr(
-                    client_open_id_connect_credential::Column::UpdatedAt,
+                    client_openid_connect_credential::Column::UpdatedAt,
                     sea_orm::sea_query::Expr::value(Some(now.fixed_offset())),
                 )
-                .filter(client_open_id_connect_credential::Column::Id.eq(current.id))
+                .filter(client_openid_connect_credential::Column::Id.eq(current.id))
                 .exec(&txn)
                 .await
                 .map_err(query_error)?;

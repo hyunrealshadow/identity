@@ -1,23 +1,19 @@
-//! Current SeaORM persistence entity.
+//! OpenID Connect client platform persistence entity.
 
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "client_open_id_connect_credential")]
+#[sea_orm(table_name = "client_openid_connect_platform")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
-    #[sea_orm(unique)]
-    #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
-    pub oid: Uuid,
+    #[sea_orm(unique_key = "idx_client_openid_connect_platform_client_id_platform")]
     pub client_id: i64,
-    pub r#type: String,
-    #[sea_orm(column_type = "JsonBinary")]
-    pub data: Json,
-    pub hint: String,
-    pub expires_at: DateTimeWithTimeZone,
-    pub revoked_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(unique_key = "idx_client_openid_connect_platform_client_id_platform")]
+    pub platform: String,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub redirect_uris: Option<Json>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

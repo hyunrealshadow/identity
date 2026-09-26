@@ -27,11 +27,11 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::client_authorization::Entity")]
     ClientAuthorization,
-    #[sea_orm(has_one = "super::client_open_id_connect::Entity")]
+    #[sea_orm(has_one = "super::client_openid_connect::Entity")]
     ClientOpenIdConnect,
-    #[sea_orm(has_many = "super::client_open_id_connect_credential::Entity")]
+    #[sea_orm(has_many = "super::client_openid_connect_credential::Entity")]
     ClientOpenIdConnectCredential,
-    #[sea_orm(has_many = "super::client_open_id_connect_platform::Entity")]
+    #[sea_orm(has_many = "super::client_openid_connect_platform::Entity")]
     ClientOpenIdConnectPlatform,
     #[sea_orm(has_many = "super::client_scope::Entity")]
     ClientScope,
@@ -47,19 +47,19 @@ impl Related<super::client_authorization::Entity> for Entity {
     }
 }
 
-impl Related<super::client_open_id_connect::Entity> for Entity {
+impl Related<super::client_openid_connect::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnect.def()
     }
 }
 
-impl Related<super::client_open_id_connect_credential::Entity> for Entity {
+impl Related<super::client_openid_connect_credential::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnectCredential.def()
     }
 }
 
-impl Related<super::client_open_id_connect_platform::Entity> for Entity {
+impl Related<super::client_openid_connect_platform::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnectPlatform.def()
     }

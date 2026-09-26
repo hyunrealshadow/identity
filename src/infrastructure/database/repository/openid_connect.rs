@@ -11,10 +11,10 @@ use uuid::Uuid;
 
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity, client_open_id_connect,
-    client_open_id_connect::Entity as OpenIdConnectClientEntity, client_open_id_connect_credential,
-    client_open_id_connect_platform,
-    client_open_id_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
+    client_authorization::Entity as ClientAuthorizationEntity, client_openid_connect,
+    client_openid_connect::Entity as OpenIdConnectClientEntity, client_openid_connect_credential,
+    client_openid_connect_platform,
+    client_openid_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
     client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
     scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
 };
@@ -83,7 +83,7 @@ fn to_client(model: client::Model) -> Result<Client, OpenIdConnectClientReposito
 }
 
 fn to_metadata(
-    model: client_open_id_connect::Model,
+    model: client_openid_connect::Model,
 ) -> Result<OpenIdConnectClientMetadata, OpenIdConnectClientRepositoryError> {
     let settings = serde_json::from_value::<OpenIdConnectClientSettings>(model.settings)
         .map_err(OpenIdConnectClientRepositoryError::DeserializeMetadata)?;
@@ -201,7 +201,7 @@ fn parse_metadata_values<T: std::str::FromStr>(
 }
 
 fn to_platform(
-    model: client_open_id_connect_platform::Model,
+    model: client_openid_connect_platform::Model,
 ) -> Result<OpenIdConnectClientPlatform, OpenIdConnectClientRepositoryError> {
     Ok(OpenIdConnectClientPlatform {
         platform: model
@@ -280,7 +280,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                     let metadata = registration.metadata;
                     let settings = serde_json::to_value(metadata.settings)
                         .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
-                    client_open_id_connect::ActiveModel {
+                    client_openid_connect::ActiveModel {
                         client_id: Set(client_model.id),
                         post_logout_redirect_uris: Set(optional_urls_to_json(
                             metadata.post_logout_redirect_uris,
@@ -353,7 +353,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                     .await?;
 
                     for platform in registration.platforms {
-                        client_open_id_connect_platform::ActiveModel {
+                        client_openid_connect_platform::ActiveModel {
                             client_id: Set(client_model.id),
                             platform: Set(platform.platform.to_string()),
                             redirect_uris: Set(urls_to_json(platform.redirect_uris)),
@@ -397,7 +397,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         };
                         let serialized = serialize_credential_data(credential);
 
-                        client_open_id_connect_credential::ActiveModel {
+                        client_openid_connect_credential::ActiveModel {
                             oid: Set(Uuid::new_v4()),
                             client_id: Set(client_model.id),
                             r#type: Set(serialized.type_),
@@ -544,7 +544,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
 
         let client_id = client_model.id;
         let platform_models = ClientOpenIdConnectPlatformEntity::find()
-            .filter(client_open_id_connect_platform::Column::ClientId.eq(client_id))
+            .filter(client_openid_connect_platform::Column::ClientId.eq(client_id))
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -620,10 +620,10 @@ impl OpenIdConnectClientRepositoryImpl {
 
         let channel_filter = match channel {
             LogoutChannel::Front => {
-                client_open_id_connect::Column::FrontchannelLogoutUri.is_not_null()
+                client_openid_connect::Column::FrontchannelLogoutUri.is_not_null()
             }
             LogoutChannel::Back => {
-                client_open_id_connect::Column::BackchannelLogoutUri.is_not_null()
+                client_openid_connect::Column::BackchannelLogoutUri.is_not_null()
             }
         };
         let mut client_rows = ClientEntity::find()
@@ -647,7 +647,7 @@ impl OpenIdConnectClientRepositoryImpl {
 
         let platform_models = ClientOpenIdConnectPlatformEntity::find()
             .filter(
-                client_open_id_connect_platform::Column::ClientId.is_in(matched_client_ids.clone()),
+                client_openid_connect_platform::Column::ClientId.is_in(matched_client_ids.clone()),
             )
             .all(&self.db)
             .await
@@ -707,9 +707,7 @@ mod tests {
     };
     use crate::{
         domain::openid_connect::OpenIdConnectClientPlatformType,
-        infrastructure::database::entity::{
-            client_open_id_connect, client_open_id_connect_platform,
-        },
+        infrastructure::database::entity::{client_openid_connect, client_openid_connect_platform},
     };
     use chrono::Utc;
     use serde_json::json;
@@ -738,7 +736,7 @@ mod tests {
 
     #[test]
     fn maps_logout_metadata() {
-        let metadata = to_metadata(client_open_id_connect::Model {
+        let metadata = to_metadata(client_openid_connect::Model {
             id: 1,
             client_id: 2,
             post_logout_redirect_uris: None,
@@ -790,8 +788,8 @@ mod tests {
     }
 
     #[test]
-    fn maps_client_open_id_connect_platform_redirect_uris() {
-        let platform = to_platform(client_open_id_connect_platform::Model {
+    fn maps_client_openid_connect_platform_redirect_uris() {
+        let platform = to_platform(client_openid_connect_platform::Model {
             id: 1,
             client_id: 2,
             platform: "web".to_string(),
@@ -809,8 +807,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_client_open_id_connect_platform() {
-        let error = to_platform(client_open_id_connect_platform::Model {
+    fn rejects_unknown_client_openid_connect_platform() {
+        let error = to_platform(client_openid_connect_platform::Model {
             id: 1,
             client_id: 2,
             platform: "ios".to_string(),

@@ -35,7 +35,7 @@ use identity_infrastructure::{
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 
 use crate::infrastructure::database::entity::{
-    client, client_authorization, client_open_id_connect, client_open_id_connect_platform, key,
+    client, client_authorization, client_openid_connect, client_openid_connect_platform, key,
     login, setting,
 };
 
@@ -286,7 +286,7 @@ pub(super) async fn continue_state(
         expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,
     };
-    let oidc_metadata_model = client_open_id_connect::Model {
+    let oidc_metadata_model = client_openid_connect::Model {
         id: 31,
         client_id: client_model.id,
         post_logout_redirect_uris: None,
@@ -327,7 +327,7 @@ pub(super) async fn continue_state(
         created_at: now.into(),
         updated_at: None,
     };
-    let platform_model = client_open_id_connect_platform::Model {
+    let platform_model = client_openid_connect_platform::Model {
         id: 37,
         client_id: client_model.id,
         platform: "web".to_owned(),

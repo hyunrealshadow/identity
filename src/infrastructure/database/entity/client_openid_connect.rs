@@ -4,7 +4,7 @@ use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "client_open_id_connect")]
+#[sea_orm(table_name = "client_openid_connect")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,

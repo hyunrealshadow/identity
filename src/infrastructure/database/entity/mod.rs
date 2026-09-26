@@ -7,9 +7,9 @@ pub mod prelude;
 
 pub mod client;
 pub mod client_authorization;
-pub mod client_open_id_connect;
-pub mod client_open_id_connect_credential;
-pub mod client_open_id_connect_platform;
+pub mod client_openid_connect;
+pub mod client_openid_connect_credential;
+pub mod client_openid_connect_platform;
 pub mod client_scope;
 pub mod key;
 pub mod key_jwk;

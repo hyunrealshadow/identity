@@ -8,14 +8,14 @@ mod m20260306_031058_create_client;
 mod m20260306_090746_create_session;
 mod m20260319_121151_create_key;
 mod m20260328_132501_create_setting;
-mod m20260407_060453_create_client_open_id_connect;
-mod m20260407_060506_create_client_open_id_connect_credential;
+mod m20260407_060453_create_client_openid_connect;
+mod m20260407_060506_create_client_openid_connect_credential;
 mod m20260407_060938_create_client_authorization;
 mod m20260407_071449_create_login;
 mod m20260426_000001_create_scope;
 mod m20260426_000002_create_client_scope;
 mod m20260427_000001_create_key_jwk;
-mod m20260428_000001_create_client_open_id_connect_platform;
+mod m20260428_000001_create_client_openid_connect_platform;
 mod m20260801_000001_session_relay_index;
 mod m20260824_000001_add_user_preferences;
 mod m20260907_000001_create_user_client_consent;
@@ -34,14 +34,14 @@ impl MigratorTrait for Migrator {
             Box::new(m20260306_090746_create_session::Migration),
             Box::new(m20260319_121151_create_key::Migration),
             Box::new(m20260328_132501_create_setting::Migration),
-            Box::new(m20260407_060453_create_client_open_id_connect::Migration),
-            Box::new(m20260407_060506_create_client_open_id_connect_credential::Migration),
+            Box::new(m20260407_060453_create_client_openid_connect::Migration),
+            Box::new(m20260407_060506_create_client_openid_connect_credential::Migration),
             Box::new(m20260407_060938_create_client_authorization::Migration),
             Box::new(m20260407_071449_create_login::Migration),
             Box::new(m20260426_000001_create_scope::Migration),
             Box::new(m20260426_000002_create_client_scope::Migration),
             Box::new(m20260427_000001_create_key_jwk::Migration),
-            Box::new(m20260428_000001_create_client_open_id_connect_platform::Migration),
+            Box::new(m20260428_000001_create_client_openid_connect_platform::Migration),
             Box::new(m20260801_000001_session_relay_index::Migration),
             Box::new(m20260824_000001_add_user_preferences::Migration),
             Box::new(m20260907_000001_create_user_client_consent::Migration),

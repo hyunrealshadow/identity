@@ -123,7 +123,7 @@ impl MigrationTrait for Migration {
                     ))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_client_open_id_connect_client_id")
+                            .name("fk_client_openid_connect_client_id")
                             .from(ClientOpenIdConnect::Table, ClientOpenIdConnect::ClientId)
                             .to(Client::Table, Client::Id)
                             .on_delete(ForeignKeyAction::Cascade)
@@ -136,7 +136,7 @@ impl MigrationTrait for Migration {
             .create_index(
                 Index::create()
                     .table(ClientOpenIdConnect::Table)
-                    .name("idx_client_open_id_connect_client_id")
+                    .name("idx_client_openid_connect_client_id")
                     .col(ClientOpenIdConnect::ClientId)
                     .unique()
                     .to_owned(),
@@ -150,7 +150,7 @@ impl MigrationTrait for Migration {
             .drop_index(
                 Index::drop()
                     .table(ClientOpenIdConnect::Table)
-                    .name("idx_client_open_id_connect_client_id")
+                    .name("idx_client_openid_connect_client_id")
                     .to_owned(),
             )
             .await?;

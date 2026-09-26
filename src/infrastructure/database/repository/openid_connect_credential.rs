@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use url::Url;
 
-use crate::database::entity::{client, client_open_id_connect_credential};
+use crate::database::entity::{client, client_openid_connect_credential};
 use identity_domain::client::model::ClientOid;
 use identity_domain::key::PublicJwk;
 use identity_domain::openid_connect::{
@@ -146,7 +146,7 @@ fn deserialize_data(
 
 fn to_domain(
     client_oid: ClientOid,
-    model: client_open_id_connect_credential::Model,
+    model: client_openid_connect_credential::Model,
 ) -> Result<OpenIdConnectCredential, OpenIdConnectCredentialRepositoryError> {
     let type_: OpenIdConnectCredentialType = model
         .r#type
@@ -187,25 +187,25 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
         let rows = client::Entity::find()
             .filter(client::Column::Oid.eq(client_oid))
             .filter(client::Column::Protocol.eq("openid_connect"))
-            .inner_join(client_open_id_connect_credential::Entity)
-            .filter(client_open_id_connect_credential::Column::Type.eq(type_.to_string()))
-            .filter(client_open_id_connect_credential::Column::RevokedAt.is_null())
-            .filter(client_open_id_connect_credential::Column::ExpiresAt.gt(Utc::now()))
-            .order_by_desc(client_open_id_connect_credential::Column::CreatedAt)
+            .inner_join(client_openid_connect_credential::Entity)
+            .filter(client_openid_connect_credential::Column::Type.eq(type_.to_string()))
+            .filter(client_openid_connect_credential::Column::RevokedAt.is_null())
+            .filter(client_openid_connect_credential::Column::ExpiresAt.gt(Utc::now()))
+            .order_by_desc(client_openid_connect_credential::Column::CreatedAt)
             .select_only()
             .columns([
-                client_open_id_connect_credential::Column::Id,
-                client_open_id_connect_credential::Column::Oid,
-                client_open_id_connect_credential::Column::ClientId,
-                client_open_id_connect_credential::Column::Type,
-                client_open_id_connect_credential::Column::Data,
-                client_open_id_connect_credential::Column::Hint,
-                client_open_id_connect_credential::Column::ExpiresAt,
-                client_open_id_connect_credential::Column::RevokedAt,
-                client_open_id_connect_credential::Column::CreatedAt,
-                client_open_id_connect_credential::Column::UpdatedAt,
+                client_openid_connect_credential::Column::Id,
+                client_openid_connect_credential::Column::Oid,
+                client_openid_connect_credential::Column::ClientId,
+                client_openid_connect_credential::Column::Type,
+                client_openid_connect_credential::Column::Data,
+                client_openid_connect_credential::Column::Hint,
+                client_openid_connect_credential::Column::ExpiresAt,
+                client_openid_connect_credential::Column::RevokedAt,
+                client_openid_connect_credential::Column::CreatedAt,
+                client_openid_connect_credential::Column::UpdatedAt,
             ])
-            .into_model::<client_open_id_connect_credential::Model>()
+            .into_model::<client_openid_connect_credential::Model>()
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectCredentialRepositoryError::QueryFailed(Box::new(e)))?;
@@ -220,7 +220,7 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
 #[cfg(test)]
 mod tests {
     use super::{OpenIdConnectCredentialRepositoryImpl, deserialize_data, serialize_data};
-    use crate::database::entity::client_open_id_connect_credential;
+    use crate::database::entity::client_openid_connect_credential;
     use identity_domain::openid_connect::{
         OpenIdConnectCredentialRepository as _, OpenIdConnectCredentialType,
     };
@@ -262,7 +262,7 @@ mod tests {
     #[tokio::test]
     async fn active_lookup_filters_lifecycle_and_prefers_newest_credentials() {
         let now = chrono::Utc::now();
-        let model = client_open_id_connect_credential::Model {
+        let model = client_openid_connect_credential::Model {
             id: 1,
             oid: uuid::Uuid::new_v4(),
             client_id: 1,

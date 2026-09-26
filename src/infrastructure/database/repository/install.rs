@@ -38,8 +38,8 @@ use crate::{
         crypto::key::generate_all_jwks_for_key,
         database::{
             entity::{
-                client, client_open_id_connect, client_open_id_connect_credential,
-                client_open_id_connect_platform, client_scope, key, key_jwk, scope, setting, user,
+                client, client_openid_connect, client_openid_connect_credential,
+                client_openid_connect_platform, client_scope, key, key_jwk, scope, setting, user,
                 user_credential,
             },
             repository::{
@@ -180,7 +180,7 @@ impl InstallRepository for InstallRepositoryImpl {
 
         let callback_url = built_in_callback_url(&data.application_url)?;
         let logout_url = built_in_logout_url(&data.application_url)?;
-        client_open_id_connect::ActiveModel {
+        client_openid_connect::ActiveModel {
             client_id: Set(created_client.id),
             post_logout_redirect_uris: Set(Some(serde_json::json!([logout_url.as_str()]))),
             response_types: Set(Some(serde_json::json!([ResponseType::Code]))),
@@ -205,7 +205,7 @@ impl InstallRepository for InstallRepositoryImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        client_open_id_connect_platform::ActiveModel {
+        client_openid_connect_platform::ActiveModel {
             client_id: Set(created_client.id),
             platform: Set("web".to_owned()),
             redirect_uris: Set(Some(serde_json::json!([callback_url.as_str()]))),
@@ -253,7 +253,7 @@ impl InstallRepository for InstallRepositoryImpl {
             serialize_credential_data(OpenIdConnectCredentialData::ClientSecret {
                 secret: data.client_secret,
             });
-        client_open_id_connect_credential::ActiveModel {
+        client_openid_connect_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(created_client.id),
             r#type: Set(serialized_credential.type_),

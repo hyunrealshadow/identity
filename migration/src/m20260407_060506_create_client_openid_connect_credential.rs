@@ -61,7 +61,7 @@ impl MigrationTrait for Migration {
                     ))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_client_open_id_connect_credential_client_id")
+                            .name("fk_client_openid_connect_credential_client_id")
                             .from(
                                 ClientOpenIdConnectCredential::Table,
                                 ClientOpenIdConnectCredential::ClientId,
@@ -77,7 +77,7 @@ impl MigrationTrait for Migration {
             .create_index(
                 Index::create()
                     .table(ClientOpenIdConnectCredential::Table)
-                    .name("idx_client_open_id_connect_credential_client_id_type")
+                    .name("idx_client_openid_connect_credential_client_id_type")
                     .col(ClientOpenIdConnectCredential::ClientId)
                     .col(ClientOpenIdConnectCredential::Type)
                     .to_owned(),
@@ -91,7 +91,7 @@ impl MigrationTrait for Migration {
             .drop_index(
                 Index::drop()
                     .table(ClientOpenIdConnectCredential::Table)
-                    .name("idx_client_open_id_connect_credential_client_id_type")
+                    .name("idx_client_openid_connect_credential_client_id_type")
                     .to_owned(),
             )
             .await?;
