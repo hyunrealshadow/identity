@@ -53,6 +53,19 @@ pub struct BackChannelLogoutNotification {
     pub logout_token: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackChannelLogoutDelivery {
+    Delivered,
+    Rejected,
+    TransportFailed,
+}
+
+#[async_trait::async_trait]
+pub trait BackChannelLogoutSender: Send + Sync {
+    async fn send(&self, notification: &BackChannelLogoutNotification)
+    -> BackChannelLogoutDelivery;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LogoutOutcome {
     Redirect {
@@ -77,7 +90,7 @@ pub struct LogoutService {
     key_repo: Arc<dyn KeyRepository>,
     key_jwk_repo: Arc<dyn KeyJwkRepository>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    http_client: reqwest::Client,
+    backchannel_sender: Arc<dyn BackChannelLogoutSender>,
     events: Arc<dyn crate::observability::EventSink>,
 }
 
@@ -87,7 +100,7 @@ pub struct LogoutServiceDependencies {
     pub key_repo: Arc<dyn KeyRepository>,
     pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
     pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    pub http_client: reqwest::Client,
+    pub backchannel_sender: Arc<dyn BackChannelLogoutSender>,
 }
 
 impl LogoutService {
@@ -98,15 +111,9 @@ impl LogoutService {
             key_repo: deps.key_repo,
             key_jwk_repo: deps.key_jwk_repo,
             signing_algorithm_detector: deps.signing_algorithm_detector,
-            http_client: deps.http_client,
+            backchannel_sender: deps.backchannel_sender,
             events: Arc::new(crate::observability::NoopEventSink),
         }
-    }
-
-    #[must_use]
-    pub fn with_http_client(mut self, http_client: reqwest::Client) -> Self {
-        self.http_client = http_client;
-        self
     }
 
     /// Attach the key event and audit sink.
@@ -373,40 +380,11 @@ impl LogoutService {
     /// is reported as an observed notification result; it never claims that the
     /// remote session was actually revoked.
     async fn notify_backchannel_logout(&self, notification: &BackChannelLogoutNotification) {
-        use tracing::Instrument as _;
-
-        let trace = crate::observability::outbound_trace();
-        let mut headers = http::HeaderMap::new();
-        trace.inject(&notification.logout_uri, &mut headers);
-        let span = trace.client_span("POST", &notification.logout_uri);
-        let result = self
-            .http_client
-            .post(notification.logout_uri.clone())
-            .headers(headers)
-            .form(&[("logout_token", notification.logout_token.as_str())])
-            .send()
-            .instrument(span.clone())
-            .await;
-
-        let (outcome, reason) = match &result {
-            Ok(response) if response.status().is_success() => ("success", None),
-            Ok(response) => {
-                span.record("http.response.status_code", response.status().as_u16());
-                tracing::warn!(
-                    client_id = %notification.client_id,
-                    status = %response.status(),
-                    "back-channel logout request returned non-success status"
-                );
-                ("failure", Some("non_success_status"))
-            }
-            Err(error) => {
-                tracing::warn!(
-                    client_id = %notification.client_id,
-                    error = %error,
-                    "back-channel logout request failed"
-                );
-                ("failure", Some("transport_error"))
-            }
+        let delivery = self.backchannel_sender.send(notification).await;
+        let (outcome, reason) = match delivery {
+            BackChannelLogoutDelivery::Delivered => ("success", None),
+            BackChannelLogoutDelivery::Rejected => ("failure", Some("non_success_status")),
+            BackChannelLogoutDelivery::TransportFailed => ("failure", Some("transport_error")),
         };
 
         use crate::observability::{BusinessEvent, EventValue};
@@ -635,6 +613,7 @@ fn unsigned_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        BackChannelLogoutDelivery, BackChannelLogoutNotification, BackChannelLogoutSender,
         LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
         unsigned_id_token_hint_for_test,
     };
@@ -652,6 +631,7 @@ mod tests {
             },
             setting::installation::{InstallationSetting, InstallationState},
         },
+        observability::{BusinessEvent, EventSink},
         openid_connect::{
             provider::{OpenIdProviderService, SigningAlgorithmDetector},
             tests::fixtures::mocks::{MockKeyJwkRepository, MockKeyRepository},
@@ -665,9 +645,52 @@ mod tests {
         jwt::{self, JwtPayload},
     };
     use openssl::rsa::Rsa;
-    use std::{collections::HashMap, sync::Arc};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
     use url::Url;
     use uuid::Uuid;
+
+    struct NoopBackChannelLogoutSender;
+
+    #[async_trait]
+    impl BackChannelLogoutSender for NoopBackChannelLogoutSender {
+        async fn send(
+            &self,
+            _notification: &BackChannelLogoutNotification,
+        ) -> BackChannelLogoutDelivery {
+            BackChannelLogoutDelivery::Delivered
+        }
+    }
+
+    struct RecordingBackChannelLogoutSender {
+        delivery: BackChannelLogoutDelivery,
+        notifications: Mutex<Vec<BackChannelLogoutNotification>>,
+    }
+
+    #[async_trait]
+    impl BackChannelLogoutSender for RecordingBackChannelLogoutSender {
+        async fn send(
+            &self,
+            notification: &BackChannelLogoutNotification,
+        ) -> BackChannelLogoutDelivery {
+            self.notifications
+                .lock()
+                .unwrap()
+                .push(notification.clone());
+            self.delivery
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingEventSink(Mutex<Vec<BusinessEvent>>);
+
+    impl EventSink for RecordingEventSink {
+        fn emit(&self, event: BusinessEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
 
     #[derive(Clone)]
     struct FakeClientRepository {
@@ -916,7 +939,7 @@ mod tests {
             key_repo: Arc::new(key_repo),
             key_jwk_repo: Arc::new(jwk_repo),
             signing_algorithm_detector: Arc::new(TestSigningAlgorithmDetector),
-            http_client: crate::openid_connect::remote::test_backchannel_logout_http_client(),
+            backchannel_sender: Arc::new(NoopBackChannelLogoutSender),
         });
         (service, signing)
     }
@@ -935,6 +958,49 @@ mod tests {
             None,
             None,
         )])
+    }
+
+    #[tokio::test]
+    async fn backchannel_delivery_outcomes_emit_audit_results() {
+        for (delivery, outcome, reason) in [
+            (BackChannelLogoutDelivery::Delivered, "success", None),
+            (
+                BackChannelLogoutDelivery::Rejected,
+                "failure",
+                Some("non_success_status"),
+            ),
+            (
+                BackChannelLogoutDelivery::TransportFailed,
+                "failure",
+                Some("transport_error"),
+            ),
+        ] {
+            let sender = Arc::new(RecordingBackChannelLogoutSender {
+                delivery,
+                notifications: Mutex::new(Vec::new()),
+            });
+            let events = Arc::new(RecordingEventSink::default());
+            let mut service = service_with_clients(Vec::new());
+            service.backchannel_sender = sender.clone();
+            service.events = events.clone();
+            let notification = BackChannelLogoutNotification {
+                client_id: Uuid::new_v4(),
+                logout_uri: Url::parse("https://rp.example.com/backchannel_logout").unwrap(),
+                logout_token: "token".to_owned(),
+            };
+
+            service.notify_backchannel_logout(&notification).await;
+
+            assert_eq!(
+                sender.notifications.lock().unwrap().as_slice(),
+                &[notification]
+            );
+            let events = events.0.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].name, "logout.backchannel.result");
+            assert_eq!(events[0].outcome, Some(outcome));
+            assert_eq!(events[0].reason, reason);
+        }
     }
 
     #[tokio::test]

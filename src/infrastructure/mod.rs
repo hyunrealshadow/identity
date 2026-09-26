@@ -11,6 +11,7 @@ pub mod graphql;
 pub mod i18n;
 pub mod lifecycle;
 pub mod observability;
+pub mod openid_connect;
 pub mod resources;
 pub mod services;
 pub mod settings;

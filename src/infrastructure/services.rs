@@ -23,6 +23,7 @@ use crate::{
         session::SessionRepositoryImpl, setting::SettingRepositoryImpl, user::UserRepositoryImpl,
         user_credential::UserCredentialRepositoryImpl,
     },
+    openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
 };
 use identity_application::observability::EventSink;
 use identity_application::{
@@ -40,7 +41,7 @@ use identity_application::{
         logout::{LogoutService, LogoutServiceDependencies},
         provider::OpenIdProviderService,
         registration::DynamicClientRegistrationService,
-        remote::{backchannel_logout_http_client, request_uri_http_client},
+        remote::{conformance_allows_invalid_certs, request_uri_http_client},
         token::{TokenService, TokenServiceDependencies},
         user_info::UserInfoService,
     },
@@ -128,7 +129,9 @@ impl AppServices {
         workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     ) -> Result<Self, reqwest::Error> {
         let request_uri_http_client = request_uri_http_client()?;
-        let backchannel_logout_http_client = backchannel_logout_http_client()?;
+        let backchannel_sender = Arc::new(HttpBackChannelLogoutSender::new(
+            conformance_allows_invalid_certs(),
+        )?);
         let key_repo = Arc::new(KeyRepositoryImpl::new(db.clone()));
         let signing_algorithm_detector = Arc::new(SigningAlgorithmDetectorImpl);
         let key_jwk_generator = Arc::new(KeyJwkGeneratorImpl);
@@ -235,7 +238,7 @@ impl AppServices {
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
-                http_client: backchannel_logout_http_client,
+                backchannel_sender,
             })
             .with_events(Arc::clone(&events)),
             user_info: UserInfoService::new(
