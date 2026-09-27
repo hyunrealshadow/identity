@@ -179,19 +179,21 @@ body {
 }
 
 /* The segmented code display is a JS enhancement. Without hydration, expose
-   its native input so entered OTP/recovery-code characters remain visible. */
-.no-js [data-input-otp-group] {
+   its native input so entered OTP/recovery-code characters remain visible.
+   Select the input through its parent: Bitwarden treats an OTP-named data
+   attribute on the input as a TOTP hint, including on device-code fields. */
+.no-js [data-slot="input-otp-group"] {
   display: none;
 }
 
-.no-js [data-input-otp-container] {
+.no-js [data-slot="input-otp"] {
   display: block;
   width: 100%;
   max-width: none;
   padding-inline: 0;
 }
 
-.no-js [data-input-otp] {
+.no-js [data-slot="input-otp"] > input {
   position: static;
   width: 100%;
   clip-path: none;
@@ -205,7 +207,7 @@ body {
   box-shadow: var(--field-shadow);
 }
 
-.no-js [data-input-otp]:focus {
+.no-js [data-slot="input-otp"] > input:focus {
   border-color: var(--field-border-focus);
   outline: 2px solid var(--focus);
   outline-offset: 1px;

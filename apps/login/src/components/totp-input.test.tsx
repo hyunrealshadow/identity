@@ -18,9 +18,17 @@ beforeEach(() => {
 })
 
 describe('GroupedCodeInput', () => {
+  it('does not advertise the device code input as an OTP field', () => {
+    const { container } = render(<GroupedCodeInput name="user_code" />)
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
+
+    expect(input.autocomplete).toBe('off')
+    expect(Object.entries(input.dataset).flat().join(' ').toLowerCase()).not.toContain('totp')
+  })
+
   it('normalizes a pasted device code and renders a separator after four characters', () => {
     const { container } = render(<GroupedCodeInput name="user_code" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
 
     act(() => {
       input.value = 'wdjb-mjht'
@@ -38,7 +46,7 @@ describe('GroupedCodeInput', () => {
 
   it('does not let repeated separators consume the native input limit', () => {
     const { container } = render(<GroupedCodeInput name="user_code" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
 
     act(() => {
       input.value = 'WDJBM'
@@ -93,7 +101,7 @@ afterEach(() => {
 describe('TotpInput', () => {
   it('does not let invalid characters block the sixth digit', () => {
     const { container } = render(<TotpInput name="totp" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
 
     act(() => {
       input.value = '79436'
@@ -117,7 +125,7 @@ describe('TotpInput', () => {
 
   it('synchronizes a value inserted through a native password-manager event', () => {
     const { container } = render(<TotpInput name="totp" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')
 
     expect(input).not.toBeNull()
     act(() => {
@@ -135,12 +143,12 @@ describe('TotpInput', () => {
 
   it('exposes the stable semantics expected by authenticator extensions', () => {
     const { container } = render(<TotpInput name="totp" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')
     const root = container.querySelector<HTMLElement>('[data-slot="input-otp"]')
-    const group = container.querySelector<HTMLElement>('[data-input-otp-group]')
+    const group = container.querySelector<HTMLElement>('[data-slot="input-otp-group"]')
     const firstSlot = container.querySelector<HTMLElement>('[data-slot="input-otp-slot"]')
 
-    expect(container.querySelector('[data-input-otp-group]')).not.toBeNull()
+    expect(container.querySelector('[data-slot="input-otp-group"]')).not.toBeNull()
     expect(root?.classList).toContain('w-fit')
     expect(group?.className).toBe('input-otp__group pointer-events-none items-center')
     expect(firstSlot?.className).toBe('input-otp__slot')
@@ -154,7 +162,7 @@ describe('TotpInput', () => {
 
   it('focuses the native input after hydration when requested', () => {
     const { container } = render(<TotpInput name="totp" autoFocus />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
     const firstSlot = container.querySelector<HTMLElement>('[data-slot="input-otp-slot"]')!
 
     expect(document.activeElement).toBe(input)
@@ -174,7 +182,7 @@ describe('TotpInput', () => {
 
   it('does not synthesize input events when the field gains or loses focus', async () => {
     const { container } = render(<TotpInput name="totp" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
     const inputListener = vi.fn()
     input.addEventListener('input', inputListener)
 
@@ -187,7 +195,7 @@ describe('TotpInput', () => {
 
   it('keeps a password-manager value written after focus across the focus re-render', () => {
     const { container } = render(<TotpInput name="totp" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
 
     // Bitwarden focuses the field (React schedules a state update from
     // onFocus) and then assigns the code straight to the DOM node before the
@@ -213,7 +221,7 @@ describe('TotpInput', () => {
 
   it('renders a code supplied as the initial value (server-rendered fill)', () => {
     const { container } = render(<TotpInput name="totp" defaultValue="123456" />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
 
     const slots = Array.from(
       container.querySelectorAll('[data-slot="input-otp-slot"]'),
@@ -231,7 +239,7 @@ describe('TotpInput', () => {
       return <TotpInput name="code" value={code} onChange={setCode} />
     }
     const { container } = render(<Harness />)
-    const input = container.querySelector<HTMLInputElement>('[data-input-otp]')!
+    const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')!
 
     act(() => {
       setExternal('246813')

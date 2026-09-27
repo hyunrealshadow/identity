@@ -171,7 +171,6 @@ export function SegmentedCodeInput({
 
   return (
     <div
-      data-input-otp-container
       data-autofocus={isAutofocusPending ? 'true' : undefined}
       data-disabled={disabled ? 'true' : undefined}
       data-invalid={isInvalid ? 'true' : undefined}
@@ -183,7 +182,6 @@ export function SegmentedCodeInput({
       })}
     >
       <div
-        data-input-otp-group
         data-slot="input-otp-group"
         className={slots.group({
           className: ['pointer-events-none items-center', groupClassName]
@@ -226,7 +224,6 @@ export function SegmentedCodeInput({
       <input
         {...props}
         ref={inputRef}
-        data-input-otp
         name={props.name}
         defaultValue={currentValue}
         disabled={disabled}
