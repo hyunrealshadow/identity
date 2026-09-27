@@ -119,6 +119,10 @@ pub struct OpenIdConnectClientSettings {
     /// Defaults to OAuth 2.0 for clients whose stored settings predate this field.
     #[serde(default)]
     pub oauth_version: OAuthProtocolVersion,
+    /// Allows browser requests from the origins of this client's registered
+    /// HTTP(S) redirect URIs at CORS-enabled OAuth endpoints.
+    #[serde(default)]
+    pub cors_enabled: bool,
     /// When enabled, the token endpoint includes the standard claims the granted
     /// scopes cover (`profile`/`email`/`phone`/`address`) in issued ID Tokens,
     /// matching the implicit-flow behaviour. Defaults to off (current behaviour).
@@ -456,6 +460,7 @@ mod tests {
     #[test]
     fn settings_defaults_include_scoped_claims_to_false() {
         assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_id_token);
+        assert!(!OpenIdConnectClientSettings::default().cors_enabled);
 
         // Stored settings without the version field retain OAuth 2.0 behavior.
         let parsed: OpenIdConnectClientSettings =

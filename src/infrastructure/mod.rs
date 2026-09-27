@@ -25,7 +25,12 @@ pub use state::AppState;
 
 #[cfg(any(test, feature = "test-support"))]
 pub async fn test_app_state_with_mock_settings() -> AppState {
-    use std::sync::Arc;
+    test_app_state_with_cors_origin(None).await
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppState {
+    use std::{collections::BTreeMap, sync::Arc};
 
     use chrono::Utc;
     use identity_domain::{
@@ -42,7 +47,7 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
             model::SettingDefinition,
         },
     };
-    use sea_orm::{DatabaseBackend, MockDatabase};
+    use sea_orm::{DatabaseBackend, MockDatabase, Value};
 
     use crate::{
         config::{AppEnvironment, HealthChecksConfig},
@@ -125,6 +130,12 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
         updated_at: None,
     };
 
+    let cors_rows: Vec<BTreeMap<String, Value>> = cors_origin
+        .into_iter()
+        .map(|origin| {
+            BTreeMap::from([("origin".to_owned(), Value::String(Some(origin.to_owned())))])
+        })
+        .collect();
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results(vec![
             vec![installation_initialized_setting],
@@ -137,6 +148,7 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
             vec![login_domain_setting],
             vec![device_authorization_setting],
         ])
+        .append_query_results([cors_rows])
         .append_query_results([
             Vec::<crate::infrastructure::database::entity::key::Model>::new(),
             Vec::<crate::infrastructure::database::entity::key::Model>::new(),

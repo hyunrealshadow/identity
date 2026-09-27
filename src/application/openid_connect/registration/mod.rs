@@ -292,6 +292,7 @@ impl DynamicClientRegistrationService {
                 allow_public_client_flow: public_client,
                 allow_nonce_without_pkce: false,
                 oauth_version: Default::default(),
+                cors_enabled: false,
                 include_scoped_claims_in_id_token: false,
             },
         };

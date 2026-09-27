@@ -3,6 +3,7 @@
 pub use super::client::Entity as Client;
 pub use super::client_authorization::Entity as ClientAuthorization;
 pub use super::client_openid_connect::Entity as ClientOpenIdConnect;
+pub use super::client_openid_connect_cors_origin::Entity as ClientOpenIdConnectCorsOrigin;
 pub use super::client_openid_connect_credential::Entity as ClientOpenIdConnectCredential;
 pub use super::client_openid_connect_platform::Entity as ClientOpenIdConnectPlatform;
 pub use super::client_scope::Entity as ClientScope;

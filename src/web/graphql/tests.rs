@@ -268,6 +268,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
     let user_model = test_user(user_oid, now);
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results(setting_rows(user_oid, key_oid, now))
+        .append_query_results([Vec::<setting::Model>::new()])
         .append_query_results([
             Vec::<key::Model>::new(),
             Vec::<key::Model>::new(),

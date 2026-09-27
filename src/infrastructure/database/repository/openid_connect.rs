@@ -12,8 +12,8 @@ use uuid::Uuid;
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
     client_authorization::Entity as ClientAuthorizationEntity, client_openid_connect,
-    client_openid_connect::Entity as OpenIdConnectClientEntity, client_openid_connect_credential,
-    client_openid_connect_platform,
+    client_openid_connect::Entity as OpenIdConnectClientEntity, client_openid_connect_cors_origin,
+    client_openid_connect_credential, client_openid_connect_platform,
     client_openid_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
     client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
     scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
@@ -247,6 +247,25 @@ fn urls_to_json(value: Vec<Url>) -> Option<Value> {
     })
 }
 
+fn cors_origins_for_client(
+    settings: &OpenIdConnectClientSettings,
+    platforms: &[OpenIdConnectClientPlatform],
+) -> Vec<String> {
+    if !settings.cors_enabled {
+        return Vec::new();
+    }
+
+    let mut origins: Vec<_> = platforms
+        .iter()
+        .flat_map(|platform| &platform.redirect_uris)
+        .filter(|uri| matches!(uri.scheme(), "http" | "https"))
+        .map(|uri| uri.origin().ascii_serialization())
+        .collect();
+    origins.sort_unstable();
+    origins.dedup();
+    origins
+}
+
 #[async_trait]
 impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
@@ -256,6 +275,8 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
     ) -> Result<identity_domain::client::model::ClientOid, OpenIdConnectClientRepositoryError> {
         let client_oid = registration.client.oid;
         let now = Utc::now();
+        let cors_origins =
+            cors_origins_for_client(&registration.metadata.settings, &registration.platforms);
 
         self.db
             .transaction::<_, _, sea_orm::DbErr>(|txn| {
@@ -362,6 +383,21 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                             ..Default::default()
                         }
                         .insert(txn)
+                        .await?;
+                    }
+
+                    if !cors_origins.is_empty() {
+                        client_openid_connect_cors_origin::Entity::insert_many(
+                            cors_origins.into_iter().map(|origin| {
+                                client_openid_connect_cors_origin::ActiveModel {
+                                    client_id: Set(client_model.id),
+                                    origin: Set(origin),
+                                    created_at: Set(now.into()),
+                                    updated_at: Set(None),
+                                }
+                            }),
+                        )
+                        .exec(txn)
                         .await?;
                     }
 
@@ -702,15 +738,48 @@ impl OpenIdConnectClientRepositoryImpl {
 #[cfg(test)]
 mod tests {
     use super::{
-        deserialize_optional_string_vec, parse_optional_url, parse_optional_urls, to_metadata,
-        to_platform,
+        cors_origins_for_client, deserialize_optional_string_vec, parse_optional_url,
+        parse_optional_urls, to_metadata, to_platform,
     };
     use crate::{
-        domain::openid_connect::OpenIdConnectClientPlatformType,
+        domain::openid_connect::{
+            OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType,
+            OpenIdConnectClientSettings,
+        },
         infrastructure::database::entity::{client_openid_connect, client_openid_connect_platform},
     };
     use chrono::Utc;
     use serde_json::json;
+    use url::Url;
+
+    #[test]
+    fn materialized_cors_origins_follow_client_settings_and_redirects() {
+        let platforms = vec![
+            OpenIdConnectClientPlatform {
+                platform: OpenIdConnectClientPlatformType::Web,
+                redirect_uris: [
+                    "https://rp.example.com/callback",
+                    "https://rp.example.com/another",
+                    "http://localhost:3000/callback",
+                ]
+                .into_iter()
+                .map(|uri| Url::parse(uri).unwrap())
+                .collect(),
+            },
+            OpenIdConnectClientPlatform {
+                platform: OpenIdConnectClientPlatformType::Native,
+                redirect_uris: vec![Url::parse("com.example.app:/callback").unwrap()],
+            },
+        ];
+        let mut settings = OpenIdConnectClientSettings::default();
+        assert!(cors_origins_for_client(&settings, &platforms).is_empty());
+
+        settings.cors_enabled = true;
+        assert_eq!(
+            cors_origins_for_client(&settings, &platforms),
+            ["http://localhost:3000", "https://rp.example.com"]
+        );
+    }
 
     #[test]
     fn parses_json_array_to_optional_vec() {

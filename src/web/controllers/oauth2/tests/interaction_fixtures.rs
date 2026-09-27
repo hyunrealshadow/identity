@@ -308,6 +308,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         .append_query_results([[dynamic_registration_setting]])
         .append_query_results([[login_domain_setting]])
         .append_query_results([[device_authorization_setting]])
+        .append_query_results([Vec::<setting::Model>::new()])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])

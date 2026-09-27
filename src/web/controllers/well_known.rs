@@ -8,6 +8,7 @@ use crate::{
 };
 
 use super::response::{JsonWebResult, app_state, render_json};
+use crate::cors::{ClientCors, preflight};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonWebKeySetResponse {
@@ -16,8 +17,18 @@ pub struct JsonWebKeySetResponse {
 
 pub fn routes() -> Router {
     Router::new()
-        .push(Router::with_path(".well-known/openid-configuration").get(openid_configuration))
-        .push(Router::with_path(".well-known/keys").get(keys_handler))
+        .push(
+            Router::with_path(".well-known/openid-configuration")
+                .hoop(ClientCors::new("GET"))
+                .get(openid_configuration)
+                .options(preflight),
+        )
+        .push(
+            Router::with_path(".well-known/keys")
+                .hoop(ClientCors::new("GET"))
+                .get(keys_handler)
+                .options(preflight),
+        )
 }
 
 async fn openid_configuration_document(
