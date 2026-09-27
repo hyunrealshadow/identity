@@ -320,6 +320,7 @@ mod tests {
             client_id: uuid::Uuid::nil(),
             redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
             redirect_uri_raw: "https://client.example.com/callback".to_owned(),
+            redirect_uri_was_supplied: true,
             scope: ScopeSet::parse("openid").unwrap(),
             state: "state".to_string(),
             nonce: None,

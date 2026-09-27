@@ -1,5 +1,5 @@
 use super::*;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use identity_domain::openid_connect::{OAuthProtocolVersion, TokenEndpointAuthMethod};
 
 impl AuthorizeService {
     pub async fn validate_request(
@@ -66,7 +66,8 @@ impl AuthorizeService {
             );
         }
 
-        if params.redirect_uri.trim().is_empty()
+        let redirect_uri_was_supplied = !params.redirect_uri.trim().is_empty();
+        if !redirect_uri_was_supplied
             && !params
                 .scope
                 .split_whitespace()
@@ -189,7 +190,9 @@ impl AuthorizeService {
                         .with_param("field", "code_challenge"),
                 );
             }
-            if code_challenge_method != Some(CodeChallengeMethod::S256) {
+            if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+                && code_challenge_method != Some(CodeChallengeMethod::S256)
+            {
                 return Err(
                     AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
                         .with_param("code_challenge_method", "S256 required"),
@@ -197,7 +200,9 @@ impl AuthorizeService {
             }
         }
 
-        if client.metadata().settings.allow_public_client_flow {
+        if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+            && client.metadata().settings.allow_public_client_flow
+        {
             if response_type != ResponseType::Code {
                 return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
                     .with_param("response_type", response_type.to_string()));
@@ -209,7 +214,8 @@ impl AuthorizeService {
                 );
             }
         }
-        if response_type.includes_code()
+        if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+            && response_type.includes_code()
             && !has_code_challenge
             && !(scope.contains_openid()
                 && !client.metadata().settings.allow_public_client_flow
@@ -241,6 +247,7 @@ impl AuthorizeService {
             client_id,
             redirect_uri,
             redirect_uri_raw: params.redirect_uri,
+            redirect_uri_was_supplied,
             scope,
             state: params.state,
             nonce: params.nonce,

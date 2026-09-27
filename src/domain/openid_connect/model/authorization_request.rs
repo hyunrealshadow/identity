@@ -345,6 +345,8 @@ pub struct AuthorizationRequest {
     pub redirect_uri: Url,
     /// Exact redirect URI value received in the authorization request.
     pub redirect_uri_raw: String,
+    /// Whether the client supplied redirect_uri in the authorization request.
+    pub redirect_uri_was_supplied: bool,
     pub scope: ScopeSet,
     pub state: String,
     pub nonce: Option<String>,
@@ -369,6 +371,8 @@ pub struct AuthorizationRequestData {
     pub response_mode: Option<ResponseMode>,
     pub client_id: String,
     pub redirect_uri: String,
+    #[serde(default = "default_redirect_uri_was_supplied")]
+    pub redirect_uri_was_supplied: bool,
     pub scope: String,
     pub state: String,
     pub nonce: Option<String>,
@@ -393,6 +397,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             response_mode: value.response_mode,
             client_id: value.client_id.to_string(),
             redirect_uri: value.redirect_uri_raw.clone(),
+            redirect_uri_was_supplied: value.redirect_uri_was_supplied,
             scope: value.scope.to_scope_string(),
             state: value.state.clone(),
             nonce: value.nonce.clone(),
@@ -409,6 +414,10 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
                 .and_then(|c| serde_json::to_string(c).ok()),
         }
     }
+}
+
+fn default_redirect_uri_was_supplied() -> bool {
+    true
 }
 
 mod optional_prompt_values {
@@ -569,6 +578,7 @@ mod tests {
             client_id: Uuid::nil(),
             redirect_uri: Url::parse("http://127.0.0.1:80/callback").unwrap(),
             redirect_uri_raw: "http://127.0.0.1:80/callback".to_owned(),
+            redirect_uri_was_supplied: false,
             scope: ScopeSet::parse("openid email").unwrap(),
             state: "abc123".to_string(),
             nonce: Some("nonce123".to_string()),
@@ -593,8 +603,16 @@ mod tests {
         assert_eq!(parsed.response_type, ResponseType::Code);
         assert_eq!(parsed.scope, "openid email");
         assert_eq!(parsed.redirect_uri, "http://127.0.0.1:80/callback");
+        assert!(!parsed.redirect_uri_was_supplied);
         assert_eq!(parsed.nonce.as_deref(), Some("nonce123"));
         assert_eq!(parsed.login_hint, None);
+        let mut old_json: serde_json::Value = serde_json::from_str(&json).unwrap();
+        old_json
+            .as_object_mut()
+            .unwrap()
+            .remove("redirect_uri_was_supplied");
+        let old: AuthorizationRequestData = serde_json::from_value(old_json).unwrap();
+        assert!(old.redirect_uri_was_supplied);
     }
 
     #[test]
@@ -605,6 +623,7 @@ mod tests {
             client_id: Uuid::nil(),
             redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             redirect_uri_raw: "https://client.example.com/callback".to_owned(),
+            redirect_uri_was_supplied: true,
             scope: ScopeSet::parse("openid email").unwrap(),
             state: "abc123".to_string(),
             nonce: Some("nonce123".to_string()),

@@ -65,8 +65,14 @@ pub struct AuthorizationCodeData {
     #[serde(default)]
     pub amr: Vec<String>,
     pub redirect_uri: String,
+    #[serde(default = "default_redirect_uri_was_supplied")]
+    pub redirect_uri_was_supplied: bool,
     pub auth_time: Option<i64>,
     pub claims: Option<ClaimsRequest>,
+}
+
+fn default_redirect_uri_was_supplied() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -243,6 +249,7 @@ mod tests {
             acr: Some("urn:mfa".to_string()),
             amr: vec!["pwd".to_string(), "otp".to_string(), "mfa".to_string()],
             redirect_uri: "https://client.example.com/callback".to_string(),
+            redirect_uri_was_supplied: true,
             auth_time: Some(1234567890),
             claims: None,
         };
@@ -254,6 +261,14 @@ mod tests {
             parsed.protected_session_id.as_deref(),
             Some("protected-session")
         );
+        assert!(parsed.redirect_uri_was_supplied);
+        let mut old_json: serde_json::Value = serde_json::from_str(&json).unwrap();
+        old_json
+            .as_object_mut()
+            .unwrap()
+            .remove("redirect_uri_was_supplied");
+        let old: AuthorizationCodeData = serde_json::from_value(old_json).unwrap();
+        assert!(old.redirect_uri_was_supplied);
     }
 
     #[test]

@@ -141,6 +141,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
                 response_mode: None,
                 client_id: client_oid.to_string(),
                 redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: true,
                 scope: "openid".to_owned(),
                 state: "state123".to_owned(),
                 nonce: None,

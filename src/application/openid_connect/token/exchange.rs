@@ -166,11 +166,19 @@ impl TokenService {
                             .map(|platform| platform.redirect_uris.len())
                             .sum::<usize>()
                             > 1;
-                if authenticated_client.metadata().settings.oauth_version
-                    != OAuthProtocolVersion::V2_1
-                    || data.code_challenge.is_none()
-                    || oidc_with_multiple_redirects
-                {
+                let may_omit = match authenticated_client.metadata().settings.oauth_version {
+                    OAuthProtocolVersion::V2_0 => {
+                        !data.redirect_uri_was_supplied
+                            || (data.scope.split_whitespace().any(|scope| scope == "openid")
+                                && authenticated_client
+                                    .single_redirect_uri()
+                                    .is_some_and(|uri| uri.as_str() == data.redirect_uri))
+                    }
+                    OAuthProtocolVersion::V2_1 => {
+                        data.code_challenge.is_some() && !oidc_with_multiple_redirects
+                    }
+                };
+                if !may_omit {
                     return Err(AppError::from_code(TokenErrorCode::RedirectUriMismatch));
                 }
             }
@@ -179,10 +187,11 @@ impl TokenService {
 
         let verifier = params.code_verifier.as_deref();
 
-        if authenticated_client
-            .metadata()
-            .settings
-            .allow_public_client_flow
+        if authenticated_client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+            && authenticated_client
+                .metadata()
+                .settings
+                .allow_public_client_flow
             && (data.code_challenge.as_deref().is_none_or(str::is_empty)
                 || data.code_challenge_method
                     != Some(identity_domain::openid_connect::CodeChallengeMethod::S256))
@@ -195,6 +204,7 @@ impl TokenService {
             data.code_challenge.as_deref(),
             data.code_challenge_method,
             verifier,
+            authenticated_client.metadata().settings.oauth_version,
         )?;
 
         let claimed = self

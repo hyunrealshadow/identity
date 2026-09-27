@@ -73,6 +73,26 @@ async fn confidential_client_rejects_plain_pkce() {
 }
 
 #[tokio::test]
+async fn oauth20_client_allows_code_without_pkce_and_plain_pkce() {
+    let service = build_test_service(
+        Arc::new(LegacyClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.code_challenge = None;
+    request.code_challenge_method = None;
+    assert!(service.validate_request(request).await.is_ok());
+
+    let mut request = params("openid profile");
+    request.code_challenge = Some("verifier".to_owned());
+    request.code_challenge_method = Some("plain".to_owned());
+    assert!(service.validate_request(request.clone()).await.is_ok());
+    request.code_challenge_method = None;
+    assert!(service.validate_request(request).await.is_ok());
+}
+
+#[tokio::test]
 async fn confidential_client_rejects_pkce_method_without_challenge() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
@@ -152,6 +172,7 @@ async fn oauth_code_with_one_registered_redirect_may_omit_authorization_redirect
         request.redirect_uri_raw,
         "https://client.example.com/callback"
     );
+    assert!(!request.redirect_uri_was_supplied);
 
     let mut oidc_request = params("openid profile");
     oidc_request.redirect_uri.clear();

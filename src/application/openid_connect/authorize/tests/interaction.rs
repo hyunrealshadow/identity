@@ -21,6 +21,7 @@ fn request() -> AuthorizationRequestData {
         response_mode: None,
         client_id: Uuid::nil().to_string(),
         redirect_uri: "https://client.example.com/callback".to_owned(),
+        redirect_uri_was_supplied: true,
         scope: "openid".to_owned(),
         state: "state-123".to_owned(),
         nonce: None,

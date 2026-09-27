@@ -760,6 +760,7 @@ impl AuthorizeService {
                         acr: authentication.acr.map(str::to_owned),
                         amr: authentication.amr.to_vec(),
                         redirect_uri: request.redirect_uri.clone(),
+                        redirect_uri_was_supplied: request.redirect_uri_was_supplied,
                         auth_time: authentication.auth_time,
                         claims: request
                             .claims

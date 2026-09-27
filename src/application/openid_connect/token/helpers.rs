@@ -78,6 +78,7 @@ pub(crate) fn verify_pkce(
     code_challenge: Option<&str>,
     code_challenge_method: Option<identity_domain::openid_connect::CodeChallengeMethod>,
     code_verifier: Option<&str>,
+    oauth_version: identity_domain::openid_connect::OAuthProtocolVersion,
 ) -> Result<(), AppError> {
     let Some(code_challenge) = code_challenge else {
         return if code_verifier.is_some() {
@@ -93,12 +94,19 @@ pub(crate) fn verify_pkce(
 
     let method = code_challenge_method
         .unwrap_or(identity_domain::openid_connect::CodeChallengeMethod::Plain);
-    if method != identity_domain::openid_connect::CodeChallengeMethod::S256 {
+    if oauth_version == identity_domain::openid_connect::OAuthProtocolVersion::V2_1
+        && method != identity_domain::openid_connect::CodeChallengeMethod::S256
+    {
         return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
             .with_param("code_challenge_method", method.to_string()));
     }
-    let digest = Sha256::digest(code_verifier.as_bytes());
-    let computed = URL_SAFE_NO_PAD.encode(digest);
+    let computed = match method {
+        identity_domain::openid_connect::CodeChallengeMethod::S256 => {
+            let digest = Sha256::digest(code_verifier.as_bytes());
+            URL_SAFE_NO_PAD.encode(digest)
+        }
+        identity_domain::openid_connect::CodeChallengeMethod::Plain => code_verifier.to_owned(),
+    };
 
     if !bool::from(subtle::ConstantTimeEq::ct_eq(
         computed.as_bytes(),

@@ -30,6 +30,7 @@ async fn expired_authorization_code_has_a_distinct_error() {
                 amr: vec![],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() - chrono::Duration::seconds(1),
@@ -74,7 +75,7 @@ fn rs256_token_service_with_public_key(
 }
 
 #[tokio::test]
-async fn oauth21_client_may_omit_token_redirect_uri_but_oauth20_client_may_not() {
+async fn oauth20_client_must_repeat_supplied_redirect_but_oauth21_client_may_omit_it() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
     let record = repo
@@ -92,6 +93,7 @@ async fn oauth21_client_may_omit_token_redirect_uri_but_oauth20_client_may_not()
                 amr: vec![],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -133,6 +135,96 @@ async fn oauth21_client_may_omit_token_redirect_uri_but_oauth20_client_may_not()
 }
 
 #[tokio::test]
+async fn oauth20_client_may_omit_token_redirect_when_authorization_omitted_it() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "profile".to_owned(),
+                nonce: None,
+                code_challenge: None,
+                code_challenge_method: None,
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec![],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: false,
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+    let service =
+        build_token_service_with_client_repo(repo, user_oid, Arc::new(InMemoryClientRepository));
+
+    assert!(
+        service
+            .exchange_authorization_code(AuthorizationCodeGrantParams {
+                code: STANDARD.encode(record.oid.as_bytes()),
+                redirect_uri: None,
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_assertion_type: None,
+                client_assertion: None,
+                code_verifier: None,
+            })
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn oidc10_single_redirect_client_may_omit_token_redirect() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "openid profile".to_owned(),
+                nonce: None,
+                code_challenge: None,
+                code_challenge_method: None,
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec![],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: true,
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+    let service =
+        build_token_service_with_client_repo(repo, user_oid, Arc::new(InMemoryClientRepository));
+
+    assert!(
+        service
+            .exchange_authorization_code(AuthorizationCodeGrantParams {
+                code: STANDARD.encode(record.oid.as_bytes()),
+                redirect_uri: None,
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_assertion_type: None,
+                client_assertion: None,
+                code_verifier: None,
+            })
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
@@ -154,6 +246,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -241,6 +334,7 @@ async fn exchange_authorization_code_without_openid_issues_no_id_token() {
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -289,6 +383,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 amr: vec!["pwd".to_owned()],
                 auth_time: Some(chrono::Utc::now().timestamp()),
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -338,6 +433,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -404,6 +500,7 @@ async fn scoped_claims_client_omits_claims_outside_granted_scope_in_code_flow_id
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -454,6 +551,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -531,6 +629,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -619,6 +718,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -683,6 +783,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                     amr: vec!["pwd".to_owned()],
                     auth_time: None,
                     redirect_uri: "https://client.example.com/callback".to_string(),
+                    redirect_uri_was_supplied: true,
                     claims: None,
                 }),
                 Utc::now() + chrono::Duration::minutes(10),
@@ -790,6 +891,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
                 amr: vec!["pwd".to_owned()],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
@@ -981,6 +1083,7 @@ async fn successful_exchange_emits_consumption_and_issuance_events() {
                 amr: vec![],
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: true,
                 claims: None,
             }),
             Utc::now() + chrono::Duration::minutes(10),
