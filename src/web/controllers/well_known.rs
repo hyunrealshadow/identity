@@ -107,6 +107,10 @@ mod tests {
             "https://identity.example.com/oauth2/token"
         );
         assert_eq!(
+            json["revocation_endpoint"],
+            "https://identity.example.com/oauth2/revoke"
+        );
+        assert_eq!(
             json["jwks_uri"],
             "https://identity.example.com/.well-known/keys"
         );

@@ -73,6 +73,16 @@ pub struct ClientCredentialsGrantParams {
     pub client_assertion: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct TokenRevocationParams {
+    pub token: String,
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub client_secret_basic: bool,
+    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion: Option<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TokenResponse {
     pub access_token: String,
@@ -179,6 +189,7 @@ impl TokenService {
 mod client_credentials;
 mod device;
 mod exchange;
+mod revocation;
 
 pub(crate) use exchange::{resolve_client_id, resolve_id_token_alg};
 

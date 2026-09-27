@@ -59,6 +59,7 @@ mod auth;
 mod exchange;
 mod fixtures;
 mod helpers;
+mod revocation;
 
 use self::fixtures::{
     InMemoryClientRepository, InMemoryDataProtector, InMemoryUserRepository,

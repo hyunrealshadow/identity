@@ -67,6 +67,18 @@ mockall::mock! {
             client_oid: ClientOid,
             now: DateTime<Utc>,
         ) -> Result<(), ClientAuthorizationRepositoryError>;
+        async fn revoke_access_token_for_client(
+            &self,
+            access_oid: uuid::Uuid,
+            client_oid: ClientOid,
+            now: DateTime<Utc>,
+        ) -> Result<(), ClientAuthorizationRepositoryError>;
+        async fn revoke_refresh_grant_for_client(
+            &self,
+            refresh_oid: uuid::Uuid,
+            client_oid: ClientOid,
+            now: DateTime<Utc>,
+        ) -> Result<(), ClientAuthorizationRepositoryError>;
     }
 }
 

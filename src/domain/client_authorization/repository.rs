@@ -77,6 +77,22 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         client_oid: ClientOid,
         now: DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError>;
+
+    /// Voluntary RFC 7009 revocation of one access token.
+    async fn revoke_access_token_for_client(
+        &self,
+        access_oid: Uuid,
+        client_oid: ClientOid,
+        now: DateTime<Utc>,
+    ) -> Result<(), ClientAuthorizationRepositoryError>;
+
+    /// Voluntary revocation of a refresh grant and all tokens in its rotation chain.
+    async fn revoke_refresh_grant_for_client(
+        &self,
+        refresh_oid: Uuid,
+        client_oid: ClientOid,
+        now: DateTime<Utc>,
+    ) -> Result<(), ClientAuthorizationRepositoryError>;
 }
 
 #[derive(Debug, thiserror::Error)]

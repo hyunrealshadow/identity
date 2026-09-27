@@ -314,7 +314,13 @@ impl ClientAuthenticator {
 
         let issuer_base = issuer.as_str().trim_end_matches('/');
         let token_endpoint = format!("{issuer_base}/oauth2/token");
-        let valid_audiences = [issuer.as_str(), issuer_base, token_endpoint.as_str()];
+        let revocation_endpoint = format!("{issuer_base}/oauth2/revoke");
+        let valid_audiences = [
+            issuer.as_str(),
+            issuer_base,
+            token_endpoint.as_str(),
+            revocation_endpoint.as_str(),
+        ];
         if !audience_matches(payload, &valid_audiences) {
             return Err(AppError::from_code(TokenErrorCode::AssertionAudMismatch));
         }

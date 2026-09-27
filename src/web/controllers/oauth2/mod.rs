@@ -10,6 +10,7 @@ mod continue_endpoint;
 mod device_authorization_endpoint;
 mod logout_endpoint;
 mod registration_endpoint;
+mod revocation_endpoint;
 mod session_endpoint;
 mod third_party_initiated_endpoint;
 mod token_endpoint;
@@ -36,6 +37,12 @@ pub fn routes() -> Router {
             Router::with_path("oauth2/token")
                 .hoop(ClientCors::new("POST"))
                 .post(token_endpoint::token)
+                .options(preflight),
+        )
+        .push(
+            Router::with_path("oauth2/revoke")
+                .hoop(ClientCors::new("POST"))
+                .post(revocation_endpoint::revoke)
                 .options(preflight),
         )
         .push(

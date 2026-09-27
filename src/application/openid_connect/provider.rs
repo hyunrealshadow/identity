@@ -307,6 +307,7 @@ impl OpenIdProviderService {
             issuer: issuer.clone(),
             authorization_endpoint: endpoint_url(&issuer, "/oauth2/authorize")?,
             token_endpoint: Some(endpoint_url(&issuer, "/oauth2/token")?),
+            revocation_endpoint: endpoint_url(&issuer, "/oauth2/revoke")?,
             userinfo_endpoint: Some(endpoint_url(&issuer, "/oauth2/userinfo")?),
             device_authorization_endpoint: Some(endpoint_url(&issuer, "/oauth2/device")?),
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,
