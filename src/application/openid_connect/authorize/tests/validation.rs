@@ -38,10 +38,10 @@ async fn public_client_requires_pkce_s256() {
         Arc::new(mock_login_repo()),
     );
 
-    let missing = service
-        .validate_request(params("openid profile"))
-        .await
-        .unwrap_err();
+    let mut missing_request = params("openid profile");
+    missing_request.code_challenge = None;
+    missing_request.code_challenge_method = None;
+    let missing = service.validate_request(missing_request).await.unwrap_err();
     assert_eq!(missing.code(), 23013);
 
     let mut plain = params("openid profile");
@@ -80,11 +80,89 @@ async fn confidential_client_rejects_pkce_method_without_challenge() {
         Arc::new(mock_login_repo()),
     );
     let mut request = params("openid profile");
+    request.code_challenge = None;
     request.code_challenge_method = Some("S256".to_owned());
 
     let error = service.validate_request(request).await.unwrap_err();
 
     assert_eq!(error.code(), 23013);
+}
+
+#[tokio::test]
+async fn confidential_code_without_pkce_requires_trusted_oidc_nonce() {
+    let standard = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let trusted = build_test_service(
+        Arc::new(TrustedNonceClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.code_challenge = None;
+    request.code_challenge_method = None;
+    request.nonce = Some("transaction-nonce".to_owned());
+    assert_eq!(
+        standard
+            .validate_request(request.clone())
+            .await
+            .unwrap_err()
+            .code(),
+        23013
+    );
+    assert!(trusted.validate_request(request.clone()).await.is_ok());
+    request.nonce = None;
+    assert_eq!(
+        trusted.validate_request(request).await.unwrap_err().code(),
+        23013
+    );
+}
+
+#[tokio::test]
+async fn public_client_cannot_use_trusted_nonce_instead_of_pkce() {
+    let service = build_test_service(
+        Arc::new(TrustedNoncePublicClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.code_challenge = None;
+    request.code_challenge_method = None;
+    request.nonce = Some("transaction-nonce".to_owned());
+
+    assert_eq!(
+        service.validate_request(request).await.unwrap_err().code(),
+        23013
+    );
+}
+
+#[tokio::test]
+async fn oauth_code_with_one_registered_redirect_may_omit_authorization_redirect_uri() {
+    let service = build_test_service(
+        Arc::new(FoundClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut oauth_request = params("profile");
+    oauth_request.redirect_uri.clear();
+    let (request, _) = service.validate_request(oauth_request).await.unwrap();
+    assert_eq!(
+        request.redirect_uri_raw,
+        "https://client.example.com/callback"
+    );
+
+    let mut oidc_request = params("openid profile");
+    oidc_request.redirect_uri.clear();
+    assert_eq!(
+        service
+            .validate_request(oidc_request)
+            .await
+            .unwrap_err()
+            .code(),
+        23013
+    );
 }
 
 #[tokio::test]
@@ -215,7 +293,6 @@ async fn validate_request_reports_missing_required_fields() {
 
     assert!(debug.contains("response_type"));
     assert!(debug.contains("client_id"));
-    assert!(debug.contains("redirect_uri"));
     assert!(debug.contains("scope"));
 }
 

@@ -319,6 +319,7 @@ impl OpenIdProviderService {
             grant_types_supported: non_empty(to_string_values(
                 &self.capabilities.grant_types_supported,
             )),
+            code_challenge_methods_supported: vec!["S256".to_owned()],
             acr_values_supported: non_empty(self.capabilities.acr_values_supported.clone()),
             subject_types_supported: to_string_values(&self.capabilities.subject_types_supported),
             id_token_signing_alg_values_supported: to_string_values(&id_token_algos),

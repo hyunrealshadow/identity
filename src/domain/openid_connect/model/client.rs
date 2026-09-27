@@ -95,12 +95,30 @@ impl FromStr for GrantType {
     }
 }
 
+/// OAuth rules used for this client's authorization code exchanges.
+/// OpenID Connect is an additional protocol layer, not a version of OAuth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
+pub enum OAuthProtocolVersion {
+    #[default]
+    #[serde(rename = "2.0")]
+    V2_0,
+    #[serde(rename = "2.1")]
+    V2_1,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct OpenIdConnectClientSettings {
     #[serde(default)]
     pub skip_consent: bool,
     #[serde(default)]
     pub allow_public_client_flow: bool,
+    /// Explicitly trusted confidential OIDC clients may use a transaction-bound
+    /// nonce instead of PKCE for authorization code injection protection.
+    #[serde(default)]
+    pub allow_nonce_without_pkce: bool,
+    /// Defaults to OAuth 2.0 for clients whose stored settings predate this field.
+    #[serde(default)]
+    pub oauth_version: OAuthProtocolVersion,
     /// When enabled, the token endpoint includes the standard claims the granted
     /// scopes cover (`profile`/`email`/`phone`/`address`) in issued ID Tokens,
     /// matching the implicit-flow behaviour. Defaults to off (current behaviour).
@@ -113,6 +131,25 @@ pub struct OpenIdConnectClientSettings {
 pub enum OpenIdConnectClientPlatformType {
     Web,
     Native,
+}
+
+impl OpenIdConnectClientPlatformType {
+    #[must_use]
+    pub fn allows_redirect_uri_scheme(&self, uri: &Url) -> bool {
+        match uri.scheme() {
+            "https" => true,
+            "http" => {
+                uri.host_str() == Some("localhost")
+                    || (*self == Self::Native
+                        && matches!(
+                            uri.host(),
+                            Some(url::Host::Ipv4(std::net::Ipv4Addr::LOCALHOST))
+                                | Some(url::Host::Ipv6(std::net::Ipv6Addr::LOCALHOST))
+                        ))
+            }
+            _ => *self == Self::Native,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -252,6 +289,15 @@ impl OpenIdConnectClient {
         &self.platforms
     }
 
+    #[must_use]
+    pub fn single_redirect_uri(&self) -> Option<&Url> {
+        let mut registered = self
+            .platforms
+            .iter()
+            .flat_map(|platform| platform.redirect_uris.iter());
+        registered.next().filter(|_| registered.next().is_none())
+    }
+
     pub fn has_redirect_uri(&self, redirect_uri: &Url) -> bool {
         self.has_redirect_uri_str(redirect_uri.as_str())
     }
@@ -262,6 +308,11 @@ impl OpenIdConnectClient {
         };
         self.platforms.iter().any(|platform| {
             platform.redirect_uris.iter().any(|registered| {
+                if !platform.platform.allows_redirect_uri_scheme(registered)
+                    || !platform.platform.allows_redirect_uri_scheme(&requested)
+                {
+                    return false;
+                }
                 if registered.as_str() == raw_redirect_uri {
                     return true;
                 }
@@ -367,8 +418,9 @@ impl std::error::Error for InvalidOpenIdConnectClientError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        GrantType, OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-        OpenIdConnectClientPlatformType, OpenIdConnectClientSettings, pairwise_subject_identifier,
+        GrantType, OAuthProtocolVersion, OpenIdConnectClient, OpenIdConnectClientMetadata,
+        OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
+        pairwise_subject_identifier,
     };
     use crate::client::model::{Client, ClientProtocol};
     use crate::openid_connect::{ResponseType, SubjectType};
@@ -405,11 +457,31 @@ mod tests {
     fn settings_defaults_include_scoped_claims_to_false() {
         assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_id_token);
 
-        // legacy stored settings without the field must deserialize to false
+        // Stored settings without the version field retain OAuth 2.0 behavior.
         let parsed: OpenIdConnectClientSettings =
             serde_json::from_value(serde_json::json!({"skip_consent": true})).unwrap();
         assert!(parsed.skip_consent);
         assert!(!parsed.include_scoped_claims_in_id_token);
+        assert!(!parsed.allow_nonce_without_pkce);
+        assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_0);
+    }
+
+    #[test]
+    fn settings_roundtrips_oauth_protocol_version() {
+        let settings = OpenIdConnectClientSettings {
+            oauth_version: OAuthProtocolVersion::V2_1,
+            ..OpenIdConnectClientSettings::default()
+        };
+        let json = serde_json::to_value(&settings).unwrap();
+        assert_eq!(json["oauth_version"], "2.1");
+        let parsed: OpenIdConnectClientSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_1);
+        assert!(
+            serde_json::from_value::<OpenIdConnectClientSettings>(
+                serde_json::json!({"oauth_version": "3.0"})
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -418,6 +490,7 @@ mod tests {
             skip_consent: true,
             allow_public_client_flow: false,
             include_scoped_claims_in_id_token: true,
+            ..OpenIdConnectClientSettings::default()
         };
         let json = serde_json::to_value(&settings).unwrap();
         let parsed: OpenIdConnectClientSettings = serde_json::from_value(json).unwrap();
@@ -554,7 +627,11 @@ mod tests {
             vec![
                 OpenIdConnectClientPlatform {
                     platform: OpenIdConnectClientPlatformType::Web,
-                    redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                    redirect_uris: vec![
+                        Url::parse("https://rp.example.com/callback").unwrap(),
+                        Url::parse("http://localhost:3000/callback").unwrap(),
+                        Url::parse("http://rp.example.com/callback").unwrap(),
+                    ],
                 },
                 OpenIdConnectClientPlatform {
                     platform: OpenIdConnectClientPlatformType::Native,
@@ -571,6 +648,9 @@ mod tests {
         assert!(
             oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/callback").unwrap())
         );
+        assert!(oidc_client.has_redirect_uri_str("http://localhost:3000/callback"));
+        assert!(!oidc_client.has_redirect_uri_str("http://rp.example.com/callback"));
+        assert!(!oidc_client.has_redirect_uri_str("http://localhost.evil.test:3000/callback"));
         assert!(oidc_client.has_redirect_uri(&Url::parse("com.example.app:/callback").unwrap()));
         assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/callback?source=app"));
         assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:80/callback?source=app"));

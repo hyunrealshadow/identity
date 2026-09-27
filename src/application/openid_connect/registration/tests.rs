@@ -143,6 +143,73 @@ async fn register_rejects_requests_when_dynamic_registration_is_disabled() {
 }
 
 #[tokio::test]
+async fn dynamic_registration_does_not_expose_internal_oauth_version() {
+    for request_includes_internal_field in [false, true] {
+        let captured = Arc::new(std::sync::Mutex::new(None));
+        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+        let service =
+            DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+
+        let mut registration_json = serde_json::json!({
+            "redirect_uris": ["https://rp.example.com/callback"],
+        });
+        if request_includes_internal_field {
+            registration_json["oauth_version"] = serde_json::json!("2.1");
+        }
+        let request: DynamicClientRegistrationRequest =
+            serde_json::from_value(registration_json).unwrap();
+        let response = service.register(request, &issuer()).await.unwrap();
+
+        assert!(serde_json::to_value(&response).unwrap()["oauth_version"].is_null());
+        assert_eq!(
+            captured
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .metadata
+                .settings
+                .oauth_version,
+            identity_domain::openid_connect::OAuthProtocolVersion::V2_0
+        );
+    }
+}
+
+#[tokio::test]
+async fn registration_only_allows_http_for_localhost_or_native_loopback() {
+    for (application_type, redirect_uri, allowed) in [
+        ("web", "http://localhost:3000/callback", true),
+        ("web", "http://rp.example.com/callback", false),
+        ("web", "http://localhost.evil.test:3000/callback", false),
+        ("web", "http://127.0.0.1:3000/callback", false),
+        ("native", "http://127.0.0.1:3000/callback", true),
+    ] {
+        let captured = Arc::new(std::sync::Mutex::new(None));
+        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
+        let service =
+            DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
+        let result = service
+            .register(
+                DynamicClientRegistrationRequest {
+                    application_type: Some(application_type.to_owned()),
+                    redirect_uris: vec![Url::parse(redirect_uri).unwrap()],
+                    ..DynamicClientRegistrationRequest::default()
+                },
+                &issuer(),
+            )
+            .await;
+        assert_eq!(result.is_ok(), allowed, "{redirect_uri}");
+        assert_eq!(
+            captured.lock().unwrap().is_some(),
+            allowed,
+            "{redirect_uri}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn register_maps_supported_client_metadata_and_generates_secret() {
     let captured = Arc::new(std::sync::Mutex::new(None));
     let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -223,6 +290,11 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
 
     let captured_val = captured.lock().unwrap().clone().unwrap();
     assert_eq!(captured_val.client.name, "Example RP");
+    assert_eq!(
+        captured_val.metadata.settings.oauth_version,
+        identity_domain::openid_connect::OAuthProtocolVersion::V2_0
+    );
+    assert!(!captured_val.metadata.settings.allow_nonce_without_pkce);
     assert_eq!(captured_val.platforms[0].platform.to_string(), "web");
     assert_eq!(
         captured_val.metadata.subject_type.unwrap().to_string(),

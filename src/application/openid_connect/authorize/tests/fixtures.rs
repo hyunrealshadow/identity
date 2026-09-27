@@ -9,7 +9,8 @@ pub(super) use crate::openid_connect::tests::fixtures::mocks::mock_login_repo;
 pub(super) use clients::{
     FoundClientRepository, InitiateLoginClientRepository, MissingClientRepository,
     PublicClientRepository, RequestUriClientRepository, RestrictedGrantClientRepository,
-    ScopedClientRepository, TEST_CLIENT_ID,
+    ScopedClientRepository, TEST_CLIENT_ID, TrustedNonceClientRepository,
+    TrustedNoncePublicClientRepository,
 };
 pub(super) use request_object::{
     authorize_service_with_public_key, authorize_service_with_request_object_encryption_key,
@@ -42,8 +43,8 @@ pub(super) fn params(scope: &str) -> AuthorizationRequestParams {
         claims: None,
         request: None,
         request_uri: None,
-        code_challenge: None,
-        code_challenge_method: None,
+        code_challenge: Some("test-code-challenge".to_owned()),
+        code_challenge_method: Some("S256".to_owned()),
     }
 }
 

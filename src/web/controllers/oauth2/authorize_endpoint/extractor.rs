@@ -157,24 +157,26 @@ pub fn has_request_object_transport(raw: &RawAuthorizeRequest) -> bool {
 }
 
 pub fn authorize_input_error(raw: &RawAuthorizeRequest) -> Option<AppError> {
-    // Only client_id and redirect_uri missing are non-redirectable errors.
-    // Missing response_type/scope are handled by the service which can redirect with error.
+    // A missing redirect_uri may be resolved from the sole registered URI for
+    // an OAuth client. The service handles that check after loading the client.
     if has_request_object_transport(raw) {
         return None;
     }
 
-    let mut must_show_page = Vec::new();
-    for (name, value) in [
-        ("client_id", raw.client_id.as_deref()),
-        ("redirect_uri", raw.redirect_uri.as_deref()),
-    ] {
-        if value.map(str::trim).unwrap_or_default().is_empty() {
-            must_show_page.push(name);
-        }
-    }
-
-    if must_show_page.is_empty() {
+    if raw
+        .client_id
+        .as_deref()
+        .is_some_and(|id| !id.trim().is_empty())
+    {
         return None;
+    }
+    let mut must_show_page = vec!["client_id"];
+    if raw
+        .redirect_uri
+        .as_deref()
+        .is_none_or(|uri| uri.trim().is_empty())
+    {
+        must_show_page.push("redirect_uri");
     }
 
     Some(
@@ -215,5 +217,14 @@ mod tests {
 
         let extracted = extract_authorize_request(&mut request).await.unwrap();
         assert_eq!(extracted.raw.scope.as_deref(), Some("openid"));
+    }
+
+    #[test]
+    fn missing_redirect_uri_is_resolved_after_client_lookup() {
+        let raw = RawAuthorizeRequest {
+            client_id: Some("client-id".to_owned()),
+            ..RawAuthorizeRequest::default()
+        };
+        assert!(authorize_input_error(&raw).is_none());
     }
 }

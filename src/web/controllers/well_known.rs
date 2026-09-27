@@ -84,6 +84,10 @@ mod tests {
 
         assert_eq!(json["issuer"], "https://identity.example.com/");
         assert_eq!(
+            json["code_challenge_methods_supported"],
+            serde_json::json!(["S256"])
+        );
+        assert_eq!(
             json["authorization_endpoint"],
             "https://identity.example.com/oauth2/authorize"
         );

@@ -74,6 +74,65 @@ fn rs256_token_service_with_public_key(
 }
 
 #[tokio::test]
+async fn oauth21_client_may_omit_token_redirect_uri_but_oauth20_client_may_not() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                scope: "profile".to_owned(),
+                nonce: None,
+                code_challenge: Some(s256_challenge("verifier-123")),
+                code_challenge_method: Some("S256".parse().unwrap()),
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec![],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_owned(),
+                claims: None,
+            }),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+    let params = AuthorizationCodeGrantParams {
+        code: STANDARD.encode(record.oid.as_bytes()),
+        redirect_uri: None,
+        client_id: Some(Uuid::nil().to_string()),
+        client_secret: Some("secret-123".to_owned()),
+        client_assertion_type: None,
+        client_assertion: None,
+        code_verifier: Some("verifier-123".to_owned()),
+    };
+
+    let default_policy = build_token_service_with_client_repo(
+        repo.clone(),
+        user_oid,
+        Arc::new(InMemoryClientRepository),
+    );
+    assert_eq!(
+        default_policy
+            .exchange_authorization_code(params.clone())
+            .await
+            .unwrap_err()
+            .code(),
+        24007
+    );
+
+    let optional_redirect =
+        build_token_service_with_client_repo(repo, user_oid, Arc::new(OAuth21ClientRepository));
+    assert!(
+        optional_redirect
+            .exchange_authorization_code(params)
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
 async fn exchange_authorization_code_revokes_code_after_success() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();

@@ -120,6 +120,15 @@ impl DynamicClientRegistrationService {
         }
 
         let platform = parse_application_type(request.application_type.as_deref())?;
+        if request
+            .redirect_uris
+            .iter()
+            .any(|uri| !platform.allows_redirect_uri_scheme(uri))
+        {
+            return Err(AppError::from_code(
+                RegistrationErrorCode::InvalidRedirectUri,
+            ));
+        }
         let subject_type = request
             .subject_type
             .as_deref()
@@ -281,6 +290,8 @@ impl DynamicClientRegistrationService {
             settings: OpenIdConnectClientSettings {
                 skip_consent: default_skip_consent(),
                 allow_public_client_flow: public_client,
+                allow_nonce_without_pkce: false,
+                oauth_version: Default::default(),
                 include_scoped_claims_in_id_token: false,
             },
         };

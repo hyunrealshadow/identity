@@ -80,7 +80,11 @@ pub(crate) fn verify_pkce(
     code_verifier: Option<&str>,
 ) -> Result<(), AppError> {
     let Some(code_challenge) = code_challenge else {
-        return Ok(());
+        return if code_verifier.is_some() {
+            Err(AppError::from_code(TokenErrorCode::PkceVerifierMismatch))
+        } else {
+            Ok(())
+        };
     };
 
     let Some(code_verifier) = code_verifier else {

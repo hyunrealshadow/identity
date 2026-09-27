@@ -1,4 +1,5 @@
 use super::*;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
 
 impl AuthorizeService {
     pub async fn validate_request(
@@ -62,6 +63,23 @@ impl AuthorizeService {
             return Err(
                 AppError::from_code(AuthorizeErrorCode::ClientGrantNotAllowed)
                     .with_param("response_type", response_type.to_string()),
+            );
+        }
+
+        if params.redirect_uri.trim().is_empty()
+            && !params
+                .scope
+                .split_whitespace()
+                .any(|scope| scope == "openid")
+        {
+            if let Some(only_uri) = client.single_redirect_uri() {
+                params.redirect_uri = only_uri.as_str().to_owned();
+            }
+        }
+        if params.redirect_uri.trim().is_empty() {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
+                    .with_param("field", "redirect_uri"),
             );
         }
 
@@ -191,6 +209,23 @@ impl AuthorizeService {
                 );
             }
         }
+        if response_type.includes_code()
+            && !has_code_challenge
+            && !(scope.contains_openid()
+                && !client.metadata().settings.allow_public_client_flow
+                && client.metadata().token_endpoint_auth_method
+                    != Some(TokenEndpointAuthMethod::None)
+                && client.metadata().settings.allow_nonce_without_pkce
+                && params
+                    .nonce
+                    .as_deref()
+                    .is_some_and(|nonce| !nonce.is_empty()))
+        {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
+                    .with_param("field", "code_challenge"),
+            );
+        }
 
         let claims = params
             .claims
@@ -250,7 +285,6 @@ impl AuthorizeService {
         for (name, value) in [
             ("response_type", params.response_type.as_str()),
             ("client_id", params.client_id.as_str()),
-            ("redirect_uri", params.redirect_uri.as_str()),
             ("scope", params.scope.as_str()),
         ] {
             if value.trim().is_empty() {

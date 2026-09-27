@@ -4,6 +4,7 @@ use crate::openid_connect::tests::fixtures::client::{
 };
 
 pub(in crate::openid_connect) struct InMemoryClientRepository;
+pub(in crate::openid_connect) struct OAuth21ClientRepository;
 pub(in crate::openid_connect) struct PublicFlowClientRepository;
 pub(in crate::openid_connect) struct ScopedClaimsClientRepository;
 pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
@@ -34,6 +35,22 @@ impl OpenIdConnectClientRepository for InMemoryClientRepository {
                 test_scopes(),
             )
             .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for OAuth21ClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.settings.oauth_version =
+            identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
         ))
     }
 }

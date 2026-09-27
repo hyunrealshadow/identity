@@ -10,8 +10,8 @@ mod clients;
 
 pub(super) use clients::{
     AuthMethodClientRepository, InMemoryClientRepository, MachineClientRepository,
-    PublicFlowClientRepository, RegisteredPublicClientRepository, RestrictedGrantClientRepository,
-    ScopedClaimsClientRepository,
+    OAuth21ClientRepository, PublicFlowClientRepository, RegisteredPublicClientRepository,
+    RestrictedGrantClientRepository, ScopedClaimsClientRepository,
 };
 
 pub(super) const CLIENT_SECRET_JWT_SECRET: &str =

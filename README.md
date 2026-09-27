@@ -147,3 +147,17 @@ Available profiles: `basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `
 - Scope-based claims (profile, email, address, phone)
 - Pairwise subject identifiers
 - Client authentication: client_secret_basic, client_secret_post, client_secret_jwt, private_key_jwt
+
+Authorization code requests use PKCE S256 by default. A confidential OIDC
+client may use a transaction-specific `nonce` without PKCE only when its stored
+`OpenIdConnectClientSettings.allow_nonce_without_pkce` is explicitly enabled
+after verifying that the client checks the ID Token nonce. The per-client
+`OpenIdConnectClientSettings.oauth_version` setting selects OAuth `"2.0"` or
+`"2.1"` authorization code behavior. It defaults to `"2.0"` for existing and
+newly registered clients. Set it to `"2.1"` server-side for clients using the
+OAuth 2.1 rules; this is not dynamic client registration metadata. OIDC
+requests from clients with multiple registered redirects still require
+`redirect_uri`. Web redirect URIs require
+HTTPS, with an explicit `http://localhost` exception for local development.
+Native loopback IP redirects may also use HTTP.
+The Web `http://localhost` exception is a deliberate deviation from RFC 9700 §2.6.

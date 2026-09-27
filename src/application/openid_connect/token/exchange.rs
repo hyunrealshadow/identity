@@ -3,6 +3,7 @@ use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
 use crate::observability::{BusinessEvent, EventValue};
 use identity_domain::auth::SessionOid;
+use identity_domain::openid_connect::OAuthProtocolVersion;
 
 impl TokenService {
     #[tracing::instrument(
@@ -152,12 +153,28 @@ impl TokenService {
             .protected_session_id(data.session_oid, data.protected_session_id.as_deref())
             .await?;
 
-        let redirect_uri = params
-            .redirect_uri
-            .as_deref()
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::RedirectUriMismatch))?;
-        if redirect_uri != data.redirect_uri {
-            return Err(AppError::from_code(TokenErrorCode::RedirectUriMismatch));
+        match params.redirect_uri.as_deref() {
+            Some(redirect_uri) if redirect_uri != data.redirect_uri => {
+                return Err(AppError::from_code(TokenErrorCode::RedirectUriMismatch));
+            }
+            None => {
+                let oidc_with_multiple_redirects =
+                    data.scope.split_whitespace().any(|scope| scope == "openid")
+                        && authenticated_client
+                            .platforms()
+                            .iter()
+                            .map(|platform| platform.redirect_uris.len())
+                            .sum::<usize>()
+                            > 1;
+                if authenticated_client.metadata().settings.oauth_version
+                    != OAuthProtocolVersion::V2_1
+                    || data.code_challenge.is_none()
+                    || oidc_with_multiple_redirects
+                {
+                    return Err(AppError::from_code(TokenErrorCode::RedirectUriMismatch));
+                }
+            }
+            Some(_) => {}
         }
 
         let verifier = params.code_verifier.as_deref();

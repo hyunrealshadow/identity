@@ -312,10 +312,10 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
         .append_query_results([[platform_model]])
-        .append_query_results([[BTreeMap::from([(
-            "name".to_owned(),
-            Value::String(Some("openid".to_owned())),
-        )])]])
+        .append_query_results([[
+            BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]),
+            BTreeMap::from([("name".to_owned(), Value::String(Some("profile".to_owned())))]),
+        ]])
         .append_query_results([[(active_session.clone(), active_user)]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[inserted_authorization_model.clone()]])

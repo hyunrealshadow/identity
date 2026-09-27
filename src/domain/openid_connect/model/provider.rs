@@ -103,6 +103,7 @@ pub struct OpenIdProviderMetadata {
     pub response_modes_supported: Option<Vec<String>>,
     #[serde(skip_serializing_if = "is_empty")]
     pub grant_types_supported: Option<Vec<String>>,
+    pub code_challenge_methods_supported: Vec<String>,
     #[serde(skip_serializing_if = "is_empty")]
     pub acr_values_supported: Option<Vec<String>>,
     pub subject_types_supported: Vec<String>,
@@ -197,6 +198,7 @@ mod tests {
                 "implicit".to_owned(),
                 "refresh_token".to_owned(),
             ]),
+            code_challenge_methods_supported: vec!["S256".to_owned()],
             acr_values_supported: None,
             subject_types_supported: vec!["public".to_owned()],
             id_token_signing_alg_values_supported: vec!["RS256".to_owned()],
@@ -270,6 +272,7 @@ mod tests {
             response_types_supported: vec!["code".to_owned()],
             response_modes_supported: Some(vec![]),
             grant_types_supported: Some(vec![]),
+            code_challenge_methods_supported: vec!["S256".to_owned()],
             acr_values_supported: Some(vec![]),
             subject_types_supported: vec!["public".to_owned()],
             id_token_signing_alg_values_supported: vec!["RS256".to_owned()],

@@ -31,3 +31,14 @@ fn verify_pkce_rejects_implicit_plain_method() {
     let result = verify_pkce(Some("verifier"), None, Some("verifier"));
     assert_eq!(result.unwrap_err().code(), 24048);
 }
+
+#[test]
+fn verify_pkce_rejects_verifier_when_authorization_had_no_challenge() {
+    assert_eq!(
+        verify_pkce(None, None, Some("verifier"))
+            .unwrap_err()
+            .code(),
+        24049
+    );
+    assert!(verify_pkce(None, None, None).is_ok());
+}
