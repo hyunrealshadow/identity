@@ -6,6 +6,7 @@ use crate::openid_connect::tests::fixtures::client::{
 pub(in crate::openid_connect) struct MissingClientRepository;
 
 pub(in crate::openid_connect) struct FoundClientRepository;
+pub(in crate::openid_connect) struct DefaultsClientRepository;
 pub(in crate::openid_connect) struct LegacyClientRepository;
 
 pub(in crate::openid_connect) struct PublicClientRepository;
@@ -65,6 +66,22 @@ impl OpenIdConnectClientRepository for FoundClientRepository {
         let mut metadata = test_metadata(None, None);
         metadata.settings.oauth_version =
             identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for DefaultsClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: Uuid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, None);
+        metadata.default_max_age = Some(300);
+        metadata.default_acr_values = Some(vec![identity_domain::auth::ACR_AAL2.to_owned()]);
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),

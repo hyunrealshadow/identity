@@ -22,6 +22,7 @@ use crate::{
         openid_connect::{jose::asymmetric_verifier_from_pem, provider::OpenIdProviderService},
     },
     domain::{
+        auth::repository::SessionRepository,
         key::{JwaSigningAlgorithm, KeyData, KeyJwkRepository, repository::KeyRepository},
         openid_connect::{OpenIdConnectClient, OpenIdConnectClientRepository},
     },
@@ -91,6 +92,7 @@ pub struct LogoutService {
     key_jwk_repo: Arc<dyn KeyJwkRepository>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     backchannel_sender: Arc<dyn BackChannelLogoutSender>,
+    session_repo: Option<Arc<dyn SessionRepository>>,
     events: Arc<dyn crate::observability::EventSink>,
 }
 
@@ -112,6 +114,7 @@ impl LogoutService {
             key_jwk_repo: deps.key_jwk_repo,
             signing_algorithm_detector: deps.signing_algorithm_detector,
             backchannel_sender: deps.backchannel_sender,
+            session_repo: None,
             events: Arc::new(crate::observability::NoopEventSink),
         }
     }
@@ -120,6 +123,12 @@ impl LogoutService {
     #[must_use]
     pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
         self.events = events;
+        self
+    }
+
+    #[must_use]
+    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
+        self.session_repo = Some(session_repo);
         self
     }
 
@@ -293,10 +302,17 @@ impl LogoutService {
             .into_iter()
             .filter_map(|client| {
                 let mut logout_uri = client.metadata().frontchannel_logout_uri.clone()?;
-                logout_uri
-                    .query_pairs_mut()
-                    .append_pair("iss", issuer.as_str())
-                    .append_pair("sid", protected_session_id.unwrap_or_default());
+                if client.metadata().frontchannel_logout_session_required == Some(true)
+                    && protected_session_id.is_none()
+                {
+                    return None;
+                }
+                if let Some(sid) = protected_session_id {
+                    logout_uri
+                        .query_pairs_mut()
+                        .append_pair("iss", issuer.as_str())
+                        .append_pair("sid", sid);
+                }
                 Some(FrontChannelLogoutNotification {
                     client_id: client.client().oid,
                     logout_uri,
@@ -310,10 +326,27 @@ impl LogoutService {
         session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
     ) -> Result<Vec<BackChannelLogoutNotification>, AppError> {
-        let (Some(session_oid), Some(protected_session_id)) = (session_oid, protected_session_id)
-        else {
+        let Some(session_oid) = session_oid else {
             return Ok(Vec::new());
         };
+
+        let user_oid = if protected_session_id.is_none() {
+            let Some(session_repo) = &self.session_repo else {
+                return Ok(Vec::new());
+            };
+            session_repo
+                .find_by_oid(session_oid)
+                .await
+                .map_err(|error| {
+                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+                })?
+                .map(|session| session.user_oid)
+        } else {
+            None
+        };
+        if protected_session_id.is_none() && user_oid.is_none() {
+            return Ok(Vec::new());
+        }
 
         let issuer = self.provider_service.issuer()?;
         let clients = self
@@ -327,6 +360,11 @@ impl LogoutService {
         let candidates = clients
             .into_iter()
             .filter_map(|client| {
+                if client.metadata().backchannel_logout_session_required == Some(true)
+                    && protected_session_id.is_none()
+                {
+                    return None;
+                }
                 client
                     .metadata()
                     .backchannel_logout_uri
@@ -343,6 +381,7 @@ impl LogoutService {
         candidates
             .into_iter()
             .map(|(client, logout_uri)| {
+                let subject = user_oid.map(|oid| client.subject_identifier(oid, &issuer));
                 let logout_token = self.sign_logout_token(
                     &key_id,
                     &private_key,
@@ -350,6 +389,7 @@ impl LogoutService {
                     &issuer,
                     client.client().oid,
                     protected_session_id,
+                    subject.as_deref(),
                 )?;
                 Ok(BackChannelLogoutNotification {
                     client_id: client.client().oid,
@@ -449,7 +489,8 @@ impl LogoutService {
         alg: JwaSigningAlgorithm,
         issuer: &Url,
         audience: Uuid,
-        protected_session_id: &str,
+        protected_session_id: Option<&str>,
+        subject: Option<&str>,
     ) -> Result<String, AppError> {
         let mut header = JwsHeader::new();
         header.set_token_type("logout+jwt");
@@ -461,11 +502,16 @@ impl LogoutService {
         payload.set_audience(vec![audience.to_string()]);
         payload.set_issued_at(&now);
         payload.set_jwt_id(Uuid::new_v4().to_string());
-        payload
-            .set_claim("sid", Some(serde_json::json!(protected_session_id)))
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+        if let Some(protected_session_id) = protected_session_id {
+            payload
+                .set_claim("sid", Some(serde_json::json!(protected_session_id)))
+                .map_err(|error| {
+                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+                })?;
+        }
+        if let Some(subject) = subject {
+            payload.set_subject(subject);
+        }
         payload
             .set_claim(
                 "events",
@@ -617,6 +663,7 @@ mod tests {
         LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
         unsigned_id_token_hint_for_test,
     };
+    use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
     use crate::setting::{AppSettings, InstallationSettings, SettingsSnapshot};
     use crate::{
         domain::{
@@ -639,7 +686,7 @@ mod tests {
     };
     use async_trait::async_trait;
     use chrono::Utc;
-    use identity_domain::auth::SessionOid;
+    use identity_domain::auth::{SessionOid, SessionStatus, model::Session};
     use josekit::{
         jws::{JwsHeader, RS256},
         jwt::{self, JwtPayload},
@@ -1251,6 +1298,78 @@ mod tests {
                 .map(serde_json::Map::is_empty),
             Some(true)
         );
+    }
+
+    #[tokio::test]
+    async fn backchannel_logout_uses_subject_when_sid_is_unavailable_and_client_allows_it() {
+        let session_oid = SessionOid(Uuid::new_v4());
+        let user_oid = Uuid::new_v4();
+        let client_without_sid = test_client(
+            Uuid::new_v4(),
+            None,
+            None,
+            Some("https://rp.example.com/backchannel_logout"),
+        );
+        let mut metadata = client_without_sid.metadata().clone();
+        metadata.backchannel_logout_session_required = Some(false);
+        let client_without_sid = OpenIdConnectClient::new(
+            client_without_sid.client().clone(),
+            metadata,
+            client_without_sid.platforms().to_vec(),
+            client_without_sid.assigned_scopes().to_vec(),
+        )
+        .unwrap();
+        let client_requiring_sid = test_client(
+            Uuid::new_v4(),
+            None,
+            None,
+            Some("https://required.example.com/backchannel_logout"),
+        );
+        let expected_client_oid = client_without_sid.client().oid;
+        let (service, signing) =
+            service_with_clients_and_signing(vec![client_without_sid, client_requiring_sid]);
+        let session = Session {
+            oid: session_oid,
+            user_oid,
+            status: SessionStatus::Active,
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            last_active_at: None,
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            acr: None,
+            acr_expires_at: None,
+            amr: Vec::new(),
+        };
+        let mut session_repo = MockSessionRepository::new();
+        session_repo
+            .expect_find_by_oid()
+            .returning(move |oid| Ok((oid == session_oid).then(|| session.clone())));
+        let service = service.with_session_repo(Arc::new(session_repo));
+
+        let notifications = service
+            .backchannel_logout_notifications(Some(session_oid), None)
+            .await
+            .unwrap();
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].client_id, expected_client_oid);
+        let payload = jwt::decode_with_verifier(
+            &notifications[0].logout_token,
+            &*RS256
+                .verifier_from_pem(signing.public_key.as_bytes())
+                .unwrap(),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(payload.subject(), Some(user_oid.to_string().as_str()));
+        assert!(payload.claim("sid").is_none());
     }
 
     #[tokio::test]

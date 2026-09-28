@@ -109,8 +109,13 @@ async fn handle_userinfo_request(
         .await
         .map_err(UserinfoWebError)?;
 
+    let signed = service
+        .sign_user_info(token_claims.client_oid, &user_claims)
+        .await
+        .map_err(UserinfoWebError)?;
+
     match service
-        .encrypt_user_info(token_claims.client_oid, &user_claims)
+        .encrypt_user_info(token_claims.client_oid, &user_claims, signed.as_deref())
         .await
     {
         Ok(Some(encrypted)) => return Ok(AppResponse(build_jose_response(encrypted))),
@@ -118,13 +123,8 @@ async fn handle_userinfo_request(
         Err(error) => return Err(UserinfoWebError(error)),
     }
 
-    match service
-        .sign_user_info(token_claims.client_oid, &user_claims)
-        .await
-    {
-        Ok(Some(signed)) => return Ok(AppResponse(build_jwt_response(signed))),
-        Ok(None) => {}
-        Err(error) => return Err(UserinfoWebError(error)),
+    if let Some(signed) = signed {
+        return Ok(AppResponse(build_jwt_response(signed)));
     }
 
     Ok(AppResponse(build_success_response(user_claims)))

@@ -191,6 +191,7 @@ impl AppServices {
             },
             oidc: OpenIdProviderService::new(settings.store())
                 .with_key_repo(key_repo.clone())
+                .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
             oidc_authorize: AuthorizeService::new(AuthorizeServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
@@ -233,6 +234,7 @@ impl AppServices {
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 backchannel_sender,
             })
+            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
             user_info: UserInfoService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),

@@ -106,6 +106,43 @@ pub(super) fn reject_none_algorithm(
     Ok(())
 }
 
+pub(super) fn validate_response_signing_algorithm(
+    field: &'static str,
+    value: Option<&str>,
+    allow_none: bool,
+) -> Result<(), AppError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    if value.parse::<JwaSigningAlgorithm>().is_ok()
+        || (allow_none && value == "none" && cfg!(feature = "allow-none-alg"))
+    {
+        return Ok(());
+    }
+    Err(
+        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+            .with_param("field", field),
+    )
+}
+
+pub(super) fn validate_response_encryption_algorithm(
+    field: &'static str,
+    value: Option<&str>,
+) -> Result<(), AppError> {
+    if value.is_some_and(|value| {
+        !matches!(
+            value,
+            "RSA-OAEP" | "RSA-OAEP-256" | "ECDH-ES" | "ECDH-ES+A128KW" | "ECDH-ES+A256KW"
+        )
+    }) {
+        return Err(
+            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                .with_param("field", field),
+        );
+    }
+    Ok(())
+}
+
 pub(super) fn validate_request_object_encryption(
     alg: Option<&str>,
     enc: Option<&str>,

@@ -17,6 +17,35 @@ use sha2::{Digest, Sha256};
 
 type AuthorizeServiceWithRequestRepo = (AuthorizeService, Arc<ClientAuthorizationState>);
 
+fn implicit_client() -> OpenIdConnectClient {
+    use crate::openid_connect::tests::fixtures::client::{
+        test_client, test_metadata, test_platforms, test_scopes,
+    };
+    OpenIdConnectClient::new(
+        test_client(Uuid::nil()),
+        test_metadata(None, None),
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap()
+}
+
+fn pairwise_implicit_client() -> OpenIdConnectClient {
+    use crate::openid_connect::tests::fixtures::client::{
+        test_client, test_metadata, test_platforms, test_scopes,
+    };
+    let mut metadata = test_metadata(None, None);
+    metadata.subject_type = Some(identity_domain::openid_connect::SubjectType::Pairwise);
+    metadata.sector_identifier_uri = Some("https://sector.example.com/redirects".parse().unwrap());
+    OpenIdConnectClient::new(
+        test_client(Uuid::nil()),
+        metadata,
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap()
+}
+
 fn hybrid_user(user_oid: Uuid) -> User {
     User {
         oid: UserOid::from(user_oid),
@@ -520,6 +549,31 @@ async fn validate_request_accepts_a_scope_without_openid() {
     assert!(
         !request.scope.contains_openid(),
         "the request stays a plain OAuth authorization"
+    );
+}
+
+#[tokio::test]
+async fn client_authentication_defaults_apply_and_request_values_override_them() {
+    let service = build_test_service(
+        Arc::new(DefaultsClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let (request, _) = service.validate_request(params("openid")).await.unwrap();
+    assert_eq!(request.max_age, Some(300));
+    assert_eq!(
+        request.acr_values,
+        Some(vec![identity_domain::auth::ACR_AAL2.to_owned()])
+    );
+
+    let mut explicit = params("openid");
+    explicit.max_age = Some("0".to_owned());
+    explicit.acr_values = Some(identity_domain::auth::ACR_AAL1.to_owned());
+    let (request, _) = service.validate_request(explicit).await.unwrap();
+    assert_eq!(request.max_age, Some(0));
+    assert_eq!(
+        request.acr_values,
+        Some(vec![identity_domain::auth::ACR_AAL1.to_owned()])
     );
 }
 
@@ -1196,6 +1250,7 @@ fn sign_implicit_id_token_includes_scope_claims() {
         ..id_token_user(user_oid)
     };
     let issuer = Url::parse("https://identity.example.com").unwrap();
+    let client = pairwise_implicit_client();
     let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
@@ -1206,6 +1261,7 @@ fn sign_implicit_id_token_includes_scope_claims() {
             issuer: &issuer,
             audience: "client-1",
             user: &user,
+            client: &client,
             nonce: "nonce-1",
             auth_time: Utc::now().timestamp(),
             acr: None,
@@ -1219,6 +1275,11 @@ fn sign_implicit_id_token_includes_scope_claims() {
         .unwrap();
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (payload, _) = jwt::decode_with_verifier(&token, &verifier).unwrap();
+
+    assert_eq!(
+        payload.subject(),
+        Some(client.subject_identifier(user_oid, &issuer).as_str())
+    );
 
     assert_eq!(
         payload.claim("name").and_then(|v| v.as_str()),
@@ -1269,6 +1330,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
             issuer: &issuer,
             audience: "client-1",
             user: &user,
+            client: &implicit_client(),
             nonce: "nonce-1",
             auth_time: Utc::now().timestamp(),
             acr: None,
@@ -1315,6 +1377,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
             issuer: &issuer,
             audience: "client-1",
             user: &user,
+            client: &implicit_client(),
             nonce: "nonce-1",
             auth_time: Utc::now().timestamp(),
             acr: None,
@@ -1355,6 +1418,7 @@ fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
             issuer: &issuer,
             audience: "client-1",
             user: &user,
+            client: &implicit_client(),
             nonce: "nonce-1",
             auth_time: Utc::now().timestamp(),
             acr: None,

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
     sea_query::Expr,
 };
 use serde_json::Value;
@@ -83,6 +83,8 @@ impl KeyRepository for KeyRepositoryImpl {
             .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
             .filter(key::Column::RevokedAt.is_null())
             .filter(key::Column::ExpiresAt.gt(Utc::now()))
+            .order_by_desc(key::Column::CreatedAt)
+            .order_by_desc(key::Column::Oid)
             .all(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::ListAvailableFailed(Box::new(e)))?

@@ -207,6 +207,22 @@ impl TokenService {
             authenticated_client.metadata().settings.oauth_version,
         )?;
 
+        let id_token_signing_key = if data.scope.split_whitespace().any(|scope| scope == "openid") {
+            if authenticated_client.metadata().require_auth_time == Some(true)
+                && data.auth_time.is_none()
+            {
+                return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
+            }
+            Some(
+                self.load_id_token_signing_key(
+                    authenticated_client.metadata().id_token_signed_response_alg,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+
         let claimed = self
             .client_authorization_repo
             .revoke_if_active(record.oid, ClientAuthorizationType::AuthorizationCode, now)
@@ -251,10 +267,6 @@ impl TokenService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
-        let id_token_alg = resolve_id_token_alg(
-            signing_alg,
-            authenticated_client.metadata().id_token_signed_response_alg,
-        );
         let audience = client_id.clone();
         let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&data.scope)
             .map(|scope| scope.has_api_scopes())
@@ -294,12 +306,12 @@ impl TokenService {
                 amr: &session_amr,
             })
             .await?;
-        let id_token = if data.scope.split_whitespace().any(|scope| scope == "openid") {
+        let id_token = if let Some((id_key_id, id_key_pem, id_token_alg)) = &id_token_signing_key {
             let signed = self
                 .sign_id_token(SignIdTokenInput {
-                    key_id: &signing_key_id,
-                    private_key_pem: &signing_key_pem,
-                    alg: id_token_alg,
+                    key_id: &id_key_id,
+                    private_key_pem: &id_key_pem,
+                    alg: *id_token_alg,
                     issuer: &issuer,
                     audience: &audience,
                     client: &authenticated_client,
@@ -552,6 +564,28 @@ impl TokenService {
             ));
         }
 
+        let granted_scope = refresh_data
+            .scope
+            .split_whitespace()
+            .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
+            .collect::<Vec<_>>();
+        let scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
+        let id_token_signing_key = if scope.split_whitespace().any(|scope| scope == "openid") {
+            if authenticated_client.metadata().require_auth_time == Some(true)
+                && refresh_data.auth_time.is_none()
+            {
+                return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
+            }
+            Some(
+                self.load_id_token_signing_key(
+                    authenticated_client.metadata().id_token_signed_response_alg,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+
         let claimed = self
             .client_authorization_repo
             .revoke_if_active(
@@ -583,12 +617,6 @@ impl TokenService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
-        let granted_scope = refresh_data
-            .scope
-            .split_whitespace()
-            .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
-            .collect::<Vec<_>>();
-        let scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
         let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&scope)
             .map(|scope| scope.has_api_scopes())
             .unwrap_or(false)
@@ -635,45 +663,46 @@ impl TokenService {
             .await?;
         // A refresh never turns a plain OAuth grant into an OIDC one: the
         // original authorization decides, exactly like the first exchange.
-        let signed_id_token = if scope.split_whitespace().any(|scope| scope == "openid") {
-            let signed = self
-                .sign_id_token(SignIdTokenInput {
-                    key_id: &signing_key_id,
-                    private_key_pem: &signing_key_pem,
-                    alg: identity_domain::key::JwsAlgorithm::Asymmetric(signing_alg),
-                    issuer: &issuer,
-                    audience: &client_id,
-                    client: &authenticated_client,
-                    user: &user,
-                    scope: &scope,
-                    nonce: None,
-                    auth_time: refresh_data.auth_time,
-                    acr: session_acr.as_deref(),
-                    amr: &session_amr,
-                    access_token: Some(&access_token),
-                    protected_session_id: protected_session_id.as_deref(),
-                })
-                .await?;
+        let signed_id_token =
+            if let Some((id_key_id, id_key_pem, id_token_alg)) = &id_token_signing_key {
+                let signed = self
+                    .sign_id_token(SignIdTokenInput {
+                        key_id: &id_key_id,
+                        private_key_pem: &id_key_pem,
+                        alg: *id_token_alg,
+                        issuer: &issuer,
+                        audience: &client_id,
+                        client: &authenticated_client,
+                        user: &user,
+                        scope: &scope,
+                        nonce: None,
+                        auth_time: refresh_data.auth_time,
+                        acr: session_acr.as_deref(),
+                        amr: &session_amr,
+                        access_token: Some(&access_token),
+                        protected_session_id: protected_session_id.as_deref(),
+                    })
+                    .await?;
 
-            Some(
-                match authenticated_client
-                    .metadata()
-                    .id_token_encrypted_response_alg
-                {
-                    Some(alg) => {
-                        let enc = authenticated_client
-                            .metadata()
-                            .id_token_encrypted_response_enc
-                            .unwrap_or(JweContentEncryption::A128CbcHs256);
-                        self.encrypt_token(&signed, &authenticated_client, alg, enc)
-                            .await?
-                    }
-                    None => signed,
-                },
-            )
-        } else {
-            None
-        };
+                Some(
+                    match authenticated_client
+                        .metadata()
+                        .id_token_encrypted_response_alg
+                    {
+                        Some(alg) => {
+                            let enc = authenticated_client
+                                .metadata()
+                                .id_token_encrypted_response_enc
+                                .unwrap_or(JweContentEncryption::A128CbcHs256);
+                            self.encrypt_token(&signed, &authenticated_client, alg, enc)
+                                .await?
+                        }
+                        None => signed,
+                    },
+                )
+            } else {
+                None
+            };
         let id_token = signed_id_token;
         let rotated_from = refresh_record.oid.to_string();
         let refresh_token = Some(
@@ -816,23 +845,6 @@ pub(crate) fn resolve_client_id(
     }
 
     Err(AppError::from_code(TokenErrorCode::ClientIdRequired))
-}
-
-pub(crate) fn resolve_id_token_alg(
-    fallback: identity_domain::key::JwaSigningAlgorithm,
-    client_alg: Option<identity_domain::key::JwsAlgorithm>,
-) -> identity_domain::key::JwsAlgorithm {
-    #[cfg(feature = "allow-none-alg")]
-    if client_alg == Some(identity_domain::key::JwsAlgorithm::None) {
-        return identity_domain::key::JwsAlgorithm::None;
-    }
-
-    #[cfg(not(feature = "allow-none-alg"))]
-    if client_alg == Some(identity_domain::key::JwsAlgorithm::None) {
-        return identity_domain::key::JwsAlgorithm::Asymmetric(fallback);
-    }
-
-    identity_domain::key::JwsAlgorithm::Asymmetric(fallback)
 }
 
 /// Bounded outcome/reason categories for issuance result events. The numeric

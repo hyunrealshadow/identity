@@ -1,7 +1,6 @@
 use super::flow::{AuthorizationCodeContext, session_state_for_authorize_response};
 use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
 use super::*;
-use crate::openid_connect::token::resolve_id_token_alg;
 use identity_domain::auth::SessionOid;
 use uuid::Uuid;
 
@@ -61,6 +60,9 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
             })?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+        if client.metadata().require_auth_time == Some(true) && authentication.auth_time.is_none() {
+            return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
+        }
 
         let user_oid_obj = UserOid(user_oid);
         let user = self
@@ -74,8 +76,6 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
-        let id_token_alg =
-            resolve_id_token_alg(signing_alg, client.metadata().id_token_signed_response_alg);
         let audience = client_id.to_string();
         let auth_time_val = authentication
             .auth_time
@@ -124,13 +124,17 @@ impl AuthorizeService {
             (None, 0)
         };
 
+        let (id_key_id, id_key_pem, id_token_alg) = self
+            .load_id_token_signing_key_impl(client.metadata().id_token_signed_response_alg)
+            .await?;
         let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
-            key_id: &signing_key_id,
-            private_key_pem: &signing_key_pem,
+            key_id: &id_key_id,
+            private_key_pem: &id_key_pem,
             alg: id_token_alg,
             issuer: &issuer,
             audience: &audience,
             user: &user,
+            client: &client,
             nonce,
             auth_time: auth_time_val,
             acr: authentication.acr,
@@ -200,6 +204,12 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
             })?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+        if response_type.includes_id_token()
+            && client.metadata().require_auth_time == Some(true)
+            && authentication.auth_time.is_none()
+        {
+            return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
+        }
         let (code, authorization_code_oid) = self
             .create_authorization_code(
                 request,
@@ -215,8 +225,6 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
-        let id_token_alg =
-            resolve_id_token_alg(signing_alg, client.metadata().id_token_signed_response_alg);
         let audience = client_id.to_string();
         let scope = ScopeSet::parse(&request.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
@@ -260,6 +268,9 @@ impl AuthorizeService {
         };
 
         let id_token = if response_type.includes_id_token() {
+            let (id_key_id, id_key_pem, id_token_alg) = self
+                .load_id_token_signing_key_impl(client.metadata().id_token_signed_response_alg)
+                .await?;
             let nonce = request
                 .nonce
                 .as_deref()
@@ -273,12 +284,13 @@ impl AuthorizeService {
                 })?
                 .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
             let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
-                key_id: &signing_key_id,
-                private_key_pem: &signing_key_pem,
+                key_id: &id_key_id,
+                private_key_pem: &id_key_pem,
                 alg: id_token_alg,
                 issuer: &issuer,
                 audience: &audience,
                 user: &user,
+                client: &client,
                 nonce,
                 auth_time: authentication
                     .auth_time

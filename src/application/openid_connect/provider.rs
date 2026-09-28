@@ -9,8 +9,8 @@ use crate::{
     },
     domain::{
         key::{
-            JwaEncryptionAlgorithm, JwaSigningAlgorithm, JweContentEncryption, JwsAlgorithm, Key,
-            KeyData, repository::KeyRepository,
+            JwaEncryptionAlgorithm, JwaSigningAlgorithm, JweContentEncryption, JwkAlgorithm,
+            JwsAlgorithm, Key, KeyData, KeyJwkRepository, repository::KeyRepository,
         },
         openid_connect::{
             ApiScope, ClaimType, Display, GrantType, OpenIdProviderMetadata, ResponseMode,
@@ -219,6 +219,7 @@ pub struct OpenIdProviderService {
     settings: Arc<dyn SettingsSource>,
     capabilities: OpenIdProviderCapabilities,
     key_repo: Option<Arc<dyn KeyRepository>>,
+    key_jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
 }
 
@@ -248,6 +249,7 @@ impl OpenIdProviderService {
             settings,
             capabilities: OpenIdProviderCapabilities::default(),
             key_repo: None,
+            key_jwk_repo: None,
             signing_algorithm_detector: None,
         }
     }
@@ -260,12 +262,18 @@ impl OpenIdProviderService {
             settings,
             capabilities,
             key_repo: None,
+            key_jwk_repo: None,
             signing_algorithm_detector: None,
         }
     }
 
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
         self.key_repo = Some(key_repo);
+        self
+    }
+
+    pub fn with_key_jwk_repo(mut self, key_jwk_repo: Arc<dyn KeyJwkRepository>) -> Self {
+        self.key_jwk_repo = Some(key_jwk_repo);
         self
     }
 
@@ -378,6 +386,24 @@ impl OpenIdProviderService {
                 let keys = key_repo.list_active_asymmetric().await.map_err(|error| {
                     AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
                 })?;
+                if let Some(key_jwk_repo) = &self.key_jwk_repo {
+                    let bindings = key_jwk_repo.list_active().await.map_err(|error| {
+                        AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
+                    })?;
+                    let mut algorithms = bindings
+                        .into_iter()
+                        .filter(|binding| keys.iter().any(|key| key.oid == binding.key_oid))
+                        .filter_map(|binding| match binding.algorithm {
+                            JwkAlgorithm::Signing(algorithm) => {
+                                Some(JwsAlgorithm::Asymmetric(algorithm))
+                            }
+                            JwkAlgorithm::Encryption(_) => None,
+                        })
+                        .collect::<Vec<_>>();
+                    algorithms.sort_unstable_by_key(|algorithm| algorithm.as_str());
+                    algorithms.dedup();
+                    return Ok(append_conformance_none_alg(algorithms));
+                }
                 let detected = self
                     .signing_algorithm_detector
                     .as_ref()
@@ -498,10 +524,10 @@ mod tests {
     use super::{OpenIdProviderService, SigningAlgorithmDetector};
     use crate::{
         domain::key::{
-            JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
-            repository::KeyRepositoryError,
+            JwaSigningAlgorithm, JwkAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid, KeyType,
+            PublicJwk, material::AsymmetricKeyData, repository::KeyRepositoryError,
         },
-        openid_connect::tests::fixtures::mocks::MockKeyRepository,
+        openid_connect::tests::fixtures::mocks::{MockKeyJwkRepository, MockKeyRepository},
         setting::{DynamicRegistrationSettings, OpenIdConnectSettings},
     };
 
@@ -967,6 +993,52 @@ mod tests {
         assert_eq!(
             metadata.id_token_signing_alg_values_supported,
             expected_id_token_algorithms(&["RS256", "RS384", "RS512"])
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_advertises_only_published_signing_algorithms() {
+        let key = make_asymmetric_key(generate_rsa_pem());
+        let binding = KeyJwk {
+            oid: KeyJwkOid(Uuid::new_v4()),
+            key_oid: key.oid,
+            algorithm: JwkAlgorithm::Signing(JwaSigningAlgorithm::Rs256),
+            jwk: PublicJwk::Rsa {
+                key_use: Some("sig".to_owned()),
+                alg: Some("RS256".to_owned()),
+                kid: Some(Uuid::new_v4().to_string()),
+                n: "AQAB".to_owned(),
+                e: "AQAB".to_owned(),
+                x5c: None,
+                x5t: None,
+                x5t_s256: None,
+            },
+            created_at: Utc::now(),
+        };
+        let mut jwk_repo = MockKeyJwkRepository::new();
+        jwk_repo
+            .expect_list_active()
+            .returning(move || Ok(vec![binding.clone()]));
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
+        .await
+        .with_key_repo(Arc::new(key_repo_with_keys(vec![key])))
+        .with_key_jwk_repo(Arc::new(jwk_repo));
+
+        let metadata = service.discovery_metadata().await.unwrap();
+        assert_eq!(
+            metadata.id_token_signing_alg_values_supported,
+            expected_id_token_algorithms(&["RS256"]),
         );
     }
 

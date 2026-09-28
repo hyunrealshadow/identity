@@ -1,10 +1,12 @@
 use super::*;
+use crate::openid_connect::client_encryption::select_client_encryption_jwk;
 use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
 use std::time::Duration;
 use uuid::Uuid;
 
 use crate::openid_connect::jose::{
-    asymmetric_signer_from_pem, encrypt_compact_with_public_jwk, front_channel_hash,
+    asymmetric_signer_from_pem, encrypt_compact_with_public_jwk_with_content_type,
+    front_channel_hash,
 };
 use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
 use identity_domain::openid_connect::{
@@ -19,6 +21,7 @@ pub(super) struct SignImplicitIdTokenInput<'a> {
     pub issuer: &'a Url,
     pub audience: &'a str,
     pub user: &'a identity_domain::user::User,
+    pub client: &'a OpenIdConnectClient,
     pub nonce: &'a str,
     pub auth_time: i64,
     pub acr: Option<&'a str>,
@@ -48,6 +51,58 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
 }
 
 impl AuthorizeService {
+    pub(super) async fn load_id_token_signing_key_impl(
+        &self,
+        requested: Option<JwsAlgorithm>,
+    ) -> Result<(String, String, JwsAlgorithm), AppError> {
+        match requested {
+            Some(JwsAlgorithm::Asymmetric(alg)) => {
+                let keys = self
+                    .key_repo
+                    .list_active_asymmetric()
+                    .await
+                    .map_err(|error| {
+                        AppError::from_code(AuthorizeErrorCode::LoadRequestFailed)
+                            .with_source(error)
+                    })?;
+                for key in keys {
+                    let KeyData::Asymmetric(data) = &key.data else {
+                        continue;
+                    };
+                    if asymmetric_signer_from_pem(alg.as_str(), data.private_key.as_bytes())
+                        .is_err()
+                    {
+                        continue;
+                    }
+                    if let Some(binding) = self
+                        .key_jwk_repo
+                        .find_active_by_key_oid_and_algorithm(key.oid, alg)
+                        .await
+                        .map_err(|error| {
+                            AppError::from_code(AuthorizeErrorCode::LoadRequestFailed)
+                                .with_source(error)
+                        })?
+                    {
+                        return Ok((
+                            Uuid::from(binding.oid).to_string(),
+                            data.private_key.clone(),
+                            JwsAlgorithm::Asymmetric(alg),
+                        ));
+                    }
+                }
+                Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
+            }
+            Some(JwsAlgorithm::None) if cfg!(feature = "allow-none-alg") => {
+                Ok((String::new(), String::new(), JwsAlgorithm::None))
+            }
+            Some(_) => Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed)),
+            None => {
+                let (key_id, private_key, alg) = self.load_signing_key_impl().await?;
+                Ok((key_id, private_key, JwsAlgorithm::Asymmetric(alg)))
+            }
+        }
+    }
+
     pub(super) async fn load_signing_key_impl(
         &self,
     ) -> Result<(String, String, JwaSigningAlgorithm), AppError> {
@@ -104,7 +159,11 @@ impl AuthorizeService {
         let mut payload = JwtPayload::new();
         let now = std::time::SystemTime::now();
         payload.set_issuer(input.issuer.as_str());
-        payload.set_subject(Uuid::from(input.user.oid).to_string());
+        payload.set_subject(
+            input
+                .client
+                .subject_identifier(Uuid::from(input.user.oid), input.issuer),
+        );
         payload.set_audience(vec![input.audience]);
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
@@ -310,29 +369,23 @@ impl AuthorizeService {
         encryption_alg: JwaEncryptionAlgorithm,
         content_enc: JweContentEncryption,
     ) -> Result<String, AppError> {
-        let credential = self
-            .credential_repo
-            .find_first_encryption_key(client.client().oid)
-            .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound).with_source(error)
-            })?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound))?;
+        let public_jwk = select_client_encryption_jwk(
+            &*self.credential_repo,
+            client.client().oid,
+            encryption_alg.as_str(),
+        )
+        .await
+        .map_err(|error| {
+            AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound).with_source(error)
+        })?
+        .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound))?;
 
-        let public_jwk = match &credential.data {
-            OpenIdConnectCredentialData::ClientPublicKey { jwk: Some(jwk), .. } => jwk,
-            _ => {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::EncryptionKeyNotFound,
-                ));
-            }
-        };
-
-        encrypt_compact_with_public_jwk(
+        encrypt_compact_with_public_jwk_with_content_type(
             signed_jwt.as_bytes(),
-            public_jwk,
+            &public_jwk,
             encryption_alg.as_str(),
             content_enc.as_str(),
+            Some("JWT"),
         )
         .map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::EncryptionFailed).with_source(error)

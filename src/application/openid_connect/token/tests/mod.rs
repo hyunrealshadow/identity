@@ -20,6 +20,7 @@ use openssl::rsa::Rsa;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use uuid::Uuid;
 
+use super::signing::SignIdTokenInput;
 use super::{
     AuthorizationCodeGrantParams, ClientCredentialsGrantParams, DeviceCodeGrantParams,
     RefreshTokenGrantParams, TokenService, TokenServiceDependencies, verify_pkce,
@@ -391,6 +392,83 @@ async fn signing_key_provider_avoids_hot_path_repository_queries() {
     let first = service.load_signing_key().await.unwrap();
     let second = service.load_signing_key().await.unwrap();
     assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
+    let rsa = key_for_algorithm("RS256");
+    let ec = key_for_algorithm("ES256");
+    let rsa_binding = key_jwk_binding(&rsa, "RS256", Uuid::new_v4());
+    let ec_binding = key_jwk_binding(&ec, "ES256", Uuid::new_v4());
+    let user_oid = Uuid::new_v4();
+    let mut service =
+        fixtures::build_token_service(Arc::new(MockClientAuthorizationRepository::new()), user_oid);
+    service.key_repo = Arc::new(key_repo_with_keys(vec![rsa, ec]));
+    service.key_jwk_repo = Arc::new(jwk_repo_with_bindings(vec![
+        rsa_binding,
+        ec_binding.clone(),
+    ]));
+
+    let (kid, _, alg) = service
+        .load_id_token_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
+            JwaSigningAlgorithm::Es256,
+        )))
+        .await
+        .unwrap();
+    assert_eq!(kid, Uuid::from(ec_binding.oid).to_string());
+    assert_eq!(alg.as_str(), "ES256");
+    assert!(
+        service
+            .load_id_token_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
+                JwaSigningAlgorithm::Es384,
+            )))
+            .await
+            .is_err(),
+        "the OP must not silently sign with another algorithm"
+    );
+}
+
+#[tokio::test]
+async fn require_auth_time_never_invents_an_authentication_timestamp() {
+    use crate::openid_connect::tests::fixtures::client::{
+        test_client, test_metadata, test_platforms, test_scopes,
+    };
+    let user_oid = Uuid::new_v4();
+    let user = test_user(user_oid);
+    let service =
+        fixtures::build_token_service(Arc::new(MockClientAuthorizationRepository::new()), user_oid);
+    let mut metadata = test_metadata(None, None);
+    metadata.require_auth_time = Some(true);
+    let client = OpenIdConnectClient::new(
+        test_client(Uuid::new_v4()),
+        metadata,
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap();
+    let issuer = "https://identity.example.com".parse().unwrap();
+
+    assert!(
+        service
+            .sign_id_token(SignIdTokenInput {
+                key_id: "unused",
+                private_key_pem: "unused",
+                alg: "RS256".parse().unwrap(),
+                issuer: &issuer,
+                audience: "client",
+                client: &client,
+                user: &user,
+                scope: "openid",
+                nonce: None,
+                auth_time: None,
+                acr: None,
+                amr: &[],
+                access_token: None,
+                protected_session_id: None,
+            })
+            .await
+            .is_err()
+    );
 }
 
 fn key_data_algorithm(key: &Key) -> String {

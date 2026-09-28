@@ -253,7 +253,7 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
                 backchannel_logout_session_required: Some(true),
                 subject_type: Some("pairwise".to_owned()),
                 id_token_signed_response_alg: Some("ES256".to_owned()),
-                token_endpoint_auth_method: Some("client_secret_post".to_owned()),
+                token_endpoint_auth_method: Some("client_secret_jwt".to_owned()),
                 token_endpoint_auth_signing_alg: Some("HS256".to_owned()),
                 default_max_age: Some(3600),
                 require_auth_time: Some(true),
@@ -283,7 +283,7 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
     );
     assert_eq!(
         response.token_endpoint_auth_method.as_deref(),
-        Some("client_secret_post")
+        Some("client_secret_jwt")
     );
     assert!(
         response

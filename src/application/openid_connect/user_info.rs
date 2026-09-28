@@ -11,7 +11,7 @@ use crate::{
             dto::UserInfoClaims,
             jose::{
                 asymmetric_signer_from_pem, asymmetric_verifier_from_pem,
-                encrypt_compact_with_public_jwk,
+                encrypt_compact_with_public_jwk_with_content_type,
             },
             provider::OpenIdProviderService,
         },
@@ -27,7 +27,6 @@ use crate::{
             ClaimsRequest, OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
             ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
-            model::credential::OpenIdConnectCredentialData,
         },
         user::{UserOid, repository::UserRepository},
     },
@@ -196,6 +195,7 @@ impl UserInfoService {
         &self,
         client_oid: Uuid,
         claims: &UserInfoClaims,
+        signed_response: Option<&str>,
     ) -> Result<Option<String>, AppError> {
         let client = self
             .client_repo
@@ -219,27 +219,29 @@ impl UserInfoService {
             .map(|value| value.as_str())
             .unwrap_or("A128CBC-HS256");
 
-        let credential = self
-            .credential_repo
-            .find_first_encryption_key(client.client().oid)
-            .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        let public_jwk = super::client_encryption::select_client_encryption_jwk(
+            &*self.credential_repo,
+            client.client().oid,
+            alg,
+        )
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
 
-        let public_jwk = match &credential.data {
-            OpenIdConnectCredentialData::ClientPublicKey { jwk: Some(jwk), .. } => jwk,
-            _ => return Err(AppError::from_code(CommonErrorCode::InternalError)),
+        let json_body = match signed_response {
+            Some(signed) => signed.to_owned(),
+            None => serde_json::to_string(claims).map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?,
         };
-
-        let json_body = serde_json::to_string(claims).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
-        let encrypted = encrypt_compact_with_public_jwk(json_body.as_bytes(), public_jwk, alg, enc)
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+        let encrypted = encrypt_compact_with_public_jwk_with_content_type(
+            json_body.as_bytes(),
+            &public_jwk,
+            alg,
+            enc,
+            signed_response.map(|_| "JWT"),
+        )
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
         Ok(Some(encrypted))
     }
@@ -475,15 +477,6 @@ impl UserInfoService {
                 .map(str::to_owned)
                 .unwrap_or_else(|| Uuid::from(binding.oid).to_string());
             return Ok((key_id, data.private_key.clone()));
-        }
-
-        for key in keys {
-            let KeyData::Asymmetric(data) = key.data else {
-                continue;
-            };
-            if build_user_info_signer(&data.private_key, alg).is_ok() {
-                return Ok((Uuid::from(key.oid).to_string(), data.private_key));
-            }
         }
 
         Err(AppError::from_code(CommonErrorCode::InternalError))

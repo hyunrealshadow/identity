@@ -213,11 +213,30 @@ pub fn encrypt_compact_with_public_jwk(
     encryption_alg: &str,
     content_enc: &str,
 ) -> Result<String, JoseError> {
+    encrypt_compact_with_public_jwk_with_content_type(
+        plaintext,
+        public_jwk,
+        encryption_alg,
+        content_enc,
+        None,
+    )
+}
+
+pub fn encrypt_compact_with_public_jwk_with_content_type(
+    plaintext: &[u8],
+    public_jwk: &PublicJwk,
+    encryption_alg: &str,
+    content_enc: &str,
+    content_type: Option<&str>,
+) -> Result<String, JoseError> {
     let jwk = public_jwk_to_jose(public_jwk)?;
     let encrypter = jwe_encrypter_from_public_jwk(encryption_alg, &jwk)?;
     let mut header = JweHeader::new();
     header.set_algorithm(encryption_alg);
     header.set_content_encryption(content_enc);
+    if let Some(content_type) = content_type {
+        header.set_content_type(content_type);
+    }
 
     josekit::jwe::serialize_compact(plaintext, &header, &*encrypter)
 }

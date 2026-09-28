@@ -160,7 +160,16 @@ impl AuthorizeService {
             .transpose()
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::MaxAgeInvalid).with_source(error)
-            })?;
+            })?
+            .or_else(|| {
+                scope
+                    .contains_openid()
+                    .then_some(client.metadata().default_max_age)
+                    .flatten()
+            });
+        if max_age.is_some_and(|value| value < 0) {
+            return Err(AppError::from_code(AuthorizeErrorCode::MaxAgeInvalid));
+        }
 
         let request_uri = params
             .request_uri
@@ -241,6 +250,15 @@ impl AuthorizeService {
 
         self.validate_redirect_uri(&client, &params.redirect_uri)?;
 
+        let acr_values = params
+            .acr_values
+            .map(|value| value.split_whitespace().map(str::to_owned).collect())
+            .or_else(|| {
+                scope
+                    .contains_openid()
+                    .then(|| client.metadata().default_acr_values.clone())
+                    .flatten()
+            });
         let request = AuthorizationRequest {
             response_type,
             response_mode,
@@ -262,9 +280,7 @@ impl AuthorizeService {
                 .map(|value| value.split_whitespace().map(str::to_owned).collect()),
             id_token_hint: params.id_token_hint,
             login_hint: params.login_hint,
-            acr_values: params
-                .acr_values
-                .map(|value| value.split_whitespace().map(str::to_owned).collect()),
+            acr_values,
             claims,
             request_uri,
             code_challenge: params.code_challenge,

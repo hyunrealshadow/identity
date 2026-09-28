@@ -191,7 +191,7 @@ mod device;
 mod exchange;
 mod revocation;
 
-pub(crate) use exchange::{resolve_client_id, resolve_id_token_alg};
+pub(crate) use exchange::resolve_client_id;
 
 pub(crate) mod helpers;
 mod signing;

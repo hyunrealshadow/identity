@@ -38,7 +38,8 @@ use validation::{
     default_response_types, parse_application_type, parse_metadata_value, parse_metadata_values,
     reject_none_algorithm, split_scope, validate_grant_response_type_consistency,
     validate_initiate_login_uri, validate_request_object_encryption,
-    validate_request_object_signing, validate_sector_identifier_uri,
+    validate_request_object_signing, validate_response_encryption_algorithm,
+    validate_response_signing_algorithm, validate_sector_identifier_uri,
 };
 
 pub struct DynamicClientRegistrationService {
@@ -155,6 +156,12 @@ impl DynamicClientRegistrationService {
         )
         .await?;
         validate_initiate_login_uri(request.initiate_login_uri.as_ref())?;
+        if request.default_max_age.is_some_and(|value| value < 0) {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "default_max_age"),
+            );
+        }
         let token_auth_method = request
             .token_endpoint_auth_method
             .as_deref()
@@ -173,9 +180,103 @@ impl DynamicClientRegistrationService {
                     .with_param("field", "token_endpoint_auth_method"),
             );
         }
+        if request.id_token_encrypted_response_enc.is_some()
+            && request.id_token_encrypted_response_alg.is_none()
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "id_token_encrypted_response_alg"),
+            );
+        }
+        if request.userinfo_encrypted_response_enc.is_some()
+            && request.userinfo_encrypted_response_alg.is_none()
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "userinfo_encrypted_response_alg"),
+            );
+        }
+        if request.frontchannel_logout_session_required == Some(true)
+            && request.frontchannel_logout_uri.is_none()
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "frontchannel_logout_uri"),
+            );
+        }
+        if request.backchannel_logout_session_required == Some(true)
+            && request.backchannel_logout_uri.is_none()
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "backchannel_logout_uri"),
+            );
+        }
+        for (field, value) in [
+            (
+                "userinfo_signed_response_alg",
+                request.userinfo_signed_response_alg.as_deref(),
+            ),
+            (
+                "id_token_encrypted_response_alg",
+                request.id_token_encrypted_response_alg.as_deref(),
+            ),
+            (
+                "token_endpoint_auth_signing_alg",
+                request.token_endpoint_auth_signing_alg.as_deref(),
+            ),
+        ] {
+            reject_none_algorithm(field, value)?;
+        }
+        let auth_signing_alg = request
+            .token_endpoint_auth_signing_alg
+            .as_deref()
+            .map(str::parse::<crate::domain::key::JwsAlgorithm>)
+            .transpose()
+            .map_err(|_| {
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "token_endpoint_auth_signing_alg")
+            })?;
+        if auth_signing_alg.is_some_and(|alg| {
+            !matches!(
+                (token_auth_method, alg),
+                (
+                    TokenEndpointAuthMethod::ClientSecretJwt,
+                    crate::domain::key::JwsAlgorithm::Hs256
+                        | crate::domain::key::JwsAlgorithm::Hs384
+                        | crate::domain::key::JwsAlgorithm::Hs512
+                ) | (
+                    TokenEndpointAuthMethod::PrivateKeyJwt,
+                    crate::domain::key::JwsAlgorithm::Asymmetric(_)
+                )
+            )
+        }) {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "token_endpoint_auth_signing_alg"),
+            );
+        }
         reject_none_algorithm(
             "id_token_signed_response_alg",
             request.id_token_signed_response_alg.as_deref(),
+        )?;
+        validate_response_signing_algorithm(
+            "id_token_signed_response_alg",
+            request.id_token_signed_response_alg.as_deref(),
+            !response_types.iter().any(ResponseType::includes_id_token),
+        )?;
+        validate_response_signing_algorithm(
+            "userinfo_signed_response_alg",
+            request.userinfo_signed_response_alg.as_deref(),
+            false,
+        )?;
+        validate_response_encryption_algorithm(
+            "id_token_encrypted_response_alg",
+            request.id_token_encrypted_response_alg.as_deref(),
+        )?;
+        validate_response_encryption_algorithm(
+            "userinfo_encrypted_response_alg",
+            request.userinfo_encrypted_response_alg.as_deref(),
         )?;
         for (field, value) in [
             (

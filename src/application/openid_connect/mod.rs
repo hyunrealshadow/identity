@@ -1,5 +1,6 @@
 pub mod authorize;
 pub mod client_authentication;
+mod client_encryption;
 pub mod device;
 pub mod dto;
 pub mod jose;

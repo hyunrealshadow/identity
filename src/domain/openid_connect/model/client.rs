@@ -376,10 +376,14 @@ impl OpenIdConnectClient {
     /// requires every grant the response type relies on.
     #[must_use]
     pub fn allows_response_type(&self, response_type: &ResponseType) -> bool {
-        response_type
-            .required_grants()
-            .iter()
-            .all(|grant| self.allows_grant(*grant))
+        self.metadata
+            .response_types
+            .as_ref()
+            .is_none_or(|registered| registered.contains(response_type))
+            && response_type
+                .required_grants()
+                .iter()
+                .all(|grant| self.allows_grant(*grant))
     }
 
     pub fn subject_identifier(&self, user_oid: uuid::Uuid, issuer: &Url) -> String {
@@ -794,6 +798,27 @@ mod tests {
 
         assert!(both.allows_response_type(&ResponseType::CodeIdToken));
         assert!(both.allows_response_type(&ResponseType::CodeTokenIdToken));
+    }
+
+    #[test]
+    fn registered_response_types_restrict_allowed_responses_even_with_both_grants() {
+        let base = client_with_grant_types(Some(vec![
+            GrantType::AuthorizationCode,
+            GrantType::Implicit,
+        ]));
+        let mut metadata = base.metadata().clone();
+        metadata.response_types = Some(vec![ResponseType::Code]);
+        let client = OpenIdConnectClient::new(
+            base.client().clone(),
+            metadata,
+            base.platforms().to_vec(),
+            base.assigned_scopes().to_vec(),
+        )
+        .unwrap();
+
+        assert!(client.allows_response_type(&ResponseType::Code));
+        assert!(!client.allows_response_type(&ResponseType::IdToken));
+        assert!(!client.allows_response_type(&ResponseType::CodeIdToken));
     }
 
     #[test]

@@ -273,11 +273,14 @@ impl TokenService {
             .await?;
 
         let id_token = if scope.contains_openid() {
+            let (id_key_id, id_key_pem, id_token_alg) = self
+                .load_id_token_signing_key(client.metadata().id_token_signed_response_alg)
+                .await?;
             let signed = self
                 .sign_id_token(SignIdTokenInput {
-                    key_id: &signing_key_id,
-                    private_key_pem: &signing_key_pem,
-                    alg: identity_domain::key::JwsAlgorithm::Asymmetric(signing_alg),
+                    key_id: &id_key_id,
+                    private_key_pem: &id_key_pem,
+                    alg: id_token_alg,
                     issuer: &issuer,
                     audience: client_id,
                     client,
