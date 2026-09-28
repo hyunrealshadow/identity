@@ -3,10 +3,8 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use http::StatusCode;
 use identity_application::setting::{
-    DeviceAuthorizationSetting, DomainSetting, DynamicClientRegistrationSetting,
-    InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-    InstallationInitializedAtSetting, InstallationInitializedSetting, LoginDomainSetting,
-    PasswordHashSetting, SettingDefinition,
+    DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
+    SettingDefinition,
 };
 use identity_domain::{
     auth::SessionOid,
@@ -262,7 +260,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
     };
     let user_model = test_user(user_oid, now);
     let db = MockDatabase::new(DatabaseBackend::Postgres)
-        .append_query_results([setting_rows(user_oid, key_oid, now)])
+        .append_query_results([setting_rows(now)])
         .append_query_results([Vec::<setting::Model>::new()])
         .append_query_results([
             Vec::<key::Model>::new(),
@@ -339,25 +337,43 @@ fn access_token(
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()
 }
 
-fn setting_rows(user_oid: Uuid, key_oid: Uuid, now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
+fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
     vec![
-        setting_model::<InstallationInitializedSetting>(1, true, now),
+        setting::Model {
+            id: 1,
+            oid: Uuid::new_v4(),
+            key: "app.installation.initialized".to_owned(),
+            value: json!(true),
+            created_at: now.naive_utc(),
+            updated_at: None,
+        },
         setting_model::<DomainSetting>(2, Some("identity.example.com".to_owned()), now),
-        setting_model::<InstallationFirstUserOidSetting>(3, Some(user_oid), now),
-        setting_model::<InstallationFirstKeyOidSetting>(4, Some(key_oid), now),
-        setting_model::<InstallationInitializedAtSetting>(5, Some(now), now),
+        setting::Model {
+            id: 5,
+            oid: Uuid::new_v4(),
+            key: "app.installation.initialized_at".to_owned(),
+            value: json!(now),
+            created_at: now.naive_utc(),
+            updated_at: None,
+        },
         setting_model::<PasswordHashSetting>(6, PasswordHashSetting::default_value(), now),
-        setting_model::<DynamicClientRegistrationSetting>(
-            7,
-            DynamicClientRegistrationSetting::default_value(),
-            now,
-        ),
+        setting::Model {
+            id: 7,
+            oid: Uuid::new_v4(),
+            key: "openid_connect.dynamic_registration.enabled".to_owned(),
+            value: json!(false),
+            created_at: now.naive_utc(),
+            updated_at: None,
+        },
         setting_model::<LoginDomainSetting>(11, Some("https://ui.example.com".to_owned()), now),
-        setting_model::<DeviceAuthorizationSetting>(
-            10,
-            DeviceAuthorizationSetting::default_value(),
-            now,
-        ),
+        setting::Model {
+            id: 10,
+            oid: Uuid::new_v4(),
+            key: "openid_connect.device_authorization".to_owned(),
+            value: json!(DeviceAuthorizationSettings::default()),
+            created_at: now.naive_utc(),
+            updated_at: None,
+        },
     ]
 }
 

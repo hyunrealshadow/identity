@@ -617,7 +617,7 @@ mod tests {
         LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
         unsigned_id_token_hint_for_test,
     };
-    use crate::setting::InstallationState;
+    use crate::setting::{AppSettings, InstallationSettings, SettingsSnapshot};
     use crate::{
         domain::{
             client::model::{Client, ClientProtocol},
@@ -706,14 +706,11 @@ mod tests {
 
     struct TestSigningAlgorithmDetector;
 
-    struct TestInstallationSetting(Arc<InstallationState>);
+    struct TestInstallationSetting(Arc<SettingsSnapshot>);
 
-    impl crate::setting::OrdinarySettingsProvider for TestInstallationSetting {
-        fn current_snapshot(&self) -> Arc<crate::setting::OrdinarySettingsSnapshot> {
-            Arc::new(crate::setting::OrdinarySettingsSnapshot {
-                installation: (*self.0).clone(),
-                ..Default::default()
-            })
+    impl crate::setting::SettingsSource for TestInstallationSetting {
+        fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
+            Arc::clone(&self.0)
         }
     }
 
@@ -929,13 +926,18 @@ mod tests {
                 clients: client_map,
             }),
             provider_service: Arc::new(OpenIdProviderService::new(Arc::new(
-                TestInstallationSetting(Arc::new(InstallationState {
-                    initialized: true,
-                    domain: Some("https://identity.example.com".to_owned()),
-                    first_user_oid: None,
-                    first_key_oid: None,
-                    initialized_at: None,
-                })),
+                TestInstallationSetting(Arc::new(
+                    SettingsSnapshot::default()
+                        .with_section(&AppSettings {
+                            domain: Some("https://identity.example.com".to_owned()),
+                            login_domain: None,
+                            login_client_id: None,
+                        })
+                        .with_section(&InstallationSettings {
+                            initialized: true,
+                            initialized_at: None,
+                        }),
+                )),
             ))),
             key_repo: Arc::new(key_repo),
             key_jwk_repo: Arc::new(jwk_repo),

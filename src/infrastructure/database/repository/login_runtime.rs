@@ -44,11 +44,12 @@ fn retirement_expiry(
 
 async fn builtin_login_client<C: ConnectionTrait>(
     db: &C,
+    client_oid: Uuid,
 ) -> Result<Option<client::Model>, LoginRuntimeRepositoryError> {
     client::Entity::find()
+        .filter(client::Column::Oid.eq(client_oid))
         .filter(client::Column::BuiltIn.eq(true))
         .filter(client::Column::Protocol.eq("openid_connect"))
-        .order_by_asc(client::Column::CreatedAt)
         .one(db)
         .await
         .map_err(query_error)
@@ -79,9 +80,10 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "login_runtime_config"))]
     async fn login_runtime_config(
         &self,
+        client_oid: Uuid,
         now: DateTime<Utc>,
     ) -> Result<Option<LoginRuntimeConfig>, LoginRuntimeRepositoryError> {
-        let Some(client) = builtin_login_client(&self.db).await? else {
+        let Some(client) = builtin_login_client(&self.db, client_oid).await? else {
             return Ok(None);
         };
         let Some(credential) = latest_secret(&self.db, client.id, true, now).await? else {
@@ -115,6 +117,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "rotate_if_due"))]
     async fn rotate_if_due(
         &self,
+        client_oid: Uuid,
         now: DateTime<Utc>,
         policy: &LoginRotationPolicy,
     ) -> Result<u64, LoginRuntimeRepositoryError> {
@@ -122,7 +125,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         txn.execute_unprepared("SELECT pg_advisory_xact_lock(684395120247316901)")
             .await
             .map_err(query_error)?;
-        let Some(client) = builtin_login_client(&txn).await? else {
+        let Some(client) = builtin_login_client(&txn, client_oid).await? else {
             txn.commit().await.map_err(query_error)?;
             return Ok(0);
         };

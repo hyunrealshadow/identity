@@ -49,6 +49,7 @@ pub trait LoginRuntimeRepository: Send + Sync {
     /// `None` when installation has not created one yet.
     async fn login_runtime_config(
         &self,
+        client_oid: crate::client::model::ClientOid,
         now: DateTime<Utc>,
     ) -> Result<Option<LoginRuntimeConfig>, LoginRuntimeRepositoryError>;
 
@@ -58,6 +59,7 @@ pub trait LoginRuntimeRepository: Send + Sync {
     /// performed.
     async fn rotate_if_due(
         &self,
+        client_oid: crate::client::model::ClientOid,
         now: DateTime<Utc>,
         policy: &LoginRotationPolicy,
     ) -> Result<u64, LoginRuntimeRepositoryError>;

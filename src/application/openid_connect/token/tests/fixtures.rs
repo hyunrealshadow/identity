@@ -123,28 +123,30 @@ impl crate::data_protection::DataProtector for InMemoryDataProtector {
 }
 
 pub(super) struct StaticInstallationProvider {
-    pub(super) value: Arc<InstallationState>,
+    pub(super) value: Arc<SettingsSnapshot>,
 }
 
-impl crate::setting::OrdinarySettingsProvider for StaticInstallationProvider {
-    fn current_snapshot(&self) -> Arc<crate::setting::OrdinarySettingsSnapshot> {
-        Arc::new(crate::setting::OrdinarySettingsSnapshot {
-            installation: (*self.value).clone(),
-            ..Default::default()
-        })
+impl crate::setting::SettingsSource for StaticInstallationProvider {
+    fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
+        Arc::clone(&self.value)
     }
 }
 
 pub(super) fn provider_service() -> Arc<OpenIdProviderService> {
     Arc::new(OpenIdProviderService::new(Arc::new(
         StaticInstallationProvider {
-            value: Arc::new(InstallationState {
-                initialized: true,
-                domain: Some("https://identity.example.com".to_string()),
-                first_user_oid: Some(Uuid::new_v4()),
-                first_key_oid: Some(Uuid::new_v4()),
-                initialized_at: Some(Utc::now()),
-            }),
+            value: Arc::new(
+                SettingsSnapshot::default()
+                    .with_section(&AppSettings {
+                        domain: Some("https://identity.example.com".to_string()),
+                        login_domain: None,
+                        login_client_id: None,
+                    })
+                    .with_section(&InstallationSettings {
+                        initialized: true,
+                        initialized_at: Some(Utc::now()),
+                    }),
+            ),
         },
     )))
 }

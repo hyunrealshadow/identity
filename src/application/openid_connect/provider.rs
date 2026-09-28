@@ -5,7 +5,7 @@ use url::Url;
 use crate::{
     application::{
         error::{AppError, codes::provider::ProviderErrorCode},
-        setting::{DynamicClientRegistrationSettings, InstallationState, Setting},
+        setting::{AppSettings, InstallationSettings, OpenIdConnectSettings, SettingsSource},
     },
     domain::{
         key::{
@@ -214,19 +214,9 @@ fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
         .collect()
 }
 
-pub trait OpenIdProviderSettings:
-    Setting<InstallationState> + Setting<DynamicClientRegistrationSettings>
-{
-}
-
-impl<T> OpenIdProviderSettings for T where
-    T: Setting<InstallationState> + Setting<DynamicClientRegistrationSettings> + ?Sized
-{
-}
-
 #[derive(Clone)]
 pub struct OpenIdProviderService {
-    installation_setting: Arc<dyn OpenIdProviderSettings>,
+    settings: Arc<dyn SettingsSource>,
     capabilities: OpenIdProviderCapabilities,
     key_repo: Option<Arc<dyn KeyRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
@@ -253,9 +243,9 @@ fn detect_id_token_signing_algorithms(
 }
 
 impl OpenIdProviderService {
-    pub fn new(installation_setting: Arc<dyn OpenIdProviderSettings>) -> Self {
+    pub fn new(settings: Arc<dyn SettingsSource>) -> Self {
         Self {
-            installation_setting,
+            settings,
             capabilities: OpenIdProviderCapabilities::default(),
             key_repo: None,
             signing_algorithm_detector: None,
@@ -263,11 +253,11 @@ impl OpenIdProviderService {
     }
 
     pub fn with_capabilities(
-        installation_setting: Arc<dyn OpenIdProviderSettings>,
+        settings: Arc<dyn SettingsSource>,
         capabilities: OpenIdProviderCapabilities,
     ) -> Self {
         Self {
-            installation_setting,
+            settings,
             capabilities,
             key_repo: None,
             signing_algorithm_detector: None,
@@ -288,9 +278,11 @@ impl OpenIdProviderService {
     }
 
     pub fn issuer(&self) -> Result<Url, AppError> {
-        let installation =
-            Setting::<InstallationState>::current_value(self.installation_setting.as_ref());
-        normalize_issuer(&installation)
+        let snapshot = self.settings.snapshot();
+        normalize_issuer(
+            &snapshot.section::<InstallationSettings>(),
+            snapshot.section::<AppSettings>().domain.as_deref(),
+        )
     }
 
     pub async fn discovery_metadata(&self) -> Result<OpenIdProviderMetadata, AppError> {
@@ -408,10 +400,13 @@ impl OpenIdProviderService {
     }
 
     fn registration_endpoint(&self, issuer: &Url) -> Result<Option<Url>, AppError> {
-        let registration = Setting::<DynamicClientRegistrationSettings>::current_value(
-            self.installation_setting.as_ref(),
-        );
-        if registration.enabled {
+        if self
+            .settings
+            .snapshot()
+            .section::<OpenIdConnectSettings>()
+            .dynamic_registration
+            .enabled
+        {
             endpoint_url(issuer, "/oauth2/register").map(Some)
         } else {
             Ok(None)
@@ -447,14 +442,15 @@ fn endpoint_url(issuer: &Url, path: &str) -> Result<Url, AppError> {
     })
 }
 
-fn normalize_issuer(installation: &InstallationState) -> Result<Url, AppError> {
+fn normalize_issuer(
+    installation: &InstallationSettings,
+    domain: Option<&str>,
+) -> Result<Url, AppError> {
     if !installation.initialized {
         return Err(AppError::from_code(ProviderErrorCode::NotInitialized));
     }
 
-    let raw = installation
-        .domain
-        .as_deref()
+    let raw = domain
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::from_code(ProviderErrorCode::DomainMissing))?;
@@ -493,7 +489,7 @@ fn normalize_issuer(installation: &InstallationState) -> Result<Url, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::setting::InstallationState;
+    use crate::setting::{AppSettings, InstallationSettings, SettingsSnapshot};
     use std::sync::Arc;
 
     use chrono::Utc;
@@ -506,22 +502,19 @@ mod tests {
             repository::KeyRepositoryError,
         },
         openid_connect::tests::fixtures::mocks::MockKeyRepository,
-        setting::{OrdinarySettingsProvider, OrdinarySettingsSnapshot},
+        setting::{DynamicRegistrationSettings, OpenIdConnectSettings},
     };
 
-    struct StaticOrdinarySettings {
-        installation: Arc<InstallationState>,
+    fn static_settings(
+        settings: SettingsSnapshot,
         dynamic_client_registration: bool,
-    }
-
-    impl OrdinarySettingsProvider for StaticOrdinarySettings {
-        fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
-            Arc::new(OrdinarySettingsSnapshot {
-                installation: (*self.installation).clone(),
-                dynamic_client_registration: self.dynamic_client_registration,
-                ..Default::default()
-            })
-        }
+    ) -> Arc<SettingsSnapshot> {
+        Arc::new(settings.with_section(&OpenIdConnectSettings {
+            dynamic_registration: DynamicRegistrationSettings {
+                enabled: dynamic_client_registration,
+            },
+            ..OpenIdConnectSettings::default()
+        }))
     }
 
     #[cfg(feature = "allow-none-alg")]
@@ -647,13 +640,18 @@ mod tests {
 
     #[tokio::test]
     async fn normalizes_plain_domain_to_https_issuer() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let issuer = service.issuer().unwrap();
@@ -663,13 +661,18 @@ mod tests {
 
     #[tokio::test]
     async fn assembles_discovery_document_from_issuer_and_capabilities() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com/issuer1/".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com/issuer1/".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -713,13 +716,18 @@ mod tests {
 
     #[tokio::test]
     async fn default_discovery_advertises_the_device_authorization_endpoint() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -743,13 +751,18 @@ mod tests {
 
     #[tokio::test]
     async fn default_discovery_advertises_supported_address_and_phone_claims() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -766,13 +779,18 @@ mod tests {
 
     #[tokio::test]
     async fn default_discovery_advertises_form_post_and_pairwise() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -792,13 +810,18 @@ mod tests {
 
     #[tokio::test]
     async fn default_discovery_advertises_request_object_verifier_algorithms() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -817,13 +840,18 @@ mod tests {
 
     #[tokio::test]
     async fn default_discovery_advertises_request_object_encryption() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -840,13 +868,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_advertises_registration_endpoint_when_enabled() {
-        let service = OpenIdProviderService::for_test_with_registration(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test_with_registration(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -859,13 +892,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_advertises_public_client_auth_method() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -876,13 +914,18 @@ mod tests {
 
     #[tokio::test]
     async fn default_discovery_advertises_token_endpoint_auth_verifier_algorithms() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
@@ -901,13 +944,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_uses_rsa_key_repo_algorithm() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await
         .with_key_repo(Arc::new(key_repo_with_keys(vec![make_asymmetric_key(
             generate_rsa_pem(),
@@ -924,13 +972,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_uses_rsa_pss_key_repo_algorithm() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await
         .with_key_repo(Arc::new(key_repo_with_keys(vec![
             make_asymmetric_key(generate_rsa_pss_pem("PS256")),
@@ -949,13 +1002,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_uses_ec_key_repo_algorithm() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await
         .with_key_repo(Arc::new(key_repo_with_keys(vec![make_asymmetric_key(
             generate_ec_p256_pem(),
@@ -972,13 +1030,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_uses_all_detected_key_repo_algorithms() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await
         .with_key_repo(Arc::new(key_repo_with_keys(vec![
             make_asymmetric_key(generate_rsa_pem()),
@@ -1006,13 +1069,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_falls_back_to_capabilities_when_key_repo_has_no_detected_algorithms() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await
         .with_key_repo(Arc::new(key_repo_with_keys(vec![])));
 
@@ -1026,13 +1094,18 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_maps_key_repo_errors() {
-        let service = OpenIdProviderService::for_test(InstallationState {
-            initialized: true,
-            domain: Some("https://identity.example.com".to_owned()),
-            first_user_oid: None,
-            first_key_oid: None,
-            initialized_at: None,
-        })
+        let service = OpenIdProviderService::for_test(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
+        )
         .await
         .with_key_repo(Arc::new(key_repo_failing()));
 
@@ -1042,18 +1115,12 @@ mod tests {
     }
 
     impl OpenIdProviderService {
-        async fn for_test(state: InstallationState) -> Self {
-            Self::new(Arc::new(StaticOrdinarySettings {
-                installation: Arc::new(state),
-                dynamic_client_registration: false,
-            }))
+        async fn for_test(state: SettingsSnapshot) -> Self {
+            Self::new(static_settings(state, false))
         }
 
-        async fn for_test_with_registration(state: InstallationState) -> Self {
-            Self::new(Arc::new(StaticOrdinarySettings {
-                installation: Arc::new(state),
-                dynamic_client_registration: true,
-            }))
+        async fn for_test_with_registration(state: SettingsSnapshot) -> Self {
+            Self::new(static_settings(state, true))
         }
     }
 

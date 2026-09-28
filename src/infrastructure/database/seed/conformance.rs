@@ -15,25 +15,24 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use identity_domain::{
-    openid_connect::{GrantType, ResponseType, TokenEndpointAuthMethod},
-    user::CredentialType,
-};
+use crate::application::user::CredentialType;
+use identity_domain::openid_connect::{GrantType, ResponseType, TokenEndpointAuthMethod};
 
 use crate::{
     application::error::AppError,
     application::error::codes::common::CommonErrorCode,
     infrastructure::database::entity::{
         client, client_openid_connect, client_openid_connect_credential,
-        client_openid_connect_platform, client_scope, scope, setting, user, user_credential,
+        client_openid_connect_platform, client_scope, scope, user, user_credential,
     },
 };
 use identity_application::setting::{
-    DynamicClientRegistrationSetting, LoginDomainSetting, SettingDefinition,
+    DynamicRegistrationSettings, LoginDomainSetting, OpenIdConnectSettings, SettingChanges,
 };
 use identity_domain::openid_connect::OpenIdConnectCredentialData;
 
 use crate::infrastructure::database::repository::openid_connect_credential::serialize_data as serialize_credential_data;
+use crate::infrastructure::database::repository::setting::{read_setting, write_settings};
 
 use super::Seed;
 
@@ -122,8 +121,8 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
 
     let now = Utc::now();
 
-    ensure_dynamic_registration_enabled(&txn, now).await?;
-    ensure_login_domain(&txn, now).await?;
+    let login_domain = read_setting::<LoginDomainSetting, _>(&txn).await?;
+    write_settings(&txn, conformance_settings(login_domain)?).await?;
 
     // ── Test user ──────────────────────────────────────────────────────────
 
@@ -211,10 +210,11 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     Ok(())
 }
 
-async fn ensure_login_domain(
-    db: &impl sea_orm::ConnectionTrait,
-    now: chrono::DateTime<Utc>,
-) -> Result<(), AppError> {
+/// The conformance suite registers clients dynamically and signs in through
+/// the login application, so both are configured on every start.
+///
+/// Only the login domain is changed; the other app settings keep their stored values.
+fn conformance_settings(current_login_domain: Option<String>) -> Result<SettingChanges, AppError> {
     let login_url =
         std::env::var("LOGIN_URL").unwrap_or_else(|_| "https://login:3443/login".to_owned());
 
@@ -225,85 +225,17 @@ async fn ensure_login_domain(
         .filter(|url| matches!(url.scheme(), "http" | "https"))
         .map(|url| url.origin().ascii_serialization());
 
-    if let Some(login_domain) = login_domain {
-        ensure_string_setting(db, LoginDomainSetting::KEY, login_domain, now).await?;
-    }
+    let login_domain = login_domain.or(current_login_domain);
 
-    Ok(())
-}
-
-async fn ensure_string_setting(
-    db: &impl sea_orm::ConnectionTrait,
-    key: &str,
-    value: String,
-    now: chrono::DateTime<Utc>,
-) -> Result<(), AppError> {
-    let existing = setting::Entity::find()
-        .filter(setting::Column::Key.eq(key))
-        .one(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-    let value = serde_json::json!(value);
-
-    if let Some(existing) = existing {
-        if existing.value == value {
-            return Ok(());
-        }
-
-        setting::ActiveModel {
-            id: Set(existing.id),
-            value: Set(value),
-            updated_at: Set(Some(now.naive_utc())),
-            ..Default::default()
-        }
-        .update(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-    } else {
-        setting::ActiveModel {
-            oid: Set(Uuid::new_v4()),
-            key: Set(key.to_owned()),
-            value: Set(value),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(Some(now.naive_utc())),
-            ..Default::default()
-        }
-        .insert(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-    }
-
-    Ok(())
-}
-
-async fn ensure_dynamic_registration_enabled(
-    db: &impl sea_orm::ConnectionTrait,
-    now: chrono::DateTime<Utc>,
-) -> Result<(), AppError> {
-    let exists = setting::Entity::find()
-        .filter(setting::Column::Key.eq(DynamicClientRegistrationSetting::KEY))
-        .one(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
-        .is_some();
-
-    if exists {
-        return Ok(());
-    }
-
-    setting::ActiveModel {
-        oid: Set(Uuid::new_v4()),
-        key: Set(DynamicClientRegistrationSetting::KEY.to_owned()),
-        value: Set(serde_json::json!(true)),
-        created_at: Set(now.naive_utc()),
-        updated_at: Set(Some(now.naive_utc())),
-        ..Default::default()
-    }
-    .insert(db)
-    .await
-    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-
-    Ok(())
+    Ok(SettingChanges::default()
+        .set_section_field(
+            &OpenIdConnectSettings {
+                dynamic_registration: DynamicRegistrationSettings { enabled: true },
+                ..OpenIdConnectSettings::default()
+            },
+            "dynamic_registration.enabled",
+        )?
+        .set::<LoginDomainSetting>(&login_domain)?)
 }
 
 fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
@@ -609,10 +541,10 @@ async fn ensure_web_platform_redirect_uri(
 /// Hash `CONFORMANCE_PASSWORD` with the same Argon2id defaults the app uses,
 /// and return the serialised `Password` JSON value ready for the DB.
 fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
-    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
-    use identity_domain::user::password::{
+    use crate::application::user::password::{
         Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
     };
+    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
     use rand_core::OsRng;
 
     let salt = SaltString::generate(&mut OsRng);

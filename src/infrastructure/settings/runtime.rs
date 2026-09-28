@@ -2,16 +2,16 @@ use std::{sync::Arc, time::Duration};
 
 use sea_orm::DatabaseConnection;
 
-use identity_application::{error::AppError, setting::runtime::SettingsRefresher};
+use identity_application::error::AppError;
 
 use super::{
     key_ring::CachedRuntimeKeyRingProvider, openid_connect::CachedCorsOrigins,
-    ordinary::OrdinarySettings,
+    refresher::SettingsRefresher, setting_registry, store::SettingsStore,
 };
 
 #[derive(Clone)]
 pub struct AppRuntimeSettings {
-    ordinary: Arc<OrdinarySettings>,
+    store: Arc<SettingsStore>,
     cors_origins: Arc<CachedCorsOrigins>,
     key_ring: Arc<CachedRuntimeKeyRingProvider>,
 }
@@ -19,7 +19,7 @@ pub struct AppRuntimeSettings {
 impl AppRuntimeSettings {
     pub async fn from_db(db: DatabaseConnection) -> Result<Self, AppError> {
         Ok(Self {
-            ordinary: Arc::new(OrdinarySettings::new(db.clone()).await?),
+            store: Arc::new(SettingsStore::new(db.clone(), setting_registry()).await?),
             cors_origins: Arc::new(CachedCorsOrigins::new(db.clone()).await?),
             key_ring: Arc::new(CachedRuntimeKeyRingProvider::new(db).await?),
         })
@@ -27,15 +27,15 @@ impl AppRuntimeSettings {
 
     pub fn spawn_refresh_task(&self, refresh_interval: Duration) {
         let mut refresher = SettingsRefresher::new(refresh_interval);
-        refresher.register(Arc::clone(&self.ordinary));
+        refresher.register(Arc::clone(&self.store));
         refresher.register(Arc::clone(&self.cors_origins));
         refresher.register(Arc::clone(&self.key_ring));
         refresher.spawn_detached();
     }
 
     #[must_use]
-    pub fn ordinary(&self) -> Arc<OrdinarySettings> {
-        Arc::clone(&self.ordinary)
+    pub fn store(&self) -> Arc<SettingsStore> {
+        Arc::clone(&self.store)
     }
 
     #[must_use]

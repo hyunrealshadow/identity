@@ -3,7 +3,7 @@ use crate::{
     user::model::{Argon2Options, Argon2Variant, Argon2Version},
 };
 
-use super::{SettingDefinition, SettingValidationError};
+use crate::setting::{SettingDefinition, SettingValidationError};
 
 pub struct PasswordHashSetting;
 

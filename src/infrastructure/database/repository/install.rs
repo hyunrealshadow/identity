@@ -6,7 +6,6 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     Set, TransactionTrait,
 };
-use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
@@ -17,11 +16,7 @@ use crate::{
             codes::{common::CommonErrorCode, install::InstallErrorCode},
         },
         install::{InstallRepository, InstallationData},
-        setting::{
-            DomainSetting, InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-            InstallationInitializedAtSetting, InstallationInitializedSetting, InstallationState,
-            LoginDomainSetting, SettingDefinition,
-        },
+        setting::InstallationSettings,
     },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
@@ -35,11 +30,12 @@ use crate::{
         database::{
             entity::{
                 client, client_openid_connect, client_openid_connect_credential,
-                client_openid_connect_platform, client_scope, key, key_jwk, scope, setting, user,
+                client_openid_connect_platform, client_scope, key, key_jwk, scope, user,
                 user_credential,
             },
             repository::{
                 openid_connect_credential::serialize_data as serialize_credential_data,
+                setting::{read_section, write_settings},
                 shared::encode_nonnullable_expiry,
             },
         },
@@ -63,13 +59,10 @@ impl InstallRepositoryImpl {
 #[async_trait]
 impl InstallRepository for InstallRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create_installation"))]
-    async fn create_installation(
-        &self,
-        data: InstallationData,
-    ) -> Result<InstallationState, AppError> {
+    async fn create_installation(&self, data: InstallationData) -> Result<(), AppError> {
         let now = Utc::now();
-        let user_oid = Uuid::new_v4();
-        let key_oid = Uuid::new_v4();
+        let user_oid = data.user_oid;
+        let key_oid = data.key_oid;
         let client_oid = data.client_id;
         let normalized_username =
             identity_domain::user::normalization::normalize_username(&data.username)
@@ -84,20 +77,15 @@ impl InstallRepository for InstallRepositoryImpl {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
             })?;
 
-        let installation_state = InstallationState {
-            initialized: true,
-            domain: Some(data.domain.clone()),
-            first_user_oid: Some(user_oid),
-            first_key_oid: Some(key_oid),
-            initialized_at: Some(now),
-        };
-
         let txn = self.db.begin().await.map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
 
         acquire_install_transaction_lock(&txn).await?;
-        if installation_state_exists(&txn).await? {
+        if read_section::<InstallationSettings, _>(&txn)
+            .await?
+            .initialized
+        {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
 
@@ -331,21 +319,13 @@ impl InstallRepository for InstallRepositoryImpl {
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
 
-        upsert_installation_state(&txn, &installation_state).await?;
-        if let Some(login_domain) = data.login_domain.clone() {
-            upsert_setting(
-                &txn,
-                LoginDomainSetting::KEY,
-                serde_json::json!(login_domain),
-            )
-            .await?;
-        }
+        write_settings(&txn, data.settings).await?;
 
         txn.commit().await.map_err(|error| {
             AppError::from_code(CommonErrorCode::InternalError).with_source(error)
         })?;
 
-        Ok(installation_state)
+        Ok(())
     }
 }
 
@@ -370,107 +350,6 @@ fn built_in_logout_url(application_url: &url::Url) -> Result<url::Url, AppError>
     application_url
         .join("logout")
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
-}
-
-async fn installation_state_exists<C>(db: &C) -> Result<bool, AppError>
-where
-    C: ConnectionTrait,
-{
-    let state = setting::Entity::find()
-        .filter(setting::Column::Key.eq(InstallationInitializedSetting::KEY))
-        .one(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-
-    let Some(state) = state else {
-        return Ok(false);
-    };
-
-    let value: bool = serde_json::from_value(state.value)
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-    Ok(value)
-}
-
-async fn upsert_installation_state<C>(db: &C, state: &InstallationState) -> Result<(), AppError>
-where
-    C: ConnectionTrait,
-{
-    upsert_setting(
-        db,
-        InstallationInitializedSetting::KEY,
-        serde_json::to_value(state.initialized).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?,
-    )
-    .await?;
-    upsert_setting(
-        db,
-        DomainSetting::KEY,
-        serde_json::to_value(&state.domain).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?,
-    )
-    .await?;
-    upsert_setting(
-        db,
-        InstallationFirstUserOidSetting::KEY,
-        serde_json::to_value(state.first_user_oid).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?,
-    )
-    .await?;
-    upsert_setting(
-        db,
-        InstallationFirstKeyOidSetting::KEY,
-        serde_json::to_value(state.first_key_oid).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?,
-    )
-    .await?;
-    upsert_setting(
-        db,
-        InstallationInitializedAtSetting::KEY,
-        serde_json::to_value(state.initialized_at).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?,
-    )
-    .await?;
-
-    Ok(())
-}
-
-async fn upsert_setting<C>(db: &C, key: &str, value: Value) -> Result<(), AppError>
-where
-    C: ConnectionTrait,
-{
-    let now = Utc::now().naive_utc();
-    if let Some(existing) = setting::Entity::find()
-        .filter(setting::Column::Key.eq(key))
-        .one(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
-    {
-        let mut active: setting::ActiveModel = existing.into();
-        active.value = Set(value);
-        active.updated_at = Set(Some(now));
-        active.update(db).await.map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
-    } else {
-        setting::ActiveModel {
-            oid: Set(Uuid::new_v4()),
-            key: Set(key.to_owned()),
-            value: Set(value),
-            created_at: Set(now),
-            updated_at: Set(Some(now)),
-            ..Default::default()
-        }
-        .insert(db)
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

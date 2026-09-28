@@ -1,4 +1,4 @@
-use crate::setting::InstallationState;
+use crate::setting::{AppSettings, InstallationSettings};
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;

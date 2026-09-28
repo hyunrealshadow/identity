@@ -6,32 +6,34 @@ use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
     MockOpenIdConnectCredentialRepository, MockUserRepository,
 };
-use crate::setting::{OrdinarySettingsProvider, OrdinarySettingsSnapshot};
+use crate::setting::{SettingsSnapshot, SettingsSource};
 use crate::user::repository::UserRepositoryError;
 
 pub(in crate::openid_connect) struct StaticInstallationProvider {
-    pub(in crate::openid_connect) value: Arc<InstallationState>,
+    pub(in crate::openid_connect) value: Arc<SettingsSnapshot>,
 }
 
-impl OrdinarySettingsProvider for StaticInstallationProvider {
-    fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
-        Arc::new(OrdinarySettingsSnapshot {
-            installation: (*self.value).clone(),
-            ..Default::default()
-        })
+impl SettingsSource for StaticInstallationProvider {
+    fn snapshot(&self) -> Arc<SettingsSnapshot> {
+        Arc::clone(&self.value)
     }
 }
 
 pub(in crate::openid_connect) fn provider_service() -> Arc<OpenIdProviderService> {
     Arc::new(OpenIdProviderService::new(Arc::new(
         StaticInstallationProvider {
-            value: Arc::new(InstallationState {
-                initialized: true,
-                domain: Some("https://identity.example.com".to_string()),
-                first_user_oid: Some(Uuid::new_v4()),
-                first_key_oid: Some(Uuid::new_v4()),
-                initialized_at: Some(chrono::Utc::now()),
-            }),
+            value: Arc::new(
+                SettingsSnapshot::default()
+                    .with_section(&AppSettings {
+                        domain: Some("https://identity.example.com".to_string()),
+                        login_domain: None,
+                        login_client_id: None,
+                    })
+                    .with_section(&InstallationSettings {
+                        initialized: true,
+                        initialized_at: Some(chrono::Utc::now()),
+                    }),
+            ),
         },
     )))
 }

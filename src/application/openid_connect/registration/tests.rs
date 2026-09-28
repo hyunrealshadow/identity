@@ -20,12 +20,16 @@ use crate::{
 
 struct TestRegistrationSetting(bool);
 
-impl crate::setting::OrdinarySettingsProvider for TestRegistrationSetting {
-    fn current_snapshot(&self) -> Arc<crate::setting::OrdinarySettingsSnapshot> {
-        Arc::new(crate::setting::OrdinarySettingsSnapshot {
-            dynamic_client_registration: self.0,
-            ..Default::default()
-        })
+impl crate::setting::SettingsSource for TestRegistrationSetting {
+    fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
+        Arc::new(crate::setting::SettingsSnapshot::default().with_section(
+            &crate::setting::OpenIdConnectSettings {
+                dynamic_registration: crate::setting::DynamicRegistrationSettings {
+                    enabled: self.0,
+                },
+                ..crate::setting::OpenIdConnectSettings::default()
+            },
+        ))
     }
 }
 

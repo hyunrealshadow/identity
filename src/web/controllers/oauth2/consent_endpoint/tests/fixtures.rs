@@ -4,10 +4,8 @@ use std::sync::Arc;
 use base64::Engine;
 use chrono::{Duration, Utc};
 use identity_application::setting::{
-    DeviceAuthorizationSetting, DomainSetting, DynamicClientRegistrationSetting,
-    InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-    InstallationInitializedAtSetting, InstallationInitializedSetting, LoginDomainSetting,
-    PasswordHashSetting, SettingDefinition,
+    DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
+    SettingDefinition,
 };
 use identity_domain::{
     auth::{LoginStatus, SessionOid, SessionStatus},
@@ -120,7 +118,7 @@ async fn consent_test_state_for(
     let installation_initialized_setting = setting::Model {
         id: 2,
         oid: uuid::Uuid::new_v4(),
-        key: InstallationInitializedSetting::KEY.to_string(),
+        key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
@@ -133,26 +131,10 @@ async fn consent_test_state_for(
         created_at: now.naive_utc(),
         updated_at: None,
     };
-    let installation_first_user_oid_setting = setting::Model {
-        id: 4,
-        oid: uuid::Uuid::new_v4(),
-        key: InstallationFirstUserOidSetting::KEY.to_string(),
-        value: serde_json::to_value(user_oid).unwrap(),
-        created_at: now.naive_utc(),
-        updated_at: None,
-    };
-    let installation_first_key_oid_setting = setting::Model {
-        id: 5,
-        oid: uuid::Uuid::new_v4(),
-        key: InstallationFirstKeyOidSetting::KEY.to_string(),
-        value: serde_json::to_value(symmetric_key_oid).unwrap(),
-        created_at: now.naive_utc(),
-        updated_at: None,
-    };
     let installation_initialized_at_setting = setting::Model {
         id: 6,
         oid: uuid::Uuid::new_v4(),
-        key: InstallationInitializedAtSetting::KEY.to_string(),
+        key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(now).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
@@ -160,8 +142,8 @@ async fn consent_test_state_for(
     let dynamic_registration_setting = setting::Model {
         id: 7,
         oid: uuid::Uuid::new_v4(),
-        key: DynamicClientRegistrationSetting::KEY.to_string(),
-        value: serde_json::to_value(DynamicClientRegistrationSetting::default_value()).unwrap(),
+        key: "openid_connect.dynamic_registration.enabled".to_owned(),
+        value: serde_json::to_value(false).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -176,8 +158,8 @@ async fn consent_test_state_for(
     let device_authorization_setting = setting::Model {
         id: 10,
         oid: uuid::Uuid::new_v4(),
-        key: DeviceAuthorizationSetting::KEY.to_string(),
-        value: serde_json::to_value(DeviceAuthorizationSetting::default_value()).unwrap(),
+        key: "openid_connect.device_authorization".to_owned(),
+        value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: now.naive_utc(),
         updated_at: None,
     };
@@ -395,8 +377,6 @@ async fn consent_test_state_for(
         .append_query_results([[
             installation_initialized_setting,
             domain_setting,
-            installation_first_user_oid_setting,
-            installation_first_key_oid_setting,
             installation_initialized_at_setting,
             password_setting,
             dynamic_registration_setting,

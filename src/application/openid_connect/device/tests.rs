@@ -32,23 +32,18 @@ use crate::openid_connect::{
     client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
     provider::OpenIdProviderService,
 };
-use crate::setting::installation::InstallationState;
-use crate::setting::{
-    DeviceAuthorizationSettings, OrdinarySettingsProvider, OrdinarySettingsSnapshot,
-};
+use crate::setting::{AppSettings, InstallationSettings, LoginDomainSetting, SettingsSnapshot};
+use crate::setting::{DeviceAuthorizationSettings, OpenIdConnectSettings, SettingsSource};
 
 const CLIENT_ID: Uuid = Uuid::nil();
 
 struct StaticInstallationProvider {
-    value: Arc<InstallationState>,
+    value: Arc<SettingsSnapshot>,
 }
 
-impl OrdinarySettingsProvider for StaticInstallationProvider {
-    fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
-        Arc::new(OrdinarySettingsSnapshot {
-            installation: (*self.value).clone(),
-            ..Default::default()
-        })
+impl SettingsSource for StaticInstallationProvider {
+    fn snapshot(&self) -> Arc<SettingsSnapshot> {
+        Arc::clone(&self.value)
     }
 }
 
@@ -57,26 +52,34 @@ struct StaticDeviceAuthorizationProvider {
     login_domain: Option<String>,
 }
 
-impl OrdinarySettingsProvider for StaticDeviceAuthorizationProvider {
-    fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
-        Arc::new(OrdinarySettingsSnapshot {
-            device_authorization: (*self.value).clone(),
-            login_domain: self.login_domain.clone(),
-            ..Default::default()
-        })
+impl SettingsSource for StaticDeviceAuthorizationProvider {
+    fn snapshot(&self) -> Arc<SettingsSnapshot> {
+        Arc::new(
+            SettingsSnapshot::default()
+                .with_section(&OpenIdConnectSettings {
+                    device_authorization: (*self.value).clone(),
+                    ..OpenIdConnectSettings::default()
+                })
+                .with::<LoginDomainSetting>(self.login_domain.clone()),
+        )
     }
 }
 
 fn provider_service() -> Arc<OpenIdProviderService> {
     Arc::new(OpenIdProviderService::new(Arc::new(
         StaticInstallationProvider {
-            value: Arc::new(InstallationState {
-                initialized: true,
-                domain: Some("https://identity.example.com".to_owned()),
-                first_user_oid: Some(Uuid::new_v4()),
-                first_key_oid: Some(Uuid::new_v4()),
-                initialized_at: Some(Utc::now()),
-            }),
+            value: Arc::new(
+                SettingsSnapshot::default()
+                    .with_section(&AppSettings {
+                        domain: Some("https://identity.example.com".to_owned()),
+                        login_domain: None,
+                        login_client_id: None,
+                    })
+                    .with_section(&InstallationSettings {
+                        initialized: true,
+                        initialized_at: Some(Utc::now()),
+                    }),
+            ),
         },
     )))
 }

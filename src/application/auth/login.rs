@@ -9,7 +9,7 @@ use crate::{
         totp::TotpVerifier,
     },
     error::{AppError, codes::auth::AuthErrorCode},
-    setting::Setting,
+    setting::{PasswordHashSetting, SettingsSource},
     user::{
         model::{
             CredentialData, CredentialType, OtpCredentialData, Password,
@@ -79,7 +79,7 @@ pub struct LoginService {
     login_repo: Arc<dyn LoginRepository>,
     password_hasher: Arc<dyn PasswordHasher>,
     totp_verifier: Arc<dyn TotpVerifier>,
-    hash_options: Arc<dyn Setting<HashOptions>>,
+    settings: Arc<dyn SettingsSource>,
     /// Device authorizations, so account level security actions can withdraw
     /// them. Optional: services built without it simply have no device
     /// authorizations to revoke.
@@ -96,7 +96,7 @@ impl LoginService {
         login_repo: Arc<dyn LoginRepository>,
         password_hasher: Arc<dyn PasswordHasher>,
         totp_verifier: Arc<dyn TotpVerifier>,
-        hash_options: Arc<dyn Setting<HashOptions>>,
+        settings: Arc<dyn SettingsSource>,
     ) -> Self {
         Self {
             user_repo,
@@ -105,7 +105,7 @@ impl LoginService {
             login_repo,
             password_hasher,
             totp_verifier,
-            hash_options,
+            settings,
             device_repo: None,
             events: Arc::new(crate::observability::NoopEventSink),
         }
@@ -193,7 +193,7 @@ impl LoginService {
                 ));
             }
         };
-        let options = self.hash_options.current_value();
+        let options = self.settings.snapshot().get::<PasswordHashSetting>();
         let hasher = Arc::clone(&self.password_hasher);
         let new_password_to_verify = new_password.to_owned();
         let verify_options = options.clone();
@@ -528,7 +528,7 @@ impl LoginService {
             return Err(AppError::from_code(AuthErrorCode::LoginExpired));
         }
 
-        let hash_options = self.hash_options.current_value();
+        let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
 
         match credential_type {
             CredentialType::Password => {
@@ -1062,7 +1062,7 @@ fn failed_attempt_lock_until() -> chrono::DateTime<Utc> {
 
 #[cfg(test)]
 mod tests {
-    use crate::setting::{OrdinarySettingsProvider, OrdinarySettingsSnapshot};
+    use crate::setting::{PasswordHashSetting, SettingsSnapshot};
     use crate::{
         auth::{
             password::{HashOptions, VerifyResult},
@@ -1098,15 +1098,8 @@ mod tests {
     use super::{LoginService, SessionContext};
     use crate::application::error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode};
 
-    struct FixedHashOptions(Arc<HashOptions>);
-
-    impl OrdinarySettingsProvider for FixedHashOptions {
-        fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
-            Arc::new(OrdinarySettingsSnapshot {
-                password_hash_options: (*self.0).clone(),
-                ..Default::default()
-            })
-        }
+    fn fixed_hash_options(options: HashOptions) -> Arc<SettingsSnapshot> {
+        Arc::new(SettingsSnapshot::default().with::<PasswordHashSetting>(options))
     }
 
     struct AlwaysInvalidTotp;
@@ -1606,15 +1599,13 @@ mod tests {
             login_repo,
             Arc::new(StubPasswordHasher),
             Arc::new(AlwaysInvalidTotp),
-            Arc::new(FixedHashOptions(Arc::new(HashOptions::Argon2(
-                Argon2Options {
-                    variant: Argon2Variant::Argon2id,
-                    version: Argon2Version::Argon2013,
-                    time_cost: 3,
-                    memory_cost: 65_536,
-                    parallelism: 4,
-                },
-            )))),
+            fixed_hash_options(HashOptions::Argon2(Argon2Options {
+                variant: Argon2Variant::Argon2id,
+                version: Argon2Version::Argon2013,
+                time_cost: 3,
+                memory_cost: 65_536,
+                parallelism: 4,
+            })),
         );
         (service, user)
     }
@@ -1659,7 +1650,7 @@ mod tests {
             login_repo,
             Arc::new(RecordingPasswordHasher),
             Arc::new(AlwaysInvalidTotp),
-            Arc::new(FixedHashOptions(Arc::new(options))),
+            fixed_hash_options(options),
         );
 
         let mut device_repo =

@@ -63,32 +63,32 @@ mod tests {
 
     use crate::{
         application::openid_connect::provider::OpenIdProviderService,
-        application::setting::installation::InstallationState,
+        application::setting::{AppSettings, InstallationSettings, SettingsSnapshot},
     };
 
     use super::openid_configuration_document;
 
-    struct TestInstallationSetting(Arc<InstallationState>);
+    struct TestInstallationSetting(Arc<SettingsSnapshot>);
 
-    impl identity_application::setting::OrdinarySettingsProvider for TestInstallationSetting {
-        fn current_snapshot(&self) -> Arc<identity_application::setting::OrdinarySettingsSnapshot> {
-            Arc::new(identity_application::setting::OrdinarySettingsSnapshot {
-                installation: (*self.0).clone(),
-                ..Default::default()
-            })
+    impl identity_application::setting::SettingsSource for TestInstallationSetting {
+        fn snapshot(&self) -> Arc<identity_application::setting::SettingsSnapshot> {
+            Arc::clone(&self.0)
         }
     }
 
     #[tokio::test]
     async fn discovery_contract_contains_expected_fields() {
         let service = OpenIdProviderService::new(Arc::new(TestInstallationSetting(Arc::new(
-            InstallationState {
-                initialized: true,
-                domain: Some("identity.example.com".to_owned()),
-                first_user_oid: None,
-                first_key_oid: None,
-                initialized_at: None,
-            },
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("identity.example.com".to_owned()),
+                    login_domain: None,
+                    login_client_id: None,
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    initialized_at: None,
+                }),
         ))));
 
         let metadata = openid_configuration_document(&service).await.unwrap();

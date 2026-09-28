@@ -1,150 +1,205 @@
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, sea_query::OnConflict,
-};
+use std::collections::HashMap;
+
+use chrono::Utc;
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set, sea_query::OnConflict};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::database::entity::{setting, setting::Entity as SettingEntity};
-use identity_application::setting::{
-    SettingDefinition, SettingEntry,
-    repository::{SettingRepository, SettingRepositoryError},
+use crate::database::entity::setting;
+use identity_application::{
+    error::{AppError, codes::common::CommonErrorCode},
+    setting::{SettingChanges, SettingDefinition, SettingRegistry, SettingSection},
 };
 
-pub struct SettingRepositoryImpl {
-    db: DatabaseConnection,
-}
-
-impl SettingRepositoryImpl {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+/// The stored value of `S`, or its declared default when it has no row.
+///
+/// For reads that must see the database itself, such as inside a
+/// transaction; everything else reads the settings snapshot.
+pub async fn read_setting<S, C>(db: &C) -> Result<S::Value, AppError>
+where
+    S: SettingDefinition,
+    C: ConnectionTrait,
+{
+    let row = setting::Entity::find()
+        .filter(setting::Column::Key.eq(S::KEY))
+        .one(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    match row {
+        Some(row) => Ok(S::decode(&row.value)?),
+        None => Ok(S::default_value()),
     }
 }
 
-fn serialize_value<S>(value: &S::Value) -> Result<Value, SettingRepositoryError>
+/// Binds separate dotted keys beneath a section prefix from the database.
+pub async fn read_section<T, C>(db: &C) -> Result<T, AppError>
 where
-    S: SettingDefinition,
+    T: SettingSection,
+    C: ConnectionTrait,
 {
-    serde_json::to_value(value).map_err(SettingRepositoryError::Serialize)
+    let rows = setting::Entity::find()
+        .filter(setting::Column::Key.starts_with(format!("{}.", T::PREFIX)))
+        .all(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    let raw: HashMap<_, _> = rows.into_iter().map(|row| (row.key, row.value)).collect();
+    let snapshot = SettingRegistry::default()
+        .register_section::<T>()
+        .resolve(&raw, None)?;
+    Ok(snapshot.section::<T>())
 }
 
-fn to_domain<S>(model: setting::Model) -> Result<SettingEntry<S::Value>, SettingRepositoryError>
+/// Writes every change in one statement, replacing stored values.
+///
+/// Takes any connection, so the writes can join a larger transaction.
+#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "write_settings"))]
+pub async fn write_settings<C>(db: &C, changes: SettingChanges) -> Result<(), AppError>
 where
-    S: SettingDefinition,
+    C: ConnectionTrait,
 {
-    let setting::Model {
-        oid,
-        key,
-        value,
-        created_at,
-        updated_at,
-        ..
-    } = model;
-
-    let value = serde_json::from_value(value).map_err(SettingRepositoryError::Deserialize)?;
-    S::validate(&value)
-        .map_err(|error| SettingRepositoryError::Validation(error.message().to_owned()))?;
-
-    Ok(SettingEntry {
-        oid: oid.into(),
-        key,
-        value,
-        created_at: DateTime::from_naive_utc_and_offset(created_at, Utc),
-        updated_at: updated_at.map(|value| DateTime::from_naive_utc_and_offset(value, Utc)),
-    })
+    insert_rows(
+        db,
+        changes,
+        OnConflict::column(setting::Column::Key)
+            .update_columns([setting::Column::Value, setting::Column::UpdatedAt])
+            .to_owned(),
+    )
+    .await
 }
 
-#[async_trait]
-impl SettingRepository for SettingRepositoryImpl {
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "get"))]
-    async fn get<S>(&self) -> Result<Option<SettingEntry<S::Value>>, SettingRepositoryError>
-    where
-        S: SettingDefinition,
-    {
-        SettingEntity::find()
-            .filter(setting::Column::Key.eq(S::KEY))
-            .one(&self.db)
-            .await
-            .map_err(|e| SettingRepositoryError::QueryFailed(Box::new(e)))?
-            .map(to_domain::<S>)
-            .transpose()
-    }
+/// Stores each value whose key has no row yet, keeping every stored value.
+///
+/// One `INSERT ... ON CONFLICT (key) DO NOTHING`: concurrent callers race
+/// safely on the unique key.
+#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "insert_missing_settings"))]
+pub async fn insert_missing_settings<C>(
+    db: &C,
+    values: impl IntoIterator<Item = (String, Value)>,
+) -> Result<(), AppError>
+where
+    C: ConnectionTrait,
+{
+    insert_rows(
+        db,
+        values,
+        OnConflict::column(setting::Column::Key)
+            .do_nothing()
+            .to_owned(),
+    )
+    .await
+}
 
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "upsert"))]
-    async fn upsert<S>(
-        &self,
-        value: &S::Value,
-    ) -> Result<SettingEntry<S::Value>, SettingRepositoryError>
-    where
-        S: SettingDefinition,
-    {
-        S::validate(value)
-            .map_err(|error| SettingRepositoryError::Validation(error.message().to_owned()))?;
-
-        let now = Utc::now().naive_utc();
-        let serialized = serialize_value::<S>(value)?;
-
-        let active = setting::ActiveModel {
+async fn insert_rows<C>(
+    db: &C,
+    values: impl IntoIterator<Item = (String, Value)>,
+    on_conflict: OnConflict,
+) -> Result<(), AppError>
+where
+    C: ConnectionTrait,
+{
+    let now = Utc::now().naive_utc();
+    let rows = values
+        .into_iter()
+        .map(|(key, value)| setting::ActiveModel {
             oid: Set(Uuid::new_v4()),
-            key: Set(S::KEY.to_owned()),
-            value: Set(serialized),
+            key: Set(key),
+            value: Set(value),
             created_at: Set(now),
             updated_at: Set(Some(now)),
             ..Default::default()
-        };
-
-        let model = SettingEntity::insert(active)
-            .on_conflict(
-                OnConflict::column(setting::Column::Key)
-                    .update_columns([setting::Column::Value, setting::Column::UpdatedAt])
-                    .to_owned(),
-            )
-            .exec_with_returning(&self.db)
-            .await
-            .map_err(|e| SettingRepositoryError::UpdateFailed(Box::new(e)))?;
-        to_domain::<S>(model)
+        })
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return Ok(());
     }
+
+    setting::Entity::insert_many(rows)
+        .on_conflict(on_conflict)
+        .exec_without_returning(db)
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::to_domain;
-    use crate::database::entity::setting;
-    use chrono::Utc;
-    use identity_application::setting::{SettingDefinition, SettingValidationError};
+    use identity_application::setting::{
+        DynamicRegistrationSettings, InstallationSettings, LoginDomainSetting,
+        OpenIdConnectSettings, SettingChanges,
+    };
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+    use serde_json::json;
     use uuid::Uuid;
 
-    struct PositiveSetting;
+    use super::{read_section, write_settings};
+    use crate::database::entity::setting;
 
-    impl SettingDefinition for PositiveSetting {
-        type Value = i32;
-        const KEY: &'static str = "positive";
+    #[tokio::test]
+    async fn reads_a_section_from_separate_dotted_keys() {
+        let now = chrono::Utc::now();
+        let row = |id, key: &str, value| setting::Model {
+            id,
+            oid: Uuid::new_v4(),
+            key: key.to_owned(),
+            value,
+            created_at: now.naive_utc(),
+            updated_at: None,
+        };
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([[
+                row(1, "app.installation.initialized", json!(true)),
+                row(2, "app.installation.initialized_at", json!(now)),
+            ]])
+            .into_connection();
 
-        fn default_value() -> Self::Value {
-            1
-        }
+        let installation = read_section::<InstallationSettings, _>(&db).await.unwrap();
 
-        fn validate(value: &Self::Value) -> Result<(), SettingValidationError> {
-            (*value > 0)
-                .then_some(())
-                .ok_or_else(|| SettingValidationError::new("must be positive"))
-        }
+        assert!(installation.initialized);
+        assert_eq!(installation.initialized_at, Some(now));
+        let sql = format!("{:?}", db.into_transaction_log()[0]);
+        assert!(sql.contains("app.installation.%"), "{sql}");
     }
 
-    #[test]
-    fn persisted_setting_is_validated_before_entering_the_domain() {
-        let now = Utc::now().naive_utc();
-        let error = to_domain::<PositiveSetting>(setting::Model {
-            id: 1,
-            oid: Uuid::new_v4(),
-            key: PositiveSetting::KEY.to_owned(),
-            value: serde_json::json!(0),
-            created_at: now,
-            updated_at: None,
-        })
-        .unwrap_err();
+    #[tokio::test]
+    async fn writes_every_change_in_one_upsert() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 2,
+            }])
+            .into_connection();
+        let changes = SettingChanges::default()
+            .set_section_field(
+                &OpenIdConnectSettings {
+                    dynamic_registration: DynamicRegistrationSettings { enabled: true },
+                    ..OpenIdConnectSettings::default()
+                },
+                "dynamic_registration.enabled",
+            )
+            .unwrap()
+            .set::<LoginDomainSetting>(&Some("https://login.example".to_owned()))
+            .unwrap();
 
-        assert!(error.to_string().contains("must be positive"));
+        write_settings(&db, changes).await.unwrap();
+
+        let log = db.into_transaction_log();
+        assert_eq!(log.len(), 1);
+        let sql = format!("{:?}", log[0]);
+        assert!(
+            sql.contains(r#"ON CONFLICT (\"key\") DO UPDATE SET \"value\" = \"excluded\".\"value\", \"updated_at\" = \"excluded\".\"updated_at\""#),
+            "{sql}"
+        );
+        assert!(sql.contains("https://login.example"), "{sql}");
+    }
+
+    #[tokio::test]
+    async fn empty_changes_touch_nothing() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+
+        write_settings(&db, SettingChanges::default())
+            .await
+            .unwrap();
+
+        assert!(db.into_transaction_log().is_empty());
     }
 }

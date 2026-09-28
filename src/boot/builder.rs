@@ -213,21 +213,12 @@ impl AppBuilder {
 }
 
 async fn is_installed(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use identity_application::setting::InstallationSettings;
+    use identity_infrastructure::database::repository::setting::read_section;
 
-    use identity_application::setting::{InstallationInitializedSetting, SettingDefinition};
-    use identity_infrastructure::database::entity::setting;
-
-    let row = setting::Entity::find()
-        .filter(setting::Column::Key.eq(InstallationInitializedSetting::KEY))
-        .one(db)
-        .await?;
-
-    let Some(row) = row else {
-        return Ok(false);
-    };
-
-    serde_json::from_value(row.value).map_err(Into::into)
+    Ok(read_section::<InstallationSettings, _>(db)
+        .await?
+        .initialized)
 }
 
 fn build_install_service(
@@ -237,7 +228,7 @@ fn build_install_service(
 ) -> InstallService {
     InstallService {
         password_hasher: Arc::new(PasswordHasherImpl::new()),
-        settings: settings.ordinary(),
+        settings: settings.store(),
         key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         repository: Arc::new(InstallRepositoryImpl::new(db)),

@@ -6,7 +6,6 @@ pub mod key;
 pub mod login;
 pub mod registration;
 pub mod session;
-pub mod setting;
 pub mod user;
 
 pub use auth::*;

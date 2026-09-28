@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     application::{
         error::{AppError, codes::device::DeviceAuthorizationErrorCode},
-        setting::{DeviceAuthorizationSettings, LoginDomainSettings, Setting},
+        setting::{AppSettings, OpenIdConnectSettings, SettingsSource},
     },
     domain::{
         client_authorization::{
@@ -107,22 +107,12 @@ pub struct DeviceVerificationOutcome {
     pub status: DeviceVerificationStatus,
 }
 
-pub trait DeviceAuthorizationSettingsSource:
-    Setting<DeviceAuthorizationSettings> + Setting<LoginDomainSettings>
-{
-}
-
-impl<T> DeviceAuthorizationSettingsSource for T where
-    T: Setting<DeviceAuthorizationSettings> + Setting<LoginDomainSettings> + ?Sized
-{
-}
-
 pub struct DeviceAuthorizationService {
     client_authentication: Arc<ClientAuthenticator>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     device_repo: Arc<dyn DeviceAuthorizationRepository>,
     provider_service: Arc<OpenIdProviderService>,
-    settings: Arc<dyn DeviceAuthorizationSettingsSource>,
+    settings: Arc<dyn SettingsSource>,
     events: Arc<dyn EventSink>,
 }
 
@@ -131,7 +121,7 @@ pub struct DeviceAuthorizationServiceDependencies {
     pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
     pub device_repo: Arc<dyn DeviceAuthorizationRepository>,
     pub provider_service: Arc<OpenIdProviderService>,
-    pub settings: Arc<dyn DeviceAuthorizationSettingsSource>,
+    pub settings: Arc<dyn SettingsSource>,
 }
 
 impl DeviceAuthorizationService {
@@ -159,8 +149,10 @@ impl DeviceAuthorizationService {
         &self,
         params: DeviceAuthorizationParams,
     ) -> Result<DeviceAuthorizationResponse, AppError> {
-        let settings =
-            Setting::<DeviceAuthorizationSettings>::current_value(self.settings.as_ref());
+        let snapshot = self.settings.snapshot();
+        let settings = snapshot
+            .section::<OpenIdConnectSettings>()
+            .device_authorization;
         // A JWT authenticated client may identify itself through the
         // assertion alone (RFC 7523 §2.2). The unverified subject only locates
         // the client; the assertion is fully verified before it authenticates
@@ -200,8 +192,8 @@ impl DeviceAuthorizationService {
             .await?;
 
         let user_code_display = request.user_code_display.clone();
-        let login_domain = Setting::<LoginDomainSettings>::current_value(self.settings.as_ref());
-        let verification_uri = self.verification_uri(&issuer, login_domain.value.as_deref())?;
+        let login_domain = snapshot.section::<AppSettings>().login_domain;
+        let verification_uri = self.verification_uri(&issuer, login_domain.as_deref())?;
         let verification_uri_complete =
             verification_uri_complete(&verification_uri, &user_code_display);
 

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Utc;
 use rand::RngExt;
 use url::Url;
 use uuid::Uuid;
@@ -12,13 +13,16 @@ use crate::{
             AppError,
             codes::{common::CommonErrorCode, install::InstallErrorCode},
         },
-        setting::{Setting, runtime::RefreshableSetting},
+        setting::{PasswordHashSetting, SettingsSource, runtime::RefreshableSetting},
     },
-    auth::password::{HashOptions, PasswordHasher},
+    auth::password::PasswordHasher,
     domain::key::{
         AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm, generator::AsymmetricKeyGenerator,
     },
-    setting::InstallationState,
+    setting::{
+        DomainSetting, InstallationSettings, LoginClientIdSetting, LoginDomainSetting,
+        SettingChanges,
+    },
     user::model::Password,
 };
 
@@ -33,15 +37,9 @@ pub struct InstallInput {
     pub key_algorithm: String,
 }
 
-pub trait InstallSettings:
-    Setting<InstallationState> + Setting<HashOptions> + RefreshableSetting
-{
-}
+pub trait InstallSettings: SettingsSource + RefreshableSetting {}
 
-impl<T> InstallSettings for T where
-    T: Setting<InstallationState> + Setting<HashOptions> + RefreshableSetting + ?Sized
-{
-}
+impl<T> InstallSettings for T where T: SettingsSource + RefreshableSetting + ?Sized {}
 
 pub struct InstallService {
     pub password_hasher: Arc<dyn PasswordHasher>,
@@ -68,13 +66,15 @@ pub struct InstallationData {
     pub username: String,
     pub email: String,
     pub password: Password,
-    pub domain: String,
-    pub login_domain: Option<String>,
+    pub user_oid: Uuid,
     pub application_url: Url,
     pub client_id: Uuid,
     pub client_secret: String,
     pub client_secret_lifetime: chrono::Duration,
+    pub key_oid: Uuid,
     pub key_data: identity_domain::key::AsymmetricKeyData,
+    /// The installation settings, written in the same transaction.
+    pub settings: SettingChanges,
 }
 
 /// Storage port for a complete installation. The implementation writes the
@@ -82,15 +82,15 @@ pub struct InstallationData {
 /// installation settings as one atomic unit.
 #[async_trait]
 pub trait InstallRepository: Send + Sync {
-    async fn create_installation(
-        &self,
-        data: InstallationData,
-    ) -> Result<InstallationState, AppError>;
+    async fn create_installation(&self, data: InstallationData) -> Result<(), AppError>;
 }
 
 impl InstallService {
     pub fn is_initialized(&self) -> bool {
-        Setting::<InstallationState>::current_value(self.settings.as_ref()).initialized
+        self.settings
+            .snapshot()
+            .section::<InstallationSettings>()
+            .initialized
     }
 
     #[tracing::instrument(skip_all, name = "install")]
@@ -120,7 +120,7 @@ impl InstallService {
 
         let input = validate_install_input(input)?;
 
-        let hash_options = Setting::<HashOptions>::current_value(self.settings.as_ref());
+        let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
         let password_hasher = Arc::clone(&self.password_hasher);
         let password = crate::auth::password::run_password_hashing(move || {
             password_hasher.hash(&input.password, &hash_options)
@@ -141,20 +141,30 @@ impl InstallService {
         let mut client_secret_bytes = [0_u8; 32];
         rand::rng().fill(&mut client_secret_bytes);
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
-        let login_domain = login_app_domain(&input.application_url);
+        let user_oid = Uuid::new_v4();
+        let key_oid = Uuid::new_v4();
+        let settings = SettingChanges::default()
+            .set::<DomainSetting>(&Some(input.domain))?
+            .set::<LoginDomainSetting>(&login_app_domain(&input.application_url))?
+            .set::<LoginClientIdSetting>(&Some(client_id))?
+            .set_section(&InstallationSettings {
+                initialized: true,
+                initialized_at: Some(Utc::now()),
+            })?;
 
         self.repository
             .create_installation(InstallationData {
                 username: input.username,
                 email: input.email,
                 password,
-                domain: input.domain,
-                login_domain: login_domain.clone(),
+                user_oid,
                 application_url: input.application_url,
                 client_id,
                 client_secret: client_secret.clone(),
                 client_secret_lifetime: self.client_secret_lifetime,
+                key_oid,
                 key_data,
+                settings,
             })
             .await?;
 
