@@ -1,15 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::setting::{SettingDefinition, SettingValidationError};
-
 /// Tunables of the RFC 8628 device authorization flow.
-///
-/// Defaults to a ten minute request lifetime and a five second polling interval.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceAuthorizationSettings {
-    /// Lifetime of a device authorization request, returned as `expires_in`.
     pub request_ttl_seconds: i64,
-    /// Polling interval advertised to clients as `interval`.
     pub polling_interval_seconds: i64,
 }
 
@@ -21,6 +15,8 @@ impl Default for DeviceAuthorizationSettings {
         }
     }
 }
+
+use super::{SettingDefinition, SettingValidationError};
 
 pub struct DeviceAuthorizationSetting;
 

@@ -6,10 +6,12 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use identity_domain::{
-    auth::{totp::TotpError, totp::TotpVerifier},
+use crate::user::UserOid;
+
+use crate::{
+    auth::totp::{TotpError, TotpVerifier},
     user::{
-        CredentialType, OtpCredentialData, RecoveryCodeCredentialData, UserOid,
+        CredentialType, OtpCredentialData, RecoveryCodeCredentialData,
         repository::UserCredentialRepository,
     },
 };
@@ -220,7 +222,7 @@ impl MfaService {
         enrollment_token: &str,
         issuer: &str,
         account_name: &str,
-        algorithm: identity_domain::user::OtpAlgorithm,
+        algorithm: crate::user::OtpAlgorithm,
     ) -> Result<BeginTotpEnrollment, AppError> {
         if self.status(user_oid).await?.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
@@ -329,17 +331,17 @@ fn generate_recovery_codes() -> (Vec<String>, Vec<RecoveryCodeCredentialData>) {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use async_trait::async_trait;
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
-    use identity_domain::{
+    use crate::{
         auth::totp::{TotpError, TotpVerifier},
-        data_protection::DataProtectionError,
         user::{
             CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData, Password,
             RecoveryCodeCredentialData, UserCredential, UserCredentialOid, UserOid,
             repository::{UserCredentialRepository, UserCredentialRepositoryError},
         },
     };
+    use async_trait::async_trait;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use identity_domain::data_protection::DataProtectionError;
     use uuid::Uuid;
 
     use super::{

@@ -1,5 +1,10 @@
 use crate::setting::SettingDefinition;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DynamicClientRegistrationSettings {
+    pub enabled: bool,
+}
+
 pub struct DynamicClientRegistrationSetting;
 
 impl SettingDefinition for DynamicClientRegistrationSetting {

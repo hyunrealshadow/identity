@@ -6,15 +6,19 @@ use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
     MockOpenIdConnectCredentialRepository, MockUserRepository,
 };
-use identity_domain::user::repository::UserRepositoryError;
+use crate::setting::{OrdinarySettingsProvider, OrdinarySettingsSnapshot};
+use crate::user::repository::UserRepositoryError;
 
 pub(in crate::openid_connect) struct StaticInstallationProvider {
     pub(in crate::openid_connect) value: Arc<InstallationState>,
 }
 
-impl SettingProvider<InstallationSetting> for StaticInstallationProvider {
-    fn current_value(&self) -> Arc<InstallationState> {
-        self.value.clone()
+impl OrdinarySettingsProvider for StaticInstallationProvider {
+    fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
+        Arc::new(OrdinarySettingsSnapshot {
+            installation: (*self.value).clone(),
+            ..Default::default()
+        })
     }
 }
 

@@ -2,8 +2,14 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use base64::Engine;
 use chrono::{Duration, Utc};
+use identity_application::setting::{
+    DeviceAuthorizationSetting, DomainSetting, DynamicClientRegistrationSetting,
+    InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+    InstallationInitializedAtSetting, InstallationInitializedSetting, LoginDomainSetting,
+    PasswordHashSetting, SettingDefinition,
+};
 use identity_domain::{
-    auth::{LoginStatus, password::PasswordHashSetting},
+    auth::LoginStatus,
     client_authorization::{
         AuthorizationInteractionState, ClientAuthorizationType, StoredAuthorizationRequest,
     },
@@ -12,17 +18,6 @@ use identity_domain::{
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
     },
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
-    setting::{
-        device_authorization::DeviceAuthorizationSetting,
-        domain::DomainSetting,
-        dynamic_registration::DynamicClientRegistrationSetting,
-        installation::{
-            InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-            InstallationInitializedAtSetting, InstallationInitializedSetting,
-        },
-        login_domain::LoginDomainSetting,
-        model::SettingDefinition,
-    },
 };
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
@@ -300,15 +295,17 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
-        .append_query_results([[installation_initialized_setting]])
-        .append_query_results([[domain_setting]])
-        .append_query_results([[installation_first_user_oid_setting]])
-        .append_query_results([[installation_first_key_oid_setting]])
-        .append_query_results([[installation_initialized_at_setting]])
-        .append_query_results([[password_setting]])
-        .append_query_results([[dynamic_registration_setting]])
-        .append_query_results([[login_domain_setting]])
-        .append_query_results([[device_authorization_setting]])
+        .append_query_results([[
+            installation_initialized_setting,
+            domain_setting,
+            installation_first_user_oid_setting,
+            installation_first_key_oid_setting,
+            installation_initialized_at_setting,
+            password_setting,
+            dynamic_registration_setting,
+            login_domain_setting,
+            device_authorization_setting,
+        ]])
         .append_query_results([Vec::<setting::Model>::new()])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[symmetric_key.clone()]])

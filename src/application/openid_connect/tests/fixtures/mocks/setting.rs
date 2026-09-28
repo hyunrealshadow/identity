@@ -1,5 +1,5 @@
-use identity_domain::setting::repository::{SettingRepository, SettingRepositoryError};
-use identity_domain::setting::{SettingDefinition, SettingEntry};
+use crate::setting::repository::{SettingRepository, SettingRepositoryError};
+use crate::setting::{SettingDefinition, SettingEntry};
 
 mockall::mock! {
     pub SettingRepository {}

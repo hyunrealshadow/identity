@@ -212,7 +212,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         .login()
         .challenge(
             login_oid,
-            identity_domain::user::CredentialType::Password,
+            identity_application::user::CredentialType::Password,
             &body.password,
             sess_ctx,
         )

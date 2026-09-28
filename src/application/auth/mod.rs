@@ -1,6 +1,8 @@
 pub mod account;
 pub mod error;
+pub mod hash;
 pub mod login;
 pub mod mfa;
-pub(crate) mod password;
+pub mod password;
 pub mod session;
+pub mod totp;

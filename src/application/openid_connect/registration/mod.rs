@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     application::{
         error::{AppError, codes::registration::RegistrationErrorCode},
-        setting::runtime::SettingProvider,
+        setting::{DynamicClientRegistrationSettings, Setting},
     },
     domain::{
         client::model::{Client, ClientProtocol},
@@ -17,7 +17,6 @@ use crate::{
             OpenIdConnectClientRegistrationRepository, OpenIdConnectClientSettings,
             OpenIdConnectCredentialData, ResponseType, SubjectType, TokenEndpointAuthMethod,
         },
-        setting::DynamicClientRegistrationSetting,
     },
 };
 
@@ -43,7 +42,7 @@ use validation::{
 };
 
 pub struct DynamicClientRegistrationService {
-    enabled: Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>,
+    enabled: Arc<dyn Setting<DynamicClientRegistrationSettings>>,
     repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
     events: Arc<dyn crate::observability::EventSink>,
 }
@@ -51,7 +50,7 @@ pub struct DynamicClientRegistrationService {
 impl DynamicClientRegistrationService {
     #[must_use]
     pub fn new(
-        enabled: Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>,
+        enabled: Arc<dyn Setting<DynamicClientRegistrationSettings>>,
         repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
     ) -> Self {
         Self {
@@ -83,7 +82,7 @@ impl DynamicClientRegistrationService {
         request: DynamicClientRegistrationRequest,
         issuer: &Url,
     ) -> Result<DynamicClientRegistrationResponse, AppError> {
-        if !*self.enabled.current_value() {
+        if !self.enabled.current_value().enabled {
             return Err(AppError::from_code(
                 RegistrationErrorCode::DynamicRegistrationDisabled,
             ));
@@ -376,7 +375,7 @@ impl DynamicClientRegistrationService {
         registration_access_token: &str,
         issuer: &Url,
     ) -> Result<DynamicClientRegistrationResponse, AppError> {
-        if !*self.enabled.current_value() {
+        if !self.enabled.current_value().enabled {
             return Err(AppError::from_code(
                 RegistrationErrorCode::DynamicRegistrationDisabled,
             ));
@@ -405,7 +404,7 @@ impl DynamicClientRegistrationService {
         client_id: &str,
         registration_access_token: &str,
     ) -> Result<(), AppError> {
-        if !*self.enabled.current_value() {
+        if !self.enabled.current_value().enabled {
             return Err(AppError::from_code(
                 RegistrationErrorCode::DynamicRegistrationDisabled,
             ));

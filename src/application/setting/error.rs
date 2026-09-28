@@ -1,6 +1,6 @@
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
-    domain::setting::repository::SettingRepositoryError,
+    setting::repository::SettingRepositoryError,
 };
 
 impl From<SettingRepositoryError> for AppError {

@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use identity_domain::auth::LoginStatus;
 use serde::{Deserialize, Serialize};
 
-use identity_domain::user::CredentialType;
+use identity_application::user::CredentialType;
 
 // ─── Common Error Response ───────────────────────────────────────────────────
 

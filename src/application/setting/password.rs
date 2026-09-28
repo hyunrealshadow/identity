@@ -1,40 +1,9 @@
-//! Password hashing contract for the authentication domain.
-//!
-//! This module defines the abstraction only. Concrete implementations live in
-//! [`crate::infrastructure::auth::password`].
-
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
 use crate::{
-    setting::model::{SettingDefinition, SettingValidationError},
-    user::model::{Argon2Options, Argon2Variant, Argon2Version, Password},
+    auth::password::HashOptions,
+    user::model::{Argon2Options, Argon2Variant, Argon2Version},
 };
 
-#[derive(Debug, Error)]
-pub enum PasswordHashError {
-    #[error("invalid hash options: {0}")]
-    InvalidOptions(String),
-
-    #[error("hashing failed: {0}")]
-    HashFailed(String),
-
-    #[error("invalid stored hash: {0}")]
-    InvalidStoredHash(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerifyResult {
-    Success,
-    Failure,
-    NeedsRehash,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HashOptions {
-    Argon2(Argon2Options),
-}
+use super::{SettingDefinition, SettingValidationError};
 
 pub struct PasswordHashSetting;
 
@@ -80,24 +49,11 @@ impl SettingDefinition for PasswordHashSetting {
     }
 }
 
-pub trait PasswordHasher: Send + Sync {
-    fn hash(&self, password: &str, options: &HashOptions) -> Result<Password, PasswordHashError>;
-
-    fn verify(
-        &self,
-        password: &str,
-        stored: &Password,
-        options: &HashOptions,
-    ) -> Result<VerifyResult, PasswordHashError>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::{HashOptions, PasswordHashSetting};
-    use crate::{
-        setting::model::SettingDefinition,
-        user::model::{Argon2Options, Argon2Variant, Argon2Version},
-    };
+    use crate::setting::SettingDefinition;
+    use crate::user::model::{Argon2Options, Argon2Variant, Argon2Version};
 
     fn invalid_options(update: impl FnOnce(&mut Argon2Options)) -> HashOptions {
         let mut options = Argon2Options {

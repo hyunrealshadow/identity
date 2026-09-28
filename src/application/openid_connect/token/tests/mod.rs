@@ -1,3 +1,4 @@
+use crate::setting::InstallationState;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -28,7 +29,6 @@ use crate::{
         error::AppError,
         key::asymmetric::{AsymmetricKeyService, GeneratedKeyJwk, KeyJwkGenerator},
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
-        setting::runtime::SettingProvider,
     },
     domain::{
         client::model::ClientOid,
@@ -47,7 +47,6 @@ use crate::{
             OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialType,
             model::claim::JwtClaimNames,
         },
-        setting::installation::{InstallationSetting, InstallationState},
         user::{
             User, UserOid,
             repository::{UserRepository, UserRepositoryError},

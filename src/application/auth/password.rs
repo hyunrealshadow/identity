@@ -1,8 +1,8 @@
 use std::sync::{Arc, OnceLock};
 
-use identity_domain::auth::password::PasswordHashError;
 use tokio::sync::Semaphore;
 
+pub use super::hash::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult};
 use crate::error::{AppError, codes::common::CommonErrorCode};
 
 const MAX_CONCURRENT_PASSWORD_HASHES: usize = 4;

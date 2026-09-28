@@ -2,7 +2,16 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::setting::{SettingDefinition, SettingValidationError};
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct InstallationState {
+    pub initialized: bool,
+    pub domain: Option<String>,
+    pub first_user_oid: Option<Uuid>,
+    pub first_key_oid: Option<Uuid>,
+    pub initialized_at: Option<DateTime<Utc>>,
+}
+
+use super::{SettingDefinition, SettingValidationError};
 
 // --- Per-field setting definitions (flat storage) ---
 
@@ -54,19 +63,8 @@ impl SettingDefinition for InstallationInitializedAtSetting {
 
 // --- Grouped read-view struct (for backward-compatible consumers) ---
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct InstallationState {
-    pub initialized: bool,
-    pub domain: Option<String>,
-    pub first_user_oid: Option<Uuid>,
-    pub first_key_oid: Option<Uuid>,
-    pub initialized_at: Option<DateTime<Utc>>,
-}
-
-/// Group-level setting that is assembled from the 5 per-field flat settings.
-/// Its KEY is unused for storage (each field has its own KEY). A custom
-/// provider implementation reads from the 5 flat `CachedSetting`s and
-/// assembles an `InstallationState`.
+/// Group-level read view assembled from the per-field flat settings.
+/// Its KEY is unused for storage; each field has its own key.
 pub struct InstallationSetting;
 
 impl SettingDefinition for InstallationSetting {

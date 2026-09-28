@@ -33,19 +33,11 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
     use std::{collections::BTreeMap, sync::Arc};
 
     use chrono::Utc;
-    use identity_domain::{
-        auth::password::PasswordHashSetting,
-        setting::{
-            device_authorization::DeviceAuthorizationSetting,
-            domain::DomainSetting,
-            dynamic_registration::DynamicClientRegistrationSetting,
-            installation::{
-                InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-                InstallationInitializedAtSetting, InstallationInitializedSetting,
-            },
-            login_domain::LoginDomainSetting,
-            model::SettingDefinition,
-        },
+    use identity_application::setting::{
+        DeviceAuthorizationSetting, DomainSetting, DynamicClientRegistrationSetting,
+        InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+        InstallationInitializedAtSetting, InstallationInitializedSetting, LoginDomainSetting,
+        PasswordHashSetting, SettingDefinition,
     };
     use sea_orm::{DatabaseBackend, MockDatabase, Value};
 
@@ -137,17 +129,17 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         })
         .collect();
     let db = MockDatabase::new(DatabaseBackend::Postgres)
-        .append_query_results(vec![
-            vec![installation_initialized_setting],
-            vec![domain_setting],
-            vec![installation_first_user_oid_setting],
-            vec![installation_first_key_oid_setting],
-            vec![installation_initialized_at_setting],
-            vec![password_setting],
-            vec![dynamic_registration_setting],
-            vec![login_domain_setting],
-            vec![device_authorization_setting],
-        ])
+        .append_query_results([[
+            installation_initialized_setting,
+            domain_setting,
+            installation_first_user_oid_setting,
+            installation_first_key_oid_setting,
+            installation_initialized_at_setting,
+            password_setting,
+            dynamic_registration_setting,
+            login_domain_setting,
+            device_authorization_setting,
+        ]])
         .append_query_results([cors_rows])
         .append_query_results([
             Vec::<crate::infrastructure::database::entity::key::Model>::new(),

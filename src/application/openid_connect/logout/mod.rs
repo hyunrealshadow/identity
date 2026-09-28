@@ -617,6 +617,7 @@ mod tests {
         LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
         unsigned_id_token_hint_for_test,
     };
+    use crate::setting::InstallationState;
     use crate::{
         domain::{
             client::model::{Client, ClientProtocol},
@@ -629,7 +630,6 @@ mod tests {
                 OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
                 OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
             },
-            setting::installation::{InstallationSetting, InstallationState},
         },
         observability::{BusinessEvent, EventSink},
         openid_connect::{
@@ -708,11 +708,12 @@ mod tests {
 
     struct TestInstallationSetting(Arc<InstallationState>);
 
-    impl crate::application::setting::runtime::SettingProvider<InstallationSetting>
-        for TestInstallationSetting
-    {
-        fn current_value(&self) -> Arc<InstallationState> {
-            Arc::clone(&self.0)
+    impl crate::setting::OrdinarySettingsProvider for TestInstallationSetting {
+        fn current_snapshot(&self) -> Arc<crate::setting::OrdinarySettingsSnapshot> {
+            Arc::new(crate::setting::OrdinarySettingsSnapshot {
+                installation: (*self.0).clone(),
+                ..Default::default()
+            })
         }
     }
 

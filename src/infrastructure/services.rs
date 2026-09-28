@@ -20,7 +20,7 @@ use crate::{
         login_runtime::LoginRuntimeRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
-        session::SessionRepositoryImpl, setting::SettingRepositoryImpl, user::UserRepositoryImpl,
+        session::SessionRepositoryImpl, user::UserRepositoryImpl,
         user_credential::UserCredentialRepositoryImpl,
     },
     openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
@@ -63,7 +63,7 @@ pub type AppMfaService = MfaService;
 
 pub type AppKeyService = AsymmetricKeyService;
 
-pub type AppInstallService = InstallService<SettingRepositoryImpl>;
+pub type AppInstallService = InstallService;
 
 pub type AppOpenIdProviderService = OpenIdProviderService;
 
@@ -156,7 +156,7 @@ impl AppServices {
                 Arc::new(LoginRepositoryImpl::new(db.clone())),
                 Arc::new(PasswordHasherImpl::new()),
                 totp.clone(),
-                settings.password_hash_options(),
+                settings.ordinary(),
             )
             .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
@@ -180,13 +180,7 @@ impl AppServices {
             .with_runtime_key_ring(settings.key_ring()),
             install: InstallService {
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
-                password_hash_options: settings.password_hash_options(),
-                installation_initialized: settings.installation_initialized(),
-                domain: settings.domain(),
-                login_domain: settings.login_domain(),
-                installation_first_user_oid: settings.installation_first_user_oid(),
-                installation_first_key_oid: settings.installation_first_key_oid(),
-                installation_initialized_at: settings.installation_initialized_at(),
+                settings: settings.ordinary(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
                 certificate_generator: Arc::new(CertificateGeneratorImpl),
                 repository: Arc::new(InstallRepositoryImpl::new(db.clone())),
@@ -195,8 +189,7 @@ impl AppServices {
                     rotation_config.credential_lifetime_days,
                 ),
             },
-            oidc: OpenIdProviderService::new(settings.installation())
-                .with_dynamic_registration_setting(settings.dynamic_client_registration())
+            oidc: OpenIdProviderService::new(settings.ordinary())
                 .with_key_repo(key_repo.clone())
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
             oidc_authorize: AuthorizeService::new(AuthorizeServiceDependencies {
@@ -209,7 +202,7 @@ impl AppServices {
                 user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
-                provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                provider_service: Arc::new(OpenIdProviderService::new(settings.ordinary())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
                 http_client: request_uri_http_client.clone(),
@@ -225,7 +218,7 @@ impl AppServices {
                 user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
                 client_repo: oidc_client_repo.clone(),
                 credential_repo: oidc_credential_repo.clone(),
-                provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                provider_service: Arc::new(OpenIdProviderService::new(settings.ordinary())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
             })
@@ -234,7 +227,7 @@ impl AppServices {
             .with_events(Arc::clone(&events)),
             oidc_logout: LogoutService::new(LogoutServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
-                provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
+                provider_service: Arc::new(OpenIdProviderService::new(settings.ordinary())),
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
@@ -255,30 +248,29 @@ impl AppServices {
                     )
                     .with_runtime_key_ring(settings.key_ring()),
                 ),
-                Arc::new(OpenIdProviderService::new(settings.installation())),
+                Arc::new(OpenIdProviderService::new(settings.ordinary())),
             )
             .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone()))),
             dynamic_client_registration: DynamicClientRegistrationService::new(
-                settings.dynamic_client_registration(),
+                settings.ordinary(),
                 oidc_client_registration_repo.clone(),
             )
             .with_events(Arc::clone(&events)),
             device_authorization: DeviceAuthorizationService::new(
                 DeviceAuthorizationServiceDependencies {
-                    login_domain: settings.login_domain(),
                     client_authentication: Arc::new(ClientAuthenticator::new(
                         ClientAuthenticatorDependencies {
                             client_repo: oidc_client_repo.clone(),
                             credential_repo: oidc_credential_repo.clone(),
                             provider_service: Arc::new(OpenIdProviderService::new(
-                                settings.installation(),
+                                settings.ordinary(),
                             )),
                         },
                     )),
                     client_repo: oidc_client_repo.clone(),
                     device_repo: Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())),
-                    provider_service: Arc::new(OpenIdProviderService::new(settings.installation())),
-                    settings: settings.device_authorization(),
+                    provider_service: Arc::new(OpenIdProviderService::new(settings.ordinary())),
+                    settings: settings.ordinary(),
                 },
             )
             .with_events(Arc::clone(&events)),

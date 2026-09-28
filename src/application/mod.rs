@@ -9,6 +9,7 @@ pub mod key;
 pub mod observability;
 pub mod openid_connect;
 pub mod setting;
+pub mod user;
 
 #[cfg(test)]
 mod tests {

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::Utc;
 use rand::RngExt;
 use url::Url;
 use uuid::Uuid;
@@ -13,25 +12,14 @@ use crate::{
             AppError,
             codes::{common::CommonErrorCode, install::InstallErrorCode},
         },
-        setting::runtime::{CachedSetting, SettingProvider},
+        setting::{Setting, runtime::RefreshableSetting},
     },
-    domain::{
-        auth::password::{PasswordHashSetting, PasswordHasher},
-        key::{
-            AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm,
-            generator::AsymmetricKeyGenerator,
-        },
-        setting::{
-            DomainSetting, LoginDomainSetting,
-            installation::{
-                InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-                InstallationInitializedAtSetting, InstallationInitializedSetting,
-                InstallationState,
-            },
-            repository::SettingRepository,
-        },
-        user::model::Password,
+    auth::password::{HashOptions, PasswordHasher},
+    domain::key::{
+        AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm, generator::AsymmetricKeyGenerator,
     },
+    setting::InstallationState,
+    user::model::Password,
 };
 
 #[derive(Debug, Clone)]
@@ -45,15 +33,19 @@ pub struct InstallInput {
     pub key_algorithm: String,
 }
 
-pub struct InstallService<R: SettingRepository> {
+pub trait InstallSettings:
+    Setting<InstallationState> + Setting<HashOptions> + RefreshableSetting
+{
+}
+
+impl<T> InstallSettings for T where
+    T: Setting<InstallationState> + Setting<HashOptions> + RefreshableSetting + ?Sized
+{
+}
+
+pub struct InstallService {
     pub password_hasher: Arc<dyn PasswordHasher>,
-    pub password_hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
-    pub installation_initialized: Arc<CachedSetting<InstallationInitializedSetting, R>>,
-    pub domain: Arc<CachedSetting<DomainSetting, R>>,
-    pub login_domain: Arc<CachedSetting<LoginDomainSetting, R>>,
-    pub installation_first_user_oid: Arc<CachedSetting<InstallationFirstUserOidSetting, R>>,
-    pub installation_first_key_oid: Arc<CachedSetting<InstallationFirstKeyOidSetting, R>>,
-    pub installation_initialized_at: Arc<CachedSetting<InstallationInitializedAtSetting, R>>,
+    pub settings: Arc<dyn InstallSettings>,
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
     pub certificate_generator: Arc<dyn CertificateGenerator>,
     pub repository: Arc<dyn InstallRepository>,
@@ -96,9 +88,9 @@ pub trait InstallRepository: Send + Sync {
     ) -> Result<InstallationState, AppError>;
 }
 
-impl<R: SettingRepository> InstallService<R> {
+impl InstallService {
     pub fn is_initialized(&self) -> bool {
-        *self.installation_initialized.current_value()
+        Setting::<InstallationState>::current_value(self.settings.as_ref()).initialized
     }
 
     #[tracing::instrument(skip_all, name = "install")]
@@ -128,10 +120,10 @@ impl<R: SettingRepository> InstallService<R> {
 
         let input = validate_install_input(input)?;
 
-        let hash_options = self.password_hash_options.current_value();
+        let hash_options = Setting::<HashOptions>::current_value(self.settings.as_ref());
         let password_hasher = Arc::clone(&self.password_hasher);
         let password = crate::auth::password::run_password_hashing(move || {
-            password_hasher.hash(&input.password, hash_options.as_ref())
+            password_hasher.hash(&input.password, &hash_options)
         })
         .await?;
         let mut key_data =
@@ -151,8 +143,7 @@ impl<R: SettingRepository> InstallService<R> {
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
         let login_domain = login_app_domain(&input.application_url);
 
-        let installation_state = self
-            .repository
+        self.repository
             .create_installation(InstallationData {
                 username: input.username,
                 email: input.email,
@@ -167,18 +158,7 @@ impl<R: SettingRepository> InstallService<R> {
             })
             .await?;
 
-        self.installation_initialized.set(true).await?;
-        self.domain.set(installation_state.domain.clone()).await?;
-        self.login_domain.set(login_domain).await?;
-        self.installation_first_user_oid
-            .set(installation_state.first_user_oid)
-            .await?;
-        self.installation_first_key_oid
-            .set(installation_state.first_key_oid)
-            .await?;
-        self.installation_initialized_at
-            .set(Some(Utc::now()))
-            .await?;
+        self.settings.refresh_value().await?;
         self.runtime_key_ring.refresh_value().await?;
 
         Ok(())

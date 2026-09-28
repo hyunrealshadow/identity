@@ -10,12 +10,18 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
+    application::user::CredentialType,
     application::{
         error::{
             AppError,
             codes::{common::CommonErrorCode, install::InstallErrorCode},
         },
         install::{InstallRepository, InstallationData},
+        setting::{
+            DomainSetting, InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+            InstallationInitializedAtSetting, InstallationInitializedSetting, InstallationState,
+            LoginDomainSetting, SettingDefinition,
+        },
     },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
@@ -23,16 +29,6 @@ use crate::{
             GrantType, OpenIdConnectCredentialData, ResponseType, SubjectType,
             TokenEndpointAuthMethod,
         },
-        setting::{
-            DomainSetting, LoginDomainSetting,
-            installation::{
-                InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-                InstallationInitializedAtSetting, InstallationInitializedSetting,
-                InstallationState,
-            },
-            model::SettingDefinition,
-        },
-        user::CredentialType,
     },
     infrastructure::{
         crypto::key::generate_all_jwks_for_key,

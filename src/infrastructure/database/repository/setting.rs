@@ -7,7 +7,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::database::entity::{setting, setting::Entity as SettingEntity};
-use identity_domain::setting::{
+use identity_application::setting::{
     SettingDefinition, SettingEntry,
     repository::{SettingRepository, SettingRepositoryError},
 };
@@ -112,7 +112,7 @@ mod tests {
     use super::to_domain;
     use crate::database::entity::setting;
     use chrono::Utc;
-    use identity_domain::setting::{SettingDefinition, SettingValidationError};
+    use identity_application::setting::{SettingDefinition, SettingValidationError};
     use uuid::Uuid;
 
     struct PositiveSetting;

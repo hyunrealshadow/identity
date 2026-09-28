@@ -5,7 +5,7 @@ use url::Url;
 use crate::{
     application::{
         error::{AppError, codes::provider::ProviderErrorCode},
-        setting::runtime::SettingProvider,
+        setting::{DynamicClientRegistrationSettings, InstallationState, Setting},
     },
     domain::{
         key::{
@@ -16,10 +16,6 @@ use crate::{
             ApiScope, ClaimType, Display, GrantType, OpenIdProviderMetadata, ResponseMode,
             ResponseType, SubjectType, TokenEndpointAuthMethod,
             model::claim::{JwtClaimNames, StandardScopes},
-        },
-        setting::{
-            dynamic_registration::DynamicClientRegistrationSetting,
-            installation::{InstallationSetting, InstallationState},
         },
     },
 };
@@ -218,11 +214,19 @@ fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
         .collect()
 }
 
+pub trait OpenIdProviderSettings:
+    Setting<InstallationState> + Setting<DynamicClientRegistrationSettings>
+{
+}
+
+impl<T> OpenIdProviderSettings for T where
+    T: Setting<InstallationState> + Setting<DynamicClientRegistrationSettings> + ?Sized
+{
+}
+
 #[derive(Clone)]
 pub struct OpenIdProviderService {
-    installation_setting: Arc<dyn SettingProvider<InstallationSetting>>,
-    dynamic_registration_setting:
-        Option<Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>>,
+    installation_setting: Arc<dyn OpenIdProviderSettings>,
     capabilities: OpenIdProviderCapabilities,
     key_repo: Option<Arc<dyn KeyRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
@@ -249,10 +253,9 @@ fn detect_id_token_signing_algorithms(
 }
 
 impl OpenIdProviderService {
-    pub fn new(installation_setting: Arc<dyn SettingProvider<InstallationSetting>>) -> Self {
+    pub fn new(installation_setting: Arc<dyn OpenIdProviderSettings>) -> Self {
         Self {
             installation_setting,
-            dynamic_registration_setting: None,
             capabilities: OpenIdProviderCapabilities::default(),
             key_repo: None,
             signing_algorithm_detector: None,
@@ -260,12 +263,11 @@ impl OpenIdProviderService {
     }
 
     pub fn with_capabilities(
-        installation_setting: Arc<dyn SettingProvider<InstallationSetting>>,
+        installation_setting: Arc<dyn OpenIdProviderSettings>,
         capabilities: OpenIdProviderCapabilities,
     ) -> Self {
         Self {
             installation_setting,
-            dynamic_registration_setting: None,
             capabilities,
             key_repo: None,
             signing_algorithm_detector: None,
@@ -274,14 +276,6 @@ impl OpenIdProviderService {
 
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
         self.key_repo = Some(key_repo);
-        self
-    }
-
-    pub fn with_dynamic_registration_setting(
-        mut self,
-        setting: Arc<dyn SettingProvider<DynamicClientRegistrationSetting>>,
-    ) -> Self {
-        self.dynamic_registration_setting = Some(setting);
         self
     }
 
@@ -294,8 +288,9 @@ impl OpenIdProviderService {
     }
 
     pub fn issuer(&self) -> Result<Url, AppError> {
-        let installation = self.installation_setting.current_value();
-        normalize_issuer(installation.as_ref())
+        let installation =
+            Setting::<InstallationState>::current_value(self.installation_setting.as_ref());
+        normalize_issuer(&installation)
     }
 
     pub async fn discovery_metadata(&self) -> Result<OpenIdProviderMetadata, AppError> {
@@ -413,12 +408,10 @@ impl OpenIdProviderService {
     }
 
     fn registration_endpoint(&self, issuer: &Url) -> Result<Option<Url>, AppError> {
-        let enabled = self
-            .dynamic_registration_setting
-            .as_ref()
-            .map(|setting| *setting.current_value())
-            .unwrap_or(false);
-        if enabled {
+        let registration = Setting::<DynamicClientRegistrationSettings>::current_value(
+            self.installation_setting.as_ref(),
+        );
+        if registration.enabled {
             endpoint_url(issuer, "/oauth2/register").map(Some)
         } else {
             Ok(None)
@@ -500,43 +493,34 @@ fn normalize_issuer(installation: &InstallationState) -> Result<Url, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
+    use crate::setting::InstallationState;
+    use std::sync::Arc;
 
-    use async_trait::async_trait;
     use chrono::Utc;
-    use serde_json::to_value;
     use uuid::Uuid;
 
     use super::{OpenIdProviderService, SigningAlgorithmDetector};
     use crate::{
-        application::setting::runtime::CachedSetting,
-        domain::{
-            key::{
-                JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
-                repository::KeyRepositoryError,
-            },
-            setting::{
-                dynamic_registration::DynamicClientRegistrationSetting,
-                installation::{InstallationSetting, InstallationState},
-                model::{SettingDefinition, SettingEntry},
-                repository::{SettingRepository, SettingRepositoryError},
-            },
+        domain::key::{
+            JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType, material::AsymmetricKeyData,
+            repository::KeyRepositoryError,
         },
         openid_connect::tests::fixtures::mocks::MockKeyRepository,
+        setting::{OrdinarySettingsProvider, OrdinarySettingsSnapshot},
     };
 
-    #[derive(Clone)]
-    struct TestSettingRepo {
-        value: Arc<RwLock<serde_json::Value>>,
+    struct StaticOrdinarySettings {
+        installation: Arc<InstallationState>,
+        dynamic_client_registration: bool,
     }
 
-    struct StaticDynamicRegistrationSetting(bool);
-
-    impl crate::application::setting::runtime::SettingProvider<DynamicClientRegistrationSetting>
-        for StaticDynamicRegistrationSetting
-    {
-        fn current_value(&self) -> Arc<bool> {
-            Arc::new(self.0)
+    impl OrdinarySettingsProvider for StaticOrdinarySettings {
+        fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
+            Arc::new(OrdinarySettingsSnapshot {
+                installation: (*self.installation).clone(),
+                dynamic_client_registration: self.dynamic_client_registration,
+                ..Default::default()
+            })
         }
     }
 
@@ -553,45 +537,6 @@ mod tests {
     #[cfg(not(feature = "allow-none-alg"))]
     fn expected_id_token_algorithms(values: &[&str]) -> Vec<String> {
         values.iter().copied().map(str::to_owned).collect()
-    }
-
-    #[async_trait]
-    impl SettingRepository for TestSettingRepo {
-        async fn get<S>(&self) -> Result<Option<SettingEntry<S::Value>>, SettingRepositoryError>
-        where
-            S: SettingDefinition,
-        {
-            let value = self.value.read().unwrap().clone();
-            let parsed =
-                serde_json::from_value(value).map_err(SettingRepositoryError::Deserialize)?;
-
-            Ok(Some(SettingEntry {
-                oid: Uuid::new_v4().into(),
-                key: S::KEY.to_owned(),
-                value: parsed,
-                created_at: Utc::now(),
-                updated_at: None,
-            }))
-        }
-
-        async fn upsert<S>(
-            &self,
-            value: &S::Value,
-        ) -> Result<SettingEntry<S::Value>, SettingRepositoryError>
-        where
-            S: SettingDefinition,
-        {
-            let serialized = to_value(value).map_err(SettingRepositoryError::Serialize)?;
-            *self.value.write().unwrap() = serialized;
-
-            Ok(SettingEntry {
-                oid: Uuid::new_v4().into(),
-                key: S::KEY.to_owned(),
-                value: value.clone(),
-                created_at: Utc::now(),
-                updated_at: None,
-            })
-        }
     }
 
     fn key_repo_with_keys(keys: Vec<Key>) -> MockKeyRepository {
@@ -895,15 +840,14 @@ mod tests {
 
     #[tokio::test]
     async fn discovery_advertises_registration_endpoint_when_enabled() {
-        let service = OpenIdProviderService::for_test(InstallationState {
+        let service = OpenIdProviderService::for_test_with_registration(InstallationState {
             initialized: true,
             domain: Some("https://identity.example.com".to_owned()),
             first_user_oid: None,
             first_key_oid: None,
             initialized_at: None,
         })
-        .await
-        .with_dynamic_registration_setting(Arc::new(StaticDynamicRegistrationSetting(true)));
+        .await;
 
         let metadata = service.discovery_metadata().await.unwrap();
 
@@ -1099,13 +1043,17 @@ mod tests {
 
     impl OpenIdProviderService {
         async fn for_test(state: InstallationState) -> Self {
-            let setting = CachedSetting::<InstallationSetting, _>::new(TestSettingRepo {
-                value: Arc::new(RwLock::new(to_value(state).unwrap())),
-            })
-            .await
-            .unwrap();
+            Self::new(Arc::new(StaticOrdinarySettings {
+                installation: Arc::new(state),
+                dynamic_client_registration: false,
+            }))
+        }
 
-            Self::new(Arc::new(setting))
+        async fn for_test_with_registration(state: InstallationState) -> Self {
+            Self::new(Arc::new(StaticOrdinarySettings {
+                installation: Arc::new(state),
+                dynamic_client_registration: true,
+            }))
         }
     }
 

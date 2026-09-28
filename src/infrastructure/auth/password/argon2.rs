@@ -9,7 +9,7 @@ use argon2::{
 };
 use rand_core::OsRng;
 
-use identity_domain::{
+use identity_application::{
     auth::password::{HashOptions, PasswordHashError, VerifyResult},
     user::model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
 };
@@ -95,7 +95,7 @@ pub(super) fn verify(
 #[cfg(test)]
 mod tests {
     use super::{build_argon2, hash, verify};
-    use identity_domain::{
+    use identity_application::{
         auth::password::VerifyResult,
         user::model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
     };
@@ -121,7 +121,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            identity_domain::auth::password::PasswordHashError::HashFailed(_)
+            identity_application::auth::password::PasswordHashError::HashFailed(_)
         ));
     }
 
@@ -148,7 +148,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            identity_domain::auth::password::PasswordHashError::InvalidStoredHash(_)
+            identity_application::auth::password::PasswordHashError::InvalidStoredHash(_)
         ));
     }
 

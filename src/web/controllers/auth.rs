@@ -27,11 +27,10 @@ use crate::{
         auth::login::ChallengeOutcome,
         error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
+        user::CredentialType,
     },
     domain::{
-        client_authorization::SelectionSource,
-        openid_connect::PromptValue,
-        user::model::{CredentialType, UserOid},
+        client_authorization::SelectionSource, openid_connect::PromptValue, user::model::UserOid,
     },
     middleware::resolved_client_ip,
 };

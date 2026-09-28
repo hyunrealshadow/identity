@@ -126,9 +126,12 @@ pub(super) struct StaticInstallationProvider {
     pub(super) value: Arc<InstallationState>,
 }
 
-impl SettingProvider<InstallationSetting> for StaticInstallationProvider {
-    fn current_value(&self) -> Arc<InstallationState> {
-        self.value.clone()
+impl crate::setting::OrdinarySettingsProvider for StaticInstallationProvider {
+    fn current_snapshot(&self) -> Arc<crate::setting::OrdinarySettingsSnapshot> {
+        Arc::new(crate::setting::OrdinarySettingsSnapshot {
+            installation: (*self.value).clone(),
+            ..Default::default()
+        })
     }
 }
 
@@ -204,7 +207,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn update_identifier(
         &self,
         _oid: UserOid,
-        _update: identity_domain::user::repository::UserIdentifierUpdate,
+        _update: crate::user::repository::UserIdentifierUpdate,
     ) -> Result<Option<User>, UserRepositoryError> {
         Ok(None)
     }
@@ -212,7 +215,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn update_profile(
         &self,
         _oid: UserOid,
-        _patch: identity_domain::user::repository::UserProfilePatch,
+        _patch: crate::user::repository::UserProfilePatch,
     ) -> Result<Option<User>, UserRepositoryError> {
         Ok(None)
     }

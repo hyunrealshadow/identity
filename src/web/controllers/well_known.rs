@@ -63,18 +63,19 @@ mod tests {
 
     use crate::{
         application::openid_connect::provider::OpenIdProviderService,
-        domain::setting::installation::{InstallationSetting, InstallationState},
+        application::setting::installation::InstallationState,
     };
 
     use super::openid_configuration_document;
 
     struct TestInstallationSetting(Arc<InstallationState>);
 
-    impl identity_application::setting::runtime::SettingProvider<InstallationSetting>
-        for TestInstallationSetting
-    {
-        fn current_value(&self) -> Arc<InstallationState> {
-            Arc::clone(&self.0)
+    impl identity_application::setting::OrdinarySettingsProvider for TestInstallationSetting {
+        fn current_snapshot(&self) -> Arc<identity_application::setting::OrdinarySettingsSnapshot> {
+            Arc::new(identity_application::setting::OrdinarySettingsSnapshot {
+                installation: (*self.0).clone(),
+                ..Default::default()
+            })
         }
     }
 

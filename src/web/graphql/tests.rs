@@ -2,8 +2,14 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use http::StatusCode;
+use identity_application::setting::{
+    DeviceAuthorizationSetting, DomainSetting, DynamicClientRegistrationSetting,
+    InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
+    InstallationInitializedAtSetting, InstallationInitializedSetting, LoginDomainSetting,
+    PasswordHashSetting, SettingDefinition,
+};
 use identity_domain::{
-    auth::{SessionOid, password::PasswordHashSetting},
+    auth::SessionOid,
     client_authorization::{AccessTokenData, ClientAuthorizationType},
     key::{
         KeyData, KeyType,
@@ -11,17 +17,6 @@ use identity_domain::{
         model::AsymmetricKeyAlgorithm,
     },
     openid_connect::model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
-    setting::{
-        device_authorization::DeviceAuthorizationSetting,
-        domain::DomainSetting,
-        dynamic_registration::DynamicClientRegistrationSetting,
-        installation::{
-            InstallationFirstKeyOidSetting, InstallationFirstUserOidSetting,
-            InstallationInitializedAtSetting, InstallationInitializedSetting,
-        },
-        login_domain::LoginDomainSetting,
-        model::SettingDefinition,
-    },
 };
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
@@ -267,7 +262,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
     };
     let user_model = test_user(user_oid, now);
     let db = MockDatabase::new(DatabaseBackend::Postgres)
-        .append_query_results(setting_rows(user_oid, key_oid, now))
+        .append_query_results([setting_rows(user_oid, key_oid, now)])
         .append_query_results([Vec::<setting::Model>::new()])
         .append_query_results([
             Vec::<key::Model>::new(),
@@ -344,55 +339,25 @@ fn access_token(
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()
 }
 
-fn setting_rows(
-    user_oid: Uuid,
-    key_oid: Uuid,
-    now: chrono::DateTime<Utc>,
-) -> Vec<Vec<setting::Model>> {
+fn setting_rows(user_oid: Uuid, key_oid: Uuid, now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
     vec![
-        vec![setting_model::<InstallationInitializedSetting>(
-            1, true, now,
-        )],
-        vec![setting_model::<DomainSetting>(
-            2,
-            Some("identity.example.com".to_owned()),
-            now,
-        )],
-        vec![setting_model::<InstallationFirstUserOidSetting>(
-            3,
-            Some(user_oid),
-            now,
-        )],
-        vec![setting_model::<InstallationFirstKeyOidSetting>(
-            4,
-            Some(key_oid),
-            now,
-        )],
-        vec![setting_model::<InstallationInitializedAtSetting>(
-            5,
-            Some(now),
-            now,
-        )],
-        vec![setting_model::<PasswordHashSetting>(
-            6,
-            PasswordHashSetting::default_value(),
-            now,
-        )],
-        vec![setting_model::<DynamicClientRegistrationSetting>(
+        setting_model::<InstallationInitializedSetting>(1, true, now),
+        setting_model::<DomainSetting>(2, Some("identity.example.com".to_owned()), now),
+        setting_model::<InstallationFirstUserOidSetting>(3, Some(user_oid), now),
+        setting_model::<InstallationFirstKeyOidSetting>(4, Some(key_oid), now),
+        setting_model::<InstallationInitializedAtSetting>(5, Some(now), now),
+        setting_model::<PasswordHashSetting>(6, PasswordHashSetting::default_value(), now),
+        setting_model::<DynamicClientRegistrationSetting>(
             7,
             DynamicClientRegistrationSetting::default_value(),
             now,
-        )],
-        vec![setting_model::<LoginDomainSetting>(
-            11,
-            Some("https://ui.example.com".to_owned()),
-            now,
-        )],
-        vec![setting_model::<DeviceAuthorizationSetting>(
+        ),
+        setting_model::<LoginDomainSetting>(11, Some("https://ui.example.com".to_owned()), now),
+        setting_model::<DeviceAuthorizationSetting>(
             10,
             DeviceAuthorizationSetting::default_value(),
             now,
-        )],
+        ),
     ]
 }
 

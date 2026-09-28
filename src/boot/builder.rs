@@ -215,9 +215,7 @@ impl AppBuilder {
 async fn is_installed(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-    use identity_domain::setting::{
-        installation::InstallationInitializedSetting, model::SettingDefinition,
-    };
+    use identity_application::setting::{InstallationInitializedSetting, SettingDefinition};
     use identity_infrastructure::database::entity::setting;
 
     let row = setting::Entity::find()
@@ -236,16 +234,10 @@ fn build_install_service(
     settings: &AppRuntimeSettings,
     db: DatabaseConnection,
     rotation_config: &identity_infrastructure::config::ClientCredentialRotationConfig,
-) -> InstallService<identity_infrastructure::database::repository::setting::SettingRepositoryImpl> {
+) -> InstallService {
     InstallService {
         password_hasher: Arc::new(PasswordHasherImpl::new()),
-        password_hash_options: settings.password_hash_options(),
-        installation_initialized: settings.installation_initialized(),
-        domain: settings.domain(),
-        login_domain: settings.login_domain(),
-        installation_first_user_oid: settings.installation_first_user_oid(),
-        installation_first_key_oid: settings.installation_first_key_oid(),
-        installation_initialized_at: settings.installation_initialized_at(),
+        settings: settings.ordinary(),
         key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         repository: Arc::new(InstallRepositoryImpl::new(db)),

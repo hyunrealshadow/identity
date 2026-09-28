@@ -16,7 +16,6 @@ use crate::{
     application::{
         auth::login::SessionContext,
         error::{AppError, codes::common::CommonErrorCode},
-        setting::runtime::SettingProvider,
     },
     boot::AppState,
     controllers::response::redirect_to_response,
@@ -512,7 +511,7 @@ fn interaction_redirect(
     route: &'static str,
     login_id: &str,
 ) -> Result<Response, AppError> {
-    let login_domain = ctx.settings().login_domain().current_value();
+    let login_domain = ctx.settings().ordinary().login_domain_value();
     let login_domain = login_domain
         .as_deref()
         .map(str::trim)

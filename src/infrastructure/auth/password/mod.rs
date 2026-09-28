@@ -12,7 +12,7 @@
 
 mod argon2;
 
-use identity_domain::{
+use identity_application::{
     auth::password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
     user::model::Password,
 };
@@ -51,7 +51,7 @@ impl PasswordHasher for PasswordHasherImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use identity_domain::{
+    use identity_application::{
         auth::password::{HashOptions, VerifyResult},
         user::model::{Argon2Options, Argon2Variant, Argon2Version},
     };

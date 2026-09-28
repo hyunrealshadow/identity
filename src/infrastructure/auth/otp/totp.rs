@@ -1,8 +1,8 @@
 use subtle::ConstantTimeEq as _;
 use totp_rs::{Algorithm, Secret, TOTP};
 
-use identity_application::auth::mfa::{GeneratedTotpEnrollment, TotpEnrollmentGenerator};
-use identity_domain::{
+use identity_application::{
+    auth::mfa::{GeneratedTotpEnrollment, TotpEnrollmentGenerator},
     auth::totp::{TotpError, TotpVerifier},
     user::model::{OtpAlgorithm, OtpCredentialData},
 };
@@ -131,7 +131,7 @@ fn build_totp(
 mod tests {
     use super::{TOTP_ALLOWED_SKEW_STEPS, TotpVerifierImpl, build_totp, verify_at};
     use identity_application::auth::mfa::TotpEnrollmentGenerator;
-    use identity_domain::user::{OtpAlgorithm, OtpCredentialData};
+    use identity_application::user::{OtpAlgorithm, OtpCredentialData};
     use totp_rs::Algorithm;
 
     #[test]

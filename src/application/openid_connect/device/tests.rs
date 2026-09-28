@@ -6,7 +6,6 @@ use uuid::Uuid;
 use crate::application::error::{
     code::AppErrorCode, codes::device::DeviceAuthorizationErrorCode, codes::token::TokenErrorCode,
 };
-use crate::application::setting::runtime::SettingProvider;
 use crate::domain::client::model::ClientOid;
 use crate::domain::client_authorization::{
     ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
@@ -17,10 +16,6 @@ use crate::domain::openid_connect::{
     ClientAssertionType, GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
     OpenIdConnectClientRepositoryError, OpenIdConnectCredential, OpenIdConnectCredentialData,
     OpenIdConnectCredentialType, TokenEndpointAuthMethod,
-};
-use crate::domain::setting::installation::{InstallationSetting, InstallationState};
-use crate::domain::setting::{
-    DeviceAuthorizationSetting, DeviceAuthorizationSettings, LoginDomainSetting,
 };
 use crate::openid_connect::device::{
     DEVICE_VERIFICATION_PATH, DeviceAuthorizationParams, DeviceAuthorizationService,
@@ -37,6 +32,10 @@ use crate::openid_connect::{
     client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
     provider::OpenIdProviderService,
 };
+use crate::setting::installation::InstallationState;
+use crate::setting::{
+    DeviceAuthorizationSettings, OrdinarySettingsProvider, OrdinarySettingsSnapshot,
+};
 
 const CLIENT_ID: Uuid = Uuid::nil();
 
@@ -44,29 +43,27 @@ struct StaticInstallationProvider {
     value: Arc<InstallationState>,
 }
 
-impl SettingProvider<InstallationSetting> for StaticInstallationProvider {
-    fn current_value(&self) -> Arc<InstallationState> {
-        self.value.clone()
-    }
-}
-
-struct StaticLoginDomainProvider {
-    value: Option<String>,
-}
-
-impl SettingProvider<LoginDomainSetting> for StaticLoginDomainProvider {
-    fn current_value(&self) -> Arc<Option<String>> {
-        Arc::new(self.value.clone())
+impl OrdinarySettingsProvider for StaticInstallationProvider {
+    fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
+        Arc::new(OrdinarySettingsSnapshot {
+            installation: (*self.value).clone(),
+            ..Default::default()
+        })
     }
 }
 
 struct StaticDeviceAuthorizationProvider {
     value: Arc<DeviceAuthorizationSettings>,
+    login_domain: Option<String>,
 }
 
-impl SettingProvider<DeviceAuthorizationSetting> for StaticDeviceAuthorizationProvider {
-    fn current_value(&self) -> Arc<DeviceAuthorizationSettings> {
-        self.value.clone()
+impl OrdinarySettingsProvider for StaticDeviceAuthorizationProvider {
+    fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
+        Arc::new(OrdinarySettingsSnapshot {
+            device_authorization: (*self.value).clone(),
+            login_domain: self.login_domain.clone(),
+            ..Default::default()
+        })
     }
 }
 
@@ -193,11 +190,9 @@ fn build_service_with_credential(
         client_repo,
         device_repo,
         provider_service: provider_service(),
-        login_domain: Arc::new(StaticLoginDomainProvider {
-            value: login_domain.map(str::to_owned),
-        }),
         settings: Arc::new(StaticDeviceAuthorizationProvider {
             value: Arc::new(settings),
+            login_domain: login_domain.map(str::to_owned),
         }),
     })
 }

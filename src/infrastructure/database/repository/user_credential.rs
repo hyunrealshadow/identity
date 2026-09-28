@@ -4,7 +4,7 @@ use crate::database::entity::{
 };
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_domain::user::{
+use identity_application::user::{
     CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
     UserCredential, UserCredentialOid, UserOid,
     repository::{UserCredentialRepository, UserCredentialRepositoryError},
@@ -403,7 +403,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
 mod tests {
     use crate::database::entity::user_credential;
     use chrono::Utc;
-    use identity_domain::user::{
+    use identity_application::user::{
         CredentialData, CredentialType, OtpCredentialData, UserCredentialOid, UserOid,
         repository::{UserCredentialRepository as _, UserCredentialRepositoryError},
     };
@@ -459,7 +459,7 @@ mod tests {
         let repo = UserCredentialRepositoryImpl::new(db);
         let otp = OtpCredentialData {
             secret: "secret".to_owned(),
-            algorithm: identity_domain::user::OtpAlgorithm::Sha1,
+            algorithm: identity_application::user::OtpAlgorithm::Sha1,
             digits: 6,
             period: 30,
             last_used_counter: None,

@@ -7,13 +7,11 @@ use identity_domain::{
         OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
         OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
     },
-    setting::DynamicClientRegistrationSetting,
 };
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    application::setting::runtime::SettingProvider,
     openid_connect::registration::{
         DynamicClientRegistrationRequest, DynamicClientRegistrationService,
     },
@@ -22,9 +20,12 @@ use crate::{
 
 struct TestRegistrationSetting(bool);
 
-impl SettingProvider<DynamicClientRegistrationSetting> for TestRegistrationSetting {
-    fn current_value(&self) -> Arc<bool> {
-        Arc::new(self.0)
+impl crate::setting::OrdinarySettingsProvider for TestRegistrationSetting {
+    fn current_snapshot(&self) -> Arc<crate::setting::OrdinarySettingsSnapshot> {
+        Arc::new(crate::setting::OrdinarySettingsSnapshot {
+            dynamic_client_registration: self.0,
+            ..Default::default()
+        })
     }
 }
 

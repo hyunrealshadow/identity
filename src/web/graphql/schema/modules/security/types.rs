@@ -1,5 +1,5 @@
 use async_graphql::{Enum, InputObject, Object};
-use identity_domain::user::OtpAlgorithm;
+use identity_application::user::OtpAlgorithm;
 
 pub(super) struct AccountSecurity {
     totp_enabled: bool,

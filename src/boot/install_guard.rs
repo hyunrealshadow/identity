@@ -5,7 +5,6 @@ use sea_orm::{
     sea_query::{Alias, Expr, Query},
 };
 
-use identity_application::setting::runtime::SettingProvider;
 use identity_infrastructure::settings::AppRuntimeSettings;
 
 use super::AppResult;
@@ -14,7 +13,7 @@ pub async fn ensure_install_startup_guard(
     db: &DatabaseConnection,
     settings: &AppRuntimeSettings,
 ) -> AppResult<()> {
-    if *settings.installation_initialized().current_value() {
+    if settings.ordinary().initialized() {
         return Ok(());
     }
 
@@ -23,8 +22,8 @@ pub async fn ensure_install_startup_guard(
         return Ok(());
     }
 
-    settings.installation().refresh().await?;
-    if *settings.installation_initialized().current_value() {
+    settings.ordinary().refresh().await?;
+    if settings.ordinary().initialized() {
         return Ok(());
     }
 

@@ -1,6 +1,6 @@
 use serde::{Serialize, de::DeserializeOwned};
 
-use super::error::SettingValidationError;
+use super::validation::SettingValidationError;
 
 pub trait SettingValue:
     Clone + PartialEq + Send + Sync + Serialize + DeserializeOwned + 'static

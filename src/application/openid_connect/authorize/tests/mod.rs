@@ -1,3 +1,4 @@
+use crate::setting::InstallationState;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -28,7 +29,6 @@ use crate::{
         DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl,
     },
     openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
-    setting::runtime::SettingProvider,
 };
 use identity_domain::{
     auth::{SessionOid, repository::LoginRepository},
@@ -42,7 +42,6 @@ use identity_domain::{
         OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
         OpenIdConnectCredentialType,
     },
-    setting::installation::{InstallationSetting, InstallationState},
     user::{User, UserOid},
 };
 

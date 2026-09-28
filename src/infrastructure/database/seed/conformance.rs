@@ -28,10 +28,10 @@ use crate::{
         client_openid_connect_platform, client_scope, scope, setting, user, user_credential,
     },
 };
-use identity_domain::openid_connect::OpenIdConnectCredentialData;
-use identity_domain::setting::{
+use identity_application::setting::{
     DynamicClientRegistrationSetting, LoginDomainSetting, SettingDefinition,
 };
+use identity_domain::openid_connect::OpenIdConnectCredentialData;
 
 use crate::infrastructure::database::repository::openid_connect_credential::serialize_data as serialize_credential_data;
 

@@ -3,14 +3,12 @@ use crate::{
         AppError,
         codes::{auth::AuthErrorCode, common::CommonErrorCode},
     },
+    auth::{password::PasswordHashError, totp::TotpError},
     domain::{
-        auth::{
-            password::PasswordHashError,
-            repository::{LoginRepositoryError, SessionRepositoryError},
-            totp::TotpError,
-        },
-        user::repository::{UserCredentialRepositoryError, UserRepositoryError},
+        auth::repository::{LoginRepositoryError, SessionRepositoryError},
+        user::repository::UserRepositoryError,
     },
+    user::repository::UserCredentialRepositoryError,
 };
 
 impl From<UserRepositoryError> for AppError {

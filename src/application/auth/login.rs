@@ -4,8 +4,19 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
+    auth::{
+        password::{HashOptions, PasswordHasher, VerifyResult},
+        totp::TotpVerifier,
+    },
     error::{AppError, codes::auth::AuthErrorCode},
-    setting::runtime::SettingProvider,
+    setting::Setting,
+    user::{
+        model::{
+            CredentialData, CredentialType, OtpCredentialData, Password,
+            RecoveryCodeCredentialData, User,
+        },
+        repository::UserCredentialRepository,
+    },
 };
 use identity_domain::{
     auth::{
@@ -13,18 +24,10 @@ use identity_domain::{
         ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LoginFailureReason, LoginStatus,
         MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
         model::{Login, Session},
-        password::{HashOptions, PasswordHashSetting, PasswordHasher, VerifyResult},
         repository::{CreateSessionInput, LoginRepository, SessionRepository},
-        totp::TotpVerifier,
     },
     client_authorization::DeviceAuthorizationRepository,
-    user::{
-        model::{
-            CredentialData, CredentialType, OtpCredentialData, Password,
-            RecoveryCodeCredentialData, User,
-        },
-        repository::{UserCredentialRepository, UserRepository},
-    },
+    user::repository::UserRepository,
 };
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
@@ -76,7 +79,7 @@ pub struct LoginService {
     login_repo: Arc<dyn LoginRepository>,
     password_hasher: Arc<dyn PasswordHasher>,
     totp_verifier: Arc<dyn TotpVerifier>,
-    hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
+    hash_options: Arc<dyn Setting<HashOptions>>,
     /// Device authorizations, so account level security actions can withdraw
     /// them. Optional: services built without it simply have no device
     /// authorizations to revoke.
@@ -93,7 +96,7 @@ impl LoginService {
         login_repo: Arc<dyn LoginRepository>,
         password_hasher: Arc<dyn PasswordHasher>,
         totp_verifier: Arc<dyn TotpVerifier>,
-        hash_options: Arc<dyn SettingProvider<PasswordHashSetting>>,
+        hash_options: Arc<dyn Setting<HashOptions>>,
     ) -> Self {
         Self {
             user_repo,
@@ -141,7 +144,7 @@ impl LoginService {
     /// password again.
     pub async fn credential_types(
         &self,
-        user_oid: identity_domain::user::UserOid,
+        user_oid: crate::user::UserOid,
     ) -> Result<Vec<CredentialType>, AppError> {
         let mut credential_types = Vec::new();
         for credential_type in [
@@ -163,7 +166,7 @@ impl LoginService {
 
     pub async fn change_password(
         &self,
-        user_oid: identity_domain::user::UserOid,
+        user_oid: crate::user::UserOid,
         new_password: &str,
     ) -> Result<(), AppError> {
         if new_password.len() < 12 {
@@ -209,10 +212,9 @@ impl LoginService {
         }
         let hasher = Arc::clone(&self.password_hasher);
         let new_password = new_password.to_owned();
-        let password = super::password::run_password_hashing(move || {
-            hasher.hash(&new_password, options.as_ref())
-        })
-        .await?;
+        let password =
+            super::password::run_password_hashing(move || hasher.hash(&new_password, &options))
+                .await?;
         self.credential_repo
             .update_password_by_oid(credential.oid, &password)
             .await?;
@@ -242,7 +244,7 @@ impl LoginService {
     #[tracing::instrument(skip_all, name = "account.password.change")]
     pub async fn change_password_with_session_revocation(
         &self,
-        user_oid: identity_domain::user::UserOid,
+        user_oid: crate::user::UserOid,
         new_password: &str,
         current_session: identity_domain::auth::SessionOid,
     ) -> Result<PasswordChangeOutcome, AppError> {
@@ -305,10 +307,7 @@ impl LoginService {
     }
 
     /// Fetch the user associated with a login by their OID.
-    pub async fn get_user(
-        &self,
-        user_oid: identity_domain::user::UserOid,
-    ) -> Result<User, AppError> {
+    pub async fn get_user(&self, user_oid: crate::user::UserOid) -> Result<User, AppError> {
         self.user_repo
             .find_by_oid(user_oid)
             .await?
@@ -533,7 +532,7 @@ impl LoginService {
 
         match credential_type {
             CredentialType::Password => {
-                self.challenge_password(login, credential, hash_options.as_ref(), ctx)
+                self.challenge_password(login, credential, &hash_options, ctx)
                     .await
             }
             CredentialType::Otp => self.challenge_otp(login, credential, ctx).await,
@@ -1063,6 +1062,18 @@ fn failed_attempt_lock_until() -> chrono::DateTime<Utc> {
 
 #[cfg(test)]
 mod tests {
+    use crate::setting::{OrdinarySettingsProvider, OrdinarySettingsSnapshot};
+    use crate::{
+        auth::{
+            password::{HashOptions, VerifyResult},
+            totp::TotpVerifier,
+        },
+        user::{
+            CredentialData, CredentialType, OtpCredentialData, UserCredential, UserCredentialOid,
+            model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
+            repository::{UserCredentialRepository, UserCredentialRepositoryError},
+        },
+    };
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
@@ -1072,36 +1083,29 @@ mod tests {
             ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus,
             MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
             model::{Login, Session, SessionOid},
-            password::{HashOptions, PasswordHashSetting, VerifyResult},
             repository::{
                 CreateSessionInput, LoginRepository, LoginRepositoryError, SessionRepository,
                 SessionRepositoryError,
             },
-            totp::TotpVerifier,
         },
         user::{
-            CredentialData, CredentialType, OtpCredentialData, User, UserCredential,
-            UserCredentialOid, UserOid,
-            model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
-            repository::{
-                UserCredentialRepository, UserCredentialRepositoryError, UserRepository,
-                UserRepositoryError,
-            },
+            User, UserOid,
+            repository::{UserRepository, UserRepositoryError},
         },
     };
     use uuid::Uuid;
 
     use super::{LoginService, SessionContext};
-    use crate::{
-        application::error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
-        setting::runtime::SettingProvider,
-    };
+    use crate::application::error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode};
 
     struct FixedHashOptions(Arc<HashOptions>);
 
-    impl SettingProvider<PasswordHashSetting> for FixedHashOptions {
-        fn current_value(&self) -> Arc<HashOptions> {
-            Arc::clone(&self.0)
+    impl OrdinarySettingsProvider for FixedHashOptions {
+        fn current_snapshot(&self) -> Arc<OrdinarySettingsSnapshot> {
+            Arc::new(OrdinarySettingsSnapshot {
+                password_hash_options: (*self.0).clone(),
+                ..Default::default()
+            })
         }
     }
 
@@ -1112,7 +1116,7 @@ mod tests {
             &self,
             _otp_data: &OtpCredentialData,
             _code: &str,
-        ) -> Result<Option<u64>, identity_domain::auth::totp::TotpError> {
+        ) -> Result<Option<u64>, crate::auth::totp::TotpError> {
             Ok(None)
         }
     }
@@ -1123,12 +1127,12 @@ mod tests {
     /// password instead of running the (deliberately expensive) KDF.
     struct RecordingPasswordHasher;
 
-    impl identity_domain::auth::password::PasswordHasher for RecordingPasswordHasher {
+    impl crate::auth::password::PasswordHasher for RecordingPasswordHasher {
         fn hash(
             &self,
             password: &str,
             options: &HashOptions,
-        ) -> Result<Password, identity_domain::auth::password::PasswordHashError> {
+        ) -> Result<Password, crate::auth::password::PasswordHashError> {
             let HashOptions::Argon2(argon2) = options;
 
             Ok(Password::Argon2(Argon2Password {
@@ -1143,22 +1147,20 @@ mod tests {
             _password: &str,
             _stored: &Password,
             _options: &HashOptions,
-        ) -> Result<VerifyResult, identity_domain::auth::password::PasswordHashError> {
+        ) -> Result<VerifyResult, crate::auth::password::PasswordHashError> {
             Ok(VerifyResult::Failure)
         }
     }
 
-    impl identity_domain::auth::password::PasswordHasher for StubPasswordHasher {
+    impl crate::auth::password::PasswordHasher for StubPasswordHasher {
         fn hash(
             &self,
             _password: &str,
             _options: &HashOptions,
-        ) -> Result<Password, identity_domain::auth::password::PasswordHashError> {
-            Err(
-                identity_domain::auth::password::PasswordHashError::HashFailed(
-                    "not used in OTP tests".to_owned(),
-                ),
-            )
+        ) -> Result<Password, crate::auth::password::PasswordHashError> {
+            Err(crate::auth::password::PasswordHashError::HashFailed(
+                "not used in OTP tests".to_owned(),
+            ))
         }
 
         fn verify(
@@ -1166,12 +1168,10 @@ mod tests {
             _password: &str,
             _stored: &Password,
             _options: &HashOptions,
-        ) -> Result<VerifyResult, identity_domain::auth::password::PasswordHashError> {
-            Err(
-                identity_domain::auth::password::PasswordHashError::HashFailed(
-                    "not used in OTP tests".to_owned(),
-                ),
-            )
+        ) -> Result<VerifyResult, crate::auth::password::PasswordHashError> {
+            Err(crate::auth::password::PasswordHashError::HashFailed(
+                "not used in OTP tests".to_owned(),
+            ))
         }
     }
 
@@ -1225,7 +1225,7 @@ mod tests {
         async fn update_identifier(
             &self,
             _oid: UserOid,
-            _update: identity_domain::user::repository::UserIdentifierUpdate,
+            _update: crate::user::repository::UserIdentifierUpdate,
         ) -> Result<Option<User>, UserRepositoryError> {
             unimplemented!("identifier updates are not part of this test double")
         }
@@ -1233,7 +1233,7 @@ mod tests {
         async fn update_profile(
             &self,
             _oid: UserOid,
-            _patch: identity_domain::user::repository::UserProfilePatch,
+            _patch: crate::user::repository::UserProfilePatch,
         ) -> Result<Option<User>, UserRepositoryError> {
             unimplemented!("profile updates are not part of this test double")
         }
@@ -1285,8 +1285,8 @@ mod tests {
         async fn enable_totp_if_disabled(
             &self,
             _user_oid: UserOid,
-            _otp: identity_domain::user::OtpCredentialData,
-            _recovery_codes: Vec<identity_domain::user::RecoveryCodeCredentialData>,
+            _otp: crate::user::OtpCredentialData,
+            _recovery_codes: Vec<crate::user::RecoveryCodeCredentialData>,
         ) -> Result<bool, UserCredentialRepositoryError> {
             Ok(false)
         }
@@ -1294,7 +1294,7 @@ mod tests {
         async fn replace_recovery_codes_if_totp_enabled(
             &self,
             _user_oid: UserOid,
-            _recovery_codes: Vec<identity_domain::user::RecoveryCodeCredentialData>,
+            _recovery_codes: Vec<crate::user::RecoveryCodeCredentialData>,
         ) -> Result<bool, UserCredentialRepositoryError> {
             Ok(false)
         }
@@ -1597,7 +1597,7 @@ mod tests {
                         secret: "secret".to_owned(),
                         digits: 6,
                         period: 30,
-                        algorithm: identity_domain::user::OtpAlgorithm::Sha1,
+                        algorithm: crate::user::OtpAlgorithm::Sha1,
                         last_used_counter: None,
                     }),
                 }],
@@ -1676,7 +1676,7 @@ mod tests {
 
         let outcome = service
             .change_password_with_session_revocation(
-                identity_domain::user::UserOid(user_oid),
+                crate::user::UserOid(user_oid),
                 "a-sufficiently-long-password",
                 SessionOid(Uuid::new_v4()),
             )

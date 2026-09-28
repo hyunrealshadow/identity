@@ -1,5 +1,10 @@
 use crate::setting::SettingDefinition;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoginDomainSettings {
+    pub value: Option<String>,
+}
+
 /// Where the login application is served, derived from the application URL
 /// given during installation (`https://login.example.com/login` becomes
 /// `https://login.example.com`).

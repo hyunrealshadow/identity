@@ -8,6 +8,8 @@ publish = false
 path = "mod.rs"
 
 [dependencies]
+derive_more = { workspace = true }
+strum = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }

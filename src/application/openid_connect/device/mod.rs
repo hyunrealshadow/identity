@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     application::{
         error::{AppError, codes::device::DeviceAuthorizationErrorCode},
-        setting::runtime::SettingProvider,
+        setting::{DeviceAuthorizationSettings, LoginDomainSettings, Setting},
     },
     domain::{
         client_authorization::{
@@ -21,7 +21,6 @@ use crate::{
             normalize_user_code,
         },
         openid_connect::{GrantType, OpenIdConnectClient, OpenIdConnectClientRepository, ScopeSet},
-        setting::{DeviceAuthorizationSetting, LoginDomainSetting},
     },
     observability::{BusinessEvent, EventSink, EventValue},
     openid_connect::client_authentication::ClientAuthenticator,
@@ -108,13 +107,22 @@ pub struct DeviceVerificationOutcome {
     pub status: DeviceVerificationStatus,
 }
 
+pub trait DeviceAuthorizationSettingsSource:
+    Setting<DeviceAuthorizationSettings> + Setting<LoginDomainSettings>
+{
+}
+
+impl<T> DeviceAuthorizationSettingsSource for T where
+    T: Setting<DeviceAuthorizationSettings> + Setting<LoginDomainSettings> + ?Sized
+{
+}
+
 pub struct DeviceAuthorizationService {
     client_authentication: Arc<ClientAuthenticator>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     device_repo: Arc<dyn DeviceAuthorizationRepository>,
     provider_service: Arc<OpenIdProviderService>,
-    login_domain: Arc<dyn SettingProvider<LoginDomainSetting>>,
-    settings: Arc<dyn SettingProvider<DeviceAuthorizationSetting>>,
+    settings: Arc<dyn DeviceAuthorizationSettingsSource>,
     events: Arc<dyn EventSink>,
 }
 
@@ -123,8 +131,7 @@ pub struct DeviceAuthorizationServiceDependencies {
     pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
     pub device_repo: Arc<dyn DeviceAuthorizationRepository>,
     pub provider_service: Arc<OpenIdProviderService>,
-    pub login_domain: Arc<dyn SettingProvider<LoginDomainSetting>>,
-    pub settings: Arc<dyn SettingProvider<DeviceAuthorizationSetting>>,
+    pub settings: Arc<dyn DeviceAuthorizationSettingsSource>,
 }
 
 impl DeviceAuthorizationService {
@@ -135,7 +142,6 @@ impl DeviceAuthorizationService {
             client_repo: deps.client_repo,
             device_repo: deps.device_repo,
             provider_service: deps.provider_service,
-            login_domain: deps.login_domain,
             settings: deps.settings,
             events: Arc::new(crate::observability::NoopEventSink),
         }
@@ -153,7 +159,8 @@ impl DeviceAuthorizationService {
         &self,
         params: DeviceAuthorizationParams,
     ) -> Result<DeviceAuthorizationResponse, AppError> {
-        let settings = self.settings.current_value();
+        let settings =
+            Setting::<DeviceAuthorizationSettings>::current_value(self.settings.as_ref());
         // A JWT authenticated client may identify itself through the
         // assertion alone (RFC 7523 §2.2). The unverified subject only locates
         // the client; the assertion is fully verified before it authenticates
@@ -193,7 +200,8 @@ impl DeviceAuthorizationService {
             .await?;
 
         let user_code_display = request.user_code_display.clone();
-        let verification_uri = self.verification_uri(&issuer)?;
+        let login_domain = Setting::<LoginDomainSettings>::current_value(self.settings.as_ref());
+        let verification_uri = self.verification_uri(&issuer, login_domain.value.as_deref())?;
         let verification_uri_complete =
             verification_uri_complete(&verification_uri, &user_code_display);
 
@@ -223,11 +231,8 @@ impl DeviceAuthorizationService {
     /// domain recorded during installation (`app.login_domain`) — the identity
     /// service and the login application may well live on different hosts.
     /// Installations without that record fall back to the issuer.
-    fn verification_uri(&self, issuer: &Url) -> Result<Url, AppError> {
-        let login_domain = self.login_domain.current_value();
-
+    fn verification_uri(&self, issuer: &Url, login_domain: Option<&str>) -> Result<Url, AppError> {
         match login_domain
-            .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
