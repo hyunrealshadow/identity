@@ -6,9 +6,14 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "client_openid_connect_cors_origin")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    #[sea_orm(unique_key = "idx_client_openid_connect_cors_origin_client_id_origin")]
     pub client_id: i64,
-    #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
+    #[sea_orm(
+        unique_key = "idx_client_openid_connect_cors_origin_client_id_origin",
+        column_type = "Text"
+    )]
     pub origin: String,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,

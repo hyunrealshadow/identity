@@ -394,6 +394,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                                     origin: Set(origin),
                                     created_at: Set(now.into()),
                                     updated_at: Set(None),
+                                    ..Default::default()
                                 }
                             }),
                         )
