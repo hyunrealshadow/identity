@@ -231,6 +231,8 @@ mod tests {
             }),
             expires_at: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
             revoked_at: None,
+            rotated_from_oid: None,
+            rotated_at: None,
             created_at: NaiveDateTime::parse_from_str("2026-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
                 .unwrap(),
             updated_at: None,

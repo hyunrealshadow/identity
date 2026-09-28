@@ -5,6 +5,7 @@ pub mod encryption;
 pub mod encryption_algorithm;
 pub mod key;
 pub mod key_jwk;
+pub mod key_rotation;
 pub mod signing_algorithm;
 pub mod tls;
 pub mod xchacha20;

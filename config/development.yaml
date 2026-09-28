@@ -64,7 +64,7 @@ internal:
 client_credential_rotation:
   enable: true
   check_interval_secs: 60
-  credential_lifetime_days: 180
+  credential_lifetime_days: 90
   rotate_before_expiry_days: 30
   retire_after_secs: 86400
 

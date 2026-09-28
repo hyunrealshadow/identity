@@ -223,6 +223,8 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
         data: serde_json::to_value(KeyData::Asymmetric(key_data.clone())).unwrap(),
         expires_at: (now + Duration::days(1)).into(),
         revoked_at: None,
+        rotated_from_oid: None,
+        rotated_at: None,
         created_at: now.naive_utc(),
         updated_at: None,
     };

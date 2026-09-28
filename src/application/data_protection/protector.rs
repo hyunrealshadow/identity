@@ -422,6 +422,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rotated_key_encrypts_new_tokens_and_decrypts_old_tokens() {
+        let now = Utc::now();
+        let previous = make_symmetric_key(now - Duration::days(60), None, None);
+        let original = DataProtectorImpl::new(
+            Arc::new(MockKeyRingProvider::new(vec![previous.clone()])),
+            test_cipher(),
+        );
+        let old_token = original.protect("refresh-token", b"old").await.unwrap();
+
+        let mut successor = make_symmetric_key(now, Some(now + Duration::days(90)), None);
+        let KeyData::Symmetric(next_data) = &mut successor.data else {
+            unreachable!()
+        };
+        next_data.key = base64::engine::general_purpose::STANDARD.encode([0x24u8; 32]);
+        let previous = Key {
+            expires_at: Some(now - Duration::seconds(1)),
+            ..previous
+        };
+        let rotated = DataProtectorImpl::new(
+            Arc::new(MockKeyRingProvider::new(vec![previous, successor.clone()])),
+            test_cipher(),
+        );
+
+        let new_token = rotated.protect("refresh-token", b"new").await.unwrap();
+        assert_eq!(
+            identity_domain::data_protection::ProtectedPayload::decode(&new_token)
+                .unwrap()
+                .key_id,
+            successor.oid
+        );
+        assert_eq!(
+            rotated
+                .unprotect("refresh-token", &old_token)
+                .await
+                .unwrap(),
+            b"old"
+        );
+    }
+
+    #[tokio::test]
     async fn no_active_key_returns_key_ring_empty() {
         let now = Utc::now();
         let expired = make_symmetric_key(

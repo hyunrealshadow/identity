@@ -733,7 +733,7 @@ const fn default_rotation_check_interval_secs() -> u64 {
 }
 
 const fn default_credential_lifetime_days() -> i64 {
-    180
+    90
 }
 
 const fn default_rotate_before_expiry_days() -> i64 {

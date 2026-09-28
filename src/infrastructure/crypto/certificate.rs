@@ -1,3 +1,7 @@
+use josekit::{
+    jwk::alg::rsapss::RsaPssKeyPair,
+    jws::{PS256, PS384, PS512},
+};
 use openssl::{
     asn1::{Asn1Integer, Asn1Time},
     bn::{BigNum, MsbOption},
@@ -23,17 +27,14 @@ pub fn generate_self_signed_certificate(
     domain: &str,
     algorithm: &AsymmetricKeyAlgorithm,
 ) -> Result<String, KeyMaterialError> {
-    let domain = domain.trim().trim_matches('.');
-    if domain.is_empty() {
-        return Err(KeyMaterialError::InvalidInput(
-            "certificate domain is required".to_owned(),
-        ));
-    }
-
+    let dns_name = certificate_dns_name(domain).ok_or_else(|| {
+        KeyMaterialError::InvalidInput("certificate domain must contain a DNS hostname".to_owned())
+    })?;
     let pkey = PKey::private_key_from_pem(private_key_pem.as_bytes()).map_err(internal)?;
 
     let mut name = X509NameBuilder::new().map_err(internal)?;
-    name.append_entry_by_text("CN", domain).map_err(internal)?;
+    name.append_entry_by_text("CN", &dns_name)
+        .map_err(internal)?;
     let name = name.build();
 
     let mut serial = BigNum::new().map_err(internal)?;
@@ -61,12 +62,26 @@ pub fn generate_self_signed_certificate(
         .append_extension(basic_constraints)
         .map_err(internal)?;
 
-    let key_usage = KeyUsage::new()
-        .critical()
-        .digital_signature()
-        .key_encipherment()
-        .build()
-        .map_err(internal)?;
+    let mut key_usage = KeyUsage::new();
+    key_usage.critical();
+    match algorithm {
+        AsymmetricKeyAlgorithm::Rsa { .. } => {
+            key_usage.digital_signature().key_encipherment();
+        }
+        AsymmetricKeyAlgorithm::EcdsaP256
+        | AsymmetricKeyAlgorithm::EcdsaP384
+        | AsymmetricKeyAlgorithm::EcdsaP521
+        | AsymmetricKeyAlgorithm::EcdsaSecp256k1 => {
+            key_usage.digital_signature().key_agreement();
+        }
+        AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => {
+            key_usage.digital_signature();
+        }
+        AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448 => {
+            key_usage.key_agreement();
+        }
+    }
+    let key_usage = key_usage.build().map_err(internal)?;
     builder.append_extension(key_usage).map_err(internal)?;
 
     let subject_key_identifier = SubjectKeyIdentifier::new()
@@ -77,7 +92,7 @@ pub fn generate_self_signed_certificate(
         .map_err(internal)?;
 
     let subject_alt_name = SubjectAlternativeName::new()
-        .dns(domain)
+        .dns(&dns_name)
         .build(&builder.x509v3_context(None, None))
         .map_err(internal)?;
     builder
@@ -85,19 +100,48 @@ pub fn generate_self_signed_certificate(
         .map_err(internal)?;
 
     builder
-        .sign(&pkey, certificate_digest(algorithm))
+        .sign(&pkey, certificate_digest(private_key_pem, algorithm)?)
         .map_err(internal)?;
 
     let certificate = builder.build().to_pem().map_err(internal)?;
     String::from_utf8(certificate).map_err(internal)
 }
 
-fn certificate_digest(algorithm: &AsymmetricKeyAlgorithm) -> MessageDigest {
-    match algorithm {
+fn certificate_dns_name(domain: &str) -> Option<String> {
+    let domain = domain.trim();
+    let url = if domain.contains("://") {
+        url::Url::parse(domain).ok()?
+    } else {
+        url::Url::parse(&format!("https://{domain}")).ok()?
+    };
+    let host = url.host_str()?.trim_end_matches('.');
+    (!host.is_empty()).then(|| host.to_owned())
+}
+
+fn certificate_digest(
+    private_key_pem: &str,
+    algorithm: &AsymmetricKeyAlgorithm,
+) -> Result<MessageDigest, KeyMaterialError> {
+    if matches!(algorithm, AsymmetricKeyAlgorithm::Rsa { .. })
+        && RsaPssKeyPair::from_pem(private_key_pem, None, None, None).is_ok()
+    {
+        return if PS256.signer_from_pem(private_key_pem).is_ok() {
+            Ok(MessageDigest::sha256())
+        } else if PS384.signer_from_pem(private_key_pem).is_ok() {
+            Ok(MessageDigest::sha384())
+        } else if PS512.signer_from_pem(private_key_pem).is_ok() {
+            Ok(MessageDigest::sha512())
+        } else {
+            Err(KeyMaterialError::InvalidInput(
+                "unsupported RSA-PSS certificate signing digest".to_owned(),
+            ))
+        };
+    }
+    Ok(match algorithm {
         AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => MessageDigest::null(),
         AsymmetricKeyAlgorithm::EcdsaP384 => MessageDigest::sha384(),
         AsymmetricKeyAlgorithm::EcdsaP521 => MessageDigest::sha512(),
         AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 4096 => MessageDigest::sha512(),
         _ => MessageDigest::sha256(),
-    }
+    })
 }

@@ -3,6 +3,7 @@ pub mod device_authorization;
 pub mod install;
 pub mod key;
 pub mod key_jwk;
+pub mod key_rotation;
 pub mod login;
 pub mod login_runtime;
 pub mod openid_connect;

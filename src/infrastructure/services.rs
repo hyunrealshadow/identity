@@ -16,7 +16,8 @@ use crate::{
     database::repository::{
         client_authorization::ClientAuthorizationRepositoryImpl,
         device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallRepositoryImpl,
-        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl, login::LoginRepositoryImpl,
+        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl,
+        key_rotation::KeyRotationRepositoryImpl, login::LoginRepositoryImpl,
         login_runtime::LoginRuntimeRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
@@ -32,7 +33,7 @@ use identity_application::{
     },
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
-    key::asymmetric::AsymmetricKeyService,
+    key::{asymmetric::AsymmetricKeyService, rotation::KeyRotationService},
     openid_connect::{
         authorize::{AuthorizeService, AuthorizeServiceDependencies},
         client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
@@ -84,6 +85,7 @@ pub struct AppServices {
     session: AppSessionService,
     mfa: AppMfaService,
     key: AppKeyService,
+    key_rotation: KeyRotationService,
     install: AppInstallService,
     oidc: AppOpenIdProviderService,
     oidc_authorize: AppOpenIdAuthorizeService,
@@ -178,6 +180,11 @@ impl AppServices {
                 Some(Arc::new(KeyJwkRepositoryImpl::new(db.clone()))),
             )
             .with_runtime_key_ring(settings.key_ring()),
+            key_rotation: KeyRotationService::new(
+                Arc::new(KeyRotationRepositoryImpl::new(db.clone())),
+                Arc::new(crate::crypto::key_rotation::KeyRotationMaterialGeneratorImpl),
+                settings.key_ring(),
+            ),
             install: InstallService {
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 settings: settings.store(),
@@ -329,6 +336,11 @@ impl AppServices {
     #[must_use]
     pub fn key(&self) -> &AppKeyService {
         &self.key
+    }
+
+    #[must_use]
+    pub fn key_rotation(&self) -> &KeyRotationService {
+        &self.key_rotation
     }
 
     #[must_use]

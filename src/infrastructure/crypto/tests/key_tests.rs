@@ -23,6 +23,21 @@ fn test_rsa_key_and_cert() -> (String, String) {
 }
 
 #[test]
+fn certificate_subject_alt_name_uses_only_domain_hostname() {
+    let data = generate_p256_key().unwrap();
+    let certificate = generate_self_signed_certificate(
+        &data.private_key,
+        "https://id.unsvc.net:8443/",
+        &AsymmetricKeyAlgorithm::EcdsaP256,
+    )
+    .unwrap();
+    let certificate = openssl::x509::X509::from_pem(certificate.as_bytes()).unwrap();
+    let alt_names = certificate.subject_alt_names().unwrap();
+    assert_eq!(alt_names.len(), 1);
+    assert_eq!(alt_names.get(0).unwrap().dnsname(), Some("id.unsvc.net"));
+}
+
+#[test]
 fn jwk_without_certificate_has_no_x5_fields() {
     let (private_key, _cert) = test_rsa_key_and_cert();
     let jwk = public_jwk_from_private_key_pem(&private_key, None, None).unwrap();

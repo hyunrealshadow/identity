@@ -53,13 +53,10 @@ pub trait LoginRuntimeRepository: Send + Sync {
         now: DateTime<Utc>,
     ) -> Result<Option<LoginRuntimeConfig>, LoginRuntimeRepositoryError>;
 
-    /// Rotates the Login OAuth secret in a single transaction when the
-    /// current secret has less remaining lifetime than
-    /// `policy.rotate_before_expiry`. Returns the number of rotations
-    /// performed.
-    async fn rotate_if_due(
+    /// Rotates existing secrets for every built-in OIDC client whose newest
+    /// secret is due. Clients without a secret are skipped.
+    async fn rotate_builtin_if_due(
         &self,
-        client_oid: crate::client::model::ClientOid,
         now: DateTime<Utc>,
         policy: &LoginRotationPolicy,
     ) -> Result<u64, LoginRuntimeRepositoryError>;

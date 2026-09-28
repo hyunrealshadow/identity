@@ -16,6 +16,7 @@ use crate::{
             codes::{common::CommonErrorCode, install::InstallErrorCode},
         },
         install::{InstallRepository, InstallationData},
+        key::rotation::KEY_LIFETIME,
         setting::InstallationSettings,
     },
     domain::{
@@ -36,7 +37,6 @@ use crate::{
             repository::{
                 openid_connect_credential::serialize_data as serialize_credential_data,
                 setting::{read_section, write_settings},
-                shared::encode_nonnullable_expiry,
             },
         },
     },
@@ -257,7 +257,7 @@ impl InstallRepository for InstallRepositoryImpl {
             oid: Set(key_oid),
             r#type: Set(KeyType::Asymmetric.to_string()),
             data: Set(key_json),
-            expires_at: Set(encode_nonnullable_expiry(None)),
+            expires_at: Set((now + KEY_LIFETIME).into()),
             revoked_at: Set(None),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),
@@ -309,7 +309,7 @@ impl InstallRepository for InstallRepositoryImpl {
             oid: Set(Uuid::new_v4()),
             r#type: Set(KeyType::Symmetric.to_string()),
             data: Set(sym_key_json),
-            expires_at: Set(encode_nonnullable_expiry(None)),
+            expires_at: Set((now + KEY_LIFETIME).into()),
             revoked_at: Set(None),
             created_at: Set(now.naive_utc()),
             updated_at: Set(Some(now.naive_utc())),

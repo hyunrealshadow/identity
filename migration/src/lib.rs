@@ -22,6 +22,7 @@ mod m20260907_000001_create_user_client_consent;
 mod m20260913_000001_device_authorization_indexes;
 mod m20260925_000001_refresh_token_family_indexes;
 mod m20260927_000001_create_client_openid_connect_cors_origin;
+mod m20260928_000001_add_key_rotation;
 
 pub struct Migrator;
 
@@ -49,6 +50,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260913_000001_device_authorization_indexes::Migration),
             Box::new(m20260925_000001_refresh_token_family_indexes::Migration),
             Box::new(m20260927_000001_create_client_openid_connect_cors_origin::Migration),
+            Box::new(m20260928_000001_add_key_rotation::Migration),
         ]
     }
 }

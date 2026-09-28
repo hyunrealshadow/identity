@@ -1,4 +1,8 @@
+use std::str::FromStr;
 use std::sync::Arc;
+
+use apalis::prelude::{Data, WorkerBuilder, WorkerFactoryFn};
+use apalis_cron::{CronContext, CronStream, Schedule};
 
 use salvo::{
     Listener, Router, Server,
@@ -26,12 +30,7 @@ pub async fn start_servers(
     app: Router,
     internal: Router,
 ) -> AppResult<()> {
-    if config.client_credential_rotation.enable {
-        spawn_login_runtime_rotation_worker(
-            state.clone(),
-            config.client_credential_rotation.check_interval_secs,
-        );
-    }
+    spawn_rotation_worker(state.clone(), config.client_credential_rotation.enable);
     spawn_device_authorization_cleanup_worker(state.clone());
     let shared_health = health::shares_listener(&config.health, &config.server);
     let shared_graphql = graphql::shares_listener(&config.graphql, &config.server);
@@ -184,41 +183,67 @@ pub async fn start_servers(
     Ok(())
 }
 
-fn spawn_login_runtime_rotation_worker(state: AppState, interval_secs: u64) {
-    tokio::spawn(async move {
-        let mut shutdown = state.lifecycle().subscribe_shutdown();
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(interval_secs.max(1)));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    let span = tracing::info_span!("login_runtime.rotation.round");
-                    let _entered = span.enter();
-                    match state.services().login_runtime().maintain().await {
-                        Ok(rotated) if rotated > 0 => {
-                            use identity_application::observability::{BusinessEvent, EventValue};
-                            identity_application::observability::event_sink().emit(
-                                BusinessEvent::audit("login_runtime.credential.rotated")
-                                    .outcome("rotated")
-                                    .attribute(
-                                        "generation_count",
-                                        EventValue::Integer(i64::try_from(rotated).unwrap_or(i64::MAX)),
-                                    ),
-                            );
-                        }
-                        Ok(_) => {}
-                        Err(error) => {
-                            tracing::error!(error = %error, "login runtime rotation maintenance failed");
-                        }
-                    }
-                }
-                changed = shutdown.changed() => {
-                    if changed.is_err() || *shutdown.borrow() {
-                        break;
-                    }
-                }
+#[derive(Debug, Clone, Default)]
+struct RotationTick;
+
+async fn maintain_rotation(state: &AppState, rotate_secrets: bool) {
+    use identity_application::observability::{BusinessEvent, EventValue, event_sink};
+    match state.services().key_rotation().maintain().await {
+        Ok(rotated) if rotated > 0 => {
+            tracing::info!(rotated, "keys rotated");
+            event_sink().emit(
+                BusinessEvent::audit("key.rotated")
+                    .outcome("rotated")
+                    .attribute(
+                        "count",
+                        EventValue::Integer(i64::try_from(rotated).unwrap_or(i64::MAX)),
+                    ),
+            );
+        }
+        Ok(_) => {}
+        Err(error) => tracing::error!(error = %error, "key rotation maintenance failed"),
+    }
+    if rotate_secrets {
+        match state.services().login_runtime().maintain().await {
+            Ok(rotated) if rotated > 0 => {
+                tracing::info!(rotated, "built-in client secrets rotated");
+                event_sink().emit(
+                    BusinessEvent::audit("builtin_client.credential.rotated")
+                        .outcome("rotated")
+                        .attribute(
+                            "count",
+                            EventValue::Integer(i64::try_from(rotated).unwrap_or(i64::MAX)),
+                        ),
+                );
             }
+            Ok(_) => {}
+            Err(error) => tracing::error!(error = %error, "built-in client secret rotation failed"),
+        }
+    }
+}
+
+async fn handle_rotation_tick(
+    _: RotationTick,
+    _: CronContext<chrono::Utc>,
+    data: Data<(AppState, bool)>,
+) {
+    maintain_rotation(&data.0, data.1).await;
+}
+
+fn spawn_rotation_worker(state: AppState, rotate_secrets: bool) {
+    tokio::spawn(async move {
+        maintain_rotation(&state, rotate_secrets).await;
+        let mut shutdown = state.lifecycle().subscribe_shutdown();
+        let schedule = Schedule::from_str("@hourly").expect("valid rotation schedule");
+        let worker = WorkerBuilder::new("credential-rotation")
+            .data((state, rotate_secrets))
+            .backend(CronStream::new(schedule))
+            .build_fn(handle_rotation_tick);
+        tokio::select! {
+            () = worker.run() => tracing::error!("rotation worker stopped"),
+            _ = async {
+                while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
+            } => {}
         }
     });
 }

@@ -15,6 +15,8 @@ pub struct Model {
     pub data: Json,
     pub expires_at: DateTimeWithTimeZone,
     pub revoked_at: Option<DateTimeWithTimeZone>,
+    pub rotated_from_oid: Option<Uuid>,
+    pub rotated_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTime,
     pub updated_at: Option<DateTime>,
 }

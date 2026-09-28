@@ -76,11 +76,8 @@ impl LoginRuntimeService {
     }
 
     pub async fn maintain(&self) -> Result<u64, AppError> {
-        let Some(client_oid) = self.settings.snapshot().get::<LoginClientIdSetting>() else {
-            return Ok(0);
-        };
         self.repository
-            .rotate_if_due(client_oid, Utc::now(), &self.policy)
+            .rotate_builtin_if_due(Utc::now(), &self.policy)
             .await
             .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
     }
@@ -104,7 +101,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingRepository {
         config_ids: Mutex<Vec<Uuid>>,
-        rotation_ids: Mutex<Vec<Uuid>>,
+        rotation_count: Mutex<u64>,
     }
 
     #[async_trait::async_trait]
@@ -123,13 +120,12 @@ mod tests {
             }))
         }
 
-        async fn rotate_if_due(
+        async fn rotate_builtin_if_due(
             &self,
-            client_oid: Uuid,
             _now: DateTime<Utc>,
             _policy: &LoginRotationPolicy,
         ) -> Result<u64, LoginRuntimeRepositoryError> {
-            self.rotation_ids.lock().unwrap().push(client_oid);
+            *self.rotation_count.lock().unwrap() += 1;
             Ok(1)
         }
     }
@@ -161,17 +157,17 @@ mod tests {
         assert_eq!(config.oauth_client.client_id, client_oid);
         assert_eq!(service.maintain().await.unwrap(), 1);
         assert_eq!(*repository.config_ids.lock().unwrap(), vec![client_oid]);
-        assert_eq!(*repository.rotation_ids.lock().unwrap(), vec![client_oid]);
+        assert_eq!(*repository.rotation_count.lock().unwrap(), 1);
     }
 
     #[tokio::test]
-    async fn missing_login_client_does_not_query_or_rotate() {
+    async fn missing_login_client_does_not_block_builtin_rotation() {
         let repository = Arc::new(RecordingRepository::default());
         let service = service(Arc::clone(&repository), SettingsSnapshot::default());
 
         assert!(service.runtime_config().await.unwrap().is_none());
-        assert_eq!(service.maintain().await.unwrap(), 0);
+        assert_eq!(service.maintain().await.unwrap(), 1);
         assert!(repository.config_ids.lock().unwrap().is_empty());
-        assert!(repository.rotation_ids.lock().unwrap().is_empty());
+        assert_eq!(*repository.rotation_count.lock().unwrap(), 1);
     }
 }

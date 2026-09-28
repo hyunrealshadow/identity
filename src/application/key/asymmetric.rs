@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
@@ -31,7 +31,6 @@ pub trait KeyJwkGenerator: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct GenerateAsymmetricKeyInput {
     pub algorithm: AsymmetricKeyAlgorithm,
-    pub expires_at: Option<DateTime<Utc>>,
     pub certificate: Option<String>,
 }
 
@@ -107,9 +106,10 @@ impl AsymmetricKeyService {
             data.certificate = Some(certificate);
         }
 
+        let expires_at = Some(Utc::now() + super::rotation::KEY_LIFETIME);
         let key = self
             .repo
-            .create(&KeyData::Asymmetric(data.clone()), input.expires_at)
+            .create(&KeyData::Asymmetric(data.clone()), expires_at)
             .await?;
 
         if let Some(ref jwk_repo) = self.jwk_repo {

@@ -324,6 +324,8 @@ pub(super) async fn continue_state(
         .unwrap(),
         expires_at: (now + Duration::hours(1)).into(),
         revoked_at: None,
+        rotated_from_oid: None,
+        rotated_at: None,
         created_at: now.naive_utc(),
         updated_at: None,
     };

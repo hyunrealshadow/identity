@@ -42,6 +42,16 @@ fn retirement_expiry(
     (current_expires_at > now).then(|| current_expires_at.min(now + retire_after))
 }
 
+fn secret_is_due(
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+    policy: &LoginRotationPolicy,
+) -> bool {
+    created_at <= now - chrono::Duration::days(60)
+        || expires_at <= now + policy.rotate_before_expiry
+}
+
 async fn builtin_login_client<C: ConnectionTrait>(
     db: &C,
     client_oid: Uuid,
@@ -68,7 +78,8 @@ async fn latest_secret<C: ConnectionTrait>(
                 .eq(OpenIdConnectCredentialType::ClientSecret.to_string()),
         )
         .filter(client_openid_connect_credential::Column::RevokedAt.is_null())
-        .order_by_desc(client_openid_connect_credential::Column::CreatedAt);
+        .order_by_desc(client_openid_connect_credential::Column::CreatedAt)
+        .order_by_desc(client_openid_connect_credential::Column::Id);
     if active_only {
         query = query.filter(client_openid_connect_credential::Column::ExpiresAt.gt(now));
     }
@@ -114,10 +125,9 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         }))
     }
 
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "rotate_if_due"))]
-    async fn rotate_if_due(
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "rotate_builtin_if_due"))]
+    async fn rotate_builtin_if_due(
         &self,
-        client_oid: Uuid,
         now: DateTime<Utc>,
         policy: &LoginRotationPolicy,
     ) -> Result<u64, LoginRuntimeRepositoryError> {
@@ -125,60 +135,68 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         txn.execute_unprepared("SELECT pg_advisory_xact_lock(684395120247316901)")
             .await
             .map_err(query_error)?;
-        let Some(client) = builtin_login_client(&txn, client_oid).await? else {
-            txn.commit().await.map_err(query_error)?;
-            return Ok(0);
-        };
-        let Some(current) = latest_secret(&txn, client.id, false, now).await? else {
-            txn.commit().await.map_err(query_error)?;
-            return Ok(0);
-        };
-        if current.expires_at.with_timezone(&Utc) > now + policy.rotate_before_expiry {
-            txn.commit().await.map_err(query_error)?;
-            return Ok(0);
-        }
+        let clients = client::Entity::find()
+            .filter(client::Column::BuiltIn.eq(true))
+            .all(&txn)
+            .await
+            .map_err(query_error)?;
+        let mut rotated = 0;
+        for client in clients {
+            let Some(current) = latest_secret(&txn, client.id, false, now).await? else {
+                continue;
+            };
+            if !secret_is_due(
+                current.created_at.with_timezone(&Utc),
+                current.expires_at.with_timezone(&Utc),
+                now,
+                policy,
+            ) {
+                continue;
+            }
 
-        let mut secret_bytes = [0_u8; 32];
-        rand::rng().fill(&mut secret_bytes);
-        let secret = URL_SAFE_NO_PAD.encode(secret_bytes);
-        let serialized = serialize_data(OpenIdConnectCredentialData::ClientSecret { secret });
-        client_openid_connect_credential::ActiveModel {
-            oid: Set(Uuid::new_v4()),
-            client_id: Set(client.id),
-            r#type: Set(serialized.type_),
-            data: Set(serialized.data),
-            hint: Set(serialized.hint),
-            expires_at: Set((now + policy.credential_lifetime).into()),
-            revoked_at: Set(None),
-            created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(query_error)?;
+            let mut secret_bytes = [0_u8; 32];
+            rand::rng().fill(&mut secret_bytes);
+            let secret = URL_SAFE_NO_PAD.encode(secret_bytes);
+            let serialized = serialize_data(OpenIdConnectCredentialData::ClientSecret { secret });
+            client_openid_connect_credential::ActiveModel {
+                oid: Set(Uuid::new_v4()),
+                client_id: Set(client.id),
+                r#type: Set(serialized.type_),
+                data: Set(serialized.data),
+                hint: Set(serialized.hint),
+                expires_at: Set((now + policy.credential_lifetime).into()),
+                revoked_at: Set(None),
+                created_at: Set(now.into()),
+                updated_at: Set(Some(now.into())),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await
+            .map_err(query_error)?;
 
-        if let Some(retiring) = retirement_expiry(
-            current.expires_at.with_timezone(&Utc),
-            now,
-            policy.retire_after,
-        ) {
-            client_openid_connect_credential::Entity::update_many()
-                .col_expr(
-                    client_openid_connect_credential::Column::ExpiresAt,
-                    sea_orm::sea_query::Expr::value(retiring.fixed_offset()),
-                )
-                .col_expr(
-                    client_openid_connect_credential::Column::UpdatedAt,
-                    sea_orm::sea_query::Expr::value(Some(now.fixed_offset())),
-                )
-                .filter(client_openid_connect_credential::Column::Id.eq(current.id))
-                .exec(&txn)
-                .await
-                .map_err(query_error)?;
+            if let Some(retiring) = retirement_expiry(
+                current.expires_at.with_timezone(&Utc),
+                now,
+                policy.retire_after,
+            ) {
+                client_openid_connect_credential::Entity::update_many()
+                    .col_expr(
+                        client_openid_connect_credential::Column::ExpiresAt,
+                        sea_orm::sea_query::Expr::value(retiring.fixed_offset()),
+                    )
+                    .col_expr(
+                        client_openid_connect_credential::Column::UpdatedAt,
+                        sea_orm::sea_query::Expr::value(Some(now.fixed_offset())),
+                    )
+                    .filter(client_openid_connect_credential::Column::Id.eq(current.id))
+                    .exec(&txn)
+                    .await
+                    .map_err(query_error)?;
+            }
+            rotated += 1;
         }
         txn.commit().await.map_err(query_error)?;
-        Ok(1)
+        Ok(rotated)
     }
 }
 
@@ -186,7 +204,8 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
 mod tests {
     use chrono::{Duration, TimeZone as _, Utc};
 
-    use super::retirement_expiry;
+    use super::{retirement_expiry, secret_is_due};
+    use identity_domain::openid_connect::LoginRotationPolicy;
 
     #[test]
     fn retirement_never_extends_or_resurrects_a_credential() {
@@ -204,5 +223,28 @@ mod tests {
             retirement_expiry(now + Duration::days(30), now, Duration::hours(24)),
             Some(now + Duration::hours(24))
         );
+    }
+
+    #[test]
+    fn builtin_secret_rotates_at_day_sixty_even_if_legacy_expiry_is_later() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 28, 0, 0, 0).unwrap();
+        let policy = LoginRotationPolicy {
+            credential_lifetime: Duration::days(90),
+            rotate_before_expiry: Duration::days(30),
+            retire_after: Duration::days(1),
+        };
+        let far_expiry = now + Duration::days(120);
+        assert!(!secret_is_due(
+            now - Duration::days(59),
+            far_expiry,
+            now,
+            &policy
+        ));
+        assert!(secret_is_due(
+            now - Duration::days(60),
+            far_expiry,
+            now,
+            &policy
+        ));
     }
 }
