@@ -96,14 +96,19 @@ pub(super) async fn handle_continue(
             continue_oauth_error_response(ctx, headers, &stored.request, error)?
         }
         ContinueAction::Consent => continue_consent_redirect(ctx, login_id)?,
-        ContinueAction::Deny => ctx
-            .services()
-            .oidc_authorize()
-            .deny_authorization_request(authorization_request_id)
-            .await
-            .map(|redirect| {
-                finish_authorize_redirect(ctx, headers, &redirect, stored.request.response_mode)
-            })?,
+        ContinueAction::Deny => {
+            let request = ctx
+                .services()
+                .oidc_authorize()
+                .deny_authorization_request(authorization_request_id)
+                .await?;
+            continue_oauth_error_response(
+                ctx,
+                headers,
+                &request,
+                crate::domain::openid_connect::OAuthErrorCode::AccessDenied,
+            )?
+        }
         ContinueAction::Approve {
             session_oid,
             user_oid,

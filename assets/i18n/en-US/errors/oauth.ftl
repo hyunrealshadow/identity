@@ -1,0 +1,17 @@
+oauth-error-description-invalid_request = The authorization request is invalid.
+oauth-error-description-unauthorized_client = The client is not authorized to make this request.
+oauth-error-description-access_denied = The authorization request was denied.
+oauth-error-description-unsupported_response_type = The requested response type is not supported.
+oauth-error-description-invalid_scope = The requested scope is invalid or unavailable.
+oauth-error-description-server_error = The authorization server could not complete the request.
+oauth-error-description-temporarily_unavailable = The authorization server is temporarily unavailable.
+oauth-error-description-login_required = The user must sign in to continue.
+oauth-error-description-consent_required = The user must grant consent to continue.
+oauth-error-description-interaction_required = User interaction is required to continue.
+oauth-error-description-account_selection_required = The user must select an account to continue.
+oauth-error-description-invalid_request_uri = The request URI is invalid.
+oauth-error-description-invalid_request_object = The request object is invalid.
+oauth-error-description-request_not_supported = The authorization request is not supported.
+oauth-error-description-request_uri_not_supported = Request URIs are not supported.
+oauth-error-description-registration_not_supported = Dynamic client registration is not supported.
+oauth-error-description-unmet_authentication_requirements = The authentication performed does not satisfy the requested requirements.

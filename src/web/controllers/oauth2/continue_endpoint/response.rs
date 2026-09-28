@@ -3,9 +3,10 @@ use http::HeaderMap;
 use crate::{
     application::error::{AppError, codes::authorize::AuthorizeErrorCode},
     controllers::response::redirect_to_response,
-    domain::openid_connect::{AuthorizationRequestData, OAuthErrorCode, OAuthErrorResponse},
+    domain::openid_connect::{AuthorizationRequestData, OAuthErrorCode},
 };
 
+use crate::controllers::oauth2::authorization_error::oauth_error_response;
 use crate::controllers::oauth2::authorize_endpoint::render_form_post_response;
 
 pub(super) fn continue_login_redirect(
@@ -32,7 +33,7 @@ pub(super) fn continue_oauth_error_response(
         AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
     })?;
     let response_type = request.response_type.clone();
-    let error_response = OAuthErrorResponse::new(error)
+    let error_response = oauth_error_response(ctx, headers, error, None)
         .with_state(request.state.clone())
         .with_issuer(ctx.services().oidc_authorize().issuer()?.to_string());
 

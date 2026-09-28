@@ -11,6 +11,7 @@ use crate::{
     web::views::oauth2::{ErrorPageData, FormPostField, FormPostPageData},
 };
 
+use super::super::authorization_error::oauth_error_response;
 use super::extractor::RawAuthorizeRequest;
 use crate::controllers::response::{redirect_to_response, render_app_error, render_html};
 use crate::controllers::shared::generate_csp_nonce;
@@ -32,7 +33,7 @@ pub fn redirect_oauth_error_response(
             );
         }
     };
-    let error_response = OAuthErrorResponse::new(error)
+    let error_response = oauth_error_response(ctx, headers, error, None)
         .with_state(request.state.clone())
         .with_issuer(issuer.to_string());
     let response_mode = request.response_mode.unwrap_or_else(|| {
@@ -222,6 +223,14 @@ pub(super) fn authorize_oauth_error_code(error: &AppError) -> OAuthErrorCode {
     }
 }
 
+pub(super) fn localized_authorize_error_response(
+    ctx: &AppState,
+    headers: &HeaderMap,
+    error: &AppError,
+) -> OAuthErrorResponse {
+    oauth_error_response(ctx, headers, authorize_oauth_error_code(error), Some(error))
+}
+
 pub fn render_authorize_error_page(
     ctx: &AppState,
     headers: &HeaderMap,
@@ -253,8 +262,9 @@ pub fn render_authorize_error_page(
 
 #[cfg(test)]
 mod tests {
-    use http::{HeaderValue, StatusCode};
+    use http::{HeaderMap, HeaderValue, StatusCode, header};
     use identity_application::error::AppError;
+    use identity_application::error::codes::authorize::AuthorizeErrorCode;
     use identity_application::error::codes::common::CommonErrorCode;
     use identity_application::error::kind::ErrorKind;
     use identity_domain::openid_connect::{
@@ -263,6 +273,50 @@ mod tests {
     use salvo::test::ResponseExt;
 
     use super::{authorize_error_status, authorize_oauth_error_code};
+
+    #[tokio::test]
+    async fn localized_scope_error_redirect_preserves_unassigned_scope() {
+        let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
+        let error = AppError::from_code(AuthorizeErrorCode::ScopeNotAssignedToClient)
+            .with_param("scopes", "email");
+        let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
+
+        for (language, expected) in [
+            ("zh-CN", "客户端无权请求 scope：email。"),
+            (
+                "en-US",
+                "The client is not allowed to request scope(s): email.",
+            ),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::ACCEPT_LANGUAGE,
+                HeaderValue::from_str(language).unwrap(),
+            );
+            let response = super::localized_authorize_error_response(&ctx, &headers, &error)
+                .with_state("state123")
+                .with_issuer("https://identity.example.com/");
+            let redirect = response.to_redirect_url(&redirect_uri);
+            let params = redirect
+                .query_pairs()
+                .collect::<std::collections::HashMap<_, _>>();
+
+            assert_eq!(params.len(), 4);
+            assert_eq!(
+                params.get("error").map(AsRef::as_ref),
+                Some("invalid_scope")
+            );
+            assert_eq!(
+                params.get("error_description").map(AsRef::as_ref),
+                Some(expected)
+            );
+            assert_eq!(params.get("state").map(AsRef::as_ref), Some("state123"));
+            assert_eq!(
+                params.get("iss").map(AsRef::as_ref),
+                Some("https://identity.example.com/")
+            );
+        }
+    }
 
     #[test]
     fn internal_error_kind_maps_to_500_status() {

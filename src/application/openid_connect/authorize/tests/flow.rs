@@ -750,11 +750,11 @@ async fn deny_authorization_request_is_single_use_after_first_denial() {
         .await
         .unwrap();
 
-    let redirect = service
+    let denied_request = service
         .deny_authorization_request(authorization_oid)
         .await
         .unwrap();
-    assert!(redirect.as_str().contains("error=access_denied"));
+    assert_eq!(denied_request.state, "state123");
 
     let error = service
         .deny_authorization_request(authorization_oid)
@@ -1128,7 +1128,7 @@ async fn create_authorization_request_persists_prompt() {
 }
 
 #[tokio::test]
-async fn deny_authorization_request_returns_access_denied_redirect() {
+async fn deny_authorization_request_returns_validated_request() {
     let (service, _) = default_authorize_service_with_request_repo();
 
     let (request, _) = service
@@ -1139,11 +1139,13 @@ async fn deny_authorization_request_returns_access_denied_redirect() {
         .create_authorization_request(&request)
         .await
         .unwrap();
-    let redirect = service.deny_authorization_request(oid).await.unwrap();
+    let denied_request = service.deny_authorization_request(oid).await.unwrap();
 
-    let query = redirect.query().unwrap();
-    assert!(query.contains("error=access_denied"));
-    assert!(query.contains("state=state123"));
+    assert_eq!(denied_request.state, "state123");
+    assert_eq!(
+        denied_request.redirect_uri,
+        "https://client.example.com/callback"
+    );
 }
 
 #[tokio::test]
@@ -1170,11 +1172,9 @@ async fn deny_authorization_request_failure_does_not_burn_interaction() {
         "https://client.example.com/callback",
     );
 
-    let redirect = service.deny_authorization_request(oid).await.unwrap();
+    let denied_request = service.deny_authorization_request(oid).await.unwrap();
 
-    let query = redirect.query().unwrap();
-    assert!(query.contains("error=access_denied"));
-    assert!(query.contains("state=state123"));
+    assert_eq!(denied_request.state, "state123");
     assert!(completed_at_for_test(&request_repo, oid).is_some());
 }
 

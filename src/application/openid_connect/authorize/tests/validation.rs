@@ -406,6 +406,7 @@ async fn validate_request_rejects_scope_not_assigned_to_client() {
         .unwrap_err();
 
     assert_eq!(error.code(), 23056);
+    assert_eq!(error.params().get("scopes"), Some("email"));
 }
 
 #[tokio::test]

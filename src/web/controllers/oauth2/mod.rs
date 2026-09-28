@@ -4,6 +4,7 @@ use crate::cors::{ClientCors, preflight};
 
 use super::shared::{api_csrf_middleware, browser_csrf_middleware};
 
+mod authorization_error;
 mod authorize_endpoint;
 mod consent_endpoint;
 mod continue_endpoint;

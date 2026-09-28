@@ -6,7 +6,7 @@ use crate::controllers::{
     shared::load_op_active_session_entries,
 };
 use identity_application::error::AppError;
-use identity_domain::openid_connect::{OAuthErrorResponse, ResponseType};
+use identity_domain::openid_connect::ResponseType;
 use identity_infrastructure::AppState;
 use uuid::Uuid;
 
@@ -24,7 +24,7 @@ pub use response::{
 
 use extractor::extract_authorize_request;
 use interaction::determine_authorize_flow;
-use response::{authorize_oauth_error_code, render_authorize_error_page};
+use response::{localized_authorize_error_response, render_authorize_error_page};
 
 async fn render_error(
     ctx: &AppState,
@@ -95,7 +95,7 @@ async fn render_error(
             Ok(issuer) => issuer,
             Err(error) => return render_authorize_error_page(ctx, headers, raw, error),
         };
-        let error_response = OAuthErrorResponse::new(authorize_oauth_error_code(&error))
+        let error_response = localized_authorize_error_response(ctx, headers, &error)
             .with_issuer(issuer.to_string());
         let error_response = if let Some(s) = raw.state.clone() {
             error_response.with_state(s)

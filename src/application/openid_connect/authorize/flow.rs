@@ -822,24 +822,14 @@ impl AuthorizeService {
     pub async fn deny_authorization_request(
         &self,
         authorization_request_id: Uuid,
-    ) -> Result<Url, AppError> {
+    ) -> Result<AuthorizationRequestData, AppError> {
         let request = self
             .load_authorization_request(authorization_request_id)
             .await?;
-        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
+        Url::parse(&request.redirect_uri).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
         })?;
-        let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
-            .with_state(request.state)
-            .with_issuer(self.provider_service.issuer()?.to_string());
-
-        let response_type = request.response_type.clone();
-
-        let redirect = if response_type.uses_front_channel_response() {
-            error.to_fragment_redirect_url(&redirect_uri)
-        } else {
-            error.to_redirect_url(&redirect_uri)
-        };
+        self.provider_service.issuer()?;
 
         self.mark_authorization_request_completed(authorization_request_id)
             .await?;
@@ -854,7 +844,7 @@ impl AuthorizeService {
                 ),
         );
 
-        Ok(redirect)
+        Ok(request)
     }
 
     pub async fn approve_authorization_request_by_login(
@@ -884,7 +874,7 @@ impl AuthorizeService {
     pub async fn deny_authorization_request_by_login(
         &self,
         protected_login_oid: &str,
-    ) -> Result<Url, AppError> {
+    ) -> Result<AuthorizationRequestData, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
         self.deny_authorization_request(login.client_authorization_oid)
             .await

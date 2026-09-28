@@ -113,7 +113,14 @@ async fn continue_with_denied_consent_returns_access_denied() {
     let (state, protected_login_id, _) =
         continue_selected_session_with_consent_state(ConsentState::Denied).await;
 
-    let response = call_continue_with_state(&protected_login_id, state, None).await;
+    let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state));
+    let service = Service::new(app);
+    let response = TestClient::get(format!(
+        "http://127.0.0.1:5800/oauth2/continue?login_id={protected_login_id}"
+    ))
+    .add_header(header::ACCEPT_LANGUAGE, "zh-CN", true)
+    .send(&service)
+    .await;
 
     assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
     assert_eq!(
@@ -123,6 +130,10 @@ async fn continue_with_denied_consent_returns_access_denied() {
     assert_eq!(
         query_param(location(&response), "state").as_deref(),
         Some("state-123")
+    );
+    assert_eq!(
+        query_param(location(&response), "error_description").as_deref(),
+        Some("授权请求已被拒绝。")
     );
 }
 

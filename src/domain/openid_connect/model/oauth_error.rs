@@ -35,33 +35,6 @@ impl fmt::Display for ParseOAuthErrorCodeError {
 
 impl std::error::Error for ParseOAuthErrorCodeError {}
 
-impl OAuthErrorCode {
-    #[must_use]
-    pub const fn description(&self) -> &'static str {
-        match self {
-            Self::InvalidRequest => "The authorization request is invalid.",
-            Self::UnauthorizedClient => "The client is not authorized to make this request.",
-            Self::AccessDenied => "The authorization request was denied.",
-            Self::UnsupportedResponseType => "The requested response type is not supported.",
-            Self::InvalidScope => "The requested scope is invalid or unavailable.",
-            Self::ServerError => "The authorization server could not complete the request.",
-            Self::TemporarilyUnavailable => "The authorization server is temporarily unavailable.",
-            Self::LoginRequired => "The user must sign in to continue.",
-            Self::ConsentRequired => "The user must grant consent to continue.",
-            Self::InteractionRequired => "User interaction is required to continue.",
-            Self::AccountSelectionRequired => "The user must select an account to continue.",
-            Self::InvalidRequestUri => "The request URI is invalid.",
-            Self::InvalidRequestObject => "The request object is invalid.",
-            Self::RequestNotSupported => "The authorization request is not supported.",
-            Self::RequestUriNotSupported => "Request URIs are not supported.",
-            Self::RegistrationNotSupported => "Dynamic client registration is not supported.",
-            Self::UnmetAuthenticationRequirements => {
-                "The authentication performed does not satisfy the requested requirements."
-            }
-        }
-    }
-}
-
 impl FromStr for OAuthErrorCode {
     type Err = ParseOAuthErrorCodeError;
 
@@ -83,10 +56,9 @@ pub struct OAuthErrorResponse {
 
 impl OAuthErrorResponse {
     pub fn new(error: OAuthErrorCode) -> Self {
-        let error_description = Some(error.description().to_owned());
         Self {
             error,
-            error_description,
+            error_description: None,
             error_uri: None,
             state: None,
             issuer: None,
@@ -95,6 +67,11 @@ impl OAuthErrorResponse {
 
     pub fn with_state(mut self, state: impl Into<String>) -> Self {
         self.state = Some(state.into());
+        self
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.error_description = Some(description.into());
         self
     }
 
@@ -232,6 +209,7 @@ mod tests {
     #[test]
     fn to_fragment_redirect_url_places_error_in_fragment() {
         let error = super::OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
+            .with_description("The authorization request was denied.")
             .with_state("state123")
             .with_issuer("https://identity.example.com/");
         let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
@@ -259,6 +237,7 @@ mod tests {
     #[test]
     fn to_redirect_url_places_error_in_query() {
         let error = super::OAuthErrorResponse::new(OAuthErrorCode::LoginRequired)
+            .with_description("The user must sign in to continue.")
             .with_state("abc")
             .with_issuer("https://identity.example.com/");
         let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
