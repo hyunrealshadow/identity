@@ -16,6 +16,7 @@ pub struct Migration;
 
 #[derive(DeriveIden)]
 pub enum ClientOpenIdConnectCredential {
+    #[sea_orm(iden = "client_openid_connect_credential")]
     Table,
     Id,
     Oid,

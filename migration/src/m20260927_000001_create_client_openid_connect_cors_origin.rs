@@ -13,6 +13,7 @@ pub struct Migration;
 
 #[derive(DeriveIden)]
 enum ClientOpenIdConnectCorsOrigin {
+    #[sea_orm(iden = "client_openid_connect_cors_origin")]
     Table,
     ClientId,
     Origin,

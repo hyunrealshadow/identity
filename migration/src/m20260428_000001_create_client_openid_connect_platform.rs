@@ -16,6 +16,7 @@ pub struct Migration;
 
 #[derive(DeriveIden)]
 pub enum ClientOpenIdConnectPlatform {
+    #[sea_orm(iden = "client_openid_connect_platform")]
     Table,
     Id,
     ClientId,
