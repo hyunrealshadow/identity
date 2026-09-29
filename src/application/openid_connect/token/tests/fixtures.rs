@@ -9,10 +9,10 @@ use crate::openid_connect::tests::fixtures::mocks::{
 mod clients;
 
 pub(super) use clients::{
-    AuthMethodClientRepository, IdTokenAlgorithmClientRepository, InMemoryClientRepository,
-    MachineAlgorithmClientRepository, MachineClientRepository, OAuth21ClientRepository,
-    PublicFlowClientRepository, RegisteredPublicClientRepository, RestrictedGrantClientRepository,
-    ScopedClaimsClientRepository,
+    AccessClaimsClientRepository, AuthMethodClientRepository, IdTokenAlgorithmClientRepository,
+    InMemoryClientRepository, MachineAlgorithmClientRepository, MachineClientRepository,
+    OAuth21ClientRepository, PublicFlowClientRepository, RegisteredPublicClientRepository,
+    RestrictedGrantClientRepository, ScopedClaimsClientRepository,
 };
 
 pub(super) const CLIENT_SECRET_JWT_SECRET: &str =

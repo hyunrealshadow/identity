@@ -117,6 +117,12 @@ async fn signed_access_token_revokes_only_its_record() {
     let (key_id, private_key_pem, alg) = service.load_signing_key().await.unwrap();
     let token_id = record.oid.to_string();
     let client_id = Uuid::nil().to_string();
+    let client = service
+        .client_repo
+        .find_by_oid(Uuid::nil())
+        .await
+        .unwrap()
+        .unwrap();
     let token = service
         .sign_access_token(SignAccessTokenInput {
             token_id: &token_id,
@@ -127,6 +133,8 @@ async fn signed_access_token_revokes_only_its_record() {
             audience: &client_id,
             client_id: &client_id,
             user_oid: &user_oid,
+            client: &client,
+            user: None,
             protected_session_id: None,
             scope: "openid",
             claims: None,

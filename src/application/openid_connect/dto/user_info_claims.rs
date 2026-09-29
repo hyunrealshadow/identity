@@ -363,12 +363,11 @@ fn absolute_profile_url(profile_base_url: &str, value: Option<&str>) -> Option<S
 
 /// Standard claims the granted `scope` (and, for the `id_token` section, an
 /// optional `claims_request`) allow, as JSON object entries keyed by claim name.
-/// `sub` is intentionally excluded: both ID Token signing paths set the subject
-/// themselves (`subject_identifier`).
+/// `sub` is intentionally excluded: token signers set their own subject.
 ///
-/// Shared by the implicit/hybrid ID Token signer and the token-endpoint signer
-/// (when `OpenIdConnectClientSettings::include_scoped_claims_in_id_token` is on)
-/// so the scope/essential filtering rules never drift between the two.
+/// Shared by the implicit/hybrid ID Token signer and the token-endpoint signers
+/// (when scoped claims are enabled for ID or access tokens) so the
+/// scope/essential filtering rules never drift between them.
 pub fn scoped_standard_claims(
     user: &identity_domain::user::User,
     scope: &identity_domain::openid_connect::ScopeSet,

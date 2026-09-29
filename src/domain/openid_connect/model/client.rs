@@ -128,6 +128,10 @@ pub struct OpenIdConnectClientSettings {
     /// matching the implicit-flow behaviour. Defaults to off (current behaviour).
     #[serde(default)]
     pub include_scoped_claims_in_id_token: bool,
+    /// Includes standard user claims covered by the granted scopes in access
+    /// tokens issued for a user. Machine tokens have no user claims.
+    #[serde(default)]
+    pub include_scoped_claims_in_access_token: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
@@ -464,6 +468,7 @@ mod tests {
     #[test]
     fn settings_defaults_include_scoped_claims_to_false() {
         assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_id_token);
+        assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_access_token);
         assert!(!OpenIdConnectClientSettings::default().cors_enabled);
 
         // Stored settings without the version field retain OAuth 2.0 behavior.
@@ -471,6 +476,7 @@ mod tests {
             serde_json::from_value(serde_json::json!({"skip_consent": true})).unwrap();
         assert!(parsed.skip_consent);
         assert!(!parsed.include_scoped_claims_in_id_token);
+        assert!(!parsed.include_scoped_claims_in_access_token);
         assert!(!parsed.allow_nonce_without_pkce);
         assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_0);
     }
@@ -499,6 +505,7 @@ mod tests {
             skip_consent: true,
             allow_public_client_flow: false,
             include_scoped_claims_in_id_token: true,
+            include_scoped_claims_in_access_token: true,
             ..OpenIdConnectClientSettings::default()
         };
         let json = serde_json::to_value(&settings).unwrap();

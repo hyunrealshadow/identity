@@ -503,7 +503,8 @@ fn conformance_client_settings() -> serde_json::Value {
     serde_json::json!({
         "skip_consent": true,
         "allow_public_client_flow": false,
-        "include_scoped_claims_in_id_token": false
+        "include_scoped_claims_in_id_token": false,
+        "include_scoped_claims_in_access_token": false
     })
 }
 

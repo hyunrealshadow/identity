@@ -161,6 +161,39 @@ async fn device_grant_uses_client_algorithm_for_access_token() {
     }
 }
 
+#[tokio::test]
+async fn device_grant_includes_scoped_user_claims_in_access_token_when_enabled() {
+    let scope = "openid profile email";
+    let (repo, _records) = device_repo(
+        request_record_with_scope(
+            DeviceRequestStatus::Approved,
+            Utc::now() + chrono::Duration::minutes(10),
+            scope,
+        ),
+        Some(relation_record_with_scope(false, scope)),
+        DeviceRepoOptions::default(),
+    );
+    let mut metadata = test_metadata(None, Some("client_secret_basic"));
+    metadata.grant_types = Some(vec![GrantType::DeviceCode]);
+    metadata.settings.include_scoped_claims_in_access_token = true;
+    let client = OpenIdConnectClient::new(
+        test_client(Uuid::nil()),
+        metadata,
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap();
+    let service = build_service(client, repo);
+
+    let response = service.exchange_device_code(params()).await.unwrap();
+    let access_claims = decode_unverified_payload(&response.access_token);
+    assert_eq!(access_claims["name"], "A");
+    assert_eq!(access_claims["email"], "a@example.com");
+    let id_claims = decode_unverified_payload(response.id_token.as_ref().unwrap());
+    assert!(id_claims.get("name").is_none());
+    assert!(id_claims.get("email").is_none());
+}
+
 #[derive(Default)]
 struct DeviceRepoOptions {
     poll: Option<DevicePollOutcome>,

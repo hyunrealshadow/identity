@@ -10,6 +10,7 @@ pub(in crate::openid_connect) struct IdTokenAlgorithmClientRepository {
 pub(in crate::openid_connect) struct OAuth21ClientRepository;
 pub(in crate::openid_connect) struct PublicFlowClientRepository;
 pub(in crate::openid_connect) struct ScopedClaimsClientRepository;
+pub(in crate::openid_connect) struct AccessClaimsClientRepository;
 pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
     pub(in crate::openid_connect) grant_types: Vec<identity_domain::openid_connect::GrantType>,
 }
@@ -21,6 +22,7 @@ pub(in crate::openid_connect) struct RegisteredPublicClientRepository;
 pub(in crate::openid_connect) struct MachineClientRepository;
 pub(in crate::openid_connect) struct MachineAlgorithmClientRepository {
     pub(in crate::openid_connect) algorithm: identity_domain::key::JwaSigningAlgorithm,
+    pub(in crate::openid_connect) include_access_claims: bool,
 }
 pub(in crate::openid_connect) struct AuthMethodClientRepository {
     pub(in crate::openid_connect) method: &'static str,
@@ -144,6 +146,7 @@ impl OpenIdConnectClientRepository for MachineAlgorithmClientRepository {
         metadata.id_token_signed_response_alg = Some(
             identity_domain::key::JwsAlgorithm::Asymmetric(self.algorithm),
         );
+        metadata.settings.include_scoped_claims_in_access_token = self.include_access_claims;
         Ok(Some(
             OpenIdConnectClient::new(
                 test_client(oid),
@@ -180,6 +183,22 @@ impl OpenIdConnectClientRepository for ScopedClaimsClientRepository {
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, Some("client_secret_basic"));
         metadata.settings.include_scoped_claims_in_id_token = true;
+
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for AccessClaimsClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.settings.include_scoped_claims_in_access_token = true;
 
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())

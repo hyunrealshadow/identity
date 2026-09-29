@@ -97,6 +97,8 @@ impl TokenService {
                 audience: identity_domain::openid_connect::API_RESOURCE,
                 client_id: &client_id,
                 user_oid: &client_oid,
+                client: &client,
+                user: None,
                 protected_session_id: None,
                 scope: &scope,
                 claims: None,

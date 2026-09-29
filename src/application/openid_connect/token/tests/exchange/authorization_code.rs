@@ -457,6 +457,9 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (id_payload, _) =
         jwt::decode_with_verifier(result.id_token.as_ref().unwrap(), &verifier).unwrap();
+    let (access_payload, _) = jwt::decode_with_verifier(&result.access_token, &verifier).unwrap();
+    assert!(access_payload.claim(JwtClaimNames::NAME).is_none());
+    assert!(access_payload.claim(JwtClaimNames::EMAIL).is_none());
 
     // profile + email scope → scoped standard claims present (scope-driven, no
     // claims_request needed). sub stays the raw user oid (public subject type).
@@ -1026,6 +1029,100 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
 }
 
 #[tokio::test]
+async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let service = build_token_service_with_client_repo(
+        repo.clone(),
+        user_oid,
+        Arc::new(AccessClaimsClientRepository),
+    );
+
+    for scope in [
+        "openid profile email offline_access",
+        "profile email offline_access",
+        "openid profile offline_access",
+    ] {
+        let has_openid = scope.split_whitespace().any(|value| value == "openid");
+        let has_email = scope.split_whitespace().any(|value| value == "email");
+        let record = repo
+            .create(
+                Uuid::nil(),
+                ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    scope: scope.to_owned(),
+                    nonce: has_openid.then_some("nonce-claims".to_owned()),
+                    code_challenge: Some(s256_challenge("verifier-claims")),
+                    code_challenge_method: Some("S256".parse().unwrap()),
+                    user_oid: user_oid.to_string(),
+                    session_oid: SessionOid::from(Uuid::new_v4()),
+                    protected_session_id: None,
+                    acr: None,
+                    amr: vec!["pwd".to_owned()],
+                    auth_time: None,
+                    redirect_uri: "https://client.example.com/callback".to_owned(),
+                    redirect_uri_was_supplied: true,
+                    claims: None,
+                }),
+                Utc::now() + chrono::Duration::minutes(10),
+            )
+            .await
+            .unwrap();
+        let issued = service
+            .exchange_authorization_code(AuthorizationCodeGrantParams {
+                code: STANDARD.encode(record.oid.as_bytes()),
+                redirect_uri: Some("https://client.example.com/callback".to_owned()),
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_assertion_type: None,
+                client_assertion: None,
+                code_verifier: Some("verifier-claims".to_owned()),
+            })
+            .await
+            .unwrap();
+        let refreshed = service
+            .exchange_refresh_token(RefreshTokenGrantParams {
+                scope: None,
+                refresh_token: issued.refresh_token.clone().unwrap(),
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_assertion_type: None,
+                client_assertion: None,
+            })
+            .await
+            .unwrap();
+
+        for tokens in [&issued, &refreshed] {
+            let access_claims = serde_json::from_slice::<serde_json::Value>(
+                &URL_SAFE_NO_PAD
+                    .decode(tokens.access_token.split('.').nth(1).unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(access_claims["sub"], user_oid.to_string());
+            assert_eq!(access_claims["name"], "A");
+            if has_email {
+                assert_eq!(access_claims["email"], "a@example.com");
+                assert_eq!(access_claims["email_verified"], true);
+            } else {
+                assert!(access_claims.get("email").is_none());
+                assert!(access_claims.get("email_verified").is_none());
+            }
+            assert_eq!(tokens.id_token.is_some(), has_openid);
+            if let Some(id_token) = &tokens.id_token {
+                let id_claims = serde_json::from_slice::<serde_json::Value>(
+                    &URL_SAFE_NO_PAD
+                        .decode(id_token.split('.').nth(1).unwrap())
+                        .unwrap(),
+                )
+                .unwrap();
+                assert!(id_claims.get("name").is_none());
+                assert!(id_claims.get("email").is_none());
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
     for alg in ["PS256", "PS384", "PS512"] {
         let repo = Arc::new(mock_client_auth_repo());
@@ -1053,6 +1150,13 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             )
             .await
             .unwrap();
+        let client = service
+            .client_repo
+            .find_by_oid(Uuid::nil())
+            .await
+            .unwrap()
+            .unwrap();
+        let user = test_user(user_oid);
         let access_token = service
             .sign_access_token(SignAccessTokenInput {
                 token_id: &access_record.oid.to_string(),
@@ -1063,6 +1167,8 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 audience: &Uuid::nil().to_string(),
                 client_id: &Uuid::nil().to_string(),
                 user_oid: &user_oid,
+                client: &client,
+                user: Some(&user),
                 protected_session_id: Some(&Uuid::new_v4().to_string()),
                 scope: "openid profile",
                 claims: None,
@@ -1072,12 +1178,6 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             })
             .await
             .unwrap();
-        let client = service
-            .client_repo
-            .find_by_oid(Uuid::nil())
-            .await
-            .unwrap()
-            .unwrap();
         let id_token = service
             .sign_id_token(SignIdTokenInput {
                 key_id: &key_id,
@@ -1086,7 +1186,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 issuer: &issuer,
                 audience: &Uuid::nil().to_string(),
                 client: &client,
-                user: &test_user(user_oid),
+                user: &user,
                 scope: "openid profile",
                 nonce: None,
                 auth_time: None,

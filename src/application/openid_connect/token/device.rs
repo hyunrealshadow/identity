@@ -267,6 +267,8 @@ impl TokenService {
                 audience: access_token_audience,
                 client_id,
                 user_oid: &user.oid.0,
+                client,
+                user: Some(user),
                 // Device tokens have no browser session and therefore no sid.
                 protected_session_id: None,
                 scope: &scope_string,

@@ -41,6 +41,7 @@ async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
         Uuid::new_v4(),
         Arc::new(MachineAlgorithmClientRepository {
             algorithm: JwaSigningAlgorithm::Rs256,
+            include_access_claims: true,
         }),
     );
     let default_ec_key = key_for_algorithm("ES256");
@@ -58,6 +59,14 @@ async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
         .await
         .unwrap();
     assert!(response.id_token.is_none());
+    let access_claims = serde_json::from_slice::<serde_json::Value>(
+        &URL_SAFE_NO_PAD
+            .decode(response.access_token.split('.').nth(1).unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(access_claims.get("name").is_none());
+    assert!(access_claims.get("email").is_none());
     let header = jwt::decode_header(&response.access_token).unwrap();
     assert_eq!(
         header

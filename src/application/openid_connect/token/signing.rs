@@ -34,6 +34,8 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub audience: &'a str,
     pub client_id: &'a str,
     pub user_oid: &'a Uuid,
+    pub client: &'a identity_domain::openid_connect::OpenIdConnectClient,
+    pub user: Option<&'a identity_domain::user::User>,
     /// `None` for device issued tokens: they have no browser session, so no
     /// `sid` claim is emitted (a forged one would be a lie).
     pub protected_session_id: Option<&'a str>,
@@ -271,6 +273,22 @@ impl TokenService {
                 .map_err(|error| {
                     AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
                 })?;
+        }
+        if input
+            .client
+            .metadata()
+            .settings
+            .include_scoped_claims_in_access_token
+            && let Some(user) = input.user
+        {
+            let scope = ScopeSet::parse(input.scope).map_err(|error| {
+                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+            })?;
+            for (name, value) in scoped_standard_claims(user, &scope, None, input.issuer.as_str()) {
+                payload.set_claim(&name, Some(value)).map_err(|error| {
+                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
+                })?;
+            }
         }
 
         let private_key_pem = input.private_key_pem.to_owned();
