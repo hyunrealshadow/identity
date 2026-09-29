@@ -9,6 +9,7 @@ pub mod crypto;
 pub mod database;
 pub mod graphql;
 pub mod i18n;
+pub mod jobs;
 pub mod lifecycle;
 pub mod observability;
 pub mod openid_connect;
@@ -52,7 +53,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
         value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
     let installation_initialized_setting = setting::Model {
@@ -60,7 +61,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
     let domain_setting = setting::Model {
@@ -68,7 +69,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
     let installation_initialized_at_setting = setting::Model {
@@ -76,7 +77,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(Utc::now()).unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
     let dynamic_registration_setting = setting::Model {
@@ -84,7 +85,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
         value: serde_json::to_value(false).unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
     let device_authorization_setting = setting::Model {
@@ -92,7 +93,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
         value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
     let login_domain_setting = setting::Model {
@@ -100,7 +101,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
         oid: uuid::Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
         value: serde_json::to_value(LoginDomainSetting::default_value()).unwrap(),
-        created_at: Utc::now().naive_utc(),
+        created_at: Utc::now().into(),
         updated_at: None,
     };
 
@@ -130,12 +131,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
     let tera = build_tera(i18n.loader()).unwrap();
     let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
     let services = Arc::new(
-        AppServices::from_db_with_rotation(
-            db.clone(),
-            settings.as_ref(),
-            &config::ClientCredentialRotationConfig::default(),
-        )
-        .expect("services should build"),
+        AppServices::from_db(db.clone(), settings.as_ref()).expect("services should build"),
     );
 
     AppState::new(

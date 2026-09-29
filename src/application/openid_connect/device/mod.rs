@@ -233,23 +233,6 @@ impl DeviceAuthorizationService {
         }
     }
 
-    /// Housekeeping: drops expired device requests, never their authorization relations.
-    ///
-    /// Returns the number of removed request rows.
-    #[tracing::instrument(skip_all, name = "device_authorization.cleanup")]
-    pub async fn maintain(&self) -> Result<u64, AppError> {
-        let now = Utc::now();
-        let removed = self
-            .device_repo
-            .delete_expired_device_requests(now)
-            .await
-            .map_err(|error| {
-                AppError::from_code(DeviceAuthorizationErrorCode::StoreRequestFailed)
-                    .with_source(error)
-            })?;
-        Ok(removed)
-    }
-
     /// Resolves what the verification UI must show for a user code.
     ///
     /// Read-only by design: a GET carrying the browser session cookie must not

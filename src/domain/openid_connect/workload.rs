@@ -37,6 +37,18 @@ pub struct LoginRotationPolicy {
     pub retire_after: chrono::Duration,
 }
 
+pub const BUILTIN_CLIENT_SECRET_LIFETIME: chrono::Duration = chrono::Duration::days(90);
+
+impl Default for LoginRotationPolicy {
+    fn default() -> Self {
+        Self {
+            credential_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
+            rotate_before_expiry: chrono::Duration::days(30),
+            retire_after: chrono::Duration::hours(24),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum LoginRuntimeRepositoryError {
     #[error("failed to query login runtime state")]

@@ -39,7 +39,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
             ]))
             .filter(key::Column::RevokedAt.is_null())
             .filter(key::Column::RotatedAt.is_null())
-            .filter(key::Column::CreatedAt.lte((now - KEY_ROTATION_AGE).naive_utc()))
+            .filter(key::Column::CreatedAt.lte(now - KEY_ROTATION_AGE))
             .all(&self.db)
             .await
             .map_err(internal)?
@@ -73,7 +73,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
             || (previous.r#type == KeyType::Symmetric.to_string() && !material.jwks.is_empty())
             || previous.revoked_at.is_some()
             || previous.rotated_at.is_some()
-            || previous.created_at > (now - KEY_ROTATION_AGE).naive_utc()
+            || previous.created_at > now - KEY_ROTATION_AGE
         {
             return Ok(false);
         }
@@ -87,8 +87,8 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
             revoked_at: Set(None),
             rotated_from_oid: Set(Some(Uuid::from(previous_oid))),
             rotated_at: Set(None),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(Some(now.naive_utc())),
+            created_at: Set(now.into()),
+            updated_at: Set(None),
             ..Default::default()
         };
         next.insert(&txn).await.map_err(internal)?;
@@ -102,8 +102,8 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
                 key_oid: Set(next_oid),
                 algorithm: Set(generated.algorithm.as_str().to_owned()),
                 jwk: Set(serde_json::to_value(jwk).map_err(internal)?),
-                created_at: Set(now.naive_utc()),
-                updated_at: Set(Some(now.naive_utc())),
+                created_at: Set(now.into()),
+                updated_at: Set(None),
                 ..Default::default()
             }
             .insert(&txn)
@@ -122,7 +122,10 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
                 Expr::value(Some(now.fixed_offset())),
             )
             .col_expr(key::Column::ExpiresAt, Expr::value(retiring_expiry))
-            .col_expr(key::Column::UpdatedAt, Expr::value(Some(now.naive_utc())))
+            .col_expr(
+                key::Column::UpdatedAt,
+                Expr::value(Some(now.fixed_offset())),
+            )
             .filter(key::Column::Id.eq(previous.id))
             .exec(&txn)
             .await

@@ -137,11 +137,7 @@ impl AppBuilder {
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         let key_algorithm = cfg.key_algorithm.to_string();
-        let svc = build_install_service(
-            &settings,
-            db.clone(),
-            &self.config.client_credential_rotation,
-        );
+        let svc = build_install_service(&settings, db.clone());
 
         let domain = install_domain(cfg, &self.config);
 
@@ -184,7 +180,6 @@ impl AppBuilder {
         self.services = Some(Arc::new(AppServices::from_db_with_workload_auth(
             db,
             settings.as_ref(),
-            &self.config.client_credential_rotation,
             workload_authenticator,
         )?));
         Ok(self)
@@ -221,11 +216,7 @@ async fn is_installed(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
         .initialized)
 }
 
-fn build_install_service(
-    settings: &AppRuntimeSettings,
-    db: DatabaseConnection,
-    rotation_config: &identity_infrastructure::config::ClientCredentialRotationConfig,
-) -> InstallService {
+fn build_install_service(settings: &AppRuntimeSettings, db: DatabaseConnection) -> InstallService {
     InstallService {
         password_hasher: Arc::new(PasswordHasherImpl::new()),
         settings: settings.store(),
@@ -233,7 +224,7 @@ fn build_install_service(
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         repository: Arc::new(InstallRepositoryImpl::new(db)),
         runtime_key_ring: settings.key_ring(),
-        client_secret_lifetime: chrono::Duration::days(rotation_config.credential_lifetime_days),
+        client_secret_lifetime: identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME,
     }
 }
 

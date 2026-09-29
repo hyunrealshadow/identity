@@ -28,6 +28,6 @@ pub use repository::{
     OpenIdConnectCredentialRepository, OpenIdConnectCredentialRepositoryError,
 };
 pub use workload::{
-    AuthenticatedWorkload, BuiltInWorkload, LoginRotationPolicy, LoginRuntimeConfig,
-    LoginRuntimeRepository, LoginRuntimeRepositoryError, WorkloadAuthenticator,
+    AuthenticatedWorkload, BUILTIN_CLIENT_SECRET_LIFETIME, BuiltInWorkload, LoginRotationPolicy,
+    LoginRuntimeConfig, LoginRuntimeRepository, LoginRuntimeRepositoryError, WorkloadAuthenticator,
 };

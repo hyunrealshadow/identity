@@ -117,7 +117,7 @@ mod tests {
             oid: Uuid::new_v4(),
             key: key.to_owned(),
             value,
-            created_at: Utc::now().naive_utc(),
+            created_at: Utc::now().into(),
             updated_at: None,
         }
     }

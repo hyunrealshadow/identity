@@ -167,7 +167,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
                 expires_at: Set((now + policy.credential_lifetime).into()),
                 revoked_at: Set(None),
                 created_at: Set(now.into()),
-                updated_at: Set(Some(now.into())),
+                updated_at: Set(None),
                 ..Default::default()
             }
             .insert(&txn)

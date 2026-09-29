@@ -60,10 +60,8 @@ pub fn to_domain(model: key::Model) -> Result<Key, KeyRepositoryError> {
         data,
         expires_at: decode_nonnullable_expiry(model.expires_at),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
-        created_at: DateTime::from_naive_utc_and_offset(model.created_at, Utc),
-        updated_at: model
-            .updated_at
-            .map(|value| DateTime::from_naive_utc_and_offset(value, Utc)),
+        created_at: model.created_at.with_timezone(&Utc),
+        updated_at: model.updated_at.map(|value| value.with_timezone(&Utc)),
     })
 }
 
@@ -119,8 +117,8 @@ impl KeyRepository for KeyRepositoryImpl {
             data: Set(serialize_key_data(data)?),
             expires_at: Set(encode_nonnullable_expiry(expires_at)),
             revoked_at: Set(None),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(Some(now.naive_utc())),
+            created_at: Set(now.into()),
+            updated_at: Set(None),
             ..Default::default()
         };
 
@@ -155,7 +153,10 @@ impl KeyRepository for KeyRepositoryImpl {
         let now = Utc::now();
         let updated = KeyEntity::update_many()
             .col_expr(key::Column::Data, Expr::value(serialize_key_data(&data)?))
-            .col_expr(key::Column::UpdatedAt, Expr::value(Some(now.naive_utc())))
+            .col_expr(
+                key::Column::UpdatedAt,
+                Expr::value(Some(now.fixed_offset())),
+            )
             .filter(key::Column::Id.eq(model.id))
             .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
             .filter(key::Column::RevokedAt.is_null())
@@ -188,7 +189,7 @@ impl KeyRepository for KeyRepositoryImpl {
             )
             .col_expr(
                 key::Column::UpdatedAt,
-                Expr::value(Some(Utc::now().naive_utc())),
+                Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(key::Column::Oid.eq(Uuid::from(oid)))
             .filter(key::Column::RevokedAt.is_null())
@@ -211,7 +212,7 @@ impl KeyRepository for KeyRepositoryImpl {
 #[cfg(test)]
 mod tests {
     use super::to_domain;
-    use chrono::{DateTime, NaiveDateTime, Utc};
+    use chrono::{DateTime, Utc};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -233,8 +234,7 @@ mod tests {
             revoked_at: None,
             rotated_from_oid: None,
             rotated_at: None,
-            created_at: NaiveDateTime::parse_from_str("2026-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
-                .unwrap(),
+            created_at: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
             updated_at: None,
         };
 

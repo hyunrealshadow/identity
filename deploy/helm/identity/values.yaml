@@ -40,12 +40,6 @@ identity:
     create: true
     name: ""
     annotations: {}
-  rotation:
-    enabled: true
-    checkIntervalSeconds: 60
-    credentialLifetimeDays: 180
-    rotateBeforeExpiryDays: 30
-    retireAfterSeconds: 86400
   observability:
     # Keep container logs available until an OTLP collector is configured.
     console: true

@@ -30,7 +30,6 @@ pub struct LoginRuntimeService {
     repository: Arc<dyn LoginRuntimeRepository>,
     settings: Arc<dyn SettingsSource>,
     policy: LoginRotationPolicy,
-    refresh_after_secs: u64,
 }
 
 impl LoginRuntimeService {
@@ -38,14 +37,11 @@ impl LoginRuntimeService {
     pub fn new(
         repository: Arc<dyn LoginRuntimeRepository>,
         settings: Arc<dyn SettingsSource>,
-        policy: LoginRotationPolicy,
-        refresh_after_secs: u64,
     ) -> Self {
         Self {
             repository,
             settings,
-            policy,
-            refresh_after_secs,
+            policy: LoginRotationPolicy::default(),
         }
     }
 
@@ -71,7 +67,7 @@ impl LoginRuntimeService {
                 generation: config.generation,
                 expires_at: config.secret_expires_at,
             },
-            refresh_after: self.refresh_after_secs,
+            refresh_after: 60,
         }))
     }
 
@@ -134,16 +130,7 @@ mod tests {
         repository: Arc<RecordingRepository>,
         settings: SettingsSnapshot,
     ) -> LoginRuntimeService {
-        LoginRuntimeService::new(
-            repository,
-            Arc::new(settings),
-            LoginRotationPolicy {
-                credential_lifetime: Duration::days(30),
-                rotate_before_expiry: Duration::days(7),
-                retire_after: Duration::days(1),
-            },
-            60,
-        )
+        LoginRuntimeService::new(repository, Arc::new(settings))
     }
 
     #[tokio::test]

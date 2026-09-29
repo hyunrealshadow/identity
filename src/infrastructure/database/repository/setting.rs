@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use chrono::Utc;
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set, sea_query::OnConflict};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set,
+    sea_query::{Expr, OnConflict},
+};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -61,7 +64,8 @@ where
         db,
         changes,
         OnConflict::column(setting::Column::Key)
-            .update_columns([setting::Column::Value, setting::Column::UpdatedAt])
+            .update_column(setting::Column::Value)
+            .value(setting::Column::UpdatedAt, Expr::current_timestamp())
             .to_owned(),
     )
     .await
@@ -97,7 +101,7 @@ async fn insert_rows<C>(
 where
     C: ConnectionTrait,
 {
-    let now = Utc::now().naive_utc();
+    let now = Utc::now().fixed_offset();
     let rows = values
         .into_iter()
         .map(|(key, value)| setting::ActiveModel {
@@ -105,7 +109,7 @@ where
             key: Set(key),
             value: Set(value),
             created_at: Set(now),
-            updated_at: Set(Some(now)),
+            updated_at: Set(None),
             ..Default::default()
         })
         .collect::<Vec<_>>();
@@ -142,7 +146,7 @@ mod tests {
             oid: Uuid::new_v4(),
             key: key.to_owned(),
             value,
-            created_at: now.naive_utc(),
+            created_at: now.into(),
             updated_at: None,
         };
         let db = MockDatabase::new(DatabaseBackend::Postgres)
@@ -186,7 +190,12 @@ mod tests {
         assert_eq!(log.len(), 1);
         let sql = format!("{:?}", log[0]);
         assert!(
-            sql.contains(r#"ON CONFLICT (\"key\") DO UPDATE SET \"value\" = \"excluded\".\"value\", \"updated_at\" = \"excluded\".\"updated_at\""#),
+            sql.contains(r#"ON CONFLICT (\"key\") DO UPDATE SET \"value\" = \"excluded\".\"value\", \"updated_at\" = CURRENT_TIMESTAMP"#),
+            "{sql}"
+        );
+        assert_eq!(
+            sql.matches("ChronoDateTimeWithTimeZone(None)").count(),
+            2,
             "{sql}"
         );
         assert!(sql.contains("https://login.example"), "{sql}");

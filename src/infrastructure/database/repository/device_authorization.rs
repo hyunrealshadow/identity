@@ -34,7 +34,7 @@ use identity_domain::{
 
 /// Partial unique index guarding user codes of active device requests; the
 /// name must match the index created by
-/// `m20260913_000001_device_authorization_indexes`.
+/// `m20260407_060938_create_client_authorization`.
 const ACTIVE_USER_CODE_INDEX: &str = "idx_client_authorization_active_user_code";
 
 fn device_request_type() -> String {
@@ -154,8 +154,9 @@ impl DeviceAuthorizationRepositoryImpl {
             expires_at: Set(record.expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
+            is_expired: Set(record.expires_at <= now),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
         }
         .insert(transaction)
         .await
@@ -283,6 +284,28 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             })?;
 
         let now = Utc::now();
+        // Release an expired owner immediately, even if the scheduled expiry
+        // job has not reached it yet. The unique index still serializes active
+        // owners across instances.
+        ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::IsExpired,
+                SimpleExpr::Value(true.into()),
+            )
+            .col_expr(
+                client_authorization::Column::UpdatedAt,
+                SimpleExpr::Value(Some(now).into()),
+            )
+            .filter(client_authorization::Column::Type.eq(device_request_type()))
+            .filter(json_field_equals("user_code", &data.user_code))
+            .filter(client_authorization::Column::ExpiresAt.lte(now))
+            .filter(client_authorization::Column::IsExpired.eq(false))
+            .filter(client_authorization::Column::CompletedAt.is_null())
+            .filter(client_authorization::Column::RevokedAt.is_null())
+            .exec(&transaction)
+            .await
+            .map_err(query_failed)?;
+
         let model = client_authorization::ActiveModel {
             id: Default::default(),
             oid: Set(Uuid::new_v4()),
@@ -292,8 +315,9 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             expires_at: Set(expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
+            is_expired: Set(expires_at <= now),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
         }
         .insert(&transaction)
         .await
@@ -346,6 +370,8 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Type.eq(device_request_type()))
             .filter(client_authorization::Column::CompletedAt.is_null())
             .filter(client_authorization::Column::RevokedAt.is_null())
+            .filter(client_authorization::Column::IsExpired.eq(false))
+            .filter(client_authorization::Column::ExpiresAt.gt(Utc::now()))
             // A claimed code is semantically consumed: only an unclaimed
             // request can still be answered with the code it advertises.
             .filter(json_field_is_null("claimed_login_oid"))
@@ -478,8 +504,9 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             expires_at: Set(non_expiring_timestamp()),
             completed_at: Set(None),
             revoked_at: Set(None),
+            is_expired: Set(false),
             created_at: Set(decided_at.into()),
-            updated_at: Set(Some(decided_at.into())),
+            updated_at: Set(None),
         }
         .insert(&transaction)
         .await
@@ -682,21 +709,6 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
                     .add(client_authorization::Column::RevokedAt.is_null())
                     .add(json_field_equals("user_oid", &user_oid.to_string())),
             )
-            .exec(&self.db)
-            .await
-            .map_err(query_failed)?;
-
-        Ok(result.rows_affected)
-    }
-
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "delete_expired_device_requests"))]
-    async fn delete_expired_device_requests(
-        &self,
-        now: DateTime<Utc>,
-    ) -> Result<u64, DeviceAuthorizationRepositoryError> {
-        let result = ClientAuthorizationEntity::delete_many()
-            .filter(client_authorization::Column::Type.eq(device_request_type()))
-            .filter(client_authorization::Column::ExpiresAt.lte(now))
             .exec(&self.db)
             .await
             .map_err(query_failed)?;
@@ -929,6 +941,68 @@ mod postgres_tests {
         )
         .await
         .expect("user code is reusable once the request is completed");
+
+        drop_client(&db, client_oid).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires PostgreSQL"]
+    async fn expired_request_does_not_reserve_its_user_code() {
+        let db = test_db().await;
+        let client_oid = new_client_oid();
+        create_client(&db, client_oid).await;
+        let user_code = unique_code("EXPIRED");
+        let first = insert_request(
+            &db,
+            client_oid,
+            request_data(&unique_code("device-expired"), &user_code, 5),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .expect("request before expiration");
+        // Simulate time passing before the periodic expiration worker runs.
+        ClientAuthorizationEntity::update_many()
+            .col_expr(
+                client_authorization::Column::ExpiresAt,
+                SimpleExpr::Value((Utc::now() - chrono::Duration::seconds(1)).into()),
+            )
+            .filter(client_authorization::Column::Oid.eq(first.oid))
+            .exec(&db)
+            .await
+            .expect("expire request without setting is_expired");
+        let repository = DeviceAuthorizationRepositoryImpl::new(db.clone());
+        assert!(
+            repository
+                .find_active_device_request_by_user_code(&user_code)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let second = insert_request(
+            &db,
+            client_oid,
+            request_data(&unique_code("device-new"), &user_code, 5),
+            Utc::now() + chrono::Duration::minutes(10),
+        )
+        .await
+        .expect("expired code can be reused");
+        assert_ne!(first.oid, second.oid);
+        assert_eq!(count_rows(&db, first.oid).await, 1);
+        let old_row = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(first.oid))
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(old_row.is_expired);
+        assert!(old_row.revoked_at.is_none());
+        let active = repository
+            .find_active_device_request_by_user_code(&user_code)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(active.oid, second.oid);
 
         drop_client(&db, client_oid).await;
     }
@@ -1424,8 +1498,9 @@ mod postgres_tests {
             expires_at: Set((Utc::now() + chrono::Duration::minutes(5)).into()),
             completed_at: Set(None),
             revoked_at: Set(None),
+            is_expired: Set(false),
             created_at: Set(Utc::now().into()),
-            updated_at: Set(Some(Utc::now().into())),
+            updated_at: Set(None),
         }
         .insert(&db)
         .await

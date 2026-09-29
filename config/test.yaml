@@ -46,9 +46,6 @@ internal:
       static_tokens:
         - file: {{ get_env(name="IDENTITY_WORKLOAD_TOKEN_FILE", default="config/secrets/login-workload-token") }}
 
-client_credential_rotation:
-  enable: false
-
 # Worker Configuration
 workers:
   # specifies the worker mode. Options:

@@ -1,7 +1,10 @@
 use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
     prelude::{DbErr, DeriveIden, DeriveMigrationName, MigrationTrait, SchemaManager, Table},
-    schema::{json_binary, pk_auto, string_uniq, timestamp, timestamp_null, uuid_uniq},
+    schema::{
+        json_binary, pk_auto, string_uniq, timestamp_with_time_zone, timestamp_with_time_zone_null,
+        uuid_uniq,
+    },
 };
 
 #[derive(DeriveMigrationName)]
@@ -30,8 +33,8 @@ impl MigrationTrait for Migration {
                     .col(uuid_uniq(Setting::Oid))
                     .col(string_uniq(Setting::Key))
                     .col(json_binary(Setting::Value))
-                    .col(timestamp(Setting::CreatedAt))
-                    .col(timestamp_null(Setting::UpdatedAt))
+                    .col(timestamp_with_time_zone(Setting::CreatedAt))
+                    .col(timestamp_with_time_zone_null(Setting::UpdatedAt))
                     .to_owned(),
             )
             .await

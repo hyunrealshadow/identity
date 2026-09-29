@@ -6,7 +6,7 @@ use sea_orm_migration::{
         ForeignKeyAction, Index, MigrationTrait, SchemaManager, Table,
     },
     schema::{
-        big_integer, json_binary, pk_auto, string, timestamp_with_time_zone,
+        big_integer, boolean, json_binary, pk_auto, string, timestamp_with_time_zone,
         timestamp_with_time_zone_null, uuid_uniq,
     },
 };
@@ -23,6 +23,7 @@ pub enum ClientAuthorization {
     Type,
     Data,
     ExpiresAt,
+    IsExpired,
     CompletedAt,
     RevokedAt,
     CreatedAt,
@@ -46,6 +47,7 @@ impl MigrationTrait for Migration {
                     .col(string(ClientAuthorization::Type))
                     .col(json_binary(ClientAuthorization::Data))
                     .col(timestamp_with_time_zone(ClientAuthorization::ExpiresAt))
+                    .col(boolean(ClientAuthorization::IsExpired).default(false))
                     .col(timestamp_with_time_zone_null(
                         ClientAuthorization::CompletedAt,
                     ))
@@ -105,10 +107,94 @@ impl MigrationTrait for Migration {
                    WHERE "type" = 'access_token'"#,
             )
             .await?;
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_session_oid"
+                   ON "client_authorization" (("data"->>'session_oid'))
+                   WHERE "type" IN ('authorization_code', 'access_token', 'refresh_token')
+                     AND "revoked_at" IS NULL"#,
+            )
+            .await?;
+        for (name, field, type_) in [
+            (
+                "idx_client_authorization_device_code_digest",
+                "device_code_digest",
+                "device_authorization_request",
+            ),
+            (
+                "idx_client_authorization_active_user_code",
+                "user_code",
+                "device_authorization_request",
+            ),
+            (
+                "idx_client_authorization_device_authorization_user",
+                "user_oid",
+                "device_authorization",
+            ),
+            (
+                "idx_client_authorization_refresh_token_rotated_from",
+                "rotated_from",
+                "refresh_token",
+            ),
+            (
+                "idx_client_authorization_access_token_refresh_token_oid",
+                "refresh_token_oid",
+                "access_token",
+            ),
+            (
+                "idx_client_authorization_access_token_device_authorization_oid",
+                "device_authorization_oid",
+                "access_token",
+            ),
+        ] {
+            let unique = if matches!(field, "device_code_digest" | "user_code") {
+                "UNIQUE "
+            } else {
+                ""
+            };
+            let active = if field == "user_code" {
+                " AND \"is_expired\" = false AND \"completed_at\" IS NULL AND \"revoked_at\" IS NULL"
+            } else {
+                ""
+            };
+            manager
+                .get_connection()
+                .execute_unprepared(&format!(
+                    "CREATE {unique}INDEX IF NOT EXISTS \"{name}\" ON \"client_authorization\" ((\"data\"->>'{field}')) WHERE \"type\" = '{type_}'{active}"
+                ))
+                .await?;
+        }
+        manager
+            .get_connection()
+            .execute_unprepared(
+                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_expiration_pending"
+                   ON "client_authorization" ("expires_at")
+                   WHERE "is_expired" = false"#,
+            )
+            .await?;
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        for index in [
+            "idx_client_authorization_expiration_pending",
+            "idx_client_authorization_access_token_device_authorization_oid",
+            "idx_client_authorization_access_token_refresh_token_oid",
+            "idx_client_authorization_refresh_token_rotated_from",
+            "idx_client_authorization_device_authorization_user",
+            "idx_client_authorization_active_user_code",
+            "idx_client_authorization_device_code_digest",
+        ] {
+            manager
+                .get_connection()
+                .execute_unprepared(&format!(r#"DROP INDEX IF EXISTS "{index}""#))
+                .await?;
+        }
+        manager
+            .get_connection()
+            .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_authorization_session_oid""#)
+            .await?;
         manager
             .get_connection()
             .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_authorization_data_code_oid""#)

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sea_orm::DatabaseConnection;
 
-use crate::config::{ClientCredentialRotationConfig, LoginWorkloadConfig};
+use crate::config::LoginWorkloadConfig;
 use crate::{
     auth::{
         otp::TotpVerifierImpl, password::PasswordHasherImpl,
@@ -48,8 +48,8 @@ use identity_application::{
     },
 };
 use identity_domain::openid_connect::{
-    LoginRotationPolicy, OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
-    OpenIdConnectCredentialRepository, WorkloadAuthenticator,
+    BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
+    OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, WorkloadAuthenticator,
 };
 
 use super::settings::AppRuntimeSettings;
@@ -107,18 +107,9 @@ impl AppServices {
         db: DatabaseConnection,
         settings: &AppRuntimeSettings,
     ) -> Result<Self, reqwest::Error> {
-        Self::from_db_with_rotation(db, settings, &ClientCredentialRotationConfig::default())
-    }
-
-    pub fn from_db_with_rotation(
-        db: DatabaseConnection,
-        settings: &AppRuntimeSettings,
-        rotation_config: &ClientCredentialRotationConfig,
-    ) -> Result<Self, reqwest::Error> {
         Self::from_db_with_workload_auth(
             db,
             settings,
-            rotation_config,
             build_login_workload_authenticator(&LoginWorkloadConfig::default())
                 .expect("default login workload authenticator must build"),
         )
@@ -127,7 +118,6 @@ impl AppServices {
     pub fn from_db_with_workload_auth(
         db: DatabaseConnection,
         settings: &AppRuntimeSettings,
-        rotation_config: &ClientCredentialRotationConfig,
         workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     ) -> Result<Self, reqwest::Error> {
         let request_uri_http_client = request_uri_http_client()?;
@@ -192,9 +182,7 @@ impl AppServices {
                 certificate_generator: Arc::new(CertificateGeneratorImpl),
                 repository: Arc::new(InstallRepositoryImpl::new(db.clone())),
                 runtime_key_ring: settings.key_ring(),
-                client_secret_lifetime: chrono::Duration::days(
-                    rotation_config.credential_lifetime_days,
-                ),
+                client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
             },
             oidc: OpenIdProviderService::new(settings.store())
                 .with_key_repo(key_repo.clone())
@@ -286,16 +274,6 @@ impl AppServices {
             login_runtime: LoginRuntimeService::new(
                 Arc::new(LoginRuntimeRepositoryImpl::new(db.clone())),
                 settings.store(),
-                LoginRotationPolicy {
-                    credential_lifetime: chrono::Duration::days(
-                        rotation_config.credential_lifetime_days,
-                    ),
-                    rotate_before_expiry: chrono::Duration::days(
-                        rotation_config.rotate_before_expiry_days,
-                    ),
-                    retire_after: chrono::Duration::seconds(rotation_config.retire_after_secs),
-                },
-                rotation_config.check_interval_secs.max(1),
             ),
             workload_authenticator,
             oidc_client_repo,

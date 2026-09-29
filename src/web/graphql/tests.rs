@@ -225,7 +225,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
         revoked_at: None,
         rotated_from_oid: None,
         rotated_at: None,
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let client_model = client::Model {
@@ -236,7 +236,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
         names: None,
         description: None,
         built_in: false,
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let access_token_model = client_authorization::Model {
@@ -257,6 +257,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
         expires_at: (now + Duration::hours(1)).into(),
         completed_at: None,
         revoked_at: options.revoked.then(|| now.into()),
+        is_expired: false,
         created_at: now.into(),
         updated_at: None,
     };
@@ -346,7 +347,7 @@ fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
             oid: Uuid::new_v4(),
             key: "app.installation.initialized".to_owned(),
             value: json!(true),
-            created_at: now.naive_utc(),
+            created_at: now.into(),
             updated_at: None,
         },
         setting_model::<DomainSetting>(2, Some("identity.example.com".to_owned()), now),
@@ -355,7 +356,7 @@ fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
             oid: Uuid::new_v4(),
             key: "app.installation.initialized_at".to_owned(),
             value: json!(now),
-            created_at: now.naive_utc(),
+            created_at: now.into(),
             updated_at: None,
         },
         setting_model::<PasswordHashSetting>(6, PasswordHashSetting::default_value(), now),
@@ -364,7 +365,7 @@ fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
             oid: Uuid::new_v4(),
             key: "openid_connect.dynamic_registration.enabled".to_owned(),
             value: json!(false),
-            created_at: now.naive_utc(),
+            created_at: now.into(),
             updated_at: None,
         },
         setting_model::<LoginDomainSetting>(11, Some("https://ui.example.com".to_owned()), now),
@@ -373,7 +374,7 @@ fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
             oid: Uuid::new_v4(),
             key: "openid_connect.device_authorization".to_owned(),
             value: json!(DeviceAuthorizationSettings::default()),
-            created_at: now.naive_utc(),
+            created_at: now.into(),
             updated_at: None,
         },
     ]
@@ -388,7 +389,7 @@ where
         oid: Uuid::new_v4(),
         key: S::KEY.to_owned(),
         value: serde_json::to_value(value).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     }
 }

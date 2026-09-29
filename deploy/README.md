@@ -113,9 +113,9 @@ transaction. The installation response contains no client secret. Login then
 uses its workload credential to retrieve the built-in client ID and the current
 secret generation.
 
-Identity periodically locks rotation in PostgreSQL, creates a new generation,
-and retains the previous generation for `retire_after_secs` (24 hours by
-default). Every Login replica refreshes its in-memory snapshot. The token
+Identity periodically locks rotation in PostgreSQL, creates a new generation
+after 60 days, and retains the previous generation for 24 hours. A new
+generation expires after 90 days. Every Login replica refreshes its in-memory snapshot. The token
 endpoint accepts both generations during the overlap, so instances may update
 independently without per-pod credentials, shared files, or rollout
 coordination.

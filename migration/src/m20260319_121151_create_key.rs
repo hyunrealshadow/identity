@@ -2,8 +2,8 @@ use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
     prelude::{DbErr, DeriveIden, DeriveMigrationName, MigrationTrait, SchemaManager, Table},
     schema::{
-        json_binary, pk_auto, string, timestamp, timestamp_null, timestamp_with_time_zone,
-        timestamp_with_time_zone_null, uuid_uniq,
+        json_binary, pk_auto, string, timestamp_with_time_zone, timestamp_with_time_zone_null,
+        uuid_uniq,
     },
 };
 
@@ -37,8 +37,8 @@ impl MigrationTrait for Migration {
                     .col(json_binary(Key::Data))
                     .col(timestamp_with_time_zone(Key::ExpiresAt))
                     .col(timestamp_with_time_zone_null(Key::RevokedAt))
-                    .col(timestamp(Key::CreatedAt))
-                    .col(timestamp_null(Key::UpdatedAt))
+                    .col(timestamp_with_time_zone(Key::CreatedAt))
+                    .col(timestamp_with_time_zone_null(Key::UpdatedAt))
                     .to_owned(),
             )
             .await

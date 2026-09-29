@@ -269,7 +269,7 @@ impl UserRepository for UserRepositoryImpl {
         lock_until: DateTime<Utc>,
     ) -> Result<i32, UserRepositoryError> {
         let oid = uuid::Uuid::from(user_oid);
-        let now = Utc::now().naive_utc();
+        let now = Utc::now().fixed_offset();
         let transaction = self
             .db
             .begin()
@@ -280,10 +280,7 @@ impl UserRepository for UserRepositoryImpl {
                 user::Column::FailedAttempts,
                 Expr::col(user::Column::FailedAttempts).add(1),
             )
-            .col_expr(
-                user::Column::UpdatedAt,
-                Expr::value(Option::<chrono::NaiveDateTime>::Some(now)),
-            )
+            .col_expr(user::Column::UpdatedAt, Expr::value(Some(now)))
             .filter(user::Column::Oid.eq(oid))
             .exec_with_returning(&transaction)
             .await
@@ -298,9 +295,7 @@ impl UserRepository for UserRepositoryImpl {
                 .col_expr(user::Column::Locked, Expr::value(true))
                 .col_expr(
                     user::Column::LockedUntil,
-                    Expr::value(Option::<chrono::NaiveDateTime>::Some(
-                        lock_until.naive_utc(),
-                    )),
+                    Expr::value(Some(lock_until.fixed_offset())),
                 )
                 .filter(user::Column::Oid.eq(oid))
                 .exec(&transaction)
@@ -323,13 +318,11 @@ impl UserRepository for UserRepositoryImpl {
             .col_expr(user::Column::Locked, Expr::value(false))
             .col_expr(
                 user::Column::LockedUntil,
-                Expr::value(Option::<chrono::NaiveDateTime>::None),
+                Expr::value(Option::<chrono::DateTime<chrono::FixedOffset>>::None),
             )
             .col_expr(
                 user::Column::UpdatedAt,
-                Expr::value(Option::<chrono::NaiveDateTime>::Some(
-                    Utc::now().naive_utc(),
-                )),
+                Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(user::Column::Oid.eq(oid))
             .exec(&self.db)

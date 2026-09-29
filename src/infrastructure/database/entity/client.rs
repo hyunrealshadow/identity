@@ -19,8 +19,8 @@ pub struct Model {
     #[sea_orm(default_value = false)]
     pub built_in: bool,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
-    pub created_at: DateTime,
-    pub updated_at: Option<DateTime>,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

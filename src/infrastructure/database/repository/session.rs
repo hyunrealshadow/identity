@@ -320,7 +320,7 @@ impl SessionRepository for SessionRepositoryImpl {
             authenticated_at: Set(Some(now.into())),
             expires_at: Set(encode_nonnullable_expiry(input.expires_at)),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
             acr: Set(input.acr),
             acr_expires_at: Set(input.acr_expires_at.map(Into::into)),
             amr: Set(serde_json::json!(input.amr)),

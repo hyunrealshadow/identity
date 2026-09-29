@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::Duration;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
     TransactionTrait,
@@ -75,10 +75,8 @@ fn to_client(model: client::Model) -> Result<Client, OpenIdConnectClientReposito
         names: deserialize_optional_string_vec(model.names.as_ref())?.unwrap_or_default(),
         description: model.description,
         built_in: model.built_in,
-        created_at: DateTime::<Utc>::from_naive_utc_and_offset(model.created_at, Utc),
-        updated_at: model
-            .updated_at
-            .map(|v| DateTime::<Utc>::from_naive_utc_and_offset(v, Utc)),
+        created_at: model.created_at.with_timezone(&Utc),
+        updated_at: model.updated_at.map(|v| v.with_timezone(&Utc)),
     })
 }
 
@@ -288,11 +286,8 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         names: Set(optional_strings_to_json(Some(registration.client.names))),
                         description: Set(registration.client.description),
                         built_in: Set(registration.client.built_in),
-                        created_at: Set(registration.client.created_at.naive_utc()),
-                        updated_at: Set(registration
-                            .client
-                            .updated_at
-                            .map(|value| value.naive_utc())),
+                        created_at: Set(registration.client.created_at.into()),
+                        updated_at: Set(None),
                         ..Default::default()
                     }
                     .insert(txn)
@@ -459,8 +454,9 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         expires_at: Set((now + Duration::days(365)).into()),
                         completed_at: Set(None),
                         revoked_at: Set(None),
+                        is_expired: Set(false),
                         created_at: Set(now.into()),
-                        updated_at: Set(Some(now.into())),
+                        updated_at: Set(None),
                         ..Default::default()
                     }
                     .insert(txn)

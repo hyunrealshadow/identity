@@ -77,10 +77,5 @@ mockall::mock! {
             user_oid: Uuid,
             revoked_at: DateTime<Utc>,
         ) -> Result<u64, DeviceAuthorizationRepositoryError>;
-
-        async fn delete_expired_device_requests(
-            &self,
-            now: DateTime<Utc>,
-        ) -> Result<u64, DeviceAuthorizationRepositoryError>;
     }
 }

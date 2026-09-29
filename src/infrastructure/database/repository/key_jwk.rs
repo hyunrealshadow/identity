@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::DateTime;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
@@ -39,7 +38,7 @@ fn validate_jwk_algorithm(
 }
 
 fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
-    let created_at = DateTime::from_naive_utc_and_offset(model.created_at, chrono::Utc);
+    let created_at = model.created_at.with_timezone(&chrono::Utc);
     let jwk = serde_json::from_value::<PublicJwk>(model.jwk)
         .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
     let algorithm = model
@@ -82,7 +81,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
                     key_oid: Set(Uuid::from(input.key_oid)),
                     algorithm: Set(input.algorithm.to_string()),
                     jwk: Set(jwk),
-                    created_at: Set(now.naive_utc()),
+                    created_at: Set(now.into()),
                     ..Default::default()
                 })
             })
@@ -196,7 +195,7 @@ mod tests {
                 "n": "modulus",
                 "e": "AQAB"
             }),
-            created_at: Utc::now().naive_utc(),
+            created_at: Utc::now().into(),
             updated_at: None,
         })
         .unwrap();
@@ -218,7 +217,7 @@ mod tests {
                 "n": "modulus",
                 "e": "AQAB"
             }),
-            created_at: Utc::now().naive_utc(),
+            created_at: Utc::now().into(),
             updated_at: None,
         })
         .unwrap_err();
@@ -244,7 +243,7 @@ mod tests {
                     "n": "modulus",
                     "e": "AQAB"
                 }),
-                created_at: Utc::now().naive_utc(),
+                created_at: Utc::now().into(),
                 updated_at: None,
             }
             .into_mock_row()]])

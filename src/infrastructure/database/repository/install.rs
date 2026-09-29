@@ -125,7 +125,6 @@ impl InstallRepository for InstallRepositoryImpl {
             locked: Set(false),
             locked_until: Set(None),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
             ..Default::default()
         }
         .insert(&txn)
@@ -138,7 +137,6 @@ impl InstallRepository for InstallRepositoryImpl {
             r#type: Set(CredentialType::Password.to_string()),
             data: Set(password_json),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
             ..Default::default()
         }
         .insert(&txn)
@@ -154,8 +152,7 @@ impl InstallRepository for InstallRepositoryImpl {
                 "Built-in account and session management application".to_owned(),
             )),
             built_in: Set(true),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(Some(now.naive_utc())),
+            created_at: Set(now.into()),
             ..Default::default()
         }
         .insert(&txn)
@@ -182,7 +179,6 @@ impl InstallRepository for InstallRepositoryImpl {
                 "include_scoped_claims_in_id_token": false
             })),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
             ..Default::default()
         }
         .insert(&txn)
@@ -194,7 +190,6 @@ impl InstallRepository for InstallRepositoryImpl {
             platform: Set("web".to_owned()),
             redirect_uris: Set(Some(serde_json::json!([callback_url.as_str()]))),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
             ..Default::default()
         }
         .insert(&txn)
@@ -246,7 +241,7 @@ impl InstallRepository for InstallRepositoryImpl {
             expires_at: Set((now + data.client_secret_lifetime).into()),
             revoked_at: Set(None),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
             ..Default::default()
         }
         .insert(&txn)
@@ -259,8 +254,8 @@ impl InstallRepository for InstallRepositoryImpl {
             data: Set(key_json),
             expires_at: Set((now + KEY_LIFETIME).into()),
             revoked_at: Set(None),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(Some(now.naive_utc())),
+            created_at: Set(now.into()),
+            updated_at: Set(None),
             ..Default::default()
         }
         .insert(&txn)
@@ -281,8 +276,7 @@ impl InstallRepository for InstallRepositoryImpl {
                     key_oid: Set(key_oid),
                     algorithm: Set(algorithm),
                     jwk: Set(jwk),
-                    created_at: Set(now.naive_utc()),
-                    updated_at: Set(Some(now.naive_utc())),
+                    created_at: Set(now.into()),
                     ..Default::default()
                 })
             })
@@ -311,8 +305,7 @@ impl InstallRepository for InstallRepositoryImpl {
             data: Set(sym_key_json),
             expires_at: Set((now + KEY_LIFETIME).into()),
             revoked_at: Set(None),
-            created_at: Set(now.naive_utc()),
-            updated_at: Set(Some(now.naive_utc())),
+            created_at: Set(now.into()),
             ..Default::default()
         }
         .insert(&txn)

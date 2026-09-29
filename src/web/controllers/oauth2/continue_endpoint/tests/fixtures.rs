@@ -109,7 +109,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
         value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let installation_initialized_setting = setting::Model {
@@ -117,7 +117,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let domain_setting = setting::Model {
@@ -125,7 +125,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let installation_initialized_at_setting = setting::Model {
@@ -133,7 +133,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(now).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let dynamic_registration_setting = setting::Model {
@@ -141,7 +141,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
         value: serde_json::to_value(false).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let login_domain_setting = setting::Model {
@@ -149,7 +149,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
         value: serde_json::to_value(Some("https://ui.example.com".to_owned())).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let device_authorization_setting = setting::Model {
@@ -157,7 +157,7 @@ pub(super) async fn continue_state(
         oid: uuid::Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
         value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let client_model = client::Model {
@@ -168,7 +168,7 @@ pub(super) async fn continue_state(
         names: None,
         description: Some("OIDC relying party".to_owned()),
         built_in: false,
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
     let authorization_request = StoredAuthorizationRequest {
@@ -219,6 +219,7 @@ pub(super) async fn continue_state(
         expires_at: authorization_expires_at.into(),
         completed_at: fixture.authorization_completed_at.map(Into::into),
         revoked_at: None,
+        is_expired: authorization_expires_at <= now,
         created_at: now.into(),
         updated_at: Some(now.into()),
     };
@@ -242,6 +243,7 @@ pub(super) async fn continue_state(
         expires_at: (now + Duration::minutes(10)).into(),
         completed_at: None,
         revoked_at: None,
+        is_expired: false,
         created_at: now.into(),
         updated_at: Some(now.into()),
     };
@@ -326,7 +328,7 @@ pub(super) async fn continue_state(
         revoked_at: None,
         rotated_from_oid: None,
         rotated_at: None,
-        created_at: now.naive_utc(),
+        created_at: now.into(),
         updated_at: None,
     };
 

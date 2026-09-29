@@ -4,7 +4,10 @@ use sea_orm_migration::{
         DbErr, DeriveIden, DeriveMigrationName, ForeignKey, ForeignKeyAction, MigrationTrait,
         SchemaManager, Table,
     },
-    schema::{json_binary, pk_auto, string, timestamp, timestamp_null, uuid, uuid_uniq},
+    schema::{
+        json_binary, pk_auto, string, timestamp_with_time_zone, timestamp_with_time_zone_null,
+        uuid, uuid_uniq,
+    },
 };
 
 #[derive(DeriveMigrationName)]
@@ -35,8 +38,8 @@ impl MigrationTrait for Migration {
                     .col(uuid(KeyJwk::KeyOid))
                     .col(string(KeyJwk::Algorithm))
                     .col(json_binary(KeyJwk::Jwk))
-                    .col(timestamp(KeyJwk::CreatedAt))
-                    .col(timestamp_null(KeyJwk::UpdatedAt))
+                    .col(timestamp_with_time_zone(KeyJwk::CreatedAt))
+                    .col(timestamp_with_time_zone_null(KeyJwk::UpdatedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_key_jwk_key_oid")

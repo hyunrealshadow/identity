@@ -169,7 +169,10 @@ impl LoginRepository for LoginRepositoryImpl {
                 login::Column::Status,
                 Expr::value(LoginStatus::IDENTIFIER_VERIFIED.as_str()),
             )
-            .col_expr(login::Column::UpdatedAt, Expr::value(Some(now.naive_utc())))
+            .col_expr(
+                login::Column::UpdatedAt,
+                Expr::value(Some(now.fixed_offset())),
+            )
             .filter(login::Column::Oid.eq(login_oid))
             .filter(login::Column::Status.eq(LoginStatus::CREATED.as_str()))
             .filter(login::Column::UserId.is_null())
@@ -257,7 +260,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .col_expr(login::Column::Status, Expr::value(status.as_str()))
             .col_expr(
                 login::Column::UpdatedAt,
-                Expr::value(Some(Utc::now().naive_utc())),
+                Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(login::Column::Oid.eq(login_oid))
             .filter(login::Column::Status.eq(previous_status));
@@ -283,16 +286,13 @@ impl LoginRepository for LoginRepositoryImpl {
         login_oid: Uuid,
         failure_reason: Option<identity_domain::auth::LoginFailureReason>,
     ) -> Result<i32, LoginRepositoryError> {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now().fixed_offset();
         let mut update = LoginEntity::update_many()
             .col_expr(
                 login::Column::FailedAttempts,
                 Expr::col(login::Column::FailedAttempts).add(1),
             )
-            .col_expr(
-                login::Column::UpdatedAt,
-                Expr::value(Option::<chrono::NaiveDateTime>::Some(now)),
-            )
+            .col_expr(login::Column::UpdatedAt, Expr::value(Some(now)))
             .filter(login::Column::Oid.eq(login_oid));
 
         if let Some(reason) = failure_reason {
@@ -329,7 +329,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .col_expr(login::Column::FailedAttempts, Expr::value(0))
             .col_expr(
                 login::Column::UpdatedAt,
-                Expr::value(Some(Utc::now().naive_utc())),
+                Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(login::Column::Oid.eq(login_oid))
             .filter(login::Column::Status.is_in([
@@ -363,7 +363,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .col_expr(login::Column::SessionId, Expr::value(Some(session.id)))
             .col_expr(
                 login::Column::UpdatedAt,
-                Expr::value(Some(Utc::now().naive_utc())),
+                Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(login::Column::Oid.eq(login_oid))
             .exec(&self.db)
@@ -379,13 +379,10 @@ impl LoginRepository for LoginRepositoryImpl {
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_failed_attempts"))]
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now().fixed_offset();
         LoginEntity::update_many()
             .col_expr(login::Column::FailedAttempts, Expr::value(0))
-            .col_expr(
-                login::Column::UpdatedAt,
-                Expr::value(Option::<chrono::NaiveDateTime>::Some(now)),
-            )
+            .col_expr(login::Column::UpdatedAt, Expr::value(Some(now)))
             .filter(login::Column::Oid.eq(login_oid))
             .exec(&self.db)
             .await

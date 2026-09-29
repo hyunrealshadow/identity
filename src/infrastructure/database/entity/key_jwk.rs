@@ -14,8 +14,8 @@ pub struct Model {
     pub algorithm: String,
     #[sea_orm(column_type = "JsonBinary")]
     pub jwk: Json,
-    pub created_at: DateTime,
-    pub updated_at: Option<DateTime>,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -173,6 +173,28 @@ pub struct ClientAuthorizationRepositoryImpl {
     db: DatabaseConnection,
 }
 
+/// Marks one batch of expired authorizations without deleting their records.
+/// The caller repeats until fewer than the batch limit were updated.
+pub(crate) async fn expire_due_authorizations_batch(
+    db: &DatabaseConnection,
+) -> Result<u64, sea_orm::DbErr> {
+    Ok(db
+        .execute_unprepared(
+            r#"WITH due AS (
+                SELECT id FROM client_authorization
+                WHERE is_expired = false AND expires_at <= CURRENT_TIMESTAMP
+                ORDER BY expires_at
+                LIMIT 1000
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE client_authorization AS authorization
+            SET is_expired = true, updated_at = CURRENT_TIMESTAMP
+            FROM due WHERE authorization.id = due.id"#,
+        )
+        .await?
+        .rows_affected())
+}
+
 async fn lock_refresh_family(
     transaction: &DatabaseTransaction,
     refresh_oid: Uuid,
@@ -327,8 +349,9 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             expires_at: Set(expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
+            is_expired: Set(expires_at <= now),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
         }
         .insert(&transaction)
         .await

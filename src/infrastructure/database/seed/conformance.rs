@@ -170,7 +170,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
             locked: Set(false),
             locked_until: Set(None),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
             ..Default::default()
         }
         .insert(&txn)
@@ -183,7 +183,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
             r#type: Set(CredentialType::Password.to_string()),
             data: Set(password_json),
             created_at: Set(now.into()),
-            updated_at: Set(Some(now.into())),
+            updated_at: Set(None),
             ..Default::default()
         }
         .insert(&txn)
@@ -348,7 +348,7 @@ async fn ensure_conformance_client(
             names: Set(None),
             description: Set(None),
             built_in: Set(true),
-            created_at: Set(now.naive_utc()),
+            created_at: Set(now.into()),
             updated_at: Set(None),
             ..Default::default()
         }

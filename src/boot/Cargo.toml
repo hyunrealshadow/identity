@@ -8,8 +8,6 @@ publish = false
 path = "mod.rs"
 
 [dependencies]
-apalis = { workspace = true }
-apalis-cron = { workspace = true }
 chrono = { workspace = true }
 identity-application = { workspace = true }
 identity-domain = { workspace = true }

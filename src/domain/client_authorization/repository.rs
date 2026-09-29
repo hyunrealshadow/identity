@@ -237,12 +237,6 @@ pub trait DeviceAuthorizationRepository: Send + Sync {
         user_oid: Uuid,
         revoked_at: DateTime<Utc>,
     ) -> Result<u64, DeviceAuthorizationRepositoryError>;
-
-    /// Deletes expired device requests. Relations are never deleted here.
-    async fn delete_expired_device_requests(
-        &self,
-        now: DateTime<Utc>,
-    ) -> Result<u64, DeviceAuthorizationRepositoryError>;
 }
 
 #[derive(Debug, thiserror::Error)]

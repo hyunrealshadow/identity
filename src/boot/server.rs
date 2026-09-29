@@ -1,8 +1,4 @@
-use std::str::FromStr;
 use std::sync::Arc;
-
-use apalis::prelude::{Data, WorkerBuilder, WorkerFactoryFn};
-use apalis_cron::{CronContext, CronStream, Schedule};
 
 use salvo::{
     Listener, Router, Server,
@@ -15,6 +11,7 @@ use salvo::{
 use identity_infrastructure::{
     config::{AppConfig, TlsTermination},
     crypto::tls::{TlsMode, prepare_tls_material},
+    jobs::spawn_background_workers,
     lifecycle::{AppLifecycle, wait_for_shutdown},
     state::AppState,
 };
@@ -30,8 +27,7 @@ pub async fn start_servers(
     app: Router,
     internal: Router,
 ) -> AppResult<()> {
-    spawn_rotation_worker(state.clone(), config.client_credential_rotation.enable);
-    spawn_device_authorization_cleanup_worker(state.clone());
+    spawn_background_workers(state.clone(), config).await?;
     let shared_health = health::shares_listener(&config.health, &config.server);
     let shared_graphql = graphql::shares_listener(&config.graphql, &config.server);
 
@@ -183,106 +179,6 @@ pub async fn start_servers(
     Ok(())
 }
 
-#[derive(Debug, Clone, Default)]
-struct RotationTick;
-
-async fn maintain_rotation(state: &AppState, rotate_secrets: bool) {
-    use identity_application::observability::{BusinessEvent, EventValue, event_sink};
-    match state.services().key_rotation().maintain().await {
-        Ok(rotated) if rotated > 0 => {
-            tracing::info!(rotated, "keys rotated");
-            event_sink().emit(
-                BusinessEvent::audit("key.rotated")
-                    .outcome("rotated")
-                    .attribute(
-                        "count",
-                        EventValue::Integer(i64::try_from(rotated).unwrap_or(i64::MAX)),
-                    ),
-            );
-        }
-        Ok(_) => {}
-        Err(error) => tracing::error!(error = %error, "key rotation maintenance failed"),
-    }
-    if rotate_secrets {
-        match state.services().login_runtime().maintain().await {
-            Ok(rotated) if rotated > 0 => {
-                tracing::info!(rotated, "built-in client secrets rotated");
-                event_sink().emit(
-                    BusinessEvent::audit("builtin_client.credential.rotated")
-                        .outcome("rotated")
-                        .attribute(
-                            "count",
-                            EventValue::Integer(i64::try_from(rotated).unwrap_or(i64::MAX)),
-                        ),
-                );
-            }
-            Ok(_) => {}
-            Err(error) => tracing::error!(error = %error, "built-in client secret rotation failed"),
-        }
-    }
-}
-
-async fn handle_rotation_tick(
-    _: RotationTick,
-    _: CronContext<chrono::Utc>,
-    data: Data<(AppState, bool)>,
-) {
-    maintain_rotation(&data.0, data.1).await;
-}
-
-fn spawn_rotation_worker(state: AppState, rotate_secrets: bool) {
-    tokio::spawn(async move {
-        maintain_rotation(&state, rotate_secrets).await;
-        let mut shutdown = state.lifecycle().subscribe_shutdown();
-        let schedule = Schedule::from_str("@hourly").expect("valid rotation schedule");
-        let worker = WorkerBuilder::new("credential-rotation")
-            .data((state, rotate_secrets))
-            .backend(CronStream::new(schedule))
-            .build_fn(handle_rotation_tick);
-        tokio::select! {
-            () = worker.run() => tracing::error!("rotation worker stopped"),
-            _ = async {
-                while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
-            } => {}
-        }
-    });
-}
-
-/// Expired device requests are tenant data with a ten minute lifetime; a
-/// five minute sweep keeps the table from growing without touching the
-/// long lived device authorizations.
-const DEVICE_AUTHORIZATION_CLEANUP_INTERVAL_SECS: u64 = 300;
-
-fn spawn_device_authorization_cleanup_worker(state: AppState) {
-    tokio::spawn(async move {
-        let mut shutdown = state.lifecycle().subscribe_shutdown();
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-            DEVICE_AUTHORIZATION_CLEANUP_INTERVAL_SECS,
-        ));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    match state.services().oidc_device_authorization().maintain().await {
-                        Ok(removed) if removed > 0 => {
-                            tracing::info!(removed, "device authorization cleanup removed expired requests");
-                        }
-                        Ok(_) => {}
-                        Err(error) => {
-                            tracing::error!(error = %error, "device authorization cleanup failed");
-                        }
-                    }
-                }
-                changed = shutdown.changed() => {
-                    if changed.is_err() || *shutdown.borrow() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
-}
-
 async fn serve_with_shutdown<A>(
     acceptor: A,
     app: Router,
@@ -425,7 +321,6 @@ mod tests {
             logger: LoggerConfig::default(),
             server: ServerConfig::default(),
             internal: Default::default(),
-            client_credential_rotation: Default::default(),
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
             graphql: GraphqlConfig::default(),

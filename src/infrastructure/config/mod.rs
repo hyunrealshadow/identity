@@ -27,8 +27,6 @@ pub struct AppConfig {
     #[serde(default)]
     pub internal: InternalConfig,
     #[serde(default)]
-    pub client_credential_rotation: ClientCredentialRotationConfig,
-    #[serde(default)]
     pub database: DatabaseConfig,
     #[serde(default)]
     pub health: HealthConfig,
@@ -40,33 +38,6 @@ pub struct AppConfig {
     pub install: InstallConfig,
     #[serde(default)]
     pub openid_connect: OpenIdConnectConfig,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ClientCredentialRotationConfig {
-    #[serde(default = "default_true")]
-    pub enable: bool,
-    #[serde(default = "default_rotation_check_interval_secs")]
-    pub check_interval_secs: u64,
-    #[serde(default = "default_credential_lifetime_days")]
-    pub credential_lifetime_days: i64,
-    #[serde(default = "default_rotate_before_expiry_days")]
-    pub rotate_before_expiry_days: i64,
-    #[serde(default = "default_retire_after_secs")]
-    pub retire_after_secs: i64,
-}
-
-impl Default for ClientCredentialRotationConfig {
-    fn default() -> Self {
-        Self {
-            enable: true,
-            check_interval_secs: default_rotation_check_interval_secs(),
-            credential_lifetime_days: default_credential_lifetime_days(),
-            rotate_before_expiry_days: default_rotate_before_expiry_days(),
-            retire_after_secs: default_retire_after_secs(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -302,20 +273,6 @@ impl AppConfig {
             )
             .into());
         }
-        let rotation = &self.client_credential_rotation;
-        if rotation.enable
-            && (rotation.check_interval_secs == 0
-                || rotation.credential_lifetime_days <= 0
-                || rotation.rotate_before_expiry_days <= 0
-                || rotation.credential_lifetime_days <= rotation.rotate_before_expiry_days
-                || rotation.retire_after_secs <= 0)
-        {
-            return Err(invalid_config(
-                "client credential rotation intervals must be positive and credential_lifetime_days must exceed rotate_before_expiry_days",
-            )
-            .into());
-        }
-
         Ok(())
     }
 }
@@ -726,22 +683,6 @@ fn default_internal_binding() -> String {
 
 const fn default_internal_port() -> u16 {
     5151
-}
-
-const fn default_rotation_check_interval_secs() -> u64 {
-    60
-}
-
-const fn default_credential_lifetime_days() -> i64 {
-    90
-}
-
-const fn default_rotate_before_expiry_days() -> i64 {
-    30
-}
-
-const fn default_retire_after_secs() -> i64 {
-    24 * 60 * 60
 }
 
 fn default_internal_token_audience() -> String {
@@ -1242,28 +1183,6 @@ database:
         let error = config.validate_https_contract().unwrap_err();
 
         assert!(error.to_string().contains("namespace"));
-    }
-
-    #[test]
-    fn rotation_can_run_without_an_additional_token() {
-        let config: AppConfig = serde_yml::from_str(
-            r#"
-server:
-  host: https://identity.example.com
-internal:
-  workloads:
-    login:
-      static_tokens:
-        - file: config/secrets/login-workload-token
-client_credential_rotation:
-  enable: true
-database:
-  uri: postgres://localhost/identity
-"#,
-        )
-        .unwrap();
-
-        assert!(config.validate_https_contract().is_ok());
     }
 
     #[test]

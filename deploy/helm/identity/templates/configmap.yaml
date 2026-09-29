@@ -83,12 +83,6 @@ data:
             {{- if .Values.identity.workload.issuerToken.enabled }}
             token_file: /var/run/secrets/identity-issuer/token
             {{- end }}
-    client_credential_rotation:
-      enable: {{ .Values.identity.rotation.enabled }}
-      check_interval_secs: {{ .Values.identity.rotation.checkIntervalSeconds }}
-      credential_lifetime_days: {{ .Values.identity.rotation.credentialLifetimeDays }}
-      rotate_before_expiry_days: {{ .Values.identity.rotation.rotateBeforeExpiryDays }}
-      retire_after_secs: {{ .Values.identity.rotation.retireAfterSeconds }}
     database:
       uri: {{ "{{ get_env(name=\"DATABASE_URL\") }}" }}
       enable_logging: false

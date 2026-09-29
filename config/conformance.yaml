@@ -24,9 +24,6 @@ internal:
       static_tokens:
         - environment: IDENTITY_WORKLOAD_TOKEN
 
-client_credential_rotation:
-  enable: false
-
 database:
   uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}
   enable_logging: false
