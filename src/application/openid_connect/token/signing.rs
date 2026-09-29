@@ -64,7 +64,7 @@ pub(super) struct SignIdTokenInput<'a> {
 }
 
 impl TokenService {
-    pub(super) async fn load_id_token_signing_key(
+    pub(super) async fn load_configured_signing_key(
         &self,
         requested: Option<JwsAlgorithm>,
     ) -> Result<(String, String, JwsAlgorithm), AppError> {
@@ -179,6 +179,18 @@ impl TokenService {
         }
 
         Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
+    }
+
+    pub(super) async fn load_access_token_signing_key(
+        &self,
+        configured_signing_key: &(String, String, JwsAlgorithm),
+    ) -> Result<(String, String, JwaSigningAlgorithm), AppError> {
+        if let (key_id, private_key, JwsAlgorithm::Asymmetric(alg)) = configured_signing_key {
+            return Ok((key_id.clone(), private_key.clone(), *alg));
+        }
+
+        // `none` applies only to ID tokens; access tokens still need a signing key.
+        self.load_signing_key().await
     }
 
     pub(super) async fn sign_access_token(

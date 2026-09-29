@@ -17,10 +17,18 @@ fn request_record(
     status: DeviceRequestStatus,
     expires_at: chrono::DateTime<Utc>,
 ) -> ClientAuthorization {
+    request_record_with_scope(status, expires_at, "openid offline_access")
+}
+
+fn request_record_with_scope(
+    status: DeviceRequestStatus,
+    expires_at: chrono::DateTime<Utc>,
+    scope: &str,
+) -> ClientAuthorization {
     let approval =
         matches!(status, DeviceRequestStatus::Approved).then(|| DeviceAuthorizationApproval {
             user_oid: Uuid::nil().to_string(),
-            approved_scope: "openid offline_access".to_owned(),
+            approved_scope: scope.to_owned(),
             auth_time: Some(1_700_000_000),
             acr: Some("urn:identity:acr:aal1".to_owned()),
             amr: vec!["pwd".to_owned()],
@@ -33,7 +41,7 @@ fn request_record(
         client_oid: Uuid::nil(),
         type_: ClientAuthorizationType::DeviceAuthorizationRequest,
         data: ClientAuthorizationData::DeviceAuthorizationRequest(DeviceAuthorizationRequestData {
-            scope: "openid offline_access".to_owned(),
+            scope: scope.to_owned(),
             device_code_digest: identity_domain::client_authorization::device_code_digest(
                 DEVICE_CODE,
             ),
@@ -60,12 +68,16 @@ fn request_record(
 }
 
 fn relation_record(revoked: bool) -> ClientAuthorization {
+    relation_record_with_scope(revoked, "openid offline_access")
+}
+
+fn relation_record_with_scope(revoked: bool, scope: &str) -> ClientAuthorization {
     ClientAuthorization {
         oid: Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap(),
         client_oid: Uuid::nil(),
         type_: ClientAuthorizationType::DeviceAuthorization,
         data: ClientAuthorizationData::DeviceAuthorization(DeviceAuthorizationData {
-            scope: "openid offline_access".to_owned(),
+            scope: scope.to_owned(),
             user_oid: Uuid::nil().to_string(),
             auth_time: Some(1_700_000_000),
             acr: Some("urn:identity:acr:aal1".to_owned()),
@@ -82,8 +94,17 @@ fn relation_record(revoked: bool) -> ClientAuthorization {
 }
 
 fn device_client(grant_types: Vec<GrantType>) -> OpenIdConnectClient {
+    device_client_with_id_token_algorithm(grant_types, None)
+}
+
+fn device_client_with_id_token_algorithm(
+    grant_types: Vec<GrantType>,
+    algorithm: Option<JwaSigningAlgorithm>,
+) -> OpenIdConnectClient {
     let mut metadata = test_metadata(None, Some("client_secret_basic"));
     metadata.grant_types = Some(grant_types);
+    metadata.id_token_signed_response_alg =
+        algorithm.map(identity_domain::key::JwsAlgorithm::Asymmetric);
 
     OpenIdConnectClient::new(
         test_client(Uuid::nil()),
@@ -92,6 +113,52 @@ fn device_client(grant_types: Vec<GrantType>) -> OpenIdConnectClient {
         test_scopes(),
     )
     .unwrap()
+}
+
+#[tokio::test]
+async fn device_grant_uses_client_algorithm_for_access_token() {
+    for scope in ["openid offline_access", "profile"] {
+        let (repo, _records) = device_repo(
+            request_record_with_scope(
+                DeviceRequestStatus::Approved,
+                Utc::now() + chrono::Duration::minutes(10),
+                scope,
+            ),
+            Some(relation_record_with_scope(false, scope)),
+            DeviceRepoOptions::default(),
+        );
+        let mut service = build_service(
+            device_client_with_id_token_algorithm(
+                vec![GrantType::DeviceCode],
+                Some(JwaSigningAlgorithm::Rs256),
+            ),
+            repo,
+        );
+        let default_ec_key = key_for_algorithm("ES256");
+        let requested_rsa_key = key_for_algorithm("RS256");
+        let ec_binding = key_jwk_binding(&default_ec_key, "ES256", Uuid::new_v4());
+        let rsa_binding = key_jwk_binding(&requested_rsa_key, "RS256", Uuid::new_v4());
+        service.key_repo = Arc::new(key_repo_with_keys(vec![default_ec_key, requested_rsa_key]));
+        service.key_jwk_repo = Arc::new(jwk_repo_with_bindings(vec![
+            ec_binding,
+            rsa_binding.clone(),
+        ]));
+
+        let response = service.exchange_device_code(params()).await.unwrap();
+        assert_eq!(response.id_token.is_some(), scope.contains("openid"));
+        let expected_kid = Uuid::from(rsa_binding.oid).to_string();
+        for token in std::iter::once(&response.access_token).chain(response.id_token.iter()) {
+            let header = jwt::decode_header(token).unwrap();
+            assert_eq!(
+                header.claim(JwtClaimNames::ALG).and_then(|v| v.as_str()),
+                Some("RS256")
+            );
+            assert_eq!(
+                header.claim(JwtClaimNames::KID).and_then(|v| v.as_str()),
+                Some(expected_kid.as_str())
+            );
+        }
+    }
 }
 
 #[derive(Default)]

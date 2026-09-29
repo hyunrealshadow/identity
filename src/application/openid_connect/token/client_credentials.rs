@@ -70,7 +70,12 @@ impl TokenService {
         let scope = requested.to_scope_string();
         let client_oid = client.client().oid;
         let issuer = self.provider_service.issuer()?;
-        let (key_id, private_key_pem, alg) = self.load_signing_key().await?;
+        let configured_signing_key = self
+            .load_configured_signing_key(client.metadata().id_token_signed_response_alg)
+            .await?;
+        let (key_id, private_key_pem, alg) = self
+            .load_access_token_signing_key(&configured_signing_key)
+            .await?;
         let record = self
             .create_access_token_record(
                 client_oid,

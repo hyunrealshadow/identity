@@ -4,6 +4,9 @@ use crate::openid_connect::tests::fixtures::client::{
 };
 
 pub(in crate::openid_connect) struct InMemoryClientRepository;
+pub(in crate::openid_connect) struct IdTokenAlgorithmClientRepository {
+    pub(in crate::openid_connect) algorithm: identity_domain::key::JwaSigningAlgorithm,
+}
 pub(in crate::openid_connect) struct OAuth21ClientRepository;
 pub(in crate::openid_connect) struct PublicFlowClientRepository;
 pub(in crate::openid_connect) struct ScopedClaimsClientRepository;
@@ -16,6 +19,9 @@ pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
 /// client flow.
 pub(in crate::openid_connect) struct RegisteredPublicClientRepository;
 pub(in crate::openid_connect) struct MachineClientRepository;
+pub(in crate::openid_connect) struct MachineAlgorithmClientRepository {
+    pub(in crate::openid_connect) algorithm: identity_domain::key::JwaSigningAlgorithm,
+}
 pub(in crate::openid_connect) struct AuthMethodClientRepository {
     pub(in crate::openid_connect) method: &'static str,
     pub(in crate::openid_connect) signing_alg: Option<&'static str>,
@@ -35,6 +41,23 @@ impl OpenIdConnectClientRepository for InMemoryClientRepository {
                 test_scopes(),
             )
             .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for IdTokenAlgorithmClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.id_token_signed_response_alg = Some(
+            identity_domain::key::JwsAlgorithm::Asymmetric(self.algorithm),
+        );
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
         ))
     }
 }
@@ -102,6 +125,31 @@ impl OpenIdConnectClientRepository for MachineClientRepository {
                 metadata,
                 test_platforms(),
                 vec!["account.read".to_owned(), "session.read".to_owned()],
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for MachineAlgorithmClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.grant_types = Some(vec![
+            identity_domain::openid_connect::GrantType::ClientCredentials,
+        ]);
+        metadata.id_token_signed_response_alg = Some(
+            identity_domain::key::JwsAlgorithm::Asymmetric(self.algorithm),
+        );
+        Ok(Some(
+            OpenIdConnectClient::new(
+                test_client(oid),
+                metadata,
+                test_platforms(),
+                vec!["account.read".to_owned()],
             )
             .unwrap(),
         ))

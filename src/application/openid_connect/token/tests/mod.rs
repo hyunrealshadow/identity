@@ -410,7 +410,7 @@ async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
     ]));
 
     let (kid, _, alg) = service
-        .load_id_token_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
+        .load_configured_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
             JwaSigningAlgorithm::Es256,
         )))
         .await
@@ -419,7 +419,7 @@ async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
     assert_eq!(alg.as_str(), "ES256");
     assert!(
         service
-            .load_id_token_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
+            .load_configured_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
                 JwaSigningAlgorithm::Es384,
             )))
             .await

@@ -243,8 +243,13 @@ impl TokenService {
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<TokenResponse, AppError> {
         let issuer = self.provider_service.issuer()?;
-        let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
         let scope_string = scope.to_scope_string();
+        let configured_signing_key = self
+            .load_configured_signing_key(client.metadata().id_token_signed_response_alg)
+            .await?;
+        let (signing_key_id, signing_key_pem, signing_alg) = self
+            .load_access_token_signing_key(&configured_signing_key)
+            .await?;
         let access_token_audience = if scope.has_api_scopes() {
             identity_domain::openid_connect::API_RESOURCE
         } else {
@@ -273,14 +278,12 @@ impl TokenService {
             .await?;
 
         let id_token = if scope.contains_openid() {
-            let (id_key_id, id_key_pem, id_token_alg) = self
-                .load_id_token_signing_key(client.metadata().id_token_signed_response_alg)
-                .await?;
+            let (id_key_id, id_key_pem, id_token_alg) = &configured_signing_key;
             let signed = self
                 .sign_id_token(SignIdTokenInput {
-                    key_id: &id_key_id,
-                    private_key_pem: &id_key_pem,
-                    alg: id_token_alg,
+                    key_id: id_key_id,
+                    private_key_pem: id_key_pem,
+                    alg: *id_token_alg,
                     issuer: &issuer,
                     audience: client_id,
                     client,

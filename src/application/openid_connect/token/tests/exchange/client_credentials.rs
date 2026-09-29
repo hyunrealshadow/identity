@@ -34,6 +34,46 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
 }
 
 #[tokio::test]
+async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let mut service = build_token_service_with_client_repo(
+        repo,
+        Uuid::new_v4(),
+        Arc::new(MachineAlgorithmClientRepository {
+            algorithm: JwaSigningAlgorithm::Rs256,
+        }),
+    );
+    let default_ec_key = key_for_algorithm("ES256");
+    let requested_rsa_key = key_for_algorithm("RS256");
+    let ec_binding = key_jwk_binding(&default_ec_key, "ES256", Uuid::new_v4());
+    let rsa_binding = key_jwk_binding(&requested_rsa_key, "RS256", Uuid::new_v4());
+    service.key_repo = Arc::new(key_repo_with_keys(vec![default_ec_key, requested_rsa_key]));
+    service.key_jwk_repo = Arc::new(jwk_repo_with_bindings(vec![
+        ec_binding,
+        rsa_binding.clone(),
+    ]));
+
+    let response = service
+        .exchange_client_credentials(request("account.read"))
+        .await
+        .unwrap();
+    assert!(response.id_token.is_none());
+    let header = jwt::decode_header(&response.access_token).unwrap();
+    assert_eq!(
+        header
+            .claim(JwtClaimNames::ALG)
+            .and_then(|value| value.as_str()),
+        Some("RS256")
+    );
+    assert_eq!(
+        header
+            .claim(JwtClaimNames::KID)
+            .and_then(|value| value.as_str()),
+        Some(Uuid::from(rsa_binding.oid).to_string().as_str())
+    );
+}
+
+#[tokio::test]
 async fn client_credentials_rejects_user_scope_and_unassigned_scope() {
     let repo = Arc::new(mock_client_auth_repo());
     let service = build_token_service_with_client_repo(

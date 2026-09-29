@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set, sea_query::Expr,
+};
 use uuid::Uuid;
 
 use crate::database::entity::{key_jwk, key_jwk::Entity as KeyJwkEntity};
@@ -105,6 +107,13 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .inner_join(key::Entity)
             .filter(key::Column::RevokedAt.is_null())
             .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
+            .order_by_desc(Expr::col((key::Entity, key::Column::CreatedAt)))
+            .order_by_desc(Expr::col((key::Entity, key::Column::Oid)))
+            .order_by_asc(Expr::cust(
+                "CASE WHEN \"key_jwk\".\"jwk\"->>'use' = 'sig' THEN 0 ELSE 1 END",
+            ))
+            .order_by_asc(Expr::col((key_jwk::Entity, key_jwk::Column::Algorithm)))
+            .order_by_asc(Expr::col((key_jwk::Entity, key_jwk::Column::Oid)))
             .all(&self.db)
             .await
             .map_err(|e| KeyJwkRepositoryError::ListActiveFailed(Box::new(e)))?

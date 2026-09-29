@@ -933,6 +933,99 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
 }
 
 #[tokio::test]
+async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let default_ec_key = key_for_algorithm("ES256");
+    let requested_rsa_key = key_for_algorithm("RS256");
+    let ec_binding = key_jwk_binding(&default_ec_key, "ES256", Uuid::new_v4());
+    let rsa_binding = key_jwk_binding(&requested_rsa_key, "RS256", Uuid::new_v4());
+    let rsa_public_key = match &requested_rsa_key.data {
+        KeyData::Asymmetric(data) => data.public_key.clone(),
+        KeyData::Symmetric(_) => unreachable!(),
+    };
+    let mut service = build_token_service_with_client_repo(
+        repo.clone(),
+        user_oid,
+        Arc::new(IdTokenAlgorithmClientRepository {
+            algorithm: JwaSigningAlgorithm::Rs256,
+        }),
+    );
+    service.key_repo = Arc::new(key_repo_with_keys(vec![default_ec_key, requested_rsa_key]));
+    service.key_jwk_repo = Arc::new(jwk_repo_with_bindings(vec![
+        ec_binding,
+        rsa_binding.clone(),
+    ]));
+
+    let expected_kid = Uuid::from(rsa_binding.oid).to_string();
+    for scope in ["openid offline_access profile", "offline_access profile"] {
+        let has_openid = scope.split_whitespace().any(|value| value == "openid");
+        let record = repo
+            .create(
+                Uuid::nil(),
+                ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    scope: scope.to_owned(),
+                    nonce: has_openid.then_some("nonce-rsa".to_owned()),
+                    code_challenge: Some(s256_challenge("verifier-rsa")),
+                    code_challenge_method: Some("S256".parse().unwrap()),
+                    user_oid: user_oid.to_string(),
+                    session_oid: SessionOid::from(Uuid::new_v4()),
+                    protected_session_id: None,
+                    acr: None,
+                    amr: vec!["pwd".to_owned()],
+                    auth_time: None,
+                    redirect_uri: "https://client.example.com/callback".to_owned(),
+                    redirect_uri_was_supplied: true,
+                    claims: None,
+                }),
+                Utc::now() + chrono::Duration::minutes(10),
+            )
+            .await
+            .unwrap();
+
+        let issued = service
+            .exchange_authorization_code(AuthorizationCodeGrantParams {
+                code: STANDARD.encode(record.oid.as_bytes()),
+                redirect_uri: Some("https://client.example.com/callback".to_owned()),
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_assertion_type: None,
+                client_assertion: None,
+                code_verifier: Some("verifier-rsa".to_owned()),
+            })
+            .await
+            .unwrap();
+        let refreshed = service
+            .exchange_refresh_token(RefreshTokenGrantParams {
+                scope: None,
+                refresh_token: issued.refresh_token.clone().unwrap(),
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_assertion_type: None,
+                client_assertion: None,
+            })
+            .await
+            .unwrap();
+
+        for tokens in [&issued, &refreshed] {
+            assert_eq!(tokens.id_token.is_some(), has_openid);
+            for token in std::iter::once(&tokens.access_token).chain(tokens.id_token.iter()) {
+                let header = jwt::decode_header(token).unwrap();
+                assert_eq!(
+                    header.claim(JwtClaimNames::ALG).and_then(|v| v.as_str()),
+                    Some("RS256")
+                );
+                assert_eq!(
+                    header.claim(JwtClaimNames::KID).and_then(|v| v.as_str()),
+                    Some(expected_kid.as_str())
+                );
+                decode_jwt_with_alg(token, &rsa_public_key, "RS256");
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
     for alg in ["PS256", "PS384", "PS512"] {
         let repo = Arc::new(mock_client_auth_repo());

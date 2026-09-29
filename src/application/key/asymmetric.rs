@@ -81,7 +81,18 @@ impl AsymmetricKeyService {
 
     pub async fn list_available_jwks(&self) -> Result<Vec<identity_domain::key::KeyJwk>, AppError> {
         match self.jwk_repo {
-            Some(ref jwk_repo) => Ok(jwk_repo.list_active().await?),
+            Some(ref jwk_repo) => {
+                let mut jwks = jwk_repo.list_active().await?;
+                if let Some(key_id) = self.runtime_key_ring.as_ref().and_then(|provider| {
+                    provider
+                        .current_value()
+                        .signing_key()
+                        .map(|key| key.key_id.clone())
+                }) {
+                    prioritize_current_signing_key(&mut jwks, &key_id);
+                }
+                Ok(jwks)
+            }
             None => Ok(vec![]),
         }
     }
@@ -177,6 +188,52 @@ impl AsymmetricKeyService {
             .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
         self.refresh_runtime_key_ring().await?;
         Ok(key)
+    }
+}
+
+fn prioritize_current_signing_key(jwks: &mut [identity_domain::key::KeyJwk], key_id: &str) {
+    if let Some(position) = jwks
+        .iter()
+        .position(|binding| binding.jwk.key_id() == Some(key_id))
+    {
+        jwks[..=position].rotate_right(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::prioritize_current_signing_key;
+    use crate::domain::key::{KeyJwk, KeyJwkOid, KeyOid, PublicJwk};
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn published_jwks_start_with_the_runtime_signing_key() {
+        let binding = |kid: Uuid| KeyJwk {
+            oid: KeyJwkOid(kid),
+            key_oid: KeyOid(Uuid::new_v4()),
+            algorithm: "RS256".parse().unwrap(),
+            jwk: PublicJwk::Rsa {
+                key_use: Some("sig".to_owned()),
+                alg: Some("RS256".to_owned()),
+                kid: Some(kid.to_string()),
+                n: "modulus".to_owned(),
+                e: "AQAB".to_owned(),
+                x5c: None,
+                x5t: None,
+                x5t_s256: None,
+            },
+            created_at: Utc::now(),
+        };
+        let previous = Uuid::new_v4();
+        let current = Uuid::new_v4();
+        let another = Uuid::new_v4();
+        let mut jwks = vec![binding(previous), binding(another), binding(current)];
+
+        prioritize_current_signing_key(&mut jwks, &current.to_string());
+
+        let published: Vec<_> = jwks.iter().map(|binding| binding.oid.0).collect();
+        assert_eq!(published, vec![current, previous, another]);
     }
 }
 

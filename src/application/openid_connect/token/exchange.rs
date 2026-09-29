@@ -207,21 +207,19 @@ impl TokenService {
             authenticated_client.metadata().settings.oauth_version,
         )?;
 
-        let id_token_signing_key = if data.scope.split_whitespace().any(|scope| scope == "openid") {
+        let issue_id_token = data.scope.split_whitespace().any(|scope| scope == "openid");
+        if issue_id_token {
             if authenticated_client.metadata().require_auth_time == Some(true)
                 && data.auth_time.is_none()
             {
                 return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
             }
-            Some(
-                self.load_id_token_signing_key(
-                    authenticated_client.metadata().id_token_signed_response_alg,
-                )
-                .await?,
+        }
+        let configured_signing_key = self
+            .load_configured_signing_key(
+                authenticated_client.metadata().id_token_signed_response_alg,
             )
-        } else {
-            None
-        };
+            .await?;
 
         let claimed = self
             .client_authorization_repo
@@ -266,7 +264,9 @@ impl TokenService {
             .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeUserNotFound))?;
 
         let issuer = self.provider_service.issuer()?;
-        let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
+        let (signing_key_id, signing_key_pem, signing_alg) = self
+            .load_access_token_signing_key(&configured_signing_key)
+            .await?;
         let audience = client_id.clone();
         let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&data.scope)
             .map(|scope| scope.has_api_scopes())
@@ -306,7 +306,8 @@ impl TokenService {
                 amr: &session_amr,
             })
             .await?;
-        let id_token = if let Some((id_key_id, id_key_pem, id_token_alg)) = &id_token_signing_key {
+        let id_token = if issue_id_token {
+            let (id_key_id, id_key_pem, id_token_alg) = &configured_signing_key;
             let signed = self
                 .sign_id_token(SignIdTokenInput {
                     key_id: &id_key_id,
@@ -570,21 +571,19 @@ impl TokenService {
             .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
             .collect::<Vec<_>>();
         let scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
-        let id_token_signing_key = if scope.split_whitespace().any(|scope| scope == "openid") {
+        let issue_id_token = scope.split_whitespace().any(|scope| scope == "openid");
+        if issue_id_token {
             if authenticated_client.metadata().require_auth_time == Some(true)
                 && refresh_data.auth_time.is_none()
             {
                 return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
             }
-            Some(
-                self.load_id_token_signing_key(
-                    authenticated_client.metadata().id_token_signed_response_alg,
-                )
-                .await?,
+        }
+        let configured_signing_key = self
+            .load_configured_signing_key(
+                authenticated_client.metadata().id_token_signed_response_alg,
             )
-        } else {
-            None
-        };
+            .await?;
 
         let claimed = self
             .client_authorization_repo
@@ -616,7 +615,9 @@ impl TokenService {
             .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenUserNotFound))?;
 
         let issuer = self.provider_service.issuer()?;
-        let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key().await?;
+        let (signing_key_id, signing_key_pem, signing_alg) = self
+            .load_access_token_signing_key(&configured_signing_key)
+            .await?;
         let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&scope)
             .map(|scope| scope.has_api_scopes())
             .unwrap_or(false)
@@ -663,47 +664,46 @@ impl TokenService {
             .await?;
         // A refresh never turns a plain OAuth grant into an OIDC one: the
         // original authorization decides, exactly like the first exchange.
-        let signed_id_token =
-            if let Some((id_key_id, id_key_pem, id_token_alg)) = &id_token_signing_key {
-                let signed = self
-                    .sign_id_token(SignIdTokenInput {
-                        key_id: &id_key_id,
-                        private_key_pem: &id_key_pem,
-                        alg: *id_token_alg,
-                        issuer: &issuer,
-                        audience: &client_id,
-                        client: &authenticated_client,
-                        user: &user,
-                        scope: &scope,
-                        nonce: None,
-                        auth_time: refresh_data.auth_time,
-                        acr: session_acr.as_deref(),
-                        amr: &session_amr,
-                        access_token: Some(&access_token),
-                        protected_session_id: protected_session_id.as_deref(),
-                    })
-                    .await?;
+        let id_token = if issue_id_token {
+            let (id_key_id, id_key_pem, id_token_alg) = &configured_signing_key;
+            let signed = self
+                .sign_id_token(SignIdTokenInput {
+                    key_id: id_key_id,
+                    private_key_pem: id_key_pem,
+                    alg: *id_token_alg,
+                    issuer: &issuer,
+                    audience: &client_id,
+                    client: &authenticated_client,
+                    user: &user,
+                    scope: &scope,
+                    nonce: None,
+                    auth_time: refresh_data.auth_time,
+                    acr: session_acr.as_deref(),
+                    amr: &session_amr,
+                    access_token: Some(&access_token),
+                    protected_session_id: protected_session_id.as_deref(),
+                })
+                .await?;
 
-                Some(
-                    match authenticated_client
-                        .metadata()
-                        .id_token_encrypted_response_alg
-                    {
-                        Some(alg) => {
-                            let enc = authenticated_client
-                                .metadata()
-                                .id_token_encrypted_response_enc
-                                .unwrap_or(JweContentEncryption::A128CbcHs256);
-                            self.encrypt_token(&signed, &authenticated_client, alg, enc)
-                                .await?
-                        }
-                        None => signed,
-                    },
-                )
-            } else {
-                None
-            };
-        let id_token = signed_id_token;
+            Some(
+                match authenticated_client
+                    .metadata()
+                    .id_token_encrypted_response_alg
+                {
+                    Some(alg) => {
+                        let enc = authenticated_client
+                            .metadata()
+                            .id_token_encrypted_response_enc
+                            .unwrap_or(JweContentEncryption::A128CbcHs256);
+                        self.encrypt_token(&signed, &authenticated_client, alg, enc)
+                            .await?
+                    }
+                    None => signed,
+                },
+            )
+        } else {
+            None
+        };
         let rotated_from = refresh_record.oid.to_string();
         let refresh_token = Some(
             self.store_refresh_token(StoreRefreshTokenParams {
