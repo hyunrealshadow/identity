@@ -28,17 +28,28 @@ pub struct Model {
     pub tos_uri: Option<String>,
     pub sector_identifier_uri: Option<String>,
     pub subject_type: Option<String>,
-    pub id_token_signed_response_alg: Option<String>,
-    pub id_token_encrypted_response_alg: Option<String>,
-    pub id_token_encrypted_response_enc: Option<String>,
-    pub userinfo_signed_response_alg: Option<String>,
-    pub userinfo_encrypted_response_alg: Option<String>,
-    pub userinfo_encrypted_response_enc: Option<String>,
-    pub request_object_signing_alg: Option<String>,
-    pub request_object_encryption_alg: Option<String>,
-    pub request_object_encryption_enc: Option<String>,
-    pub token_endpoint_auth_method: Option<String>,
-    pub token_endpoint_auth_signing_alg: Option<String>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub id_token_signed_response_algs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub id_token_encrypted_response_algs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub id_token_encrypted_response_encs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub userinfo_signed_response_algs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub userinfo_encrypted_response_algs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub userinfo_encrypted_response_encs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub request_object_signing_algs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub request_object_encryption_algs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub request_object_encryption_encs: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub token_endpoint_auth_methods: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub token_endpoint_auth_signing_algs: Option<Json>,
     pub default_max_age: Option<i32>,
     pub require_auth_time: Option<bool>,
     #[sea_orm(column_type = "JsonBinary", nullable)]

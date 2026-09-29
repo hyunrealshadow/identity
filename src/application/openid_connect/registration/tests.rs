@@ -95,17 +95,17 @@ fn registered_client_with_built_in(client_oid: ClientOid, built_in: bool) -> Ope
             tos_uri: None,
             sector_identifier_uri: None,
             subject_type: None,
-            id_token_signed_response_alg: None,
-            id_token_encrypted_response_alg: None,
-            id_token_encrypted_response_enc: None,
-            userinfo_signed_response_alg: None,
-            userinfo_encrypted_response_alg: None,
-            userinfo_encrypted_response_enc: None,
-            request_object_signing_alg: None,
-            request_object_encryption_alg: None,
-            request_object_encryption_enc: None,
-            token_endpoint_auth_method: None,
-            token_endpoint_auth_signing_alg: None,
+            id_token_signed_response_algs: None,
+            id_token_encrypted_response_algs: None,
+            id_token_encrypted_response_encs: None,
+            userinfo_signed_response_algs: None,
+            userinfo_encrypted_response_algs: None,
+            userinfo_encrypted_response_encs: None,
+            request_object_signing_algs: None,
+            request_object_encryption_algs: None,
+            request_object_encryption_encs: None,
+            token_endpoint_auth_methods: None,
+            token_endpoint_auth_signing_algs: None,
             default_max_age: None,
             require_auth_time: None,
             default_acr_values: None,
@@ -422,14 +422,18 @@ async fn register_accepts_supported_request_object_encryption_metadata() {
     assert_eq!(
         registration
             .metadata
-            .request_object_encryption_alg
+            .request_object_encryption_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.as_str()),
         Some("RSA-OAEP-256")
     );
     assert_eq!(
         registration
             .metadata
-            .request_object_encryption_enc
+            .request_object_encryption_encs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.as_str()),
         Some("A256GCM")
     );
@@ -627,7 +631,12 @@ async fn register_allows_public_client_none_auth() {
         credential,
         identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { .. }
     )));
-    assert!(registration.metadata.settings.allow_public_client_flow);
+    assert_eq!(
+        registration.metadata.token_endpoint_auth_methods,
+        Some(vec![
+            identity_domain::openid_connect::TokenEndpointAuthMethod::None
+        ])
+    );
 }
 
 #[cfg(feature = "allow-none-alg")]

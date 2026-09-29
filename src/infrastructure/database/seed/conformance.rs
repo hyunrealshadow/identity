@@ -98,7 +98,7 @@ struct ConformanceClientSpec {
 struct ConformanceOidcMetadataValues {
     grant_types: serde_json::Value,
     response_types: serde_json::Value,
-    token_endpoint_auth_method: Option<String>,
+    token_endpoint_auth_methods: Option<serde_json::Value>,
     post_logout_redirect_uris: Option<serde_json::Value>,
     frontchannel_logout_uri: Option<String>,
     frontchannel_logout_session_required: Option<bool>,
@@ -387,7 +387,7 @@ async fn ensure_conformance_oidc_metadata(
         client_id: Set(client_id),
         grant_types: Set(Some(values.grant_types)),
         response_types: Set(Some(values.response_types)),
-        token_endpoint_auth_method: Set(values.token_endpoint_auth_method),
+        token_endpoint_auth_methods: Set(values.token_endpoint_auth_methods),
         post_logout_redirect_uris: Set(values.post_logout_redirect_uris),
         frontchannel_logout_uri: Set(values.frontchannel_logout_uri),
         frontchannel_logout_session_required: Set(values.frontchannel_logout_session_required),
@@ -414,7 +414,9 @@ fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> Conformance
                 .collect::<Vec<_>>()
         ),
         response_types: serde_json::json!(spec.response_types),
-        token_endpoint_auth_method: Some(spec.token_endpoint_auth_method.to_string()),
+        token_endpoint_auth_methods: Some(serde_json::json!([spec
+            .token_endpoint_auth_method
+            .to_string()])),
         post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
         frontchannel_logout_uri: Some(conformance_frontchannel_logout_uri()),
         frontchannel_logout_session_required: Some(true),
@@ -502,7 +504,6 @@ fn conformance_backchannel_logout_uri() -> String {
 fn conformance_client_settings() -> serde_json::Value {
     serde_json::json!({
         "skip_consent": true,
-        "allow_public_client_flow": false,
         "include_scoped_claims_in_id_token": false,
         "include_scoped_claims_in_access_token": false
     })

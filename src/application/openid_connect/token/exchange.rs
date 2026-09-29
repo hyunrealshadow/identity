@@ -3,6 +3,7 @@ use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
 use crate::observability::{BusinessEvent, EventValue};
 use identity_domain::auth::SessionOid;
+use identity_domain::client_authorization::ClientAuthenticationMode;
 use identity_domain::openid_connect::OAuthProtocolVersion;
 
 impl TokenService {
@@ -34,6 +35,9 @@ impl TokenService {
         &self,
         params: AuthorizationCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
+        let client_authentication_mode = ClientAuthenticationMode::from_credentials(
+            params.client_secret.is_some() || params.client_assertion.is_some(),
+        );
         let client_id = resolve_client_id(
             params.client_id,
             params.client_assertion_type,
@@ -44,6 +48,7 @@ impl TokenService {
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
+                params.client_secret_basic,
                 params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
@@ -187,11 +192,8 @@ impl TokenService {
 
         let verifier = params.code_verifier.as_deref();
 
-        if authenticated_client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
-            && authenticated_client
-                .metadata()
-                .settings
-                .allow_public_client_flow
+        if params.client_secret.is_none()
+            && params.client_assertion.is_none()
             && (data.code_challenge.as_deref().is_none_or(str::is_empty)
                 || data.code_challenge_method
                     != Some(identity_domain::openid_connect::CodeChallengeMethod::S256))
@@ -217,7 +219,10 @@ impl TokenService {
         }
         let configured_signing_key = self
             .load_configured_signing_key(
-                authenticated_client.metadata().id_token_signed_response_alg,
+                authenticated_client
+                    .metadata()
+                    .id_token_signed_response_algs
+                    .as_deref(),
             )
             .await?;
 
@@ -286,6 +291,7 @@ impl TokenService {
                 Some(&protected_session_id),
                 Some(record.oid),
                 None,
+                client_authentication_mode,
             )
             .await?;
         let access_token = self
@@ -328,20 +334,9 @@ impl TokenService {
                     protected_session_id: Some(&protected_session_id),
                 })
                 .await?;
-            let id_token = match authenticated_client
-                .metadata()
-                .id_token_encrypted_response_alg
-            {
-                Some(alg) => {
-                    let enc = authenticated_client
-                        .metadata()
-                        .id_token_encrypted_response_enc
-                        .unwrap_or(JweContentEncryption::A128CbcHs256);
-                    self.encrypt_token(&signed, &authenticated_client, alg, enc)
-                        .await?
-                }
-                None => signed,
-            };
+            let id_token = self
+                .encrypt_token_for_client(&signed, &authenticated_client)
+                .await?;
             Some(id_token)
         } else {
             None
@@ -371,6 +366,7 @@ impl TokenService {
                     amr: &session_amr,
                     rotated_from: None,
                     authorization_code_oid: Some(record.oid),
+                    client_authentication_mode,
                 })
                 .await?,
             )
@@ -436,6 +432,9 @@ impl TokenService {
         &self,
         params: RefreshTokenGrantParams,
     ) -> Result<TokenResponse, AppError> {
+        let client_authentication_mode = ClientAuthenticationMode::from_credentials(
+            params.client_secret.is_some() || params.client_assertion.is_some(),
+        );
         let client_id = resolve_client_id(
             params.client_id,
             params.client_assertion_type,
@@ -446,6 +445,7 @@ impl TokenService {
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
+                params.client_secret_basic,
                 params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
@@ -508,6 +508,22 @@ impl TokenService {
                 ));
             }
         };
+        let issued_mode = refresh_data.client_authentication_mode.unwrap_or_else(|| {
+            if authenticated_client
+                .metadata()
+                .effective_token_endpoint_auth_methods()
+                == [identity_domain::openid_connect::TokenEndpointAuthMethod::None]
+            {
+                ClientAuthenticationMode::Public
+            } else {
+                ClientAuthenticationMode::Confidential
+            }
+        });
+        if issued_mode != client_authentication_mode {
+            return Err(AppError::from_code(
+                TokenErrorCode::RefreshTokenClientMismatch,
+            ));
+        }
         // A device issued refresh token follows its device authorization
         // relation instead of a browser session: revoking the relation stops
         // refreshing immediately, while a browser logout does not.
@@ -583,7 +599,10 @@ impl TokenService {
         }
         let configured_signing_key = self
             .load_configured_signing_key(
-                authenticated_client.metadata().id_token_signed_response_alg,
+                authenticated_client
+                    .metadata()
+                    .id_token_signed_response_algs
+                    .as_deref(),
             )
             .await?;
 
@@ -644,6 +663,7 @@ impl TokenService {
                     .as_deref()
                     .and_then(|oid| oid.parse::<Uuid>().ok()),
                 refresh_record.oid,
+                issued_mode,
             )
             .await?;
         let access_token = self
@@ -690,20 +710,8 @@ impl TokenService {
                 .await?;
 
             Some(
-                match authenticated_client
-                    .metadata()
-                    .id_token_encrypted_response_alg
-                {
-                    Some(alg) => {
-                        let enc = authenticated_client
-                            .metadata()
-                            .id_token_encrypted_response_enc
-                            .unwrap_or(JweContentEncryption::A128CbcHs256);
-                        self.encrypt_token(&signed, &authenticated_client, alg, enc)
-                            .await?
-                    }
-                    None => signed,
-                },
+                self.encrypt_token_for_client(&signed, &authenticated_client)
+                    .await?,
             )
         } else {
             None
@@ -728,6 +736,7 @@ impl TokenService {
                     .device_authorization_oid
                     .as_deref()
                     .and_then(|oid| oid.parse::<Uuid>().ok()),
+                client_authentication_mode: issued_mode,
             })
             .await?,
         );

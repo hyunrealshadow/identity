@@ -8,17 +8,15 @@ pub(in crate::openid_connect) struct IdTokenAlgorithmClientRepository {
     pub(in crate::openid_connect) algorithm: identity_domain::key::JwaSigningAlgorithm,
 }
 pub(in crate::openid_connect) struct OAuth21ClientRepository;
-pub(in crate::openid_connect) struct PublicFlowClientRepository;
 pub(in crate::openid_connect) struct ScopedClaimsClientRepository;
 pub(in crate::openid_connect) struct AccessClaimsClientRepository;
 pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
     pub(in crate::openid_connect) grant_types: Vec<identity_domain::openid_connect::GrantType>,
 }
 
-/// A client whose registration declares `token_endpoint_auth_method: none`;
-/// unlike `PublicFlowClientRepository` it does not enable the browser public
-/// client flow.
+/// A client whose registration declares `token_endpoint_auth_method: none`.
 pub(in crate::openid_connect) struct RegisteredPublicClientRepository;
+pub(in crate::openid_connect) struct MixedClientRepository;
 pub(in crate::openid_connect) struct MachineClientRepository;
 pub(in crate::openid_connect) struct MachineAlgorithmClientRepository {
     pub(in crate::openid_connect) algorithm: identity_domain::key::JwaSigningAlgorithm,
@@ -54,9 +52,10 @@ impl OpenIdConnectClientRepository for IdTokenAlgorithmClientRepository {
         oid: ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, Some("client_secret_basic"));
-        metadata.id_token_signed_response_alg = Some(
-            identity_domain::key::JwsAlgorithm::Asymmetric(self.algorithm),
-        );
+        metadata.id_token_signed_response_algs =
+            Some(vec![identity_domain::key::JwsAlgorithm::Asymmetric(
+                self.algorithm,
+            )]);
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),
@@ -112,6 +111,24 @@ impl OpenIdConnectClientRepository for RegisteredPublicClientRepository {
 }
 
 #[async_trait]
+impl OpenIdConnectClientRepository for MixedClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.token_endpoint_auth_methods = Some(vec![
+            identity_domain::openid_connect::TokenEndpointAuthMethod::ClientSecretBasic,
+            identity_domain::openid_connect::TokenEndpointAuthMethod::None,
+        ]);
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
 impl OpenIdConnectClientRepository for MachineClientRepository {
     async fn find_by_oid(
         &self,
@@ -143,9 +160,10 @@ impl OpenIdConnectClientRepository for MachineAlgorithmClientRepository {
         metadata.grant_types = Some(vec![
             identity_domain::openid_connect::GrantType::ClientCredentials,
         ]);
-        metadata.id_token_signed_response_alg = Some(
-            identity_domain::key::JwsAlgorithm::Asymmetric(self.algorithm),
-        );
+        metadata.id_token_signed_response_algs =
+            Some(vec![identity_domain::key::JwsAlgorithm::Asymmetric(
+                self.algorithm,
+            )]);
         metadata.settings.include_scoped_claims_in_access_token = self.include_access_claims;
         Ok(Some(
             OpenIdConnectClient::new(
@@ -155,22 +173,6 @@ impl OpenIdConnectClientRepository for MachineAlgorithmClientRepository {
                 vec!["account.read".to_owned()],
             )
             .unwrap(),
-        ))
-    }
-}
-
-#[async_trait]
-impl OpenIdConnectClientRepository for PublicFlowClientRepository {
-    async fn find_by_oid(
-        &self,
-        oid: ClientOid,
-    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
-        let mut metadata = test_metadata(None, Some("client_secret_basic"));
-        metadata.settings.allow_public_client_flow = true;
-
-        Ok(Some(
-            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
-                .unwrap(),
         ))
     }
 }
@@ -214,8 +216,8 @@ impl OpenIdConnectClientRepository for AuthMethodClientRepository {
         oid: ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, Some(self.method));
-        metadata.token_endpoint_auth_signing_alg =
-            self.signing_alg.map(|value| value.parse().unwrap());
+        metadata.token_endpoint_auth_signing_algs =
+            self.signing_alg.map(|value| vec![value.parse().unwrap()]);
 
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())

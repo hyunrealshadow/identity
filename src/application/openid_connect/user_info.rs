@@ -164,14 +164,10 @@ impl UserInfoService {
             })?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let Some(alg) = client.metadata().userinfo_signed_response_alg else {
+        let Some(algorithms) = client.metadata().userinfo_signed_response_algs.as_deref() else {
             return Ok(None);
         };
-        let identity_domain::key::JwsAlgorithm::Asymmetric(alg) = alg else {
-            return Err(AppError::from_code(CommonErrorCode::InternalError));
-        };
-
-        let (key_id, private_key) = self.load_signing_key_for_alg(alg).await?;
+        let (alg, key_id, private_key) = self.load_signing_key_for_algs(algorithms).await?;
         let mut header = JwsHeader::new();
         header.set_token_type("JWT");
         header.set_key_id(&key_id);
@@ -206,27 +202,19 @@ impl UserInfoService {
             })?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let Some(alg) = client
+        let Some(algorithms) = client
             .metadata()
-            .userinfo_encrypted_response_alg
-            .map(|value| value.as_str())
+            .userinfo_encrypted_response_algs
+            .as_deref()
         else {
             return Ok(None);
         };
-        let enc = client
+        let default_content_encryption = [identity_domain::key::JweContentEncryption::A128CbcHs256];
+        let content_encryptions = client
             .metadata()
-            .userinfo_encrypted_response_enc
-            .map(|value| value.as_str())
-            .unwrap_or("A128CBC-HS256");
-
-        let public_jwk = super::client_encryption::select_client_encryption_jwk(
-            &*self.credential_repo,
-            client.client().oid,
-            alg,
-        )
-        .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+            .userinfo_encrypted_response_encs
+            .as_deref()
+            .unwrap_or(&default_content_encryption);
 
         let json_body = match signed_response {
             Some(signed) => signed.to_owned(),
@@ -234,16 +222,33 @@ impl UserInfoService {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
             })?,
         };
-        let encrypted = encrypt_compact_with_public_jwk_with_content_type(
-            json_body.as_bytes(),
-            &public_jwk,
-            alg,
-            enc,
-            signed_response.map(|_| "JWT"),
-        )
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        for algorithm in algorithms {
+            let Some(public_jwk) = super::client_encryption::select_client_encryption_jwk(
+                &*self.credential_repo,
+                client.client().oid,
+                algorithm.as_str(),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+            })?
+            else {
+                continue;
+            };
+            for content_encryption in content_encryptions {
+                if let Ok(encrypted) = encrypt_compact_with_public_jwk_with_content_type(
+                    json_body.as_bytes(),
+                    &public_jwk,
+                    algorithm.as_str(),
+                    content_encryption.as_str(),
+                    signed_response.map(|_| "JWT"),
+                ) {
+                    return Ok(Some(encrypted));
+                }
+            }
+        }
 
-        Ok(Some(encrypted))
+        Err(AppError::from_code(CommonErrorCode::InternalError))
     }
 
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {
@@ -454,29 +459,33 @@ impl UserInfoService {
         Ok((payload, header))
     }
 
-    async fn load_signing_key_for_alg(
+    async fn load_signing_key_for_algs(
         &self,
-        alg: identity_domain::key::JwaSigningAlgorithm,
-    ) -> Result<(String, String), AppError> {
+        algorithms: &[identity_domain::key::JwsAlgorithm],
+    ) -> Result<(identity_domain::key::JwaSigningAlgorithm, String, String), AppError> {
         let keys = self.key_service.list_available().await?;
         let bindings = self.key_service.list_available_jwks().await?;
 
-        for binding in bindings
-            .iter()
-            .filter(|binding| binding.algorithm == identity_domain::key::JwkAlgorithm::Signing(alg))
-        {
-            let Some(key) = keys.iter().find(|key| key.oid == binding.key_oid) else {
+        for requested in algorithms {
+            let identity_domain::key::JwsAlgorithm::Asymmetric(alg) = requested else {
                 continue;
             };
-            let KeyData::Asymmetric(data) = &key.data else {
-                continue;
-            };
-            let key_id = binding
-                .jwk
-                .key_id()
-                .map(str::to_owned)
-                .unwrap_or_else(|| Uuid::from(binding.oid).to_string());
-            return Ok((key_id, data.private_key.clone()));
+            for binding in bindings.iter().filter(|binding| {
+                binding.algorithm == identity_domain::key::JwkAlgorithm::Signing(*alg)
+            }) {
+                let Some(key) = keys.iter().find(|key| key.oid == binding.key_oid) else {
+                    continue;
+                };
+                let KeyData::Asymmetric(data) = &key.data else {
+                    continue;
+                };
+                let key_id = binding
+                    .jwk
+                    .key_id()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| Uuid::from(binding.oid).to_string());
+                return Ok((*alg, key_id, data.private_key.clone()));
+            }
         }
 
         Err(AppError::from_code(CommonErrorCode::InternalError))

@@ -99,8 +99,8 @@ impl AuthorizeService {
                 AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed)
                     .with_source(error)
             })?;
-        if let Some(registered_algorithm) = client.metadata().request_object_signing_alg
-            && registered_algorithm != algorithm
+        if let Some(registered_algorithms) = &client.metadata().request_object_signing_algs
+            && !registered_algorithms.contains(&algorithm)
         {
             return Err(AppError::from_code(
                 AuthorizeErrorCode::RequestObjectVerifyFailed,
@@ -185,14 +185,18 @@ impl AuthorizeService {
         }
         if client
             .metadata()
-            .request_object_encryption_alg
-            .map(|value| value.as_str())
-            .is_some_and(|registered| registered != algorithm)
+            .request_object_encryption_algs
+            .as_ref()
+            .is_some_and(|registered| !registered.iter().any(|value| value.as_str() == algorithm))
             || client
                 .metadata()
-                .request_object_encryption_enc
-                .map(|value| value.as_str())
-                .is_some_and(|registered| registered != content_encryption)
+                .request_object_encryption_encs
+                .as_ref()
+                .is_some_and(|registered| {
+                    !registered
+                        .iter()
+                        .any(|value| value.as_str() == content_encryption)
+                })
         {
             return Err(AppError::from_code(
                 AuthorizeErrorCode::RequestObjectEncryptionUnsupported,

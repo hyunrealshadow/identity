@@ -2,7 +2,7 @@
 //! credentials (the token endpoint and the device authorization endpoint).
 //!
 //! The rules are the ones the token endpoint always applied: the registered
-//! `token_endpoint_auth_method` decides how a confidential client proves
+//! `token_endpoint_auth_methods` decide how a confidential client proves
 //! itself, and clients registered as public clients authenticate with a
 //! `client_id` only. Keeping one implementation means a flow cannot
 //! accidentally accept a weaker method than the registration allows.
@@ -136,9 +136,15 @@ impl ClientAuthenticator {
         &self,
         client_id: &str,
         client_secret: Option<&str>,
+        client_secret_basic: bool,
         client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
         client_assertion: Option<&str>,
     ) -> Result<Uuid, AppError> {
+        if client_assertion_type.is_some() != client_assertion.is_some()
+            || (client_secret.is_some() && client_assertion.is_some())
+        {
+            return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+        }
         if let (
             Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(assertion),
@@ -156,15 +162,39 @@ impl ClientAuthenticator {
                 })?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
-            return match client.metadata().token_endpoint_auth_method {
-                Some(identity_domain::openid_connect::TokenEndpointAuthMethod::ClientSecretJwt) => {
+            let header = jwt::decode_header(assertion).map_err(|error| {
+                AppError::from_code(TokenErrorCode::AssertionHeaderInvalid).with_source(error)
+            })?;
+            let algorithm = header
+                .claim(JwtClaimNames::ALG)
+                .and_then(|value| value.as_str())
+                .unwrap_or("none")
+                .parse::<JwsAlgorithm>()
+                .map_err(|error| {
+                    AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_source(error)
+                })?;
+            let method = match algorithm {
+                JwsAlgorithm::Hs256 | JwsAlgorithm::Hs384 | JwsAlgorithm::Hs512 => {
+                    TokenEndpointAuthMethod::ClientSecretJwt
+                }
+                JwsAlgorithm::Asymmetric(_) => TokenEndpointAuthMethod::PrivateKeyJwt,
+                JwsAlgorithm::None => {
+                    return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
+                }
+            };
+            if !client.metadata().allows_token_endpoint_auth_method(method) {
+                return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+            }
+            return match method {
+                TokenEndpointAuthMethod::ClientSecretJwt => {
                     self.authenticate_client_secret_jwt(client_id, assertion)
                         .await
                 }
-                _ => {
+                TokenEndpointAuthMethod::PrivateKeyJwt => {
                     self.authenticate_private_key_jwt(client_id, assertion)
                         .await
                 }
+                _ => Err(AppError::from_code(TokenErrorCode::ClientAuthRequired)),
             };
         }
 
@@ -181,7 +211,10 @@ impl ClientAuthenticator {
                 })?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
-            if client.metadata().settings.allow_public_client_flow {
+            if client
+                .metadata()
+                .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::None)
+            {
                 return Ok(client.client().oid);
             }
 
@@ -200,21 +233,29 @@ impl ClientAuthenticator {
             })?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
-        if client.metadata().token_endpoint_auth_method
-            == Some(identity_domain::openid_connect::TokenEndpointAuthMethod::ClientSecretBasic)
+        if client_secret_basic
+            && client
+                .metadata()
+                .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::ClientSecretBasic)
         {
             self.authenticate_client_secret_basic(client_id, client_secret)
                 .await
-        } else {
+        } else if !client_secret_basic
+            && client
+                .metadata()
+                .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::ClientSecretPost)
+        {
             self.authenticate_client_secret_post(client_id, client_secret)
                 .await
+        } else {
+            Err(AppError::from_code(TokenErrorCode::ClientAuthRequired))
         }
     }
 
     /// Authenticates a client for a flow public clients may use and returns
     /// the loaded client.
     ///
-    /// A client registered with `token_endpoint_auth_method: none` proves
+    /// A client allowing `token_endpoint_auth_methods: ["none"]` proves
     /// itself with its `client_id` only; every other client must present its
     /// secret or assertion. The registered method decides, so the check cannot
     /// be bypassed by omitting credentials.
@@ -222,12 +263,16 @@ impl ClientAuthenticator {
         &self,
         client_id: &str,
         client_secret: Option<&str>,
+        client_secret_basic: bool,
         client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
         client_assertion: Option<&str>,
     ) -> Result<OpenIdConnectClient, AppError> {
         if client_secret.is_none() && client_assertion.is_none() {
             let client = self.load_client(client_id).await?;
-            if client.metadata().token_endpoint_auth_method == Some(TokenEndpointAuthMethod::None) {
+            if client
+                .metadata()
+                .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::None)
+            {
                 return Ok(client);
             }
 
@@ -238,6 +283,7 @@ impl ClientAuthenticator {
         self.authenticate_client(
             client_id,
             client_secret,
+            client_secret_basic,
             client_assertion_type,
             client_assertion,
         )
@@ -357,8 +403,8 @@ impl ClientAuthenticator {
         if algorithm == JwsAlgorithm::None && !cfg!(feature = "allow-none-alg") {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
-        if let Some(registered_algorithm) = client.metadata().token_endpoint_auth_signing_alg
-            && registered_algorithm != algorithm
+        if let Some(registered_algorithms) = &client.metadata().token_endpoint_auth_signing_algs
+            && !registered_algorithms.contains(&algorithm)
         {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
@@ -451,8 +497,8 @@ impl ClientAuthenticator {
         if algorithm == JwsAlgorithm::None && !cfg!(feature = "allow-none-alg") {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
-        if let Some(registered_algorithm) = client.metadata().token_endpoint_auth_signing_alg
-            && registered_algorithm != algorithm
+        if let Some(registered_algorithms) = &client.metadata().token_endpoint_auth_signing_algs
+            && !registered_algorithms.contains(&algorithm)
         {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }

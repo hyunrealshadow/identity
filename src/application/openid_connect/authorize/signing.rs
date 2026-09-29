@@ -53,6 +53,28 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
 impl AuthorizeService {
     pub(super) async fn load_id_token_signing_key_impl(
         &self,
+        requested: Option<&[JwsAlgorithm]>,
+    ) -> Result<(String, String, JwsAlgorithm), AppError> {
+        let Some(requested) = requested else {
+            return self.load_id_token_signing_key_single(None).await;
+        };
+        for algorithm in requested {
+            match self
+                .load_id_token_signing_key_single(Some(*algorithm))
+                .await
+            {
+                Ok(key) => return Ok(key),
+                Err(error)
+                    if error.code()
+                        == AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).code() => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
+    }
+
+    async fn load_id_token_signing_key_single(
+        &self,
         requested: Option<JwsAlgorithm>,
     ) -> Result<(String, String, JwsAlgorithm), AppError> {
         match requested {
@@ -362,34 +384,56 @@ impl AuthorizeService {
         })
     }
 
-    pub(super) async fn encrypt_id_token(
+    pub(super) async fn encrypt_id_token_for_client(
         &self,
         signed_jwt: &str,
         client: &OpenIdConnectClient,
-        encryption_alg: JwaEncryptionAlgorithm,
-        content_enc: JweContentEncryption,
     ) -> Result<String, AppError> {
-        let public_jwk = select_client_encryption_jwk(
-            &*self.credential_repo,
-            client.client().oid,
-            encryption_alg.as_str(),
-        )
-        .await
-        .map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound).with_source(error)
-        })?
-        .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound))?;
-
-        encrypt_compact_with_public_jwk_with_content_type(
-            signed_jwt.as_bytes(),
-            &public_jwk,
-            encryption_alg.as_str(),
-            content_enc.as_str(),
-            Some("JWT"),
-        )
-        .map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::EncryptionFailed).with_source(error)
-        })
+        let Some(algorithms) = client
+            .metadata()
+            .id_token_encrypted_response_algs
+            .as_deref()
+        else {
+            return Ok(signed_jwt.to_owned());
+        };
+        let default_content_encryption = [JweContentEncryption::A128CbcHs256];
+        let content_encryptions = client
+            .metadata()
+            .id_token_encrypted_response_encs
+            .as_deref()
+            .unwrap_or(&default_content_encryption);
+        let mut found_key = false;
+        for algorithm in algorithms {
+            let Some(public_jwk) = select_client_encryption_jwk(
+                &*self.credential_repo,
+                client.client().oid,
+                algorithm.as_str(),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::EncryptionKeyNotFound).with_source(error)
+            })?
+            else {
+                continue;
+            };
+            found_key = true;
+            for content_encryption in content_encryptions {
+                if let Ok(encrypted) = encrypt_compact_with_public_jwk_with_content_type(
+                    signed_jwt.as_bytes(),
+                    &public_jwk,
+                    algorithm.as_str(),
+                    content_encryption.as_str(),
+                    Some("JWT"),
+                ) {
+                    return Ok(encrypted);
+                }
+            }
+        }
+        Err(AppError::from_code(if found_key {
+            AuthorizeErrorCode::EncryptionFailed
+        } else {
+            AuthorizeErrorCode::EncryptionKeyNotFound
+        }))
     }
 }
 

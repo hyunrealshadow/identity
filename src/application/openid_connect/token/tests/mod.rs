@@ -410,18 +410,26 @@ async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
     ]));
 
     let (kid, _, alg) = service
-        .load_configured_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
+        .load_configured_signing_key(Some(&[identity_domain::key::JwsAlgorithm::Asymmetric(
             JwaSigningAlgorithm::Es256,
-        )))
+        )]))
         .await
         .unwrap();
     assert_eq!(kid, Uuid::from(ec_binding.oid).to_string());
     assert_eq!(alg.as_str(), "ES256");
+    let (_, _, fallback_alg) = service
+        .load_configured_signing_key(Some(&[
+            identity_domain::key::JwsAlgorithm::Asymmetric(JwaSigningAlgorithm::Es384),
+            identity_domain::key::JwsAlgorithm::Asymmetric(JwaSigningAlgorithm::Es256),
+        ]))
+        .await
+        .unwrap();
+    assert_eq!(fallback_alg.as_str(), "ES256");
     assert!(
         service
-            .load_configured_signing_key(Some(identity_domain::key::JwsAlgorithm::Asymmetric(
+            .load_configured_signing_key(Some(&[identity_domain::key::JwsAlgorithm::Asymmetric(
                 JwaSigningAlgorithm::Es384,
-            )))
+            )]))
             .await
             .is_err(),
         "the OP must not silently sign with another algorithm"

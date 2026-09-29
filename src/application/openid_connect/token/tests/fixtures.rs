@@ -11,7 +11,7 @@ mod clients;
 pub(super) use clients::{
     AccessClaimsClientRepository, AuthMethodClientRepository, IdTokenAlgorithmClientRepository,
     InMemoryClientRepository, MachineAlgorithmClientRepository, MachineClientRepository,
-    OAuth21ClientRepository, PublicFlowClientRepository, RegisteredPublicClientRepository,
+    MixedClientRepository, OAuth21ClientRepository, RegisteredPublicClientRepository,
     RestrictedGrantClientRepository, ScopedClaimsClientRepository,
 };
 

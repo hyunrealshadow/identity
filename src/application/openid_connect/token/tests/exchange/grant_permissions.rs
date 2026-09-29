@@ -15,6 +15,7 @@ fn refresh_token_data(user_oid: Uuid) -> RefreshTokenData {
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: None,
+        client_authentication_mode: None,
     }
 }
 
@@ -59,6 +60,7 @@ async fn code_exchange_rejects_client_without_authorization_code_grant() {
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
             code_verifier: None,
@@ -114,6 +116,7 @@ async fn code_exchange_does_not_issue_unusable_refresh_token() {
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
             code_verifier: None,
@@ -150,6 +153,7 @@ async fn refresh_exchange_rejects_client_without_refresh_token_grant() {
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })
@@ -185,6 +189,7 @@ async fn grant_permission_is_checked_before_the_refresh_token_lookup() {
             refresh_token: STANDARD.encode(Uuid::new_v4().as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_string()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })

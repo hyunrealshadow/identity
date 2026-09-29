@@ -58,6 +58,7 @@ fn request_record_with_scope(
             approval,
             denied_by_user_oid: None,
             decided_at: None,
+            client_authentication_mode: None,
         }),
         expires_at,
         completed_at: None,
@@ -97,14 +98,26 @@ fn device_client(grant_types: Vec<GrantType>) -> OpenIdConnectClient {
     device_client_with_id_token_algorithm(grant_types, None)
 }
 
+fn public_device_client() -> OpenIdConnectClient {
+    let mut metadata = test_metadata(None, Some("none"));
+    metadata.grant_types = Some(vec![GrantType::DeviceCode]);
+    OpenIdConnectClient::new(
+        test_client(Uuid::nil()),
+        metadata,
+        test_platforms(),
+        test_scopes(),
+    )
+    .unwrap()
+}
+
 fn device_client_with_id_token_algorithm(
     grant_types: Vec<GrantType>,
     algorithm: Option<JwaSigningAlgorithm>,
 ) -> OpenIdConnectClient {
     let mut metadata = test_metadata(None, Some("client_secret_basic"));
     metadata.grant_types = Some(grant_types);
-    metadata.id_token_signed_response_alg =
-        algorithm.map(identity_domain::key::JwsAlgorithm::Asymmetric);
+    metadata.id_token_signed_response_algs =
+        algorithm.map(|value| vec![identity_domain::key::JwsAlgorithm::Asymmetric(value)]);
 
     OpenIdConnectClient::new(
         test_client(Uuid::nil()),
@@ -246,6 +259,7 @@ fn params() -> DeviceCodeGrantParams {
         device_code: DEVICE_CODE.to_owned(),
         client_id: Some(Uuid::nil().to_string()),
         client_secret: Some("secret-123".to_owned()),
+        client_secret_basic: true,
         client_assertion_type: None,
         client_assertion: None,
     }
@@ -571,12 +585,32 @@ async fn redemption_requires_client_authentication() {
     let error = service
         .exchange_device_code(DeviceCodeGrantParams {
             client_secret: None,
+            client_secret_basic: false,
             ..params()
         })
         .await
         .unwrap_err();
 
     assert_eq!(error.code(), 24031);
+}
+
+#[tokio::test]
+async fn registered_public_client_redeems_device_code_without_secret() {
+    let mut repo = MockDeviceAuthorizationRepository::new();
+    repo.expect_find_device_request_by_device_code_digest()
+        .returning(|_| Ok(None));
+    let service = build_service(public_device_client(), Arc::new(repo));
+
+    let error = service
+        .exchange_device_code(DeviceCodeGrantParams {
+            client_secret: None,
+            client_secret_basic: false,
+            ..params()
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 24062);
 }
 
 /// Builds a device refresh token whose original authorization had `scope`.
@@ -592,6 +626,7 @@ async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, sco
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
+        client_authentication_mode: None,
     };
     let record = repo
         .create(
@@ -629,6 +664,7 @@ async fn a_device_grant_without_openid_stays_plain_oauth_through_refresh() {
             refresh_token: STANDARD.encode(oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })
@@ -666,6 +702,7 @@ async fn refresh_cannot_add_openid_the_device_grant_never_requested() {
             refresh_token: STANDARD.encode(oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })
@@ -703,6 +740,7 @@ async fn refresh_may_narrow_the_granted_scope() {
             refresh_token: STANDARD.encode(oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })
@@ -729,6 +767,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
+        client_authentication_mode: None,
     };
     let repo = Arc::new(mock_client_auth_repo());
     let record = repo
@@ -760,6 +799,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })
@@ -787,6 +827,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
+        client_authentication_mode: None,
     };
     let repo = Arc::new(mock_client_auth_repo());
     let record = repo
@@ -818,6 +859,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
         })

@@ -810,6 +810,7 @@ mod postgres_tests {
             decided_at: None,
             device_authorization_oid: None,
             claimed_login_oid: None,
+            client_authentication_mode: None,
         }
     }
 
@@ -835,6 +836,7 @@ mod postgres_tests {
                 authorization_code_oid: None,
                 refresh_token_oid: None,
                 device_authorization_oid: None,
+                client_authentication_mode: None,
             }),
             expires_at: Utc::now() + chrono::Duration::minutes(5),
         }

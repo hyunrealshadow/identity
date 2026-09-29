@@ -1,5 +1,6 @@
 use super::fixtures::*;
 use super::*;
+use crate::error::code::AppErrorCode;
 use crate::openid_connect::client_authentication::{
     ClientAuthenticator, ClientAuthenticatorDependencies,
 };
@@ -116,6 +117,38 @@ async fn authenticate_client_secret_post_accepts_matching_secret() {
 }
 
 #[tokio::test]
+async fn authenticate_client_enforces_secret_transport_method() {
+    let basic = authenticator(
+        Arc::new(InMemoryClientRepository),
+        vec![secret_credential("secret-123")],
+    );
+    let post = authenticator(
+        Arc::new(AuthMethodClientRepository {
+            method: "client_secret_post",
+            signing_alg: None,
+        }),
+        vec![secret_credential("secret-123")],
+    );
+    let client_id = "00000000-0000-0000-0000-000000000000";
+    assert!(
+        basic
+            .authenticate_client(client_id, Some("secret-123"), false, None, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        post.authenticate_client(client_id, Some("secret-123"), true, None, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        post.authenticate_client(client_id, Some("secret-123"), false, None, None)
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
 async fn authenticate_client_secret_jwt_accepts_hs256_assertion() {
     let service = authenticator(
         Arc::new(AuthMethodClientRepository {
@@ -134,6 +167,7 @@ async fn authenticate_client_secret_jwt_accepts_hs256_assertion() {
         .authenticate_client(
             "00000000-0000-0000-0000-000000000000",
             None,
+            false,
             Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
@@ -162,6 +196,7 @@ async fn authenticate_client_secret_jwt_uses_registered_signing_algorithm() {
         .authenticate_client(
             "00000000-0000-0000-0000-000000000000",
             None,
+            false,
             Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
@@ -190,6 +225,7 @@ async fn authenticate_client_secret_jwt_rejects_unregistered_signing_algorithm()
         .authenticate_client(
             "00000000-0000-0000-0000-000000000000",
             None,
+            false,
             Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
@@ -273,11 +309,17 @@ async fn authenticate_private_key_jwt_rejects_missing_exp() {
 }
 
 #[tokio::test]
-async fn authenticate_client_rejects_public_flow_by_default() {
+async fn authenticate_client_rejects_unauthenticated_confidential_client() {
     let service = authenticator(Arc::new(InMemoryClientRepository), vec![]);
 
     let error = service
-        .authenticate_client("00000000-0000-0000-0000-000000000000", None, None, None)
+        .authenticate_client(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            false,
+            None,
+            None,
+        )
         .await
         .unwrap_err();
 
@@ -285,15 +327,73 @@ async fn authenticate_client_rejects_public_flow_by_default() {
 }
 
 #[tokio::test]
-async fn authenticate_client_accepts_public_flow_when_enabled() {
-    let service = authenticator(Arc::new(PublicFlowClientRepository), vec![]);
+async fn authenticate_client_accepts_registered_public_client() {
+    let service = authenticator(Arc::new(RegisteredPublicClientRepository), vec![]);
 
     let client_oid = service
-        .authenticate_client("00000000-0000-0000-0000-000000000000", None, None, None)
+        .authenticate_client(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            false,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     assert_eq!(client_oid, Uuid::nil());
+}
+
+#[tokio::test]
+async fn mixed_client_accepts_public_and_confidential_proofs_without_downgrade() {
+    let service = authenticator(
+        Arc::new(MixedClientRepository),
+        vec![secret_credential("secret-123")],
+    );
+    let client_id = "00000000-0000-0000-0000-000000000000";
+    assert_eq!(
+        service
+            .authenticate_client(client_id, None, false, None, None)
+            .await
+            .unwrap(),
+        Uuid::nil()
+    );
+    assert_eq!(
+        service
+            .authenticate_client(client_id, Some("secret-123"), true, None, None)
+            .await
+            .unwrap(),
+        Uuid::nil()
+    );
+    assert_eq!(
+        service
+            .authenticate_client(client_id, Some("wrong"), true, None, None)
+            .await
+            .unwrap_err()
+            .code(),
+        crate::error::codes::token::TokenErrorCode::ClientCredentialsInvalid.code()
+    );
+}
+
+#[tokio::test]
+async fn authenticate_client_rejects_secret_for_registered_public_client() {
+    let service = authenticator(
+        Arc::new(RegisteredPublicClientRepository),
+        vec![secret_credential("secret-123")],
+    );
+
+    let error = service
+        .authenticate_client(
+            "00000000-0000-0000-0000-000000000000",
+            Some("secret-123"),
+            true,
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 24031);
 }
 
 #[tokio::test]
@@ -304,7 +404,13 @@ async fn authenticate_client_request_rejects_confidential_client_without_credent
     );
 
     let error = service
-        .authenticate_client_request("00000000-0000-0000-0000-000000000000", None, None, None)
+        .authenticate_client_request(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            false,
+            None,
+            None,
+        )
         .await
         .unwrap_err();
 
@@ -316,7 +422,13 @@ async fn authenticate_client_request_accepts_registered_public_client() {
     let service = authenticator(Arc::new(RegisteredPublicClientRepository), vec![]);
 
     let client = service
-        .authenticate_client_request("00000000-0000-0000-0000-000000000000", None, None, None)
+        .authenticate_client_request(
+            "00000000-0000-0000-0000-000000000000",
+            None,
+            false,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -334,6 +446,7 @@ async fn authenticate_client_request_accepts_confidential_client_with_secret() {
         .authenticate_client_request(
             "00000000-0000-0000-0000-000000000000",
             Some("secret-123"),
+            true,
             None,
             None,
         )

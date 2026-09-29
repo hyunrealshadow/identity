@@ -23,6 +23,7 @@ pub(super) struct StoreRefreshTokenParams<'a> {
     pub authorization_code_oid: Option<Uuid>,
     /// Device authorization relation behind the token, if any.
     pub device_authorization_oid: Option<Uuid>,
+    pub client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
 }
 
 pub(super) struct SignAccessTokenInput<'a> {
@@ -67,6 +68,28 @@ pub(super) struct SignIdTokenInput<'a> {
 
 impl TokenService {
     pub(super) async fn load_configured_signing_key(
+        &self,
+        requested: Option<&[JwsAlgorithm]>,
+    ) -> Result<(String, String, JwsAlgorithm), AppError> {
+        let Some(requested) = requested else {
+            return self.load_configured_signing_key_single(None).await;
+        };
+        for algorithm in requested {
+            match self
+                .load_configured_signing_key_single(Some(*algorithm))
+                .await
+            {
+                Ok(key) => return Ok(key),
+                Err(error)
+                    if error.code()
+                        == AppError::from_code(TokenErrorCode::NoSigningKeyAvailable).code() => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
+    }
+
+    async fn load_configured_signing_key_single(
         &self,
         requested: Option<JwsAlgorithm>,
     ) -> Result<(String, String, JwsAlgorithm), AppError> {
@@ -437,32 +460,56 @@ impl TokenService {
         })
     }
 
-    pub(super) async fn encrypt_token(
+    pub(super) async fn encrypt_token_for_client(
         &self,
         signed_jwt: &str,
         client: &identity_domain::openid_connect::OpenIdConnectClient,
-        encryption_alg: JwaEncryptionAlgorithm,
-        content_enc: JweContentEncryption,
     ) -> Result<String, AppError> {
-        let public_jwk = select_client_encryption_jwk(
-            &*self.credential_repo,
-            client.client().oid,
-            encryption_alg.as_str(),
-        )
-        .await
-        .map_err(|error| {
-            AppError::from_code(TokenErrorCode::EncryptionKeyNotFound).with_source(error)
-        })?
-        .ok_or_else(|| AppError::from_code(TokenErrorCode::EncryptionKeyNotFound))?;
-
-        encrypt_compact_with_public_jwk_with_content_type(
-            signed_jwt.as_bytes(),
-            &public_jwk,
-            encryption_alg.as_str(),
-            content_enc.as_str(),
-            Some("JWT"),
-        )
-        .map_err(|e| AppError::from_code(TokenErrorCode::EncryptionFailed).with_source(e))
+        let Some(algorithms) = client
+            .metadata()
+            .id_token_encrypted_response_algs
+            .as_deref()
+        else {
+            return Ok(signed_jwt.to_owned());
+        };
+        let default_content_encryption = [JweContentEncryption::A128CbcHs256];
+        let content_encryptions = client
+            .metadata()
+            .id_token_encrypted_response_encs
+            .as_deref()
+            .unwrap_or(&default_content_encryption);
+        let mut found_key = false;
+        for algorithm in algorithms {
+            let Some(public_jwk) = select_client_encryption_jwk(
+                &*self.credential_repo,
+                client.client().oid,
+                algorithm.as_str(),
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(TokenErrorCode::EncryptionKeyNotFound).with_source(error)
+            })?
+            else {
+                continue;
+            };
+            found_key = true;
+            for content_encryption in content_encryptions {
+                if let Ok(encrypted) = encrypt_compact_with_public_jwk_with_content_type(
+                    signed_jwt.as_bytes(),
+                    &public_jwk,
+                    algorithm.as_str(),
+                    content_encryption.as_str(),
+                    Some("JWT"),
+                ) {
+                    return Ok(encrypted);
+                }
+            }
+        }
+        Err(AppError::from_code(if found_key {
+            TokenErrorCode::EncryptionFailed
+        } else {
+            TokenErrorCode::EncryptionKeyNotFound
+        }))
     }
 }
 
@@ -516,6 +563,7 @@ impl TokenService {
             rotated_from: params.rotated_from.map(str::to_string),
             authorization_code_oid: params.authorization_code_oid.map(|oid| oid.to_string()),
             device_authorization_oid: params.device_authorization_oid.map(|oid| oid.to_string()),
+            client_authentication_mode: Some(params.client_authentication_mode),
         });
 
         let record = self
@@ -548,6 +596,7 @@ impl TokenService {
         protected_session_id: Option<&str>,
         authorization_code_oid: Option<Uuid>,
         device_authorization_oid: Option<Uuid>,
+        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     ) -> Result<ClientAuthorization, AppError> {
         let data = self.access_token_data(
             scope,
@@ -556,6 +605,7 @@ impl TokenService {
             protected_session_id,
             authorization_code_oid,
             device_authorization_oid,
+            client_authentication_mode,
         );
 
         self.client_authorization_repo
@@ -580,6 +630,7 @@ impl TokenService {
         protected_session_id: Option<&str>,
         authorization_code_oid: Option<Uuid>,
         device_authorization_oid: Option<Uuid>,
+        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     ) -> ClientAuthorizationData {
         ClientAuthorizationData::AccessToken(AccessTokenData {
             scope: scope.to_string(),
@@ -589,6 +640,7 @@ impl TokenService {
             authorization_code_oid: authorization_code_oid.map(|oid| oid.to_string()),
             refresh_token_oid: None,
             device_authorization_oid: device_authorization_oid.map(|oid| oid.to_string()),
+            client_authentication_mode: Some(client_authentication_mode),
         })
     }
 
@@ -603,6 +655,7 @@ impl TokenService {
         authorization_code_oid: Option<Uuid>,
         device_authorization_oid: Option<Uuid>,
         refresh_token_oid: Uuid,
+        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     ) -> Result<ClientAuthorization, AppError> {
         let mut data = self.access_token_data(
             scope,
@@ -611,6 +664,7 @@ impl TokenService {
             protected_session_id,
             authorization_code_oid,
             device_authorization_oid,
+            client_authentication_mode,
         );
         if let ClientAuthorizationData::AccessToken(access) = &mut data {
             access.refresh_token_oid = Some(refresh_token_oid.to_string());

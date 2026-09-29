@@ -57,6 +57,30 @@ async fn public_client_requires_pkce_s256() {
 }
 
 #[tokio::test]
+async fn oauth20_public_client_also_requires_pkce_s256() {
+    let service = build_test_service(
+        Arc::new(OAuth20PublicClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut missing = params("openid profile");
+    missing.code_challenge = None;
+    missing.code_challenge_method = None;
+    assert_eq!(
+        service.validate_request(missing).await.unwrap_err().code(),
+        23013
+    );
+
+    let mut plain = params("openid profile");
+    plain.code_challenge = Some("challenge".to_owned());
+    plain.code_challenge_method = Some("plain".to_owned());
+    assert_eq!(
+        service.validate_request(plain).await.unwrap_err().code(),
+        23011
+    );
+}
+
+#[tokio::test]
 async fn confidential_client_rejects_plain_pkce() {
     let service = build_test_service(
         Arc::new(FoundClientRepository),
@@ -260,7 +284,7 @@ async fn hybrid_client_with_both_grants_passes_validation() {
 }
 
 #[tokio::test]
-async fn public_client_rejects_implicit_response_type() {
+async fn oauth21_public_client_accepts_id_token_response_type() {
     let service = build_test_service(
         Arc::new(PublicClientRepository),
         Arc::new(empty_cred_repo()),
@@ -272,9 +296,37 @@ async fn public_client_rejects_implicit_response_type() {
     request.code_challenge = Some("challenge".to_owned());
     request.code_challenge_method = Some("S256".to_owned());
 
+    assert!(service.validate_request(request).await.is_ok());
+}
+
+#[tokio::test]
+async fn oauth21_public_client_rejects_front_channel_access_token() {
+    let service = build_test_service(
+        Arc::new(PublicClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.response_type = "id_token token".to_owned();
+    request.nonce = Some("nonce".to_owned());
+
     let error = service.validate_request(request).await.unwrap_err();
 
     assert_eq!(error.code(), 23003);
+}
+
+#[tokio::test]
+async fn oauth20_client_accepts_registered_implicit_response_type() {
+    let service = build_test_service(
+        Arc::new(LegacyClientRepository),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    let mut request = params("openid profile");
+    request.response_type = "id_token token".to_owned();
+    request.nonce = Some("nonce".to_owned());
+
+    assert!(service.validate_request(request).await.is_ok());
 }
 
 #[tokio::test]

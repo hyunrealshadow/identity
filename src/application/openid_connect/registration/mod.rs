@@ -349,47 +349,57 @@ impl DynamicClientRegistrationService {
             tos_uri: request.tos_uri.clone(),
             sector_identifier_uri: request.sector_identifier_uri.clone(),
             subject_type,
-            id_token_signed_response_alg: parse_metadata_value(
+            id_token_signed_response_algs: parse_metadata_value(
                 "id_token_signed_response_alg",
                 request.id_token_signed_response_alg.as_deref(),
-            )?,
-            id_token_encrypted_response_alg: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            id_token_encrypted_response_algs: parse_metadata_value(
                 "id_token_encrypted_response_alg",
                 request.id_token_encrypted_response_alg.as_deref(),
-            )?,
-            id_token_encrypted_response_enc: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            id_token_encrypted_response_encs: parse_metadata_value(
                 "id_token_encrypted_response_enc",
                 request.id_token_encrypted_response_enc.as_deref(),
-            )?,
-            userinfo_signed_response_alg: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            userinfo_signed_response_algs: parse_metadata_value(
                 "userinfo_signed_response_alg",
                 request.userinfo_signed_response_alg.as_deref(),
-            )?,
-            userinfo_encrypted_response_alg: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            userinfo_encrypted_response_algs: parse_metadata_value(
                 "userinfo_encrypted_response_alg",
                 request.userinfo_encrypted_response_alg.as_deref(),
-            )?,
-            userinfo_encrypted_response_enc: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            userinfo_encrypted_response_encs: parse_metadata_value(
                 "userinfo_encrypted_response_enc",
                 request.userinfo_encrypted_response_enc.as_deref(),
-            )?,
-            request_object_signing_alg: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            request_object_signing_algs: parse_metadata_value(
                 "request_object_signing_alg",
                 request.request_object_signing_alg.as_deref(),
-            )?,
-            request_object_encryption_alg: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            request_object_encryption_algs: parse_metadata_value(
                 "request_object_encryption_alg",
                 request.request_object_encryption_alg.as_deref(),
-            )?,
-            request_object_encryption_enc: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            request_object_encryption_encs: parse_metadata_value(
                 "request_object_encryption_enc",
                 request.request_object_encryption_enc.as_deref(),
-            )?,
-            token_endpoint_auth_method: Some(token_auth_method),
-            token_endpoint_auth_signing_alg: parse_metadata_value(
+            )?
+            .map(|value| vec![value]),
+            token_endpoint_auth_methods: Some(vec![token_auth_method]),
+            token_endpoint_auth_signing_algs: parse_metadata_value(
                 "token_endpoint_auth_signing_alg",
                 request.token_endpoint_auth_signing_alg.as_deref(),
-            )?,
+            )?
+            .map(|value| vec![value]),
             default_max_age: request.default_max_age,
             require_auth_time: request.require_auth_time,
             default_acr_values: request.default_acr_values.clone(),
@@ -397,7 +407,6 @@ impl DynamicClientRegistrationService {
             request_uris: request.request_uris.clone(),
             settings: OpenIdConnectClientSettings {
                 skip_consent: default_skip_consent(),
-                allow_public_client_flow: public_client,
                 allow_nonce_without_pkce: false,
                 oauth_version: Default::default(),
                 cors_enabled: false,

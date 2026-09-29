@@ -1042,7 +1042,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
         let binding_oid = Uuid::new_v4();
         let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
         AuthorizeService::new(AuthorizeServiceDependencies {
-            client_repo: Arc::new(FoundClientRepository),
+            client_repo: Arc::new(LegacyClientRepository),
             credential_repo: Arc::new(empty_cred_repo()),
             client_authorization_repo: request_repo,
             login_repo: Arc::new(mock_login_repo()),
@@ -1107,7 +1107,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
         let binding_oid = Uuid::new_v4();
         let (key_repo, jwk_repo) = hybrid_key_repos(&private_key, key_oid, binding_oid);
         AuthorizeService::new(AuthorizeServiceDependencies {
-            client_repo: Arc::new(FoundClientRepository),
+            client_repo: Arc::new(LegacyClientRepository),
             credential_repo: Arc::new(empty_cred_repo()),
             client_authorization_repo: request_repo,
             login_repo: Arc::new(mock_login_repo()),

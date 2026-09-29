@@ -20,7 +20,7 @@ use crate::{
             device_code_digest,
         },
         key::{
-            JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
+            JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
             repository::KeyRepository,
         },
         openid_connect::{
@@ -39,6 +39,7 @@ pub struct AuthorizationCodeGrantParams {
     pub client_id: Option<String>,
     pub code_verifier: Option<String>,
     pub client_secret: Option<String>,
+    pub client_secret_basic: bool,
     pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
@@ -48,6 +49,7 @@ pub struct DeviceCodeGrantParams {
     pub device_code: String,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
+    pub client_secret_basic: bool,
     pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
@@ -59,6 +61,7 @@ pub struct RefreshTokenGrantParams {
     pub scope: Option<String>,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
+    pub client_secret_basic: bool,
     pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
 }

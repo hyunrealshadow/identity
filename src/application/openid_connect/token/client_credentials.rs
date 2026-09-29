@@ -18,31 +18,28 @@ impl TokenService {
             .authenticate_client_request(
                 &client_id,
                 params.client_secret.as_deref(),
+                params.client_secret_basic,
                 params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
             .await?;
-        let method = client
-            .metadata()
-            .token_endpoint_auth_method
-            .unwrap_or(TokenEndpointAuthMethod::ClientSecretBasic);
-        let valid_proof = match method {
-            TokenEndpointAuthMethod::ClientSecretBasic => {
-                params.client_secret_basic
-                    && params.client_secret.is_some()
-                    && params.client_assertion.is_none()
-            }
-            TokenEndpointAuthMethod::ClientSecretPost => {
-                !params.client_secret_basic
-                    && params.client_secret.is_some()
-                    && params.client_assertion.is_none()
-            }
-            TokenEndpointAuthMethod::ClientSecretJwt | TokenEndpointAuthMethod::PrivateKeyJwt => {
-                params.client_secret.is_none() && params.client_assertion.is_some()
-            }
-            TokenEndpointAuthMethod::None => false,
+        let methods = client.metadata();
+        let valid_proof = if params.client_assertion.is_some() {
+            params.client_secret.is_none()
+                && (methods
+                    .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::ClientSecretJwt)
+                    || methods
+                        .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::PrivateKeyJwt))
+        } else if params.client_secret.is_some() {
+            methods.allows_token_endpoint_auth_method(if params.client_secret_basic {
+                TokenEndpointAuthMethod::ClientSecretBasic
+            } else {
+                TokenEndpointAuthMethod::ClientSecretPost
+            })
+        } else {
+            false
         };
-        if !valid_proof || client.metadata().settings.allow_public_client_flow {
+        if !valid_proof {
             return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
         }
         if !client.allows_grant(GrantType::ClientCredentials) {
@@ -71,7 +68,7 @@ impl TokenService {
         let client_oid = client.client().oid;
         let issuer = self.provider_service.issuer()?;
         let configured_signing_key = self
-            .load_configured_signing_key(client.metadata().id_token_signed_response_alg)
+            .load_configured_signing_key(client.metadata().id_token_signed_response_algs.as_deref())
             .await?;
         let (key_id, private_key_pem, alg) = self
             .load_access_token_signing_key(&configured_signing_key)
@@ -85,6 +82,7 @@ impl TokenService {
                 None,
                 None,
                 None,
+                identity_domain::client_authorization::ClientAuthenticationMode::Confidential,
             )
             .await?;
         let access_token = self

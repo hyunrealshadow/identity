@@ -21,7 +21,7 @@ use crate::{
         auth::repository::LoginRepository,
         client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
         key::{
-            JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
+            JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
             repository::KeyRepository,
         },
         openid_connect::{

@@ -110,8 +110,6 @@ pub enum OAuthProtocolVersion {
 pub struct OpenIdConnectClientSettings {
     #[serde(default)]
     pub skip_consent: bool,
-    #[serde(default)]
-    pub allow_public_client_flow: bool,
     /// Explicitly trusted confidential OIDC clients may use a transaction-bound
     /// nonce instead of PKCE for authorization code injection protection.
     #[serde(default)]
@@ -193,6 +191,8 @@ pub struct OpenIdConnectClientPlatform {
 /// stored `None` (legacy rows and registrations that omitted the field) allows
 /// only the code flow. An explicitly registered empty list allows no grant.
 pub const DEFAULT_GRANT_TYPES: [GrantType; 1] = [GrantType::AuthorizationCode];
+pub const DEFAULT_TOKEN_ENDPOINT_AUTH_METHODS: [TokenEndpointAuthMethod; 1] =
+    [TokenEndpointAuthMethod::ClientSecretBasic];
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct OpenIdConnectClientMetadata {
@@ -210,17 +210,17 @@ pub struct OpenIdConnectClientMetadata {
     pub tos_uri: Option<Url>,
     pub sector_identifier_uri: Option<Url>,
     pub subject_type: Option<SubjectType>,
-    pub id_token_signed_response_alg: Option<JwsAlgorithm>,
-    pub id_token_encrypted_response_alg: Option<JwaEncryptionAlgorithm>,
-    pub id_token_encrypted_response_enc: Option<JweContentEncryption>,
-    pub userinfo_signed_response_alg: Option<JwsAlgorithm>,
-    pub userinfo_encrypted_response_alg: Option<JwaEncryptionAlgorithm>,
-    pub userinfo_encrypted_response_enc: Option<JweContentEncryption>,
-    pub request_object_signing_alg: Option<JwsAlgorithm>,
-    pub request_object_encryption_alg: Option<JwaEncryptionAlgorithm>,
-    pub request_object_encryption_enc: Option<JweContentEncryption>,
-    pub token_endpoint_auth_method: Option<TokenEndpointAuthMethod>,
-    pub token_endpoint_auth_signing_alg: Option<JwsAlgorithm>,
+    pub id_token_signed_response_algs: Option<Vec<JwsAlgorithm>>,
+    pub id_token_encrypted_response_algs: Option<Vec<JwaEncryptionAlgorithm>>,
+    pub id_token_encrypted_response_encs: Option<Vec<JweContentEncryption>>,
+    pub userinfo_signed_response_algs: Option<Vec<JwsAlgorithm>>,
+    pub userinfo_encrypted_response_algs: Option<Vec<JwaEncryptionAlgorithm>>,
+    pub userinfo_encrypted_response_encs: Option<Vec<JweContentEncryption>>,
+    pub request_object_signing_algs: Option<Vec<JwsAlgorithm>>,
+    pub request_object_encryption_algs: Option<Vec<JwaEncryptionAlgorithm>>,
+    pub request_object_encryption_encs: Option<Vec<JweContentEncryption>>,
+    pub token_endpoint_auth_methods: Option<Vec<TokenEndpointAuthMethod>>,
+    pub token_endpoint_auth_signing_algs: Option<Vec<JwsAlgorithm>>,
     pub default_max_age: Option<i32>,
     pub require_auth_time: Option<bool>,
     pub default_acr_values: Option<Vec<String>>,
@@ -241,6 +241,19 @@ impl OpenIdConnectClientMetadata {
     #[must_use]
     pub fn allows_grant(&self, grant: GrantType) -> bool {
         self.effective_grant_types().contains(&grant)
+    }
+
+    #[must_use]
+    pub fn effective_token_endpoint_auth_methods(&self) -> &[TokenEndpointAuthMethod] {
+        self.token_endpoint_auth_methods
+            .as_deref()
+            .unwrap_or(&DEFAULT_TOKEN_ENDPOINT_AUTH_METHODS)
+    }
+
+    #[must_use]
+    pub fn allows_token_endpoint_auth_method(&self, method: TokenEndpointAuthMethod) -> bool {
+        self.effective_token_endpoint_auth_methods()
+            .contains(&method)
     }
 }
 
@@ -503,7 +516,6 @@ mod tests {
     fn settings_roundtrips_include_scoped_claims_flag() {
         let settings = OpenIdConnectClientSettings {
             skip_consent: true,
-            allow_public_client_flow: false,
             include_scoped_claims_in_id_token: true,
             include_scoped_claims_in_access_token: true,
             ..OpenIdConnectClientSettings::default()
@@ -568,17 +580,17 @@ mod tests {
             tos_uri: None,
             sector_identifier_uri: None,
             subject_type: None,
-            id_token_signed_response_alg: None,
-            id_token_encrypted_response_alg: None,
-            id_token_encrypted_response_enc: None,
-            userinfo_signed_response_alg: None,
-            userinfo_encrypted_response_alg: None,
-            userinfo_encrypted_response_enc: None,
-            request_object_signing_alg: None,
-            request_object_encryption_alg: None,
-            request_object_encryption_enc: None,
-            token_endpoint_auth_method: None,
-            token_endpoint_auth_signing_alg: None,
+            id_token_signed_response_algs: None,
+            id_token_encrypted_response_algs: None,
+            id_token_encrypted_response_encs: None,
+            userinfo_signed_response_algs: None,
+            userinfo_encrypted_response_algs: None,
+            userinfo_encrypted_response_encs: None,
+            request_object_signing_algs: None,
+            request_object_encryption_algs: None,
+            request_object_encryption_encs: None,
+            token_endpoint_auth_methods: None,
+            token_endpoint_auth_signing_algs: None,
             default_max_age: None,
             require_auth_time: None,
             default_acr_values: None,
@@ -618,17 +630,17 @@ mod tests {
             tos_uri: None,
             sector_identifier_uri: None,
             subject_type: None,
-            id_token_signed_response_alg: None,
-            id_token_encrypted_response_alg: None,
-            userinfo_signed_response_alg: None,
-            userinfo_encrypted_response_alg: None,
-            userinfo_encrypted_response_enc: None,
-            id_token_encrypted_response_enc: None,
-            request_object_signing_alg: None,
-            request_object_encryption_alg: None,
-            request_object_encryption_enc: None,
-            token_endpoint_auth_method: None,
-            token_endpoint_auth_signing_alg: None,
+            id_token_signed_response_algs: None,
+            id_token_encrypted_response_algs: None,
+            userinfo_signed_response_algs: None,
+            userinfo_encrypted_response_algs: None,
+            userinfo_encrypted_response_encs: None,
+            id_token_encrypted_response_encs: None,
+            request_object_signing_algs: None,
+            request_object_encryption_algs: None,
+            request_object_encryption_encs: None,
+            token_endpoint_auth_methods: None,
+            token_endpoint_auth_signing_algs: None,
             default_max_age: None,
             require_auth_time: None,
             default_acr_values: None,
@@ -706,17 +718,17 @@ mod tests {
             tos_uri: None,
             sector_identifier_uri: None,
             subject_type: None,
-            id_token_signed_response_alg: None,
-            id_token_encrypted_response_alg: None,
-            id_token_encrypted_response_enc: None,
-            userinfo_signed_response_alg: None,
-            userinfo_encrypted_response_alg: None,
-            userinfo_encrypted_response_enc: None,
-            request_object_signing_alg: None,
-            request_object_encryption_alg: None,
-            request_object_encryption_enc: None,
-            token_endpoint_auth_method: None,
-            token_endpoint_auth_signing_alg: None,
+            id_token_signed_response_algs: None,
+            id_token_encrypted_response_algs: None,
+            id_token_encrypted_response_encs: None,
+            userinfo_signed_response_algs: None,
+            userinfo_encrypted_response_algs: None,
+            userinfo_encrypted_response_encs: None,
+            request_object_signing_algs: None,
+            request_object_encryption_algs: None,
+            request_object_encryption_encs: None,
+            token_endpoint_auth_methods: None,
+            token_endpoint_auth_signing_algs: None,
             default_max_age: None,
             require_auth_time: None,
             default_acr_values: None,

@@ -96,6 +96,10 @@ pub struct RefreshTokenData {
     /// not issued from a browser session.
     #[serde(default)]
     pub device_authorization_oid: Option<String>,
+    /// Bound to the authentication mode used when this token was issued.
+    /// Legacy records omit this field.
+    #[serde(default)]
+    pub client_authentication_mode: Option<ClientAuthenticationMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -116,6 +120,26 @@ pub struct AccessTokenData {
     /// token was not issued from a browser session.
     #[serde(default)]
     pub device_authorization_oid: Option<String>,
+    #[serde(default)]
+    pub client_authentication_mode: Option<ClientAuthenticationMode>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientAuthenticationMode {
+    Public,
+    Confidential,
+}
+
+impl ClientAuthenticationMode {
+    #[must_use]
+    pub const fn from_credentials(has_credentials: bool) -> Self {
+        if has_credentials {
+            Self::Confidential
+        } else {
+            Self::Public
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -284,6 +308,7 @@ mod tests {
             rotated_from: Some(uuid::Uuid::nil().to_string()),
             authorization_code_oid: None,
             device_authorization_oid: None,
+            client_authentication_mode: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();
@@ -311,6 +336,7 @@ mod tests {
             rotated_from: None,
             authorization_code_oid: None,
             device_authorization_oid: None,
+            client_authentication_mode: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();
@@ -328,6 +354,7 @@ mod tests {
             authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
             refresh_token_oid: None,
             device_authorization_oid: None,
+            client_authentication_mode: None,
         };
 
         let json = serde_json::to_string(&data).unwrap();

@@ -34,17 +34,17 @@ pub enum ClientOpenIdConnect {
     TosUri,
     SectorIdentifierUri,
     SubjectType,
-    IdTokenSignedResponseAlg,
-    IdTokenEncryptedResponseAlg,
-    IdTokenEncryptedResponseEnc,
-    UserinfoSignedResponseAlg,
-    UserinfoEncryptedResponseAlg,
-    UserinfoEncryptedResponseEnc,
-    RequestObjectSigningAlg,
-    RequestObjectEncryptionAlg,
-    RequestObjectEncryptionEnc,
-    TokenEndpointAuthMethod,
-    TokenEndpointAuthSigningAlg,
+    IdTokenSignedResponseAlgs,
+    IdTokenEncryptedResponseAlgs,
+    IdTokenEncryptedResponseEncs,
+    UserinfoSignedResponseAlgs,
+    UserinfoEncryptedResponseAlgs,
+    UserinfoEncryptedResponseEncs,
+    RequestObjectSigningAlgs,
+    RequestObjectEncryptionAlgs,
+    RequestObjectEncryptionEncs,
+    TokenEndpointAuthMethods,
+    TokenEndpointAuthSigningAlgs,
     DefaultMaxAge,
     RequireAuthTime,
     DefaultAcrValues,
@@ -85,26 +85,38 @@ impl MigrationTrait for Migration {
                     .col(string_null(ClientOpenIdConnect::TosUri))
                     .col(string_null(ClientOpenIdConnect::SectorIdentifierUri))
                     .col(string_null(ClientOpenIdConnect::SubjectType))
-                    .col(string_null(ClientOpenIdConnect::IdTokenSignedResponseAlg))
-                    .col(string_null(
-                        ClientOpenIdConnect::IdTokenEncryptedResponseAlg,
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::IdTokenSignedResponseAlgs,
                     ))
-                    .col(string_null(
-                        ClientOpenIdConnect::IdTokenEncryptedResponseEnc,
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::IdTokenEncryptedResponseAlgs,
                     ))
-                    .col(string_null(ClientOpenIdConnect::UserinfoSignedResponseAlg))
-                    .col(string_null(
-                        ClientOpenIdConnect::UserinfoEncryptedResponseAlg,
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::IdTokenEncryptedResponseEncs,
                     ))
-                    .col(string_null(
-                        ClientOpenIdConnect::UserinfoEncryptedResponseEnc,
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::UserinfoSignedResponseAlgs,
                     ))
-                    .col(string_null(ClientOpenIdConnect::RequestObjectSigningAlg))
-                    .col(string_null(ClientOpenIdConnect::RequestObjectEncryptionAlg))
-                    .col(string_null(ClientOpenIdConnect::RequestObjectEncryptionEnc))
-                    .col(string_null(ClientOpenIdConnect::TokenEndpointAuthMethod))
-                    .col(string_null(
-                        ClientOpenIdConnect::TokenEndpointAuthSigningAlg,
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::UserinfoEncryptedResponseAlgs,
+                    ))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::UserinfoEncryptedResponseEncs,
+                    ))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::RequestObjectSigningAlgs,
+                    ))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::RequestObjectEncryptionAlgs,
+                    ))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::RequestObjectEncryptionEncs,
+                    ))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::TokenEndpointAuthMethods,
+                    ))
+                    .col(json_binary_null(
+                        ClientOpenIdConnect::TokenEndpointAuthSigningAlgs,
                     ))
                     .col(integer_null(ClientOpenIdConnect::DefaultMaxAge))
                     .col(boolean_null(ClientOpenIdConnect::RequireAuthTime))

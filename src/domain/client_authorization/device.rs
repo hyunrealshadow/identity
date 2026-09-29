@@ -124,6 +124,9 @@ pub struct DeviceAuthorizationRequestData {
     /// Relation created by the approval, mirrored from `approval`.
     #[serde(default)]
     pub device_authorization_oid: Option<Uuid>,
+    /// The mode established when the device request was created.
+    #[serde(default)]
+    pub client_authentication_mode: Option<super::model::ClientAuthenticationMode>,
 }
 
 /// Long-lived grant established by approving a device request.
@@ -247,6 +250,7 @@ mod tests {
             denied_by_user_oid: None,
             decided_at: None,
             device_authorization_oid: None,
+            client_authentication_mode: None,
         }
     }
 

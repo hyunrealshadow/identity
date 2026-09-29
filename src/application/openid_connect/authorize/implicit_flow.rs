@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 struct CreateFrontChannelAccessTokenInput<'a> {
     client_id: Uuid,
+    client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     user_oid: Uuid,
     session_oid: SessionOid,
     protected_session_id: &'a str,
@@ -20,6 +21,18 @@ struct CreateFrontChannelAccessTokenInput<'a> {
     auth_time: i64,
     acr: Option<&'a str>,
     amr: &'a [String],
+}
+
+fn front_channel_token_mode(
+    client: &OpenIdConnectClient,
+) -> identity_domain::client_authorization::ClientAuthenticationMode {
+    if client.metadata().allows_token_endpoint_auth_method(
+        identity_domain::openid_connect::TokenEndpointAuthMethod::None,
+    ) {
+        identity_domain::client_authorization::ClientAuthenticationMode::Public
+    } else {
+        identity_domain::client_authorization::ClientAuthenticationMode::Confidential
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -101,6 +114,7 @@ impl AuthorizeService {
                 Some(
                     self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
                         client_id,
+                        client_authentication_mode: front_channel_token_mode(&client),
                         user_oid,
                         session_oid,
                         protected_session_id,
@@ -125,7 +139,9 @@ impl AuthorizeService {
         };
 
         let (id_key_id, id_key_pem, id_token_alg) = self
-            .load_id_token_signing_key_impl(client.metadata().id_token_signed_response_alg)
+            .load_id_token_signing_key_impl(
+                client.metadata().id_token_signed_response_algs.as_deref(),
+            )
             .await?;
         let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: &id_key_id,
@@ -146,17 +162,9 @@ impl AuthorizeService {
             claims_request: claims.as_ref(),
         })?;
 
-        let id_token = match client.metadata().id_token_encrypted_response_alg {
-            Some(alg) => {
-                let enc = client
-                    .metadata()
-                    .id_token_encrypted_response_enc
-                    .unwrap_or(JweContentEncryption::A128CbcHs256);
-                self.encrypt_id_token(&signed_id_token, &client, alg, enc)
-                    .await?
-            }
-            None => signed_id_token,
-        };
+        let id_token = self
+            .encrypt_id_token_for_client(&signed_id_token, &client)
+            .await?;
 
         let mut fragment = url::form_urlencoded::Serializer::new(String::new());
         fragment.append_pair("id_token", &id_token);
@@ -244,6 +252,7 @@ impl AuthorizeService {
             Some(
                 self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
                     client_id,
+                    client_authentication_mode: front_channel_token_mode(&client),
                     user_oid,
                     session_oid,
                     protected_session_id,
@@ -269,7 +278,9 @@ impl AuthorizeService {
 
         let id_token = if response_type.includes_id_token() {
             let (id_key_id, id_key_pem, id_token_alg) = self
-                .load_id_token_signing_key_impl(client.metadata().id_token_signed_response_alg)
+                .load_id_token_signing_key_impl(
+                    client.metadata().id_token_signed_response_algs.as_deref(),
+                )
                 .await?;
             let nonce = request
                 .nonce
@@ -303,17 +314,10 @@ impl AuthorizeService {
                 scope: &scope,
                 claims_request: claims.as_ref(),
             })?;
-            Some(match client.metadata().id_token_encrypted_response_alg {
-                Some(alg) => {
-                    let enc = client
-                        .metadata()
-                        .id_token_encrypted_response_enc
-                        .unwrap_or(JweContentEncryption::A128CbcHs256);
-                    self.encrypt_id_token(&signed_id_token, &client, alg, enc)
-                        .await?
-                }
-                None => signed_id_token,
-            })
+            Some(
+                self.encrypt_id_token_for_client(&signed_id_token, &client)
+                    .await?,
+            )
         } else {
             None
         };
@@ -360,6 +364,7 @@ impl AuthorizeService {
                             .map(|oid| oid.to_string()),
                         refresh_token_oid: None,
                         device_authorization_oid: None,
+                        client_authentication_mode: Some(input.client_authentication_mode),
                     },
                 ),
                 chrono::Utc::now() + chrono::Duration::hours(1),

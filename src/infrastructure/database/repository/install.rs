@@ -170,12 +170,11 @@ impl InstallRepository for InstallRepositoryImpl {
                 GrantType::RefreshToken.as_str()
             ]))),
             subject_type: Set(Some(SubjectType::Public.to_string())),
-            token_endpoint_auth_method: Set(Some(
-                TokenEndpointAuthMethod::ClientSecretBasic.to_string(),
-            )),
+            token_endpoint_auth_methods: Set(Some(serde_json::json!([
+                TokenEndpointAuthMethod::ClientSecretBasic.to_string()
+            ]))),
             settings: Set(serde_json::json!({
                 "skip_consent": true,
-                "allow_public_client_flow": false,
                 "include_scoped_claims_in_id_token": false,
                 "include_scoped_claims_in_access_token": false
             })),

@@ -102,7 +102,7 @@ fn device_client(grant_types: Vec<GrantType>, public: bool) -> OpenIdConnectClie
     let mut metadata = test_metadata(None, public.then_some("none"));
     metadata.grant_types = Some(grant_types);
     if public {
-        metadata.token_endpoint_auth_method = Some(TokenEndpointAuthMethod::None);
+        metadata.token_endpoint_auth_methods = Some(vec![TokenEndpointAuthMethod::None]);
     }
 
     OpenIdConnectClient::new(
@@ -238,6 +238,7 @@ fn params(client_secret: Option<&str>, scope: Option<&str>) -> DeviceAuthorizati
     DeviceAuthorizationParams {
         client_id: Some(CLIENT_ID.to_string()),
         client_secret: client_secret.map(str::to_owned),
+        client_secret_basic: true,
         client_assertion_type: None,
         client_assertion: None,
         scope: scope.map(str::to_owned),
@@ -673,6 +674,7 @@ fn pending_record(user_code: &str, scope: &str, expires_at: DateTime<Utc>) -> Cl
             denied_by_user_oid: None,
             decided_at: None,
             device_authorization_oid: None,
+            client_authentication_mode: None,
         },
         expires_at,
     )

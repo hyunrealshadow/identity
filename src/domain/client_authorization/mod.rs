@@ -9,9 +9,10 @@ pub use device::{
     format_user_code, normalize_user_code,
 };
 pub use model::{
-    AccessTokenData, AuthorizationCodeData, AuthorizationInteractionState, ClientAuthorization,
-    ClientAuthorizationData, ClientAuthorizationOid, ClientAuthorizationType, ConsentState,
-    RefreshTokenData, RegistrationAccessTokenData, SelectionSource, StoredAuthorizationRequest,
+    AccessTokenData, AuthorizationCodeData, AuthorizationInteractionState,
+    ClientAuthenticationMode, ClientAuthorization, ClientAuthorizationData, ClientAuthorizationOid,
+    ClientAuthorizationType, ConsentState, RefreshTokenData, RegistrationAccessTokenData,
+    SelectionSource, StoredAuthorizationRequest,
 };
 pub use repository::{
     ClientAuthorizationRepository, ClientAuthorizationRepositoryError,

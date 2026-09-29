@@ -252,6 +252,7 @@ async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
             authorization_code_oid: None,
             refresh_token_oid: None,
             device_authorization_oid: None,
+            client_authentication_mode: None,
         })
         .unwrap(),
         expires_at: (now + Duration::hours(1)).into(),

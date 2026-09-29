@@ -174,6 +174,7 @@ pub async fn device_authorization(
         .authorize(DeviceAuthorizationParams {
             client_id,
             client_secret,
+            client_secret_basic: basic_auth.is_some(),
             client_assertion_type,
             client_assertion: form.client_assertion,
             scope: form.scope,

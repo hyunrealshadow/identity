@@ -45,6 +45,7 @@ pub const DEVICE_VERIFICATION_PATH: &str = "device";
 pub struct DeviceAuthorizationParams {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
+    pub client_secret_basic: bool,
     pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
     pub client_assertion: Option<String>,
     pub scope: Option<String>,
@@ -169,10 +170,16 @@ impl DeviceAuthorizationService {
             .authenticate_client_request(
                 &client_id,
                 params.client_secret.as_deref(),
+                params.client_secret_basic,
                 params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
             .await?;
+
+        let client_authentication_mode =
+            identity_domain::client_authorization::ClientAuthenticationMode::from_credentials(
+                params.client_secret.is_some() || params.client_assertion.is_some(),
+            );
 
         self.check_client_grant(&client)?;
         let scope = self.resolve_scope(&client, params.scope.as_deref())?;
@@ -188,6 +195,7 @@ impl DeviceAuthorizationService {
                 &device_code,
                 settings.polling_interval_seconds,
                 expires_at,
+                client_authentication_mode,
             )
             .await?;
 
@@ -543,6 +551,7 @@ impl DeviceAuthorizationService {
         device_code: &str,
         interval_seconds: i64,
         expires_at: DateTime<Utc>,
+        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     ) -> Result<DeviceAuthorizationRequestData, AppError> {
         for _ in 0..USER_CODE_ATTEMPTS {
             let user_code = generate_user_code();
@@ -560,6 +569,7 @@ impl DeviceAuthorizationService {
                 denied_by_user_oid: None,
                 decided_at: None,
                 device_authorization_oid: None,
+                client_authentication_mode: Some(client_authentication_mode),
             };
 
             match self

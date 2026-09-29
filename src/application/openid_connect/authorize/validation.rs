@@ -209,27 +209,38 @@ impl AuthorizeService {
             }
         }
 
-        if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
-            && client.metadata().settings.allow_public_client_flow
-        {
-            if response_type != ResponseType::Code {
-                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", response_type.to_string()));
-            }
+        let public_only = client.metadata().effective_token_endpoint_auth_methods()
+            == [TokenEndpointAuthMethod::None];
+        if public_only && response_type.includes_code() {
             if !has_code_challenge {
                 return Err(
                     AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
                         .with_param("field", "code_challenge"),
                 );
             }
+            if code_challenge_method != Some(CodeChallengeMethod::S256) {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
+                        .with_param("code_challenge_method", "S256 required"),
+                );
+            }
+        }
+
+        if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+            && response_type.includes_access_token()
+        {
+            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                .with_param("response_type", response_type.to_string()));
         }
         if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
             && response_type.includes_code()
             && !has_code_challenge
             && !(scope.contains_openid()
-                && !client.metadata().settings.allow_public_client_flow
-                && client.metadata().token_endpoint_auth_method
-                    != Some(TokenEndpointAuthMethod::None)
+                && client
+                    .metadata()
+                    .effective_token_endpoint_auth_methods()
+                    .iter()
+                    .any(|method| *method != TokenEndpointAuthMethod::None)
                 && client.metadata().settings.allow_nonce_without_pkce
                 && params
                     .nonce

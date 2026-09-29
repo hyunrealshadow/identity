@@ -139,37 +139,59 @@ pub(super) fn response_from_client(
         sector_identifier_uri: metadata.sector_identifier_uri.clone(),
         subject_type: metadata.subject_type.map(|value| value.to_string()),
         id_token_signed_response_alg: metadata
-            .id_token_signed_response_alg
+            .id_token_signed_response_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         id_token_encrypted_response_alg: metadata
-            .id_token_encrypted_response_alg
+            .id_token_encrypted_response_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         id_token_encrypted_response_enc: metadata
-            .id_token_encrypted_response_enc
+            .id_token_encrypted_response_encs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         userinfo_signed_response_alg: metadata
-            .userinfo_signed_response_alg
+            .userinfo_signed_response_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         userinfo_encrypted_response_alg: metadata
-            .userinfo_encrypted_response_alg
+            .userinfo_encrypted_response_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         userinfo_encrypted_response_enc: metadata
-            .userinfo_encrypted_response_enc
+            .userinfo_encrypted_response_encs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         request_object_signing_alg: metadata
-            .request_object_signing_alg
+            .request_object_signing_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         request_object_encryption_alg: metadata
-            .request_object_encryption_alg
+            .request_object_encryption_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         request_object_encryption_enc: metadata
-            .request_object_encryption_enc
+            .request_object_encryption_encs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         token_endpoint_auth_method: metadata
-            .token_endpoint_auth_method
+            .token_endpoint_auth_methods
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         token_endpoint_auth_signing_alg: metadata
-            .token_endpoint_auth_signing_alg
+            .token_endpoint_auth_signing_algs
+            .as_ref()
+            .and_then(|values| values.first())
             .map(|value| value.to_string()),
         jwks: None,
         jwks_uri: None,

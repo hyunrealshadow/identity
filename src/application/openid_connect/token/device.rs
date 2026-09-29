@@ -44,6 +44,10 @@ impl TokenService {
         &self,
         params: DeviceCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
+        let client_authentication_mode =
+            identity_domain::client_authorization::ClientAuthenticationMode::from_credentials(
+                params.client_secret.is_some() || params.client_assertion.is_some(),
+            );
         let client_id = resolve_client_id(
             params.client_id,
             params.client_assertion_type,
@@ -54,6 +58,7 @@ impl TokenService {
             .authenticate_client(
                 &client_id,
                 params.client_secret.as_deref(),
+                params.client_secret_basic,
                 params.client_assertion_type,
                 params.client_assertion.as_deref(),
             )
@@ -99,6 +104,20 @@ impl TokenService {
             ClientAuthorizationData::DeviceAuthorizationRequest(data) => data.clone(),
             _ => return Err(AppError::from_code(TokenErrorCode::DeviceCodeNotFound)),
         };
+        let issued_mode = data.client_authentication_mode.unwrap_or_else(|| {
+            if client.metadata().effective_token_endpoint_auth_methods()
+                == [identity_domain::openid_connect::TokenEndpointAuthMethod::None]
+            {
+                identity_domain::client_authorization::ClientAuthenticationMode::Public
+            } else {
+                identity_domain::client_authorization::ClientAuthenticationMode::Confidential
+            }
+        });
+        if issued_mode != client_authentication_mode {
+            return Err(AppError::from_code(
+                TokenErrorCode::DeviceCodeClientMismatch,
+            ));
+        }
         let now = chrono::Utc::now();
         if record.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::DeviceCodeExpired));
@@ -166,6 +185,7 @@ impl TokenService {
             record.oid,
             device_authorization_oid,
             now,
+            issued_mode,
         )
         .await
     }
@@ -241,11 +261,12 @@ impl TokenService {
         request_oid: Uuid,
         device_authorization_oid: Uuid,
         now: chrono::DateTime<chrono::Utc>,
+        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     ) -> Result<TokenResponse, AppError> {
         let issuer = self.provider_service.issuer()?;
         let scope_string = scope.to_scope_string();
         let configured_signing_key = self
-            .load_configured_signing_key(client.metadata().id_token_signed_response_alg)
+            .load_configured_signing_key(client.metadata().id_token_signed_response_algs.as_deref())
             .await?;
         let (signing_key_id, signing_key_pem, signing_alg) = self
             .load_access_token_signing_key(&configured_signing_key)
@@ -299,16 +320,7 @@ impl TokenService {
                     protected_session_id: None,
                 })
                 .await?;
-            Some(match client.metadata().id_token_encrypted_response_alg {
-                Some(alg) => {
-                    let enc = client
-                        .metadata()
-                        .id_token_encrypted_response_enc
-                        .unwrap_or(JweContentEncryption::A128CbcHs256);
-                    self.encrypt_token(&signed, client, alg, enc).await?
-                }
-                None => signed,
-            })
+            Some(self.encrypt_token_for_client(&signed, client).await?)
         } else {
             None
         };
@@ -341,6 +353,7 @@ impl TokenService {
                 None,
                 None,
                 Some(device_authorization_oid),
+                client_authentication_mode,
             ),
             expires_at: now + chrono::Duration::hours(1),
         }];
@@ -358,6 +371,7 @@ impl TokenService {
                     rotated_from: None,
                     authorization_code_oid: None,
                     device_authorization_oid: Some(device_authorization_oid.to_string()),
+                    client_authentication_mode: Some(client_authentication_mode),
                 }),
                 expires_at: now + chrono::Duration::days(30),
             });

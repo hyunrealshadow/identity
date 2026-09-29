@@ -10,6 +10,7 @@ pub(in crate::openid_connect) struct DefaultsClientRepository;
 pub(in crate::openid_connect) struct LegacyClientRepository;
 
 pub(in crate::openid_connect) struct PublicClientRepository;
+pub(in crate::openid_connect) struct OAuth20PublicClientRepository;
 pub(in crate::openid_connect) struct TrustedNonceClientRepository;
 pub(in crate::openid_connect) struct TrustedNoncePublicClientRepository;
 
@@ -131,8 +132,9 @@ impl OpenIdConnectClientRepository for TrustedNoncePublicClientRepository {
         oid: Uuid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
-        metadata.token_endpoint_auth_method =
-            Some(identity_domain::openid_connect::TokenEndpointAuthMethod::None);
+        metadata.token_endpoint_auth_methods = Some(vec![
+            identity_domain::openid_connect::TokenEndpointAuthMethod::None,
+        ]);
         metadata.settings.allow_nonce_without_pkce = true;
         metadata.settings.oauth_version =
             identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
@@ -150,11 +152,28 @@ impl OpenIdConnectClientRepository for PublicClientRepository {
         oid: Uuid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
-        metadata.token_endpoint_auth_method =
-            Some(identity_domain::openid_connect::TokenEndpointAuthMethod::None);
-        metadata.settings.allow_public_client_flow = true;
+        metadata.token_endpoint_auth_methods = Some(vec![
+            identity_domain::openid_connect::TokenEndpointAuthMethod::None,
+        ]);
         metadata.settings.oauth_version =
             identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
+        Ok(Some(
+            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
+                .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for OAuth20PublicClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: Uuid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        let mut metadata = test_metadata(None, None);
+        metadata.token_endpoint_auth_methods = Some(vec![
+            identity_domain::openid_connect::TokenEndpointAuthMethod::None,
+        ]);
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),
