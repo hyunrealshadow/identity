@@ -6,7 +6,7 @@ use crate::domain::key::PublicJwk;
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct DynamicClientRegistrationRequest {
     #[serde(default, deserialize_with = "deserialize_redirect_uris")]
-    pub redirect_uris: Vec<Url>,
+    pub redirect_uris: Vec<String>,
     pub response_types: Option<Vec<String>>,
     pub grant_types: Option<Vec<String>>,
     pub application_type: Option<String>,
@@ -44,23 +44,15 @@ pub struct DynamicClientRegistrationRequest {
     pub scope: Option<String>,
 }
 
-fn deserialize_redirect_uris<'de, D>(deserializer: D) -> Result<Vec<Url>, D::Error>
+fn deserialize_redirect_uris<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let raw_uris = Vec::<String>::deserialize(deserializer)?;
-    raw_uris
-        .into_iter()
-        .map(|raw| {
-            let parsed = Url::parse(&raw).map_err(serde::de::Error::custom)?;
-            if parsed.as_str() != raw {
-                return Err(serde::de::Error::custom(
-                    "redirect_uri must use its exact canonical spelling",
-                ));
-            }
-            Ok(parsed)
-        })
-        .collect()
+    for raw in &raw_uris {
+        Url::parse(raw).map_err(serde::de::Error::custom)?;
+    }
+    Ok(raw_uris)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,10 +65,15 @@ mod redirect_uri_tests {
     use super::DynamicClientRegistrationRequest;
 
     #[test]
-    fn registration_rejects_redirect_uri_spellings_that_url_would_normalize() {
+    fn registration_preserves_redirect_uri_spelling() {
         let raw = serde_json::json!({
-            "redirect_uris": ["https://RP.example.com:443/callback"]
+            "redirect_uris": ["http://localhost:53000", "https://RP.example.com:443/callback"]
         });
-        assert!(serde_json::from_value::<DynamicClientRegistrationRequest>(raw).is_err());
+        let request = serde_json::from_value::<DynamicClientRegistrationRequest>(raw).unwrap();
+        assert_eq!(request.redirect_uris[0], "http://localhost:53000");
+        assert_eq!(
+            request.redirect_uris[1],
+            "https://RP.example.com:443/callback"
+        );
     }
 }

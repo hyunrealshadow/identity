@@ -115,7 +115,7 @@ fn registered_client_with_built_in(client_oid: ClientOid, built_in: bool) -> Ope
         },
         vec![OpenIdConnectClientPlatform {
             platform: OpenIdConnectClientPlatformType::Web,
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
         }],
         vec!["openid".to_owned()],
     )
@@ -135,7 +135,7 @@ async fn register_rejects_requests_when_dynamic_registration_is_disabled() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 ..DynamicClientRegistrationRequest::default()
             },
             &issuer(),
@@ -185,10 +185,14 @@ async fn dynamic_registration_does_not_expose_internal_oauth_version() {
 async fn registration_only_allows_http_for_localhost_or_native_loopback() {
     for (application_type, redirect_uri, allowed) in [
         ("web", "http://localhost:3000/callback", true),
+        ("web", "http://localhost:53000", true),
+        ("web", "http://app.localhost:3000/callback", false),
         ("web", "http://rp.example.com/callback", false),
         ("web", "http://localhost.evil.test:3000/callback", false),
         ("web", "http://127.0.0.1:3000/callback", false),
         ("native", "http://127.0.0.1:3000/callback", true),
+        ("native", "http://localhost:53000/callback", true),
+        ("native", "http://app.localhost:3000/callback", false),
     ] {
         let captured = Arc::new(std::sync::Mutex::new(None));
         let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -199,13 +203,21 @@ async fn registration_only_allows_http_for_localhost_or_native_loopback() {
             .register(
                 DynamicClientRegistrationRequest {
                     application_type: Some(application_type.to_owned()),
-                    redirect_uris: vec![Url::parse(redirect_uri).unwrap()],
+                    redirect_uris: vec![redirect_uri.to_owned()],
                     ..DynamicClientRegistrationRequest::default()
                 },
                 &issuer(),
             )
             .await;
         assert_eq!(result.is_ok(), allowed, "{redirect_uri}");
+        if allowed {
+            let response = result.unwrap();
+            assert_eq!(response.redirect_uris[0], redirect_uri);
+            assert_eq!(
+                captured.lock().unwrap().as_ref().unwrap().platforms[0].redirect_uris[0],
+                redirect_uri
+            );
+        }
         assert_eq!(
             captured.lock().unwrap().is_some(),
             allowed,
@@ -227,7 +239,7 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 response_types: Some(vec!["code".to_owned()]),
                 grant_types: Some(vec![
                     "authorization_code".to_owned(),
@@ -340,7 +352,7 @@ async fn register_defaults_to_openid_scope_when_scope_is_omitted() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 ..DynamicClientRegistrationRequest::default()
             },
             &issuer(),
@@ -384,7 +396,7 @@ async fn register_rejects_non_https_initiate_login_uri() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 initiate_login_uri: Some(Url::parse("http://rp.example.com/login").unwrap()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -408,7 +420,7 @@ async fn register_accepts_supported_request_object_encryption_metadata() {
     service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 request_object_encryption_alg: Some("RSA-OAEP-256".to_owned()),
                 request_object_encryption_enc: Some("A256GCM".to_owned()),
                 ..DynamicClientRegistrationRequest::default()
@@ -443,18 +455,18 @@ async fn register_accepts_supported_request_object_encryption_metadata() {
 async fn register_rejects_invalid_request_object_encryption_metadata() {
     for request in [
         DynamicClientRegistrationRequest {
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             request_object_encryption_alg: Some("RSA1_5".to_owned()),
             ..DynamicClientRegistrationRequest::default()
         },
         DynamicClientRegistrationRequest {
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             request_object_encryption_alg: Some("RSA-OAEP".to_owned()),
             request_object_encryption_enc: Some("unsupported".to_owned()),
             ..DynamicClientRegistrationRequest::default()
         },
         DynamicClientRegistrationRequest {
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             request_object_encryption_enc: Some("A128GCM".to_owned()),
             ..DynamicClientRegistrationRequest::default()
         },
@@ -483,7 +495,7 @@ async fn register_rejects_invalid_request_object_signing_algorithm() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 request_object_signing_alg: Some("unsupported".to_owned()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -509,7 +521,7 @@ async fn register_rejects_unsafe_sector_identifier_uri_before_fetch() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 sector_identifier_uri: Some(Url::parse("https://localhost/sector.json").unwrap()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -535,7 +547,7 @@ async fn register_rejects_unsafe_jwks_uri_before_fetch() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 jwks_uri: Some(Url::parse("https://127.0.0.1/jwks.json").unwrap()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -614,7 +626,7 @@ async fn register_allows_public_client_none_auth() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 token_endpoint_auth_method: Some("none".to_owned()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -651,7 +663,7 @@ async fn register_allows_none_id_token_algorithm_with_feature() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 id_token_signed_response_alg: Some("none".to_owned()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -680,7 +692,7 @@ async fn register_rejects_none_id_token_signing_alg() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 id_token_signed_response_alg: Some("none".to_owned()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -698,17 +710,17 @@ async fn register_rejects_none_id_token_signing_alg() {
 async fn register_rejects_none_in_other_client_algorithm_metadata() {
     for request in [
         DynamicClientRegistrationRequest {
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             userinfo_signed_response_alg: Some("none".to_owned()),
             ..DynamicClientRegistrationRequest::default()
         },
         DynamicClientRegistrationRequest {
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             token_endpoint_auth_signing_alg: Some("none".to_owned()),
             ..DynamicClientRegistrationRequest::default()
         },
         DynamicClientRegistrationRequest {
-            redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             id_token_encrypted_response_alg: Some("none".to_owned()),
             ..DynamicClientRegistrationRequest::default()
         },
@@ -747,7 +759,7 @@ async fn register_rejects_jwk_with_none_algorithm() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 jwks: Some(super::DynamicClientJwks { keys: vec![jwk] }),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -771,7 +783,7 @@ async fn register_allows_none_request_object_signing_algorithm() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 request_object_signing_alg: Some("none".to_owned()),
                 ..DynamicClientRegistrationRequest::default()
             },
@@ -786,7 +798,7 @@ async fn register_allows_none_request_object_signing_algorithm() {
 #[test]
 fn sector_identifier_uris_must_include_registered_redirects() {
     let sector_redirect_uris = vec!["https://rp.example.com/allowed-callback".to_owned()];
-    let redirect_uris = vec![Url::parse("https://rp.example.com/callback").unwrap()];
+    let redirect_uris = vec!["https://rp.example.com/callback".to_owned()];
 
     assert!(
         !super::validation::sector_redirect_uris_include_registered_redirects(
@@ -824,7 +836,7 @@ async fn register_defaults_to_code_response_and_authorization_code_grant() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 ..DynamicClientRegistrationRequest::default()
             },
             &issuer(),
@@ -858,7 +870,7 @@ async fn register_keeps_an_explicitly_empty_grant_list_as_no_grants() {
     let response = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 response_types: Some(vec![]),
                 grant_types: Some(vec![]),
                 ..DynamicClientRegistrationRequest::default()
@@ -881,7 +893,7 @@ async fn register_rejects_response_type_without_its_grant() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 response_types: Some(vec!["id_token".to_owned()]),
                 grant_types: Some(vec!["authorization_code".to_owned()]),
                 ..DynamicClientRegistrationRequest::default()
@@ -901,7 +913,7 @@ async fn register_rejects_hybrid_response_type_without_implicit_grant() {
     let error = service
         .register(
             DynamicClientRegistrationRequest {
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
                 response_types: Some(vec!["code id_token".to_owned()]),
                 grant_types: Some(vec!["authorization_code".to_owned()]),
                 ..DynamicClientRegistrationRequest::default()

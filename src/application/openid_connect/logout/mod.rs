@@ -845,7 +845,7 @@ mod tests {
             },
             vec![OpenIdConnectClientPlatform {
                 platform: OpenIdConnectClientPlatformType::Web,
-                redirect_uris: vec![Url::parse("https://rp.example.com/callback").unwrap()],
+                redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
             }],
             vec!["openid".to_owned()],
         )

@@ -198,7 +198,7 @@ pub(super) fn validate_initiate_login_uri(value: Option<&Url>) -> Result<(), App
 
 pub(super) async fn validate_sector_identifier_uri(
     sector_identifier_uri: Option<&Url>,
-    redirect_uris: &[Url],
+    redirect_uris: &[String],
 ) -> Result<(), AppError> {
     let Some(sector_identifier_uri) = sector_identifier_uri else {
         return Ok(());
@@ -241,13 +241,11 @@ async fn fetch_sector_redirect_uris(sector_identifier_uri: &Url) -> Result<Vec<S
 
 pub(crate) fn sector_redirect_uris_include_registered_redirects(
     sector_redirect_uris: &[String],
-    redirect_uris: &[Url],
+    redirect_uris: &[String],
 ) -> bool {
-    redirect_uris.iter().all(|redirect_uri| {
-        sector_redirect_uris
-            .iter()
-            .any(|uri| uri == redirect_uri.as_str())
-    })
+    redirect_uris
+        .iter()
+        .all(|redirect_uri| sector_redirect_uris.iter().any(|uri| uri == redirect_uri))
 }
 
 fn default_scopes() -> Vec<String> {

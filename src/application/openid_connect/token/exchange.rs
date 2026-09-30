@@ -177,7 +177,7 @@ impl TokenService {
                             || (data.scope.split_whitespace().any(|scope| scope == "openid")
                                 && authenticated_client
                                     .single_redirect_uri()
-                                    .is_some_and(|uri| uri.as_str() == data.redirect_uri))
+                                    .is_some_and(|uri| uri == data.redirect_uri))
                     }
                     OAuthProtocolVersion::V2_1 => {
                         data.code_challenge.is_some() && !oidc_with_multiple_redirects

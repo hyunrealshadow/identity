@@ -74,7 +74,7 @@ impl AuthorizeService {
                 .any(|scope| scope == "openid")
         {
             if let Some(only_uri) = client.single_redirect_uri() {
-                params.redirect_uri = only_uri.as_str().to_owned();
+                params.redirect_uri = only_uri.to_owned();
             }
         }
         if params.redirect_uri.trim().is_empty() {

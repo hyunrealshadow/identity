@@ -64,6 +64,16 @@ fn parse_optional_urls(
         .map_err(OpenIdConnectClientRepositoryError::ParseUrl)
 }
 
+fn parse_optional_redirect_uris(
+    raw: Option<&Value>,
+) -> Result<Vec<String>, OpenIdConnectClientRepositoryError> {
+    let values = deserialize_optional_string_vec(raw)?.unwrap_or_default();
+    for value in &values {
+        Url::parse(value).map_err(OpenIdConnectClientRepositoryError::ParseUrl)?;
+    }
+    Ok(values)
+}
+
 fn to_client(model: client::Model) -> Result<Client, OpenIdConnectClientRepositoryError> {
     Ok(Client {
         oid: model.oid,
@@ -191,7 +201,7 @@ fn to_platform(
             .platform
             .parse::<OpenIdConnectClientPlatformType>()
             .map_err(OpenIdConnectClientRepositoryError::ParseClientPlatform)?,
-        redirect_uris: parse_optional_urls(model.redirect_uris.as_ref())?.unwrap_or_default(),
+        redirect_uris: parse_optional_redirect_uris(model.redirect_uris.as_ref())?,
     })
 }
 
@@ -219,21 +229,14 @@ fn optional_strings_to_json(value: Option<Vec<String>>) -> Option<Value> {
     value.map(|items| Value::Array(items.into_iter().map(Value::String).collect()))
 }
 
+fn redirect_uris_to_json(value: Vec<String>) -> Option<Value> {
+    (!value.is_empty()).then(|| Value::Array(value.into_iter().map(Value::String).collect()))
+}
+
 fn optional_metadata_values_to_json<T: ToString>(value: Option<Vec<T>>) -> Option<Value> {
     optional_strings_to_json(
         value.map(|items| items.into_iter().map(|item| item.to_string()).collect()),
     )
-}
-
-fn urls_to_json(value: Vec<Url>) -> Option<Value> {
-    (!value.is_empty()).then(|| {
-        Value::Array(
-            value
-                .into_iter()
-                .map(|url| Value::String(url.to_string()))
-                .collect(),
-        )
-    })
 }
 
 fn cors_origins_for_client(
@@ -247,6 +250,7 @@ fn cors_origins_for_client(
     let mut origins: Vec<_> = platforms
         .iter()
         .flat_map(|platform| &platform.redirect_uris)
+        .filter_map(|uri| Url::parse(uri).ok())
         .filter(|uri| matches!(uri.scheme(), "http" | "https"))
         .map(|uri| uri.origin().ascii_serialization())
         .collect();
@@ -351,7 +355,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         client_openid_connect_platform::ActiveModel {
                             client_id: Set(client_model.id),
                             platform: Set(platform.platform.to_string()),
-                            redirect_uris: Set(urls_to_json(platform.redirect_uris)),
+                            redirect_uris: Set(redirect_uris_to_json(platform.redirect_uris)),
                             created_at: Set(now.into()),
                             updated_at: Set(None),
                             ..Default::default()
@@ -726,7 +730,6 @@ mod tests {
     };
     use chrono::Utc;
     use serde_json::json;
-    use url::Url;
 
     #[test]
     fn materialized_cors_origins_follow_client_settings_and_redirects() {
@@ -739,12 +742,12 @@ mod tests {
                     "http://localhost:3000/callback",
                 ]
                 .into_iter()
-                .map(|uri| Url::parse(uri).unwrap())
+                .map(str::to_owned)
                 .collect(),
             },
             OpenIdConnectClientPlatform {
                 platform: OpenIdConnectClientPlatformType::Native,
-                redirect_uris: vec![Url::parse("com.example.app:/callback").unwrap()],
+                redirect_uris: vec!["com.example.app:/callback".to_owned()],
             },
         ];
         let mut settings = OpenIdConnectClientSettings::default();
@@ -856,17 +859,14 @@ mod tests {
             id: 1,
             client_id: 2,
             platform: "web".to_string(),
-            redirect_uris: Some(json!(["https://example.com/callback"])),
+            redirect_uris: Some(json!(["http://localhost:53000"])),
             created_at: Utc::now().into(),
             updated_at: None,
         })
         .unwrap();
 
         assert_eq!(platform.platform, OpenIdConnectClientPlatformType::Web);
-        assert_eq!(
-            platform.redirect_uris[0].as_str(),
-            "https://example.com/callback"
-        );
+        assert_eq!(platform.redirect_uris[0], "http://localhost:53000");
     }
 
     #[test]

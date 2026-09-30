@@ -117,8 +117,17 @@ impl DynamicClientRegistrationService {
                 RegistrationErrorCode::RedirectUrisRequired,
             ));
         }
-        if request
+        let parsed_redirect_uris = request
             .redirect_uris
+            .iter()
+            .map(|raw| {
+                Url::parse(raw).map_err(|error| {
+                    AppError::from_code(RegistrationErrorCode::InvalidRedirectUri)
+                        .with_source(error)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if parsed_redirect_uris
             .iter()
             .any(|uri| uri.fragment().is_some())
         {
@@ -128,8 +137,7 @@ impl DynamicClientRegistrationService {
         }
 
         let platform = parse_application_type(request.application_type.as_deref())?;
-        if request
-            .redirect_uris
+        if parsed_redirect_uris
             .iter()
             .any(|uri| !platform.allows_redirect_uri_scheme(uri))
         {

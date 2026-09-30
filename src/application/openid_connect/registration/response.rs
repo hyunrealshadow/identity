@@ -21,7 +21,7 @@ pub struct DynamicClientRegistrationResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret_expires_at: Option<i64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub redirect_uris: Vec<Url>,
+    pub redirect_uris: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_types: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]

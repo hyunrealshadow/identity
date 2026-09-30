@@ -69,7 +69,7 @@ pub(in crate::openid_connect) fn test_metadata(
 pub(in crate::openid_connect) fn test_platforms() -> Vec<OpenIdConnectClientPlatform> {
     vec![OpenIdConnectClientPlatform {
         platform: OpenIdConnectClientPlatformType::Web,
-        redirect_uris: vec![Url::parse("https://client.example.com/callback").unwrap()],
+        redirect_uris: vec!["https://client.example.com/callback".to_owned()],
     }]
 }
 

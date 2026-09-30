@@ -60,7 +60,7 @@ async fn render_error(
             .unwrap_or(None)
     {
         if let Some(only_uri) = client.single_redirect_uri() {
-            resolved_raw.redirect_uri = Some(only_uri.as_str().to_owned());
+            resolved_raw.redirect_uri = Some(only_uri.to_owned());
         }
     }
     let raw = &resolved_raw;

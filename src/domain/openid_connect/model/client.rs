@@ -182,7 +182,8 @@ impl FromStr for OpenIdConnectClientPlatformType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenIdConnectClientPlatform {
     pub platform: OpenIdConnectClientPlatformType,
-    pub redirect_uris: Vec<Url>,
+    /// Preserve the registered spelling for OAuth's simple string comparison.
+    pub redirect_uris: Vec<String>,
 }
 
 /// Grant types a client may use when its registration omitted `grant_types`.
@@ -311,16 +312,15 @@ impl OpenIdConnectClient {
     }
 
     #[must_use]
-    pub fn single_redirect_uri(&self) -> Option<&Url> {
+    pub fn single_redirect_uri(&self) -> Option<&str> {
         let mut registered = self
             .platforms
             .iter()
             .flat_map(|platform| platform.redirect_uris.iter());
-        registered.next().filter(|_| registered.next().is_none())
-    }
-
-    pub fn has_redirect_uri(&self, redirect_uri: &Url) -> bool {
-        self.has_redirect_uri_str(redirect_uri.as_str())
+        registered
+            .next()
+            .filter(|_| registered.next().is_none())
+            .map(String::as_str)
     }
 
     pub fn has_redirect_uri_str(&self, raw_redirect_uri: &str) -> bool {
@@ -329,46 +329,49 @@ impl OpenIdConnectClient {
         };
         self.platforms.iter().any(|platform| {
             platform.redirect_uris.iter().any(|registered| {
-                if !platform.platform.allows_redirect_uri_scheme(registered)
+                let Ok(registered_url) = Url::parse(registered) else {
+                    return false;
+                };
+                if !platform
+                    .platform
+                    .allows_redirect_uri_scheme(&registered_url)
                     || !platform.platform.allows_redirect_uri_scheme(&requested)
                 {
                     return false;
                 }
-                if registered.as_str() == raw_redirect_uri {
+                if registered == raw_redirect_uri {
                     return true;
                 }
-                let raw_host_with_port = match registered.host() {
+                let raw_host = match registered_url.host() {
+                    Some(url::Host::Domain("localhost")) => "http://localhost",
                     Some(url::Host::Ipv4(ip)) if ip == std::net::Ipv4Addr::LOCALHOST => {
-                        "http://127.0.0.1:"
+                        "http://127.0.0.1"
                     }
                     Some(url::Host::Ipv6(ip)) if ip == std::net::Ipv6Addr::LOCALHOST => {
-                        "http://[::1]:"
+                        "http://[::1]"
                     }
                     _ => return false,
                 };
                 if platform.platform != OpenIdConnectClientPlatformType::Native
-                    || registered.scheme() != "http"
-                    || requested.host() != registered.host()
+                    || registered_url.scheme() != "http"
+                    || requested.host() != registered_url.host()
                 {
                     return false;
                 }
-                let Some(after_host) = raw_redirect_uri.strip_prefix(raw_host_with_port) else {
+                let Some(registered_suffix) = registered.strip_prefix(raw_host) else {
                     return false;
                 };
-                let Some(path_start) = after_host.find('/') else {
+                let Some(requested_suffix) = raw_redirect_uri.strip_prefix(raw_host) else {
                     return false;
                 };
-                if after_host[..path_start].parse::<u16>().is_err() {
-                    return false;
-                }
-                let registered_after_scheme = registered
-                    .as_str()
-                    .strip_prefix("http://")
-                    .expect("registered URI uses HTTP");
-                let Some(registered_path_start) = registered_after_scheme.find('/') else {
-                    return false;
-                };
-                after_host[path_start..] == registered_after_scheme[registered_path_start..]
+                matches!(
+                    (
+                        strip_loopback_port(registered_suffix),
+                        strip_loopback_port(requested_suffix),
+                    ),
+                    (Some(registered_path), Some(requested_path))
+                        if registered_path == requested_path
+                )
             })
         })
     }
@@ -412,21 +415,38 @@ impl OpenIdConnectClient {
                     .sector_identifier_uri
                     .as_ref()
                     .and_then(Url::host_str)
+                    .map(str::to_owned)
                     .or_else(|| {
                         self.platforms
                             .iter()
                             .flat_map(|platform| platform.redirect_uris.iter())
-                            .find_map(Url::host_str)
+                            .find_map(|raw| {
+                                Url::parse(raw)
+                                    .ok()
+                                    .and_then(|uri| uri.host_str().map(str::to_owned))
+                            })
                     });
                 let fallback = self.client.oid.to_string();
                 pairwise_subject_identifier(
                     user_oid,
-                    sector_identifier.unwrap_or(fallback.as_str()),
+                    sector_identifier.as_deref().unwrap_or(fallback.as_str()),
                     issuer,
                 )
             }
         }
     }
+}
+
+/// Native loopback redirects may vary only in their port component.
+fn strip_loopback_port(suffix: &str) -> Option<&str> {
+    let Some(after_colon) = suffix.strip_prefix(':') else {
+        return Some(suffix);
+    };
+    let end = after_colon
+        .find(['/', '?', '#'])
+        .unwrap_or(after_colon.len());
+    after_colon[..end].parse::<u16>().ok()?;
+    Some(&after_colon[end..])
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -656,16 +676,18 @@ mod tests {
                 OpenIdConnectClientPlatform {
                     platform: OpenIdConnectClientPlatformType::Web,
                     redirect_uris: vec![
-                        Url::parse("https://rp.example.com/callback").unwrap(),
-                        Url::parse("http://localhost:3000/callback").unwrap(),
-                        Url::parse("http://rp.example.com/callback").unwrap(),
+                        "https://rp.example.com/callback".to_owned(),
+                        "http://localhost:3000/callback".to_owned(),
+                        "http://localhost:53000".to_owned(),
+                        "http://rp.example.com/callback".to_owned(),
                     ],
                 },
                 OpenIdConnectClientPlatform {
                     platform: OpenIdConnectClientPlatformType::Native,
                     redirect_uris: vec![
-                        Url::parse("com.example.app:/callback").unwrap(),
-                        Url::parse("http://127.0.0.1:49152/callback?source=app").unwrap(),
+                        "com.example.app:/callback".to_owned(),
+                        "http://127.0.0.1:49152/callback?source=app".to_owned(),
+                        "http://127.0.0.1:49152".to_owned(),
                     ],
                 },
             ],
@@ -673,22 +695,79 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/callback").unwrap())
-        );
+        assert!(oidc_client.has_redirect_uri_str("https://rp.example.com/callback"));
+        assert!(!oidc_client.has_redirect_uri_str("https://rp.example.com/callback/"));
         assert!(oidc_client.has_redirect_uri_str("http://localhost:3000/callback"));
+        assert!(!oidc_client.has_redirect_uri_str("http://localhost:3000/callback/"));
+        assert!(oidc_client.has_redirect_uri_str("http://localhost:53000"));
+        assert!(!oidc_client.has_redirect_uri_str("http://localhost:53000/"));
+        assert!(!oidc_client.has_redirect_uri_str("http://localhost:53000?source=other"));
+        assert!(!oidc_client.has_redirect_uri_str("http://localhost:53001"));
         assert!(!oidc_client.has_redirect_uri_str("http://rp.example.com/callback"));
         assert!(!oidc_client.has_redirect_uri_str("http://localhost.evil.test:3000/callback"));
-        assert!(oidc_client.has_redirect_uri(&Url::parse("com.example.app:/callback").unwrap()));
+        assert!(oidc_client.has_redirect_uri_str("com.example.app:/callback"));
         assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/callback?source=app"));
+        assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:55000"));
+        assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/"));
+        assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/callback/?source=app"));
         assert!(oidc_client.has_redirect_uri_str("http://127.0.0.1:80/callback?source=app"));
+        assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/callback/?source=other"));
         assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.1:55000/other?source=app"));
         assert!(!oidc_client.has_redirect_uri_str("http://127.0.0.2:55000/callback?source=app"));
         assert!(!oidc_client.has_redirect_uri_str("https://RP.example.com/callback"));
         assert!(!oidc_client.has_redirect_uri_str("https://rp.example.com:443/callback"));
-        assert!(
-            !oidc_client.has_redirect_uri(&Url::parse("https://rp.example.com/other").unwrap())
-        );
+        assert!(!oidc_client.has_redirect_uri_str("https://rp.example.com/other"));
+    }
+
+    #[test]
+    fn native_localhost_redirect_allows_variable_port_in_both_oauth_versions() {
+        for oauth_version in [OAuthProtocolVersion::V2_0, OAuthProtocolVersion::V2_1] {
+            let client = Client {
+                oid: uuid::Uuid::nil(),
+                protocol: ClientProtocol::OpenIdConnect,
+                name: "Native RP".to_owned(),
+                names: vec![],
+                description: None,
+                built_in: false,
+                created_at: Utc::now(),
+                updated_at: None,
+            };
+            let metadata = OpenIdConnectClientMetadata {
+                settings: OpenIdConnectClientSettings {
+                    oauth_version,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let oidc_client = OpenIdConnectClient::new(
+                client,
+                metadata,
+                vec![OpenIdConnectClientPlatform {
+                    platform: OpenIdConnectClientPlatformType::Native,
+                    redirect_uris: vec![
+                        "http://localhost:53000/callback?source=app".to_owned(),
+                        "http://localhost:53000".to_owned(),
+                    ],
+                }],
+                vec![],
+            )
+            .unwrap();
+
+            assert!(oidc_client.has_redirect_uri_str("http://localhost:49152/callback?source=app"));
+            assert!(oidc_client.has_redirect_uri_str("http://localhost:49152"));
+            assert!(!oidc_client.has_redirect_uri_str("http://localhost:49152/"));
+            assert!(!oidc_client.has_redirect_uri_str("http://localhost:49152/callback/"));
+            assert!(
+                !oidc_client.has_redirect_uri_str("http://localhost:49152/callback?source=other")
+            );
+            assert!(
+                !oidc_client.has_redirect_uri_str("http://app.localhost:49152/callback?source=app")
+            );
+            assert!(
+                !oidc_client
+                    .has_redirect_uri_str("http://localhost.evil.test:49152/callback?source=app")
+            );
+        }
     }
 
     #[test]
