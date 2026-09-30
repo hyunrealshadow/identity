@@ -1,7 +1,7 @@
-import { Alert, Chip, FieldError, Label, TextField } from '@heroui/react'
+import { Alert, FieldError, Label, TextField } from '@heroui/react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Check, ExternalLink } from 'lucide-react'
+import { Check, ChevronDown, Clock, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { AuthShell } from '#/components/auth-shell'
@@ -249,11 +249,7 @@ function DevicePage() {
       denied: 'deviceDeniedDescription',
       expired: 'deviceExpiredDescription',
     } as const
-    const labels = {
-      approved: 'deviceApproved',
-      denied: 'deviceDenied',
-      expired: 'deviceExpired',
-    } as const
+    const OutcomeIcon = outcome === 'approved' ? Check : outcome === 'denied' ? X : Clock
 
     return (
       <AuthShell
@@ -262,10 +258,10 @@ function DevicePage() {
         showPreferences
         title={t(titles[outcome])}
         description={t(descriptions[outcome])}
+        compact
+        titleIcon={<OutcomeIcon className="size-6" aria-hidden="true" />}
       >
-        <Chip size="lg" variant="soft" className="mx-auto mt-2 flex w-fit">
-          {t(labels[outcome])}
-        </Chip>
+        {null}
       </AuthShell>
     )
   }
@@ -287,6 +283,8 @@ function DevicePage() {
       lang={data.locale}
       locale={data.locale}
       showPreferences
+      wide
+      headerAlign="left"
       title={t('deviceVerifyTitle')}
       description={t('deviceVerifyDescription', { client: device.client_name })}
     >
@@ -294,109 +292,74 @@ function DevicePage() {
         <DeviceError title={t('deviceLoadFailed')} message={visibleError} />
       ) : null}
 
-      <div className="mb-5 rounded-xl border border-border bg-surface-secondary p-4">
-        <div className="flex items-center gap-3">
-          {device.logo_uri ? (
+      <section className="mb-5 rounded-xl border border-border p-4" aria-labelledby="device-account-title">
+        <p id="device-account-title" className="text-sm text-muted">
+          {t('deviceApprovingAs')}
+        </p>
+        <div className="mt-1 flex items-center gap-3">
+          {device.account.picture ? (
             <img
-              src={device.logo_uri}
+              src={device.account.picture}
               alt=""
-              className="size-10 shrink-0 rounded-xl object-contain"
+              className="size-10 shrink-0 rounded-full object-cover"
               referrerPolicy="no-referrer"
             />
           ) : null}
           <div className="min-w-0">
-            <p className="font-semibold">{device.client_name}</p>
-            {device.client_uri ? (
-              <a
-                href={device.client_uri}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-accent hover:underline"
-              >
-                {device.client_uri}
-                <ExternalLink className="size-3" aria-hidden="true" />
-              </a>
-            ) : null}
+            <p className="break-words text-base font-semibold">{device.account.name}</p>
+            <p className="break-all text-sm text-muted">{device.account.email}</p>
           </div>
         </div>
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted">
-          {t('deviceCodeLabel')}
+      </section>
+
+      <section className="mb-5 rounded-xl border border-border p-4" aria-labelledby="device-code-title">
+        <h2 id="device-code-title" className="text-base font-semibold">
+          {t('deviceConfirmCodeTitle')}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          {t('deviceConfirmCodeDescription')}
         </p>
-        <p className="mt-1 font-mono text-2xl font-semibold tracking-[0.2em]">
+        <p className="mt-4 rounded-lg bg-surface-secondary px-2 py-4 text-center font-mono text-2xl font-semibold tracking-[0.12em] sm:text-3xl sm:tracking-[0.22em]">
           {device.user_code}
         </p>
-      </div>
-
-      {/* Name the account bound by the completed native login interaction. */}
-      <div className="mb-5 flex items-center gap-3 rounded-xl border border-border px-3 py-3">
-        {device.account.picture ? (
-          <img
-            src={device.account.picture}
-            alt=""
-            className="size-9 shrink-0 rounded-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        ) : null}
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">
-            {t('deviceApprovingAs')}
-          </p>
-          <p className="mt-0.5 truncate text-sm font-semibold">
-            {device.account.name}
-          </p>
-          <p className="truncate text-xs text-muted">{device.account.email}</p>
-        </div>
-      </div>
+        <p className="mt-3 text-xs leading-5 text-muted">
+          {t('deviceVerifyHint')}
+        </p>
+      </section>
 
       {device.consent_required ? (
-        <section aria-labelledby="device-permissions-title">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 id="device-permissions-title" className="text-sm font-semibold">
-              {t('permissions')}
-            </h2>
-            <Chip size="sm" variant="soft">
+        <details open className="group rounded-xl border border-border p-4">
+          <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+            <span className="flex-1 text-base font-semibold">{t('permissions')}</span>
+            <span className="text-xs text-muted">
               {t('permissionCount', { count: device.scopes.length })}
-            </Chip>
-          </div>
-          <ul className="auth-stagger-fast space-y-2">
+            </span>
+            <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform group-open:rotate-0" aria-hidden="true" />
+          </summary>
+          <ul className="mt-3 divide-y divide-border px-1">
             {device.scopes.map((scope) => (
-              <li
-                key={scope.name}
-                className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:bg-surface-secondary"
-              >
-                <Check
-                  className="mt-0.5 size-4 shrink-0 text-accent"
-                  aria-hidden="true"
-                />
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    {scope.name}
-                    {scope.essential ? (
-                      <Chip size="sm" variant="soft">
-                        {t('required')}
-                      </Chip>
-                    ) : null}
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-muted">
-                    {scopeDescription(data.locale, scope.name, scope.description)}
-                  </span>
-                </span>
+              <li key={scope.name} className="py-3">
+                <p className="break-all text-sm font-semibold">
+                  {scope.name}
+                  {scope.essential ? <span className="sr-only"> ({t('required')})</span> : null}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  {scopeDescription(data.locale, scope.name, scope.description)}
+                </p>
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       ) : (
-        // A trusted client (`skip_consent`) already holds the user's consent:
-        // the page confirms the code without repeating the permission list,
-        // and the decision still goes through the CSRF protected POST.
-        <p className="rounded-xl border border-border px-3 py-3 text-xs leading-5 text-muted">
+        // Trusted clients still require explicit device confirmation via the CSRF-protected form.
+        <p className="rounded-xl border border-border p-4 text-xs leading-5 text-muted">
           {t('deviceTrustedClient')}
         </p>
       )}
 
       <ProgressiveForm
         action="/device"
-        className="progressive-form mt-6 grid grid-cols-2 gap-3"
+        className="progressive-form mt-5 grid grid-cols-2 gap-3"
         enhancementErrorMessage={t('enhancedNavigationError')}
       >
         <input type="hidden" name="login_id" value={device.login_id} />
@@ -404,17 +367,14 @@ function DevicePage() {
         {data.uiLocales ? (
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
         ) : null}
-        <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
+        <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="deny" variant="secondary">
           {t('deny')}
         </SubmitButton>
-        <SubmitButton fullWidth name="decision" value="approve">
+        <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="approve">
           {t('allow')}
         </SubmitButton>
       </ProgressiveForm>
 
-      <p className="mt-5 text-center text-xs leading-5 text-muted">
-        {t('deviceVerifyHint')}
-      </p>
     </AuthShell>
   )
 }

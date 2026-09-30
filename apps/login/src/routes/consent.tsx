@@ -1,7 +1,7 @@
-import { Alert, Chip } from '@heroui/react'
+import { Alert } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Check, ExternalLink } from 'lucide-react'
+import { ChevronDown, ExternalLink } from 'lucide-react'
 
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
@@ -135,6 +135,8 @@ function ConsentPage() {
       lang={data.locale}
       locale={data.locale}
       showPreferences
+      wide
+      headerAlign="left"
       title={t('consentTitle')}
       description={
         consent
@@ -157,7 +159,7 @@ function ConsentPage() {
 
       {consent ? (
         <>
-          <div className="mb-5 rounded-xl border border-border bg-surface-secondary p-4">
+          <div className="mb-5 rounded-xl border border-border p-4">
             <div className="flex items-center gap-3">
               {consent.logo_uri ? (
                 <img
@@ -168,62 +170,52 @@ function ConsentPage() {
                 />
               ) : null}
               <div className="min-w-0">
-                <p className="font-semibold">{consent.client_name}</p>
+                <p className="break-words text-base font-semibold">{consent.client_name}</p>
                 {consent.client_uri ? (
                   <a
                     href={consent.client_uri}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-accent hover:underline"
+                    className="mt-1 flex items-center gap-2 text-sm text-muted hover:underline"
                   >
-                    {consent.client_uri}
-                    <ExternalLink className="size-3" aria-hidden="true" />
+                    <span className="truncate">{consent.client_uri}</span>
+                    <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
                   </a>
                 ) : null}
               </div>
             </div>
           </div>
 
-          <section aria-labelledby="permissions-title">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 id="permissions-title" className="text-sm font-semibold">
-                {t('permissions')}
-              </h2>
-              <Chip size="sm" variant="soft">
+          <details open className="group rounded-xl border border-border p-4">
+            <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+              <span className="flex-1 text-base font-semibold">{t('permissions')}</span>
+              <span className="text-xs text-muted">
                 {t('permissionCount', { count: consent.scopes.length })}
-              </Chip>
-            </div>
-            <ul className="auth-stagger-fast space-y-2">
+              </span>
+              <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform group-open:rotate-0" aria-hidden="true" />
+            </summary>
+            <ul className="mt-3 divide-y divide-border px-1">
               {consent.scopes.map((scope) => (
-                <li
-                  key={scope.name}
-                  className="flex gap-3 rounded-xl border border-border px-3 py-3 transition-colors duration-200 hover:bg-surface-secondary"
-                >
-                  <Check
-                    className="mt-0.5 size-4 shrink-0 text-accent"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      {scope.name}
-                      {scope.essential ? (
-                        <Chip size="sm" variant="soft">
-                          {t('required')}
-                        </Chip>
-                      ) : null}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-muted">
-                      {scopeDescription(data.locale, scope.name, scope.description)}
-                    </span>
-                  </span>
+                <li key={scope.name} className="py-4">
+                  <p className="break-all text-sm font-semibold">
+                    {scope.name}
+                    {scope.essential ? <span className="sr-only"> ({t('required')})</span> : null}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    {scopeDescription(data.locale, scope.name, scope.description)}
+                  </p>
                 </li>
               ))}
             </ul>
-          </section>
+          </details>
+
+          <p className="mt-6 text-sm leading-6 text-muted">
+            {t('revoke')}
+          </p>
 
           <ProgressiveForm
             action="/consent"
-            className="progressive-form mt-6 grid grid-cols-2 gap-3"
+            className="progressive-form mt-5 grid grid-cols-2 gap-3"
             enhancementErrorMessage={t('enhancedNavigationError')}
           >
             <input
@@ -237,17 +229,13 @@ function ConsentPage() {
               value={consent.csrf_token}
             />
             <input type="hidden" name="ui_locales" value={data.uiLocales} />
-            <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
+            <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="deny" variant="secondary">
               {t('deny')}
             </SubmitButton>
-            <SubmitButton fullWidth name="decision" value="approve">
+            <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="approve">
               {t('allow')}
             </SubmitButton>
           </ProgressiveForm>
-
-          <p className="mt-5 text-center text-xs leading-5 text-muted">
-            {t('revoke')}
-          </p>
         </>
       ) : null}
     </AuthShell>
