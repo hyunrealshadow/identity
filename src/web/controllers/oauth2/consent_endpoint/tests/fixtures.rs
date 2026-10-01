@@ -236,6 +236,7 @@ async fn consent_test_state_for(
     };
     let authorization_request = StoredAuthorizationRequest {
         request: AuthorizationRequestData {
+            resources: Vec::new(),
             response_type: "code".parse().unwrap(),
             response_mode: None,
             client_id: client_oid.to_string(),
@@ -297,6 +298,7 @@ async fn consent_test_state_for(
         client_id: client_model.id,
         r#type: ClientAuthorizationType::DeviceAuthorizationRequest.to_string(),
         data: serde_json::to_value(DeviceAuthorizationRequestData {
+            resources: Vec::new(),
             scope: scope.to_owned(),
             device_code_digest: "device-code-digest".to_owned(),
             claimed_login_oid: None,

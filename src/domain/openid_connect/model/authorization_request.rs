@@ -348,6 +348,7 @@ pub struct AuthorizationRequest {
     /// Whether the client supplied redirect_uri in the authorization request.
     pub redirect_uri_was_supplied: bool,
     pub scope: ScopeSet,
+    pub resources: Vec<String>,
     pub state: String,
     pub nonce: Option<String>,
     pub display: Option<Display>,
@@ -374,6 +375,8 @@ pub struct AuthorizationRequestData {
     #[serde(default = "default_redirect_uri_was_supplied")]
     pub redirect_uri_was_supplied: bool,
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<String>,
     pub state: String,
     pub nonce: Option<String>,
     #[serde(default)]
@@ -399,6 +402,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             redirect_uri: value.redirect_uri_raw.clone(),
             redirect_uri_was_supplied: value.redirect_uri_was_supplied,
             scope: value.scope.to_scope_string(),
+            resources: value.resources.clone(),
             state: value.state.clone(),
             nonce: value.nonce.clone(),
             prompt: value.prompt.clone(),
@@ -573,6 +577,7 @@ mod tests {
     #[test]
     fn authorization_request_data_round_trips() {
         let request = AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: None,
             client_id: Uuid::nil(),
@@ -618,6 +623,7 @@ mod tests {
     #[test]
     fn authorization_request_data_preserves_prompt_values() {
         let request = AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: None,
             client_id: Uuid::nil(),
@@ -655,4 +661,30 @@ mod tests {
         );
         assert!(data.prompt.as_ref().unwrap().contains(&PromptValue::Login));
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AuthorizationRequestParams {
+    pub response_type: String,
+    pub response_mode: Option<String>,
+    pub client_id: String,
+    pub redirect_uri: String,
+    pub scope: String,
+    #[serde(default)]
+    pub resources: Vec<String>,
+    pub state: String,
+    pub nonce: Option<String>,
+    pub display: Option<String>,
+    pub prompt: Option<String>,
+    pub max_age: Option<String>,
+    pub ui_locales: Option<String>,
+    pub claims_locales: Option<String>,
+    pub id_token_hint: Option<String>,
+    pub login_hint: Option<String>,
+    pub acr_values: Option<String>,
+    pub claims: Option<String>,
+    pub request: Option<String>,
+    pub request_uri: Option<String>,
+    pub code_challenge: Option<String>,
+    pub code_challenge_method: Option<String>,
 }

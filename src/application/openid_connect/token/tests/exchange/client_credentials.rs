@@ -5,6 +5,7 @@ use identity_domain::openid_connect::GrantType;
 
 fn request(scope: &str) -> ClientCredentialsGrantParams {
     ClientCredentialsGrantParams {
+        resources: Vec::new(),
         scope: Some(scope.to_owned()),
         client_id: Some(Uuid::nil().to_string()),
         client_secret: Some("secret-123".to_owned()),
@@ -23,10 +24,9 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
         Arc::new(MachineClientRepository),
     );
 
-    let response = service
-        .exchange_client_credentials(request("account.read"))
-        .await
-        .unwrap();
+    let mut params = request("account.read");
+    params.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
+    let response = service.exchange_client_credentials(params).await.unwrap();
     assert!(!response.access_token.is_empty());
     assert_eq!(response.scope, "account.read");
     assert!(response.id_token.is_none());

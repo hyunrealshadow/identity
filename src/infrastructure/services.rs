@@ -89,6 +89,7 @@ pub struct AppServices {
     install: AppInstallService,
     oidc: AppOpenIdProviderService,
     oidc_authorize: AppOpenIdAuthorizeService,
+    pushed_authorization: identity_application::openid_connect::par::PushedAuthorizationService,
     oidc_token: AppOpenIdTokenService,
     oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
@@ -134,12 +135,36 @@ impl AppServices {
         let oidc_client_repo = Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
         let oidc_client_registration_repo: Arc<dyn OpenIdConnectClientRegistrationRepository> =
             Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
+        let oauth_resource_repo = Arc::new(
+            crate::database::repository::oauth_resource::OAuthResourceRepositoryImpl::new(
+                db.clone(),
+            ),
+        );
         let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
         let user_credential_repo = Arc::new(UserCredentialRepositoryImpl::new(db.clone()));
         let totp = Arc::new(TotpVerifierImpl);
 
         let events = crate::observability::events::sink();
 
+        let client_authorization_repo =
+            Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone()));
+        let oidc_authorize = AuthorizeService::new(AuthorizeServiceDependencies {
+            client_repo: oidc_client_repo.clone(),
+            credential_repo: oidc_credential_repo.clone(),
+            client_authorization_repo: client_authorization_repo.clone(),
+            login_repo: Arc::new(LoginRepositoryImpl::new(db.clone())),
+            user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
+            key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
+            key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
+            provider_service: Arc::new(
+                OpenIdProviderService::new(settings.store())
+                    .with_resource_repo(oauth_resource_repo.clone()),
+            ),
+            signing_algorithm_detector: signing_algorithm_detector.clone(),
+            data_protector: data_protector.clone(),
+            http_client: request_uri_http_client.clone(),
+        })
+        .with_events(Arc::clone(&events));
         Ok(Self {
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
@@ -185,25 +210,28 @@ impl AppServices {
                 client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
             },
             oidc: OpenIdProviderService::new(settings.store())
+                .with_resource_repo(oauth_resource_repo.clone())
                 .with_key_repo(key_repo.clone())
                 .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
-            oidc_authorize: AuthorizeService::new(AuthorizeServiceDependencies {
-                client_repo: oidc_client_repo.clone(),
-                credential_repo: oidc_credential_repo.clone(),
-                client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
-                    db.clone(),
-                )),
-                login_repo: Arc::new(LoginRepositoryImpl::new(db.clone())),
-                user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
-                key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
-                key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
-                provider_service: Arc::new(OpenIdProviderService::new(settings.store())),
-                signing_algorithm_detector: signing_algorithm_detector.clone(),
-                data_protector: data_protector.clone(),
-                http_client: request_uri_http_client.clone(),
-            })
-            .with_events(Arc::clone(&events)),
+            oidc_authorize: oidc_authorize.clone(),
+            pushed_authorization:
+                identity_application::openid_connect::par::PushedAuthorizationService::new(
+                    Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {
+                        client_repo: oidc_client_repo.clone(),
+                        credential_repo: oidc_credential_repo.clone(),
+                        provider_service: Arc::new(
+                            OpenIdProviderService::new(settings.store())
+                                .with_resource_repo(oauth_resource_repo.clone()),
+                        ),
+                    })),
+                    oidc_authorize,
+                    client_authorization_repo,
+                    Arc::new(
+                        OpenIdProviderService::new(settings.store())
+                            .with_resource_repo(oauth_resource_repo.clone()),
+                    ),
+                ),
             oidc_token: TokenService::new(TokenServiceDependencies {
                 client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
                     db.clone(),
@@ -214,7 +242,10 @@ impl AppServices {
                 user_repo: Arc::new(UserRepositoryImpl::new(db.clone())),
                 client_repo: oidc_client_repo.clone(),
                 credential_repo: oidc_credential_repo.clone(),
-                provider_service: Arc::new(OpenIdProviderService::new(settings.store())),
+                provider_service: Arc::new(
+                    OpenIdProviderService::new(settings.store())
+                        .with_resource_repo(oauth_resource_repo.clone()),
+                ),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
             })
@@ -223,7 +254,10 @@ impl AppServices {
             .with_events(Arc::clone(&events)),
             oidc_logout: LogoutService::new(LogoutServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
-                provider_service: Arc::new(OpenIdProviderService::new(settings.store())),
+                provider_service: Arc::new(
+                    OpenIdProviderService::new(settings.store())
+                        .with_resource_repo(oauth_resource_repo.clone()),
+                ),
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
@@ -245,7 +279,10 @@ impl AppServices {
                     )
                     .with_runtime_key_ring(settings.key_ring()),
                 ),
-                Arc::new(OpenIdProviderService::new(settings.store())),
+                Arc::new(
+                    OpenIdProviderService::new(settings.store())
+                        .with_resource_repo(oauth_resource_repo.clone()),
+                ),
             )
             .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone()))),
             dynamic_client_registration: DynamicClientRegistrationService::new(
@@ -259,14 +296,18 @@ impl AppServices {
                         ClientAuthenticatorDependencies {
                             client_repo: oidc_client_repo.clone(),
                             credential_repo: oidc_credential_repo.clone(),
-                            provider_service: Arc::new(OpenIdProviderService::new(
-                                settings.store(),
-                            )),
+                            provider_service: Arc::new(
+                                OpenIdProviderService::new(settings.store())
+                                    .with_resource_repo(oauth_resource_repo.clone()),
+                            ),
                         },
                     )),
                     client_repo: oidc_client_repo.clone(),
                     device_repo: Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())),
-                    provider_service: Arc::new(OpenIdProviderService::new(settings.store())),
+                    provider_service: Arc::new(
+                        OpenIdProviderService::new(settings.store())
+                            .with_resource_repo(oauth_resource_repo.clone()),
+                    ),
                     settings: settings.store(),
                 },
             )
@@ -337,6 +378,12 @@ impl AppServices {
     }
 
     #[must_use]
+    pub fn pushed_authorization(
+        &self,
+    ) -> &identity_application::openid_connect::par::PushedAuthorizationService {
+        &self.pushed_authorization
+    }
+
     pub fn oidc_token(&self) -> &AppOpenIdTokenService {
         &self.oidc_token
     }

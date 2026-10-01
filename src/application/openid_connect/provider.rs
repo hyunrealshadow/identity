@@ -217,7 +217,9 @@ fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
 #[derive(Clone)]
 pub struct OpenIdProviderService {
     settings: Arc<dyn SettingsSource>,
-    capabilities: OpenIdProviderCapabilities,
+    pub(super) capabilities: OpenIdProviderCapabilities,
+    pub(super) resource_repo:
+        Option<Arc<dyn crate::domain::openid_connect::resource::OAuthResourceRepository>>,
     key_repo: Option<Arc<dyn KeyRepository>>,
     key_jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
@@ -248,6 +250,7 @@ impl OpenIdProviderService {
         Self {
             settings,
             capabilities: OpenIdProviderCapabilities::default(),
+            resource_repo: None,
             key_repo: None,
             key_jwk_repo: None,
             signing_algorithm_detector: None,
@@ -261,10 +264,19 @@ impl OpenIdProviderService {
         Self {
             settings,
             capabilities,
+            resource_repo: None,
             key_repo: None,
             key_jwk_repo: None,
             signing_algorithm_detector: None,
         }
+    }
+
+    pub fn with_resource_repo(
+        mut self,
+        repo: Arc<dyn crate::domain::openid_connect::resource::OAuthResourceRepository>,
+    ) -> Self {
+        self.resource_repo = Some(repo);
+        self
     }
 
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
@@ -298,6 +310,13 @@ impl OpenIdProviderService {
         })
     }
 
+    pub fn pushed_authorization_settings(&self) -> crate::setting::PushedAuthorizationSettings {
+        self.settings
+            .snapshot()
+            .section::<OpenIdConnectSettings>()
+            .pushed_authorization
+    }
+
     pub fn issuer(&self) -> Result<Url, AppError> {
         let snapshot = self.settings.snapshot();
         normalize_issuer(
@@ -315,6 +334,10 @@ impl OpenIdProviderService {
             issuer: issuer.clone(),
             authorization_endpoint: endpoint_url(&issuer, "/oauth2/authorize")?,
             token_endpoint: Some(endpoint_url(&issuer, "/oauth2/token")?),
+            pushed_authorization_request_endpoint: Some(endpoint_url(&issuer, "/oauth2/par")?),
+            require_pushed_authorization_requests: self
+                .pushed_authorization_settings()
+                .require_pushed_authorization_requests,
             revocation_endpoint: endpoint_url(&issuer, "/oauth2/revoke")?,
             introspection_endpoint: endpoint_url(&issuer, "/oauth2/introspect")?,
             introspection_endpoint_auth_methods_supported: to_string_values(
@@ -738,6 +761,15 @@ mod tests {
 
         assert!(metadata.request_uri_parameter_supported);
         assert!(metadata.require_request_uri_registration);
+        assert_eq!(
+            metadata
+                .pushed_authorization_request_endpoint
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "https://identity.example.com/issuer1/oauth2/par"
+        );
+        assert!(!metadata.require_pushed_authorization_requests);
         assert_eq!(
             metadata.issuer.as_str(),
             "https://identity.example.com/issuer1"

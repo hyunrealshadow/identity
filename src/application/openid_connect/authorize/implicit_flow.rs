@@ -5,6 +5,7 @@ use identity_domain::auth::SessionOid;
 use uuid::Uuid;
 
 struct CreateFrontChannelAccessTokenInput<'a> {
+    resources: &'a [String],
     client_id: Uuid,
     client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     user_oid: Uuid,
@@ -113,6 +114,7 @@ impl AuthorizeService {
             (
                 Some(
                     self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
+                        resources: &request.resources,
                         client_id,
                         client_authentication_mode: front_channel_token_mode(&client),
                         user_oid,
@@ -251,6 +253,7 @@ impl AuthorizeService {
         let access_token = if response_type.includes_access_token() {
             Some(
                 self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
+                    resources: &request.resources,
                     client_id,
                     client_authentication_mode: front_channel_token_mode(&client),
                     user_oid,
@@ -349,13 +352,22 @@ impl AuthorizeService {
         &self,
         input: CreateFrontChannelAccessTokenInput<'_>,
     ) -> Result<String, AppError> {
+        let selection = self
+            .provider_service
+            .select_resources(input.resources, input.resources, &input.request.scope)
+            .await?;
+        if selection.scope != input.request.scope {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::InvalidTarget,
+            ));
+        }
         let access_token_record = self
             .client_authorization_repo
             .create(
                 input.client_id,
                 identity_domain::client_authorization::ClientAuthorizationData::AccessToken(
                     identity_domain::client_authorization::AccessTokenData {
-                        scope: input.request.scope.clone(),
+                        scope: selection.scope.clone(),
                         user_oid: input.user_oid.to_string(),
                         session_oid: Some(input.session_oid),
                         protected_session_id: Some(input.protected_session_id.to_string()),
@@ -375,6 +387,7 @@ impl AuthorizeService {
             })?;
 
         self.sign_implicit_access_token(SignImplicitAccessTokenInput {
+            resources: &selection.resources,
             key_id: input.signing_key_id,
             private_key_pem: input.signing_key_pem,
             alg: input.signing_alg,
@@ -383,7 +396,7 @@ impl AuthorizeService {
             client_id: &input.client_id.to_string(),
             user_oid: &input.user_oid.to_string(),
             protected_session_id: input.protected_session_id,
-            scope: &input.request.scope,
+            scope: &selection.scope,
             token_id: &access_token_record.oid.to_string(),
             claims: input.claims,
             auth_time: input.auth_time,

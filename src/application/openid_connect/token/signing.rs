@@ -10,6 +10,7 @@ use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
 use identity_domain::openid_connect::{ClaimsRequest, ScopeSet};
 
 pub(super) struct StoreRefreshTokenParams<'a> {
+    pub resources: &'a [String],
     pub client_oid: Uuid,
     pub scope: &'a str,
     pub user_oid: &'a str,
@@ -27,6 +28,7 @@ pub(super) struct StoreRefreshTokenParams<'a> {
 }
 
 pub(super) struct SignAccessTokenInput<'a> {
+    pub resources: &'a [String],
     pub token_id: &'a str,
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
@@ -230,7 +232,11 @@ impl TokenService {
         let now = std::time::SystemTime::now();
         payload.set_issuer(input.issuer.as_str());
         payload.set_subject(input.user_oid.to_string());
-        payload.set_audience(vec![input.audience]);
+        payload.set_audience(if input.resources.is_empty() {
+            vec![input.audience]
+        } else {
+            input.resources.iter().map(String::as_str).collect()
+        });
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
         payload.set_jwt_id(input.token_id);
@@ -554,6 +560,7 @@ impl TokenService {
     ) -> Result<String, AppError> {
         let data = ClientAuthorizationData::RefreshToken(RefreshTokenData {
             scope: params.scope.to_string(),
+            resources: params.resources.to_vec(),
             user_oid: params.user_oid.to_string(),
             session_oid: params.session_oid,
             protected_session_id: params.protected_session_id.map(str::to_string),

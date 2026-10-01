@@ -114,6 +114,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         r#type: ClientAuthorizationType::AuthorizationRequest.to_string(),
         data: serde_json::to_value(StoredAuthorizationRequest {
             request: AuthorizationRequestData {
+                resources: Vec::new(),
                 response_type: "code".parse().unwrap(),
                 response_mode: None,
                 client_id: client_oid.to_string(),

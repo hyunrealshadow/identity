@@ -34,6 +34,7 @@ pub(super) struct SignImplicitIdTokenInput<'a> {
 }
 
 pub(super) struct SignImplicitAccessTokenInput<'a> {
+    pub resources: &'a [String],
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
     pub alg: JwaSigningAlgorithm,
@@ -310,7 +311,11 @@ impl AuthorizeService {
         let now = std::time::SystemTime::now();
         payload.set_issuer(input.issuer.as_str());
         payload.set_subject(input.user_oid);
-        payload.set_audience(vec![input.audience]);
+        payload.set_audience(if input.resources.is_empty() {
+            vec![input.audience]
+        } else {
+            input.resources.iter().map(String::as_str).collect()
+        });
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload.set_jwt_id(input.token_id);

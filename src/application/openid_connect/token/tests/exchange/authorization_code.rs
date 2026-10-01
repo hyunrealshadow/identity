@@ -19,6 +19,7 @@ async fn expired_authorization_code_has_a_distinct_error() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid".to_owned(),
                 nonce: None,
                 code_challenge: None,
@@ -39,6 +40,7 @@ async fn expired_authorization_code_has_a_distinct_error() {
         .unwrap();
     let error = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
             client_id: Some(Uuid::nil().to_string()),
@@ -83,6 +85,7 @@ async fn oauth20_client_may_omit_token_redirect_when_authorization_omitted_it() 
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "profile".to_owned(),
                 nonce: None,
                 code_challenge: None,
@@ -107,6 +110,7 @@ async fn oauth20_client_may_omit_token_redirect_when_authorization_omitted_it() 
     assert!(
         service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
+                resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: None,
                 client_id: Some(Uuid::nil().to_string()),
@@ -129,6 +133,7 @@ async fn oidc10_single_redirect_client_may_omit_token_redirect() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid profile".to_owned(),
                 nonce: None,
                 code_challenge: None,
@@ -153,6 +158,7 @@ async fn oidc10_single_redirect_client_may_omit_token_redirect() {
     assert!(
         service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
+                resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: None,
                 client_id: Some(Uuid::nil().to_string()),
@@ -178,6 +184,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some(s256_challenge("verifier-123")),
@@ -200,6 +207,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     let code = STANDARD.encode(record.oid.as_bytes());
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -267,6 +275,7 @@ async fn exchange_authorization_code_without_openid_issues_no_id_token() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "profile".to_string(),
                 nonce: None,
                 code_challenge: None,
@@ -288,6 +297,7 @@ async fn exchange_authorization_code_without_openid_issues_no_id_token() {
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -317,6 +327,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "email openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some(s256_challenge("verifier-123")),
@@ -338,6 +349,7 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -368,6 +380,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid profile email".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some(s256_challenge("verifier-123")),
@@ -389,6 +402,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -439,6 +453,7 @@ async fn scoped_claims_client_omits_claims_outside_granted_scope_in_code_flow_id
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid".to_string(),
                 nonce: Some("nonce-123".to_string()),
                 code_challenge: Some(s256_challenge("verifier-123")),
@@ -460,6 +475,7 @@ async fn scoped_claims_client_omits_claims_outside_granted_scope_in_code_flow_id
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -491,6 +507,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid profile".to_string(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("expected-verifier")),
@@ -513,6 +530,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
     let code = STANDARD.encode(record.oid.as_bytes());
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -570,6 +588,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid profile".to_string(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("verifier-789")),
@@ -592,6 +611,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let code = STANDARD.encode(record.oid.as_bytes());
     let first_response = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: code.clone(),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -610,6 +630,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -661,6 +682,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-offline".to_string()),
                 code_challenge: Some(s256_challenge("verifier-offline")),
@@ -682,6 +704,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -727,6 +750,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
             .create(
                 Uuid::nil(),
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    resources: Vec::new(),
                     scope: "openid profile".to_string(),
                     nonce: Some(format!("nonce-{alg}")),
                     code_challenge: Some(s256_challenge(&format!("verifier-{alg}"))),
@@ -748,6 +772,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
 
         let result = service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
+                resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_string()),
                 client_id: Some(Uuid::nil().to_string()),
@@ -836,6 +861,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid profile".to_string(),
                 nonce: Some("nonce-rs256".to_string()),
                 code_challenge: Some(s256_challenge("verifier-rs256")),
@@ -857,6 +883,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
 
     let result = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -921,6 +948,7 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
             .create(
                 Uuid::nil(),
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    resources: Vec::new(),
                     scope: scope.to_owned(),
                     nonce: has_openid.then_some("nonce-rsa".to_owned()),
                     code_challenge: Some(s256_challenge("verifier-rsa")),
@@ -942,6 +970,7 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
 
         let issued = service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
+                resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_owned()),
                 client_id: Some(Uuid::nil().to_string()),
@@ -955,6 +984,7 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
             .unwrap();
         let refreshed = service
             .exchange_refresh_token(RefreshTokenGrantParams {
+                resources: Vec::new(),
                 scope: None,
                 refresh_token: issued.refresh_token.clone().unwrap(),
                 client_id: Some(Uuid::nil().to_string()),
@@ -1005,6 +1035,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             .create(
                 Uuid::nil(),
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    resources: Vec::new(),
                     scope: scope.to_owned(),
                     nonce: has_openid.then_some("nonce-claims".to_owned()),
                     code_challenge: Some(s256_challenge("verifier-claims")),
@@ -1025,6 +1056,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             .unwrap();
         let issued = service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
+                resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_owned()),
                 client_id: Some(Uuid::nil().to_string()),
@@ -1038,6 +1070,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             .unwrap();
         let refreshed = service
             .exchange_refresh_token(RefreshTokenGrantParams {
+                resources: Vec::new(),
                 scope: None,
                 refresh_token: issued.refresh_token.clone().unwrap(),
                 client_id: Some(Uuid::nil().to_string()),
@@ -1118,6 +1151,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
         let user = test_user(user_oid);
         let access_token = service
             .sign_access_token(SignAccessTokenInput {
+                resources: &[],
                 token_id: &access_record.oid.to_string(),
                 key_id: &key_id,
                 private_key_pem: &private_key,
@@ -1224,6 +1258,7 @@ async fn successful_exchange_emits_consumption_and_issuance_events() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid".to_owned(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("verifier-123")),
@@ -1245,6 +1280,7 @@ async fn successful_exchange_emits_consumption_and_issuance_events() {
 
     service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
             client_id: Some(Uuid::nil().to_string()),
@@ -1306,6 +1342,7 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
 
     let error = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(Uuid::new_v4().as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
             client_id: Some(Uuid::nil().to_string()),
@@ -1362,6 +1399,7 @@ async fn code_exchange_inherits_global_oauth_version_and_honors_client_override(
             .create(
                 Uuid::nil(),
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    resources: Vec::new(),
                     scope: "profile".to_owned(),
                     nonce: None,
                     code_challenge: Some(s256_challenge("verifier-123")),
@@ -1385,6 +1423,7 @@ async fn code_exchange_inherits_global_oauth_version_and_honors_client_override(
             user_oid,
             Arc::new(ConfiguredClientRepository {
                 settings: OpenIdConnectClientSettings {
+                    require_pushed_authorization_requests: false,
                     oauth_version: client,
                     ..Default::default()
                 },
@@ -1408,6 +1447,7 @@ async fn code_exchange_inherits_global_oauth_version_and_honors_client_override(
         )));
         let result = service
             .exchange_authorization_code(AuthorizationCodeGrantParams {
+                resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: None,
                 client_id: Some(Uuid::nil().to_string()),

@@ -41,6 +41,7 @@ fn request_record_with_scope(
         client_oid: Uuid::nil(),
         type_: ClientAuthorizationType::DeviceAuthorizationRequest,
         data: ClientAuthorizationData::DeviceAuthorizationRequest(DeviceAuthorizationRequestData {
+            resources: Vec::new(),
             scope: scope.to_owned(),
             device_code_digest: identity_domain::client_authorization::device_code_digest(
                 DEVICE_CODE,
@@ -78,6 +79,7 @@ fn relation_record_with_scope(revoked: bool, scope: &str) -> ClientAuthorization
         client_oid: Uuid::nil(),
         type_: ClientAuthorizationType::DeviceAuthorization,
         data: ClientAuthorizationData::DeviceAuthorization(DeviceAuthorizationData {
+            resources: Vec::new(),
             scope: scope.to_owned(),
             user_oid: Uuid::nil().to_string(),
             auth_time: Some(1_700_000_000),
@@ -256,6 +258,7 @@ fn device_repo(
 
 fn params() -> DeviceCodeGrantParams {
     DeviceCodeGrantParams {
+        resources: Vec::new(),
         device_code: DEVICE_CODE.to_owned(),
         client_id: Some(Uuid::nil().to_string()),
         client_secret: Some("secret-123".to_owned()),
@@ -434,10 +437,16 @@ async fn an_approved_request_issues_its_token_set_once() {
         repo,
     );
 
-    let response = service.exchange_device_code(params()).await.unwrap();
+    let mut request = params();
+    request.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
+    let response = service.exchange_device_code(request).await.unwrap();
 
     assert_eq!(response.scope, "openid offline_access");
     let access_token = decode_unverified_payload(&response.access_token);
+    assert_eq!(
+        access_token["aud"],
+        identity_domain::openid_connect::API_RESOURCE
+    );
     assert_eq!(access_token["sub"], Uuid::nil().to_string());
     assert_eq!(access_token["client_id"], Uuid::nil().to_string());
     assert_eq!(access_token["auth_time"], 1_700_000_000);
@@ -471,6 +480,10 @@ async fn an_approved_request_issues_its_token_set_once() {
             }
             ClientAuthorizationData::RefreshToken(data) => {
                 found_refresh = true;
+                assert_eq!(
+                    data.resources,
+                    [identity_domain::openid_connect::API_RESOURCE]
+                );
                 assert!(data.session_oid.is_none());
                 assert_eq!(
                     data.device_authorization_oid.as_deref(),
@@ -584,6 +597,7 @@ async fn redemption_requires_client_authentication() {
 
     let error = service
         .exchange_device_code(DeviceCodeGrantParams {
+            resources: Vec::new(),
             client_secret: None,
             client_secret_basic: false,
             ..params()
@@ -603,6 +617,7 @@ async fn registered_public_client_redeems_device_code_without_secret() {
 
     let error = service
         .exchange_device_code(DeviceCodeGrantParams {
+            resources: Vec::new(),
             client_secret: None,
             client_secret_basic: false,
             ..params()
@@ -616,6 +631,7 @@ async fn registered_public_client_redeems_device_code_without_secret() {
 /// Builds a device refresh token whose original authorization had `scope`.
 async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, scope: &str) -> Uuid {
     let refresh_data = RefreshTokenData {
+        resources: Vec::new(),
         scope: scope.to_owned(),
         user_oid: Uuid::nil().to_string(),
         session_oid: None,
@@ -660,6 +676,7 @@ async fn a_device_grant_without_openid_stays_plain_oauth_through_refresh() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
@@ -698,6 +715,7 @@ async fn refresh_cannot_add_openid_the_device_grant_never_requested() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: Some("openid offline_access".to_owned()),
             refresh_token: STANDARD.encode(oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
@@ -736,6 +754,7 @@ async fn refresh_may_narrow_the_granted_scope() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: Some("openid".to_owned()),
             refresh_token: STANDARD.encode(oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
@@ -757,6 +776,7 @@ async fn refresh_may_narrow_the_granted_scope() {
 #[tokio::test]
 async fn refreshing_a_device_token_requires_a_live_relation() {
     let refresh_data = RefreshTokenData {
+        resources: Vec::new(),
         scope: "openid offline_access".to_owned(),
         user_oid: Uuid::nil().to_string(),
         session_oid: None,
@@ -795,6 +815,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
@@ -817,6 +838,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
 #[tokio::test]
 async fn a_live_relation_allows_refreshing_a_device_token() {
     let refresh_data = RefreshTokenData {
+        resources: Vec::new(),
         scope: "openid offline_access".to_owned(),
         user_oid: Uuid::nil().to_string(),
         session_oid: None,
@@ -855,6 +877,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),

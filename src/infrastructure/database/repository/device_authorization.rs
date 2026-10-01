@@ -487,6 +487,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
 
         let relation_oid = approval.device_authorization_oid;
         let relation = DeviceAuthorizationData {
+            resources: request.resources.clone(),
             scope: approval.approved_scope.clone(),
             user_oid: approval.user_oid.clone(),
             auth_time: approval.auth_time,
@@ -795,6 +796,7 @@ mod postgres_tests {
         interval_seconds: i64,
     ) -> DeviceAuthorizationRequestData {
         DeviceAuthorizationRequestData {
+            resources: Vec::new(),
             scope: "openid offline_access".to_owned(),
             device_code_digest: identity_domain::client_authorization::device_code_digest(
                 device_code,

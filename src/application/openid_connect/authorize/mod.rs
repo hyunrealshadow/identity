@@ -35,31 +35,9 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
-pub struct AuthorizationRequestParams {
-    pub response_type: String,
-    pub response_mode: Option<String>,
-    pub client_id: String,
-    pub redirect_uri: String,
-    pub scope: String,
-    pub resource: Option<String>,
-    pub state: String,
-    pub nonce: Option<String>,
-    pub display: Option<String>,
-    pub prompt: Option<String>,
-    pub max_age: Option<String>,
-    pub ui_locales: Option<String>,
-    pub claims_locales: Option<String>,
-    pub id_token_hint: Option<String>,
-    pub login_hint: Option<String>,
-    pub acr_values: Option<String>,
-    pub claims: Option<String>,
-    pub request: Option<String>,
-    pub request_uri: Option<String>,
-    pub code_challenge: Option<String>,
-    pub code_challenge_method: Option<String>,
-}
+pub use identity_domain::openid_connect::model::authorization_request::AuthorizationRequestParams;
 
+#[derive(Clone)]
 pub struct AuthorizeService {
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,

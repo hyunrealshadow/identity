@@ -10,6 +10,7 @@ use crate::{
 
 #[cfg(feature = "oidc-conformance")]
 pub mod conformance;
+pub mod oauth_resource;
 pub mod scope;
 pub mod setting;
 
@@ -25,6 +26,7 @@ pub trait Seed: Send + Sync {
 pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
     let seeds: Vec<Box<dyn Seed>> = vec![
         Box::new(setting::SettingDefaultsSeed),
+        Box::new(oauth_resource::OAuthResourceDefaultsSeed),
         Box::new(scope::BuiltInScopeSeed),
         #[cfg(feature = "oidc-conformance")]
         Box::new(conformance::ConformanceSeed),

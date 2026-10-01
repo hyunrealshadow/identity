@@ -95,6 +95,8 @@ pub struct DeviceAuthorizationApproval {
 pub struct DeviceAuthorizationRequestData {
     /// Requested scope, exactly as parsed from the device authorization request.
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<String>,
     /// Digest of the device code handed to the client.
     pub device_code_digest: String,
     /// Normalized user code used for lookups.
@@ -134,6 +136,8 @@ pub struct DeviceAuthorizationRequestData {
 pub struct DeviceAuthorizationData {
     /// Scope actually granted (a subset of the requested scope).
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<String>,
     pub user_oid: String,
     pub auth_time: Option<i64>,
     pub acr: Option<String>,
@@ -237,6 +241,7 @@ mod tests {
 
     fn request_data() -> DeviceAuthorizationRequestData {
         DeviceAuthorizationRequestData {
+            resources: Vec::new(),
             scope: "openid profile offline_access".to_owned(),
             device_code_digest: device_code_digest("device-code"),
             claimed_login_oid: None,

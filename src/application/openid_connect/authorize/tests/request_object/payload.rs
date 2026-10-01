@@ -1,3 +1,4 @@
+use crate::error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode};
 use crate::openid_connect::authorize::tests::fixtures::repositories::{
     ClientAuthorizationState, mock_client_auth_repo_with_state,
 };
@@ -43,6 +44,23 @@ async fn parse_request_object_payload_preserves_registered_claims() {
     assert_eq!(parsed["aud"], json!("https://identity.example.com/"));
     assert_eq!(parsed["exp"], json!(now + 300));
     assert_eq!(parsed["nbf"], json!(now - 10));
+    for forbidden in ["request", "request_uri"] {
+        let nested = signed_request_object(
+            &private_key,
+            [
+                ("client_id", json!(TEST_CLIENT_ID)),
+                (forbidden, json!("nested")),
+            ],
+        );
+        assert_eq!(
+            service
+                .parse_request_object_payload(&client, &nested)
+                .await
+                .unwrap_err()
+                .code(),
+            AuthorizeErrorCode::RequestObjectPayloadInvalid.code()
+        );
+    }
 }
 
 #[tokio::test]

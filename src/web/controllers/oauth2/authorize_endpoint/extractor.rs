@@ -17,7 +17,7 @@ pub struct RawAuthorizeRequest {
     pub client_id: Option<String>,
     pub redirect_uri: Option<String>,
     pub scope: Option<String>,
-    pub resource: Option<String>,
+    pub resources: Vec<String>,
     pub state: Option<String>,
     pub nonce: Option<String>,
     pub display: Option<String>,
@@ -43,7 +43,7 @@ impl RawAuthorizeRequest {
             "client_id" => self.client_id = Some(value),
             "redirect_uri" => self.redirect_uri = Some(value),
             "scope" => self.scope = Some(value),
-            "resource" => self.resource = Some(value),
+            "resource" => self.resources.push(value),
             "state" => self.state = Some(value),
             "nonce" => self.nonce = Some(value),
             "display" => self.display = Some(value),
@@ -72,7 +72,7 @@ impl From<RawAuthorizeRequest> for AuthorizationRequestParams {
             client_id: value.client_id.unwrap_or_default(),
             redirect_uri: value.redirect_uri.unwrap_or_default(),
             scope: value.scope.unwrap_or_default(),
-            resource: value.resource,
+            resources: value.resources.clone(),
             state: value.state.unwrap_or_default(),
             nonce: value.nonce,
             display: value.display,
@@ -226,5 +226,27 @@ mod tests {
             ..RawAuthorizeRequest::default()
         };
         assert!(authorize_input_error(&raw).is_none());
+    }
+
+    #[tokio::test]
+    async fn authorization_query_and_form_keep_all_resource_parameters() {
+        let body = "resource=https%3A%2F%2Fa.example%2F&resource=urn%3Ab";
+        let mut requests = [
+            TestClient::get(format!("http://localhost/oauth2/authorize?{body}")).build(),
+            TestClient::post("http://localhost/oauth2/authorize")
+                .add_header(
+                    header::CONTENT_TYPE,
+                    "application/x-www-form-urlencoded",
+                    true,
+                )
+                .text(body)
+                .build(),
+        ];
+        for request in &mut requests {
+            let extracted = extract_authorize_request(request).await.unwrap();
+            assert_eq!(extracted.raw.resources, ["https://a.example/", "urn:b"]);
+            let params: AuthorizationRequestParams = extracted.raw.into();
+            assert_eq!(params.resources, ["https://a.example/", "urn:b"]);
+        }
     }
 }

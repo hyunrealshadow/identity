@@ -63,6 +63,7 @@ pub(in crate::openid_connect) fn test_metadata(
         initiate_login_uri: None,
         request_uris,
         settings: OpenIdConnectClientSettings {
+            require_pushed_authorization_requests: false,
             allow_public_client_flow: token_endpoint_auth_method == Some("none"),
             ..OpenIdConnectClientSettings::default()
         },

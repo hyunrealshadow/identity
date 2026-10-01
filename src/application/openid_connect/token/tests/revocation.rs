@@ -36,6 +36,7 @@ async fn refresh_token_revokes_its_grant() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                resources: Vec::new(),
                 scope: "openid offline_access".to_owned(),
                 user_oid: Uuid::new_v4().to_string(),
                 session_oid: None,
@@ -66,6 +67,7 @@ async fn public_flow_disabled_blocks_revocation_of_previously_public_token() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                resources: Vec::new(),
                 scope: "offline_access".to_owned(),
                 user_oid: Uuid::new_v4().to_string(),
                 session_oid: None,
@@ -100,6 +102,7 @@ async fn disabled_public_method_cannot_revoke_a_confidential_token_without_crede
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                resources: Vec::new(),
                 scope: "offline_access".to_owned(),
                 user_oid: Uuid::new_v4().to_string(),
                 session_oid: None,
@@ -135,6 +138,7 @@ async fn another_clients_refresh_token_is_rejected() {
         .create(
             Uuid::new_v4(),
             ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                resources: Vec::new(),
                 scope: "offline_access".to_owned(),
                 user_oid: Uuid::new_v4().to_string(),
                 session_oid: None,
@@ -199,6 +203,7 @@ async fn signed_access_token_revokes_only_its_record() {
         .unwrap();
     let token = service
         .sign_access_token(SignAccessTokenInput {
+            resources: &[],
             token_id: &token_id,
             key_id: &key_id,
             private_key_pem: &private_key_pem,

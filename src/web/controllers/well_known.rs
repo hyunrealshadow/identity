@@ -83,6 +83,8 @@ fn authorization_server_document(
         "issuer": oidc.issuer,
         "authorization_endpoint": oidc.authorization_endpoint,
         "token_endpoint": oidc.token_endpoint,
+        "pushed_authorization_request_endpoint": oidc.pushed_authorization_request_endpoint,
+        "require_pushed_authorization_requests": oidc.require_pushed_authorization_requests,
         "jwks_uri": oidc.jwks_uri,
         "scopes_supported": oidc.scopes_supported,
         "response_types_supported": oidc.response_types_supported,
@@ -198,6 +200,13 @@ mod tests {
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);
         assert_eq!(json["require_request_uri_registration"], true);
+        assert!(
+            json["pushed_authorization_request_endpoint"]
+                .as_str()
+                .unwrap()
+                .ends_with("/oauth2/par")
+        );
+        assert_eq!(json["require_pushed_authorization_requests"], false);
         assert_eq!(
             json["acr_values_supported"],
             serde_json::json!([

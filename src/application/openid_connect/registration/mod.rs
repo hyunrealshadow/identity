@@ -437,6 +437,9 @@ impl DynamicClientRegistrationService {
             initiate_login_uri: request.initiate_login_uri.clone(),
             request_uris: request.request_uris.clone(),
             settings: OpenIdConnectClientSettings {
+                require_pushed_authorization_requests: request
+                    .require_pushed_authorization_requests
+                    .unwrap_or(false),
                 skip_consent: default_skip_consent(),
                 allow_public_client_flow: public_client,
                 oauth_version: Default::default(),
@@ -505,6 +508,8 @@ impl DynamicClientRegistrationService {
                 jwks_uri: request.jwks_uri,
                 default_max_age: request.default_max_age,
                 require_auth_time: request.require_auth_time,
+                require_pushed_authorization_requests: request
+                    .require_pushed_authorization_requests,
                 default_acr_values: request.default_acr_values,
                 initiate_login_uri: request.initiate_login_uri,
                 request_uris: request.request_uris,
@@ -568,7 +573,15 @@ impl DynamicClientRegistrationService {
         registration.client.oid = client_oid;
         registration.client.created_at = existing.client().created_at;
         registration.client.updated_at = Some(Utc::now());
+        let require_par = registration
+            .metadata
+            .settings
+            .require_pushed_authorization_requests;
         registration.metadata.settings = existing.metadata().settings.clone();
+        registration
+            .metadata
+            .settings
+            .require_pushed_authorization_requests = require_par;
         registration.registration_access_token = registration_access_token.to_owned();
         self.repo.update(registration, registration_access_token, request.client_secret).await.map_err(|error| {
             match error {

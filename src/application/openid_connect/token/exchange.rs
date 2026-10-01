@@ -211,6 +211,15 @@ impl TokenService {
             oauth_version,
         )?;
 
+        let selection = self
+            .provider_service
+            .select_resources(&params.resources, &data.resources, &data.scope)
+            .await?;
+        let refresh_resources = if data.resources.is_empty() {
+            &selection.resources
+        } else {
+            &data.resources
+        };
         let issue_id_token = data.scope.split_whitespace().any(|scope| scope == "openid");
         if issue_id_token {
             if authenticated_client.metadata().require_auth_time == Some(true)
@@ -287,7 +296,7 @@ impl TokenService {
         let access_token_record = self
             .create_access_token_record(
                 record.client_oid,
-                &data.scope,
+                &selection.scope,
                 &data.user_oid,
                 Some(data.session_oid),
                 Some(&protected_session_id),
@@ -298,6 +307,7 @@ impl TokenService {
             .await?;
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
+                resources: &selection.resources,
                 token_id: &access_token_record.oid.to_string(),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
@@ -309,7 +319,7 @@ impl TokenService {
                 client: &authenticated_client,
                 user: Some(&user),
                 protected_session_id: Some(&protected_session_id),
-                scope: &data.scope,
+                scope: &selection.scope,
                 claims: data.claims.as_ref(),
                 auth_time: data.auth_time,
                 acr: session_acr.as_deref(),
@@ -360,6 +370,7 @@ impl TokenService {
                     device_authorization_oid: None,
                     client_oid: record.client_oid,
                     scope: &refreshable_scope,
+                    resources: refresh_resources,
                     user_oid: &data.user_oid,
                     session_oid: Some(data.session_oid),
                     protected_session_id: Some(&protected_session_id),
@@ -408,7 +419,7 @@ impl TokenService {
             refresh_token,
             token_type: TokenType::Bearer,
             expires_in: 3600,
-            scope: data.scope,
+            scope: selection.scope,
         })
     }
 
@@ -590,7 +601,17 @@ impl TokenService {
             .split_whitespace()
             .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
             .collect::<Vec<_>>();
-        let scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
+        let grant_scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
+        let selection = self
+            .provider_service
+            .select_resources(&params.resources, &refresh_data.resources, &grant_scope)
+            .await?;
+        let refresh_resources = if refresh_data.resources.is_empty() {
+            &selection.resources
+        } else {
+            &refresh_data.resources
+        };
+        let scope = selection.scope.clone();
         let issue_id_token = scope.split_whitespace().any(|scope| scope == "openid");
         if issue_id_token {
             if authenticated_client.metadata().require_auth_time == Some(true)
@@ -670,6 +691,7 @@ impl TokenService {
             .await?;
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
+                resources: &selection.resources,
                 token_id: &access_token_record.oid.to_string(),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
@@ -701,7 +723,7 @@ impl TokenService {
                     audience: &client_id,
                     client: &authenticated_client,
                     user: &user,
-                    scope: &scope,
+                    scope: &grant_scope,
                     nonce: None,
                     auth_time: refresh_data.auth_time,
                     acr: session_acr.as_deref(),
@@ -722,7 +744,8 @@ impl TokenService {
         let refresh_token = Some(
             self.store_refresh_token(StoreRefreshTokenParams {
                 client_oid: authenticated_client_oid,
-                scope: &scope,
+                scope: &grant_scope,
+                resources: refresh_resources,
                 user_oid: &refresh_data.user_oid,
                 session_oid: refresh_data.session_oid,
                 protected_session_id: protected_session_id.as_deref(),

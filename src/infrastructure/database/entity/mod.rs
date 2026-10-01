@@ -4,6 +4,7 @@
 //! structure remains encoded by the ordered migration crate.
 
 pub mod prelude;
+pub mod resource;
 
 pub mod client;
 pub mod client_authorization;

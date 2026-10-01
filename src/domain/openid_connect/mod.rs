@@ -1,5 +1,7 @@
 pub mod model;
+pub mod par;
 pub mod repository;
+pub mod resource;
 pub mod workload;
 
 pub use model::authorization_request::{

@@ -48,6 +48,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
         .unwrap();
     let token = service
         .sign_access_token(SignAccessTokenInput {
+            resources: &[],
             token_id: &token_id,
             key_id: &key_id,
             private_key_pem: &private_key_pem,
@@ -137,6 +138,7 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
             .create(
                 owner,
                 ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                    resources: Vec::new(),
                     scope: "openid offline_access".into(),
                     user_oid: Uuid::new_v4().to_string(),
                     session_oid: None,

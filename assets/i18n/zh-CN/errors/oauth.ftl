@@ -15,3 +15,4 @@ oauth-error-description-request_not_supported = 不支持此授权请求。
 oauth-error-description-request_uri_not_supported = 不支持 request_uri。
 oauth-error-description-registration_not_supported = 不支持动态客户端注册。
 oauth-error-description-unmet_authentication_requirements = 当前身份验证不满足请求的要求。
+oauth-error-description-invalid_target = 请求的资源无效或不可用。

@@ -20,7 +20,7 @@ async fn signed_request_object_preserves_resource_through_parsing_and_merge() {
         .unwrap();
     let merged =
         AuthorizeService::merge_request_object_params(params("openid profile"), &payload).unwrap();
-    assert_eq!(merged.resource.as_deref(), Some(resource));
+    assert_eq!(merged.resources, vec![resource]);
     service.validate_request(merged).await.unwrap();
 }
 
@@ -33,12 +33,13 @@ async fn validate_request_rejects_unsupported_resource_in_signed_request_object(
         [("resource", json!("https://unsupported.example.com/api"))],
     );
     let params = AuthorizationRequestParams {
+        resources: Vec::new(),
         request: Some(request),
         ..params("openid profile")
     };
 
     let error = service.validate_request(params).await.unwrap_err();
-    assert_eq!(error.code(), 23005); // ScopeInvalid
+    assert_eq!(error.code(), 10006); // invalid_target
 }
 
 #[tokio::test]
@@ -60,6 +61,7 @@ async fn validate_request_supports_request_parameter() {
     );
 
     let params = AuthorizationRequestParams {
+        resources: Vec::new(),
         client_id: TEST_CLIENT_ID.to_string(),
         response_type: String::new(),
         redirect_uri: String::new(),
@@ -99,6 +101,7 @@ async fn validate_request_supports_request_parameter_without_outer_client_id() {
     );
 
     let params = AuthorizationRequestParams {
+        resources: Vec::new(),
         client_id: String::new(),
         response_type: String::new(),
         redirect_uri: String::new(),
@@ -129,10 +132,41 @@ async fn validate_request_rejects_mismatched_request_object_field() {
     );
 
     let params = AuthorizationRequestParams {
+        resources: Vec::new(),
         request: Some(request),
         ..params("openid profile")
     };
 
     let error = service.validate_request(params).await.unwrap_err();
     assert!(format!("{error:?}").contains("scope"));
+}
+
+#[tokio::test]
+async fn signed_request_object_resources_accept_arrays_and_reject_other_claim_types() {
+    let (private_key, public_key) = signing_keypair();
+    let service = authorize_service_with_public_key(public_key);
+    let client = service
+        .client_repo
+        .find_by_oid(TEST_CLIENT_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    for (claim, expected) in [
+        (json!(["urn:a", "urn:b"]), Some(vec!["urn:a", "urn:b"])),
+        (json!([]), None),
+        (json!(["urn:a", 42]), None),
+        (json!(42), None),
+        (json!(null), None),
+    ] {
+        let raw = signed_request_object(&private_key, [("resource", claim)]);
+        let payload = service
+            .parse_request_object_payload(&client, &raw)
+            .await
+            .unwrap();
+        let merged = AuthorizeService::merge_request_object_params(params("openid"), &payload);
+        match expected {
+            Some(expected) => assert_eq!(merged.unwrap().resources, expected),
+            None => assert_eq!(merged.unwrap_err().code(), 10006),
+        }
+    }
 }

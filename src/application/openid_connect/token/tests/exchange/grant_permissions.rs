@@ -5,6 +5,7 @@ use identity_domain::openid_connect::GrantType;
 
 fn refresh_token_data(user_oid: Uuid) -> RefreshTokenData {
     RefreshTokenData {
+        resources: Vec::new(),
         scope: "openid offline_access".to_string(),
         user_oid: user_oid.to_string(),
         session_oid: Some(SessionOid::from(Uuid::new_v4())),
@@ -35,6 +36,7 @@ async fn code_exchange_rejects_client_without_authorization_code_grant() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access".to_string(),
                 nonce: None,
                 code_challenge: None,
@@ -56,6 +58,7 @@ async fn code_exchange_rejects_client_without_authorization_code_grant() {
 
     let error = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -91,6 +94,7 @@ async fn code_exchange_does_not_issue_unusable_refresh_token() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access".to_owned(),
                 nonce: None,
                 code_challenge: None,
@@ -112,6 +116,7 @@ async fn code_exchange_does_not_issue_unusable_refresh_token() {
 
     let response = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
             client_id: Some(Uuid::nil().to_string()),
@@ -149,6 +154,7 @@ async fn refresh_exchange_rejects_client_without_refresh_token_grant() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
             client_id: Some(Uuid::nil().to_string()),
@@ -185,6 +191,7 @@ async fn grant_permission_is_checked_before_the_refresh_token_lookup() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(Uuid::new_v4().as_bytes()),
             client_id: Some(Uuid::nil().to_string()),

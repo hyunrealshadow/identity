@@ -4,7 +4,66 @@ use identity_domain::openid_connect::{OAuthProtocolVersion, TokenEndpointAuthMet
 impl AuthorizeService {
     pub async fn validate_request(
         &self,
+        params: AuthorizationRequestParams,
+    ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
+        use identity_domain::openid_connect::par::PAR_REQUEST_URI_PREFIX;
+        if let Some(uri) = params
+            .request_uri
+            .as_deref()
+            .filter(|uri| uri.starts_with(PAR_REQUEST_URI_PREFIX))
+        {
+            let expected = AuthorizationRequestParams {
+                client_id: params.client_id.clone(),
+                request_uri: params.request_uri.clone(),
+                ..Default::default()
+            };
+            if params != expected {
+                return Err(AppError::from_code(
+                    crate::error::codes::common::CommonErrorCode::InvalidRequest,
+                ));
+            }
+            let client_oid = Uuid::parse_str(&params.client_id)
+                .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
+            let stored = self
+                .client_authorization_repo
+                .consume_pushed_authorization_request(
+                    &crate::openid_connect::par::request_uri_digest(uri),
+                    client_oid,
+                    chrono::Utc::now(),
+                )
+                .await
+                .map_err(|error| {
+                    AppError::from_code(
+                        crate::error::codes::common::CommonErrorCode::PushedRequestStorageFailed,
+                    )
+                    .with_source(error)
+                })?
+                .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
+            let stored = stored.parameters;
+            if stored.client_id != params.client_id || stored.request_uri.is_some() {
+                return Err(AppError::from_code(AuthorizeErrorCode::RequestUriInvalid));
+            }
+            return self.validate_request_params(stored, true).await;
+        }
+        self.validate_request_params(params, false).await
+    }
+
+    pub(crate) async fn validate_pushed_request(
+        &self,
+        params: AuthorizationRequestParams,
+    ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
+        if params.request_uri.is_some() {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::InvalidRequest,
+            ));
+        }
+        self.validate_request_params(params, true).await
+    }
+
+    async fn validate_request_params(
+        &self,
         mut params: AuthorizationRequestParams,
+        pushed: bool,
     ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
         Self::validate_request_parameter_conflicts(&params)?;
 
@@ -32,12 +91,36 @@ impl AuthorizeService {
             })?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
+        if !pushed
+            && (self
+                .provider_service
+                .pushed_authorization_settings()
+                .require_pushed_authorization_requests
+                || client
+                    .metadata()
+                    .settings
+                    .require_pushed_authorization_requests)
+        {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::InvalidRequest,
+            ));
+        }
+
         let oauth_version = self.provider_service.oauth_version(&client);
 
         if let Some(raw_request_object) = self.resolve_request_object(&client, &params).await? {
             let payload = self
                 .parse_request_object_payload(&client, &raw_request_object)
                 .await?;
+            if pushed
+                && payload.get("client_id").and_then(serde_json::Value::as_str)
+                    != Some(params.client_id.as_str())
+            {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
+                        .with_param("field", "client_id"),
+                );
+            }
             Self::validate_request_object_claims(
                 &params,
                 &payload,
@@ -103,17 +186,10 @@ impl AuthorizeService {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;
 
-        if params
-            .resource
-            .as_deref()
-            .is_some_and(|resource| resource != identity_domain::openid_connect::API_RESOURCE)
-            || (scope.has_api_scopes()
-                && params.resource.as_deref()
-                    != Some(identity_domain::openid_connect::API_RESOURCE))
-        {
-            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
-                .with_param("resource", params.resource.as_deref().unwrap_or_default()));
-        }
+        let resources = self
+            .provider_service
+            .validate_authorization_resources(&params.resources, &scope)
+            .await?;
 
         // An identity token only exists in OIDC, so the response types that
         // ask for one demand `openid`. Code and token responses work as plain
@@ -271,6 +347,7 @@ impl AuthorizeService {
             redirect_uri_raw: params.redirect_uri,
             redirect_uri_was_supplied,
             scope,
+            resources,
             state: params.state,
             nonce: params.nonce,
             display,

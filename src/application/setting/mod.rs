@@ -6,6 +6,7 @@ pub mod runtime;
 
 pub use binding::{SettingChanges, SettingRegistry, SettingsSnapshot, SettingsSource};
 pub use definition::{SettingDefinition, SettingSection, SettingValidationError, SettingValue};
+pub use definitions::PushedAuthorizationSettings;
 pub use definitions::{
     AppSettings, DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings,
     InstallationSettings, LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings,

@@ -21,6 +21,7 @@ pub type ClientAuthorizationOid = Uuid;
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum ClientAuthorizationType {
+    PushedAuthorizationRequest,
     AuthorizationRequest,
     AuthorizationCode,
     AccessToken,
@@ -54,6 +55,8 @@ impl FromStr for ClientAuthorizationType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuthorizationCodeData {
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<String>,
     pub nonce: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<CodeChallengeMethod>,
@@ -78,6 +81,8 @@ fn default_redirect_uri_was_supplied() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RefreshTokenData {
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<String>,
     pub user_oid: String,
     /// Browser session the token was issued from; `None` for device issued
     /// tokens, which are bound to a device authorization relation instead.
@@ -154,8 +159,15 @@ pub struct StoredAuthorizationRequest {
     pub interaction: AuthorizationInteractionState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PushedAuthorizationRequestData {
+    pub request_uri_digest: String,
+    pub parameters: crate::openid_connect::model::authorization_request::AuthorizationRequestParams,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientAuthorizationData {
+    PushedAuthorizationRequest(PushedAuthorizationRequestData),
     AuthorizationRequest(StoredAuthorizationRequest),
     AuthorizationCode(AuthorizationCodeData),
     AccessToken(AccessTokenData),
@@ -169,6 +181,9 @@ impl ClientAuthorizationData {
     #[must_use]
     pub const fn authorization_type(&self) -> ClientAuthorizationType {
         match self {
+            Self::PushedAuthorizationRequest(_) => {
+                ClientAuthorizationType::PushedAuthorizationRequest
+            }
             Self::AuthorizationRequest(_) => ClientAuthorizationType::AuthorizationRequest,
             Self::AuthorizationCode(_) => ClientAuthorizationType::AuthorizationCode,
             Self::AccessToken(_) => ClientAuthorizationType::AccessToken,
@@ -263,6 +278,7 @@ mod tests {
     #[test]
     fn authorization_code_data_serialization() {
         let data = AuthorizationCodeData {
+            resources: Vec::new(),
             scope: "openid profile".to_string(),
             nonce: Some("nonce123".to_string()),
             code_challenge: Some("challenge123".to_string()),
@@ -298,6 +314,7 @@ mod tests {
     #[test]
     fn refresh_token_data_serialization() {
         let data = RefreshTokenData {
+            resources: Vec::new(),
             scope: "openid offline_access profile".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: Some(SessionOid(uuid::Uuid::nil())),
@@ -326,6 +343,7 @@ mod tests {
     #[test]
     fn refresh_token_data_auth_time_is_none_when_not_set() {
         let data = RefreshTokenData {
+            resources: Vec::new(),
             scope: "openid offline_access".to_string(),
             user_oid: uuid::Uuid::nil().to_string(),
             session_oid: Some(SessionOid(uuid::Uuid::nil())),

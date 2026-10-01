@@ -25,6 +25,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access profile email".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
                 code_challenge: Some(s256_challenge("verifier-refresh")),
@@ -46,6 +47,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -60,6 +62,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: initial.refresh_token.unwrap(),
             client_id: Some(Uuid::nil().to_string()),
@@ -96,6 +99,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh".to_string()),
                 code_challenge: Some(s256_challenge("verifier-refresh")),
@@ -117,6 +121,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -135,6 +140,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: initial_refresh_token.clone(),
             client_id: Some(Uuid::nil().to_string()),
@@ -177,6 +183,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let error = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
@@ -295,6 +302,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-refresh-es256".to_string()),
                 code_challenge: Some(s256_challenge("verifier-refresh-es256")),
@@ -316,6 +324,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -330,6 +339,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: initial.refresh_token.unwrap(),
             client_id: Some(Uuid::nil().to_string()),
@@ -436,6 +446,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access profile".to_string(),
                 nonce: Some("nonce-auth-time".to_string()),
                 code_challenge: Some(s256_challenge("verifier-auth-time")),
@@ -457,6 +468,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),
@@ -482,6 +494,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
+            resources: Vec::new(),
             scope: None,
             refresh_token: initial_refresh_token,
             client_id: Some(Uuid::nil().to_string()),
@@ -532,6 +545,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
                 scope: "openid offline_access".to_string(),
                 nonce: None,
                 code_challenge: Some(s256_challenge("verifier-no-auth-time")),
@@ -553,6 +567,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
 
     let initial = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
             client_id: Some(Uuid::nil().to_string()),

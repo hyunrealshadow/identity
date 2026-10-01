@@ -1020,6 +1020,12 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
             );
             assert!(registration.metadata.logo_uri.is_none());
             assert!(registration.metadata.contacts.is_none());
+            assert!(
+                registration
+                    .metadata
+                    .settings
+                    .require_pushed_authorization_requests
+            );
             Ok(())
         });
     let service = DynamicClientRegistrationService::new(
@@ -1028,7 +1034,8 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
     );
     let request = serde_json::from_value::<DynamicClientUpdateRequest>(serde_json::json!({
         "client_id": client_oid.to_string(), "client_secret": "old-secret",
-        "client_name": "Updated Client", "redirect_uris": ["https://rp.example.com/new"]
+        "client_name": "Updated Client", "redirect_uris": ["https://rp.example.com/new"],
+        "require_pushed_authorization_requests": true
     }))
     .unwrap();
     let response = service
@@ -1041,6 +1048,7 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
         .await
         .unwrap();
     assert_eq!(response.client_id, client_oid.to_string());
+    assert_eq!(response.require_pushed_authorization_requests, Some(true));
     assert_eq!(
         response.registration_access_token.as_deref(),
         Some("registration-token")

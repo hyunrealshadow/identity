@@ -33,6 +33,7 @@ pub struct DynamicClientRegistrationRequest {
     pub jwks_uri: Option<Url>,
     pub default_max_age: Option<i32>,
     pub require_auth_time: Option<bool>,
+    pub require_pushed_authorization_requests: Option<bool>,
     pub default_acr_values: Option<Vec<String>>,
     pub initiate_login_uri: Option<Url>,
     pub request_uris: Option<Vec<Url>>,

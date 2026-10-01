@@ -108,6 +108,7 @@ pub enum OAuthProtocolVersion {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct OpenIdConnectClientSettings {
+    pub require_pushed_authorization_requests: bool,
     #[serde(default)]
     pub skip_consent: bool,
     /// Enables unauthenticated public-client flows when `none` is registered.
@@ -530,6 +531,7 @@ mod tests {
     #[test]
     fn settings_roundtrips_oauth_protocol_version() {
         let settings = OpenIdConnectClientSettings {
+            require_pushed_authorization_requests: false,
             oauth_version: Some(OAuthProtocolVersion::V2_1),
             ..OpenIdConnectClientSettings::default()
         };
@@ -725,6 +727,7 @@ mod tests {
             };
             let metadata = OpenIdConnectClientMetadata {
                 settings: OpenIdConnectClientSettings {
+                    require_pushed_authorization_requests: false,
                     oauth_version: Some(oauth_version),
                     ..Default::default()
                 },

@@ -173,6 +173,7 @@ pub(super) async fn continue_state(
     };
     let authorization_request = StoredAuthorizationRequest {
         request: AuthorizationRequestData {
+            resources: Vec::new(),
             response_type: "code".parse().unwrap(),
             response_mode: None,
             client_id: client_oid.to_string(),
@@ -300,6 +301,7 @@ pub(super) async fn continue_state(
         initiate_login_uri: None,
         request_uris: None,
         settings: serde_json::to_value(OpenIdConnectClientSettings {
+            require_pushed_authorization_requests: false,
             skip_consent: fixture.skip_consent,
             ..OpenIdConnectClientSettings::default()
         })
