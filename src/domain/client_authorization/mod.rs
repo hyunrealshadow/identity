@@ -11,8 +11,8 @@ pub use device::{
 pub use model::{
     AccessTokenData, AuthorizationCodeData, AuthorizationInteractionState,
     ClientAuthenticationMode, ClientAuthorization, ClientAuthorizationData, ClientAuthorizationOid,
-    ClientAuthorizationType, ConsentState, RefreshTokenData, RegistrationAccessTokenData,
-    SelectionSource, StoredAuthorizationRequest,
+    ClientAuthorizationType, ConsentState, PushedAuthorizationRequestData, RefreshTokenData,
+    RegistrationAccessTokenData, SelectionSource, StoredAuthorizationRequest,
 };
 pub use repository::{
     ClientAuthorizationRepository, ClientAuthorizationRepositoryError,

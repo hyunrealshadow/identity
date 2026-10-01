@@ -10,6 +10,7 @@ pub enum OAuthErrorCode {
     AccessDenied,
     UnsupportedResponseType,
     InvalidScope,
+    InvalidTarget,
     ServerError,
     TemporarilyUnavailable,
     LoginRequired,

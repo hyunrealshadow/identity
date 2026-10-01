@@ -29,7 +29,7 @@ pub(super) fn params(scope: &str) -> AuthorizationRequestParams {
         client_id: TEST_CLIENT_ID.to_string(),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: scope.to_string(),
-        resource: None,
+        resources: Vec::new(),
         state: "state123".to_string(),
         nonce: None,
         display: None,
@@ -50,6 +50,7 @@ pub(super) fn params(scope: &str) -> AuthorizationRequestParams {
 
 pub(super) fn empty_optional_params() -> AuthorizationRequestParams {
     AuthorizationRequestParams {
+        resources: Vec::new(),
         state: "state123".to_string(),
         ..params("openid profile")
     }

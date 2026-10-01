@@ -16,6 +16,13 @@ mockall::mock! {
 
     #[async_trait::async_trait]
     impl ClientAuthorizationRepository for ClientAuthorizationRepository {
+        async fn consume_pushed_authorization_request(
+            &self,
+            digest: &str,
+            client_oid: ClientOid,
+            now: DateTime<Utc>,
+        ) -> Result<Option<identity_domain::client_authorization::PushedAuthorizationRequestData>, ClientAuthorizationRepositoryError>;
+
         async fn create(
             &self,
             client_oid: ClientOid,

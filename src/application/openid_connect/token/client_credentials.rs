@@ -64,7 +64,11 @@ impl TokenService {
                 TokenErrorCode::ClientCredentialsScopeNotAllowed,
             ));
         }
-        let scope = requested.to_scope_string();
+        let selection = self
+            .provider_service
+            .select_resources(&params.resources, &[], &requested.to_scope_string())
+            .await?;
+        let scope = selection.scope;
         let client_oid = client.client().oid;
         let issuer = self.provider_service.issuer()?;
         let configured_signing_key = self
@@ -87,6 +91,7 @@ impl TokenService {
             .await?;
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
+                resources: &selection.resources,
                 token_id: &record.oid.to_string(),
                 key_id: &key_id,
                 private_key_pem: &private_key_pem,

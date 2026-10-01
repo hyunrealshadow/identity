@@ -1,8 +1,9 @@
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseBackend, DatabaseConnection,
-    DatabaseTransaction, EntityTrait, QueryFilter, QuerySelect, Set, Statement, TransactionTrait,
+    DatabaseTransaction, EntityTrait, FromQueryResult, QueryFilter, QuerySelect, Set, Statement,
+    TransactionTrait,
     sea_query::{Expr, OnConflict, SimpleExpr},
 };
 use uuid::Uuid;
@@ -49,6 +50,7 @@ pub(super) fn serialize_data(
     data: &ClientAuthorizationData,
 ) -> Result<serde_json::Value, ClientAuthorizationRepositoryError> {
     match data {
+        ClientAuthorizationData::PushedAuthorizationRequest(value) => serde_json::to_value(value),
         ClientAuthorizationData::AuthorizationRequest(value) => serde_json::to_value(value),
         ClientAuthorizationData::AuthorizationCode(value) => serde_json::to_value(value),
         ClientAuthorizationData::AccessToken(value) => serde_json::to_value(value),
@@ -76,6 +78,11 @@ fn parse_data(
     data: serde_json::Value,
 ) -> Result<ClientAuthorizationData, ClientAuthorizationRepositoryError> {
     match type_ {
+        ClientAuthorizationType::PushedAuthorizationRequest => serde_json::from_value::<
+            identity_domain::client_authorization::PushedAuthorizationRequestData,
+        >(data)
+        .map(ClientAuthorizationData::PushedAuthorizationRequest)
+        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))),
         ClientAuthorizationType::AuthorizationRequest => parse_stored_authorization_request(data)
             .map(ClientAuthorizationData::AuthorizationRequest),
         ClientAuthorizationType::AuthorizationCode => {
@@ -270,6 +277,38 @@ impl ClientAuthorizationRepositoryImpl {
 
 #[async_trait]
 impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
+    async fn consume_pushed_authorization_request(
+        &self,
+        digest: &str,
+        client_oid: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<
+        Option<identity_domain::client_authorization::PushedAuthorizationRequestData>,
+        ClientAuthorizationRepositoryError,
+    > {
+        let row = client_authorization::Model::find_by_statement(Statement::from_sql_and_values(
+            DatabaseBackend::Postgres,
+            r#"UPDATE "client_authorization"
+               SET "completed_at" = $3, "updated_at" = $3
+               WHERE "type" = 'pushed_authorization_request'
+                 AND "data"->>'request_uri_digest' = $1
+                 AND "client_id" = (SELECT "id" FROM "client" WHERE "oid" = $2)
+                 AND "expires_at" > $3 AND "completed_at" IS NULL
+                 AND "revoked_at" IS NULL AND "is_expired" = false
+               RETURNING *"#,
+            [digest.into(), client_oid.into(), now.into()],
+        ))
+        .one(&self.db)
+        .await
+        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        row.map(|row| {
+            serde_json::from_value::<
+                identity_domain::client_authorization::PushedAuthorizationRequestData,
+            >(row.data)
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+        })
+        .transpose()
+    }
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
     async fn create(
         &self,
@@ -1006,5 +1045,77 @@ mod selection_tests {
         assert!(log.contains(&client_oid.to_string()), "{log}");
         assert!(log.contains("openid_connect"), "{log}");
         assert!(log.contains("INNER JOIN"), "{log}");
+    }
+}
+
+#[cfg(test)]
+mod par_tests {
+    use super::*;
+    use identity_domain::client_authorization::PushedAuthorizationRequestData;
+    use identity_domain::openid_connect::model::authorization_request::AuthorizationRequestParams;
+    use sea_orm::MockDatabase;
+
+    #[tokio::test]
+    async fn consumption_is_one_statement_conditioned_on_type_owner_expiry_and_unused_state() {
+        let now = Utc::now();
+        let params = AuthorizationRequestParams {
+            client_id: Uuid::nil().to_string(),
+            scope: "openid".to_owned(),
+            ..Default::default()
+        };
+        let row = client_authorization::Model {
+            id: 1,
+            oid: Uuid::new_v4(),
+            client_id: 7,
+            r#type: ClientAuthorizationType::PushedAuthorizationRequest.to_string(),
+            data: serde_json::to_value(PushedAuthorizationRequestData {
+                request_uri_digest: "digest".to_owned(),
+                parameters: params.clone(),
+            })
+            .unwrap(),
+            expires_at: (now + chrono::Duration::seconds(90)).into(),
+            completed_at: Some(now.into()),
+            revoked_at: None,
+            is_expired: false,
+            created_at: now.into(),
+            updated_at: Some(now.into()),
+        };
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![row], vec![]])
+            .into_connection();
+        let repo = ClientAuthorizationRepositoryImpl::new(db.clone());
+        assert_eq!(
+            repo.consume_pushed_authorization_request("digest", Uuid::nil(), now)
+                .await
+                .unwrap(),
+            Some(PushedAuthorizationRequestData {
+                request_uri_digest: "digest".to_owned(),
+                parameters: params
+            })
+        );
+        assert!(
+            repo.consume_pushed_authorization_request("digest", Uuid::nil(), now)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let log = db.into_transaction_log();
+        assert_eq!(log.len(), 2);
+        let sql = format!("{:?}", log[0]);
+        for predicate in [
+            "UPDATE",
+            "client_authorization",
+            "pushed_authorization_request",
+            "request_uri_digest",
+            "SELECT",
+            "expires_at",
+            "completed_at",
+            "IS NULL",
+            "revoked_at",
+            "is_expired",
+            "RETURNING",
+        ] {
+            assert!(sql.contains(predicate), "{sql}");
+        }
     }
 }

@@ -7,9 +7,11 @@ pub mod jose;
 pub mod jwt_checks;
 pub mod login_runtime;
 pub mod logout;
+pub mod par;
 pub mod provider;
 pub mod registration;
 pub mod remote;
+mod resource;
 pub mod session;
 #[cfg(test)]
 pub(crate) mod tests;

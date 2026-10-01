@@ -14,9 +14,10 @@ mod extractor;
 mod interaction;
 mod response;
 
+pub(super) use extractor::parse_authorize_pairs;
 pub use extractor::{AuthorizeRequestExtractor, RawAuthorizeRequest, authorize_input_error};
 pub use interaction::{FlowDecision, select_active_session};
-pub(super) use response::render_form_post_response;
+pub(super) use response::{authorize_oauth_error_code, render_form_post_response};
 pub use response::{
     finish_authorize_redirect, inline_script_csp_header_value, redirect_oauth_error_response,
     response_mode_from_value,
@@ -146,6 +147,16 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
                 .await
                 .into());
         }
+    };
+
+    let raw_request = RawAuthorizeRequest {
+        response_type: Some(request.response_type.to_string()),
+        response_mode: request.response_mode.map(|value| value.to_string()),
+        client_id: Some(request.client_id.to_string()),
+        redirect_uri: Some(request.redirect_uri_raw.clone()),
+        scope: Some(request.scope.to_scope_string()),
+        state: Some(request.state.clone()),
+        ..raw_request
     };
 
     let active_session_entries = match load_op_active_session_entries(&ctx, &headers).await {
@@ -366,6 +377,7 @@ mod tests {
     #[tokio::test]
     async fn authorize_redirects_oauth_error_after_redirect_uri_validation() {
         let request = AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: None,
             client_id: uuid::Uuid::nil(),
@@ -404,6 +416,7 @@ mod tests {
     #[tokio::test]
     async fn authorize_redirects_implicit_oauth_error_in_fragment() {
         let request = AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::IdToken,
             response_mode: None,
             client_id: uuid::Uuid::nil(),
@@ -449,6 +462,7 @@ mod tests {
     #[tokio::test]
     async fn authorize_redirects_hybrid_oauth_error_in_fragment() {
         let request = AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::CodeIdToken,
             response_mode: None,
             client_id: uuid::Uuid::nil(),

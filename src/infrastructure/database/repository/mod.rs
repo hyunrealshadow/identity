@@ -6,6 +6,7 @@ pub mod key_jwk;
 pub mod key_rotation;
 pub mod login;
 pub mod login_runtime;
+pub mod oauth_resource;
 pub mod openid_connect;
 pub mod openid_connect_credential;
 pub mod session;

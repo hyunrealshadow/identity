@@ -120,6 +120,11 @@ impl AuthorizeService {
             }
         };
 
+        if payload.claim("request").is_some() || payload.claim("request_uri").is_some() {
+            return Err(AppError::from_code(
+                AuthorizeErrorCode::RequestObjectPayloadInvalid,
+            ));
+        }
         let mut value = serde_json::Map::new();
         for claim in [
             "response_type",
@@ -343,8 +348,25 @@ impl AuthorizeService {
         if let Some(value) = payload.get("scope").and_then(|value| value.as_str()) {
             params.scope = value.to_string();
         }
-        if let Some(value) = payload.get("resource").and_then(|value| value.as_str()) {
-            params.resource = Some(value.to_string());
+        if let Some(value) = payload.get("resource") {
+            params.resources = match value {
+                serde_json::Value::String(uri) => vec![uri.clone()],
+                serde_json::Value::Array(values) if !values.is_empty() => values
+                    .iter()
+                    .map(|value| {
+                        value.as_str().map(str::to_owned).ok_or_else(|| {
+                            AppError::from_code(
+                                crate::error::codes::common::CommonErrorCode::InvalidTarget,
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                _ => {
+                    return Err(AppError::from_code(
+                        crate::error::codes::common::CommonErrorCode::InvalidTarget,
+                    ));
+                }
+            };
         }
         if let Some(value) = payload.get("state").and_then(|value| value.as_str()) {
             params.state = value.to_string();
@@ -660,7 +682,7 @@ impl AuthorizeService {
         })
     }
 
-    pub(super) fn extract_request_object_client_id(raw: &str) -> Result<Option<String>, AppError> {
+    pub(crate) fn extract_request_object_client_id(raw: &str) -> Result<Option<String>, AppError> {
         let payload = Self::decode_request_object_payload_unverified(raw)?;
         Ok(payload
             .get("client_id")

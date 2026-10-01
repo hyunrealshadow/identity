@@ -21,6 +21,8 @@ use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers}
 
 #[derive(Debug, Deserialize)]
 struct TokenForm {
+    #[serde(default, rename = "resource")]
+    resources: Vec<String>,
     grant_type: String,
     code: Option<String>,
     device_code: Option<String>,
@@ -42,8 +44,14 @@ struct TokenErrorResponse {
     error_description: String,
 }
 
-fn app_error_to_rfc6749(error: &AppError) -> &'static str {
+pub(super) fn app_error_to_rfc6749(error: &AppError) -> &'static str {
     match error.code() {
+        c if c
+            == identity_application::error::codes::common::CommonErrorCode::InvalidTarget
+                .code() =>
+        {
+            "invalid_target"
+        }
         // Authorization code errors → invalid_grant
         c if c == TokenErrorCode::AuthCodeNotFound.code() => "invalid_grant",
         c if c == TokenErrorCode::AuthCodeInvalid.code() => "invalid_grant",
@@ -110,7 +118,7 @@ fn app_error_to_rfc6749(error: &AppError) -> &'static str {
     }
 }
 
-fn token_error_status(error: &AppError) -> StatusCode {
+pub(super) fn token_error_status(error: &AppError) -> StatusCode {
     if error.kind() == ErrorKind::Internal {
         StatusCode::INTERNAL_SERVER_ERROR
     } else if app_error_to_rfc6749(error) == "invalid_client" {
@@ -222,6 +230,7 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
             ctx.services()
                 .oidc_token()
                 .exchange_authorization_code(AuthorizationCodeGrantParams {
+                    resources: form.resources,
                     code: form.code.unwrap_or_default(),
                     redirect_uri: form.redirect_uri,
                     client_id,
@@ -237,6 +246,7 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
             ctx.services()
                 .oidc_token()
                 .exchange_device_code(DeviceCodeGrantParams {
+                    resources: form.resources,
                     device_code: form.device_code.unwrap_or_default(),
                     client_id,
                     client_secret,
@@ -250,6 +260,7 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
             ctx.services()
                 .oidc_token()
                 .exchange_refresh_token(RefreshTokenGrantParams {
+                    resources: form.resources,
                     refresh_token: form.refresh_token.unwrap_or_default(),
                     scope: form.scope,
                     client_id,
@@ -264,6 +275,7 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
             ctx.services()
                 .oidc_token()
                 .exchange_client_credentials(ClientCredentialsGrantParams {
+                    resources: form.resources,
                     scope: form.scope,
                     client_id,
                     client_secret,
@@ -428,5 +440,34 @@ mod tests {
         let parsed = parse_basic_client_auth(&headers).unwrap();
         assert_eq!(parsed.0, "00000000-0000-0000-0000-000000000000");
         assert_eq!(parsed.1, "secret-123");
+    }
+
+    #[tokio::test]
+    async fn token_form_retains_repeated_resources_and_empty_targets() {
+        use salvo::test::TestClient;
+        for (body, expected) in [
+            (
+                "grant_type=client_credentials&resource=https%3A%2F%2Fa.example%2F&resource=urn%3Ab",
+                vec!["https://a.example/", "urn:b"],
+            ),
+            ("grant_type=client_credentials&resource=", vec![""]),
+            ("grant_type=client_credentials", vec![]),
+        ] {
+            let mut req = TestClient::post("http://localhost/oauth2/token")
+                .add_header(
+                    header::CONTENT_TYPE,
+                    "application/x-www-form-urlencoded",
+                    true,
+                )
+                .text(body)
+                .build();
+            let form: TokenForm = parse_form(&mut req).await.unwrap();
+            assert_eq!(form.resources, expected);
+        }
+        let error = AppError::from_code(
+            identity_application::error::codes::common::CommonErrorCode::InvalidTarget,
+        );
+        assert_eq!(app_error_to_rfc6749(&error), "invalid_target");
+        assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
     }
 }

@@ -43,6 +43,7 @@ pub const DEVICE_VERIFICATION_PATH: &str = "device";
 
 #[derive(Debug, Clone, Default)]
 pub struct DeviceAuthorizationParams {
+    pub resources: Vec<String>,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
@@ -183,6 +184,15 @@ impl DeviceAuthorizationService {
 
         self.check_client_grant(&client)?;
         let scope = self.resolve_scope(&client, params.scope.as_deref())?;
+        let resources = self
+            .provider_service
+            .select_resources(&params.resources, &[], &scope.to_scope_string())
+            .await?;
+        if resources.scope != scope.to_scope_string() {
+            return Err(AppError::from_code(
+                crate::error::codes::common::CommonErrorCode::InvalidTarget,
+            ));
+        }
         let issuer = self.provider_service.issuer()?;
 
         let device_code = generate_device_code();
@@ -192,6 +202,7 @@ impl DeviceAuthorizationService {
             .create_request(
                 &client,
                 &scope,
+                &resources.resources,
                 &device_code,
                 settings.polling_interval_seconds,
                 expires_at,
@@ -548,6 +559,7 @@ impl DeviceAuthorizationService {
         &self,
         client: &OpenIdConnectClient,
         scope: &ScopeSet,
+        resources: &[String],
         device_code: &str,
         interval_seconds: i64,
         expires_at: DateTime<Utc>,
@@ -556,6 +568,7 @@ impl DeviceAuthorizationService {
         for _ in 0..USER_CODE_ATTEMPTS {
             let user_code = generate_user_code();
             let data = DeviceAuthorizationRequestData {
+                resources: resources.to_vec(),
                 scope: scope.to_scope_string(),
                 device_code_digest: device_code_digest(device_code),
                 user_code_display: format_user_code(&user_code),

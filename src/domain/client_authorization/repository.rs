@@ -15,6 +15,17 @@ use crate::openid_connect::ScopeSet;
 
 #[async_trait]
 pub trait ClientAuthorizationRepository: Send + Sync {
+    /// Atomically consumes an active PAR reference belonging to this client.
+    async fn consume_pushed_authorization_request(
+        &self,
+        digest: &str,
+        client_oid: ClientOid,
+        now: DateTime<Utc>,
+    ) -> Result<
+        Option<super::model::PushedAuthorizationRequestData>,
+        ClientAuthorizationRepositoryError,
+    >;
+
     async fn create(
         &self,
         client_oid: ClientOid,

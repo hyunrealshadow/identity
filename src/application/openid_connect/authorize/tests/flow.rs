@@ -1058,6 +1058,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
 
     let mut request_params = params("openid profile");
     request_params.response_type = "code id_token token".to_string();
+    request_params.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
     request_params.nonce = Some("nonce-hybrid".to_string());
     let (request, _) = service.validate_request(request_params).await.unwrap();
     let oid = service
@@ -1084,7 +1085,16 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
     );
 
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
+    let (access, _) = jwt::decode_with_verifier(access_token, &verifier).unwrap();
+    assert_eq!(
+        access.audience().unwrap(),
+        [identity_domain::openid_connect::API_RESOURCE]
+    );
     let (payload, _) = jwt::decode_with_verifier(id_token, &verifier).unwrap();
+    assert_eq!(
+        payload.audience().unwrap(),
+        [TEST_CLIENT_ID.to_string().as_str()]
+    );
     assert_eq!(
         payload.claim(JwtClaimNames::C_HASH).unwrap(),
         &serde_json::json!(expected_hash_for_rs256(code))

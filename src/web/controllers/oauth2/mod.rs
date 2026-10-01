@@ -11,6 +11,7 @@ mod continue_endpoint;
 mod device_authorization_endpoint;
 mod introspection_endpoint;
 mod logout_endpoint;
+mod par_endpoint;
 mod registration_endpoint;
 mod revocation_endpoint;
 mod session_endpoint;
@@ -46,6 +47,13 @@ pub fn routes() -> Router {
                 .hoop(ClientCors::new("POST"))
                 .post(revocation_endpoint::revoke)
                 .options(preflight),
+        )
+        .push(
+            Router::with_path("oauth2/par")
+                .hoop(ClientCors::new("POST"))
+                .post(par_endpoint::par)
+                .options(preflight)
+                .goal(par_endpoint::method_not_allowed),
         )
         .push(Router::with_path("oauth2/introspect").post(introspection_endpoint::introspect))
         .push(
