@@ -2,6 +2,46 @@ use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
 
 #[tokio::test]
+async fn signed_request_object_preserves_resource_through_parsing_and_merge() {
+    let (private_key, public_key) = signing_keypair();
+    let service = authorize_service_with_public_key(public_key);
+    let resource = identity_domain::openid_connect::API_RESOURCE;
+    let raw = signed_request_object(&private_key, [("resource", json!(resource))]);
+    let client = service
+        .client_repo
+        .find_by_oid(TEST_CLIENT_ID)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let payload = service
+        .parse_request_object_payload(&client, &raw)
+        .await
+        .unwrap();
+    let merged =
+        AuthorizeService::merge_request_object_params(params("openid profile"), &payload).unwrap();
+    assert_eq!(merged.resource.as_deref(), Some(resource));
+    service.validate_request(merged).await.unwrap();
+}
+
+#[tokio::test]
+async fn validate_request_rejects_unsupported_resource_in_signed_request_object() {
+    let (private_key, public_key) = signing_keypair();
+    let service = authorize_service_with_public_key(public_key);
+    let request = signed_request_object(
+        &private_key,
+        [("resource", json!("https://unsupported.example.com/api"))],
+    );
+    let params = AuthorizationRequestParams {
+        request: Some(request),
+        ..params("openid profile")
+    };
+
+    let error = service.validate_request(params).await.unwrap_err();
+    assert_eq!(error.code(), 23005); // ScopeInvalid
+}
+
+#[tokio::test]
 async fn validate_request_supports_request_parameter() {
     let (private_key, public_key) = signing_keypair();
     let service = authorize_service_with_public_key(public_key);

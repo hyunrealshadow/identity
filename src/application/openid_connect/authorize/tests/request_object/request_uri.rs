@@ -15,6 +15,18 @@ fn fetchable_request_uri_strips_fragment_before_http_fetch() {
 }
 
 #[tokio::test]
+async fn validate_request_uri_rejects_unregistered_public_target() {
+    let service = authorize_service_with_request_uri("https://client.example.com/registered.jwt");
+    let params = AuthorizationRequestParams {
+        request_uri: Some("https://client.example.com/unregistered.jwt".to_string()),
+        ..params("openid profile")
+    };
+
+    let error = service.validate_request(params).await.unwrap_err();
+    assert_eq!(error.code(), 23018); // RequestUriNotRegistered
+}
+
+#[tokio::test]
 async fn validate_request_uri_rejects_loopback_target() {
     let service = authorize_service_with_request_uri("https://127.0.0.1/request.jwt");
     let params = AuthorizationRequestParams {

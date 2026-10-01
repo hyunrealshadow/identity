@@ -22,7 +22,7 @@ establish certification.
 | Client registration | Dynamic registration (RFC 7591), plus read, full replacement update, and delete (RFC 7592) |
 | Client authentication | `client_secret_basic`, `client_secret_post`, `client_secret_jwt`, `private_key_jwt`, and public clients using `none` where permitted |
 | Authorization requests | PKCE S256, nonce, consent, account selection, silent requests, reauthentication, `max_age`, `acr_values`, and claims requests |
-| Request objects | Signed, unsigned, and encrypted objects; `request` and `request_uri` |
+| Request objects | Signed, unsigned, and encrypted objects; `request` and pre-registered `request_uri` |
 | UserInfo | JSON, signed, and encrypted responses; scope-filtered profile, email, address, and phone claims |
 | Subjects | Public and pairwise subject identifiers, including sector identifier validation |
 | Logout | RP-initiated, front-channel, and back-channel logout; OP session iframe |

@@ -127,6 +127,7 @@ impl AuthorizeService {
             "client_id",
             "redirect_uri",
             "scope",
+            "resource",
             "state",
             "nonce",
             "display",

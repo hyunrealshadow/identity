@@ -175,7 +175,7 @@ impl Default for OpenIdProviderCapabilities {
             claims_parameter_supported: true,
             request_parameter_supported: true,
             request_uri_parameter_supported: true,
-            require_request_uri_registration: false,
+            require_request_uri_registration: true,
         }
     }
 }
@@ -723,6 +723,8 @@ mod tests {
 
         let metadata = service.discovery_metadata().await.unwrap();
 
+        assert!(metadata.request_uri_parameter_supported);
+        assert!(metadata.require_request_uri_registration);
         assert_eq!(
             metadata.issuer.as_str(),
             "https://identity.example.com/issuer1"
