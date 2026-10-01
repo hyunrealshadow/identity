@@ -57,11 +57,9 @@ async fn refresh_token_revokes_its_grant() {
 }
 
 #[tokio::test]
-async fn previously_public_token_remains_revocable_after_public_method_is_disabled() {
+async fn public_flow_disabled_blocks_revocation_of_previously_public_token() {
     let mut repo = fixtures::mock_client_auth_repo();
-    repo.expect_revoke_refresh_grant_for_client()
-        .times(1)
-        .returning(|_, _, _| Ok(()));
+    repo.expect_revoke_refresh_grant_for_client().times(0);
     let repo = Arc::new(repo);
     let service = fixtures::build_token_service(repo.clone(), Uuid::new_v4());
     let record = repo
@@ -88,7 +86,10 @@ async fn previously_public_token_remains_revocable_after_public_method_is_disabl
         .unwrap();
     let mut request = request(STANDARD.encode(record.oid.as_bytes()));
     request.client_secret = None;
-    service.revoke_token(request).await.unwrap();
+    assert_eq!(
+        service.revoke_token(request).await.unwrap_err().code(),
+        24031
+    );
 }
 
 #[tokio::test]

@@ -176,7 +176,7 @@ async fn dynamic_registration_does_not_expose_internal_oauth_version() {
                 .metadata
                 .settings
                 .oauth_version,
-            identity_domain::openid_connect::OAuthProtocolVersion::V2_0
+            None
         );
     }
 }
@@ -307,10 +307,7 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
 
     let captured_val = captured.lock().unwrap().clone().unwrap();
     assert_eq!(captured_val.client.name, "Example RP");
-    assert_eq!(
-        captured_val.metadata.settings.oauth_version,
-        identity_domain::openid_connect::OAuthProtocolVersion::V2_0
-    );
+    assert_eq!(captured_val.metadata.settings.oauth_version, None);
     assert_eq!(captured_val.platforms[0].platform.to_string(), "web");
     assert_eq!(
         captured_val.metadata.subject_type.unwrap().to_string(),
@@ -635,6 +632,16 @@ async fn register_allows_public_client_none_auth() {
         .unwrap();
 
     assert!(response.client_secret.is_none());
+    assert!(
+        captured
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .metadata
+            .settings
+            .allow_public_client_flow
+    );
     assert_eq!(response.token_endpoint_auth_method.as_deref(), Some("none"));
     let registration = captured.lock().unwrap().clone().unwrap();
     assert!(!registration.client.built_in);

@@ -29,6 +29,8 @@ pub struct DynamicRegistrationSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct OpenIdConnectSettings {
+    /// Default protocol rules for clients without an explicit override.
+    pub oauth_version: identity_domain::openid_connect::OAuthProtocolVersion,
     pub dynamic_registration: DynamicRegistrationSettings,
     pub device_authorization: DeviceAuthorizationSettings,
 }
@@ -60,6 +62,7 @@ mod tests {
     #[test]
     fn binds_existing_openid_connect_keys() {
         let settings = OpenIdConnectSettings {
+            oauth_version: identity_domain::openid_connect::OAuthProtocolVersion::V2_1,
             dynamic_registration: DynamicRegistrationSettings { enabled: true },
             device_authorization: DeviceAuthorizationSettings {
                 request_ttl_seconds: 30,
@@ -75,7 +78,10 @@ mod tests {
             .unwrap()
             .into_iter()
             .collect::<Vec<_>>();
-        assert_eq!(changes.len(), 2);
+        assert_eq!(changes.len(), 3);
+        assert!(changes.iter().any(|(key, value)| {
+            key == "openid_connect.oauth_version" && value == &serde_json::json!("2.1")
+        }));
         assert!(changes.iter().any(|(key, value)| {
             key == "openid_connect.dynamic_registration.enabled"
                 && value == &serde_json::json!(true)
@@ -108,7 +114,7 @@ mod tests {
             .register_section::<OpenIdConnectSettings>()
             .defaults()
             .unwrap();
-        assert_eq!(defaults.len(), 2);
+        assert_eq!(defaults.len(), 3);
         assert_eq!(
             SettingsSnapshot::default().section::<OpenIdConnectSettings>(),
             OpenIdConnectSettings::default()

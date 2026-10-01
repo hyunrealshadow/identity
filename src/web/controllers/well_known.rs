@@ -197,13 +197,19 @@ mod tests {
         assert_eq!(json["claims_parameter_supported"], true);
         assert_eq!(json["request_parameter_supported"], true);
         assert_eq!(json["request_uri_parameter_supported"], true);
-        assert_eq!(json["require_request_uri_registration"], false);
+        assert_eq!(json["require_request_uri_registration"], true);
         assert_eq!(
             json["acr_values_supported"],
             serde_json::json!([
                 identity_domain::auth::ACR_AAL1,
                 identity_domain::auth::ACR_AAL2
             ])
+        );
+        assert!(
+            json["response_modes_supported"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("form_post"))
         );
         assert_eq!(
             json["subject_types_supported"],

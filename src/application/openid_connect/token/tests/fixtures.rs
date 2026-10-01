@@ -11,8 +11,8 @@ mod clients;
 pub(super) use clients::{
     AccessClaimsClientRepository, AuthMethodClientRepository, IdTokenAlgorithmClientRepository,
     InMemoryClientRepository, MachineAlgorithmClientRepository, MachineClientRepository,
-    MixedClientRepository, OAuth21ClientRepository, RegisteredPublicClientRepository,
-    RestrictedGrantClientRepository, ScopedClaimsClientRepository,
+    MixedClientRepository, RegisteredPublicClientRepository, RestrictedGrantClientRepository,
+    ScopedClaimsClientRepository,
 };
 
 pub(super) const CLIENT_SECRET_JWT_SECRET: &str =

@@ -76,67 +76,6 @@ fn rs256_token_service_with_public_key(
 }
 
 #[tokio::test]
-async fn oauth20_client_must_repeat_supplied_redirect_but_oauth21_client_may_omit_it() {
-    let repo = Arc::new(mock_client_auth_repo());
-    let user_oid = Uuid::new_v4();
-    let record = repo
-        .create(
-            Uuid::nil(),
-            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
-                scope: "profile".to_owned(),
-                nonce: None,
-                code_challenge: Some(s256_challenge("verifier-123")),
-                code_challenge_method: Some("S256".parse().unwrap()),
-                user_oid: user_oid.to_string(),
-                session_oid: SessionOid::from(Uuid::new_v4()),
-                protected_session_id: None,
-                acr: None,
-                amr: vec![],
-                auth_time: None,
-                redirect_uri: "https://client.example.com/callback".to_owned(),
-                redirect_uri_was_supplied: true,
-                claims: None,
-            }),
-            Utc::now() + chrono::Duration::minutes(10),
-        )
-        .await
-        .unwrap();
-    let params = AuthorizationCodeGrantParams {
-        code: STANDARD.encode(record.oid.as_bytes()),
-        redirect_uri: None,
-        client_id: Some(Uuid::nil().to_string()),
-        client_secret: Some("secret-123".to_owned()),
-        client_secret_basic: true,
-        client_assertion_type: None,
-        client_assertion: None,
-        code_verifier: Some("verifier-123".to_owned()),
-    };
-
-    let default_policy = build_token_service_with_client_repo(
-        repo.clone(),
-        user_oid,
-        Arc::new(InMemoryClientRepository),
-    );
-    assert_eq!(
-        default_policy
-            .exchange_authorization_code(params.clone())
-            .await
-            .unwrap_err()
-            .code(),
-        24007
-    );
-
-    let optional_redirect =
-        build_token_service_with_client_repo(repo, user_oid, Arc::new(OAuth21ClientRepository));
-    assert!(
-        optional_redirect
-            .exchange_authorization_code(params)
-            .await
-            .is_ok()
-    );
-}
-
-#[tokio::test]
 async fn oauth20_client_may_omit_token_redirect_when_authorization_omitted_it() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
@@ -1391,4 +1330,98 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
     assert_eq!(sink.outcome_of("token.issuance.result"), Some("rejected"));
     // No code was ever consumed, so no consumption event is fabricated.
     assert!(!names.contains(&"authorization_code.consumed"));
+}
+
+#[tokio::test]
+async fn code_exchange_inherits_global_oauth_version_and_honors_client_override() {
+    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+    use crate::setting::{
+        AppSettings, InstallationSettings, OpenIdConnectSettings, SettingsSnapshot,
+    };
+    use identity_domain::openid_connect::{
+        OAuthProtocolVersion, OpenIdConnectClientSettings, TokenEndpointAuthMethod,
+    };
+
+    for (global, client, may_omit_redirect) in [
+        (OAuthProtocolVersion::V2_0, None, false),
+        (OAuthProtocolVersion::V2_1, None, true),
+        (
+            OAuthProtocolVersion::V2_1,
+            Some(OAuthProtocolVersion::V2_0),
+            false,
+        ),
+        (
+            OAuthProtocolVersion::V2_0,
+            Some(OAuthProtocolVersion::V2_1),
+            true,
+        ),
+    ] {
+        let repo = Arc::new(mock_client_auth_repo());
+        let user_oid = Uuid::new_v4();
+        let record = repo
+            .create(
+                Uuid::nil(),
+                ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    scope: "profile".to_owned(),
+                    nonce: None,
+                    code_challenge: Some(s256_challenge("verifier-123")),
+                    code_challenge_method: Some("S256".parse().unwrap()),
+                    user_oid: user_oid.to_string(),
+                    session_oid: SessionOid::from(Uuid::new_v4()),
+                    protected_session_id: None,
+                    acr: None,
+                    amr: vec![],
+                    auth_time: None,
+                    redirect_uri: "https://client.example.com/callback".to_owned(),
+                    redirect_uri_was_supplied: true,
+                    claims: None,
+                }),
+                Utc::now() + chrono::Duration::minutes(10),
+            )
+            .await
+            .unwrap();
+        let mut service = build_token_service_with_client_repo(
+            repo,
+            user_oid,
+            Arc::new(ConfiguredClientRepository {
+                settings: OpenIdConnectClientSettings {
+                    oauth_version: client,
+                    ..Default::default()
+                },
+                methods: vec![TokenEndpointAuthMethod::ClientSecretBasic],
+            }),
+        );
+        service.provider_service = Arc::new(OpenIdProviderService::new(Arc::new(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    ..Default::default()
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    ..Default::default()
+                })
+                .with_section(&OpenIdConnectSettings {
+                    oauth_version: global,
+                    ..Default::default()
+                }),
+        )));
+        let result = service
+            .exchange_authorization_code(AuthorizationCodeGrantParams {
+                code: STANDARD.encode(record.oid.as_bytes()),
+                redirect_uri: None,
+                client_id: Some(Uuid::nil().to_string()),
+                client_secret: Some("secret-123".to_owned()),
+                client_secret_basic: true,
+                client_assertion_type: None,
+                client_assertion: None,
+                code_verifier: Some("verifier-123".to_owned()),
+            })
+            .await;
+        if may_omit_redirect {
+            result.unwrap();
+        } else {
+            assert_eq!(result.unwrap_err().code(), 24007);
+        }
+    }
 }

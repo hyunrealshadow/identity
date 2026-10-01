@@ -438,6 +438,7 @@ impl DynamicClientRegistrationService {
             request_uris: request.request_uris.clone(),
             settings: OpenIdConnectClientSettings {
                 skip_consent: default_skip_consent(),
+                allow_public_client_flow: public_client,
                 oauth_version: Default::default(),
                 cors_enabled: false,
                 include_scoped_claims_in_id_token: false,

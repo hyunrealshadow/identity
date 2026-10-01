@@ -7,7 +7,6 @@ pub(in crate::openid_connect) struct InMemoryClientRepository;
 pub(in crate::openid_connect) struct IdTokenAlgorithmClientRepository {
     pub(in crate::openid_connect) algorithm: identity_domain::key::JwaSigningAlgorithm,
 }
-pub(in crate::openid_connect) struct OAuth21ClientRepository;
 pub(in crate::openid_connect) struct ScopedClaimsClientRepository;
 pub(in crate::openid_connect) struct AccessClaimsClientRepository;
 pub(in crate::openid_connect) struct RestrictedGrantClientRepository {
@@ -64,22 +63,6 @@ impl OpenIdConnectClientRepository for IdTokenAlgorithmClientRepository {
 }
 
 #[async_trait]
-impl OpenIdConnectClientRepository for OAuth21ClientRepository {
-    async fn find_by_oid(
-        &self,
-        oid: ClientOid,
-    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
-        let mut metadata = test_metadata(None, Some("client_secret_basic"));
-        metadata.settings.oauth_version =
-            identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
-        Ok(Some(
-            OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
-                .unwrap(),
-        ))
-    }
-}
-
-#[async_trait]
 impl OpenIdConnectClientRepository for RestrictedGrantClientRepository {
     async fn find_by_oid(
         &self,
@@ -101,7 +84,8 @@ impl OpenIdConnectClientRepository for RegisteredPublicClientRepository {
         &self,
         oid: ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
-        let metadata = test_metadata(None, Some("none"));
+        let mut metadata = test_metadata(None, Some("none"));
+        metadata.settings.allow_public_client_flow = true;
 
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
@@ -117,6 +101,7 @@ impl OpenIdConnectClientRepository for MixedClientRepository {
         oid: ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, Some("client_secret_basic"));
+        metadata.settings.allow_public_client_flow = true;
         metadata.token_endpoint_auth_methods = Some(vec![
             identity_domain::openid_connect::TokenEndpointAuthMethod::ClientSecretBasic,
             identity_domain::openid_connect::TokenEndpointAuthMethod::None,

@@ -75,48 +75,6 @@ fn sign_assertion(private_key: &str, client_id: &str, with_expiry: bool) -> Stri
 }
 
 #[tokio::test]
-async fn authenticate_client_secret_basic_accepts_matching_secret() {
-    let service = authenticator(
-        Arc::new(InMemoryClientRepository),
-        vec![secret_credential("secret-123")],
-    );
-
-    let result = service
-        .authenticate_client_secret_basic("00000000-0000-0000-0000-000000000000", "secret-123")
-        .await;
-
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn authenticate_client_secret_basic_rejects_wrong_secret() {
-    let service = authenticator(
-        Arc::new(InMemoryClientRepository),
-        vec![secret_credential("secret-123")],
-    );
-
-    let result = service
-        .authenticate_client_secret_basic("00000000-0000-0000-0000-000000000000", "wrong-secret")
-        .await;
-
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn authenticate_client_secret_post_accepts_matching_secret() {
-    let service = authenticator(
-        Arc::new(InMemoryClientRepository),
-        vec![secret_credential("secret-123")],
-    );
-
-    let result = service
-        .authenticate_client_secret_post("00000000-0000-0000-0000-000000000000", "secret-123")
-        .await;
-
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
 async fn authenticate_client_enforces_secret_transport_method() {
     let basic = authenticator(
         Arc::new(InMemoryClientRepository),
@@ -496,4 +454,48 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
         .await;
 
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn public_flow_switch_blocks_none_but_preserves_confidential_authentication() {
+    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+    use identity_domain::openid_connect::{OpenIdConnectClientSettings, TokenEndpointAuthMethod};
+
+    for methods in [
+        vec![TokenEndpointAuthMethod::None],
+        vec![
+            TokenEndpointAuthMethod::None,
+            TokenEndpointAuthMethod::ClientSecretBasic,
+        ],
+    ] {
+        let mixed = methods.len() > 1;
+        let service = authenticator(
+            Arc::new(ConfiguredClientRepository {
+                settings: OpenIdConnectClientSettings::default(),
+                methods,
+            }),
+            vec![secret_credential("secret-123")],
+        );
+        let client_id = Uuid::nil().to_string();
+        assert_eq!(
+            service
+                .authenticate_client(&client_id, None, false, None, None)
+                .await
+                .unwrap_err()
+                .code(),
+            24031,
+        );
+        assert_eq!(
+            service
+                .authenticate_client_request(&client_id, None, false, None, None)
+                .await
+                .unwrap_err()
+                .code(),
+            24031,
+        );
+        let secret_auth = service
+            .authenticate_client(&client_id, Some("secret-123"), true, None, None)
+            .await;
+        assert_eq!(secret_auth.is_ok(), mixed);
+    }
 }

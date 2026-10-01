@@ -3,9 +3,9 @@
 //!
 //! The rules are the ones the token endpoint always applied: the registered
 //! `token_endpoint_auth_methods` decide how a confidential client proves
-//! itself, and clients registered as public clients authenticate with a
-//! `client_id` only. Keeping one implementation means a flow cannot
-//! accidentally accept a weaker method than the registration allows.
+//! itself, and clients enabling `allow_public_client_flow` and registering
+//! `none` authenticate with a `client_id` only. Keeping one implementation
+//! means a flow cannot accidentally accept a weaker method than the registration allows.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -255,9 +255,9 @@ impl ClientAuthenticator {
     /// Authenticates a client for a flow public clients may use and returns
     /// the loaded client.
     ///
-    /// A client allowing `token_endpoint_auth_methods: ["none"]` proves
-    /// itself with its `client_id` only; every other client must present its
-    /// secret or assertion. The registered method decides, so the check cannot
+    /// A client enabling `allow_public_client_flow` and registering `none`
+    /// proves itself with its `client_id` only; every other client must present
+    /// its secret or assertion. The registered method decides, so the check cannot
     /// be bypassed by omitting credentials.
     pub async fn authenticate_client_request(
         &self,

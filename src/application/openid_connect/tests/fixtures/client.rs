@@ -62,7 +62,10 @@ pub(in crate::openid_connect) fn test_metadata(
         default_acr_values: None,
         initiate_login_uri: None,
         request_uris,
-        settings: OpenIdConnectClientSettings::default(),
+        settings: OpenIdConnectClientSettings {
+            allow_public_client_flow: token_endpoint_auth_method == Some("none"),
+            ..OpenIdConnectClientSettings::default()
+        },
     }
 }
 
@@ -80,4 +83,34 @@ pub(in crate::openid_connect) fn test_scopes() -> Vec<String> {
         "email".to_string(),
         "offline_access".to_string(),
     ]
+}
+
+/// Client settings and registered authentication methods varied independently.
+pub(in crate::openid_connect) struct ConfiguredClientRepository {
+    pub settings: OpenIdConnectClientSettings,
+    pub methods: Vec<identity_domain::openid_connect::TokenEndpointAuthMethod>,
+}
+
+#[async_trait::async_trait]
+impl identity_domain::openid_connect::OpenIdConnectClientRepository for ConfiguredClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<
+        Option<identity_domain::openid_connect::OpenIdConnectClient>,
+        identity_domain::openid_connect::OpenIdConnectClientRepositoryError,
+    > {
+        let mut metadata = test_metadata(None, None);
+        metadata.settings = self.settings.clone();
+        metadata.token_endpoint_auth_methods = Some(self.methods.clone());
+        Ok(Some(
+            identity_domain::openid_connect::OpenIdConnectClient::new(
+                test_client(oid),
+                metadata,
+                test_platforms(),
+                test_scopes(),
+            )
+            .unwrap(),
+        ))
+    }
 }

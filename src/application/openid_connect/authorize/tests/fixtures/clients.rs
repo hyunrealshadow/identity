@@ -64,7 +64,7 @@ impl OpenIdConnectClientRepository for FoundClientRepository {
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
         metadata.settings.oauth_version =
-            identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
+            Some(identity_domain::openid_connect::OAuthProtocolVersion::V2_1);
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),
@@ -113,11 +113,12 @@ impl OpenIdConnectClientRepository for PublicClientRepository {
         oid: Uuid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
+        metadata.settings.allow_public_client_flow = true;
         metadata.token_endpoint_auth_methods = Some(vec![
             identity_domain::openid_connect::TokenEndpointAuthMethod::None,
         ]);
         metadata.settings.oauth_version =
-            identity_domain::openid_connect::OAuthProtocolVersion::V2_1;
+            Some(identity_domain::openid_connect::OAuthProtocolVersion::V2_1);
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),
@@ -132,6 +133,7 @@ impl OpenIdConnectClientRepository for OAuth20PublicClientRepository {
         oid: Uuid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
+        metadata.settings.allow_public_client_flow = true;
         metadata.token_endpoint_auth_methods = Some(vec![
             identity_domain::openid_connect::TokenEndpointAuthMethod::None,
         ]);

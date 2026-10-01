@@ -32,6 +32,8 @@ impl AuthorizeService {
             })?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
+        let oauth_version = self.provider_service.oauth_version(&client);
+
         if let Some(raw_request_object) = self.resolve_request_object(&client, &params).await? {
             let payload = self
                 .parse_request_object_payload(&client, &raw_request_object)
@@ -199,7 +201,7 @@ impl AuthorizeService {
                         .with_param("field", "code_challenge"),
                 );
             }
-            if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+            if oauth_version == OAuthProtocolVersion::V2_1
                 && code_challenge_method != Some(CodeChallengeMethod::S256)
             {
                 return Err(
@@ -211,6 +213,10 @@ impl AuthorizeService {
 
         let public_only = client.metadata().effective_token_endpoint_auth_methods()
             == [TokenEndpointAuthMethod::None];
+        if public_only && !client.metadata().settings.allow_public_client_flow {
+            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                .with_param("response_type", response_type.to_string()));
+        }
         if public_only && response_type.includes_code() {
             if !has_code_challenge {
                 return Err(
@@ -226,13 +232,11 @@ impl AuthorizeService {
             }
         }
 
-        if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
-            && response_type.includes_access_token()
-        {
+        if oauth_version == OAuthProtocolVersion::V2_1 && response_type.includes_access_token() {
             return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
                 .with_param("response_type", response_type.to_string()));
         }
-        if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
+        if oauth_version == OAuthProtocolVersion::V2_1
             && response_type.includes_code()
             && !has_code_challenge
         {

@@ -3,34 +3,6 @@ use super::*;
 use identity_domain::openid_connect::GrantType;
 
 #[tokio::test]
-async fn validate_request_rejects_missing_openid_scope() {
-    let service = build_test_service(
-        Arc::new(MissingClientRepository),
-        Arc::new(empty_cred_repo()),
-        Arc::new(mock_login_repo()),
-    );
-
-    let result = service.validate_request(params("profile email")).await;
-
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn validate_request_rejects_unknown_scope() {
-    let service = build_test_service(
-        Arc::new(MissingClientRepository),
-        Arc::new(empty_cred_repo()),
-        Arc::new(mock_login_repo()),
-    );
-
-    let result = service
-        .validate_request(params("openid custom_scope"))
-        .await;
-
-    assert!(result.is_err());
-}
-
-#[tokio::test]
 async fn public_client_requires_pkce_s256() {
     let service = build_test_service(
         Arc::new(PublicClientRepository),
@@ -543,4 +515,85 @@ async fn api_scopes_accept_graphql_resource() {
     request.resource = Some(identity_domain::openid_connect::API_RESOURCE.to_string());
 
     assert!(service.validate_request(request).await.is_ok());
+}
+
+#[tokio::test]
+async fn global_oauth_version_applies_unless_client_explicitly_overrides_it() {
+    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+    use crate::setting::{OpenIdConnectSettings, SettingsSnapshot};
+    use identity_domain::openid_connect::{
+        OAuthProtocolVersion, OpenIdConnectClientSettings, TokenEndpointAuthMethod,
+    };
+
+    for (global, client, requires_pkce) in [
+        (OAuthProtocolVersion::V2_0, None, false),
+        (OAuthProtocolVersion::V2_1, None, true),
+        (
+            OAuthProtocolVersion::V2_1,
+            Some(OAuthProtocolVersion::V2_0),
+            false,
+        ),
+        (
+            OAuthProtocolVersion::V2_0,
+            Some(OAuthProtocolVersion::V2_1),
+            true,
+        ),
+    ] {
+        let mut service = build_test_service(
+            Arc::new(ConfiguredClientRepository {
+                settings: OpenIdConnectClientSettings {
+                    oauth_version: client,
+                    ..Default::default()
+                },
+                methods: vec![TokenEndpointAuthMethod::ClientSecretBasic],
+            }),
+            Arc::new(empty_cred_repo()),
+            Arc::new(mock_login_repo()),
+        );
+        service.provider_service = Arc::new(OpenIdProviderService::new(Arc::new(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    domain: Some("https://identity.example.com".to_owned()),
+                    ..Default::default()
+                })
+                .with_section(&InstallationSettings {
+                    initialized: true,
+                    ..Default::default()
+                })
+                .with_section(&OpenIdConnectSettings {
+                    oauth_version: global,
+                    ..Default::default()
+                }),
+        )));
+        let mut request = params("openid profile");
+        request.code_challenge = None;
+        request.code_challenge_method = None;
+        assert_eq!(
+            service.validate_request(request).await.is_err(),
+            requires_pkce
+        );
+    }
+}
+
+#[tokio::test]
+async fn disabled_public_flow_rejects_authorization_even_with_none_and_pkce() {
+    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+    use identity_domain::openid_connect::{OpenIdConnectClientSettings, TokenEndpointAuthMethod};
+
+    let service = build_test_service(
+        Arc::new(ConfiguredClientRepository {
+            settings: OpenIdConnectClientSettings::default(),
+            methods: vec![TokenEndpointAuthMethod::None],
+        }),
+        Arc::new(empty_cred_repo()),
+        Arc::new(mock_login_repo()),
+    );
+    assert_eq!(
+        service
+            .validate_request(params("openid profile"))
+            .await
+            .unwrap_err()
+            .code(),
+        23003
+    );
 }

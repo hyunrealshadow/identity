@@ -42,10 +42,21 @@ clients, including OIDC requests that carry a nonce. OAuth 2.0 confidential
 clients may omit PKCE. These rules depend on the client's configured protocol
 version and authentication methods.
 
-The per-client `OpenIdConnectClientSettings.oauth_version` selects the
-implemented OAuth `"2.0"` or `"2.1"` authorization code rules and defaults to
-`"2.0"`. It is an internal setting, not dynamic registration metadata.
+The global `openid_connect.oauth_version` selects the default OAuth `"2.0"` or
+`"2.1"` rules and defaults to `"2.0"`. Clients inherit this live setting unless
+`OpenIdConnectClientSettings.oauth_version` explicitly overrides it. Existing
+explicit client versions remain effective. The client override is an internal
+setting, not dynamic registration metadata.
 Selecting it does not imply coverage of every OAuth extension.
+
+Public-client flows also require the per-client
+`OpenIdConnectClientSettings.allow_public_client_flow` setting (default `false`).
+Registering authentication method `none` alone does not enable unauthenticated
+access. Dynamic registration with `token_endpoint_auth_method: "none"` enables
+this setting; administrators can disable it afterward. Disabling it blocks
+credential-free token, device authorization, and revocation requests, including
+revocation of previously public tokens. Clients with both `none` and confidential
+authentication methods can still use their registered confidential methods.
 
 Client grant permissions are enforced. Registration without `grant_types`
 defaults to `authorization_code`; an explicit empty list allows no grants.

@@ -34,6 +34,9 @@ impl TokenService {
                     AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
                 })?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+            if !client.metadata().settings.allow_public_client_flow {
+                return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+            }
             if !client
                 .metadata()
                 .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::None)

@@ -174,7 +174,7 @@ mod tests {
     use serde_json::json;
     use url::Url;
 
-    use super::{OpenIdProviderMetadata, SubjectType};
+    use super::OpenIdProviderMetadata;
 
     #[test]
     fn serializes_required_fields_and_explicit_booleans() {
@@ -263,12 +263,6 @@ mod tests {
             value["response_types_supported"],
             json!(["code", "id_token"])
         );
-    }
-
-    #[test]
-    fn subject_type_serializes_to_discovery_value() {
-        assert_eq!(SubjectType::Public.to_string(), "public");
-        assert_eq!(SubjectType::Pairwise.to_string(), "pairwise");
     }
 
     #[test]

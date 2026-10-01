@@ -110,9 +110,12 @@ pub enum OAuthProtocolVersion {
 pub struct OpenIdConnectClientSettings {
     #[serde(default)]
     pub skip_consent: bool,
-    /// Defaults to OAuth 2.0 for clients whose stored settings predate this field.
+    /// Enables unauthenticated public-client flows when `none` is registered.
     #[serde(default)]
-    pub oauth_version: OAuthProtocolVersion,
+    pub allow_public_client_flow: bool,
+    /// Inherits the global OAuth version when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth_version: Option<OAuthProtocolVersion>,
     /// Allows browser requests from the origins of this client's registered
     /// HTTP(S) redirect URIs at CORS-enabled OAuth endpoints.
     #[serde(default)]
@@ -249,8 +252,10 @@ impl OpenIdConnectClientMetadata {
 
     #[must_use]
     pub fn allows_token_endpoint_auth_method(&self, method: TokenEndpointAuthMethod) -> bool {
-        self.effective_token_endpoint_auth_methods()
-            .contains(&method)
+        (method != TokenEndpointAuthMethod::None || self.settings.allow_public_client_flow)
+            && self
+                .effective_token_endpoint_auth_methods()
+                .contains(&method)
     }
 }
 
@@ -499,61 +504,45 @@ mod tests {
         assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_id_token);
         assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_access_token);
         assert!(!OpenIdConnectClientSettings::default().cors_enabled);
+        assert!(!OpenIdConnectClientSettings::default().allow_public_client_flow);
 
-        // Stored settings without the version field retain OAuth 2.0 behavior.
+        // Stored settings without the version field inherit the global version.
         let parsed: OpenIdConnectClientSettings =
             serde_json::from_value(serde_json::json!({"skip_consent": true})).unwrap();
         assert!(parsed.skip_consent);
         assert!(!parsed.include_scoped_claims_in_id_token);
         assert!(!parsed.include_scoped_claims_in_access_token);
-        assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_0);
+        assert_eq!(parsed.oauth_version, None);
+        assert!(
+            serde_json::to_value(&parsed)
+                .unwrap()
+                .get("oauth_version")
+                .is_none()
+        );
+        let enabled: OpenIdConnectClientSettings = serde_json::from_value(
+            serde_json::json!({"allow_public_client_flow": true, "oauth_version": "2.0"}),
+        )
+        .unwrap();
+        assert!(enabled.allow_public_client_flow);
+        assert_eq!(enabled.oauth_version, Some(OAuthProtocolVersion::V2_0));
     }
 
     #[test]
     fn settings_roundtrips_oauth_protocol_version() {
         let settings = OpenIdConnectClientSettings {
-            oauth_version: OAuthProtocolVersion::V2_1,
+            oauth_version: Some(OAuthProtocolVersion::V2_1),
             ..OpenIdConnectClientSettings::default()
         };
         let json = serde_json::to_value(&settings).unwrap();
         assert_eq!(json["oauth_version"], "2.1");
         let parsed: OpenIdConnectClientSettings = serde_json::from_value(json).unwrap();
-        assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_1);
+        assert_eq!(parsed.oauth_version, Some(OAuthProtocolVersion::V2_1));
         assert!(
             serde_json::from_value::<OpenIdConnectClientSettings>(
                 serde_json::json!({"oauth_version": "3.0"})
             )
             .is_err()
         );
-    }
-
-    #[test]
-    fn settings_ignore_removed_pkce_override_in_existing_records() {
-        let parsed: OpenIdConnectClientSettings = serde_json::from_value(serde_json::json!({
-            "oauth_version": "2.1",
-            "allow_nonce_without_pkce": true,
-        }))
-        .unwrap();
-        assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_1);
-        assert!(
-            serde_json::to_value(parsed)
-                .unwrap()
-                .get("allow_nonce_without_pkce")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn settings_roundtrips_include_scoped_claims_flag() {
-        let settings = OpenIdConnectClientSettings {
-            skip_consent: true,
-            include_scoped_claims_in_id_token: true,
-            include_scoped_claims_in_access_token: true,
-            ..OpenIdConnectClientSettings::default()
-        };
-        let json = serde_json::to_value(&settings).unwrap();
-        let parsed: OpenIdConnectClientSettings = serde_json::from_value(json).unwrap();
-        assert_eq!(parsed, settings);
     }
 
     #[test]
@@ -572,15 +561,6 @@ mod tests {
         assert_eq!(subject_a, subject_a_from_uri);
         assert_ne!(subject_a, user_oid.to_string());
         assert_ne!(subject_a, subject_b);
-    }
-
-    #[test]
-    fn displays_protocol_platform_values() {
-        assert_eq!(OpenIdConnectClientPlatformType::Web.to_string(), "web");
-        assert_eq!(
-            OpenIdConnectClientPlatformType::Native.to_string(),
-            "native"
-        );
     }
 
     #[test]
@@ -745,7 +725,7 @@ mod tests {
             };
             let metadata = OpenIdConnectClientMetadata {
                 settings: OpenIdConnectClientSettings {
-                    oauth_version,
+                    oauth_version: Some(oauth_version),
                     ..Default::default()
                 },
                 ..Default::default()

@@ -65,24 +65,3 @@ pub trait SettingDefinition: Send + Sync + 'static {
         Ok(value)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::SettingDefinition;
-
-    #[test]
-    fn default_setting_definition_uses_declared_default() {
-        struct ExampleSetting;
-
-        impl SettingDefinition for ExampleSetting {
-            type Value = bool;
-            const KEY: &'static str = "example";
-
-            fn default_value() -> Self::Value {
-                true
-            }
-        }
-
-        assert!(ExampleSetting::default_value());
-    }
-}

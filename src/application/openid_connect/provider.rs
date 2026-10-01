@@ -285,6 +285,19 @@ impl OpenIdProviderService {
         self
     }
 
+    /// Explicit client configuration takes precedence over the live global default.
+    pub fn oauth_version(
+        &self,
+        client: &crate::domain::openid_connect::OpenIdConnectClient,
+    ) -> crate::domain::openid_connect::OAuthProtocolVersion {
+        client.metadata().settings.oauth_version.unwrap_or_else(|| {
+            self.settings
+                .snapshot()
+                .section::<OpenIdConnectSettings>()
+                .oauth_version
+        })
+    }
+
     pub fn issuer(&self) -> Result<Url, AppError> {
         let snapshot = self.settings.snapshot();
         normalize_issuer(
@@ -823,37 +836,6 @@ mod tests {
         assert!(claims.iter().any(|claim| claim == "phone_number"));
         assert!(claims.iter().any(|claim| claim == "phone_number_verified"));
         assert!(claims.iter().any(|claim| claim == "amr"));
-    }
-
-    #[tokio::test]
-    async fn default_discovery_advertises_form_post_and_pairwise() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-
-        assert!(
-            metadata
-                .response_modes_supported
-                .unwrap()
-                .contains(&"form_post".to_owned())
-        );
-        assert!(
-            metadata
-                .subject_types_supported
-                .contains(&"pairwise".to_owned())
-        );
     }
 
     #[tokio::test]

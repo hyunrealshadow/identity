@@ -62,6 +62,8 @@ impl TokenService {
             })?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
+        let oauth_version = self.provider_service.oauth_version(&authenticated_client);
+
         if !authenticated_client.allows_grant(GrantType::AuthorizationCode) {
             return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
                 .with_param("grant_type", GrantType::AuthorizationCode.as_str()));
@@ -171,7 +173,7 @@ impl TokenService {
                             .map(|platform| platform.redirect_uris.len())
                             .sum::<usize>()
                             > 1;
-                let may_omit = match authenticated_client.metadata().settings.oauth_version {
+                let may_omit = match oauth_version {
                     OAuthProtocolVersion::V2_0 => {
                         !data.redirect_uri_was_supplied
                             || (data.scope.split_whitespace().any(|scope| scope == "openid")
@@ -206,7 +208,7 @@ impl TokenService {
             data.code_challenge.as_deref(),
             data.code_challenge_method,
             verifier,
-            authenticated_client.metadata().settings.oauth_version,
+            oauth_version,
         )?;
 
         let issue_id_token = data.scope.split_whitespace().any(|scope| scope == "openid");

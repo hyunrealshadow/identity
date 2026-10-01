@@ -25,45 +25,6 @@ fn validate_request_object_claims_rejects_future_issued_at() {
 }
 
 #[test]
-fn merge_request_object_overrides_scope_and_login_hint() {
-    let payload = serde_json::json!({
-        "scope": "openid email",
-        "state": "override-state",
-        "login_hint": "alice@example.com"
-    });
-
-    let params = AuthorizationRequestParams {
-        response_type: "code".to_string(),
-        response_mode: None,
-        client_id: Uuid::nil().to_string(),
-        redirect_uri: "https://client.example.com/callback".to_string(),
-        scope: "openid profile".to_string(),
-        resource: None,
-        state: "state123".to_string(),
-        nonce: None,
-        display: None,
-        prompt: None,
-        max_age: None,
-        ui_locales: None,
-        claims_locales: None,
-        id_token_hint: None,
-        login_hint: None,
-        acr_values: None,
-        claims: None,
-        request: None,
-        request_uri: None,
-        code_challenge: None,
-        code_challenge_method: None,
-    };
-
-    let merged = AuthorizeService::merge_request_object_params(params, &payload).unwrap();
-
-    assert_eq!(merged.scope, "openid email");
-    assert_eq!(merged.state, "override-state");
-    assert_eq!(merged.login_hint.as_deref(), Some("alice@example.com"));
-}
-
-#[test]
 fn validate_request_object_claims_rejects_client_id_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),

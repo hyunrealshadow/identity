@@ -102,6 +102,7 @@ fn device_client(grant_types: Vec<GrantType>, public: bool) -> OpenIdConnectClie
     let mut metadata = test_metadata(None, public.then_some("none"));
     metadata.grant_types = Some(grant_types);
     if public {
+        metadata.settings.allow_public_client_flow = true;
         metadata.token_endpoint_auth_methods = Some(vec![TokenEndpointAuthMethod::None]);
     }
 
