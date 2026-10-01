@@ -184,15 +184,23 @@ impl DeviceAuthorizationService {
 
         self.check_client_grant(&client)?;
         let scope = self.resolve_scope(&client, params.scope.as_deref())?;
-        let resources = self
-            .provider_service
-            .select_resources(&params.resources, &[], &scope.to_scope_string())
-            .await?;
-        if resources.scope != scope.to_scope_string() {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::InvalidTarget,
-            ));
-        }
+        let resources = if params.resources.is_empty() {
+            let selection = self
+                .provider_service
+                .select_resources(&[], &[], &scope.to_scope_string())
+                .await?;
+            if selection.scope != scope.to_scope_string() {
+                return Err(AppError::from_code(
+                    crate::error::codes::common::CommonErrorCode::InvalidTarget,
+                ));
+            }
+            selection.resources
+        } else {
+            // Device authorization also records the full grant, before token target selection.
+            self.provider_service
+                .validate_authorization_resources(&params.resources, &scope)
+                .await?
+        };
         let issuer = self.provider_service.issuer()?;
 
         let device_code = generate_device_code();
@@ -202,7 +210,7 @@ impl DeviceAuthorizationService {
             .create_request(
                 &client,
                 &scope,
-                &resources.resources,
+                &resources,
                 &device_code,
                 settings.polling_interval_seconds,
                 expires_at,

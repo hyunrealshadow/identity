@@ -39,6 +39,8 @@ pub use identity_domain::openid_connect::model::authorization_request::Authoriza
 
 #[derive(Clone)]
 pub struct AuthorizeService {
+    scope_catalog:
+        Option<Arc<dyn identity_domain::openid_connect::scope_catalog::ScopeCatalogRepository>>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
@@ -74,6 +76,7 @@ impl AuthorizeService {
 
     pub fn new(deps: AuthorizeServiceDependencies) -> Self {
         Self {
+            scope_catalog: None,
             client_repo: deps.client_repo,
             credential_repo: deps.credential_repo,
             client_authorization_repo: deps.client_authorization_repo,
@@ -87,6 +90,32 @@ impl AuthorizeService {
             data_protector: deps.data_protector,
             events: Arc::new(crate::observability::NoopEventSink),
         }
+    }
+
+    #[must_use]
+    pub fn with_scope_catalog(
+        mut self,
+        repository: Arc<dyn identity_domain::openid_connect::scope_catalog::ScopeCatalogRepository>,
+    ) -> Self {
+        self.scope_catalog = Some(repository);
+        self
+    }
+
+    pub async fn scope_descriptions(
+        &self,
+        scope: &ScopeSet,
+    ) -> Result<Vec<identity_domain::openid_connect::scope_catalog::ScopeDescription>, AppError>
+    {
+        let repository = self
+            .scope_catalog
+            .as_ref()
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::LoadRequestFailed))?;
+        repository
+            .find_by_names(&scope.names())
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+            })
     }
 
     /// Attach the key event and audit sink.

@@ -40,6 +40,15 @@ async fn consent_get_is_a_json_api_without_content_negotiation() {
     assert_eq!(payload["scopes"][0]["previously_granted"], true);
     assert_eq!(payload["scopes"][1]["name"], "profile");
     assert_eq!(payload["scopes"][1]["previously_granted"], false);
+    assert_eq!(payload["scopes"][1]["display_name"], "Configured profile");
+    assert_eq!(
+        payload["scopes"][1]["descriptions"]["zh-CN"],
+        "数据库描述 profile"
+    );
+    assert_eq!(
+        payload["scopes"][1]["description"],
+        "Database description for profile"
+    );
 }
 
 #[tokio::test]

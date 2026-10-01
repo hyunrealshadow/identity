@@ -3,6 +3,12 @@ use std::{collections::BTreeSet, fmt, str::FromStr};
 
 pub const API_RESOURCE: &str = "urn:identity:graphql";
 
+#[derive(Debug, Clone, Copy)]
+pub enum ResourceScopeCoverage {
+    Any,
+    All,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ApiScope {
     Account,
@@ -160,6 +166,44 @@ impl ScopeSet {
         self.openid
     }
 
+    pub fn contains_offline_access(&self) -> bool {
+        self.offline_access
+    }
+
+    /// Protocol controls are grant context, not resource-server permissions.
+    pub fn has_resource_permissions(&self) -> bool {
+        self.profile || self.email || self.address || self.phone || self.has_api_scopes()
+    }
+
+    /// Restrict resource permissions while retaining the grant's protocol controls.
+    /// `All` is required for a single access token usable at every target.
+    pub fn for_resources(&self, resources: &[Self], coverage: ResourceScopeCoverage) -> Self {
+        let mut candidates = self.names();
+        for resource in resources {
+            candidates.extend(resource.names());
+        }
+        let permissions = candidates
+            .into_iter()
+            .filter(|name| {
+                let candidate = Self::parse(name).expect("domain scope name");
+                candidate.has_resource_permissions()
+                    && self.covers(&candidate)
+                    && match coverage {
+                        ResourceScopeCoverage::Any => {
+                            resources.iter().any(|set| set.covers(&candidate))
+                        }
+                        ResourceScopeCoverage::All => {
+                            resources.iter().all(|set| set.covers(&candidate))
+                        }
+                    }
+            })
+            .collect::<Vec<_>>();
+        let mut result = Self::parse(&permissions.join(" ")).expect("domain scope names");
+        result.openid = self.openid;
+        result.offline_access = self.offline_access;
+        result
+    }
+
     #[must_use]
     pub fn covers(&self, requested: &Self) -> bool {
         (!requested.openid || self.openid)
@@ -226,7 +270,34 @@ impl FromStr for ScopeSet {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{ApiScope, ScopeSet};
+    use super::{ApiScope, ResourceScopeCoverage, ScopeSet};
+
+    #[test]
+    fn resource_coverage_preserves_controls_and_intersects_hierarchical_permissions() {
+        let granted = ScopeSet::parse("openid offline_access account email").unwrap();
+        let resources = [
+            ScopeSet::parse("account email").unwrap(),
+            ScopeSet::parse("account.read").unwrap(),
+        ];
+        assert_eq!(
+            granted
+                .for_resources(&resources, ResourceScopeCoverage::All)
+                .to_scope_string(),
+            "openid offline_access account.read"
+        );
+        assert_eq!(
+            granted
+                .for_resources(&resources, ResourceScopeCoverage::Any)
+                .to_scope_string(),
+            "openid email offline_access account"
+        );
+        let controls = ScopeSet::parse("openid offline_access").unwrap();
+        assert!(!controls.has_resource_permissions());
+        assert_eq!(
+            granted.for_resources(&[ScopeSet::default()], ResourceScopeCoverage::All),
+            controls
+        );
+    }
 
     #[test]
     fn parse_valid_scope_string() {

@@ -1,6 +1,7 @@
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
 use identity_domain::auth::SessionOid;
+use identity_domain::openid_connect::{ApiScope, ScopeSet};
 
 fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
@@ -447,7 +448,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                 resources: Vec::new(),
-                scope: "openid offline_access profile".to_string(),
+                scope: "openid offline_access profile password.change".to_string(),
                 nonce: Some("nonce-auth-time".to_string()),
                 code_challenge: Some(s256_challenge("verifier-auth-time")),
                 code_challenge_method: Some("S256".parse().unwrap()),
@@ -491,6 +492,11 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         .unwrap();
     let initial_data = refresh_token_data(initial_stored);
     assert_eq!(initial_data.auth_time, Some(original_auth_time));
+    assert!(
+        ScopeSet::parse(&initial_data.scope)
+            .unwrap()
+            .allows(ApiScope::PasswordChange)
+    );
 
     let refreshed = service
         .exchange_refresh_token(RefreshTokenGrantParams {
@@ -509,6 +515,15 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (access_payload, _) =
         jwt::decode_with_verifier(&refreshed.access_token, &verifier).unwrap();
+    assert!(
+        ScopeSet::parse(&refreshed.scope)
+            .unwrap()
+            .allows(ApiScope::PasswordChange)
+    );
+    assert_eq!(
+        access_payload.claim(JwtClaimNames::AUTH_TIME),
+        Some(&serde_json::json!(original_auth_time))
+    );
     let (id_payload, _) =
         jwt::decode_with_verifier(refreshed.id_token.as_ref().unwrap(), &verifier).unwrap();
     assert_eq!(
@@ -528,6 +543,11 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     let refreshed_oid = Uuid::from_slice(&STANDARD.decode(&refreshed_token).unwrap()).unwrap();
     let refreshed_stored = repo.find_by_oid(refreshed_oid).await.unwrap().unwrap();
     let refreshed_data = refresh_token_data(refreshed_stored);
+    assert!(
+        ScopeSet::parse(&refreshed_data.scope)
+            .unwrap()
+            .allows(ApiScope::PasswordChange)
+    );
     assert_eq!(
         refreshed_data.auth_time,
         Some(original_auth_time),
