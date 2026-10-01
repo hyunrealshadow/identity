@@ -21,6 +21,9 @@ mod m20260824_000001_add_user_preferences;
 mod m20260907_000001_create_user_client_consent;
 mod m20260927_000001_create_client_openid_connect_cors_origin;
 mod m20260928_000001_add_key_rotation;
+mod m20261001_000001_create_openid_connect_resource;
+
+mod m20261001_000002_index_pushed_authorization_request;
 
 pub struct Migrator;
 
@@ -47,6 +50,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260907_000001_create_user_client_consent::Migration),
             Box::new(m20260927_000001_create_client_openid_connect_cors_origin::Migration),
             Box::new(m20260928_000001_add_key_rotation::Migration),
+            Box::new(m20261001_000001_create_openid_connect_resource::Migration),
+            Box::new(m20261001_000002_index_pushed_authorization_request::Migration),
         ]
     }
 }

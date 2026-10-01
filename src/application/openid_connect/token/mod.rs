@@ -34,6 +34,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct AuthorizationCodeGrantParams {
+    pub resources: Vec<String>,
     pub code: String,
     pub redirect_uri: Option<String>,
     pub client_id: Option<String>,
@@ -46,6 +47,7 @@ pub struct AuthorizationCodeGrantParams {
 
 #[derive(Debug, Clone)]
 pub struct DeviceCodeGrantParams {
+    pub resources: Vec<String>,
     pub device_code: String,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
@@ -56,6 +58,7 @@ pub struct DeviceCodeGrantParams {
 
 #[derive(Debug, Clone)]
 pub struct RefreshTokenGrantParams {
+    pub resources: Vec<String>,
     pub refresh_token: String,
     /// Optional narrowing of the originally granted scope (RFC 6749 §6).
     pub scope: Option<String>,
@@ -68,6 +71,7 @@ pub struct RefreshTokenGrantParams {
 
 #[derive(Debug, Clone)]
 pub struct ClientCredentialsGrantParams {
+    pub resources: Vec<String>,
     pub scope: Option<String>,
     pub client_id: Option<String>,
     pub client_secret: Option<String>,

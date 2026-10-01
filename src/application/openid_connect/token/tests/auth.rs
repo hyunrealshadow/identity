@@ -1,6 +1,7 @@
 use super::fixtures::*;
 use super::*;
 use crate::error::code::AppErrorCode;
+use crate::error::codes::token::TokenErrorCode;
 use crate::openid_connect::client_authentication::{
     ClientAuthenticator, ClientAuthenticatorDependencies,
 };
@@ -15,6 +16,68 @@ fn authenticator(
         credential_repo: Arc::new(cred_repo_with(credentials)),
         provider_service: provider_service(),
     })
+}
+
+#[tokio::test]
+async fn par_accepts_issuer_token_and_par_assertion_audiences_without_weakening_token_authentication()
+ {
+    let service = authenticator(
+        Arc::new(AuthMethodClientRepository {
+            method: "client_secret_jwt",
+            signing_alg: None,
+        }),
+        vec![secret_credential(CLIENT_SECRET_JWT_SECRET)],
+    );
+    let client_id = Uuid::nil().to_string();
+    for audience in [
+        "https://identity.example.com/",
+        "https://identity.example.com/oauth2/token",
+        "https://identity.example.com/oauth2/par",
+    ] {
+        let assertion =
+            build_client_secret_assertion(CLIENT_SECRET_JWT_SECRET, &client_id, audience);
+        assert!(
+            service
+                .authenticate_client_for_par(
+                    &client_id,
+                    None,
+                    false,
+                    Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+                    Some(&assertion)
+                )
+                .await
+                .is_ok()
+        );
+        let normal = service
+            .authenticate_client(
+                &client_id,
+                None,
+                false,
+                Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+                Some(&assertion),
+            )
+            .await;
+        assert_eq!(normal.is_ok(), !audience.ends_with("/par"));
+    }
+    let assertion = build_client_secret_assertion(
+        CLIENT_SECRET_JWT_SECRET,
+        &client_id,
+        "https://other.example.com/",
+    );
+    assert_eq!(
+        service
+            .authenticate_client_for_par(
+                &client_id,
+                None,
+                false,
+                Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+                Some(&assertion)
+            )
+            .await
+            .unwrap_err()
+            .code(),
+        TokenErrorCode::AssertionAudMismatch.code()
+    );
 }
 
 fn secret_credential(secret: &str) -> OpenIdConnectCredential {

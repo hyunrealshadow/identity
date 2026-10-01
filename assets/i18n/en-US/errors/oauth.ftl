@@ -15,3 +15,4 @@ oauth-error-description-request_not_supported = The authorization request is not
 oauth-error-description-request_uri_not_supported = Request URIs are not supported.
 oauth-error-description-registration_not_supported = Dynamic client registration is not supported.
 oauth-error-description-unmet_authentication_requirements = The authentication performed does not satisfy the requested requirements.
+oauth-error-description-invalid_target = The requested resource is invalid or unavailable.

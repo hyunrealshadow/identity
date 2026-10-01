@@ -7,5 +7,6 @@ pub use app::{AppSettings, DomainSetting, LoginClientIdSetting, LoginDomainSetti
 pub use installation::InstallationSettings;
 pub use openid_connect::{
     DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings,
+    PushedAuthorizationSettings,
 };
 pub use password::PasswordHashSetting;

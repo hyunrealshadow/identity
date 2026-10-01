@@ -33,7 +33,9 @@ use crate::openid_connect::token::helpers::{
     decode_assertion_with_alg, decode_assertion_with_hmac_alg, decode_assertion_with_jwk,
 };
 
+#[derive(Clone)]
 pub struct ClientAuthenticator {
+    par_endpoint: bool,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     provider_service: Arc<OpenIdProviderService>,
@@ -49,10 +51,33 @@ impl ClientAuthenticator {
     #[must_use]
     pub fn new(deps: ClientAuthenticatorDependencies) -> Self {
         Self {
+            par_endpoint: false,
             client_repo: deps.client_repo,
             credential_repo: deps.credential_repo,
             provider_service: deps.provider_service,
         }
+    }
+
+    pub async fn authenticate_client_for_par(
+        &self,
+        client_id: &str,
+        client_secret: Option<&str>,
+        client_secret_basic: bool,
+        client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+        client_assertion: Option<&str>,
+    ) -> Result<Uuid, AppError> {
+        let mut authenticator = self.clone();
+        authenticator.par_endpoint = true;
+        authenticator
+            .authenticate_client_request(
+                client_id,
+                client_secret,
+                client_secret_basic,
+                client_assertion_type,
+                client_assertion,
+            )
+            .await
+            .map(|client| client.client().oid)
     }
 
     async fn load_client(&self, client_id: &str) -> Result<OpenIdConnectClient, AppError> {
@@ -362,13 +387,17 @@ impl ClientAuthenticator {
         let token_endpoint = format!("{issuer_base}/oauth2/token");
         let revocation_endpoint = format!("{issuer_base}/oauth2/revoke");
         let introspection_endpoint = format!("{issuer_base}/oauth2/introspect");
-        let valid_audiences = [
+        let par_endpoint = format!("{issuer_base}/oauth2/par");
+        let mut valid_audiences = vec![
             issuer.as_str(),
             issuer_base,
             token_endpoint.as_str(),
             revocation_endpoint.as_str(),
             introspection_endpoint.as_str(),
         ];
+        if self.par_endpoint {
+            valid_audiences.push(par_endpoint.as_str());
+        }
         if !audience_matches(payload, &valid_audiences) {
             return Err(AppError::from_code(TokenErrorCode::AssertionAudMismatch));
         }

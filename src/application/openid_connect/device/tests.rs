@@ -237,6 +237,7 @@ fn accepting_device_repo() -> (
 
 fn params(client_secret: Option<&str>, scope: Option<&str>) -> DeviceAuthorizationParams {
     DeviceAuthorizationParams {
+        resources: Vec::new(),
         client_id: Some(CLIENT_ID.to_string()),
         client_secret: client_secret.map(str::to_owned),
         client_secret_basic: true,
@@ -408,6 +409,7 @@ async fn request_authenticates_a_jwt_client_without_a_separate_client_id() {
 
     let response = service
         .authorize(DeviceAuthorizationParams {
+            resources: Vec::new(),
             // RFC 7523 §2.2: the assertion identifies the client on its own.
             client_assertion_type: Some(ClientAssertionType::JwtBearer),
             client_assertion: Some(sign_assertion(&private_key, CLIENT_ID)),
@@ -435,6 +437,7 @@ async fn request_rejects_an_assertion_signed_by_another_key() {
 
     let error = service
         .authorize(DeviceAuthorizationParams {
+            resources: Vec::new(),
             client_assertion_type: Some(ClientAssertionType::JwtBearer),
             client_assertion: Some(sign_assertion(&other_private_key, CLIENT_ID)),
             ..DeviceAuthorizationParams::default()
@@ -468,6 +471,7 @@ async fn request_rejects_an_assertion_for_another_audience() {
 
     let error = service
         .authorize(DeviceAuthorizationParams {
+            resources: Vec::new(),
             client_assertion_type: Some(ClientAssertionType::JwtBearer),
             client_assertion: Some(foreign_audience),
             ..DeviceAuthorizationParams::default()
@@ -662,6 +666,7 @@ fn pending_record(user_code: &str, scope: &str, expires_at: DateTime<Utc>) -> Cl
     request_record(
         CLIENT_ID,
         DeviceAuthorizationRequestData {
+            resources: Vec::new(),
             scope: scope.to_owned(),
             device_code_digest: device_code_digest("device-code"),
             claimed_login_oid: None,

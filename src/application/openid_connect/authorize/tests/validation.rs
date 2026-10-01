@@ -311,7 +311,7 @@ async fn validate_request_reports_missing_required_fields() {
         client_id: String::new(),
         redirect_uri: String::new(),
         scope: String::new(),
-        resource: None,
+        resources: Vec::new(),
         state: String::new(),
         nonce: None,
         display: None,
@@ -387,6 +387,7 @@ async fn validate_request_rejects_request_and_request_uri_together() {
         Arc::new(mock_login_repo()),
     );
     let params = AuthorizationRequestParams {
+        resources: Vec::new(),
         request: Some("header.payload.signature".to_string()),
         request_uri: Some("https://client.example.com/request.jwt".to_string()),
         ..params("openid profile")
@@ -439,6 +440,7 @@ async fn prompt_none_combined_with_other_value_rejects() {
 
     let error = service
         .validate_request(AuthorizationRequestParams {
+            resources: Vec::new(),
             prompt: Some("none login".to_string()),
             ..params("openid profile")
         })
@@ -458,6 +460,7 @@ async fn prompt_none_alone_is_accepted() {
 
     let result = service
         .validate_request(AuthorizationRequestParams {
+            resources: Vec::new(),
             prompt: Some("none".to_string()),
             ..params("openid profile")
         })
@@ -499,7 +502,7 @@ async fn api_scopes_require_graphql_resource() {
         .await
         .unwrap_err();
 
-    assert_eq!(error.code(), 23005);
+    assert_eq!(error.code(), 10006);
 }
 
 #[tokio::test]
@@ -512,7 +515,7 @@ async fn api_scopes_accept_graphql_resource() {
         Arc::new(mock_login_repo()),
     );
     let mut request = params("openid account");
-    request.resource = Some(identity_domain::openid_connect::API_RESOURCE.to_string());
+    request.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_string()];
 
     assert!(service.validate_request(request).await.is_ok());
 }
@@ -542,6 +545,7 @@ async fn global_oauth_version_applies_unless_client_explicitly_overrides_it() {
         let mut service = build_test_service(
             Arc::new(ConfiguredClientRepository {
                 settings: OpenIdConnectClientSettings {
+                    require_pushed_authorization_requests: false,
                     oauth_version: client,
                     ..Default::default()
                 },

@@ -88,6 +88,9 @@ pub struct OpenIdProviderMetadata {
     pub authorization_endpoint: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token_endpoint: Option<Url>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pushed_authorization_request_endpoint: Option<Url>,
+    pub require_pushed_authorization_requests: bool,
     /// RFC 7009 token revocation endpoint.
     pub revocation_endpoint: Url,
     pub introspection_endpoint: Url,
@@ -179,6 +182,8 @@ mod tests {
     #[test]
     fn serializes_required_fields_and_explicit_booleans() {
         let metadata = OpenIdProviderMetadata {
+            pushed_authorization_request_endpoint: None,
+            require_pushed_authorization_requests: false,
             issuer: Url::parse("https://identity.example.com").unwrap(),
             authorization_endpoint: Url::parse("https://identity.example.com/connect/authorize")
                 .unwrap(),
@@ -268,6 +273,8 @@ mod tests {
     #[test]
     fn omits_empty_optional_arrays() {
         let metadata = OpenIdProviderMetadata {
+            pushed_authorization_request_endpoint: None,
+            require_pushed_authorization_requests: false,
             issuer: Url::parse("https://identity.example.com").unwrap(),
             authorization_endpoint: Url::parse("https://identity.example.com/connect/authorize")
                 .unwrap(),

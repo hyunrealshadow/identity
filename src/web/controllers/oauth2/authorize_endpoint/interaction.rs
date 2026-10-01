@@ -252,6 +252,7 @@ mod tests {
 
     fn request(prompt: Option<HashSet<PromptValue>>, max_age: Option<i32>) -> AuthorizationRequest {
         AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: None,
             client_id: Uuid::nil(),

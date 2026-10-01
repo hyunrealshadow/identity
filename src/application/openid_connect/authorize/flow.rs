@@ -764,6 +764,7 @@ impl AuthorizeService {
                 ClientAuthorizationData::AuthorizationCode(
                     identity_domain::client_authorization::AuthorizationCodeData {
                         scope: request.scope.clone(),
+                        resources: request.resources.clone(),
                         nonce: request.nonce.clone(),
                         code_challenge: request.code_challenge.clone(),
                         code_challenge_method: request.code_challenge_method,

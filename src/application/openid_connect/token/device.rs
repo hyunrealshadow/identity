@@ -161,6 +161,15 @@ impl TokenService {
         let scope = ScopeSet::parse(&approval.approved_scope).map_err(|error| {
             AppError::from_code(TokenErrorCode::DeviceRequestStateInvalid).with_source(error)
         })?;
+        let selection = self
+            .provider_service
+            .select_resources(&params.resources, &data.resources, &scope.to_scope_string())
+            .await?;
+        let refresh_resources = if data.resources.is_empty() {
+            &selection.resources
+        } else {
+            &data.resources
+        };
         let user_oid = Uuid::parse_str(&approval.user_oid).map_err(|error| {
             AppError::from_code(TokenErrorCode::DeviceRequestStateInvalid).with_source(error)
         })?;
@@ -181,6 +190,8 @@ impl TokenService {
             &client_id,
             &approval,
             &scope,
+            &selection,
+            refresh_resources,
             &user,
             record.oid,
             device_authorization_oid,
@@ -257,6 +268,8 @@ impl TokenService {
         client_id: &str,
         approval: &DeviceAuthorizationApproval,
         scope: &ScopeSet,
+        selection: &crate::openid_connect::resource::ResourceSelection,
+        refresh_resources: &[String],
         user: &User,
         request_oid: Uuid,
         device_authorization_oid: Uuid,
@@ -264,7 +277,7 @@ impl TokenService {
         client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
     ) -> Result<TokenResponse, AppError> {
         let issuer = self.provider_service.issuer()?;
-        let scope_string = scope.to_scope_string();
+        let scope_string = selection.scope.clone();
         let configured_signing_key = self
             .load_configured_signing_key(client.metadata().id_token_signed_response_algs.as_deref())
             .await?;
@@ -280,6 +293,7 @@ impl TokenService {
         let access_token_oid = Uuid::new_v4();
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
+                resources: &selection.resources,
                 token_id: &access_token_oid.to_string(),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
@@ -311,7 +325,7 @@ impl TokenService {
                     audience: client_id,
                     client,
                     user,
-                    scope: &scope_string,
+                    scope: &scope.to_scope_string(),
                     nonce: None,
                     auth_time: approval.auth_time,
                     acr: approval.acr.as_deref(),
@@ -361,7 +375,8 @@ impl TokenService {
             records.push(PreparedAuthorizationRecord {
                 oid: refresh_token_oid,
                 data: ClientAuthorizationData::RefreshToken(RefreshTokenData {
-                    scope: scope_string.clone(),
+                    scope: scope.to_scope_string(),
+                    resources: refresh_resources.to_vec(),
                     user_oid: approval.user_oid.clone(),
                     session_oid: None,
                     protected_session_id: None,

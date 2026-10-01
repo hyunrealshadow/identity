@@ -19,6 +19,8 @@ establish certification.
 | Discovery | OIDC discovery, OAuth authorization server metadata (RFC 8414), and public JWKS |
 | Tokens | Signed JWT access tokens and ID Tokens; encrypted ID Tokens; refresh rotation and replay handling |
 | Token lifecycle | Revocation (RFC 7009) and authenticated introspection (RFC 7662) |
+| Resource indicators | RFC 8707: registered resource URIs, multiple audiences, resource-specific scopes, and refresh grant binding |
+| Pushed authorization | RFC 9126: authenticated back-channel requests, expiring client-bound references, and one-time consumption |
 | Client registration | Dynamic registration (RFC 7591), plus read, full replacement update, and delete (RFC 7592) |
 | Client authentication | `client_secret_basic`, `client_secret_post`, `client_secret_jwt`, `private_key_jwt`, and public clients using `none` where permitted |
 | Authorization requests | PKCE S256, nonce, consent, account selection, silent requests, reauthentication, `max_age`, `acr_values`, and claims requests |
@@ -94,6 +96,89 @@ expiry, denial, and single-use issuance. Device-issued tokens follow the device
 authorization relation rather than the browser session that approved it.
 User-code lookup does not currently have a dedicated rate limiter.
 
+### Resource indicators (RFC 8707)
+
+Resources are registered in the PostgreSQL `openid_connect_resource` table.
+Each row has a unique `uri`, display `name`, JSON array of allowed `scopes`,
+and `enabled` flag. Initialization registers `urn:identity:graphql` without
+overwriting an existing row, including an administrator's disabled state.
+Additional resources can be registered with SQL:
+
+```sql
+INSERT INTO openid_connect_resource (uri, name, scopes)
+VALUES ('https://api.example.com/account', 'Account API', '["account.read"]'::jsonb);
+```
+
+Resource scopes currently use the supported scope catalog; this table does not
+add custom scope names or provide an administration API. Client scope assignments
+and consent still apply. The registry follows the resource/scope separation used
+by [Duende IdentityServer](https://docs.duendesoftware.com/identityserver/fundamentals/resources/isolation/).
+
+Authorization and token requests accept repeated `resource` parameters, for
+example `resource=https%3A%2F%2Fapi.example.com%2Faccount&resource=urn%3Aidentity%3Agraphql`.
+Request Objects accept a single URI string or a nonempty array of URI strings.
+Device authorization also accepts and persists resource indicators. Values must
+be absolute, fragment-free URIs; matching preserves the exact spelling. Query
+components are accepted. Resource identifiers are never fetched.
+
+Explicit authorization targets must be enabled and collectively cover the
+requested scopes. Code and refresh exchanges may select a subset of the original
+targets; access-token scopes are reduced to those allowed by the selected targets.
+JWT access-token `aud` contains those targets, while ID Token `aud` remains the
+client ID. Refresh tokens retain the original resource grant and scopes, allowing
+a subsequent refresh for another originally authorized resource. An explicit
+refresh `scope` still narrows the grant under RFC 6749.
+
+Unknown, disabled, malformed, out-of-grant, or incompatible targets return
+`invalid_target`; failed target validation does not consume the code or refresh
+token. Omitting targets reuses the grant's targets. Legacy grants without resource
+indicators retain their audience behavior and may select a registered target at
+the token endpoint; the resulting refresh token records that selection. API-scope
+authorization requests require an explicit resource indicator. API-scope token
+requests without indicators resolve the built-in GraphQL resource through the
+registry, so disabling it also blocks new tokens targeting it.
+
+### Pushed authorization requests (RFC 9126)
+
+Clients POST authorization parameters as `application/x-www-form-urlencoded` to
+`/oauth2/par`, using their token-endpoint authentication method. Public clients
+must have `allow_public_client_flow` enabled and satisfy the applicable PKCE rules.
+The endpoint validates client policy, redirect URI, scopes, resource indicators,
+and Request Objects before returning HTTP 201 with `request_uri` and `expires_in`.
+It does not start login or consent interactions. Requests larger than 64 KiB are
+rejected. A `request_uri` parameter cannot be pushed.
+Plain form requests must explicitly include `client_id`; client authentication
+does not supply this authorization parameter. With `request`, client identification
+may instead come from the authentication method and verified Request Object.
+
+The browser then opens `/oauth2/authorize?client_id=CLIENT_ID&request_uri=REFERENCE`.
+Additional recognized authorization parameters are rejected. References use
+256 bits of randomness and are bound to the authenticated client. PostgreSQL stores
+their SHA-256 digest and authorization parameters in `client_authorization.data`,
+using type `pushed_authorization_request`, without client credentials. A partial
+unique index covers the reference digest. `completed_at` records consumption;
+the existing expiry and revocation fields also apply.
+Consumption atomically checks the client, expiry, and unused state; concurrent
+requests cannot reuse a reference. Current client policy is checked again before
+authorization proceeds.
+
+The runtime setting `openid_connect.pushed_authorization` defaults to
+`{"request_ttl_seconds":90,"require_pushed_authorization_requests":false}`.
+Lifetime must be between 1 and 600 seconds. Setting the global requirement or
+client metadata `require_pushed_authorization_requests` to `true` requires PAR
+for that client. Dynamic registration and replacement updates accept this metadata.
+OIDC discovery and OAuth server metadata publish the PAR endpoint and global
+requirement. Expired and consumed rows can be removed periodically using SQL.
+
+Signed or encrypted Request Objects use the existing verification rules; when
+`request` is supplied, only client identification and authentication parameters
+may accompany it.
+PAR rejects invalid UTF-8 after form decoding, and Request Objects cannot contain
+nested `request` or `request_uri` claims. JWT client assertions accept the issuer,
+token endpoint, or
+PAR endpoint as their audience for PAR authentication. Redirect URIs still need
+to match client registration. Production deployments should use an HTTPS issuer.
+
 ## HTTP endpoints
 
 Paths below are relative to the service's public origin.
@@ -104,6 +189,7 @@ Paths below are relative to the service's public origin.
 | GET | `/.well-known/oauth-authorization-server` | OAuth authorization server metadata |
 | GET | `/.well-known/keys` | Public JWKS |
 | GET, POST | `/oauth2/authorize` | Authorization requests |
+| POST | `/oauth2/par` | Push an authorization request |
 | POST | `/oauth2/token` | Token issuance and refresh |
 | POST | `/oauth2/revoke` | Token revocation |
 | POST | `/oauth2/introspect` | Token introspection |

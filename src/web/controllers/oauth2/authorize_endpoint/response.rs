@@ -183,7 +183,9 @@ fn authorize_error_status(kind: ErrorKind) -> StatusCode {
     }
 }
 
-pub(super) fn authorize_oauth_error_code(error: &AppError) -> OAuthErrorCode {
+pub(in crate::controllers::oauth2) fn authorize_oauth_error_code(
+    error: &AppError,
+) -> OAuthErrorCode {
     use identity_application::error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode};
 
     if error.kind() == ErrorKind::Internal {
@@ -191,6 +193,12 @@ pub(super) fn authorize_oauth_error_code(error: &AppError) -> OAuthErrorCode {
     }
 
     match error.code() {
+        c if c
+            == identity_application::error::codes::common::CommonErrorCode::InvalidTarget
+                .code() =>
+        {
+            OAuthErrorCode::InvalidTarget
+        }
         code if code == AuthorizeErrorCode::ResponseTypeInvalid.code() => {
             OAuthErrorCode::UnsupportedResponseType
         }
@@ -369,6 +377,7 @@ mod tests {
         let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
         let headers = http::HeaderMap::new();
         let request = AuthorizationRequest {
+            resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: Some(ResponseMode::FormPost),
             client_id: uuid::Uuid::nil(),

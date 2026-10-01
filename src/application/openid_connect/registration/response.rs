@@ -75,6 +75,8 @@ pub struct DynamicClientRegistrationResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_auth_time: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_pushed_authorization_requests: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_acr_values: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initiate_login_uri: Option<Url>,
@@ -197,6 +199,9 @@ pub(super) fn response_from_client(
         jwks_uri: None,
         default_max_age: metadata.default_max_age,
         require_auth_time: metadata.require_auth_time,
+        require_pushed_authorization_requests: Some(
+            metadata.settings.require_pushed_authorization_requests,
+        ),
         default_acr_values: metadata.default_acr_values.clone(),
         initiate_login_uri: metadata.initiate_login_uri.clone(),
         request_uris: metadata.request_uris.clone(),

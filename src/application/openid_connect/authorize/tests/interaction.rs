@@ -17,6 +17,7 @@ use crate::openid_connect::authorize::{
 
 fn request() -> AuthorizationRequestData {
     AuthorizationRequestData {
+        resources: Vec::new(),
         response_type: "code".parse().unwrap(),
         response_mode: None,
         client_id: Uuid::nil().to_string(),

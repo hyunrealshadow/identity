@@ -23,6 +23,8 @@ use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers}
 /// optional scope.
 #[derive(Debug, Deserialize)]
 struct DeviceAuthorizationForm {
+    #[serde(default, rename = "resource")]
+    resources: Vec<String>,
     client_id: Option<String>,
     client_secret: Option<String>,
     client_assertion_type: Option<String>,
@@ -43,6 +45,9 @@ struct DeviceAuthorizationErrorResponse {
 /// `unauthorized_client` instead.
 fn device_error_code(error: &AppError) -> &'static str {
     let code = error.code();
+    if code == identity_application::error::codes::common::CommonErrorCode::InvalidTarget.code() {
+        return "invalid_target";
+    }
 
     if code == DeviceAuthorizationErrorCode::GrantNotAllowed.code() {
         return "unauthorized_client";
@@ -172,6 +177,7 @@ pub async fn device_authorization(
         .services()
         .oidc_device_authorization()
         .authorize(DeviceAuthorizationParams {
+            resources: form.resources,
             client_id,
             client_secret,
             client_secret_basic: basic_auth.is_some(),
