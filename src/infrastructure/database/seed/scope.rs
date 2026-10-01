@@ -17,6 +17,7 @@ pub struct BuiltInScopeDefinition {
     pub name: &'static str,
     pub display_name: &'static str,
     pub description: &'static str,
+    pub description_zh_cn: &'static str,
 }
 
 pub const BUILT_IN_OPENID_CONNECT_SCOPES: &[BuiltInScopeDefinition] = &[
@@ -25,78 +26,91 @@ pub const BUILT_IN_OPENID_CONNECT_SCOPES: &[BuiltInScopeDefinition] = &[
         name: StandardScopes::OPENID,
         display_name: "OpenID",
         description: "Access your account identifier",
+        description_zh_cn: "验证你的身份。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: StandardScopes::PROFILE,
         display_name: "Profile",
         description: "Read your basic profile information",
+        description_zh_cn: "查看你的基本个人资料。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: StandardScopes::EMAIL,
         display_name: "Email",
         description: "Read your email address",
+        description_zh_cn: "查看你的邮箱地址。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: StandardScopes::ADDRESS,
         display_name: "Address",
         description: "Read your postal address",
+        description_zh_cn: "查看你的邮寄地址。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: StandardScopes::PHONE,
         display_name: "Phone",
         description: "Read your phone number",
+        description_zh_cn: "查看你的电话号码。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: StandardScopes::OFFLINE_ACCESS,
         display_name: "Offline Access",
         description: "Request refresh tokens for long-lived access",
+        description_zh_cn: "在你未使用应用时保持访问权限。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::ACCOUNT,
         display_name: "Account",
         description: "Read and update your account",
+        description_zh_cn: "读取和更新你的账户。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::ACCOUNT_UPDATE,
         display_name: "Update account",
         description: "Update your account profile",
+        description_zh_cn: "更新你的账户资料。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::ACCOUNT_READ,
         display_name: "Read account",
         description: "Read your account profile",
+        description_zh_cn: "读取你的账户资料。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::SESSION,
         display_name: "Sessions",
         description: "Read and revoke your sessions",
+        description_zh_cn: "读取和撤销你的会话。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::SESSION_REVOKE,
         display_name: "Revoke sessions",
         description: "Revoke your sessions",
+        description_zh_cn: "撤销你的会话。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::SESSION_READ,
         display_name: "Read sessions",
         description: "Read your sessions",
+        description_zh_cn: "读取你的会话。",
     },
     BuiltInScopeDefinition {
         protocol: OPENID_CONNECT_PROTOCOL,
         name: ApiScope::PASSWORD_CHANGE,
         display_name: "Change password",
         description: "Change your password after recent authentication",
+        description_zh_cn: "在近期完成身份验证后修改你的密码。",
     },
 ];
 
@@ -128,6 +142,10 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
             let mut active: scope::ActiveModel = existing.into();
             active.display_name = Set(definition.display_name.to_string());
             active.description = Set(definition.description.to_string());
+            active.descriptions = Set(serde_json::json!({
+                "en-US": definition.description,
+                "zh-CN": definition.description_zh_cn,
+            }));
             active.built_in = Set(true);
             active.update(db).await.map_err(|error| {
                 AppError::from_code(CommonErrorCode::InternalError).with_source(error)
@@ -138,6 +156,10 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
                 name: Set(definition.name.to_string()),
                 display_name: Set(definition.display_name.to_string()),
                 description: Set(definition.description.to_string()),
+                descriptions: Set(serde_json::json!({
+                    "en-US": definition.description,
+                    "zh-CN": definition.description_zh_cn,
+                })),
                 built_in: Set(true),
                 ..Default::default()
             }

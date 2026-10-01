@@ -1,3 +1,4 @@
+import { resolveLocale, translate } from '#/lib/i18n'
 import {
   HeadContent,
   Scripts,
@@ -63,6 +64,13 @@ export const Route = createRootRoute({
 })
 
 function RootError({ error }: ErrorComponentProps) {
+  const locale = useRouterState({
+    select: (state) => resolveLocale({
+      uiLocales: [...state.matches].reverse().map((match) =>
+        (match.loaderData as { locale?: string } | undefined)?.locale ?? ''),
+    }),
+  })
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
@@ -71,7 +79,7 @@ function RootError({ error }: ErrorComponentProps) {
           {import.meta.env.DEV ? error.message : 'Please try again.'}
         </p>
         <a className="mt-5 inline-flex rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href="/">
-          Try again
+          {translate(locale, 'tryAgain')}
         </a>
       </div>
     </main>

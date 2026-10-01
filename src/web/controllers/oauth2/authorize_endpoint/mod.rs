@@ -45,10 +45,10 @@ async fn render_error(
         .redirect_uri
         .as_deref()
         .is_none_or(str::is_empty)
-        && resolved_raw
-            .scope
-            .as_deref()
-            .is_none_or(|scope| !scope.split_whitespace().any(|part| part == "openid"))
+        && resolved_raw.scope.as_deref().is_none_or(|scope| {
+            !identity_domain::openid_connect::ScopeSet::parse(scope)
+                .is_ok_and(|scope| scope.contains_openid())
+        })
         && let Some(client_oid) = resolved_raw
             .client_id
             .as_deref()

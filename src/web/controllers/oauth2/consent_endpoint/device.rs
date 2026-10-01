@@ -75,7 +75,14 @@ pub(super) async fn device_login_consent_api(
             client_name: description.client_name,
             logo_uri: description.logo_uri,
             client_uri: description.client_uri,
-            scopes: build_scope_display(&scope, &previously_granted),
+            scopes: build_scope_display(
+                &scope,
+                &previously_granted,
+                &ctx.services()
+                    .oidc_authorize()
+                    .scope_descriptions(&scope)
+                    .await?,
+            ),
             csrf_token: csrf_token(depot),
             account: DeviceConsentAccount {
                 name: actor.user_name,

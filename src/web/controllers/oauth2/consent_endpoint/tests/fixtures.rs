@@ -378,6 +378,24 @@ async fn consent_test_state_for(
 
     let openid_scope_row =
         BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]);
+    let scope_descriptions = scope
+        .split_whitespace()
+        .enumerate()
+        .map(
+            |(index, name)| crate::infrastructure::database::entity::scope::Model {
+                id: index as i64,
+                oid: uuid::Uuid::new_v4(),
+                protocol: "openid_connect".to_owned(),
+                name: name.to_owned(),
+                display_name: format!("Configured {name}"),
+                description: format!("Database description for {name}"),
+                descriptions: serde_json::json!({"zh-CN": format!("数据库描述 {name}")}),
+                built_in: true,
+                created_at: now.into(),
+                updated_at: None,
+            },
+        )
+        .collect::<Vec<_>>();
 
     let queued = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[
@@ -414,6 +432,7 @@ async fn consent_test_state_for(
             .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[(active_session.clone(), active_user.clone())]])
             .append_query_results([[openid_scope_row.clone()]])
+            .append_query_results([scope_descriptions.clone()])
             .append_query_results([[login_model.clone()]])
             .append_query_results([[client_model.clone()]])
             .append_query_results([[authorization_model.clone()]])
@@ -502,6 +521,7 @@ async fn consent_test_state_for(
                 .append_query_results([[openid_scope_row.clone()]])
                 .append_query_results([[(active_session.clone(), active_user.clone())]])
                 .append_query_results([[openid_scope_row]])
+                .append_query_results([scope_descriptions])
                 .append_query_results([[login_model]])
                 .append_query_results([[client_model.clone()]])
                 .append_query_results([[device_request_model.clone()]])

@@ -108,6 +108,7 @@ pub enum OAuthProtocolVersion {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct OpenIdConnectClientSettings {
+    #[serde(default)]
     pub require_pushed_authorization_requests: bool,
     #[serde(default)]
     pub skip_consent: bool,

@@ -126,6 +126,9 @@ impl TokenService {
             ClientAuthorizationData::AuthorizationCode(data) => data,
             _ => return Err(AppError::from_code(TokenErrorCode::DeserializeCodeFailed)),
         };
+        let code_scope = ScopeSet::parse(&data.scope).map_err(|error| {
+            AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
+        })?;
         let (session_acr, session_amr) = if let Some(session_repo) = &self.session_repo {
             let session = session_repo
                 .find_by_oid(data.session_oid)
@@ -165,18 +168,17 @@ impl TokenService {
                 return Err(AppError::from_code(TokenErrorCode::RedirectUriMismatch));
             }
             None => {
-                let oidc_with_multiple_redirects =
-                    data.scope.split_whitespace().any(|scope| scope == "openid")
-                        && authenticated_client
-                            .platforms()
-                            .iter()
-                            .map(|platform| platform.redirect_uris.len())
-                            .sum::<usize>()
-                            > 1;
+                let oidc_with_multiple_redirects = code_scope.contains_openid()
+                    && authenticated_client
+                        .platforms()
+                        .iter()
+                        .map(|platform| platform.redirect_uris.len())
+                        .sum::<usize>()
+                        > 1;
                 let may_omit = match oauth_version {
                     OAuthProtocolVersion::V2_0 => {
                         !data.redirect_uri_was_supplied
-                            || (data.scope.split_whitespace().any(|scope| scope == "openid")
+                            || (code_scope.contains_openid()
                                 && authenticated_client
                                     .single_redirect_uri()
                                     .is_some_and(|uri| uri == data.redirect_uri))
@@ -220,7 +222,7 @@ impl TokenService {
         } else {
             &data.resources
         };
-        let issue_id_token = data.scope.split_whitespace().any(|scope| scope == "openid");
+        let issue_id_token = code_scope.contains_openid();
         if issue_id_token {
             if authenticated_client.metadata().require_auth_time == Some(true)
                 && data.auth_time.is_none()
@@ -353,23 +355,15 @@ impl TokenService {
         } else {
             None
         };
-        let refreshable_scope = data
-            .scope
-            .split_whitespace()
-            .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
-            .collect::<Vec<_>>()
-            .join(" ");
+        let refresh_scope_string = code_scope.to_scope_string();
         let refresh_token = if authenticated_client.allows_grant(GrantType::RefreshToken)
-            && data
-                .scope
-                .split_whitespace()
-                .any(|scope| scope == "offline_access")
+            && code_scope.contains_offline_access()
         {
             Some(
                 self.store_refresh_token(StoreRefreshTokenParams {
                     device_authorization_oid: None,
                     client_oid: record.client_oid,
-                    scope: &refreshable_scope,
+                    scope: &refresh_scope_string,
                     resources: refresh_resources,
                     user_oid: &data.user_oid,
                     session_oid: Some(data.session_oid),
@@ -596,12 +590,11 @@ impl TokenService {
             ));
         }
 
-        let granted_scope = refresh_data
-            .scope
-            .split_whitespace()
-            .filter(|scope| *scope != identity_domain::openid_connect::ApiScope::PASSWORD_CHANGE)
-            .collect::<Vec<_>>();
-        let grant_scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
+        let granted_scope = ScopeSet::parse(&refresh_data.scope).map_err(|error| {
+            AppError::from_code(TokenErrorCode::DeserializeRefreshFailed).with_source(error)
+        })?;
+        let requested_scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
+        let grant_scope = requested_scope.to_scope_string();
         let selection = self
             .provider_service
             .select_resources(&params.resources, &refresh_data.resources, &grant_scope)
@@ -612,7 +605,7 @@ impl TokenService {
             &refresh_data.resources
         };
         let scope = selection.scope.clone();
-        let issue_id_token = scope.split_whitespace().any(|scope| scope == "openid");
+        let issue_id_token = requested_scope.contains_openid();
         if issue_id_token {
             if authenticated_client.metadata().require_auth_time == Some(true)
                 && refresh_data.auth_time.is_none()
@@ -851,19 +844,17 @@ impl TokenService {
 ///
 /// The request may drop scopes, but never add one — not even `openid`, which
 /// would otherwise turn a plain OAuth grant into an OIDC one after the fact.
-/// Without a requested scope the originally granted scope is reused verbatim,
-/// so scopes this service does not classify survive the round trip.
-fn refresh_scope(granted: &[&str], requested: Option<&str>) -> Result<String, AppError> {
+fn refresh_scope(granted: &ScopeSet, requested: Option<&str>) -> Result<ScopeSet, AppError> {
     let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(granted.join(" "));
+        return Ok(granted.clone());
     };
-
-    let requested: Vec<&str> = requested.split_whitespace().collect();
-    if requested.is_empty() || requested.iter().any(|scope| !granted.contains(scope)) {
+    let requested = ScopeSet::parse(requested).map_err(|error| {
+        AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed).with_source(error)
+    })?;
+    if !granted.covers(&requested) {
         return Err(AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed));
     }
-
-    Ok(requested.join(" "))
+    Ok(requested)
 }
 
 pub(crate) fn resolve_client_id(
@@ -904,6 +895,19 @@ pub(super) fn issuance_result(error: &AppError) -> (&'static str, &'static str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refresh_scope_allows_hierarchical_narrowing_but_rejects_expansion() {
+        let granted = ScopeSet::parse("account offline_access").unwrap();
+        assert_eq!(
+            refresh_scope(&granted, Some("account.read"))
+                .unwrap()
+                .to_scope_string(),
+            "account.read"
+        );
+        assert!(refresh_scope(&granted, Some("openid account.read")).is_err());
+        assert!(refresh_scope(&granted, Some("session.read")).is_err());
+    }
 
     fn unsigned_assertion(payload: serde_json::Value) -> String {
         let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#);

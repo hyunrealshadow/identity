@@ -114,6 +114,10 @@ add custom scope names or provide an administration API. Client scope assignment
 and consent still apply. The registry follows the resource/scope separation used
 by [Duende IdentityServer](https://docs.duendesoftware.com/identityserver/fundamentals/resources/isolation/).
 
+Consent pages use the scope table's `display_name` and `description`. Its
+`descriptions` JSONB object maps language tags such as `zh-CN` and `en-US` to
+localized descriptions; a missing translation falls back to `description`.
+
 Authorization and token requests accept repeated `resource` parameters, for
 example `resource=https%3A%2F%2Fapi.example.com%2Faccount&resource=urn%3Aidentity%3Agraphql`.
 Request Objects accept a single URI string or a nonempty array of URI strings.
@@ -128,6 +132,17 @@ JWT access-token `aud` contains those targets, while ID Token `aud` remains the
 client ID. Refresh tokens retain the original resource grant and scopes, allowing
 a subsequent refresh for another originally authorized resource. An explicit
 refresh `scope` still narrows the grant under RFC 6749.
+
+Multi-audience access tokens include only scopes allowed by every selected
+resource. Protocol controls (`openid` and `offline_access`) remain grant context
+and are retained separately from resource permissions. If no requested resource
+permission is common to all targets, the token
+request returns `invalid_target` without consuming the grant. Authorization-code
+grants can still cover distinct permissions at distinct resources; clients can
+request a separate access token for each resource. This scope restriction does
+not prevent bearer-token forwarding between audiences: multi-audience tokens
+still require mutual trust between resource servers, as described in
+[RFC 8707 Section 3](https://www.rfc-editor.org/rfc/rfc8707.html#section-3).
 
 Unknown, disabled, malformed, out-of-grant, or incompatible targets return
 `invalid_target`; failed target validation does not consume the code or refresh

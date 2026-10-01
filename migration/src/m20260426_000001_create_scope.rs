@@ -4,8 +4,8 @@ use sea_orm_migration::{
         DbErr, DeriveIden, DeriveMigrationName, Expr, Index, MigrationTrait, SchemaManager, Table,
     },
     schema::{
-        boolean, pk_auto, string, timestamp_with_time_zone, timestamp_with_time_zone_null,
-        uuid_uniq,
+        boolean, json_binary, pk_auto, string, timestamp_with_time_zone,
+        timestamp_with_time_zone_null, uuid_uniq,
     },
 };
 
@@ -21,6 +21,7 @@ pub enum Scope {
     Name,
     DisplayName,
     Description,
+    Descriptions,
     BuiltIn,
     CreatedAt,
     UpdatedAt,
@@ -40,6 +41,7 @@ impl MigrationTrait for Migration {
                     .col(string(Scope::Name))
                     .col(string(Scope::DisplayName))
                     .col(string(Scope::Description))
+                    .col(json_binary(Scope::Descriptions).default(Expr::cust("'{}'::jsonb")))
                     .col(boolean(Scope::BuiltIn).default(false))
                     .col(
                         timestamp_with_time_zone(Scope::CreatedAt)
