@@ -40,6 +40,11 @@ mockall::mock! {
             consent_state: ConsentState,
             decided_at: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
+        async fn user_consented_scope_names(
+            &self,
+            user_oid: uuid::Uuid,
+            client_oid: ClientOid,
+        ) -> Result<Vec<String>, ClientAuthorizationRepositoryError>;
         async fn has_user_consent(
             &self,
             user_oid: uuid::Uuid,

@@ -118,9 +118,10 @@ where
     };
 
     if has_prompt(request.prompt.as_ref(), PromptValue::Login) {
-        // `prompt=login` requires a new authentication ceremony. Do not bind
-        // the interaction to an existing OP session: doing so would turn it
-        // into in-place session reauthentication instead of a fresh login.
+        // `prompt=login` requires a full authentication ceremony. Do not bind
+        // an existing session before credential verification, because a bound
+        // interaction can accept an OTP without first checking the password.
+        // The authenticated user may reuse a browser session afterwards.
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 

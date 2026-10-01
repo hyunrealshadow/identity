@@ -217,7 +217,16 @@ export async function identityJson<T>(
   }
 
   const sessions = responseSessionIds(payload)
-  if (sessions && !sameSessionIds(currentSessions, sessions)) {
+  // A renewed provider session keeps its ID. Refresh the browser cookie's
+  // lifetime after completed authentication even when the list is unchanged.
+  const authenticationCompleted =
+    path === '/api/auth/login/challenge' &&
+    init?.method === 'POST' &&
+    !!payload &&
+    typeof payload === 'object' &&
+    'status' in payload &&
+    payload.status === 'authenticated'
+  if (sessions && (authenticationCompleted || !sameSessionIds(currentSessions, sessions))) {
     storeSessionIds(sessions)
   }
 

@@ -1,10 +1,12 @@
 import { Alert } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ChevronDown, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 
+import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
+import { ConsentPermissions } from '#/components/consent-permissions'
 import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
@@ -19,7 +21,7 @@ import {
   formErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
-import { scopeDescription, translate } from '#/lib/i18n'
+import { translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 
 interface ConsentSearch {
@@ -135,8 +137,6 @@ function ConsentPage() {
       lang={data.locale}
       locale={data.locale}
       showPreferences
-      wide
-      headerAlign="left"
       title={t('consentTitle')}
       description={
         consent
@@ -159,63 +159,35 @@ function ConsentPage() {
 
       {consent ? (
         <>
-          <div className="mb-5 rounded-xl border border-border p-4">
+          <div className="mb-6 rounded-xl border border-border bg-surface-secondary p-3">
             <div className="flex items-center gap-3">
-              {consent.logo_uri ? (
-                <img
-                  src={consent.logo_uri}
-                  alt=""
-                  className="size-10 shrink-0 rounded-xl object-contain"
-                  referrerPolicy="no-referrer"
-                />
-              ) : null}
+              <AccountAvatar name={consent.client_name} picture={consent.logo_uri} />
               <div className="min-w-0">
-                <p className="break-words text-base font-semibold">{consent.client_name}</p>
+                <p className="break-words text-sm font-semibold">{consent.client_name}</p>
                 {consent.client_uri ? (
                   <a
                     href={consent.client_uri}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-1 flex items-center gap-2 text-sm text-muted hover:underline"
+                    className="mt-1 flex items-center gap-1 text-xs text-muted hover:underline"
                   >
                     <span className="truncate">{consent.client_uri}</span>
-                    <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
+                    <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
                   </a>
                 ) : null}
               </div>
             </div>
           </div>
 
-          <details open className="group rounded-xl border border-border p-4">
-            <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-              <span className="flex-1 text-base font-semibold">{t('permissions')}</span>
-              <span className="text-xs text-muted">
-                {t('permissionCount', { count: consent.scopes.length })}
-              </span>
-              <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform group-open:rotate-0" aria-hidden="true" />
-            </summary>
-            <ul className="mt-3 divide-y divide-border px-1">
-              {consent.scopes.map((scope) => (
-                <li key={scope.name} className="py-4">
-                  <p className="break-all text-sm font-semibold">
-                    {scope.name}
-                    {scope.essential ? <span className="sr-only"> ({t('required')})</span> : null}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    {scopeDescription(data.locale, scope.name, scope.description)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </details>
+          <ConsentPermissions scopes={consent.scopes} locale={data.locale} />
 
-          <p className="mt-6 text-sm leading-6 text-muted">
+          <p className="mt-4 text-xs leading-5 text-muted">
             {t('revoke')}
           </p>
 
           <ProgressiveForm
             action="/consent"
-            className="progressive-form mt-5 grid grid-cols-2 gap-3"
+            className="progressive-form mt-6 grid grid-cols-2 gap-3"
             enhancementErrorMessage={t('enhancedNavigationError')}
           >
             <input
@@ -229,10 +201,10 @@ function ConsentPage() {
               value={consent.csrf_token}
             />
             <input type="hidden" name="ui_locales" value={data.uiLocales} />
-            <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="deny" variant="secondary">
+            <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
               {t('deny')}
             </SubmitButton>
-            <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="approve">
+            <SubmitButton fullWidth name="decision" value="approve">
               {t('allow')}
             </SubmitButton>
           </ProgressiveForm>

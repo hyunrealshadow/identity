@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     ConsentQuery,
-    context::{has_selected_session, load_consent_context},
+    context::load_consent_context,
     decision::handle_consent_decision,
     device::{device_consent_api, device_consent_submit, device_login_consent_api},
 };
@@ -59,11 +59,16 @@ pub(super) async fn consent_api(
         ));
     }
 
-    if !has_selected_session(loaded.selected_session_oid, &loaded.active_sessions) {
-        return Err(AppError::from_code(
-            AuthorizeHttpErrorCode::ConsentSessionNotFound,
-        ));
-    }
+    let session = loaded
+        .active_sessions
+        .iter()
+        .find(|session| Some(session.session_oid) == loaded.selected_session_oid)
+        .ok_or_else(|| AppError::from_code(AuthorizeHttpErrorCode::ConsentSessionNotFound))?;
+    let previously_granted = ctx
+        .services()
+        .oidc_authorize()
+        .user_consented_scope_names(session.user_oid, loaded.client.client().oid)
+        .await?;
 
     Ok(json_response(
         StatusCode::OK,
@@ -82,7 +87,7 @@ pub(super) async fn consent_api(
                 .client_uri
                 .as_ref()
                 .map(url::Url::to_string),
-            scopes: build_scope_display(&loaded.scope),
+            scopes: build_scope_display(&loaded.scope, &previously_granted),
             csrf_token: csrf_token(depot),
             ui_locales: loaded.stored.request.ui_locales.clone(),
         },

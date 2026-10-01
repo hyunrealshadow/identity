@@ -225,6 +225,8 @@ const zhCN = {
   deviceDeniedTitle: '设备已拒绝',
   deviceDeniedDescription: '该设备未登录。你可以安全关闭此页面。',
   permissions: '请求的权限',
+  permissionPreviouslyGranted: '已同意',
+  permissionAwaitingConsent: '待同意',
   permissionCount: '{count} 项',
   required: '必需',
   deny: '拒绝',

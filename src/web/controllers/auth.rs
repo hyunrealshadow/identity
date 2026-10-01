@@ -13,7 +13,8 @@ use super::{
     response::{JsonWebResult, app_state, parse_json, parse_param, render_json},
     shared::{
         api_csrf_middleware, build_selected_session_state, build_session_context, csrf_token,
-        load_active_session_entries, protocol_continue_uri, unprotect_session_id,
+        load_active_session_entries, parse_session_header, protocol_continue_uri,
+        unprotect_session_id,
     },
 };
 use crate::views::auth::{
@@ -375,7 +376,12 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
     let headers: HeaderMap = req.headers().clone();
     let body: ChallengeRequest = parse_json(req).await?;
 
-    let session_ctx = build_session_context(&headers, resolved_client_ip(depot));
+    let mut session_ctx = build_session_context(&headers, resolved_client_ip(depot));
+    session_ctx.browser_session_oids = parse_session_header(&ctx, &headers)
+        .await
+        .into_iter()
+        .map(|entry| entry.session_oid)
+        .collect();
     let login_oid = ctx
         .services()
         .oidc_authorize()

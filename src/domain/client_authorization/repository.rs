@@ -43,6 +43,13 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         decided_at: DateTime<Utc>,
     ) -> Result<bool, ClientAuthorizationRepositoryError>;
 
+    /// Current remembered scope approvals for this exact account and client.
+    async fn user_consented_scope_names(
+        &self,
+        user_oid: Uuid,
+        client_oid: ClientOid,
+    ) -> Result<Vec<String>, ClientAuthorizationRepositoryError>;
+
     async fn has_user_consent(
         &self,
         user_oid: Uuid,

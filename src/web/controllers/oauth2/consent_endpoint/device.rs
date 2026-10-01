@@ -60,6 +60,11 @@ pub(super) async fn device_login_consent_api(
         .await?;
     let actor = verification_actor(ctx, headers, login).await?;
     let scope = ScopeSet::parse(&description.scopes.join(" ")).unwrap_or_default();
+    let previously_granted = ctx
+        .services()
+        .oidc_authorize()
+        .user_consented_scope_names(actor.user_oid, login.client_oid)
+        .await?;
     Ok(json_response(
         StatusCode::OK,
         DeviceConsentPageData {
@@ -70,7 +75,7 @@ pub(super) async fn device_login_consent_api(
             client_name: description.client_name,
             logo_uri: description.logo_uri,
             client_uri: description.client_uri,
-            scopes: build_scope_display(&scope),
+            scopes: build_scope_display(&scope, &previously_granted),
             csrf_token: csrf_token(depot),
             account: DeviceConsentAccount {
                 name: actor.user_name,

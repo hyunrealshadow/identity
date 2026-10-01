@@ -35,6 +35,11 @@ async fn consent_get_is_a_json_api_without_content_negotiation() {
     assert!(body.contains("\"login_id\""), "{body}");
     assert!(body.contains("\"client_name\""), "{body}");
     assert!(!body.contains("\"logo_uri\""), "{body}");
+    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(payload["scopes"][0]["name"], "openid");
+    assert_eq!(payload["scopes"][0]["previously_granted"], true);
+    assert_eq!(payload["scopes"][1]["name"], "profile");
+    assert_eq!(payload["scopes"][1]["previously_granted"], false);
 }
 
 #[tokio::test]
@@ -195,6 +200,8 @@ async fn device_decision_is_recorded_against_the_bound_login() {
         )
     });
     assert_eq!(payload["account"]["email"], "ada@example.com");
+    assert_eq!(payload["scopes"][0]["previously_granted"], true);
+    assert_eq!(payload["scopes"][1]["previously_granted"], false);
 
     // A browser that presents another session than the bound one cannot
     // approve: the decision is refused and nothing is written.

@@ -1,11 +1,13 @@
 import { Alert, FieldError, Label, TextField } from '@heroui/react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Check, ChevronDown, Clock, X } from 'lucide-react'
+import { Check, Clock, X } from 'lucide-react'
 import { useState } from 'react'
 
+import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
+import { ConsentPermissions } from '#/components/consent-permissions'
 import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput } from '#/components/totp-input'
 import { errorMessage } from '#/lib/identity.server'
@@ -21,7 +23,7 @@ import {
   formErrorResponse,
   navigationResponse,
 } from '#/lib/responses.server'
-import { scopeDescription, translate } from '#/lib/i18n'
+import { translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 
 interface DeviceSearch {
@@ -283,8 +285,6 @@ function DevicePage() {
       lang={data.locale}
       locale={data.locale}
       showPreferences
-      wide
-      headerAlign="left"
       title={t('deviceVerifyTitle')}
       description={t('deviceVerifyDescription', { client: device.client_name })}
     >
@@ -292,34 +292,22 @@ function DevicePage() {
         <DeviceError title={t('deviceLoadFailed')} message={visibleError} />
       ) : null}
 
-      <section className="mb-5 rounded-xl border border-border p-4" aria-labelledby="device-account-title">
-        <p id="device-account-title" className="text-sm text-muted">
-          {t('deviceApprovingAs')}
-        </p>
-        <div className="mt-1 flex items-center gap-3">
-          {device.account.picture ? (
-            <img
-              src={device.account.picture}
-              alt=""
-              className="size-10 shrink-0 rounded-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-          ) : null}
-          <div className="min-w-0">
-            <p className="break-words text-base font-semibold">{device.account.name}</p>
-            <p className="break-all text-sm text-muted">{device.account.email}</p>
-          </div>
+      <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface-secondary p-3" aria-label={t('deviceApprovingAs')}>
+        <AccountAvatar name={device.account.name} picture={device.account.picture} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{device.account.name}</p>
+          <p className="truncate text-xs text-muted">{device.account.email}</p>
         </div>
-      </section>
+      </div>
 
-      <section className="mb-5 rounded-xl border border-border p-4" aria-labelledby="device-code-title">
-        <h2 id="device-code-title" className="text-base font-semibold">
+      <section className="mb-6" aria-labelledby="device-code-title">
+        <h2 id="device-code-title" className="text-sm font-medium">
           {t('deviceConfirmCodeTitle')}
         </h2>
-        <p className="mt-2 text-sm leading-6 text-muted">
+        <p className="mt-1 text-xs leading-5 text-muted">
           {t('deviceConfirmCodeDescription')}
         </p>
-        <p className="mt-4 rounded-lg bg-surface-secondary px-2 py-4 text-center font-mono text-2xl font-semibold tracking-[0.12em] sm:text-3xl sm:tracking-[0.22em]">
+        <p className="mt-3 rounded-field border border-border bg-surface-secondary px-2 py-3 text-center font-mono text-2xl font-semibold tracking-[0.12em] sm:text-3xl sm:tracking-[0.22em]">
           {device.user_code}
         </p>
         <p className="mt-3 text-xs leading-5 text-muted">
@@ -328,28 +316,7 @@ function DevicePage() {
       </section>
 
       {device.consent_required ? (
-        <details open className="group rounded-xl border border-border p-4">
-          <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-            <span className="flex-1 text-base font-semibold">{t('permissions')}</span>
-            <span className="text-xs text-muted">
-              {t('permissionCount', { count: device.scopes.length })}
-            </span>
-            <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform group-open:rotate-0" aria-hidden="true" />
-          </summary>
-          <ul className="mt-3 divide-y divide-border px-1">
-            {device.scopes.map((scope) => (
-              <li key={scope.name} className="py-3">
-                <p className="break-all text-sm font-semibold">
-                  {scope.name}
-                  {scope.essential ? <span className="sr-only"> ({t('required')})</span> : null}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-muted">
-                  {scopeDescription(data.locale, scope.name, scope.description)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </details>
+        <ConsentPermissions scopes={device.scopes} locale={data.locale} />
       ) : (
         // Trusted clients still require explicit device confirmation via the CSRF-protected form.
         <p className="rounded-xl border border-border p-4 text-xs leading-5 text-muted">
@@ -359,7 +326,7 @@ function DevicePage() {
 
       <ProgressiveForm
         action="/device"
-        className="progressive-form mt-5 grid grid-cols-2 gap-3"
+        className="progressive-form mt-6 grid grid-cols-2 gap-3"
         enhancementErrorMessage={t('enhancedNavigationError')}
       >
         <input type="hidden" name="login_id" value={device.login_id} />
@@ -367,10 +334,10 @@ function DevicePage() {
         {data.uiLocales ? (
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
         ) : null}
-        <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="deny" variant="secondary">
+        <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
           {t('deny')}
         </SubmitButton>
-        <SubmitButton fullWidth className="h-11 text-base font-semibold" name="decision" value="approve">
+        <SubmitButton fullWidth name="decision" value="approve">
           {t('allow')}
         </SubmitButton>
       </ProgressiveForm>

@@ -40,8 +40,11 @@ pub struct PasswordChangeOutcome {
     pub session_revocation_failures: u32,
 }
 
-/// Device and network context for session creation.
+/// Browser sessions and device context supplied by the login transport.
+#[derive(Default)]
 pub struct SessionContext {
+    /// Only sessions presented by this browser may be reused after authentication.
+    pub browser_session_oids: Vec<identity_domain::auth::SessionOid>,
     pub device_name: Option<String>,
     pub device_type: Option<String>,
     pub os_name: Option<String>,
@@ -63,7 +66,7 @@ pub struct IdentifierResult {
 #[derive(Debug)]
 pub enum ChallengeOutcome {
     /// Password was verified and the user has no OTP credential — session
-    /// created immediately with password-only ACR.
+    /// created or renewed immediately with password-only ACR.
     Authenticated { login: Login, session: Box<Session> },
     /// Password was verified and the user has an OTP credential — the client
     /// MUST call challenge again with [`CredentialType::Otp`].
@@ -379,8 +382,8 @@ impl LoginService {
     ///
     /// # Password flow
     /// - If the user has an OTP credential: returns [`ChallengeOutcome::MfaRequired`].
-    /// - Otherwise: creates a session, or refreshes the bound session during
-    ///   reauthentication, with `acr = ACR_AAL1` and returns
+    /// - Otherwise: renews a matching browser session or creates a new session,
+    ///   with `acr = ACR_AAL1` and returns
     ///   [`ChallengeOutcome::Authenticated`].
     ///
     /// # OTP flow
@@ -954,7 +957,27 @@ impl LoginService {
         acr: &str,
         amr: &[String],
     ) -> Result<Session, AppError> {
-        if let Some(session_oid) = login.session_oid {
+        // A fresh login (including prompt=login) must complete its credential
+        // checks before matching the authenticated user to a browser session.
+        let session_oid = match login.session_oid {
+            Some(oid) => Some(oid),
+            None if ctx.browser_session_oids.is_empty() => None,
+            None => {
+                let sessions = self
+                    .session_repo
+                    .find_active_accounts_by_oids(&ctx.browser_session_oids)
+                    .await?;
+                let now = Utc::now();
+                ctx.browser_session_oids.iter().copied().find(|oid| {
+                    sessions.iter().any(|session| {
+                        session.session_oid == *oid
+                            && session.user_oid == user_oid
+                            && session.expires_at.is_none_or(|expiry| expiry > now)
+                    })
+                })
+            }
+        };
+        if let Some(session_oid) = session_oid {
             return Ok(self
                 .session_repo
                 .reauthenticate_by_oid(
@@ -1080,7 +1103,7 @@ mod tests {
     use chrono::Utc;
     use identity_domain::{
         auth::{
-            ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus,
+            ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus,
             MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
             model::{Login, Session, SessionOid},
             repository::{
@@ -1115,6 +1138,31 @@ mod tests {
     }
 
     struct StubPasswordHasher;
+
+    struct TestSignInHasher;
+
+    impl crate::auth::password::PasswordHasher for TestSignInHasher {
+        fn hash(
+            &self,
+            password: &str,
+            options: &HashOptions,
+        ) -> Result<Password, crate::auth::password::PasswordHashError> {
+            StubPasswordHasher.hash(password, options)
+        }
+
+        fn verify(
+            &self,
+            password: &str,
+            _stored: &Password,
+            _options: &HashOptions,
+        ) -> Result<VerifyResult, crate::auth::password::PasswordHashError> {
+            Ok(if password == "correct-password" {
+                VerifyResult::Success
+            } else {
+                VerifyResult::Failure
+            })
+        }
+    }
 
     /// Minimal hasher for tests that change a password: it records the
     /// password instead of running the (deliberately expensive) KDF.
@@ -1701,6 +1749,7 @@ mod tests {
                 &login,
                 login.user_oid.unwrap(),
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1724,6 +1773,253 @@ mod tests {
         assert_eq!(session.acr.as_deref(), Some(ACR_AAL2));
     }
 
+    fn browser_session(user_oid: Uuid) -> identity_domain::auth::model::ActiveSession {
+        let now = Utc::now();
+        identity_domain::auth::model::ActiveSession {
+            session_oid: SessionOid(Uuid::new_v4()),
+            user_oid,
+            user_name: "user".to_owned(),
+            user_email: "user@example.com".to_owned(),
+            user_picture: None,
+            last_active_at: Some(now),
+            expires_at: Some(now + chrono::Duration::hours(1)),
+            created_at: now - chrono::Duration::days(6),
+            authenticated_at: now - chrono::Duration::days(6),
+            acr: Some(ACR_AAL1.to_owned()),
+            amr: vec![AMR_PASSWORD.to_owned()],
+        }
+    }
+
+    fn sign_in_service(user: User, logins: Vec<Login>, mfa: bool) -> LoginService {
+        let login_repo = Arc::new(TestLoginRepo {
+            state: Arc::new(Mutex::new(TestLoginRepoState {
+                logins,
+                ..Default::default()
+            })),
+        });
+        let (mut service, _) = otp_service(login_repo, user);
+        let mut credentials = if mfa {
+            vec![UserCredential {
+                oid: UserCredentialOid(Uuid::new_v4()),
+                r#type: CredentialType::Otp,
+                data: CredentialData::Otp(OtpCredentialData {
+                    secret: "secret".to_owned(),
+                    digits: 6,
+                    period: 30,
+                    algorithm: crate::user::OtpAlgorithm::Sha1,
+                    last_used_counter: None,
+                }),
+            }]
+        } else {
+            Vec::new()
+        };
+        credentials.push(UserCredential {
+            oid: UserCredentialOid(Uuid::new_v4()),
+            r#type: CredentialType::Password,
+            data: CredentialData::Password(Password::Argon2(Argon2Password {
+                hash: "stored-hash".to_owned(),
+                salt: "stored-salt".to_owned(),
+                options: Argon2Options {
+                    variant: Argon2Variant::Argon2id,
+                    version: Argon2Version::Argon2013,
+                    time_cost: 3,
+                    memory_cost: 65_536,
+                    parallelism: 4,
+                },
+            })),
+        });
+        service.credential_repo = Arc::new(TestCredentialRepo { credentials });
+        service.password_hasher = Arc::new(TestSignInHasher);
+        service
+    }
+
+    #[tokio::test]
+    async fn repeated_fresh_logins_for_different_clients_reuse_the_browser_session() {
+        use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
+
+        let user = test_user();
+        let user_oid = Uuid::from(user.oid);
+        let existing = browser_session(user_oid);
+        // An account with identical display data must not be matched by email.
+        let foreign = browser_session(Uuid::new_v4());
+        let presented = vec![foreign.session_oid, existing.session_oid];
+        let mut logins = vec![test_login(user_oid, 0), test_login(user_oid, 0)];
+        for login in &mut logins {
+            login.status = LoginStatus::IDENTIFIER_VERIFIED;
+        }
+        assert_ne!(logins[0].client_oid, logins[1].client_oid);
+        let login_oids: Vec<_> = logins.iter().map(|login| login.oid).collect();
+        let mut service = sign_in_service(user, logins, false);
+        let mut repo = MockSessionRepository::new();
+        repo.expect_find_active_accounts_by_oids()
+            .withf({
+                let presented = presented.clone();
+                move |oids| oids == presented
+            })
+            .times(2)
+            .returning({
+                let existing = existing.clone();
+                move |_| Ok(vec![existing.clone(), foreign.clone()])
+            });
+        repo.expect_reauthenticate_by_oid()
+            .withf({
+                let oid = existing.session_oid;
+                move |session_oid, owner, acr, _, amr| {
+                    *session_oid == oid
+                        && *owner == user_oid
+                        && acr == ACR_AAL1
+                        && amr == [AMR_PASSWORD.to_owned()]
+                }
+            })
+            .times(2)
+            .returning(move |oid, owner, acr, acr_expires_at, amr| {
+                Ok(Session {
+                    oid,
+                    user_oid: owner,
+                    status: identity_domain::auth::SessionStatus::ACTIVE,
+                    device_name: None,
+                    device_type: None,
+                    os_name: None,
+                    os_version: None,
+                    browser_name: None,
+                    browser_version: None,
+                    user_agent: None,
+                    ip_address: None,
+                    last_active_at: Some(Utc::now()),
+                    expires_at: Some(Utc::now() + chrono::Duration::days(7)),
+                    revoked_at: None,
+                    created_at: existing.created_at,
+                    acr: Some(acr.to_owned()),
+                    acr_expires_at: Some(acr_expires_at),
+                    amr: amr.to_vec(),
+                })
+            });
+        // Any attempt to create a session is rejected by the mock.
+        service.session_repo = Arc::new(repo);
+        for login_oid in login_oids {
+            let outcome = service
+                .challenge(
+                    login_oid,
+                    CredentialType::Password,
+                    "correct-password",
+                    SessionContext {
+                        browser_session_oids: presented.clone(),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+            let super::ChallengeOutcome::Authenticated { session, .. } = outcome else {
+                panic!("expected completed password authentication");
+            };
+            assert_eq!(session.oid, existing.session_oid);
+        }
+    }
+
+    #[tokio::test]
+    async fn fresh_login_creates_a_session_when_no_valid_same_user_session_is_presented() {
+        use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
+
+        for missing in [false, true] {
+            let user = test_user();
+            let user_oid = Uuid::from(user.oid);
+            let login = test_login(user_oid, 0);
+            let mut expired = browser_session(user_oid);
+            expired.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
+            let foreign = browser_session(Uuid::new_v4());
+            let presented = vec![expired.session_oid, foreign.session_oid];
+            let mut service = sign_in_service(user, vec![login.clone()], false);
+            let mut repo = MockSessionRepository::new();
+            repo.expect_find_active_accounts_by_oids()
+                .times(1)
+                .return_once(move |_| {
+                    Ok(if missing {
+                        Vec::new()
+                    } else {
+                        vec![expired, foreign]
+                    })
+                });
+            repo.expect_create().times(1).returning(|input| {
+                // Match the normal creation contract without a database.
+                Ok(Session {
+                    oid: SessionOid(Uuid::new_v4()),
+                    user_oid: input.user_oid,
+                    status: identity_domain::auth::SessionStatus::ACTIVE,
+                    device_name: input.device_name,
+                    device_type: input.device_type,
+                    os_name: input.os_name,
+                    os_version: input.os_version,
+                    browser_name: input.browser_name,
+                    browser_version: input.browser_version,
+                    user_agent: input.user_agent,
+                    ip_address: input.ip_address,
+                    last_active_at: Some(Utc::now()),
+                    expires_at: input.expires_at,
+                    revoked_at: None,
+                    created_at: Utc::now(),
+                    acr: input.acr,
+                    acr_expires_at: input.acr_expires_at,
+                    amr: input.amr,
+                })
+            });
+            service.session_repo = Arc::new(repo);
+            let session = service
+                .complete_session(
+                    &login,
+                    user_oid,
+                    SessionContext {
+                        browser_session_oids: presented.clone(),
+                        ..Default::default()
+                    },
+                    ACR_AAL1,
+                    &[AMR_PASSWORD.to_owned()],
+                )
+                .await
+                .unwrap();
+            assert_eq!(session.user_oid, user_oid);
+            assert!(!presented.contains(&session.oid));
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_session_does_not_bypass_password_or_mfa() {
+        use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
+
+        for mfa in [false, true] {
+            let user = test_user();
+            let existing = browser_session(user.oid.into());
+            let mut login = test_login(user.oid.into(), 0);
+            login.status = LoginStatus::IDENTIFIER_VERIFIED;
+            let login_oid = login.oid;
+            let mut service = sign_in_service(user, vec![login], mfa);
+            // No session lookup, renewal, or creation may occur yet.
+            service.session_repo = Arc::new(MockSessionRepository::new());
+            let result = service
+                .challenge(
+                    login_oid,
+                    CredentialType::Password,
+                    if mfa {
+                        "correct-password"
+                    } else {
+                        "wrong-password"
+                    },
+                    SessionContext {
+                        browser_session_oids: vec![existing.session_oid],
+                        ..Default::default()
+                    },
+                )
+                .await;
+            if mfa {
+                assert!(matches!(
+                    result.unwrap(),
+                    super::ChallengeOutcome::MfaRequired { .. }
+                ));
+            } else {
+                assert_error_code(result.unwrap_err(), AuthErrorCode::InvalidCredential);
+            }
+        }
+    }
+
     #[tokio::test]
     async fn bound_reauthentication_can_challenge_otp_without_password() {
         let user = test_user();
@@ -1745,6 +2041,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1781,6 +2078,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1817,6 +2115,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1855,6 +2154,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1893,6 +2193,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1932,6 +2233,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1974,6 +2276,7 @@ mod tests {
                     CredentialType::Otp,
                     "000000",
                     SessionContext {
+                        browser_session_oids: Vec::new(),
                         device_name: None,
                         device_type: None,
                         os_name: None,
@@ -1996,6 +2299,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -2021,6 +2325,7 @@ mod tests {
                 CredentialType::Otp,
                 "000000",
                 SessionContext {
+                    browser_session_oids: Vec::new(),
                     device_name: None,
                     device_type: None,
                     os_name: None,

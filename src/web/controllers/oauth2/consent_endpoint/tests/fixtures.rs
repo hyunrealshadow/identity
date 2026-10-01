@@ -411,6 +411,7 @@ async fn consent_test_state_for(
             >::new()])
             .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[(active_session.clone(), active_user.clone())]])
+            .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[login_model.clone()]])
             .append_query_results([[client_model.clone()]])
             .append_query_results([[authorization_model.clone()]])
@@ -496,8 +497,9 @@ async fn consent_test_state_for(
                 .append_query_results([Vec::<
                     crate::infrastructure::database::entity::client_openid_connect_platform::Model,
                 >::new()])
-                .append_query_results([[openid_scope_row]])
+                .append_query_results([[openid_scope_row.clone()]])
                 .append_query_results([[(active_session.clone(), active_user.clone())]])
+                .append_query_results([[openid_scope_row]])
                 .append_query_results([[login_model]])
                 .append_query_results([[client_model.clone()]])
                 .append_query_results([[device_request_model.clone()]])

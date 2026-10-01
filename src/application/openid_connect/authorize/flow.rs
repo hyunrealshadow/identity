@@ -399,6 +399,19 @@ impl AuthorizeService {
             .await
     }
 
+    pub async fn user_consented_scope_names(
+        &self,
+        user_oid: Uuid,
+        client_oid: identity_domain::client::model::ClientOid,
+    ) -> Result<Vec<String>, AppError> {
+        self.client_authorization_repo
+            .user_consented_scope_names(user_oid, client_oid)
+            .await
+            .map_err(|error| {
+                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
+            })
+    }
+
     pub async fn has_user_consent(
         &self,
         user_oid: Uuid,

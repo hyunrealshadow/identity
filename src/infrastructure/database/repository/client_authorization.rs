@@ -636,6 +636,27 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Ok(scope_ids_cover(granted_scope_ids, requested_scope_ids))
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_consented_scope_names"))]
+    async fn user_consented_scope_names(
+        &self,
+        user_oid: Uuid,
+        client_oid: ClientOid,
+    ) -> Result<Vec<String>, ClientAuthorizationRepositoryError> {
+        UserClientConsentEntity::find()
+            .select_only()
+            .column(scope::Column::Name)
+            .inner_join(UserEntity)
+            .inner_join(ClientEntity)
+            .inner_join(ScopeEntity)
+            .filter(user::Column::Oid.eq(user_oid))
+            .filter(client::Column::Oid.eq(client_oid))
+            .filter(scope::Column::Protocol.eq("openid_connect"))
+            .into_tuple::<String>()
+            .all(&self.db)
+            .await
+            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+    }
+
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "mark_authorization_request_completed"))]
     async fn mark_authorization_request_completed(
         &self,
@@ -948,5 +969,42 @@ mod selection_tests {
     fn consent_scope_comparison_sorts_deduplicates_and_accepts_subsets() {
         assert!(scope_ids_cover(vec![3, 1, 2, 2], vec![2, 1, 1]));
         assert!(!scope_ids_cover(vec![3, 1, 1], vec![1, 2]));
+    }
+
+    #[tokio::test]
+    async fn remembered_scope_lookup_is_scoped_to_account_client_and_protocol() {
+        use identity_domain::client_authorization::ClientAuthorizationRepository;
+        use sea_orm::{DatabaseBackend, MockDatabase, Value};
+        use std::collections::BTreeMap;
+        use uuid::Uuid;
+
+        let user_oid = Uuid::new_v4();
+        let client_oid = Uuid::new_v4();
+        let rows = vec![BTreeMap::from([(
+            "name".to_owned(),
+            Value::String(Some("email".to_owned())),
+        )])];
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([rows, Vec::new()])
+            .into_connection();
+        let repo = super::ClientAuthorizationRepositoryImpl::new(db.clone());
+        assert_eq!(
+            repo.user_consented_scope_names(user_oid, client_oid)
+                .await
+                .unwrap(),
+            vec!["email"]
+        );
+        assert!(
+            repo.user_consented_scope_names(Uuid::new_v4(), client_oid)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        let log = format!("{:?}", db.into_transaction_log());
+        assert!(log.contains(&user_oid.to_string()), "{log}");
+        assert!(log.contains(&client_oid.to_string()), "{log}");
+        assert!(log.contains("openid_connect"), "{log}");
+        assert!(log.contains("INNER JOIN"), "{log}");
     }
 }

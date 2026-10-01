@@ -114,6 +114,35 @@ describe('identityJson', () => {
     expect(mocks.setResponseHeader).not.toHaveBeenCalled()
   })
 
+  it('renews the cookie lifetime after authentication reuses the existing session', async () => {
+    const sessions = ['existing-session']
+    const cookie = `identity.sessions=${encodeURIComponent(JSON.stringify(sessions))}`
+    mocks.getRequestHeader.mockReturnValue(cookie)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      status: 'authenticated', sessions,
+    })))
+
+    await identityJson('/api/auth/login/challenge', { method: 'POST' })
+
+    expect(mocks.setResponseHeader).toHaveBeenCalledWith(
+      'set-cookie', `${cookie}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`,
+    )
+  })
+
+  it('does not renew the cookie while MFA is still required', async () => {
+    const sessions = ['existing-session']
+    mocks.getRequestHeader.mockReturnValue(
+      `identity.sessions=${encodeURIComponent(JSON.stringify(sessions))}`,
+    )
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      status: 'mfa_required', sessions,
+    })))
+
+    await identityJson('/api/auth/login/challenge', { method: 'POST' })
+
+    expect(mocks.setResponseHeader).not.toHaveBeenCalled()
+  })
+
   it('preserves structured business and field errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
       error: {

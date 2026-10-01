@@ -84,6 +84,7 @@ export interface ScopeDisplay {
   name: string
   description: string
   essential: boolean
+  previously_granted?: boolean
 }
 
 export interface ConsentPageData {

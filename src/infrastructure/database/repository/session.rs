@@ -397,6 +397,10 @@ impl SessionRepository for SessionRepositoryImpl {
         let mut active: session::ActiveModel = session_model.into();
         active.last_active_at = Set(now.into());
         active.authenticated_at = Set(Some(now.into()));
+        active.expires_at = Set((now
+            + chrono::Duration::from_std(identity_domain::auth::SESSION_EXPIRY)
+                .unwrap_or_else(|_| chrono::Duration::days(7)))
+        .into());
         active.acr = Set(Some(acr.to_owned()));
         active.acr_expires_at = Set(Some(acr_expires_at.into()));
         active.amr = Set(serde_json::json!(amr));
@@ -497,6 +501,185 @@ mod tests {
     use identity_domain::auth::{
         SessionOid, SessionStatus, model::Session, repository::SessionRepository as _,
     };
+
+    fn reauthentication_models() -> (session::Model, crate::database::entity::user::Model) {
+        let now = Utc::now().fixed_offset();
+        let session = session::Model {
+            id: 1,
+            oid: Uuid::new_v4(),
+            user_id: 42,
+            status: SessionStatus::ACTIVE.to_string(),
+            acr: None,
+            acr_expires_at: None,
+            amr: serde_json::json!([]),
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            country: None,
+            city: None,
+            last_active_at: now - chrono::Duration::days(6),
+            authenticated_at: Some(now - chrono::Duration::days(6)),
+            expires_at: now + chrono::Duration::hours(1),
+            revoked_at: None,
+            created_at: now - chrono::Duration::days(6),
+            updated_at: None,
+        };
+        let user = crate::database::entity::user::Model {
+            id: 42,
+            oid: Uuid::new_v4(),
+            name: "user".to_owned(),
+            name_normalized: "user".to_owned(),
+            email: "user@example.com".to_owned(),
+            email_normalized: "user@example.com".to_owned(),
+            email_verified: true,
+            given_name: None,
+            family_name: None,
+            middle_name: None,
+            nickname: None,
+            profile: None,
+            picture: None,
+            website: None,
+            gender: None,
+            birthdate: None,
+            zone_info: None,
+            locale: None,
+            preferences: serde_json::json!({}),
+            phone_number: None,
+            phone_number_verified: None,
+            address_formatted: None,
+            address_street_address: None,
+            address_locality: None,
+            address_region: None,
+            address_postal_code: None,
+            address_country: None,
+            failed_attempts: 0,
+            enabled: true,
+            locked: false,
+            locked_until: None,
+            created_at: now,
+            updated_at: None,
+        };
+        (session, user)
+    }
+
+    #[tokio::test]
+    async fn reauthentication_renews_expiry_and_authentication_time_without_changing_identity() {
+        let (session, user) = reauthentication_models();
+        let oid = SessionOid(session.oid);
+        let owner = user.oid;
+        let created_at = session.created_at.with_timezone(&Utc);
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_exec_results([MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            }])
+            .append_query_results([[(session.clone(), user)]])
+            .append_query_results([[session]])
+            .into_connection();
+        let repo = super::SessionRepositoryImpl::new(db);
+        let started = Utc::now();
+        let renewed = repo
+            .reauthenticate_by_oid(
+                oid,
+                owner,
+                identity_domain::auth::ACR_AAL1,
+                started + chrono::Duration::hours(1),
+                &[identity_domain::auth::AMR_PASSWORD.to_owned()],
+            )
+            .await
+            .unwrap();
+        let finished = Utc::now();
+        assert_eq!(renewed.oid, oid);
+        assert_eq!(renewed.user_oid, owner);
+        assert_eq!(renewed.created_at, created_at);
+        // Inspect the actual UPDATE rather than the scripted returned row.
+        let log = repo.db.into_transaction_log();
+        let update = log
+            .iter()
+            .flat_map(|tx| tx.statements())
+            .find(|stmt| stmt.sql.starts_with("UPDATE"))
+            .unwrap();
+        assert!(update.sql.contains("\"authenticated_at\" ="));
+        assert!(update.sql.contains("\"expires_at\" ="));
+        assert!(!update.sql.contains("\"created_at\" ="));
+        let timestamps: Vec<_> = update
+            .values
+            .as_ref()
+            .unwrap()
+            .0
+            .iter()
+            .filter_map(|value| match value {
+                sea_orm::sea_query::Value::ChronoDateTimeWithTimeZone(Some(value)) => {
+                    Some(value.with_timezone(&Utc))
+                }
+                _ => None,
+            })
+            .collect();
+        let lifetime = chrono::Duration::from_std(identity_domain::auth::SESSION_EXPIRY).unwrap();
+        assert!(
+            timestamps
+                .iter()
+                .any(|time| *time >= started && *time <= finished)
+        );
+        assert!(
+            timestamps
+                .iter()
+                .any(|time| *time >= started + lifetime && *time <= finished + lifetime)
+        );
+    }
+
+    #[tokio::test]
+    async fn reauthentication_cannot_renew_expired_revoked_or_foreign_sessions() {
+        for invalid in 0..4 {
+            let (mut session, user) = reauthentication_models();
+            let oid = SessionOid(session.oid);
+            let owner = if invalid == 3 {
+                Uuid::new_v4()
+            } else {
+                user.oid
+            };
+            match invalid {
+                0 => session.expires_at = (Utc::now() - chrono::Duration::seconds(1)).into(),
+                1 => session.revoked_at = Some(Utc::now().into()),
+                2 => session.status = "expired".to_owned(),
+                _ => {}
+            }
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_exec_results([MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                }])
+                .append_query_results([[(session, user)]])
+                .into_connection();
+            let repo = super::SessionRepositoryImpl::new(db);
+            let result = repo
+                .reauthenticate_by_oid(
+                    oid,
+                    owner,
+                    identity_domain::auth::ACR_AAL1,
+                    Utc::now() + chrono::Duration::hours(1),
+                    &[],
+                )
+                .await;
+            assert!(matches!(
+                result,
+                Err(identity_domain::auth::repository::SessionRepositoryError::SessionNotFound)
+            ));
+            assert!(
+                !repo
+                    .db
+                    .into_transaction_log()
+                    .iter()
+                    .flat_map(|tx| tx.statements())
+                    .any(|stmt| stmt.sql.starts_with("UPDATE"))
+            );
+        }
+    }
 
     #[tokio::test]
     async fn touch_active_session_is_guarded_by_the_complete_lifecycle_condition() {

@@ -480,6 +480,7 @@ pub fn build_session_context(headers: &HeaderMap, ip_address: Option<String>) ->
         parse_user_agent(headers);
 
     SessionContext {
+        browser_session_oids: Vec::new(),
         device_name,
         device_type,
         os_name,

@@ -153,8 +153,8 @@ pub trait SessionRepository: Send + Sync {
     /// Create a new session and return it.
     async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError>;
 
-    /// Atomically refresh the authentication context of an existing active
-    /// session. The expected user prevents a login interaction from upgrading
+    /// Atomically renew an existing active session and refresh its authentication
+    /// context. The expected user prevents a login interaction from upgrading
     /// a session owned by another account.
     async fn reauthenticate_by_oid(
         &self,

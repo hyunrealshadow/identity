@@ -223,6 +223,8 @@ const enUS = {
   deviceDeniedTitle: 'Device denied',
   deviceDeniedDescription: 'The device was not signed in. You can safely close this page.',
   permissions: 'Requested permissions',
+  permissionPreviouslyGranted: 'Previously allowed',
+  permissionAwaitingConsent: 'Needs consent',
   permissionCount: '{count, plural, one {# item} other {# items}}',
   required: 'Required',
   deny: 'Deny',

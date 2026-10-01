@@ -14,6 +14,7 @@ pub struct ScopeDisplay {
     pub name: &'static str,
     pub description: &'static str,
     pub essential: bool,
+    pub previously_granted: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -119,7 +120,7 @@ pub struct ErrorPageData {
     pub details: Vec<String>,
 }
 
-pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
+pub fn build_scope_display(scope: &ScopeSet, previously_granted: &[String]) -> Vec<ScopeDisplay> {
     let mut scopes = Vec::new();
 
     if scope.openid {
@@ -127,6 +128,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name: "openid",
             description: "Access your account identifier",
             essential: true,
+            previously_granted: false,
         });
     }
     if scope.profile {
@@ -134,6 +136,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name: "profile",
             description: "Read your basic profile information",
             essential: false,
+            previously_granted: false,
         });
     }
     if scope.email {
@@ -141,6 +144,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name: "email",
             description: "Read your email address",
             essential: false,
+            previously_granted: false,
         });
     }
     if scope.address {
@@ -148,6 +152,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name: "address",
             description: "Read your postal address",
             essential: false,
+            previously_granted: false,
         });
     }
     if scope.phone {
@@ -155,6 +160,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name: "phone",
             description: "Read your phone number",
             essential: false,
+            previously_granted: false,
         });
     }
     if scope.offline_access {
@@ -162,6 +168,7 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name: "offline_access",
             description: "Request refresh tokens for long-lived access",
             essential: false,
+            previously_granted: false,
         });
     }
     for name in scope.names().into_iter().filter(|name| {
@@ -181,9 +188,13 @@ pub fn build_scope_display(scope: &ScopeSet) -> Vec<ScopeDisplay> {
             name,
             description,
             essential: false,
+            previously_granted: false,
         });
     }
 
+    for scope in &mut scopes {
+        scope.previously_granted = previously_granted.iter().any(|name| name == scope.name);
+    }
     scopes
 }
 
@@ -194,7 +205,7 @@ mod tests {
 
     #[test]
     fn build_scope_display_marks_openid_as_essential() {
-        let scopes = build_scope_display(&ScopeSet::parse("openid profile").unwrap());
+        let scopes = build_scope_display(&ScopeSet::parse("openid profile").unwrap(), &[]);
 
         assert_eq!(scopes[0].name, "openid");
         assert!(scopes[0].essential);
@@ -203,7 +214,7 @@ mod tests {
 
     #[test]
     fn build_scope_display_includes_address_and_phone() {
-        let scopes = build_scope_display(&ScopeSet::parse("openid address phone").unwrap());
+        let scopes = build_scope_display(&ScopeSet::parse("openid address phone").unwrap(), &[]);
         let names = scopes.iter().map(|scope| scope.name).collect::<Vec<_>>();
 
         assert_eq!(names, vec!["openid", "address", "phone"]);
@@ -215,5 +226,37 @@ mod tests {
     fn consent_decision_deserializes_from_json() {
         let decision: ConsentDecision = serde_json::from_str("\"approve\"").unwrap();
         assert!(matches!(decision, ConsentDecision::Approve));
+    }
+
+    #[test]
+    fn scope_display_distinguishes_remembered_and_new_permissions() {
+        let requested = ScopeSet::parse("openid profile email").unwrap();
+        let scopes = build_scope_display(
+            &requested,
+            &["openid".into(), "email".into(), "phone".into()],
+        );
+        let statuses = scopes
+            .iter()
+            .map(|scope| (scope.name, scope.previously_granted))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            statuses,
+            vec![("openid", true), ("profile", false), ("email", true)]
+        );
+    }
+
+    #[test]
+    fn scope_display_does_not_assume_essential_permissions_were_approved() {
+        let requested = ScopeSet::parse("openid profile").unwrap();
+        assert!(
+            build_scope_display(&requested, &[])
+                .iter()
+                .all(|scope| !scope.previously_granted)
+        );
+        assert!(
+            build_scope_display(&requested, &["openid".into(), "profile".into()])
+                .iter()
+                .all(|scope| scope.previously_granted)
+        );
     }
 }
