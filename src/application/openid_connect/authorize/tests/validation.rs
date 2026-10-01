@@ -133,41 +133,37 @@ async fn confidential_client_rejects_pkce_method_without_challenge() {
 }
 
 #[tokio::test]
-async fn confidential_code_without_pkce_requires_trusted_oidc_nonce() {
-    let standard = build_test_service(
+async fn oauth21_confidential_code_requires_pkce_regardless_of_nonce_or_oidc_scope() {
+    let service = build_test_service(
         Arc::new(FoundClientRepository),
         Arc::new(empty_cred_repo()),
         Arc::new(mock_login_repo()),
     );
-    let trusted = build_test_service(
-        Arc::new(TrustedNonceClientRepository),
-        Arc::new(empty_cred_repo()),
-        Arc::new(mock_login_repo()),
-    );
-    let mut request = params("openid profile");
-    request.code_challenge = None;
-    request.code_challenge_method = None;
-    request.nonce = Some("transaction-nonce".to_owned());
-    assert_eq!(
-        standard
-            .validate_request(request.clone())
-            .await
-            .unwrap_err()
-            .code(),
-        23013
-    );
-    assert!(trusted.validate_request(request.clone()).await.is_ok());
-    request.nonce = None;
-    assert_eq!(
-        trusted.validate_request(request).await.unwrap_err().code(),
-        23013
-    );
+    for scope in ["openid profile", "profile"] {
+        for nonce in [None, Some("transaction-nonce".to_owned())] {
+            let mut request = params(scope);
+            request.code_challenge = None;
+            request.code_challenge_method = None;
+            request.nonce = nonce;
+            assert_eq!(
+                service
+                    .validate_request(request.clone())
+                    .await
+                    .unwrap_err()
+                    .code(),
+                23013
+            );
+            request.code_challenge = Some("challenge".to_owned());
+            request.code_challenge_method = Some("S256".to_owned());
+            assert!(service.validate_request(request).await.is_ok());
+        }
+    }
 }
 
 #[tokio::test]
-async fn public_client_cannot_use_trusted_nonce_instead_of_pkce() {
+async fn public_client_cannot_use_nonce_instead_of_pkce() {
     let service = build_test_service(
-        Arc::new(TrustedNoncePublicClientRepository),
+        Arc::new(PublicClientRepository),
         Arc::new(empty_cred_repo()),
         Arc::new(mock_login_repo()),
     );

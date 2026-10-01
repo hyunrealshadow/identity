@@ -126,6 +126,10 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
             Vec::<crate::infrastructure::database::entity::key::Model>::new(),
             Vec::<crate::infrastructure::database::entity::key::Model>::new(),
         ])
+        .append_query_results([
+            Vec::<crate::infrastructure::database::entity::key_jwk::Model>::new(),
+            Vec::<crate::infrastructure::database::entity::key_jwk::Model>::new(),
+        ])
         .into_connection();
     let i18n = build_i18n().unwrap();
     let tera = build_tera(i18n.loader()).unwrap();

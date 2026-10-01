@@ -77,3 +77,14 @@ mod redirect_uri_tests {
         );
     }
 }
+
+/// Server-managed fields are rejected even when explicitly supplied as null.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DynamicClientUpdateRequest {
+    pub client_id: String,
+    pub client_secret: Option<String>,
+    #[serde(flatten)]
+    pub metadata: DynamicClientRegistrationRequest,
+    #[serde(flatten)]
+    pub forbidden_fields: std::collections::BTreeMap<String, serde_json::Value>,
+}

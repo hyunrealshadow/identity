@@ -377,7 +377,7 @@ mod tests {
         let session = Session {
             oid: SessionOid(uuid::Uuid::new_v4()),
             user_oid: uuid::Uuid::new_v4(),
-            status: "active".to_owned(),
+            status: identity_domain::auth::SessionStatus::ACTIVE,
             device_name: None,
             device_type: None,
             os_name: None,

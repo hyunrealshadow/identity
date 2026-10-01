@@ -110,10 +110,6 @@ pub enum OAuthProtocolVersion {
 pub struct OpenIdConnectClientSettings {
     #[serde(default)]
     pub skip_consent: bool,
-    /// Explicitly trusted confidential OIDC clients may use a transaction-bound
-    /// nonce instead of PKCE for authorization code injection protection.
-    #[serde(default)]
-    pub allow_nonce_without_pkce: bool,
     /// Defaults to OAuth 2.0 for clients whose stored settings predate this field.
     #[serde(default)]
     pub oauth_version: OAuthProtocolVersion,
@@ -510,7 +506,6 @@ mod tests {
         assert!(parsed.skip_consent);
         assert!(!parsed.include_scoped_claims_in_id_token);
         assert!(!parsed.include_scoped_claims_in_access_token);
-        assert!(!parsed.allow_nonce_without_pkce);
         assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_0);
     }
 
@@ -529,6 +524,22 @@ mod tests {
                 serde_json::json!({"oauth_version": "3.0"})
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn settings_ignore_removed_pkce_override_in_existing_records() {
+        let parsed: OpenIdConnectClientSettings = serde_json::from_value(serde_json::json!({
+            "oauth_version": "2.1",
+            "allow_nonce_without_pkce": true,
+        }))
+        .unwrap();
+        assert_eq!(parsed.oauth_version, OAuthProtocolVersion::V2_1);
+        assert!(
+            serde_json::to_value(parsed)
+                .unwrap()
+                .get("allow_nonce_without_pkce")
+                .is_none()
         );
     }
 

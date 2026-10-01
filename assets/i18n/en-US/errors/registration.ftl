@@ -10,3 +10,5 @@ E25008 = Invalid redirect URI.
 E25009 = Invalid client metadata.
 E25010 = Failed to delete the dynamic client registration.
 E25011 = Built-in clients cannot be deleted.
+E25012 = Failed to update dynamic client registration.
+E25013 = This client cannot update its registration.

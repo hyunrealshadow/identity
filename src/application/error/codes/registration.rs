@@ -15,6 +15,8 @@ pub enum RegistrationErrorCode {
     InvalidClientMetadata,
     ClientDeleteFailed,
     BuiltInClientCannotBeDeleted,
+    ClientUpdateFailed,
+    ClientUpdateForbidden,
 }
 
 impl AppErrorCode for RegistrationErrorCode {
@@ -25,6 +27,8 @@ impl AppErrorCode for RegistrationErrorCode {
             Self::UnsupportedApplicationType => ErrorKind::Validation,
             Self::UnsupportedSubjectType => ErrorKind::Validation,
             Self::ClientCreateFailed => ErrorKind::Internal,
+            Self::ClientUpdateFailed => ErrorKind::Internal,
+            Self::ClientUpdateForbidden => ErrorKind::Forbidden,
             Self::InvalidRegistrationAccessToken => ErrorKind::Unauthorized,
             Self::ClientLookupFailed => ErrorKind::Internal,
             Self::NoneNotSupported => ErrorKind::Validation,
@@ -42,6 +46,8 @@ impl AppErrorCode for RegistrationErrorCode {
             Self::UnsupportedApplicationType => 25002,
             Self::UnsupportedSubjectType => 25003,
             Self::ClientCreateFailed => 25004,
+            Self::ClientUpdateFailed => 25012,
+            Self::ClientUpdateForbidden => 25013,
             Self::InvalidRegistrationAccessToken => 25005,
             Self::ClientLookupFailed => 25006,
             Self::NoneNotSupported => 25007,

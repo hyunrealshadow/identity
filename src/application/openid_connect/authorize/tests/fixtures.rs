@@ -10,8 +10,7 @@ pub(super) use clients::{
     DefaultsClientRepository, FoundClientRepository, InitiateLoginClientRepository,
     LegacyClientRepository, MissingClientRepository, OAuth20PublicClientRepository,
     PublicClientRepository, RequestUriClientRepository, RestrictedGrantClientRepository,
-    ScopedClientRepository, TEST_CLIENT_ID, TrustedNonceClientRepository,
-    TrustedNoncePublicClientRepository,
+    ScopedClientRepository, TEST_CLIENT_ID,
 };
 pub(super) use request_object::{
     authorize_service_with_public_key, authorize_service_with_request_object_encryption_key,

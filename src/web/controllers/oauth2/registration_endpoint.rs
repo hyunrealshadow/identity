@@ -7,7 +7,7 @@ use identity_application::{
     error::{
         AppError, code::AppErrorCode, codes::registration::RegistrationErrorCode, kind::ErrorKind,
     },
-    openid_connect::registration::DynamicClientRegistrationRequest,
+    openid_connect::registration::{DynamicClientRegistrationRequest, DynamicClientUpdateRequest},
 };
 
 use crate::controllers::response::{
@@ -24,6 +24,7 @@ fn registration_rfc_error_code(error: &AppError) -> &'static str {
         c if c == RegistrationErrorCode::InvalidClientMetadata.code() => "invalid_client_metadata",
         c if c == RegistrationErrorCode::InvalidRegistrationAccessToken.code() => "invalid_token",
         _ => match error.kind() {
+            ErrorKind::Forbidden => "insufficient_scope",
             ErrorKind::Unauthorized => "invalid_token",
             ErrorKind::Validation => "invalid_client_metadata",
             _ => "server_error",
@@ -35,6 +36,7 @@ fn registration_error_status(error: &AppError) -> StatusCode {
     match error.kind() {
         ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
         ErrorKind::NotFound => StatusCode::NOT_FOUND,
+        ErrorKind::Forbidden => StatusCode::FORBIDDEN,
         ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         // All registration validation errors are 400 per RFC 7591.
         _ => StatusCode::BAD_REQUEST,
@@ -62,6 +64,12 @@ fn registration_error_response(
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if status == StatusCode::UNAUTHORIZED {
+        response.headers_mut().insert(
+            header::WWW_AUTHENTICATE,
+            HeaderValue::from_static("Bearer error=\"invalid_token\""),
+        );
+    }
     response
 }
 
@@ -97,6 +105,12 @@ impl Writer for RegistrationWebError {
                 response
                     .headers_mut()
                     .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                if status == StatusCode::UNAUTHORIZED {
+                    response.headers_mut().insert(
+                        header::WWW_AUTHENTICATE,
+                        HeaderValue::from_static("Bearer error=\"invalid_token\""),
+                    );
+                }
                 *res = response;
             }
         }
@@ -182,6 +196,36 @@ pub async fn read(
         )
         .await?;
 
+    insert_no_store_headers(res);
+    render_json(res, StatusCode::OK, response);
+    Ok(())
+}
+
+#[handler]
+pub async fn update(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> Result<(), RegistrationWebError> {
+    let ctx = app_state(depot)?;
+    let client_id: String = parse_param(req, "client_id")?;
+    let token = bearer_token(req)?.to_owned();
+    // Authenticate before parsing metadata or reporting validation errors.
+    ctx.services()
+        .dynamic_client_registration()
+        .read(&client_id, &token, &ctx.services().oidc().issuer()?)
+        .await?;
+    let request: DynamicClientUpdateRequest = parse_json(req).await?;
+    let response = ctx
+        .services()
+        .dynamic_client_registration()
+        .update(
+            &client_id,
+            &token,
+            request,
+            &ctx.services().oidc().issuer()?,
+        )
+        .await?;
     insert_no_store_headers(res);
     render_json(res, StatusCode::OK, response);
     Ok(())
@@ -279,5 +323,50 @@ mod tests {
             true,
             Some("wrong-secret")
         ));
+    }
+}
+#[cfg(test)]
+mod update_route_tests {
+    use http::{StatusCode, header};
+    use salvo::{
+        Service,
+        test::{ResponseExt, TestClient},
+    };
+    #[tokio::test]
+    async fn update_route_requires_bearer_auth_and_supports_put_preflight() {
+        let state =
+            identity_infrastructure::test_app_state_with_cors_origin(Some("http://localhost:3000"))
+                .await;
+        let service = Service::new(
+            crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state)),
+        );
+        let url = "http://127.0.0.1:5800/oauth2/register/11111111-1111-1111-1111-111111111111";
+        let mut response = TestClient::put(url)
+            .json(&serde_json::json!({"client_id":"11111111-1111-1111-1111-111111111111"}))
+            .send(&service)
+            .await;
+        assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            response.headers().get(header::WWW_AUTHENTICATE).unwrap(),
+            "Bearer error=\"invalid_token\""
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        assert_eq!(json["error"], "invalid_token");
+        let response = TestClient::options(url)
+            .add_header(header::ORIGIN, "http://localhost:3000", true)
+            .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "PUT", true)
+            .send(&service)
+            .await;
+        assert_eq!(response.status_code, Some(StatusCode::NO_CONTENT));
+        assert!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_METHODS)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("PUT")
+        );
     }
 }

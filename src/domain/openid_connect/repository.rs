@@ -109,6 +109,15 @@ pub trait OpenIdConnectClientRepository: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait OpenIdConnectClientRegistrationRepository: Send + Sync {
+    /// Atomically replace registration metadata and credentials while preserving grants.
+    /// Recheck the registration token and optional current secret inside the transaction.
+    async fn update(
+        &self,
+        registration: OpenIdConnectClientRegistration,
+        token: &str,
+        current_secret: Option<String>,
+    ) -> Result<(), OpenIdConnectClientRepositoryError>;
+
     async fn create(
         &self,
         registration: OpenIdConnectClientRegistration,

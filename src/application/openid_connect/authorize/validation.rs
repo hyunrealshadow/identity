@@ -235,17 +235,6 @@ impl AuthorizeService {
         if client.metadata().settings.oauth_version == OAuthProtocolVersion::V2_1
             && response_type.includes_code()
             && !has_code_challenge
-            && !(scope.contains_openid()
-                && client
-                    .metadata()
-                    .effective_token_endpoint_auth_methods()
-                    .iter()
-                    .any(|method| *method != TokenEndpointAuthMethod::None)
-                && client.metadata().settings.allow_nonce_without_pkce
-                && params
-                    .nonce
-                    .as_deref()
-                    .is_some_and(|nonce| !nonce.is_empty()))
         {
             return Err(
                 AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)

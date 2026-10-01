@@ -9,6 +9,7 @@ mod authorize_endpoint;
 mod consent_endpoint;
 mod continue_endpoint;
 mod device_authorization_endpoint;
+mod introspection_endpoint;
 mod logout_endpoint;
 mod registration_endpoint;
 mod revocation_endpoint;
@@ -46,6 +47,7 @@ pub fn routes() -> Router {
                 .post(revocation_endpoint::revoke)
                 .options(preflight),
         )
+        .push(Router::with_path("oauth2/introspect").post(introspection_endpoint::introspect))
         .push(
             Router::with_path("oauth2/device")
                 .post(device_authorization_endpoint::device_authorization),
@@ -63,8 +65,9 @@ pub fn routes() -> Router {
         )
         .push(
             Router::with_path("oauth2/register/{client_id}")
-                .hoop(ClientCors::new("GET, DELETE"))
+                .hoop(ClientCors::new("GET, PUT, DELETE"))
                 .get(registration_endpoint::read)
+                .put(registration_endpoint::update)
                 .delete(registration_endpoint::delete)
                 .options(preflight),
         )

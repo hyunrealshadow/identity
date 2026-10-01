@@ -86,6 +86,9 @@ pub struct TokenRevocationParams {
     pub client_assertion: Option<String>,
 }
 
+/// Introspection uses the same confidential client credentials as revocation.
+pub type TokenIntrospectionParams = TokenRevocationParams;
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TokenResponse {
     pub access_token: String,
@@ -192,6 +195,7 @@ impl TokenService {
 mod client_credentials;
 mod device;
 mod exchange;
+mod introspection;
 mod revocation;
 
 pub(crate) use exchange::resolve_client_id;

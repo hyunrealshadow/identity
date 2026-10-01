@@ -311,7 +311,6 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
         captured_val.metadata.settings.oauth_version,
         identity_domain::openid_connect::OAuthProtocolVersion::V2_0
     );
-    assert!(!captured_val.metadata.settings.allow_nonce_without_pkce);
     assert_eq!(captured_val.platforms[0].platform.to_string(), "web");
     assert_eq!(
         captured_val.metadata.subject_type.unwrap().to_string(),
@@ -989,4 +988,93 @@ async fn register_client_credentials_requires_confidential_authentication() {
         .await
         .unwrap_err();
     assert_eq!(error.code(), 25009);
+}
+#[tokio::test]
+async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields() {
+    use crate::openid_connect::registration::DynamicClientUpdateRequest;
+    let client_oid = Uuid::new_v4();
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    repo.expect_find_by_registration_access_token()
+        .returning(move |oid, token| {
+            assert_eq!(oid, client_oid);
+            assert_eq!(token, "registration-token");
+            Ok(Some(registered_client(client_oid)))
+        });
+    repo.expect_update()
+        .times(1)
+        .returning(move |registration, token, secret| {
+            assert_eq!(registration.client.oid, client_oid);
+            assert_eq!(registration.registration_access_token, token);
+            assert_eq!(secret.as_deref(), Some("old-secret"));
+            assert_eq!(registration.client.name, "Updated Client");
+            assert_eq!(
+                registration.platforms[0].redirect_uris,
+                vec!["https://rp.example.com/new"]
+            );
+            assert!(registration.metadata.logo_uri.is_none());
+            assert!(registration.metadata.contacts.is_none());
+            Ok(())
+        });
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(repo),
+    );
+    let request = serde_json::from_value::<DynamicClientUpdateRequest>(serde_json::json!({
+        "client_id": client_oid.to_string(), "client_secret": "old-secret",
+        "client_name": "Updated Client", "redirect_uris": ["https://rp.example.com/new"]
+    }))
+    .unwrap();
+    let response = service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            request,
+            &issuer(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.client_id, client_oid.to_string());
+    assert_eq!(
+        response.registration_access_token.as_deref(),
+        Some("registration-token")
+    );
+    for field in [
+        "registration_access_token",
+        "registration_client_uri",
+        "client_secret_expires_at",
+        "client_id_issued_at",
+    ] {
+        let mut body = serde_json::json!({"client_id": client_oid.to_string(), "redirect_uris": ["https://rp.example.com/new"]});
+        body[field] = serde_json::Value::Null;
+        let request = serde_json::from_value(body).unwrap();
+        assert_eq!(
+            service
+                .update(
+                    &client_oid.to_string(),
+                    "registration-token",
+                    request,
+                    &issuer()
+                )
+                .await
+                .unwrap_err()
+                .code(),
+            25009
+        );
+    }
+    let request =
+        serde_json::from_value(serde_json::json!({"client_id": Uuid::new_v4().to_string()}))
+            .unwrap();
+    assert_eq!(
+        service
+            .update(
+                &client_oid.to_string(),
+                "registration-token",
+                request,
+                &issuer()
+            )
+            .await
+            .unwrap_err()
+            .code(),
+        25009
+    );
 }

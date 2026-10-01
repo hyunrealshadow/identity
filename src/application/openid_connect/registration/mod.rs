@@ -28,7 +28,9 @@ mod tests;
 mod token;
 mod validation;
 
-pub use request::{DynamicClientJwks, DynamicClientRegistrationRequest};
+pub use request::{
+    DynamicClientJwks, DynamicClientRegistrationRequest, DynamicClientUpdateRequest,
+};
 pub use response::DynamicClientRegistrationResponse;
 
 use credential::{client_credentials_from_jwks, client_credentials_from_jwks_uri};
@@ -91,6 +93,27 @@ impl DynamicClientRegistrationService {
         request: DynamicClientRegistrationRequest,
         issuer: &Url,
     ) -> Result<DynamicClientRegistrationResponse, AppError> {
+        let (registration, mut response) = self.prepare_registration(request, issuer).await?;
+        let client_id = self.repo.create(registration).await.map_err(|error| {
+            AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
+        })?;
+        response.client_id = client_id.to_string();
+        response.registration_client_uri = Some(registration_client_uri(issuer, client_id)?);
+        self.record_client_change("client.registered", client_id, "success");
+        Ok(response)
+    }
+
+    async fn prepare_registration(
+        &self,
+        request: DynamicClientRegistrationRequest,
+        issuer: &Url,
+    ) -> Result<
+        (
+            OpenIdConnectClientRegistration,
+            DynamicClientRegistrationResponse,
+        ),
+        AppError,
+    > {
         if !self.enabled() {
             return Err(AppError::from_code(
                 RegistrationErrorCode::DynamicRegistrationDisabled,
@@ -415,7 +438,6 @@ impl DynamicClientRegistrationService {
             request_uris: request.request_uris.clone(),
             settings: OpenIdConnectClientSettings {
                 skip_consent: default_skip_consent(),
-                allow_nonce_without_pkce: false,
                 oauth_version: Default::default(),
                 cors_enabled: false,
                 include_scoped_claims_in_id_token: false,
@@ -445,55 +467,122 @@ impl DynamicClientRegistrationService {
             credentials,
             registration_access_token: registration_access_token.clone(),
         };
-        let client_id = self.repo.create(registration).await.map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
-        })?;
+        let client_id = registration.client.oid;
         let registration_client_uri = registration_client_uri(issuer, client_id)?;
+        Ok((
+            registration,
+            DynamicClientRegistrationResponse {
+                client_id: client_id.to_string(),
+                registration_access_token: Some(registration_access_token),
+                registration_client_uri: Some(registration_client_uri),
+                client_secret,
+                client_secret_expires_at,
+                redirect_uris: request.redirect_uris,
+                response_types: Some(response_types.iter().map(ToString::to_string).collect()),
+                grant_types: Some(grant_types.iter().map(ToString::to_string).collect()),
+                application_type: Some(application_type),
+                contacts: request.contacts,
+                client_name: request.client_name,
+                logo_uri: request.logo_uri,
+                client_uri: request.client_uri,
+                policy_uri: request.policy_uri,
+                tos_uri: request.tos_uri,
+                sector_identifier_uri: request.sector_identifier_uri,
+                subject_type: subject_type.map(|value| value.to_string()),
+                id_token_signed_response_alg: request.id_token_signed_response_alg,
+                id_token_encrypted_response_alg: request.id_token_encrypted_response_alg,
+                id_token_encrypted_response_enc: request.id_token_encrypted_response_enc,
+                userinfo_signed_response_alg: request.userinfo_signed_response_alg,
+                userinfo_encrypted_response_alg: request.userinfo_encrypted_response_alg,
+                userinfo_encrypted_response_enc: request.userinfo_encrypted_response_enc,
+                request_object_signing_alg: request.request_object_signing_alg,
+                request_object_encryption_alg: request.request_object_encryption_alg,
+                request_object_encryption_enc: request.request_object_encryption_enc,
+                token_endpoint_auth_method: Some(token_auth_method.to_string()),
+                token_endpoint_auth_signing_alg: request.token_endpoint_auth_signing_alg,
+                jwks: request.jwks,
+                jwks_uri: request.jwks_uri,
+                default_max_age: request.default_max_age,
+                require_auth_time: request.require_auth_time,
+                default_acr_values: request.default_acr_values,
+                initiate_login_uri: request.initiate_login_uri,
+                request_uris: request.request_uris,
+                post_logout_redirect_uris: request.post_logout_redirect_uris,
+                frontchannel_logout_uri: request.frontchannel_logout_uri,
+                frontchannel_logout_session_required: request.frontchannel_logout_session_required,
+                backchannel_logout_uri: request.backchannel_logout_uri,
+                backchannel_logout_session_required: request.backchannel_logout_session_required,
+                scope: (!assigned_scopes.is_empty()).then(|| assigned_scopes.join(" ")),
+            },
+        ))
+    }
 
-        self.record_client_change("client.registered", client_id, "success");
-        Ok(DynamicClientRegistrationResponse {
-            client_id: client_id.to_string(),
-            registration_access_token: Some(registration_access_token),
-            registration_client_uri: Some(registration_client_uri),
-            client_secret,
-            client_secret_expires_at,
-            redirect_uris: request.redirect_uris,
-            response_types: Some(response_types.iter().map(ToString::to_string).collect()),
-            grant_types: Some(grant_types.iter().map(ToString::to_string).collect()),
-            application_type: Some(application_type),
-            contacts: request.contacts,
-            client_name: request.client_name,
-            logo_uri: request.logo_uri,
-            client_uri: request.client_uri,
-            policy_uri: request.policy_uri,
-            tos_uri: request.tos_uri,
-            sector_identifier_uri: request.sector_identifier_uri,
-            subject_type: subject_type.map(|value| value.to_string()),
-            id_token_signed_response_alg: request.id_token_signed_response_alg,
-            id_token_encrypted_response_alg: request.id_token_encrypted_response_alg,
-            id_token_encrypted_response_enc: request.id_token_encrypted_response_enc,
-            userinfo_signed_response_alg: request.userinfo_signed_response_alg,
-            userinfo_encrypted_response_alg: request.userinfo_encrypted_response_alg,
-            userinfo_encrypted_response_enc: request.userinfo_encrypted_response_enc,
-            request_object_signing_alg: request.request_object_signing_alg,
-            request_object_encryption_alg: request.request_object_encryption_alg,
-            request_object_encryption_enc: request.request_object_encryption_enc,
-            token_endpoint_auth_method: Some(token_auth_method.to_string()),
-            token_endpoint_auth_signing_alg: request.token_endpoint_auth_signing_alg,
-            jwks: request.jwks,
-            jwks_uri: request.jwks_uri,
-            default_max_age: request.default_max_age,
-            require_auth_time: request.require_auth_time,
-            default_acr_values: request.default_acr_values,
-            initiate_login_uri: request.initiate_login_uri,
-            request_uris: request.request_uris,
-            post_logout_redirect_uris: request.post_logout_redirect_uris,
-            frontchannel_logout_uri: request.frontchannel_logout_uri,
-            frontchannel_logout_session_required: request.frontchannel_logout_session_required,
-            backchannel_logout_uri: request.backchannel_logout_uri,
-            backchannel_logout_session_required: request.backchannel_logout_session_required,
-            scope: (!assigned_scopes.is_empty()).then(|| assigned_scopes.join(" ")),
-        })
+    /// RFC 7592 replaces metadata; omitted optional fields are cleared.
+    #[tracing::instrument(skip_all, name = "client.update")]
+    pub async fn update(
+        &self,
+        client_id: &str,
+        registration_access_token: &str,
+        request: DynamicClientUpdateRequest,
+        issuer: &Url,
+    ) -> Result<DynamicClientRegistrationResponse, AppError> {
+        let current = self
+            .read(client_id, registration_access_token, issuer)
+            .await?;
+        if request.client_id != current.client_id
+            || request.forbidden_fields.keys().any(|field| {
+                matches!(
+                    field.as_str(),
+                    "registration_access_token"
+                        | "registration_client_uri"
+                        | "client_secret_expires_at"
+                        | "client_id_issued_at"
+                )
+            })
+        {
+            return Err(AppError::from_code(
+                RegistrationErrorCode::InvalidClientMetadata,
+            ));
+        }
+        let client_oid = Uuid::parse_str(client_id).map_err(|_| {
+            AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+        })?;
+        let existing = self
+            .repo
+            .find_by_registration_access_token(client_oid, registration_access_token)
+            .await
+            .map_err(|error| {
+                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
+            })?
+            .ok_or_else(|| {
+                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+            })?;
+        if existing.client().built_in {
+            return Err(AppError::from_code(
+                RegistrationErrorCode::ClientUpdateForbidden,
+            ));
+        }
+        let (mut registration, mut response) =
+            self.prepare_registration(request.metadata, issuer).await?;
+        registration.client.oid = client_oid;
+        registration.client.created_at = existing.client().created_at;
+        registration.client.updated_at = Some(Utc::now());
+        registration.metadata.settings = existing.metadata().settings.clone();
+        registration.registration_access_token = registration_access_token.to_owned();
+        self.repo.update(registration, registration_access_token, request.client_secret).await.map_err(|error| {
+            match error {
+                crate::domain::openid_connect::OpenIdConnectClientRepositoryError::InvalidMetadataValue { .. } =>
+                    AppError::from_code(RegistrationErrorCode::InvalidClientMetadata),
+                crate::domain::openid_connect::OpenIdConnectClientRepositoryError::ClientNotFound =>
+                    AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken),
+                _ => AppError::from_code(RegistrationErrorCode::ClientUpdateFailed).with_source(error),
+            }
+        })?;
+        response.client_id = client_oid.to_string();
+        response.registration_client_uri = Some(registration_client_uri(issuer, client_oid)?);
+        response.registration_access_token = Some(registration_access_token.to_owned());
+        self.record_client_change("client.updated", client_oid, "success");
+        Ok(response)
     }
 
     pub async fn read(

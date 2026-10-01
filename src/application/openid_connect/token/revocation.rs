@@ -218,10 +218,30 @@ impl TokenService {
         Err(AppError::from_code(TokenErrorCode::ClientAuthRequired))
     }
 
-    async fn verified_access_token_oid(
+    pub(super) async fn verified_access_token_oid(
         &self,
         token: &str,
     ) -> Result<Option<(Uuid, Uuid)>, AppError> {
+        Ok(self
+            .verified_access_token_payload(token)
+            .await?
+            .and_then(|payload| {
+                payload
+                    .jwt_id()
+                    .and_then(|value| Uuid::parse_str(value).ok())
+                    .zip(
+                        payload
+                            .claim(JwtClaimNames::CLIENT_ID)
+                            .and_then(|value| value.as_str())
+                            .and_then(|value| Uuid::parse_str(value).ok()),
+                    )
+            }))
+    }
+
+    pub(super) async fn verified_access_token_payload(
+        &self,
+        token: &str,
+    ) -> Result<Option<jwt::JwtPayload>, AppError> {
         let Ok(header) = jwt::decode_header(token) else {
             return Ok(None);
         };
@@ -282,15 +302,7 @@ impl TokenService {
         {
             return Ok(None);
         }
-        Ok(payload
-            .jwt_id()
-            .and_then(|value| Uuid::parse_str(value).ok())
-            .zip(
-                payload
-                    .claim(JwtClaimNames::CLIENT_ID)
-                    .and_then(|value| value.as_str())
-                    .and_then(|value| Uuid::parse_str(value).ok()),
-            ))
+        Ok(Some(payload))
     }
 }
 

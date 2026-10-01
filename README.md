@@ -1,163 +1,355 @@
 # Identity
 
-OpenID Connect Provider (OP) built with Rust — passes the OIDC conformance test suite.
+Identity is an OAuth 2.0 authorization server and OpenID Connect Provider built
+with Rust, Salvo, and PostgreSQL. A separate React/TanStack Start application
+provides installation, sign-in, consent, device verification, and account
+management.
+
+The repository includes protocol tests and an OpenID Foundation conformance
+runner. Conformance results depend on the selected profile, build features,
+client configuration, and deployment; the presence of the runner does not
+establish certification.
+
+## Capabilities
+
+| Area | Current coverage |
+| --- | --- |
+| OAuth grants | Authorization code, refresh token, client credentials, and device authorization |
+| OIDC flows | Authorization code, implicit, and hybrid; query, fragment, and Form Post response modes |
+| Discovery | OIDC discovery, OAuth authorization server metadata (RFC 8414), and public JWKS |
+| Tokens | Signed JWT access tokens and ID Tokens; encrypted ID Tokens; refresh rotation and replay handling |
+| Token lifecycle | Revocation (RFC 7009) and authenticated introspection (RFC 7662) |
+| Client registration | Dynamic registration (RFC 7591), plus read, full replacement update, and delete (RFC 7592) |
+| Client authentication | `client_secret_basic`, `client_secret_post`, `client_secret_jwt`, `private_key_jwt`, and public clients using `none` where permitted |
+| Authorization requests | PKCE S256, nonce, consent, account selection, silent requests, reauthentication, `max_age`, `acr_values`, and claims requests |
+| Request objects | Signed, unsigned, and encrypted objects; `request` and `request_uri` |
+| UserInfo | JSON, signed, and encrypted responses; scope-filtered profile, email, address, and phone claims |
+| Subjects | Public and pairwise subject identifiers, including sector identifier validation |
+| Logout | RP-initiated, front-channel, and back-channel logout; OP session iframe |
+| Authentication | Password sign-in, TOTP MFA, single-use recovery codes, and AAL1/AAL2 authentication context |
+| Account management | Profile, username, email, password, TOTP enrollment/disable, and recovery-code regeneration |
+| Sessions | Multiple signed-in accounts, session listing, individual revocation, and revocation of other sessions |
+| Operations | Ordered migrations, runtime settings refresh, built-in Login credential rotation, health checks, and optional OTLP observability |
+
+Supported algorithms are advertised through discovery. Signing capabilities
+also depend on the active keys and client metadata.
+
+### Protocol behavior and limits
+
+Public clients must use PKCE S256 for authorization code requests in both
+implemented OAuth versions. OAuth 2.1 also requires PKCE S256 for confidential
+clients, including OIDC requests that carry a nonce. OAuth 2.0 confidential
+clients may omit PKCE. These rules depend on the client's configured protocol
+version and authentication methods.
+
+The per-client `OpenIdConnectClientSettings.oauth_version` selects the
+implemented OAuth `"2.0"` or `"2.1"` authorization code rules and defaults to
+`"2.0"`. It is an internal setting, not dynamic registration metadata.
+Selecting it does not imply coverage of every OAuth extension.
+
+Client grant permissions are enforced. Registration without `grant_types`
+defaults to `authorization_code`; an explicit empty list allows no grants.
+Clients that need refresh tokens, implicit flows, client credentials, or the
+device grant must be configured for those grants.
+
+Web redirect URIs require HTTPS, with an explicit `http://localhost`
+development exception. Native loopback IP redirects may use HTTP. The Web
+localhost exception is a deliberate deviation from RFC 9700 §2.6.
+OIDC clients with multiple registered redirect URIs must supply
+`redirect_uri`.
+
+Introspection requires confidential client authentication and discloses only
+tokens issued to the authenticated client. Unknown, expired, revoked, or
+unauthorized tokens return only `{"active":false}`. A token type hint is
+optional and does not restrict which supported token formats are checked.
+
+Dynamic registration is disabled by default through the database runtime
+setting `openid_connect.dynamic_registration.enabled`. When enabled outside
+conformance mode, the registration endpoint is open; a fixed initial access
+token is supported only for conformance harnesses. Management requests use the
+issued registration access token.
+
+Client updates replace metadata rather than merge it. They require a matching
+`client_id`; an optional `client_secret` must match the current secret.
+Server-managed registration fields are rejected. Updates rotate the secret
+for confidential clients and return its replacement, preserving the client
+ID, registration access token, and existing authorization records. Built-in
+clients cannot update their registration through this endpoint.
+
+Device authorization uses a 10-minute request lifetime and a 5-second polling
+interval by default, configurable through
+`openid_connect.device_authorization`. Polling enforces pending, slow-down,
+expiry, denial, and single-use issuance. Device-issued tokens follow the device
+authorization relation rather than the browser session that approved it.
+User-code lookup does not currently have a dedicated rate limiter.
+
+## HTTP endpoints
+
+Paths below are relative to the service's public origin.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/.well-known/openid-configuration` | OIDC discovery |
+| GET | `/.well-known/oauth-authorization-server` | OAuth authorization server metadata |
+| GET | `/.well-known/keys` | Public JWKS |
+| GET, POST | `/oauth2/authorize` | Authorization requests |
+| POST | `/oauth2/token` | Token issuance and refresh |
+| POST | `/oauth2/revoke` | Token revocation |
+| POST | `/oauth2/introspect` | Token introspection |
+| POST | `/oauth2/device` | Start device authorization |
+| POST | `/oauth2/register` | Create a dynamic client |
+| GET, PUT, DELETE | `/oauth2/register/{client_id}` | Manage a dynamic client |
+| GET, POST | `/oauth2/userinfo` | UserInfo |
+| GET, POST | `/oauth2/logout` | RP-initiated logout |
+| GET | `/oauth2/check_session` | Session management iframe |
+| GET | `/oauth2/initiate_login` | Third-party initiated login |
+| GET | `/oauth2/continue` | Resume an authorization interaction |
+| GET, POST | `/oauth2/consent` | Consent JSON API |
+| POST | `/oauth2/device/login` | Begin device verification interaction |
+
+For an issuer containing a path, RFC 8414 metadata places that path **after**
+the well-known suffix: issuer `https://example.com/tenant` uses
+`https://example.com/.well-known/oauth-authorization-server/tenant`.
+Deployment routing must preserve the configured issuer and endpoint URLs.
+
+The interactive JSON API lives under `/api/auth`. Login's backend forwards
+session state through `X-Sessions` and CSRF state through `X-CSRF-Token`.
+The browser returns to `/oauth2/continue` after login or consent.
+
+`/graphql` provides authenticated account, security, and session operations.
+It validates bearer tokens and resource audience, enforces API scopes, and
+requires recent authentication for sensitive operations. It has configurable
+query depth, complexity, pagination, and timeout limits. Its listener may be
+shared with the public API or bound separately.
+
+The separate internal listener requires workload authentication for every
+endpoint:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/internal/installation/status` | Installation status |
+| POST | `/internal/installation` | Initialize the installation |
+| GET | `/internal/workloads/self/runtime-configuration` | Login runtime configuration and current OAuth credential |
+| GET | `/internal/observability/metrics` | Optional observability pipeline metrics |
 
 ## Architecture
 
-Clean Architecture with dependency inversion:
-
-```
+```text
 src/
-  domain/         — Aggregates, value objects, repository traits (no SeaORM)
-  application/    — Use cases / services (no I/O)
-  infrastructure/ — Repositories (SeaORM), crypto, templating
-  web/            — HTTP handlers (Salvo), session management
-  boot/           — App assembly, server startup
-migration/         — Immutable ordered schema and data migrations
+  domain/          Domain models, protocol types, and repository contracts
+  application/     Use cases, authentication, and OAuth/OIDC services
+  infrastructure/  SeaORM repositories, cryptography, settings, and observability
+  web/             Salvo handlers, middleware, GraphQL, and protocol HTML
+  boot/            Configuration, application assembly, and listener startup
+migration/          Ordered schema and data migrations
+apps/login/         React/TanStack Start Login application and backend
+assets/             Fluent translations, Tera templates, and error-page styles
+conformance/        Docker-based OIDC conformance runner and test plans
+deploy/             Docker Compose and Helm deployment examples
+docs/               Design notes, reviews, and architecture decisions
 ```
 
-PostgreSQL via SeaORM. Interactive login, consent, and installation UI lives in
-the external React/TanStack application. This service renders only terminal
-error pages and protocol-required HTML documents (`form_post`, session iframe,
-and front-channel logout).
+Domain and application code depend on repository contracts rather than
+SeaORM entities. Infrastructure supplies persistence and other adapters.
+Application services also perform protocol-related remote document retrieval.
 
-The external UI locations are configured through the `app.login_url` and
-`app.consent_url` runtime settings. They must be set before an interactive OIDC
-flow can redirect to the React application.
+The Login application owns the browser UI. Identity renders protocol-required
+HTML such as Form Post, the session iframe, front-channel logout, and terminal
+error pages. Login and consent use native HTML forms with progressive
+enhancement. The UI and localized service errors support English and Simplified
+Chinese.
 
-The TanStack Start application is located in `apps/login`. It provides login,
-consent, installation, and GraphQL-backed account/session management. Both Identity and
-the public Login origin must be exposed through HTTPS. Configure the runtime
-settings with HTTPS Login and Consent URLs, then start the application with:
+## Local development
+
+### Prerequisites
+
+- A Rust toolchain that supports edition 2024 and the locked dependencies.
+  The deployment build currently uses Rust 1.96.
+- PostgreSQL and a database/user with permission to run migrations.
+- OpenSSL development libraries and the platform's native build tools;
+  the Linux build installs `pkg-config` and `libssl-dev`.
+- Node.js and pnpm for the Login application and error-page CSS.
+  The deployment build uses Node.js 22 and pnpm 11.24.0.
+
+Run from the repository root so configuration, templates, and translations can
+be found. The following examples use a POSIX shell; in PowerShell, set
+variables with `$env:NAME = "value"`.
+
+### Start Identity
+
+Create the database and configure its connection string. Generate a workload
+token and a separate Login cookie sealing secret:
+
+```sh
+export DATABASE_URL='postgres://identity:replace-with-password@localhost:5432/identity'
+export IDENTITY_WORKLOAD_TOKEN="$(openssl rand -base64 32)"
+export IDENTITY_LOGIN_SESSION_SECRET="$(openssl rand -base64 32)"
+export IDENTITY_PUBLIC_APP_URL='https://localhost:3000'
+
+cargo run --locked --bin identity
+```
+
+The default environment reads [config/development.yaml](config/development.yaml).
+It starts the public API at `https://localhost:5150` and the internal API at
+`https://localhost:5151`, generating a local TLS certificate when needed.
+In this configuration, GraphQL and `/health` share the public listener.
+
+### Start Login and install
+
+In a second terminal, provide the same workload token and cookie sealing
+secret, then run:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev:login
 ```
 
-The application proxies interactive JSON API requests to `IDENTITY_API_URL`,
-which defaults to `https://127.0.0.1:5150`. Once login or consent has updated
-the authorization interaction, the browser returns directly to the OP
-`/oauth2/continue` endpoint. Login and consent use native POST forms without
-JavaScript and are progressively enhanced after hydration.
+Open `https://localhost:3000` and complete installation. Trust the local
+development certificates in your browser. The development Login server accepts
+Identity's local self-signed certificate; production retains TLS validation.
 
-Installation and Login runtime configuration are served on the separate
-internal listener (port `5151` by default). Every internal endpoint requires
-a workload credential: a static token from `internal.workloads.login` or a
-Kubernetes projected ServiceAccount token. Configure Login with
-`IDENTITY_INTERNAL_API_URL` and the matching workload credential, and keep
-this listener off the public ingress.
+Installation accepts the administrator's username, email, password, Identity
+domain, Login application URL, and signing-key algorithm. Use
+`https://localhost:5150` as the Identity URL and
+`https://localhost:3000` as the Login application URL for the default setup.
+Installation creates the administrator, signing material, built-in Login
+client, and runtime state in a database transaction.
 
-Identity accepts only two TLS deployment modes under `server.tls.termination`:
-`direct`, where Identity terminates TLS itself, and `upstream`, where a trusted
-reverse proxy terminates TLS. Upstream mode requires
-`server.tls.trusted_proxies` to list the proxy IP networks. Identity accepts
-`Forwarded: proto=https` or `X-Forwarded-Proto: https` only when the TCP peer
-belongs to one of those networks; the same boundary applies to
-`X-Forwarded-For` and `X-Real-IP` when recording session audit data. Direct
-clients cannot spoof these headers. In both modes, `server.host` must use
-`https://`.
+The application origin is stored as `app.login_domain`; Identity derives
+the login, consent, and device UI URLs from it. The issuer comes from
+`app.domain`. A complete `install` section in the service configuration can
+also initialize an uninstalled database automatically.
 
-```yaml
-server:
-  tls:
-    termination: upstream
-    trusted_proxies:
-      - 10.0.0.0/8
-      - fd00::/8
-```
-
-## Run
+### Build
 
 ```sh
-# development (config/development.yaml)
-cargo run
-
-# conformance mode
-APP_ENV=conformance cargo run
-
-# rebuild the server-rendered error page stylesheet
-pnpm install --frozen-lockfile
+cargo build --locked --release --bin identity
 pnpm build:error-css
+pnpm build:login
+pnpm --filter login start
 ```
 
-Environment overrides: `APP_ENV`, `PORT`, `HOST`, `DATABASE_URL`,
-`IDENTITY_WORKLOAD_TOKEN`. The development Identity server and Login app must
-use the same workload token (at least 32 random bytes).
+Login's production server uses Nitro. See
+[apps/login/README.md](apps/login/README.md) for its transport, environment
+variables, and health behavior.
 
-Deployment examples for persisting the built-in Login application's client ID
-and secret are documented in `deploy/README.md`.
+## Configuration and deployment
 
-### Prerequisites
+Identity loads `config/{environment}.yaml`, selected by `APP_ENV`
+(`RUST_ENV` is a fallback; the default is `development`). YAML templates can
+read environment variables with `get_env`. Variables affect fields only
+where the selected template uses them: `PORT` and `HOST`, for example, are
+not universal overrides. The repository ships development, test, and
+conformance configurations; production examples are under `deploy/`.
 
-- Rust 1.85+
-- PostgreSQL (running on default port)
-- Node.js and pnpm (error-page CSS only)
-- `sea-orm-cli` for migration management
+Listener addresses, TLS, database access, workload authentication, GraphQL
+limits, and observability belong to startup configuration. Installed domains,
+client metadata, password-hashing settings, and OAuth runtime settings are stored in
+PostgreSQL. Runtime settings refresh periodically (30 seconds by default).
 
-### Database
+Login's main environment variables are:
 
-The current persistence model lives in `infrastructure::database::entity`,
-while the `migration` crate remains the immutable database history. Every
-schema change must update the SeaORM entities and add a matching ordered
-migration in the same change. Historical migrations must not depend on the
-current entity definitions.
+| Variable | Purpose |
+| --- | --- |
+| `IDENTITY_API_URL` | Browser-visible Identity URL; defaults to `https://localhost:5150` |
+| `IDENTITY_BACKCHANNEL_API_URL` | Server-side protocol and interactive API calls |
+| `IDENTITY_BACKCHANNEL_GRAPHQL_URL` | Server-side GraphQL calls |
+| `IDENTITY_INTERNAL_API_URL` | Internal workload API; defaults to `https://localhost:5151` |
+| `IDENTITY_WORKLOAD_TOKEN_FILE` / `IDENTITY_WORKLOAD_TOKEN` | File-based workload credential or inline development token |
+| `IDENTITY_LOGIN_SESSION_SECRET` | Cookie sealing secret, shared across Login replicas |
+| `IDENTITY_PUBLIC_APP_URL` | Public HTTPS origin of the Login application |
 
-Application startup runs only the ordered migrator; runtime schema sync is not
-enabled. Development, test, and production databases must all be created and
-upgraded with the ordered migrations. Entity metadata may be used to verify the
-portable part of the schema, but it is not a database-creation API:
-PostgreSQL-specific expression and multi-column non-unique indexes remain
-explicit migration statements because they cannot be represented by portable
-entity metadata.
+Identity supports direct TLS termination or TLS termination by a trusted
+upstream proxy. Its configured public URL must use HTTPS in both modes.
+Upstream mode uses `server.tls.trusted_proxies` to determine who may supply
+forwarded HTTPS and client-IP headers. Explicit private HTTP callers can be
+listed separately in `server.tls.direct_http_clients`.
+
+Login uses HTTPS for internal and backchannel calls by default. Private HTTP
+requires the corresponding `IDENTITY_INTERNAL_API_ALLOW_HTTP=true` or
+`IDENTITY_BACKCHANNEL_ALLOW_HTTP=true` opt-in. Keep the internal listener off
+public ingress. It accepts configured static workload tokens or verified
+Kubernetes projected ServiceAccount tokens.
+
+The built-in Login client secret is stored in PostgreSQL and fetched into
+Login's memory through the internal API. Identity rotates it after 60 days,
+gives the new generation a 90-day lifetime, and retains the previous generation
+for a 24-hour overlap. The workload credential and shared cookie sealing
+secret are configured independently.
+
+Deployment guides:
+
+- [Docker Compose and credential lifecycle](deploy/README.md)
+- [Helm chart](deploy/helm/identity/README.md)
+- [Kubernetes examples](deploy/kubernetes/README.md)
+
+## Database lifecycle
+
+With `database.auto_migrate: true`, startup applies the ordered migrator.
+Startup also ensures built-in settings and scopes. The `oidc-conformance`
+feature adds fixed test-data seeding at startup; use that build with an isolated
+conformance database. Conformance HTTP routes additionally require
+`APP_ENV=conformance`.
+
+The `migration` crate is the schema history; current SeaORM entities are
+under `src/infrastructure/database/entity`. A schema change must add an
+ordered migration and update the corresponding entities. Historical
+migrations must remain independent of current entity definitions.
+
+Runtime schema synchronization is not used. PostgreSQL-specific indexes and
+constraints remain explicit migration statements where portable entity
+metadata cannot represent them.
+
+## Observability and health
+
+Identity supports structured console logs and optional OTLP/HTTP export of
+traces, logs, and business/audit events. Login has a separate opt-in OTLP
+pipeline. Trace trust is configured independently from proxy/IP trust;
+browser-provided trace context is treated as untrusted.
+
+The pipelines use bounded queues. Export failures and drops are exposed through
+optional self-metrics rather than blocking authentication. PII can be
+pseudonymized using a configured HMAC key, with redaction as the fallback.
+Audit storage permissions and retention are deployment responsibilities.
+
+Identity's configurable `/health` endpoint checks database connectivity.
+Login exposes `/health/live` and `/health/ready`; after installation,
+readiness requires usable runtime configuration and a current OAuth credential.
+
+See [observability coverage](docs/observability-coverage.md),
+[observability design](docs/observability-design.md), and the
+[deployment guide](deploy/README.md#observability).
+
+## Tests and conformance
 
 ```sh
-# run migrations
-cargo run --bin tool -- migrate
-
-# seed test data
-cargo run --bin tool -- seed
+cargo test --workspace --locked
+cargo check --workspace --all-targets --features oidc-conformance --locked
+cargo fmt --all -- --check
+pnpm --filter login test
 ```
 
-## Test
+The conformance harness uses Docker Compose, `uv`, and Playwright:
 
 ```sh
-# unit + integration
-cargo test --workspace
-
-# OIDC conformance suite (requires Docker)
 cd conformance
 uv sync
 uv run playwright install chromium
-uv run python run.py --profile basic
+uv run python run.py --profile basic --exit-on-failure
 ```
 
-Available profiles: `basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `rp-init-logout`, `session`, `backchannel`.
+Available profiles: `basic`, `implicit`, `hybrid`, `config`,
+`formpost-basic`, `formpost-implicit`, `formpost-hybrid`,
+`third-party-init`, `rp-init-logout`, `session`, and `backchannel`.
 
-## Features
+The harness image enables `oidc-conformance` and `allow-none-alg`.
+For a manually started conformance server, set `APP_ENV=conformance` and
+build with those features. Conformance-only auto-login and fixture behavior
+are isolated from the default production build. `allow-none-alg` permits
+unsigned ID Tokens for conformance scenarios; unsigned request objects have
+separate protocol handling.
 
-- Authorization code, implicit, hybrid flows
-- Form Post response mode
-- PKCE, refresh tokens, ID tokens
-- RP-initiated, front-channel, back-channel logout
-- Session management (OP iframe)
-- UserInfo endpoint
-- Request objects (signed + unsigned)
-- TOTP MFA
-- Scope-based claims (profile, email, address, phone)
-- Pairwise subject identifiers
-- Client authentication: client_secret_basic, client_secret_post, client_secret_jwt, private_key_jwt
-
-Authorization code requests use PKCE S256 by default. A confidential OIDC
-client may use a transaction-specific `nonce` without PKCE only when its stored
-`OpenIdConnectClientSettings.allow_nonce_without_pkce` is explicitly enabled
-after verifying that the client checks the ID Token nonce. The per-client
-`OpenIdConnectClientSettings.oauth_version` setting selects OAuth `"2.0"` or
-`"2.1"` authorization code behavior. It defaults to `"2.0"` for existing and
-newly registered clients. Set it to `"2.1"` server-side for clients using the
-OAuth 2.1 rules; this is not dynamic client registration metadata. OIDC
-requests from clients with multiple registered redirects still require
-`redirect_uri`. Web redirect URIs require
-HTTPS, with an explicit `http://localhost` exception for local development.
-Native loopback IP redirects may also use HTTP.
-The Web `http://localhost` exception is a deliberate deviation from RFC 9700 §2.6.
+Runner outcomes include warnings, skips, and review results. Inspect the
+profile results before describing a deployment as conformant.
+See [conformance/README.md](conformance/README.md) for runner options and
+environment variables.

@@ -259,12 +259,12 @@ fn cors_origins_for_client(
     origins
 }
 
-#[async_trait]
-impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepositoryImpl {
+impl OpenIdConnectClientRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
-    async fn create(
+    async fn persist_registration(
         &self,
         registration: OpenIdConnectClientRegistration,
+        update_auth: Option<(String, Option<String>)>,
     ) -> Result<identity_domain::client::model::ClientOid, OpenIdConnectClientRepositoryError> {
         let client_oid = registration.client.oid;
         let now = Utc::now();
@@ -274,7 +274,38 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         self.db
             .transaction::<_, _, sea_orm::DbErr>(|txn| {
                 Box::pin(async move {
+                    let existing = if let Some((token, secret)) = &update_auth {
+                        let existing = ClientEntity::find().filter(client::Column::Oid.eq(client_oid))
+                            .lock_exclusive().one(txn).await?
+                            .ok_or_else(|| sea_orm::DbErr::Custom("registration_invalid_token".into()))?;
+                        if existing.built_in { return Err(sea_orm::DbErr::Custom("registration_invalid_token".into())); }
+                        let rows = ClientAuthorizationEntity::find()
+                            .filter(client_authorization::Column::ClientId.eq(existing.id))
+                            .filter(client_authorization::Column::Type.eq(ClientAuthorizationType::RegistrationAccessToken.to_string()))
+                            .filter(client_authorization::Column::RevokedAt.is_null())
+                            .filter(client_authorization::Column::ExpiresAt.gt(now)).all(txn).await?;
+                        let valid = rows.iter().any(|row| row.data.get("token").and_then(Value::as_str)
+                            .is_some_and(|stored| bool::from(subtle::ConstantTimeEq::ct_eq(stored.as_bytes(), token.as_bytes()))));
+                        if !valid { return Err(sea_orm::DbErr::Custom("registration_invalid_token".into())); }
+                        if let Some(secret) = secret {
+                            let rows = client_openid_connect_credential::Entity::find()
+                                .filter(client_openid_connect_credential::Column::ClientId.eq(existing.id))
+                                .filter(client_openid_connect_credential::Column::Type.eq("client_secret"))
+                                .filter(client_openid_connect_credential::Column::RevokedAt.is_null())
+                                .filter(client_openid_connect_credential::Column::ExpiresAt.gt(now)).all(txn).await?;
+                            let valid = rows.iter().any(|row| row.data.get("secret").and_then(Value::as_str)
+                                .is_some_and(|stored| bool::from(subtle::ConstantTimeEq::ct_eq(stored.as_bytes(), secret.as_bytes()))));
+                            if !valid { return Err(sea_orm::DbErr::Custom("registration_invalid_secret".into())); }
+                        }
+                        OpenIdConnectClientEntity::delete_many().filter(client_openid_connect::Column::ClientId.eq(existing.id)).exec(txn).await?;
+                        ClientOpenIdConnectPlatformEntity::delete_many().filter(client_openid_connect_platform::Column::ClientId.eq(existing.id)).exec(txn).await?;
+                        ClientScopeEntity::delete_many().filter(client_scope::Column::ClientId.eq(existing.id)).exec(txn).await?;
+                        client_openid_connect_cors_origin::Entity::delete_many().filter(client_openid_connect_cors_origin::Column::ClientId.eq(existing.id)).exec(txn).await?;
+                        client_openid_connect_credential::Entity::delete_many().filter(client_openid_connect_credential::Column::ClientId.eq(existing.id)).exec(txn).await?;
+                        Some(existing)
+                    } else { None };
                     let client_model = client::ActiveModel {
+                        id: existing.as_ref().map(|model| Set(model.id)).unwrap_or_default(),
                         oid: Set(registration.client.oid),
                         protocol: Set(registration.client.protocol.to_string()),
                         name: Set(registration.client.name),
@@ -282,11 +313,14 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         description: Set(registration.client.description),
                         built_in: Set(registration.client.built_in),
                         created_at: Set(registration.client.created_at.into()),
-                        updated_at: Set(None),
+                        updated_at: Set(registration.client.updated_at.map(Into::into)),
                         ..Default::default()
-                    }
-                    .insert(txn)
-                    .await?;
+                    };
+                    let client_model = if existing.is_some() {
+                        client_model.update(txn).await?
+                    } else {
+                        client_model.insert(txn).await?
+                    };
 
                     let metadata = registration.metadata;
                     let settings = serde_json::to_value(metadata.settings)
@@ -428,6 +462,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                         .await?;
                     }
 
+                    if update_auth.is_none() {
                     let registration_access_token = registration.registration_access_token;
                     client_authorization::ActiveModel {
                         oid: Set(Uuid::new_v4()),
@@ -445,17 +480,45 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
                     .insert(txn)
                     .await?;
 
+                    }
                     Ok(())
                 })
             })
             .await
             .map_err(|error| {
+                if error.to_string().contains("registration_invalid_token") {
+                    return OpenIdConnectClientRepositoryError::ClientNotFound;
+                }
+                if error.to_string().contains("registration_invalid_secret") {
+                    return OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "client_secret", value: String::new() };
+                }
                 OpenIdConnectClientRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Custom(
                     error.to_string(),
                 )))
             })?;
 
         Ok(client_oid)
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepositoryImpl {
+    async fn create(
+        &self,
+        registration: OpenIdConnectClientRegistration,
+    ) -> Result<identity_domain::client::model::ClientOid, OpenIdConnectClientRepositoryError> {
+        self.persist_registration(registration, None).await
+    }
+
+    async fn update(
+        &self,
+        registration: OpenIdConnectClientRegistration,
+        token: &str,
+        current_secret: Option<String>,
+    ) -> Result<(), OpenIdConnectClientRepositoryError> {
+        self.persist_registration(registration, Some((token.to_owned(), current_secret)))
+            .await
+            .map(|_| ())
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_registration_access_token"))]
@@ -887,5 +950,165 @@ mod tests {
                 _
             )
         ));
+    }
+}
+#[cfg(test)]
+mod registration_update_tests {
+    use super::*;
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+
+    fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
+        OpenIdConnectClientRegistration {
+            client: Client {
+                oid,
+                protocol: identity_domain::client::model::ClientProtocol::OpenIdConnect,
+                name: "Updated".into(),
+                names: vec![],
+                description: None,
+                built_in: false,
+                created_at: Utc::now(),
+                updated_at: Some(Utc::now()),
+            },
+            metadata: OpenIdConnectClientMetadata::default(),
+            platforms: vec![],
+            assigned_scopes: vec![],
+            credentials: vec![],
+            registration_access_token: "rat".into(),
+        }
+    }
+
+    fn client_row(oid: Uuid) -> client::Model {
+        client::Model {
+            id: 1,
+            oid,
+            protocol: "openid_connect".into(),
+            name: "Old".into(),
+            names: None,
+            description: None,
+            built_in: false,
+            created_at: Utc::now().into(),
+            updated_at: None,
+        }
+    }
+
+    fn metadata_row() -> client_openid_connect::Model {
+        use serde_json::json;
+        client_openid_connect::Model {
+            id: 1,
+            client_id: 2,
+            post_logout_redirect_uris: None,
+            frontchannel_logout_uri: Some("https://rp.example.com/frontchannel_logout".to_owned()),
+            frontchannel_logout_session_required: Some(true),
+            backchannel_logout_uri: Some("https://rp.example.com/backchannel_logout".to_owned()),
+            backchannel_logout_session_required: Some(true),
+            response_types: None,
+            grant_types: None,
+            contacts: None,
+            logo_uri: None,
+            client_uri: None,
+            policy_uri: None,
+            tos_uri: None,
+            sector_identifier_uri: None,
+            subject_type: None,
+            id_token_signed_response_algs: Some(json!(["RS256", "ES256"])),
+            id_token_encrypted_response_algs: None,
+            id_token_encrypted_response_encs: None,
+            userinfo_signed_response_algs: None,
+            userinfo_encrypted_response_algs: None,
+            userinfo_encrypted_response_encs: None,
+            request_object_signing_algs: None,
+            request_object_encryption_algs: None,
+            request_object_encryption_encs: None,
+            token_endpoint_auth_methods: Some(json!(["client_secret_basic", "none"])),
+            token_endpoint_auth_signing_algs: None,
+            default_max_age: None,
+            require_auth_time: None,
+            default_acr_values: None,
+            initiate_login_uri: None,
+            request_uris: None,
+            settings: json!({}),
+            created_at: Utc::now().into(),
+            updated_at: None,
+        }
+    }
+
+    fn auth_row() -> client_authorization::Model {
+        client_authorization::Model {
+            id: 1,
+            oid: Uuid::new_v4(),
+            client_id: 1,
+            r#type: "registration_access_token".into(),
+            data: serde_json::json!({"token":"rat"}),
+            expires_at: (Utc::now() + Duration::days(1)).into(),
+            completed_at: None,
+            revoked_at: None,
+            is_expired: false,
+            created_at: Utc::now().into(),
+            updated_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn update_rechecks_token_and_secret_before_mutation() {
+        let oid = Uuid::new_v4();
+        for (token, secret) in [("wrong", None), ("rat", Some("chosen-secret".to_owned()))] {
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([vec![client_row(oid)]])
+                .append_query_results([vec![auth_row()]])
+                .append_query_results([Vec::<client_openid_connect_credential::Model>::new()])
+                .into_connection();
+            let repo = OpenIdConnectClientRepositoryImpl::new(db.clone());
+            let error = repo
+                .update(registration(oid), token, secret)
+                .await
+                .unwrap_err();
+            if token == "wrong" {
+                assert!(matches!(
+                    error,
+                    OpenIdConnectClientRepositoryError::ClientNotFound
+                ));
+            } else {
+                assert!(matches!(
+                    error,
+                    OpenIdConnectClientRepositoryError::InvalidMetadataValue {
+                        field: "client_secret",
+                        ..
+                    }
+                ));
+            }
+            let log = format!("{:?}", db.into_transaction_log());
+            assert!(log.contains("FOR UPDATE"), "{log}");
+            assert!(log.contains("ROLLBACK"), "{log}");
+            assert!(!log.contains("DELETE"), "{log}");
+        }
+    }
+
+    #[tokio::test]
+    async fn update_replaces_metadata_in_one_transaction_without_deleting_grants() {
+        let oid = Uuid::new_v4();
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![client_row(oid)]])
+            .append_query_results([vec![auth_row()]])
+            .append_query_results([vec![client_row(oid)]])
+            .append_query_results([vec![metadata_row()]])
+            .append_exec_results((0..5).map(|_| MockExecResult {
+                last_insert_id: 1,
+                rows_affected: 1,
+            }))
+            .into_connection();
+        let repo = OpenIdConnectClientRepositoryImpl::new(db.clone());
+        repo.update(registration(oid), "rat", None).await.unwrap();
+        let log = format!("{:?}", db.into_transaction_log());
+        assert!(log.contains("COMMIT"), "{log}");
+        assert!(log.contains(r#"UPDATE \"client\""#), "{log}");
+        assert!(!log.contains(r#"DELETE FROM \"client\""#), "{log}");
+        assert!(
+            !log.contains(r#"DELETE FROM \"client_authorization\""#),
+            "{log}"
+        );
+        assert!(
+            !log.contains(r#"INSERT INTO \"client_authorization\""#),
+            "{log}"
+        );
     }
 }

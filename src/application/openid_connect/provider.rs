@@ -303,6 +303,26 @@ impl OpenIdProviderService {
             authorization_endpoint: endpoint_url(&issuer, "/oauth2/authorize")?,
             token_endpoint: Some(endpoint_url(&issuer, "/oauth2/token")?),
             revocation_endpoint: endpoint_url(&issuer, "/oauth2/revoke")?,
+            introspection_endpoint: endpoint_url(&issuer, "/oauth2/introspect")?,
+            introspection_endpoint_auth_methods_supported: to_string_values(
+                &self.capabilities.token_endpoint_auth_methods_supported,
+            )
+            .into_iter()
+            .filter(|method| method != "none")
+            .collect(),
+            introspection_endpoint_auth_signing_alg_values_supported: to_string_values(
+                &self
+                    .capabilities
+                    .token_endpoint_auth_signing_alg_values_supported,
+            ),
+            revocation_endpoint_auth_methods_supported: to_string_values(
+                &self.capabilities.token_endpoint_auth_methods_supported,
+            ),
+            revocation_endpoint_auth_signing_alg_values_supported: to_string_values(
+                &self
+                    .capabilities
+                    .token_endpoint_auth_signing_alg_values_supported,
+            ),
             userinfo_endpoint: Some(endpoint_url(&issuer, "/oauth2/userinfo")?),
             device_authorization_endpoint: Some(endpoint_url(&issuer, "/oauth2/device")?),
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,

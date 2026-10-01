@@ -90,6 +90,11 @@ pub struct OpenIdProviderMetadata {
     pub token_endpoint: Option<Url>,
     /// RFC 7009 token revocation endpoint.
     pub revocation_endpoint: Url,
+    pub introspection_endpoint: Url,
+    pub introspection_endpoint_auth_methods_supported: Vec<String>,
+    pub introspection_endpoint_auth_signing_alg_values_supported: Vec<String>,
+    pub revocation_endpoint_auth_methods_supported: Vec<String>,
+    pub revocation_endpoint_auth_signing_alg_values_supported: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub userinfo_endpoint: Option<Url>,
     /// RFC 8628 §4: endpoint clients post device authorization requests to.
@@ -179,6 +184,12 @@ mod tests {
                 .unwrap(),
             token_endpoint: Some(Url::parse("https://identity.example.com/connect/token").unwrap()),
             revocation_endpoint: Url::parse("https://identity.example.com/oauth2/revoke").unwrap(),
+            introspection_endpoint: Url::parse("https://identity.example.com/oauth2/introspect")
+                .unwrap(),
+            introspection_endpoint_auth_methods_supported: vec!["client_secret_basic".into()],
+            introspection_endpoint_auth_signing_alg_values_supported: vec![],
+            revocation_endpoint_auth_methods_supported: vec![],
+            revocation_endpoint_auth_signing_alg_values_supported: vec![],
             userinfo_endpoint: Some(
                 Url::parse("https://identity.example.com/connect/userinfo").unwrap(),
             ),
@@ -268,6 +279,12 @@ mod tests {
                 .unwrap(),
             token_endpoint: Some(Url::parse("https://identity.example.com/connect/token").unwrap()),
             revocation_endpoint: Url::parse("https://identity.example.com/oauth2/revoke").unwrap(),
+            introspection_endpoint: Url::parse("https://identity.example.com/oauth2/introspect")
+                .unwrap(),
+            introspection_endpoint_auth_methods_supported: vec!["client_secret_basic".into()],
+            introspection_endpoint_auth_signing_alg_values_supported: vec![],
+            revocation_endpoint_auth_methods_supported: vec![],
+            revocation_endpoint_auth_signing_alg_values_supported: vec![],
             userinfo_endpoint: None,
             device_authorization_endpoint: None,
             jwks_uri: Url::parse("https://identity.example.com/.well-known/keys").unwrap(),
