@@ -17,6 +17,8 @@ pub struct Model {
     pub name: String,
     pub display_name: String,
     pub description: String,
+    #[sea_orm(default_expr = "Expr::cust(\"'{}'::jsonb\")")]
+    pub descriptions: Json,
     #[sea_orm(default_value = false)]
     pub built_in: bool,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]

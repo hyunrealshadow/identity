@@ -1,6 +1,7 @@
 import type enUS from './en-US'
 
 const zhCN = {
+  tryAgain: '重试',
   homeTitle: 'Identity 交互应用',
   homeDescription: '登录和 OAuth 授权页面由协议服务携带加密的 login_id 跳转进入，不能从首页直接开始。',
   accountWelcome: '管理你的 Identity 账号',
@@ -235,12 +236,6 @@ const zhCN = {
   enhancedNavigationError: '增强导航暂时不可用。你可以刷新页面，或禁用 JavaScript 后继续提交。',
   temporaryError: '请求暂时无法完成，请稍后重试。',
   close: '关闭',
-  scope_openid: '验证你的身份。',
-  scope_profile: '查看你的基本个人资料。',
-  scope_email: '查看你的邮箱地址。',
-  scope_address: '查看你的邮寄地址。',
-  scope_phone: '查看你的电话号码。',
-  scope_offline_access: '在你未使用应用时保持访问权限。',
 } satisfies Record<keyof typeof enUS, string>
 
 export default zhCN

@@ -9,6 +9,7 @@ pub mod login_runtime;
 pub mod oauth_resource;
 pub mod openid_connect;
 pub mod openid_connect_credential;
+pub mod scope_catalog;
 pub mod session;
 pub mod setting;
 pub mod shared;

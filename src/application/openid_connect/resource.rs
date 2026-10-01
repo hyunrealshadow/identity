@@ -1,7 +1,7 @@
 use crate::error::{AppError, codes::common::CommonErrorCode};
 use crate::openid_connect::provider::OpenIdProviderService;
 use identity_domain::openid_connect::resource::{OAuthResource, valid_resource_uri};
-use identity_domain::openid_connect::{API_RESOURCE, ScopeSet};
+use identity_domain::openid_connect::{API_RESOURCE, ResourceScopeCoverage, ScopeSet};
 
 pub struct ResourceSelection {
     pub resources: Vec<String>,
@@ -15,6 +15,17 @@ impl OpenIdProviderService {
         requested: &[String],
         granted: &[String],
         scope: &str,
+    ) -> Result<ResourceSelection, AppError> {
+        self.resolve_resources(requested, granted, scope, ResourceScopeCoverage::All)
+            .await
+    }
+
+    async fn resolve_resources(
+        &self,
+        requested: &[String],
+        granted: &[String],
+        scope: &str,
+        coverage: ResourceScopeCoverage,
     ) -> Result<ResourceSelection, AppError> {
         let default_resources = if requested.is_empty()
             && granted.is_empty()
@@ -71,26 +82,11 @@ impl OpenIdProviderService {
         }
         let scopes = ScopeSet::parse(scope)
             .map_err(|_| AppError::from_code(CommonErrorCode::InvalidTarget))?;
-        let mut candidates = scopes.names();
-        for set in &allowed {
-            candidates.extend(set.names());
-        }
-        let selected = candidates
-            .into_iter()
-            .filter(|name| {
-                let candidate = ScopeSet::parse(name).expect("supported scope name");
-                scopes.covers(&candidate)
-                    && (matches!(*name, "openid" | "offline_access")
-                        || allowed.iter().any(|set| set.covers(&candidate)))
-            })
-            .collect::<Vec<_>>();
-        let is_resource_scope = |name: &&str| !matches!(*name, "openid" | "offline_access");
-        if scopes.names().iter().any(is_resource_scope) && !selected.iter().any(is_resource_scope) {
+        let selected = scopes.for_resources(&allowed, coverage);
+        if scopes.has_resource_permissions() && !selected.has_resource_permissions() {
             return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
         }
-        let scope = ScopeSet::parse(&selected.join(" "))
-            .map_err(|_| AppError::from_code(CommonErrorCode::InvalidTarget))?
-            .to_scope_string();
+        let scope = selected.to_scope_string();
         Ok(ResourceSelection { resources, scope })
     }
 
@@ -103,7 +99,9 @@ impl OpenIdProviderService {
             return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
         }
         let original = scope.to_scope_string();
-        let selection = self.select_resources(requested, &[], &original).await?;
+        let selection = self
+            .resolve_resources(requested, &[], &original, ResourceScopeCoverage::Any)
+            .await?;
         if selection.scope != original {
             return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
         }

@@ -343,20 +343,20 @@ impl TokenService {
         // this deployment and therefore require the refresh_token grant, which
         // is a local policy on top of RFC 8628.
         let refresh_token_oid = Uuid::new_v4();
-        let refresh_token = if scope.offline_access && client.allows_grant(GrantType::RefreshToken)
-        {
-            Some(
-                self.data_protector
-                    .protect("refresh-token", refresh_token_oid.as_bytes())
-                    .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::SignRefreshTokenFailed)
-                            .with_source(error)
-                    })?,
-            )
-        } else {
-            None
-        };
+        let refresh_token =
+            if scope.contains_offline_access() && client.allows_grant(GrantType::RefreshToken) {
+                Some(
+                    self.data_protector
+                        .protect("refresh-token", refresh_token_oid.as_bytes())
+                        .await
+                        .map_err(|error| {
+                            AppError::from_code(TokenErrorCode::SignRefreshTokenFailed)
+                                .with_source(error)
+                        })?,
+                )
+            } else {
+                None
+            };
 
         let mut records = vec![PreparedAuthorizationRecord {
             oid: access_token_oid,

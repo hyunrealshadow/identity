@@ -63,8 +63,3 @@ export function translate(
     values,
   ) as string
 }
-
-export function scopeDescription(locale: Locale, name: string, fallback: string) {
-  const key = `scope_${name}` as MessageKey
-  return key in messages[locale] ? translate(locale, key) : fallback
-}

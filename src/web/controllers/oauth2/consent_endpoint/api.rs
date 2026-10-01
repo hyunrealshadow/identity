@@ -87,7 +87,14 @@ pub(super) async fn consent_api(
                 .client_uri
                 .as_ref()
                 .map(url::Url::to_string),
-            scopes: build_scope_display(&loaded.scope, &previously_granted),
+            scopes: build_scope_display(
+                &loaded.scope,
+                &previously_granted,
+                &ctx.services()
+                    .oidc_authorize()
+                    .scope_descriptions(&loaded.scope)
+                    .await?,
+            ),
             csrf_token: csrf_token(depot),
             ui_locales: loaded.stored.request.ui_locales.clone(),
         },

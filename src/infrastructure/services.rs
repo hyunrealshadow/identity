@@ -164,6 +164,9 @@ impl AppServices {
             data_protector: data_protector.clone(),
             http_client: request_uri_http_client.clone(),
         })
+        .with_scope_catalog(Arc::new(
+            crate::database::repository::scope_catalog::ScopeCatalogRepositoryImpl::new(db.clone()),
+        ))
         .with_events(Arc::clone(&events));
         Ok(Self {
             login: LoginService::new(

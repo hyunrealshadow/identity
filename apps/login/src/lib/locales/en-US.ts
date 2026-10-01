@@ -1,4 +1,5 @@
 const enUS = {
+  tryAgain: 'Try again',
   homeTitle: 'Identity interaction app',
   homeDescription: 'Login and OAuth authorization pages are opened by the protocol service with an encrypted login_id. They cannot be started from this page.',
   accountWelcome: 'Manage your Identity account',
@@ -233,12 +234,6 @@ const enUS = {
   enhancedNavigationError: 'Enhanced navigation is temporarily unavailable. Refresh the page, or submit again with JavaScript disabled.',
   temporaryError: 'The request cannot be completed right now. Try again later.',
   close: 'Close',
-  scope_openid: 'Verify your identity.',
-  scope_profile: 'View your basic profile information.',
-  scope_email: 'View your email address.',
-  scope_address: 'View your postal address.',
-  scope_phone: 'View your phone number.',
-  scope_offline_access: 'Maintain access when you are not using the application.',
 } as const
 
 export default enUS

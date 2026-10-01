@@ -82,6 +82,8 @@ export interface ChallengeResponse {
 
 export interface ScopeDisplay {
   name: string
+  display_name?: string
+  descriptions?: Record<string, string>
   description: string
   essential: boolean
   previously_granted?: boolean

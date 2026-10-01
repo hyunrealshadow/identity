@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 
 import { ScopeConsentStatus } from '#/components/scope-consent-status'
-import { scopeDescription, translate, type Locale } from '#/lib/i18n'
+import { translate, type Locale } from '#/lib/i18n'
 import type { ScopeDisplay } from '#/lib/identity-types'
 
 export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[]; locale: Locale }) {
@@ -19,13 +19,13 @@ export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[];
           <li key={scope.name}>
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <p className="min-w-0 break-all text-sm font-medium">
-                {scope.name}
+                {scope.display_name || scope.name}
                 {scope.essential ? <span className="sr-only"> ({translate(locale, 'required')})</span> : null}
               </p>
               <ScopeConsentStatus granted={scope.previously_granted} locale={locale} />
             </div>
             <p className="mt-1 text-xs leading-5 text-muted">
-              {scopeDescription(locale, scope.name, scope.description)}
+              {scope.descriptions?.[locale] || scope.description}
             </p>
           </li>
         ))}

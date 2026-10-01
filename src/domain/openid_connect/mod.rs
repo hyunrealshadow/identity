@@ -2,6 +2,7 @@ pub mod model;
 pub mod par;
 pub mod repository;
 pub mod resource;
+pub mod scope_catalog;
 pub mod workload;
 
 pub use model::authorization_request::{
@@ -23,7 +24,7 @@ pub use model::oauth_error::{OAuthErrorCode, OAuthErrorResponse};
 pub use model::provider::{
     ClaimType, OpenIdProviderMetadata, SubjectType, TokenEndpointAuthMethod,
 };
-pub use model::scope::{API_RESOURCE, ApiScope, ScopeParseError, ScopeSet};
+pub use model::scope::{API_RESOURCE, ApiScope, ResourceScopeCoverage, ScopeParseError, ScopeSet};
 pub use repository::{
     OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
     OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,

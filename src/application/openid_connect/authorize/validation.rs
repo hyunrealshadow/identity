@@ -153,10 +153,7 @@ impl AuthorizeService {
 
         let redirect_uri_was_supplied = !params.redirect_uri.trim().is_empty();
         if !redirect_uri_was_supplied
-            && !params
-                .scope
-                .split_whitespace()
-                .any(|scope| scope == "openid")
+            && !ScopeSet::parse(&params.scope).is_ok_and(|scope| scope.contains_openid())
         {
             if let Some(only_uri) = client.single_redirect_uri() {
                 params.redirect_uri = only_uri.to_owned();

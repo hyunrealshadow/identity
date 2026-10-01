@@ -35,6 +35,11 @@ impl OAuthResourceRepository for Resources {
                 scopes: vec!["account.read".to_owned()],
                 enabled: true,
             }),
+            "urn:shared" => Some(OAuthResource {
+                uri: uri.to_owned(),
+                scopes: vec!["profile".to_owned(), "email".to_owned()],
+                enabled: true,
+            }),
             identity_domain::openid_connect::API_RESOURCE => Some(OAuthResource {
                 uri: uri.to_owned(),
                 scopes: vec!["account".to_owned()],
@@ -101,6 +106,35 @@ async fn resource_validation_rejects_invalid_targets_and_deduplicates_exact_uris
         10006
     );
     let scope = identity_domain::openid_connect::ScopeSet::parse("profile email").unwrap();
+    assert!(
+        provider
+            .validate_authorization_resources(&[PROFILE.to_owned(), EMAIL.to_owned()], &scope)
+            .await
+            .is_ok()
+    );
+    assert_eq!(
+        provider
+            .select_resources(
+                &[PROFILE.to_owned(), EMAIL.to_owned()],
+                &[],
+                "openid profile email offline_access"
+            )
+            .await
+            .err()
+            .unwrap()
+            .code(),
+        10006
+    );
+    let shared = provider
+        .select_resources(
+            &[PROFILE.to_owned(), "urn:shared".to_owned()],
+            &[],
+            "openid profile email offline_access",
+        )
+        .await
+        .unwrap();
+    assert_eq!(shared.resources, [PROFILE, "urn:shared"]);
+    assert_eq!(shared.scope, "openid profile offline_access");
     assert_eq!(
         provider
             .validate_authorization_resources(&[PROFILE.to_owned()], &scope)
@@ -129,7 +163,11 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
-                resources: vec![PROFILE.to_owned(), EMAIL.to_owned()],
+                resources: vec![
+                    PROFILE.to_owned(),
+                    EMAIL.to_owned(),
+                    "urn:shared".to_owned(),
+                ],
                 scope: "openid profile email offline_access".to_owned(),
                 nonce: None,
                 code_challenge: None,
@@ -175,12 +213,12 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
             .revoked_at
             .is_none()
     );
-    params.resources = vec![PROFILE.to_owned()];
+    params.resources = vec![PROFILE.to_owned(), "urn:shared".to_owned()];
     let initial = service.exchange_authorization_code(params).await.unwrap();
     assert_eq!(initial.scope, "openid profile offline_access");
     let verifier = RS256.verifier_from_pem(public.as_bytes()).unwrap();
     let (access, _) = jwt::decode_with_verifier(&initial.access_token, &verifier).unwrap();
-    assert_eq!(access.audience().unwrap(), [PROFILE]);
+    assert_eq!(access.audience().unwrap(), [PROFILE, "urn:shared"]);
     let (id, _) = jwt::decode_with_verifier(initial.id_token.as_ref().unwrap(), &verifier).unwrap();
     assert_eq!(id.audience().unwrap(), [Uuid::nil().to_string().as_str()]);
     let refresh_token = initial.refresh_token.unwrap();
@@ -189,7 +227,7 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
     let ClientAuthorizationData::RefreshToken(data) = stored.data else {
         panic!("refresh data")
     };
-    assert_eq!(data.resources, [PROFILE, EMAIL]);
+    assert_eq!(data.resources, [PROFILE, EMAIL, "urn:shared"]);
     assert_eq!(data.scope, "openid profile email offline_access");
     let mut refresh = RefreshTokenGrantParams {
         resources: vec!["urn:account".to_owned()],
@@ -228,7 +266,7 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
     let ClientAuthorizationData::RefreshToken(next) = next.data else {
         panic!("refresh data")
     };
-    assert_eq!(next.resources, [PROFILE, EMAIL]);
+    assert_eq!(next.resources, [PROFILE, EMAIL, "urn:shared"]);
     assert_eq!(next.scope, "openid profile email offline_access");
     let multiple = service
         .exchange_refresh_token(RefreshTokenGrantParams {
@@ -242,8 +280,14 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
             client_assertion: None,
         })
         .await
-        .unwrap();
-    let (access, _) = jwt::decode_with_verifier(&multiple.access_token, &verifier).unwrap();
-    assert_eq!(access.audience().unwrap(), [PROFILE, EMAIL]);
-    assert_eq!(multiple.scope, "openid profile email offline_access");
+        .unwrap_err();
+    assert_eq!(multiple.code(), 10006);
+    assert!(
+        repo.find_by_oid(next_oid)
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_at
+            .is_none()
+    );
 }
