@@ -1,5 +1,7 @@
 """Conformance test plan configurations."""
 
+from copy import deepcopy
+
 DISCOVERY_URL = "https://identity:5150/.well-known/openid-configuration"
 
 PLANS = {
@@ -161,11 +163,16 @@ PLANS = {
 }
 
 
-def get_plan(profile: str) -> dict:
+def get_plan(profile: str, identity_url: str | None = None) -> dict:
     if profile not in PLANS:
         msg = f"Unknown profile: {profile}"
         raise ValueError(msg)
-    return PLANS[profile]
+    plan = deepcopy(PLANS[profile])
+    if identity_url:
+        plan["server"]["discoveryUrl"] = (
+            identity_url.rstrip("/") + "/.well-known/openid-configuration"
+        )
+    return plan
 
 
 __all__ = ["PLANS", "get_plan", "DISCOVERY_URL"]
