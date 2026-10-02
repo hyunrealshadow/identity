@@ -202,7 +202,9 @@ pub(in crate::controllers::oauth2) fn authorize_oauth_error_code(
         code if code == AuthorizeErrorCode::ResponseTypeInvalid.code() => {
             OAuthErrorCode::UnsupportedResponseType
         }
-        code if code == AuthorizeErrorCode::ScopeInvalid.code()
+        code if code
+            == identity_application::error::codes::common::CommonErrorCode::InvalidScope.code()
+            || code == AuthorizeErrorCode::ScopeInvalid.code()
             || code == AuthorizeErrorCode::OpenidScopeRequired.code()
             || code == AuthorizeErrorCode::ScopeNotAssignedToClient.code() =>
         {

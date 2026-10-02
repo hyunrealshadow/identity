@@ -4,4 +4,5 @@ mod device_code;
 mod grant_permissions;
 mod refresh_token;
 
+mod custom_scopes;
 mod resources;

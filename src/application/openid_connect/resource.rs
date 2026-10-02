@@ -27,6 +27,12 @@ impl OpenIdProviderService {
         scope: &str,
         coverage: ResourceScopeCoverage,
     ) -> Result<ResourceSelection, AppError> {
+        self.validate_scope_names(scope).await?;
+        let parsed_scope = ScopeSet::parse(scope)
+            .map_err(|_| AppError::from_code(CommonErrorCode::InvalidScope))?;
+        if requested.is_empty() && granted.is_empty() && parsed_scope.has_custom_scopes() {
+            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+        }
         let default_resources = if requested.is_empty()
             && granted.is_empty()
             && ScopeSet::parse(scope).is_ok_and(|scope| scope.has_api_scopes())
@@ -67,11 +73,15 @@ impl OpenIdProviderService {
                 })?
             } else {
                 // Standalone providers retain the built-in resource; production injects the DB store.
-                (uri == API_RESOURCE).then(|| OAuthResource {
-                    uri: uri.clone(),
-                    scopes: self.capabilities.scopes_supported.clone(),
-                    enabled: true,
-                })
+                if uri == API_RESOURCE {
+                    Some(OAuthResource {
+                        uri: uri.clone(),
+                        scopes: self.supported_scopes().await?,
+                        enabled: true,
+                    })
+                } else {
+                    None
+                }
             }
             .filter(|resource| resource.enabled)
             .ok_or_else(|| AppError::from_code(CommonErrorCode::InvalidTarget))?;
@@ -95,7 +105,7 @@ impl OpenIdProviderService {
         requested: &[String],
         scope: &ScopeSet,
     ) -> Result<Vec<String>, AppError> {
-        if requested.is_empty() && scope.has_api_scopes() {
+        if requested.is_empty() && (scope.has_api_scopes() || scope.has_custom_scopes()) {
             return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
         }
         let original = scope.to_scope_string();

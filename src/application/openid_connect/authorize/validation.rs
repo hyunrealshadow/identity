@@ -179,6 +179,9 @@ impl AuthorizeService {
             None => None,
         };
 
+        self.provider_service
+            .validate_scope_names(&params.scope)
+            .await?;
         let scope = ScopeSet::parse(&params.scope).map_err(|error| {
             AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
         })?;

@@ -45,6 +45,9 @@ struct DeviceAuthorizationErrorResponse {
 /// `unauthorized_client` instead.
 fn device_error_code(error: &AppError) -> &'static str {
     let code = error.code();
+    if code == identity_application::error::codes::common::CommonErrorCode::InvalidScope.code() {
+        return "invalid_scope";
+    }
     if code == identity_application::error::codes::common::CommonErrorCode::InvalidTarget.code() {
         return "invalid_target";
     }

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use crate::error::{code::AppErrorCode, codes::common::CommonErrorCode};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use rand::RngExt;
@@ -183,6 +184,17 @@ impl DeviceAuthorizationService {
             );
 
         self.check_client_grant(&client)?;
+        self.provider_service
+            .validate_scope_names(params.scope.as_deref().unwrap_or("openid"))
+            .await
+            .map_err(|error| {
+                if error.code() == CommonErrorCode::InvalidScope.code() {
+                    AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid)
+                        .with_source(error)
+                } else {
+                    error
+                }
+            })?;
         let scope = self.resolve_scope(&client, params.scope.as_deref())?;
         let resources = if params.resources.is_empty() {
             let selection = self

@@ -13,6 +13,7 @@ pub struct ScopeCatalogError(pub String);
 
 #[async_trait::async_trait]
 pub trait ScopeCatalogRepository: Send + Sync {
+    async fn list_names(&self) -> Result<Vec<String>, ScopeCatalogError>;
     async fn find_by_names(
         &self,
         names: &[&str],

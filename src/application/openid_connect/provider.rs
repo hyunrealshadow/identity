@@ -220,6 +220,8 @@ pub struct OpenIdProviderService {
     pub(super) capabilities: OpenIdProviderCapabilities,
     pub(super) resource_repo:
         Option<Arc<dyn crate::domain::openid_connect::resource::OAuthResourceRepository>>,
+    scope_catalog:
+        Option<Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>>,
     key_repo: Option<Arc<dyn KeyRepository>>,
     key_jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
@@ -251,6 +253,7 @@ impl OpenIdProviderService {
             settings,
             capabilities: OpenIdProviderCapabilities::default(),
             resource_repo: None,
+            scope_catalog: None,
             key_repo: None,
             key_jwk_repo: None,
             signing_algorithm_detector: None,
@@ -265,6 +268,7 @@ impl OpenIdProviderService {
             settings,
             capabilities,
             resource_repo: None,
+            scope_catalog: None,
             key_repo: None,
             key_jwk_repo: None,
             signing_algorithm_detector: None,
@@ -277,6 +281,41 @@ impl OpenIdProviderService {
     ) -> Self {
         self.resource_repo = Some(repo);
         self
+    }
+
+    pub fn with_scope_catalog(
+        mut self,
+        repo: Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>,
+    ) -> Self {
+        self.scope_catalog = Some(repo);
+        self
+    }
+
+    pub async fn supported_scopes(&self) -> Result<Vec<String>, AppError> {
+        match &self.scope_catalog {
+            Some(repo) => repo.list_names().await.map_err(|error| {
+                AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
+                    .with_source(error)
+            }),
+            None => Ok(self.capabilities.scopes_supported.clone()),
+        }
+    }
+
+    pub async fn validate_scope_names(&self, scope: &str) -> Result<(), AppError> {
+        use crate::error::codes::common::CommonErrorCode;
+        // Validate every requested name before domain normalization of built-in scopes.
+        crate::domain::openid_connect::ScopeSet::parse(scope).map_err(|error| {
+            AppError::from_code(CommonErrorCode::InvalidScope).with_source(error)
+        })?;
+        let supported = self.supported_scopes().await?;
+        if scope
+            .split(' ')
+            .filter(|name| !name.is_empty())
+            .any(|name| !supported.iter().any(|item| item == name))
+        {
+            return Err(AppError::from_code(CommonErrorCode::InvalidScope));
+        }
+        Ok(())
     }
 
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
@@ -363,7 +402,7 @@ impl OpenIdProviderService {
             device_authorization_endpoint: Some(endpoint_url(&issuer, "/oauth2/device")?),
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,
             registration_endpoint: self.registration_endpoint(&issuer)?,
-            scopes_supported: non_empty(self.capabilities.scopes_supported.clone()),
+            scopes_supported: non_empty(self.supported_scopes().await?),
             response_types_supported: to_string_values(&self.capabilities.response_types_supported),
             response_modes_supported: non_empty(to_string_values(
                 &self.capabilities.response_modes_supported,
@@ -1404,6 +1443,51 @@ mod tests {
             assert!(algos.contains(&"RS512".parse().unwrap()));
             assert!(algos.contains(&"PS256".parse().unwrap()));
             assert!(algos.contains(&"ES256".parse().unwrap()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod scope_catalog_tests {
+    use super::*;
+    use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
+    use crate::setting::SettingsSnapshot;
+
+    #[tokio::test]
+    async fn discovery_and_validation_use_catalog_instead_of_static_capabilities() {
+        let settings = SettingsSnapshot::default().with_section(&AppSettings {
+            domain: Some("https://identity.example.com".to_owned()),
+            ..Default::default()
+        });
+        let settings = settings.with_section(&InstallationSettings {
+            initialized: true,
+            initialized_at: None,
+        });
+        let provider = OpenIdProviderService::new(Arc::new(settings)).with_scope_catalog(Arc::new(
+            TestScopeCatalog(vec!["openid".into(), "orders.read".into()]),
+        ));
+        assert_eq!(
+            provider
+                .discovery_metadata()
+                .await
+                .unwrap()
+                .scopes_supported
+                .unwrap(),
+            ["openid", "orders.read"]
+        );
+        provider
+            .validate_scope_names("openid orders.read orders.read")
+            .await
+            .unwrap();
+        for scope in ["profile", "orders", "orders.write", "orders\tread"] {
+            assert_eq!(
+                provider
+                    .validate_scope_names(scope)
+                    .await
+                    .unwrap_err()
+                    .code(),
+                10009
+            );
         }
     }
 }

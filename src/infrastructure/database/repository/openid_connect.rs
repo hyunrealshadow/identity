@@ -417,9 +417,13 @@ impl OpenIdConnectClientRepositoryImpl {
                     if !registration.assigned_scopes.is_empty() {
                         let scope_models = ScopeEntity::find()
                             .filter(scope::Column::Protocol.eq("openid_connect"))
-                            .filter(scope::Column::Name.is_in(registration.assigned_scopes))
+                            .filter(scope::Column::Name.is_in(registration.assigned_scopes.iter().cloned()))
                             .all(txn)
                             .await?;
+                        let expected = registration.assigned_scopes.iter().collect::<std::collections::BTreeSet<_>>().len();
+                        if scope_models.len() != expected {
+                            return Err(sea_orm::DbErr::Custom("registration_invalid_scope".into()));
+                        }
                         for scope_model in scope_models {
                             client_scope::ActiveModel {
                                 client_id: Set(client_model.id),
@@ -488,6 +492,9 @@ impl OpenIdConnectClientRepositoryImpl {
             .map_err(|error| {
                 if error.to_string().contains("registration_invalid_token") {
                     return OpenIdConnectClientRepositoryError::ClientNotFound;
+                }
+                if error.to_string().contains("registration_invalid_scope") {
+                    return OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "scope", value: String::new() };
                 }
                 if error.to_string().contains("registration_invalid_secret") {
                     return OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "client_secret", value: String::new() };

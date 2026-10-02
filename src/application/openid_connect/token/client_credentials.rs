@@ -48,6 +48,7 @@ impl TokenService {
         }
 
         let scope = params.scope.unwrap_or_default();
+        self.provider_service.validate_scope_names(&scope).await?;
         let requested = ScopeSet::parse(&scope)
             .map_err(|_| AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed))?;
         let assigned = ScopeSet::parse(&client.assigned_scopes().join(" "))
