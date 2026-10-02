@@ -19,6 +19,8 @@ Environment variables:
 """
 
 import argparse
+from dataclasses import asdict
+import json
 import os
 import signal
 import subprocess
@@ -185,9 +187,18 @@ def main():
         help="Identity server URL",
     )
     parser.add_argument(
+        "--discovery-origin",
+        default=os.environ.get("IDENTITY_URL"),
+        help="Identity origin reachable by the suite; defaults to its Docker origin locally",
+    )
+    parser.add_argument(
         "--login-url",
         default=os.environ.get("LOGIN_URL", "https://localhost:3443"),
         help="Login application URL",
+    )
+    parser.add_argument(
+        "--results-dir",
+        help="Save machine-readable results and official suite logs in this directory",
     )
     parser.add_argument(
         "--exit-on-failure",
@@ -243,7 +254,7 @@ def main():
         plan_id = args.plan_id
     else:
         print(f"Creating {args.profile} test plan...")
-        plan_config = get_plan(args.profile)
+        plan_config = get_plan(args.profile, args.discovery_origin)
         plan_id = client.create_plan_from_dict(
             plan_config,
             plan_name=plan_name,
@@ -252,8 +263,26 @@ def main():
         print(f"Plan ID: {plan_id}")
 
     print("\nRunning tests...")
+    expected_tests = len(client.get_modules(plan_id))
     results = runner.run_all_tests(plan_id)
     runner.print_summary(results)
+
+    if args.results_dir:
+        os.makedirs(args.results_dir, exist_ok=True)
+        report = {
+            "plan_id": plan_id,
+            "profile": args.profile,
+            "plan_name": plan_name,
+            "identity_url": args.identity_url,
+            "summary": runner.summarize_results(results),
+            "results": [asdict(result) for result in results],
+            "plan": client.get_plan(plan_id),
+        }
+        with open(os.path.join(args.results_dir, "results.json"), "w") as output:
+            json.dump(report, output, indent=2)
+        for result in results:
+            with open(os.path.join(args.results_dir, result.run_id + ".json"), "w") as output:
+                json.dump(client.get_test_logs(result.run_id), output, indent=2)
 
     if not args.no_docker:
         stop_docker_stack(compose_file)
@@ -262,9 +291,10 @@ def main():
         failures = [
             r
             for r in results
-            if r.result not in ("PASSED", "WARNING", "SKIPPED", "REVIEW")
+            if r.status != "FINISHED"
+            or r.result not in ("PASSED", "WARNING", "SKIPPED", "REVIEW")
         ]
-        if failures:
+        if failures or len(results) != expected_tests or not results:
             return 1
 
     return 0

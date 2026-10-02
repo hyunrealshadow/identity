@@ -1,0 +1,140 @@
+name: OIDC conformance through Cloudflare Tunnel
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Official OP certification profile
+        type: choice
+        default: basic
+        options:
+          - basic
+          - implicit
+          - hybrid
+          - config
+          - formpost-basic
+          - formpost-implicit
+          - formpost-hybrid
+          - third-party-init
+          - rp-init-logout
+          - session
+          - backchannel
+      suite_ref:
+        description: Official openid/conformance-suite branch, tag, or full commit SHA
+        type: string
+        default: master
+
+permissions:
+  contents: read
+
+# A named tunnel must have only one test environment connected at a time.
+concurrency:
+  group: oidc-conformance-tunnel
+  cancel-in-progress: false
+
+jobs:
+  conformance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      IDENTITY_URL: ${{ vars.CONFORMANCE_IDENTITY_URL }}
+      LOGIN_URL: ${{ vars.CONFORMANCE_LOGIN_URL }}
+      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+      COMPOSE_FILE: conformance/docker-compose.yml:conformance/docker-compose.ci.yml
+      COMPOSE_PROJECT_NAME: oidc-conformance
+      PROFILE: ${{ inputs.profile }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate tunnel settings
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          for name in ('IDENTITY_URL', 'LOGIN_URL'):
+              value = os.environ[name]
+              url = urlsplit(value)
+              if (url.scheme != 'https' or not url.hostname or url.username or url.password
+                      or url.port not in (None, 443) or url.path or url.query or url.fragment):
+                  raise SystemExit(f'{name} must be an HTTPS origin without a trailing slash')
+          if os.environ['IDENTITY_URL'] == os.environ['LOGIN_URL']:
+              raise SystemExit('Configure separate identity and login hostnames')
+          if not os.environ['CLOUDFLARE_TUNNEL_TOKEN']:
+              raise SystemExit('Set the CLOUDFLARE_TUNNEL_TOKEN repository secret')
+          PY
+
+      - name: Resolve official suite revision
+        env:
+          REQUESTED_REF: ${{ inputs.suite_ref }}
+        run: |
+          git init "$RUNNER_TEMP/official-suite"
+          git -C "$RUNNER_TEMP/official-suite" remote add origin https://gitlab.com/openid/conformance-suite.git
+          git -C "$RUNNER_TEMP/official-suite" fetch --depth 1 origin "$REQUESTED_REF"
+          revision=$(git -C "$RUNNER_TEMP/official-suite" rev-parse FETCH_HEAD)
+          echo "SUITE_REF=$revision" >> "$GITHUB_ENV"
+          mkdir -p conformance/results
+          echo "$revision" > conformance/results/suite-revision.txt
+          echo "Official suite revision: \`$revision\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: conformance/uv.lock
+
+      - name: Install browser test dependencies
+        working-directory: conformance
+        run: |
+          uv sync --locked
+          uv run playwright install --with-deps chromium
+          echo '127.0.0.1 localhost.emobix.co.uk' | sudo tee -a /etc/hosts
+
+      - name: Build and start isolated environment
+        run: |
+          docker compose build
+          docker compose up -d --wait --wait-timeout 240
+
+      - name: Check public endpoints through Cloudflare
+        working-directory: conformance
+        run: uv run python ci_ready.py
+
+      - name: Run official OpenID Foundation test plan
+        working-directory: conformance
+        run: |
+          set -o pipefail
+          uv run python run.py --no-docker --profile "$PROFILE" \
+            --identity-url "$IDENTITY_URL" --discovery-origin "$IDENTITY_URL" --login-url "$LOGIN_URL" \
+            --timeout 120 --exit-on-failure --results-dir results \
+            2>&1 | tee results/runner.log
+
+      - name: Collect service logs and summary
+        if: always()
+        run: |
+          mkdir -p conformance/results
+          docker compose logs --no-color > conformance/results/services.log 2>&1 || true
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = Path('conformance/results/results.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('\nIssuer tested: ' + os.environ['IDENTITY_URL'] + '\n\n')
+              if report.exists():
+                  result = json.loads(report.read_text())
+                  summary.write('Plan: `' + result['plan_id'] + '`\n\n')
+                  for status, count in result['summary'].items():
+                      summary.write(f'- {status}: {count}\n')
+              else:
+                  summary.write('No complete report; inspect the service and runner logs.\n')
+          PY
+
+      - name: Close tunnel and remove test database
+        if: always()
+        run: docker compose down --volumes --remove-orphans --timeout 20
+
+      - name: Upload conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: oidc-conformance-${{ inputs.profile }}-${{ github.run_id }}
+          path: conformance/results/
+          retention-days: 14

@@ -3,7 +3,12 @@ FROM maven:3.9.9-eclipse-temurin-21 AS builder
 
 WORKDIR /build
 
-RUN git clone https://gitlab.com/openid/conformance-suite.git . --depth 1
+ARG SUITE_REF=master
+RUN git init . \
+    && git remote add origin https://gitlab.com/openid/conformance-suite.git \
+    && git fetch --depth 1 origin "$SUITE_REF" \
+    && git checkout --detach FETCH_HEAD \
+    && git rev-parse HEAD > /build/suite-revision.txt
 
 RUN mvn clean package -DskipTests
 
@@ -13,6 +18,7 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 COPY --from=builder /build/target/*.jar /app/fapi-test-suite.jar
+COPY --from=builder /build/suite-revision.txt /app/suite-revision.txt
 
 EXPOSE 8080
 

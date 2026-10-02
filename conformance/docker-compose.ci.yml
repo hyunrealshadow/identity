@@ -1,0 +1,33 @@
+# Overlay for a dedicated, remotely managed Cloudflare Zero Trust Tunnel.
+# Public hostnames and origin services are configured in the Cloudflare dashboard.
+services:
+  identity:
+    environment:
+      HOST: ${IDENTITY_URL:?Set the public HTTPS identity origin}
+      LOGIN_URL: ${LOGIN_URL:?Set the public HTTPS login origin}/login
+      CONSENT_URL: ${LOGIN_URL}/consent
+  login:
+    command: ["pnpm", "--filter", "login", "start"]
+    environment:
+      IDENTITY_PUBLIC_APP_URL: ${LOGIN_URL}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login',{headers:{'x-forwarded-proto':'https'}}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"]
+  server:
+    build:
+      args:
+        SUITE_REF: ${SUITE_REF:?Set the official suite commit}
+    # The Dockerfile already supplies java -jar through ENTRYPOINT.
+    command:
+      - --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
+      - --fintechlabs.devmode=true
+      - --fintechlabs.startredir=true
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set the dedicated tunnel token}
+    depends_on:
+      identity:
+        condition: service_healthy
+      login:
+        condition: service_healthy

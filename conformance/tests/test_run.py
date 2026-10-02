@@ -1,11 +1,13 @@
 import os
 import sys
 import unittest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import run
 from plans import get_plan
+from scripts.runner import TestResult
 DEFAULT_VARIANT = {
     "server_metadata": "discovery",
     "client_registration": "static_client",
@@ -133,6 +135,17 @@ class ProfileConfigurationTests(unittest.TestCase):
 
 
 class PlanFileTests(unittest.TestCase):
+    def test_public_discovery_origin_does_not_change_default_plan(self):
+        plan = get_plan("basic", "https://issuer.example.com/")
+        self.assertEqual(
+            plan["server"]["discoveryUrl"],
+            "https://issuer.example.com/.well-known/openid-configuration",
+        )
+        plan["client"]["client_id"] = "changed"
+        original = get_plan("basic")
+        self.assertEqual(original["server"]["discoveryUrl"], "https://identity:5150/.well-known/openid-configuration")
+        self.assertEqual(original["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+
     def test_formpost_implicit_plan_exists_with_expected_defaults(self):
         plan = get_plan("formpost-implicit")
 
@@ -208,6 +221,43 @@ class PlanFileTests(unittest.TestCase):
             plan["client"]["client_secret"],
             "conformance-basic-secret-at-least-32-bytes",
         )
+
+
+class ExitStatusTests(unittest.TestCase):
+    def run_plan(self, results, module_count):
+        client = MagicMock()
+        client.create_plan_from_dict.return_value = "plan-1"
+        client.get_modules.return_value = [MagicMock() for _ in range(module_count)]
+        runner = MagicMock()
+        runner.run_all_tests.return_value = results
+        with (
+            patch.object(sys, "argv", [
+                "run.py", "--no-docker", "--exit-on-failure",
+                "--identity-url", "https://issuer.example.com",
+                "--discovery-origin", "https://issuer.example.com",
+            ]),
+            patch.object(run, "ConformanceClient", return_value=client),
+            patch.object(run, "BrowserAuthHandler"),
+            patch.object(run, "TestRunner", return_value=runner),
+        ):
+            result = run.main()
+        self.assertEqual(
+            client.create_plan_from_dict.call_args.args[0]["server"]["discoveryUrl"],
+            "https://issuer.example.com/.well-known/openid-configuration",
+        )
+        return result
+
+    def test_empty_plan_fails(self):
+        self.assertEqual(self.run_plan([], 0), 1)
+
+    def test_incomplete_plan_fails(self):
+        self.assertEqual(self.run_plan([TestResult("one", "FINISHED", "PASSED", "1")], 2), 1)
+
+    def test_unfinished_test_cannot_pass_with_review_result(self):
+        self.assertEqual(self.run_plan([TestResult("one", "WAITING", "REVIEW", "1")], 1), 1)
+
+    def test_completed_plan_passes(self):
+        self.assertEqual(self.run_plan([TestResult("one", "FINISHED", "PASSED", "1")], 1), 0)
 
 
 if __name__ == "__main__":
