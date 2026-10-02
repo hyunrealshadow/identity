@@ -47,6 +47,8 @@ use validation::{
 pub struct DynamicClientRegistrationService {
     settings: Arc<dyn SettingsSource>,
     repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
+    scope_catalog:
+        Option<Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>>,
     events: Arc<dyn crate::observability::EventSink>,
 }
 
@@ -59,6 +61,7 @@ impl DynamicClientRegistrationService {
         Self {
             settings,
             repo,
+            scope_catalog: None,
             events: Arc::new(crate::observability::NoopEventSink),
         }
     }
@@ -67,6 +70,14 @@ impl DynamicClientRegistrationService {
     #[must_use]
     pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
         self.events = events;
+        self
+    }
+
+    pub fn with_scope_catalog(
+        mut self,
+        repo: Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>,
+    ) -> Self {
+        self.scope_catalog = Some(repo);
         self
     }
 
@@ -95,6 +106,11 @@ impl DynamicClientRegistrationService {
     ) -> Result<DynamicClientRegistrationResponse, AppError> {
         let (registration, mut response) = self.prepare_registration(request, issuer).await?;
         let client_id = self.repo.create(registration).await.map_err(|error| {
+            if matches!(&error, crate::domain::openid_connect::OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "scope", .. }) {
+                return AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "scope")
+                    .with_source(error);
+            }
             AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
         })?;
         response.client_id = client_id.to_string();
@@ -349,6 +365,32 @@ impl DynamicClientRegistrationService {
             .map(|_| (Utc::now() + Duration::days(365)).timestamp());
         let registration_access_token = generate_registration_access_token();
         let assigned_scopes = split_scope(request.scope.as_deref());
+        let raw_scope = assigned_scopes.join(" ");
+        crate::domain::openid_connect::ScopeSet::parse(
+            request.scope.as_deref().unwrap_or(&raw_scope),
+        )
+        .map_err(|error| {
+            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                .with_param("field", "scope")
+                .with_source(error)
+        })?;
+        let mut seen = std::collections::BTreeSet::new();
+        let assigned_scopes = assigned_scopes
+            .into_iter()
+            .filter(|name| seen.insert(name.clone()))
+            .collect::<Vec<_>>();
+        if let Some(catalog) = &self.scope_catalog {
+            let names = catalog.list_names().await.map_err(|error| {
+                AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
+                    .with_source(error)
+            })?;
+            if assigned_scopes.iter().any(|scope| !names.contains(scope)) {
+                return Err(
+                    AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                        .with_param("field", "scope"),
+                );
+            }
+        }
         let client_name = request
             .client_name
             .clone()

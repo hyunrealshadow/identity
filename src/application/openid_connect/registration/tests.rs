@@ -20,6 +20,35 @@ use crate::{
 
 struct TestRegistrationSetting(bool);
 
+#[tokio::test]
+async fn registration_validates_catalog_and_preserves_custom_scope_assignments() {
+    use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let repo = Arc::new(capturing_registration_repo(
+        captured.clone(),
+        Arc::new(std::sync::Mutex::new(Vec::new())),
+    ));
+    let service =
+        DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo)
+            .with_scope_catalog(Arc::new(TestScopeCatalog(vec![
+                "openid".into(),
+                "orders.read".into(),
+            ])));
+    for scope in ["openid missing", "openid orders\tread"] {
+        let request = serde_json::from_value(serde_json::json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": scope})).unwrap();
+        let error = service.register(request, &issuer()).await.unwrap_err();
+        assert_eq!(error.code(), 25009);
+        assert!(captured.lock().unwrap().is_none());
+    }
+    let request = serde_json::from_value(serde_json::json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": "openid orders.read orders.read"})).unwrap();
+    let response = service.register(request, &issuer()).await.unwrap();
+    assert_eq!(response.scope.as_deref(), Some("openid orders.read"));
+    assert_eq!(
+        captured.lock().unwrap().as_ref().unwrap().assigned_scopes,
+        ["openid", "orders.read"]
+    );
+}
+
 impl crate::setting::SettingsSource for TestRegistrationSetting {
     fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
         Arc::new(crate::setting::SettingsSnapshot::default().with_section(

@@ -110,12 +110,20 @@ impl AuthorizeService {
             .scope_catalog
             .as_ref()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::LoadRequestFailed))?;
-        repository
+        let descriptions = repository
             .find_by_names(&scope.names())
             .await
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })
+            })?;
+        if scope
+            .names()
+            .iter()
+            .any(|name| !descriptions.iter().any(|item| item.name == *name))
+        {
+            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+        }
+        Ok(descriptions)
     }
 
     /// Attach the key event and audit sink.

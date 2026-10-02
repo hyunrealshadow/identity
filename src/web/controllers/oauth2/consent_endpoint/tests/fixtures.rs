@@ -380,6 +380,7 @@ async fn consent_test_state_for(
         BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]);
     let scope_descriptions = scope
         .split_whitespace()
+        .filter(|name| *name != "unknown_scope")
         .enumerate()
         .map(
             |(index, name)| crate::infrastructure::database::entity::scope::Model {

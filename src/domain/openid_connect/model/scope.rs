@@ -65,6 +65,7 @@ pub struct ScopeSet {
     pub phone: bool,
     pub offline_access: bool,
     api: BTreeSet<ApiScope>,
+    custom: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,7 +81,7 @@ impl ScopeParseError {
 
 impl fmt::Display for ScopeParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown scope: {}", self.scope_name)
+        write!(f, "invalid scope token: {}", self.scope_name)
     }
 }
 
@@ -90,7 +91,16 @@ impl ScopeSet {
     pub fn parse(scope_str: &str) -> Result<Self, ScopeParseError> {
         let mut set = Self::default();
 
-        for scope in scope_str.split_whitespace() {
+        for scope in scope_str.split(' ').filter(|scope| !scope.is_empty()) {
+            // RFC 6749 scope-token: printable ASCII except quote and backslash.
+            if !scope
+                .bytes()
+                .all(|byte| matches!(byte, 0x21 | 0x23..=0x5b | 0x5d..=0x7e))
+            {
+                return Err(ScopeParseError {
+                    scope_name: scope.to_owned(),
+                });
+            }
             match scope {
                 StandardScopes::OPENID => set.openid = true,
                 StandardScopes::PROFILE => set.profile = true,
@@ -103,9 +113,7 @@ impl ScopeSet {
                         .insert(ApiScope::parse(other).expect("scope was checked"));
                 }
                 other => {
-                    return Err(ScopeParseError {
-                        scope_name: other.to_owned(),
-                    });
+                    set.custom.insert(other.to_owned());
                 }
             }
         }
@@ -134,11 +142,14 @@ impl ScopeSet {
         if self.offline_access {
             scopes.push(StandardScopes::OFFLINE_ACCESS);
         }
-        scopes.extend(self.api.iter().copied().map(ApiScope::name));
+        for scope in &self.api {
+            scopes.push(scope.name());
+        }
+        scopes.extend(self.custom.iter().map(String::as_str));
         scopes.join(" ")
     }
 
-    pub fn names(&self) -> Vec<&'static str> {
+    pub fn names(&self) -> Vec<&str> {
         let mut scopes = Vec::new();
         if self.openid {
             scopes.push(StandardScopes::OPENID);
@@ -158,7 +169,10 @@ impl ScopeSet {
         if self.offline_access {
             scopes.push(StandardScopes::OFFLINE_ACCESS);
         }
-        scopes.extend(self.api.iter().copied().map(ApiScope::name));
+        for scope in &self.api {
+            scopes.push(scope.name());
+        }
+        scopes.extend(self.custom.iter().map(String::as_str));
         scopes
     }
 
@@ -172,7 +186,12 @@ impl ScopeSet {
 
     /// Protocol controls are grant context, not resource-server permissions.
     pub fn has_resource_permissions(&self) -> bool {
-        self.profile || self.email || self.address || self.phone || self.has_api_scopes()
+        self.profile
+            || self.email
+            || self.address
+            || self.phone
+            || self.has_api_scopes()
+            || self.has_custom_scopes()
     }
 
     /// Restrict resource permissions while retaining the grant's protocol controls.
@@ -213,6 +232,7 @@ impl ScopeSet {
             && (!requested.phone || self.phone)
             && (!requested.offline_access || self.offline_access)
             && requested.api.iter().all(|scope| self.allows(*scope))
+            && requested.custom.is_subset(&self.custom)
     }
 
     #[must_use]
@@ -239,6 +259,10 @@ impl ScopeSet {
     #[must_use]
     pub fn has_api_scopes(&self) -> bool {
         !self.api.is_empty()
+    }
+
+    pub fn has_custom_scopes(&self) -> bool {
+        !self.custom.is_empty()
     }
 
     fn normalize_api_scopes(&mut self) {
@@ -318,9 +342,23 @@ mod tests {
     }
 
     #[test]
-    fn reject_unknown_scope() {
-        let err = ScopeSet::parse("openid custom_scope").unwrap_err();
-        assert_eq!(err.scope_name(), "custom_scope");
+    fn custom_scopes_round_trip_and_use_exact_matching() {
+        let scope = ScopeSet::parse("openid orders.read orders.read orders").unwrap();
+        assert_eq!(scope.to_scope_string(), "openid orders orders.read");
+        assert!(scope.covers(&ScopeSet::parse("orders.read").unwrap()));
+        assert!(
+            !ScopeSet::parse("orders")
+                .unwrap()
+                .covers(&ScopeSet::parse("orders.read").unwrap())
+        );
+        let selected = scope.for_resources(
+            &[ScopeSet::parse("orders.read").unwrap()],
+            ResourceScopeCoverage::All,
+        );
+        assert_eq!(selected.to_scope_string(), "openid orders.read");
+        for invalid in ["orders\tread", "orders\\read", "orders\"read", "订单"] {
+            assert!(ScopeSet::parse(invalid).is_err());
+        }
     }
 
     #[test]
@@ -342,6 +380,7 @@ mod tests {
             phone: false,
             offline_access: true,
             api: BTreeSet::new(),
+            custom: BTreeSet::new(),
         };
         assert_eq!(scope.to_scope_string(), "openid profile offline_access");
     }
@@ -365,6 +404,7 @@ mod tests {
             phone: true,
             offline_access: true,
             api: BTreeSet::new(),
+            custom: BTreeSet::new(),
         };
 
         assert_eq!(

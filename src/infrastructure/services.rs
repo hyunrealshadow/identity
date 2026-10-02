@@ -132,6 +132,9 @@ impl AppServices {
             settings.key_ring(),
             Arc::new(XChaCha20DataProtectionCipher),
         ));
+        let scope_catalog = Arc::new(
+            crate::database::repository::scope_catalog::ScopeCatalogRepositoryImpl::new(db.clone()),
+        );
         let oidc_client_repo = Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
         let oidc_client_registration_repo: Arc<dyn OpenIdConnectClientRegistrationRepository> =
             Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
@@ -158,6 +161,7 @@ impl AppServices {
             key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
             provider_service: Arc::new(
                 OpenIdProviderService::new(settings.store())
+                    .with_scope_catalog(scope_catalog.clone())
                     .with_resource_repo(oauth_resource_repo.clone()),
             ),
             signing_algorithm_detector: signing_algorithm_detector.clone(),
@@ -213,6 +217,7 @@ impl AppServices {
                 client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
             },
             oidc: OpenIdProviderService::new(settings.store())
+                .with_scope_catalog(scope_catalog.clone())
                 .with_resource_repo(oauth_resource_repo.clone())
                 .with_key_repo(key_repo.clone())
                 .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
@@ -225,6 +230,7 @@ impl AppServices {
                         credential_repo: oidc_credential_repo.clone(),
                         provider_service: Arc::new(
                             OpenIdProviderService::new(settings.store())
+                                .with_scope_catalog(scope_catalog.clone())
                                 .with_resource_repo(oauth_resource_repo.clone()),
                         ),
                     })),
@@ -232,6 +238,7 @@ impl AppServices {
                     client_authorization_repo,
                     Arc::new(
                         OpenIdProviderService::new(settings.store())
+                            .with_scope_catalog(scope_catalog.clone())
                             .with_resource_repo(oauth_resource_repo.clone()),
                     ),
                 ),
@@ -247,6 +254,7 @@ impl AppServices {
                 credential_repo: oidc_credential_repo.clone(),
                 provider_service: Arc::new(
                     OpenIdProviderService::new(settings.store())
+                        .with_scope_catalog(scope_catalog.clone())
                         .with_resource_repo(oauth_resource_repo.clone()),
                 ),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
@@ -259,6 +267,7 @@ impl AppServices {
                 client_repo: oidc_client_repo.clone(),
                 provider_service: Arc::new(
                     OpenIdProviderService::new(settings.store())
+                        .with_scope_catalog(scope_catalog.clone())
                         .with_resource_repo(oauth_resource_repo.clone()),
                 ),
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
@@ -284,6 +293,7 @@ impl AppServices {
                 ),
                 Arc::new(
                     OpenIdProviderService::new(settings.store())
+                        .with_scope_catalog(scope_catalog.clone())
                         .with_resource_repo(oauth_resource_repo.clone()),
                 ),
             )
@@ -292,6 +302,7 @@ impl AppServices {
                 settings.store(),
                 oidc_client_registration_repo.clone(),
             )
+            .with_scope_catalog(scope_catalog.clone())
             .with_events(Arc::clone(&events)),
             device_authorization: DeviceAuthorizationService::new(
                 DeviceAuthorizationServiceDependencies {
@@ -301,6 +312,7 @@ impl AppServices {
                             credential_repo: oidc_credential_repo.clone(),
                             provider_service: Arc::new(
                                 OpenIdProviderService::new(settings.store())
+                                    .with_scope_catalog(scope_catalog.clone())
                                     .with_resource_repo(oauth_resource_repo.clone()),
                             ),
                         },
@@ -309,6 +321,7 @@ impl AppServices {
                     device_repo: Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())),
                     provider_service: Arc::new(
                         OpenIdProviderService::new(settings.store())
+                            .with_scope_catalog(scope_catalog.clone())
                             .with_resource_repo(oauth_resource_repo.clone()),
                     ),
                     settings: settings.store(),

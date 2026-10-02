@@ -46,6 +46,11 @@ struct TokenErrorResponse {
 
 pub(super) fn app_error_to_rfc6749(error: &AppError) -> &'static str {
     match error.code() {
+        code if code
+            == identity_application::error::codes::common::CommonErrorCode::InvalidScope.code() =>
+        {
+            "invalid_scope"
+        }
         c if c
             == identity_application::error::codes::common::CommonErrorCode::InvalidTarget
                 .code() =>

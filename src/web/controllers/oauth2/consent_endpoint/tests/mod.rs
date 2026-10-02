@@ -67,6 +67,25 @@ async fn consent_get_rejects_invalid_stored_scope() {
 }
 
 #[tokio::test]
+async fn consent_get_displays_registered_custom_scope() {
+    let (state, protected_login_id, _) = consent_test_state_with_scope("openid orders.read").await;
+    let service = Service::new(app_router(state, &consent_test_config()));
+    let mut response = TestClient::get(format!(
+        "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
+    ))
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let payload: serde_json::Value =
+        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    assert_eq!(payload["scopes"][1]["name"], "orders.read");
+    assert_eq!(
+        payload["scopes"][1]["display_name"],
+        "Configured orders.read"
+    );
+}
+
+#[tokio::test]
 async fn consent_post_accepts_json_and_returns_continue_uri() {
     let (state, protected_login_id, _) = consent_test_state().await;
     let db = state.resources().db().clone();

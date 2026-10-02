@@ -10,6 +10,7 @@ pub enum CommonErrorCode {
     Forbidden,
     NotFound,
     InvalidTarget,
+    InvalidScope,
     ResourceLookupFailed,
     PushedRequestStorageFailed,
 }
@@ -24,6 +25,7 @@ impl AppErrorCode for CommonErrorCode {
             Self::Forbidden => ErrorKind::Forbidden,
             Self::NotFound => ErrorKind::NotFound,
             Self::InvalidTarget => ErrorKind::Validation,
+            Self::InvalidScope => ErrorKind::Validation,
             Self::ResourceLookupFailed => ErrorKind::Internal,
             Self::PushedRequestStorageFailed => ErrorKind::Internal,
         }
@@ -38,6 +40,7 @@ impl AppErrorCode for CommonErrorCode {
             Self::Forbidden => 10004,
             Self::NotFound => 10005,
             Self::InvalidTarget => 10006,
+            Self::InvalidScope => 10009,
             Self::ResourceLookupFailed => 10007,
             Self::PushedRequestStorageFailed => 10008,
         }

@@ -109,9 +109,16 @@ INSERT INTO resource (uri, name, scopes)
 VALUES ('https://api.example.com/account', 'Account API', '["account.read"]'::jsonb);
 ```
 
-Resource scopes currently use the supported scope catalog; this table does not
-add custom scope names or provide an administration API. Client scope assignments
-and consent still apply. The registry follows the resource/scope separation used
+The `scope` table is the supported scope catalog for each protocol. OpenID
+Connect discovery reads rows with `protocol = 'openid_connect'`; `client_scope`
+assigns the scopes a client may request. Custom scope names use OAuth scope-token
+syntax and exact matching, and survive consent, token issuance, and refresh.
+Add their definitions to `scope`, assign them through `client_scope`, and include
+their names in the appropriate resource's `scopes` array. Custom resource
+permissions require an explicit resource indicator and do not default to the
+built-in GraphQL API. Resource registration does not add scope definitions or
+provide an administration API. Client scope assignments and consent still apply.
+The registry follows the resource/scope separation used
 by [Duende IdentityServer](https://docs.duendesoftware.com/identityserver/fundamentals/resources/isolation/).
 
 Consent pages use the scope table's `display_name` and `description`. Its
