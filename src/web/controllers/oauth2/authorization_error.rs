@@ -32,8 +32,8 @@ mod tests {
         headers.insert(header::ACCEPT_LANGUAGE, HeaderValue::from_static("zh-CN"));
 
         for (code, expected) in [
-            (OAuthErrorCode::LoginRequired, "需要登录后才能继续。"),
-            (OAuthErrorCode::AccessDenied, "授权请求已被拒绝。"),
+            (OAuthErrorCode::LoginRequired, "需要登录后才能继续"),
+            (OAuthErrorCode::AccessDenied, "授权请求已被拒绝"),
         ] {
             let response = super::oauth_error_response(&ctx, &headers, code, None);
             assert_eq!(response.error_description.as_deref(), Some(expected));

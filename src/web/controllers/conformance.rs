@@ -8,6 +8,7 @@
 //!                                    conformance credentials
 //!   POST /conformance/auto-login  – authenticate and continue the authorize
 //!                                    redirect chain
+//!   GET/POST /conformance/auto-consent – automatically approve test consent
 
 use http::{HeaderMap, StatusCode, header};
 use salvo::{Depot, Request, Response, Router, handler};
@@ -51,6 +52,11 @@ pub fn routes() -> Router {
                 .post(auto_login),
         )
         .push(Router::with_path("conformance/rotate-keys").post(rotate_keys))
+        .push(
+            Router::with_path("conformance/auto-consent")
+                .get(auto_consent_page)
+                .post(auto_consent),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +71,53 @@ struct AutoLoginRequest {
     password: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct AutoConsentRequest {
+    login_id: String,
+}
+
+#[handler]
+async fn auto_consent_page(depot: &mut Depot, req: &mut Request) -> WebResult {
+    let ctx = app_state(depot)?;
+    let query: AutoLoginPageQuery = parse_query(req)?;
+    let nonce = generate_csp_nonce();
+    let data = FormPostPageData {
+        title: "Conformance automated consent".to_owned(),
+        message: "Approving the test authorization request automatically.".to_owned(),
+        action: "/conformance/auto-consent".to_owned(),
+        fields: vec![FormPostField {
+            name: "login_id".to_owned(),
+            value: query.login_id,
+        }],
+        nonce: nonce.clone(),
+    };
+    let body = web::tera::render_view(&ctx, req.headers(), "oauth2/form_post.html", data)?;
+    let mut response = Response::new();
+    render_html(&mut response, StatusCode::OK, body);
+    response.headers_mut().insert(
+        header::HeaderName::from_static("content-security-policy"),
+        inline_script_csp_header_value(&nonce),
+    );
+    Ok(response.into())
+}
+
+#[handler]
+async fn auto_consent(depot: &mut Depot, req: &mut Request) -> WebResult {
+    let ctx = app_state(depot)?;
+    let body: AutoConsentRequest = req
+        .parse_body()
+        .await
+        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
+    ctx.services()
+        .oidc_authorize()
+        .record_consent_by_login(
+            &body.login_id,
+            identity_domain::client_authorization::ConsentState::Approved,
+        )
+        .await?;
+    Ok(auto_login_success_response(&body.login_id).into())
+}
+
 #[derive(Debug, Serialize)]
 struct AutoLoginError {
     error: String,
@@ -72,7 +125,7 @@ struct AutoLoginError {
 
 fn auto_login_form_data(login_id: &str, nonce: &str) -> FormPostPageData {
     FormPostPageData {
-        title: "Completing sign-in".to_owned(),
+        title: "Conformance automated login".to_owned(),
         message: "Continuing the conformance browser flow.".to_owned(),
         action: "/conformance/auto-login".to_owned(),
         fields: vec![
@@ -310,6 +363,29 @@ mod tests {
         Service,
         test::{ResponseExt, TestClient},
     };
+
+    #[tokio::test]
+    async fn auto_consent_page_posts_to_the_op_with_a_nonce() {
+        let app = super::routes().hoop(salvo::affix_state::inject(
+            identity_infrastructure::test_app_state_with_mock_settings().await,
+        ));
+        let mut response =
+            TestClient::get("http://127.0.0.1:5800/conformance/auto-consent?login_id=login-123")
+                .send(&Service::new(app))
+                .await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        assert!(response.headers().contains_key("content-security-policy"));
+        let body = response.take_string().await.unwrap();
+        assert!(
+            body.contains("action=\"&#x2F;conformance&#x2F;auto-consent\""),
+            "{body}"
+        );
+        assert!(
+            body.contains("name=\"login_id\" value=\"login-123\""),
+            "{body}"
+        );
+        assert!(body.contains("submit()"), "{body}");
+    }
 
     #[tokio::test]
     async fn auto_login_page_renders_auto_submit_form() {

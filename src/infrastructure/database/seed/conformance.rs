@@ -27,12 +27,12 @@ use crate::{
     },
 };
 use identity_application::setting::{
-    DynamicRegistrationSettings, LoginDomainSetting, OpenIdConnectSettings, SettingChanges,
+    DynamicRegistrationSettings, OpenIdConnectSettings, SettingChanges,
 };
 use identity_domain::openid_connect::OpenIdConnectCredentialData;
 
 use crate::infrastructure::database::repository::openid_connect_credential::serialize_data as serialize_credential_data;
-use crate::infrastructure::database::repository::setting::{read_setting, write_settings};
+use crate::infrastructure::database::repository::setting::write_settings;
 
 use super::Seed;
 
@@ -121,8 +121,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
 
     let now = Utc::now();
 
-    let login_domain = read_setting::<LoginDomainSetting, _>(&txn).await?;
-    write_settings(&txn, conformance_settings(login_domain)?).await?;
+    write_settings(&txn, conformance_settings()?).await?;
 
     // ── Test user ──────────────────────────────────────────────────────────
 
@@ -210,32 +209,15 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The conformance suite registers clients dynamically and signs in through
-/// the login application, so both are configured on every start.
-///
-/// Only the login domain is changed; the other app settings keep their stored values.
-fn conformance_settings(current_login_domain: Option<String>) -> Result<SettingChanges, AppError> {
-    let login_url =
-        std::env::var("LOGIN_URL").unwrap_or_else(|_| "https://login:3443/login".to_owned());
-
-    // The login application owns the sign-in, consent and device verification
-    // pages, so only its origin is configured; the routes are fixed.
-    let login_domain = url::Url::parse(&login_url)
-        .ok()
-        .filter(|url| matches!(url.scheme(), "http" | "https"))
-        .map(|url| url.origin().ascii_serialization());
-
-    let login_domain = login_domain.or(current_login_domain);
-
-    Ok(SettingChanges::default()
-        .set_section_field(
-            &OpenIdConnectSettings {
-                dynamic_registration: DynamicRegistrationSettings { enabled: true },
-                ..OpenIdConnectSettings::default()
-            },
-            "dynamic_registration.enabled",
-        )?
-        .set::<LoginDomainSetting>(&login_domain)?)
+/// Enable dynamic registration; browser interactions use the OP's test routes.
+fn conformance_settings() -> Result<SettingChanges, AppError> {
+    Ok(SettingChanges::default().set_section_field(
+        &OpenIdConnectSettings {
+            dynamic_registration: DynamicRegistrationSettings { enabled: true },
+            ..OpenIdConnectSettings::default()
+        },
+        "dynamic_registration.enabled",
+    )?)
 }
 
 fn conformance_client_specs() -> &'static [ConformanceClientSpec] {

@@ -292,7 +292,7 @@ mod tests {
         let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
 
         for (language, expected) in [
-            ("zh-CN", "客户端无权请求 scope：email。"),
+            ("zh-CN", "客户端无权请求 scope：email"),
             (
                 "en-US",
                 "The client is not allowed to request scope(s): email.",

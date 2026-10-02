@@ -23,7 +23,7 @@ class BrowserAuthHandlerTests(unittest.TestCase):
         handler = BrowserAuthHandler("https://localhost:5150")
 
         self.assertIn(
-            "--host-resolver-rules=MAP identity 127.0.0.1,MAP login 127.0.0.1,MAP host.docker.internal 127.0.0.1",
+            "--host-resolver-rules=MAP identity 127.0.0.1,MAP host.docker.internal 127.0.0.1",
             handler._chromium_launch_args(),
         )
 
@@ -35,42 +35,10 @@ class BrowserAuthHandlerTests(unittest.TestCase):
             "https://identity:5150/oauth2/authorize",
         )
 
-    def test_complete_browser_login_uses_explicit_op_origin(self):
-        handler = BrowserAuthHandler("https://localhost:5150")
-        page = FakePage("http://login:3000/login?login_id=login-123")
-
-        self.assertTrue(
-            handler._complete_browser_login(
-                page, "login-123", "https://identity:5150"
-            )
-        )
-        self.assertEqual(
-            page.goto_calls,
-            [
-                (
-                    "https://identity:5150/conformance/auto-login?login_id=login-123",
-                    "load",
-                    30000,
-                ),
-            ],
-        )
-
-    def test_complete_browser_login_defaults_to_configured_identity_origin(self):
-        handler = BrowserAuthHandler("https://localhost:5150")
-        page = FakePage()
-
-        self.assertTrue(handler._complete_browser_login(page, "login-123"))
-        self.assertEqual(
-            page.goto_calls,
-            [
-                (
-                    "https://localhost:5150/conformance/auto-login?login_id=login-123",
-                    "load",
-                    30000,
-                )
-            ],
-        )
-        self.assertEqual(page.wait_calls, [("load", 30000)])
+    def test_auto_login_screenshots_are_not_uploaded_as_login_ui_evidence(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        handler.last_screenshot = "data:image/png;base64,diagnostic"
+        self.assertIsNone(handler.screenshot_for_upload(["https://issuer.example.com/conformance/auto-login"]))
 
     def test_submit_post_form_builds_browser_post_for_non_conformance_urls(self):
         handler = BrowserAuthHandler("https://localhost:5150")

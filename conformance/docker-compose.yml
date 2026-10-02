@@ -18,11 +18,8 @@ services:
       APP_ENV: conformance
       DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
       HOST: https://identity:5150
-      LOGIN_URL: https://localhost:3443/login
-      CONSENT_URL: https://localhost:3443/consent
       TLS_DOMAIN: identity
       PORT: "5150"
-      IDENTITY_WORKLOAD_TOKEN: dev-login-workload-token-0123456789abcdef
     ports:
       - "5150:5150"
     depends_on:
@@ -33,37 +30,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-  login:
-    build:
-      context: ..
-      dockerfile: conformance/login.Dockerfile
-    environment:
-      IDENTITY_API_URL: https://identity:5150
-      IDENTITY_INTERNAL_API_URL: https://identity:5151
-      IDENTITY_WORKLOAD_TOKEN: dev-login-workload-token-0123456789abcdef
-      IDENTITY_LOGIN_SESSION_SECRET: conformance-login-session-secret-0123456789
-      IDENTITY_PUBLIC_APP_URL: https://localhost:3443
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
-    depends_on:
-      identity:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('https://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
   mongodb:
     image: mongo:6.0.13
   server:
     build:
       context: ./server
-    command: >
-      java
-      -jar /app/fapi-test-suite.jar
-      -Djdk.tls.maxHandshakeMessageSize=65536
-      --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
-      --fintechlabs.devmode=true
-      --fintechlabs.startredir=true
+    command:
+      - --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
+      - --fintechlabs.devmode=true
+      - --fintechlabs.startredir=true
     links:
       - mongodb:mongodb
     depends_on:
@@ -79,7 +54,6 @@ services:
       context: ./nginx
     ports:
       - "8443:8443"
-      - "3443:3443"
     networks:
       default:
         aliases:
@@ -87,5 +61,3 @@ services:
     depends_on:
       server:
         condition: service_started
-      login:
-        condition: service_healthy
