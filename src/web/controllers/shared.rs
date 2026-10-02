@@ -500,12 +500,34 @@ const CONSENT_ROUTE: &str = "consent";
 
 /// Redirect to the external login application with the protected interaction ID.
 pub fn login_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
+    #[cfg(feature = "oidc-conformance")]
+    if ctx.context().is_conformance() {
+        return Ok(redirect_to_response(&conformance_interaction_url(
+            "auto-login",
+            login_id,
+        )));
+    }
     interaction_redirect(ctx, LOGIN_ROUTE, login_id)
 }
 
 /// Redirect to the external consent application with the protected interaction ID.
 pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
+    #[cfg(feature = "oidc-conformance")]
+    if ctx.context().is_conformance() {
+        return Ok(redirect_to_response(&conformance_interaction_url(
+            "auto-consent",
+            login_id,
+        )));
+    }
     interaction_redirect(ctx, CONSENT_ROUTE, login_id)
+}
+
+#[cfg(feature = "oidc-conformance")]
+fn conformance_interaction_url(route: &str, login_id: &str) -> String {
+    format!(
+        "/conformance/{route}?login_id={}",
+        urlencoding::encode(login_id)
+    )
 }
 
 fn interaction_redirect(
@@ -548,6 +570,47 @@ fn interaction_redirect(
 mod tests {
     use http::{HeaderMap, HeaderValue};
     use uuid::Uuid;
+
+    #[cfg(feature = "oidc-conformance")]
+    #[tokio::test]
+    async fn conformance_redirects_do_not_require_a_login_application() {
+        let ctx = identity_infrastructure::test_app_state_with_environment(
+            identity_infrastructure::config::AppEnvironment::Conformance,
+        )
+        .await;
+        assert_eq!(
+            super::login_redirect(&ctx, "a+b&c")
+                .unwrap()
+                .headers()
+                .get(http::header::LOCATION)
+                .unwrap(),
+            "/conformance/auto-login?login_id=a%2Bb%26c"
+        );
+        assert_eq!(
+            super::consent_redirect(&ctx, "login-123")
+                .unwrap()
+                .headers()
+                .get(http::header::LOCATION)
+                .unwrap(),
+            "/conformance/auto-consent?login_id=login-123"
+        );
+        let ordinary = identity_infrastructure::test_app_state_with_mock_settings().await;
+        assert!(super::login_redirect(&ordinary, "login-123").is_err());
+        assert!(super::consent_redirect(&ordinary, "login-123").is_err());
+    }
+
+    #[cfg(feature = "oidc-conformance")]
+    #[test]
+    fn conformance_interactions_stay_on_the_op_origin_and_encode_login_ids() {
+        assert_eq!(
+            super::conformance_interaction_url("auto-login", "a+b&c"),
+            "/conformance/auto-login?login_id=a%2Bb%26c"
+        );
+        assert_eq!(
+            super::conformance_interaction_url("auto-consent", "login-123"),
+            "/conformance/auto-consent?login_id=login-123"
+        );
+    }
 
     #[test]
     fn build_session_cookie_is_always_secure_and_cross_site() {

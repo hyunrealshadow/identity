@@ -133,7 +133,7 @@ async fn continue_with_denied_consent_returns_access_denied() {
     );
     assert_eq!(
         query_param(location(&response), "error_description").as_deref(),
-        Some("授权请求已被拒绝。")
+        Some("授权请求已被拒绝")
     );
 }
 

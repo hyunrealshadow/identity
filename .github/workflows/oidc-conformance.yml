@@ -38,7 +38,6 @@ jobs:
     timeout-minutes: 120
     env:
       IDENTITY_URL: ${{ vars.CONFORMANCE_IDENTITY_URL }}
-      LOGIN_URL: ${{ vars.CONFORMANCE_LOGIN_URL }}
       CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       COMPOSE_FILE: conformance/docker-compose.yml:conformance/docker-compose.ci.yml
       COMPOSE_PROJECT_NAME: oidc-conformance
@@ -52,14 +51,12 @@ jobs:
           python - <<'PY'
           import os
           from urllib.parse import urlsplit
-          for name in ('IDENTITY_URL', 'LOGIN_URL'):
+          for name in ('IDENTITY_URL',):
               value = os.environ[name]
               url = urlsplit(value)
               if (url.scheme != 'https' or not url.hostname or url.username or url.password
                       or url.port not in (None, 443) or url.path or url.query or url.fragment):
                   raise SystemExit(f'{name} must be an HTTPS origin without a trailing slash')
-          if os.environ['IDENTITY_URL'] == os.environ['LOGIN_URL']:
-              raise SystemExit('Configure separate identity and login hostnames')
           if not os.environ['CLOUDFLARE_TUNNEL_TOKEN']:
               raise SystemExit('Set the CLOUDFLARE_TUNNEL_TOKEN repository secret')
           PY
@@ -103,7 +100,7 @@ jobs:
         run: |
           set -o pipefail
           uv run python run.py --no-docker --profile "$PROFILE" \
-            --identity-url "$IDENTITY_URL" --discovery-origin "$IDENTITY_URL" --login-url "$LOGIN_URL" \
+            --identity-url "$IDENTITY_URL" --discovery-origin "$IDENTITY_URL" \
             --timeout 120 --exit-on-failure --results-dir results \
             2>&1 | tee results/runner.log
 

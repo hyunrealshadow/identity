@@ -35,6 +35,7 @@ STOP_PLAN_STATUSES = {
     "TIMEOUT",
     "WAITING_AFTER_SCREENSHOT",
     "WAITING_NO_PROGRESS",
+    "MANUAL_REVIEW_REQUIRED",
 }
 
 
@@ -50,6 +51,7 @@ class TestRunner:
         self.auto_login = auto_login
         self.timeout_per_test = timeout_per_test
         self.poll_interval = poll_interval
+        self.ui_review_required = False
 
     def _rotate_keys(self) -> bool:
         import urllib3
@@ -87,6 +89,7 @@ class TestRunner:
                     continue
                 screenshot = self.auto_login.screenshot_for_upload(urls, method)
                 if not screenshot:
+                    self.ui_review_required = True
                     continue
                 if self.client.upload_screenshot(run_id, upload_id, screenshot):
                     print(f"    Uploaded screenshot for {upload_id}")
@@ -116,6 +119,7 @@ class TestRunner:
                 break
 
         self.auto_login.reset_session()
+        self.ui_review_required = False
         if run_id is None:
             run_id = self.client.start_test(plan_id, test_name, variant)
 
@@ -178,6 +182,9 @@ class TestRunner:
 
                 if not has_new_urls:
                     uploaded = self._upload_screenshots(run_id, urls, url_method)
+                    if self.ui_review_required:
+                        print("    Genuine login UI evidence is required; automation cannot supply it")
+                        return TestResult(test_name, "MANUAL_REVIEW_REQUIRED", None, run_id)
                     if uploaded:
                         time.sleep(self.poll_interval)
                         info = self.client.get_test_info(run_id)
@@ -226,6 +233,9 @@ class TestRunner:
                     result = self.run_single_test(plan_id, m.test_module, m.variant)
                     print(f" - {result.status} {result.result or ''}")
                     results.append(result)
+                    if result.status in STOP_PLAN_STATUSES:
+                        print(f"Stopping plan after {result.status} to avoid alias conflicts.")
+                        break
                     continue
                 if not self._is_active_status(info.status):
                     print(f" - already ran: {info.status} {result}")
@@ -242,6 +252,9 @@ class TestRunner:
                 result = self.run_single_test(plan_id, m.test_module, m.variant)
                 print(f" - {result.status} {result.result or ''}")
                 results.append(result)
+                if result.status in STOP_PLAN_STATUSES:
+                    print(f"Stopping plan after {result.status} to avoid alias conflicts.")
+                    break
                 continue
 
             print(" ...", flush=True)
@@ -255,9 +268,11 @@ class TestRunner:
         return results
 
     def summarize_results(self, results: list[TestResult]) -> dict[str, int]:
-        summary = {"PASSED": 0, "WARNING": 0, "REVIEW": 0, "SKIPPED": 0, "FAILED": 0}
+        summary = {"PASSED": 0, "WARNING": 0, "REVIEW": 0, "SKIPPED": 0, "FAILED": 0, "MANUAL_REVIEW_REQUIRED": 0}
         for r in results:
-            if r.status == "FINISHED" and r.result in summary:
+            if r.status == "MANUAL_REVIEW_REQUIRED":
+                summary["MANUAL_REVIEW_REQUIRED"] += 1
+            elif r.status == "FINISHED" and r.result in summary:
                 summary[r.result] += 1
             else:
                 summary["FAILED"] += 1

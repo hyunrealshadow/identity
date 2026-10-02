@@ -31,6 +31,19 @@ pub async fn test_app_state_with_mock_settings() -> AppState {
 
 #[cfg(any(test, feature = "test-support"))]
 pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppState {
+    test_app_state_with_environment_and_cors_origin(config::AppEnvironment::Test, cors_origin).await
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub async fn test_app_state_with_environment(environment: config::AppEnvironment) -> AppState {
+    test_app_state_with_environment_and_cors_origin(environment, None).await
+}
+
+#[cfg(any(test, feature = "test-support"))]
+async fn test_app_state_with_environment_and_cors_origin(
+    environment: config::AppEnvironment,
+    cors_origin: Option<&str>,
+) -> AppState {
     use std::{collections::BTreeMap, sync::Arc};
 
     use chrono::Utc;
@@ -41,7 +54,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
     use sea_orm::{DatabaseBackend, MockDatabase, Value};
 
     use crate::{
-        config::{AppEnvironment, HealthChecksConfig},
+        config::HealthChecksConfig,
         database::entity::setting,
         services::AppServices,
         settings::AppRuntimeSettings,
@@ -143,10 +156,7 @@ pub async fn test_app_state_with_cors_origin(cors_origin: Option<&str>) -> AppSt
     );
 
     AppState::new(
-        Arc::new(AppContext::new(
-            AppEnvironment::Test,
-            HealthChecksConfig::default(),
-        )),
+        Arc::new(AppContext::new(environment, HealthChecksConfig::default())),
         Arc::new(AppResources::new(db, tera, i18n)),
         Arc::new(AppLifecycle::new()),
         settings,

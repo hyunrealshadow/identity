@@ -11,6 +11,11 @@ from scripts.runner import TestResult, TestRunner
 
 
 class TestRunnerSummaryTests(unittest.TestCase):
+    def test_manual_ui_review_is_separate_from_passed_results(self):
+        runner = TestRunner(None, None)
+        result = TestResult("prompt-login", "MANUAL_REVIEW_REQUIRED", None, "1")
+        self.assertEqual(runner.summarize_results([result])["MANUAL_REVIEW_REQUIRED"], 1)
+        self.assertEqual(runner.summarize_results([result])["PASSED"], 0)
     def test_non_terminal_result_is_counted_as_failed(self):
         runner = TestRunner(None, None)
         results = [
@@ -104,6 +109,26 @@ class FakeAutoLogin:
 
 
 class TestRunnerResumeTests(unittest.TestCase):
+    @patch("scripts.runner.time.sleep", return_value=None)
+    def test_missing_ui_evidence_stops_plan_without_uploading_a_callback(self, _sleep):
+        from scripts.browser_auth import BrowserAuthHandler
+
+        client = FakeClient(
+            modules=[
+                TestModule("prompt-login", {}, ["review-run"], ""),
+                TestModule("next-module", {}, [], ""),
+            ],
+            info_sequences={"review-run": [TestInfo("review-run", "WAITING", None)]},
+        )
+        client.pending_screenshots["review-run"] = [{"upload": "login-prompt"}]
+        runner = TestRunner(client, BrowserAuthHandler("https://issuer.example.com"), poll_interval=1)
+        results = runner.run_all_tests("plan-1")
+        self.assertEqual(len(results), 1)
+        result = results[0]
+        self.assertEqual(result.status, "MANUAL_REVIEW_REQUIRED")
+        self.assertIsNone(result.result)
+        self.assertEqual(client.uploads, [])
+
     @patch("scripts.runner.time.sleep", return_value=None)
     def test_run_all_tests_retries_interrupted_instance(self, _sleep):
         interrupted_run_id = "interrupted-run"
