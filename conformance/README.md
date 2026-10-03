@@ -64,6 +64,9 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SUITE_URL` | `https://localhost.emobix.co.uk:8443` | Conformance Suite URL |
+| `CONFORMANCE_API_TOKEN` | Unset | Account API token for the hosted suite; supplied through GitHub Secrets |
+| `CONFORMANCE_ALIAS` | Profile default | Unique alias shared by the plan and seeded callbacks |
+| `CONFORMANCE_SUITE_URL` | Local suite origin | Seeded callback/logout origin inside identity |
 | `IDENTITY_URL` | `https://localhost:5150` for browser, `https://identity:5150` for suite discovery | When set, supplies both origins; `--discovery-origin` overrides the suite origin independently |
 | `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `third-party-init`, `rp-init-logout`, `session`, or `backchannel`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
@@ -74,63 +77,61 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 
 ### GitHub Actions through Cloudflare Quick Tunnel
 
-The `OIDC conformance through Cloudflare Tunnel` workflow starts the isolated
-Compose stack on a GitHub-hosted runner and allocates a
-[Cloudflare Quick Tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
-Cloudflare supplies a temporary `https://<random>.trycloudflare.com` hostname;
-no personal domain, Cloudflare account, tunnel token, or repository URL variable
-is required. Existing `CLOUDFLARE_TUNNEL_TOKEN` and `CONFORMANCE_IDENTITY_URL`
-settings are no longer used by the workflow.
+The `OIDC conformance through Cloudflare Tunnel` workflow is manually triggered
+and connects to the **hosted** suite at https://www.certification.openid.net.
+It starts only PostgreSQL, identity and a Cloudflare Quick Tunnel on the runner;
+the suite itself and its database run on the official platform.
 
-The job builds the images, starts only the tunnel connector, reads its allocated
-URL, and then starts identity with that exact public origin as its issuer. The
-suite uses the same origin for discovery and browser authorization. The generated
-URL is recorded in the job summary and `tunnel-url.txt` artifact. Cleanup stops
-the tunnel and removes the test database; the hostname stops serving the runner.
-Each new run gets a new hostname. Quick Tunnels have no uptime guarantee, so a
-Cloudflare outage can fail a CI run independently of protocol conformance.
+Before running it:
 
-The connector joins the same Docker network as identity and forwards to
-`https://identity:5150`. Origin certificate verification is disabled for the
-generated test certificate; the public HTTPS endpoint is still verified by
-the readiness probe. The tunnel is public, with no interactive email or Access
-challenge, so the official suite can make ordinary OIDC requests. This exposes
-the disposable `APP_ENV=conformance`
-instance, including its test-only auto-login, auto-consent and key-rotation endpoints.
-The login application is not built or started. Authorization interactions go
-directly to identity's `/conformance/auto-login` and `/conformance/auto-consent`
-auto-submit forms, which authenticate the test user and approve consent through
-the normal application services. Browser cookies and OIDC callbacks are retained.
+1. Sign in to the official platform with your Google or GitLab account.
+2. Create an API token in the platform's token management page.
+3. Add the token as the GitHub repository Actions secret `CONFORMANCE_API_TOKEN`.
+   Use a normal account API token with permission to create/run plans, not a
+   read-only plan sharing token. Do not put it in workflow inputs or commit it.
+4. Under **Actions**, select the workflow and click **Run workflow**.
 
-Under **Actions**, select the workflow and click **Run workflow**. Every supported
-OP plan from `plans.py` runs automatically: Basic, Implicit, Hybrid, Config,
-the three Form Post plans, Third Party Initiated Login, RP Initiated Logout,
-Session Management, and Backchannel Logout (11 plans). Each plan has its own
-runner, database, keys, browser sessions, Quick Tunnel, and report. Up to three
-plans run concurrently; a failure or manual review in one plan does not cancel
-the others. The workflow succeeds only when every plan job succeeds. A final
-summary job collects the per-plan reports into one table, including missing or
-incomplete reports. Artifacts are named separately for each profile.
+The workflow validates the token before building the environment. Plans are
+created by the API under the token owner's account, so they appear on the official
+platform. No plan IDs need to be entered manually. Each plan receives an alias
+containing the repository ID, run ID, retry number and profile to avoid collisions
+with other accounts, plans and runs. Seeded client callback and logout URLs use
+that alias and the official suite origin. Hosted API HTTPS certificates are verified.
 
-`suite_ref` selects a branch, tag, or full SHA from the official
-[`openid/conformance-suite`](https://gitlab.com/openid/conformance-suite) source.
-The workflow resolves it once to an exact commit shared by all plans and records the SHA
-with the artifacts. The existing Python harness creates and drives the official
-suite's test modules via its API, including automated browser login and consent;
-protocol assertions are performed by the official Java suite.
+Every configured OP plan runs: Basic, Implicit, Hybrid, Config, three Form Post
+plans, Third Party Initiated Login, RP Initiated Logout, Session Management and
+Backchannel Logout (11 plans). Jobs run one at a time to limit load on the hosted
+service, and a failed plan does not cancel the remaining jobs. Each has its own
+runner, database, keys, browser sessions, tunnel and report. The final summary
+includes every plan, including incomplete or missing reports. The hosted platform
+controls the suite version; the workflow no longer builds or pins its source.
 
-The official suite and MongoDB remain local to the runner. The suite uses its
-existing `https://localhost.emobix.co.uk:8443` callback URLs, which work inside
-Compose and in the runner's browser; discovery, issuer, and authorization requests
-use the public identity hostname through Cloudflare. This workflow runs the
-official suite locally, rather than submitting a plan to the hosted
-`www.certification.openid.net` service.
+Cloudflare supplies a temporary `https://<random>.trycloudflare.com` hostname.
+No personal domain, Cloudflare account or tunnel token is needed. The workflow
+allocates the hostname first, then starts identity with that origin as its issuer.
+The suite uses the public origin for discovery, authorization and token requests.
+The connector forwards to `https://identity:5150` on the Compose network and
+allows the generated origin certificate; the public HTTPS certificate is verified.
+The disposable conformance environment automatically signs in the seeded test
+user and approves consent without a separate login application.
+
+Job summaries and `plan-url.txt` artifacts link to the official plan. Plans remain
+on the official platform after the runner removes its environment. The temporary
+issuer stops serving when cleanup closes the tunnel, so those plans cannot be
+rerun against that issuer after the job ends. Quick Tunnels have no uptime guarantee.
+
+The Foundation's [FAPI RP guidance](https://www.openid.net/certification/fapi-rp-conformance-testing-certification-submission-overview-for-open-banking-brazil/)
+asks that the hosted platform not be used for automated build testing. This
+workflow is manually dispatched for deliberate hosted test runs, not triggered
+by pushes, pull requests or a schedule. Consult the Foundation about acceptable
+usage if you plan frequent automated runs. Local development testing remains
+available through `run.py` and `docker-compose.yml`.
 
 Failures, timeouts, unfinished modules, empty plans, and incomplete plans fail the
 job. `WARNING`, `SKIPPED`, and completed `REVIEW` results are retained in the
 summary and do not fail the job; `REVIEW` still requires human assessment before
 certification. Artifacts include the plan, per-module official logs, runner output,
-service logs, and suite revision. Cleanup runs even when tests fail.
+service logs, and the hosted plan URL. Cleanup runs even when tests fail.
 
 This automated environment has no real login UI. It does not upload screenshots
 of auto-submit forms or callbacks as proof of a user-facing login prompt. If the

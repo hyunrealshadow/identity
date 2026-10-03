@@ -1,12 +1,14 @@
-"""Wait for the public tunnel and local official suite before creating a plan."""
+"""Wait for the public issuer and authenticated hosted suite API."""
 
 import os
 import time
 
 import requests
+from scripts.client import ConformanceClient
 
 
 def wait_until_ready(identity_url: str, suite_url: str, timeout=180):
+    client = ConformanceClient(suite_url)
     deadline = time.monotonic() + timeout
     last_error = None
     while time.monotonic() < deadline:
@@ -18,14 +20,13 @@ def wait_until_ready(identity_url: str, suite_url: str, timeout=180):
             discovery.raise_for_status()
             if discovery.json().get("issuer") != identity_url:
                 raise ValueError("Discovery issuer does not match the public identity origin")
-            suite = requests.get(suite_url + "/api/runner/available", timeout=10, verify=False)
+            suite = client.session.get(suite_url + "/api/runner/available", timeout=10)
             suite.raise_for_status()
             if not isinstance(suite.json(), list):
                 raise ValueError("Official suite module API is not ready")
-            # This endpoint also checks that the suite can query MongoDB.
-            plans = requests.get(suite_url + "/api/plan?length=1", timeout=10, verify=False)
-            plans.raise_for_status()
-            plans.json()
+            account = client.session.get(suite_url + "/api/currentuser", timeout=10)
+            account.raise_for_status()
+            account.json()
             print("Public issuer and official suite are ready")
             return
         except (requests.RequestException, ValueError) as error:
@@ -37,5 +38,5 @@ def wait_until_ready(identity_url: str, suite_url: str, timeout=180):
 if __name__ == "__main__":
     wait_until_ready(
         os.environ["IDENTITY_URL"],
-        "https://localhost.emobix.co.uk:8443",
+        os.environ.get("SUITE_URL", "https://localhost.emobix.co.uk:8443"),
     )

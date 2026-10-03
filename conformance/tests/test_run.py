@@ -15,6 +15,16 @@ DEFAULT_VARIANT = {
 
 
 class PlanVariantTests(unittest.TestCase):
+    def test_hosted_plan_uses_unique_alias_without_mutating_defaults(self):
+        with patch.dict(os.environ, {"CONFORMANCE_ALIAS": "identity-run-basic"}):
+            plan = get_plan("basic", "https://example.trycloudflare.com")
+        self.assertEqual(plan["alias"], "identity-run-basic")
+        self.assertEqual(PLANS["basic"]["alias"], "identity")
+        self.assertEqual(
+            plan["server"]["discoveryUrl"],
+            "https://example.trycloudflare.com/.well-known/openid-configuration",
+        )
+
     def test_config_profile_uses_no_variant_override(self):
         self.assertIsNone(run.plan_variant_for_profile("config"))
 

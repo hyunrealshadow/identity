@@ -1,6 +1,7 @@
 """Conformance test plan configurations."""
 
 from copy import deepcopy
+import os
 
 DISCOVERY_URL = "https://identity:5150/.well-known/openid-configuration"
 
@@ -168,6 +169,9 @@ def get_plan(profile: str, identity_url: str | None = None) -> dict:
         msg = f"Unknown profile: {profile}"
         raise ValueError(msg)
     plan = deepcopy(PLANS[profile])
+    alias = os.environ.get("CONFORMANCE_ALIAS")
+    if alias:
+        plan["alias"] = alias
     if identity_url:
         plan["server"]["discoveryUrl"] = (
             identity_url.rstrip("/") + "/.well-known/openid-configuration"

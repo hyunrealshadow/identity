@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity
+      POSTGRES_DB: identity_conformance
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d identity_conformance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  identity:
+    build:
+      context: ..
+      dockerfile: conformance/Dockerfile
+    environment:
+      APP_ENV: conformance
+      DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
+      HOST: ${IDENTITY_URL:-https://identity:5150}
+      CONFORMANCE_SUITE_URL: https://www.certification.openid.net
+      CONFORMANCE_ALIAS: ${CONFORMANCE_ALIAS:?Unique hosted plan alias is required}
+      TLS_DOMAIN: identity
+      PORT: "5150"
+    ports:
+      - "5150:5150"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - https://identity:5150
+      - --no-tls-verify

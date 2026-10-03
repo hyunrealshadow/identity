@@ -3,7 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,6 +12,16 @@ from scripts.client import ConformanceClient
 
 
 class ConformanceClientPlanTests(unittest.TestCase):
+    def test_hosted_api_uses_account_token_and_verifies_tls(self):
+        with patch.dict(os.environ, {"CONFORMANCE_API_TOKEN": "test-token"}):
+            client = ConformanceClient("https://www.certification.openid.net")
+        self.assertEqual(client.session.headers["Authorization"], "Bearer test-token")
+        self.assertTrue(client.session.verify)
+
+    def test_local_suite_allows_its_self_signed_certificate(self):
+        client = ConformanceClient("https://localhost.emobix.co.uk:8443")
+        self.assertFalse(client.session.verify)
+
     def setUp(self):
         self.client = ConformanceClient("https://suite.example.com")
         self.client.session.post = MagicMock()
