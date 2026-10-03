@@ -72,34 +72,30 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 
 ## CI Integration
 
-### GitHub Actions through Cloudflare Zero Trust
+### GitHub Actions through Cloudflare Quick Tunnel
 
 The `OIDC conformance through Cloudflare Tunnel` workflow starts the isolated
-Compose stack on a GitHub-hosted runner and connects a dedicated, remotely managed
-[Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/).
-Only the connector runs during the job; cleanup stops it and removes the test
-database. The named tunnel and DNS records remain configured for subsequent runs.
+Compose stack on a GitHub-hosted runner and allocates a
+[Cloudflare Quick Tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+Cloudflare supplies a temporary `https://<random>.trycloudflare.com` hostname;
+no personal domain, Cloudflare account, tunnel token, or repository URL variable
+is required. Existing `CLOUDFLARE_TUNNEL_TOKEN` and `CONFORMANCE_IDENTITY_URL`
+settings are no longer used by the workflow.
 
-Configure the following repository settings under **Settings → Secrets and
-variables → Actions**:
+The job builds the images, starts only the tunnel connector, reads its allocated
+URL, and then starts identity with that exact public origin as its issuer. The
+suite uses the same origin for discovery and browser authorization. The generated
+URL is recorded in the job summary and `tunnel-url.txt` artifact. Cleanup stops
+the tunnel and removes the test database; the hostname stops serving the runner.
+Each new run gets a new hostname. Quick Tunnels have no uptime guarantee, so a
+Cloudflare outage can fail a CI run independently of protocol conformance.
 
-| Setting | Kind | Example |
-|---------|------|---------|
-| `CLOUDFLARE_TUNNEL_TOKEN` | Secret | Token for a dedicated conformance tunnel |
-| `CONFORMANCE_IDENTITY_URL` | Variable | `https://oidc-ci.example.com` |
-
-Use HTTPS origins without trailing slashes. In Cloudflare Zero Trust, create a
-Cloudflared tunnel and configure this published application route:
-
-| Public hostname | Origin service | Origin setting |
-|-----------------|----------------|----------------|
-| `oidc-ci.example.com` | `https://identity:5150` | Enable **No TLS Verify** for the generated test certificate |
-
-The connector joins the same Docker network as identity. Do not connect
-another runner or permanent connector to this dedicated tunnel. These test
-hostnames must be reachable without a Cloudflare Access login challenge, service
-token requirement, or interactive bot challenge: the official suite needs to
-make ordinary OIDC requests. This exposes the disposable `APP_ENV=conformance`
+The connector joins the same Docker network as identity and forwards to
+`https://identity:5150`. Origin certificate verification is disabled for the
+generated test certificate; the public HTTPS endpoint is still verified by
+the readiness probe. The tunnel is public, with no interactive email or Access
+challenge, so the official suite can make ordinary OIDC requests. This exposes
+the disposable `APP_ENV=conformance`
 instance, including its test-only auto-login, auto-consent and key-rotation endpoints.
 The login application is not built or started. Authorization interactions go
 directly to identity's `/conformance/auto-login` and `/conformance/auto-consent`

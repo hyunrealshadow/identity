@@ -27,9 +27,9 @@ on:
 permissions:
   contents: read
 
-# A named tunnel must have only one test environment connected at a time.
+# Each job has its own temporary public hostname.
 concurrency:
-  group: oidc-conformance-tunnel
+  group: oidc-conformance-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -37,29 +37,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      IDENTITY_URL: ${{ vars.CONFORMANCE_IDENTITY_URL }}
-      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       COMPOSE_FILE: conformance/docker-compose.yml:conformance/docker-compose.ci.yml
       COMPOSE_PROJECT_NAME: oidc-conformance
       PROFILE: ${{ inputs.profile }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v7
-
-      - name: Validate tunnel settings
-        run: |
-          python - <<'PY'
-          import os
-          from urllib.parse import urlsplit
-          for name in ('IDENTITY_URL',):
-              value = os.environ[name]
-              url = urlsplit(value)
-              if (url.scheme != 'https' or not url.hostname or url.username or url.password
-                      or url.port not in (None, 443) or url.path or url.query or url.fragment):
-                  raise SystemExit(f'{name} must be an HTTPS origin without a trailing slash')
-          if not os.environ['CLOUDFLARE_TUNNEL_TOKEN']:
-              raise SystemExit('Set the CLOUDFLARE_TUNNEL_TOKEN repository secret')
-          PY
 
       - name: Resolve official suite revision
         env:
@@ -86,9 +69,19 @@ jobs:
           uv run playwright install --with-deps chromium
           echo '127.0.0.1 localhost.emobix.co.uk' | sudo tee -a /etc/hosts
 
-      - name: Build and start isolated environment
+      - name: Build isolated environment
+        run: docker compose build
+
+      - name: Allocate temporary Cloudflare public hostname
         run: |
-          docker compose build
+          docker compose up -d --no-deps tunnel
+          public_url=$(python conformance/ci_tunnel.py)
+          echo "IDENTITY_URL=$public_url" >> "$GITHUB_ENV"
+          echo "$public_url" > conformance/results/tunnel-url.txt
+          echo "Temporary public URL: $public_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start identity with the public issuer
+        run: |
           docker compose up -d --wait --wait-timeout 240
 
       - name: Check public endpoints through Cloudflare
@@ -114,7 +107,7 @@ jobs:
           from pathlib import Path
           report = Path('conformance/results/results.json')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('\nIssuer tested: ' + os.environ['IDENTITY_URL'] + '\n\n')
+              summary.write('\nIssuer tested: ' + os.environ.get('IDENTITY_URL', '(tunnel not created)') + '\n\n')
               if report.exists():
                   result = json.loads(report.read_text())
                   summary.write('Plan: `' + result['plan_id'] + '`\n\n')

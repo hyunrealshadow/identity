@@ -1,13 +1,12 @@
-# Overlay for a dedicated, remotely managed Cloudflare Zero Trust Tunnel.
-# Public hostnames and origin services are configured in the Cloudflare dashboard.
+# Quick Tunnel starts first so CI can configure identity with its generated issuer.
 services:
   identity:
     environment:
-      HOST: ${IDENTITY_URL:?Set the public HTTPS identity origin}
+      HOST: ${IDENTITY_URL:-https://identity:5150}
   server:
     build:
       args:
-        SUITE_REF: ${SUITE_REF:?Set the official suite commit}
+        SUITE_REF: ${SUITE_REF:-master}
     # The Dockerfile already supplies java -jar through ENTRYPOINT.
     command:
       - --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
@@ -15,9 +14,9 @@ services:
       - --fintechlabs.startredir=true
   tunnel:
     image: cloudflare/cloudflared:latest
-    command: ["tunnel", "--no-autoupdate", "run"]
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set the dedicated tunnel token}
-    depends_on:
-      identity:
-        condition: service_healthy
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --url
+      - https://identity:5150
+      - --no-tls-verify
