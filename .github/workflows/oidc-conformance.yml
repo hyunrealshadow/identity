@@ -2,11 +2,6 @@ name: OIDC conformance through Cloudflare Tunnel
 
 on:
   workflow_dispatch:
-    inputs:
-      suite_ref:
-        description: Official openid/conformance-suite branch, tag, or full commit SHA
-        type: string
-        default: master
 
 permissions:
   contents: read
@@ -22,7 +17,6 @@ jobs:
     timeout-minutes: 10
     outputs:
       profiles: ${{ steps.profiles.outputs.profiles }}
-      suite_ref: ${{ steps.suite.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
 
@@ -37,17 +31,6 @@ jobs:
               output.write('profiles=' + json.dumps(list(PLANS)) + '\n')
           PY
 
-      - name: Resolve one official suite revision for all plans
-        id: suite
-        env:
-          REQUESTED_REF: ${{ inputs.suite_ref }}
-        run: |
-          git init "$RUNNER_TEMP/official-suite"
-          git -C "$RUNNER_TEMP/official-suite" remote add origin https://gitlab.com/openid/conformance-suite.git
-          git -C "$RUNNER_TEMP/official-suite" fetch --depth 1 origin "$REQUESTED_REF"
-          revision=$(git -C "$RUNNER_TEMP/official-suite" rev-parse FETCH_HEAD)
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
-          echo "Official suite revision for all plans: \`$revision\`" >> "$GITHUB_STEP_SUMMARY"
 
   conformance:
     name: OP plan (${{ matrix.profile }})
@@ -56,23 +39,31 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 1
       matrix:
         profile: ${{ fromJSON(needs.prepare.outputs.profiles) }}
     env:
-      COMPOSE_FILE: conformance/docker-compose.yml:conformance/docker-compose.ci.yml
+      COMPOSE_FILE: conformance/docker-compose.hosted.yml
       COMPOSE_PROJECT_NAME: oidc-conformance
       PROFILE: ${{ matrix.profile }}
-      SUITE_REF: ${{ needs.prepare.outputs.suite_ref }}
+      SUITE_URL: https://www.certification.openid.net
+      CONFORMANCE_ALIAS: identity-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.profile }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v7
 
-      - name: Record official suite revision
+      - name: Validate official account token
+        env:
+          CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
         run: |
           mkdir -p conformance/results
-          echo "$SUITE_REF" > conformance/results/suite-revision.txt
-          echo "Official suite revision: \`$SUITE_REF\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$CONFORMANCE_API_TOKEN" ]; then
+            echo "::error::Add the official suite API token as the CONFORMANCE_API_TOKEN repository secret"
+            exit 1
+          fi
+          curl --fail --silent --show-error --output /dev/null \
+            --header "Authorization: Bearer $CONFORMANCE_API_TOKEN" \
+            "$SUITE_URL/api/currentuser"
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -84,10 +75,9 @@ jobs:
         run: |
           uv sync --locked
           uv run playwright install --with-deps chromium
-          echo '127.0.0.1 localhost.emobix.co.uk' | sudo tee -a /etc/hosts
 
       - name: Build isolated environment
-        run: docker compose build
+        run: docker compose build identity
 
       - name: Allocate temporary Cloudflare public hostname
         run: |
@@ -99,13 +89,17 @@ jobs:
 
       - name: Start identity with the public issuer
         run: |
-          docker compose up -d --wait --wait-timeout 240
+          docker compose up -d --wait --wait-timeout 240 db identity
 
       - name: Check public endpoints through Cloudflare
         working-directory: conformance
+        env:
+          CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
         run: uv run python ci_ready.py
 
-      - name: Run official OpenID Foundation test plan
+      - name: Run official hosted OpenID Foundation test plan
+        env:
+          CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
         working-directory: conformance
         run: |
           set -o pipefail
@@ -127,10 +121,13 @@ jobs:
               summary.write('\nIssuer tested: ' + os.environ.get('IDENTITY_URL', '(tunnel not created)') + '\n\n')
               if report.exists():
                   result = json.loads(report.read_text())
-                  summary.write('Plan: `' + result['plan_id'] + '`\n\n')
+                  summary.write('Official plan: ' + result['plan_url'] + '\n\n')
                   for status, count in result['summary'].items():
                       summary.write(f'- {status}: {count}\n')
               else:
+                  plan_url = Path('conformance/results/plan-url.txt')
+                  if plan_url.exists():
+                      summary.write('Official plan: ' + plan_url.read_text().strip() + '\n\n')
                   summary.write('No complete report; inspect the service and runner logs.\n')
           PY
 

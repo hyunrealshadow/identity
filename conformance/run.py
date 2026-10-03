@@ -251,6 +251,13 @@ def main():
         )
         print(f"Plan ID: {plan_id}")
 
+    plan_url = f"{client.suite_url}/plan-detail.html?plan={plan_id}"
+    print(f"Plan URL: {plan_url}")
+    if args.results_dir:
+        os.makedirs(args.results_dir, exist_ok=True)
+        with open(os.path.join(args.results_dir, "plan-url.txt"), "w") as output:
+            output.write(plan_url + "\n")
+
     print("\nRunning tests...")
     expected_tests = len(client.get_modules(plan_id))
     results = runner.run_all_tests(plan_id)
@@ -260,6 +267,7 @@ def main():
         os.makedirs(args.results_dir, exist_ok=True)
         report = {
             "plan_id": plan_id,
+            "plan_url": plan_url,
             "profile": args.profile,
             "plan_name": plan_name,
             "identity_url": args.identity_url,

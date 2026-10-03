@@ -1,4 +1,5 @@
 import json
+import os
 import urllib.parse
 import requests
 from typing import Optional
@@ -24,9 +25,14 @@ class TestInfo:
 
 
 class ConformanceClient:
-    def __init__(self, suite_url: str, verify_ssl: bool = False):
+    def __init__(self, suite_url: str, verify_ssl: bool | None = None):
         self.suite_url = suite_url.rstrip("/")
         self.session = requests.Session()
+        token = os.environ.get("CONFORMANCE_API_TOKEN")
+        if token:
+            self.session.headers["Authorization"] = f"Bearer {token}"
+        if verify_ssl is None:
+            verify_ssl = self.suite_url != "https://localhost.emobix.co.uk:8443"
         self.session.verify = verify_ssl
         if not verify_ssl:
             import urllib3

@@ -452,35 +452,82 @@ async fn ensure_conformance_client_secret(
     Ok(())
 }
 
+fn conformance_suite_uri(default_uri: &str) -> String {
+    let suite_url = std::env::var("CONFORMANCE_SUITE_URL")
+        .unwrap_or_else(|_| "https://localhost.emobix.co.uk:8443".to_owned());
+    let alias = std::env::var("CONFORMANCE_ALIAS").ok();
+    map_conformance_suite_uri(default_uri, &suite_url, alias.as_deref())
+}
+
+fn map_conformance_suite_uri(default_uri: &str, suite_url: &str, alias: Option<&str>) -> String {
+    let path = default_uri
+        .strip_prefix("https://localhost.emobix.co.uk:8443")
+        .expect("conformance callback uses the default suite origin");
+    if let Some(alias) = alias {
+        let suffix = path.rsplit('/').next().unwrap_or("callback");
+        format!(
+            "{}/test/a/{alias}/{suffix}",
+            suite_url.trim_end_matches('/')
+        )
+    } else {
+        format!("{}{path}", suite_url.trim_end_matches('/'))
+    }
+}
+
 fn conformance_redirect_uris() -> serde_json::Value {
     serde_json::json!([
-        "https://localhost.emobix.co.uk:8443/test/a/identity/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-session/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/callback",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
+        conformance_suite_uri("https://localhost.emobix.co.uk:8443/test/a/identity/callback"),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-session/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
+        )
     ])
 }
 
 fn conformance_post_logout_redirect_uris() -> serde_json::Value {
     serde_json::json!([
-        "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-session/post_logout_redirect",
-        "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/post_logout_redirect"
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-session/post_logout_redirect"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/post_logout_redirect"
+        )
     ])
 }
 
 fn conformance_frontchannel_logout_uri() -> String {
-    "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout"
-        .to_owned()
+    conformance_suite_uri(
+        "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout",
+    )
 }
 
 fn conformance_backchannel_logout_uri() -> String {
-    "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/backchannel_logout".to_owned()
+    conformance_suite_uri(
+        "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/backchannel_logout",
+    )
 }
 
 fn conformance_client_settings() -> serde_json::Value {
@@ -612,6 +659,25 @@ async fn assign_all_built_in_oidc_scopes(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hosted_callbacks_use_the_official_origin_and_unique_alias() {
+        for endpoint in ["callback", "post_logout_redirect", "backchannel_logout"] {
+            let original = format!(
+                "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/{endpoint}"
+            );
+            assert_eq!(
+                super::map_conformance_suite_uri(
+                    &original,
+                    "https://www.certification.openid.net/",
+                    Some("identity-123-backchannel"),
+                ),
+                format!(
+                    "https://www.certification.openid.net/test/a/identity-123-backchannel/{endpoint}"
+                ),
+            );
+        }
+    }
+
     #[test]
     fn conformance_redirect_uris_include_active_plan_aliases() {
         let redirect_uris = super::conformance_redirect_uris();
