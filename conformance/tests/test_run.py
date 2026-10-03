@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import run
-from plans import get_plan
+from plans import PLANS, get_plan
 from scripts.runner import TestResult
 DEFAULT_VARIANT = {
     "server_metadata": "discovery",
@@ -83,6 +83,10 @@ class PlanVariantTests(unittest.TestCase):
 
 
 class ProfileConfigurationTests(unittest.TestCase):
+    def test_every_ci_plan_has_a_supported_profile_and_official_plan_name(self):
+        self.assertEqual(set(PLANS), set(run.SUPPORTED_PROFILES))
+        self.assertEqual(set(PLANS), set(run.PLAN_NAMES))
+
     def test_new_formpost_profiles_are_supported(self):
         self.assertIn("formpost-implicit", run.SUPPORTED_PROFILES)
         self.assertIn("formpost-hybrid", run.SUPPORTED_PROFILES)

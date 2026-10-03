@@ -102,10 +102,19 @@ directly to identity's `/conformance/auto-login` and `/conformance/auto-consent`
 auto-submit forms, which authenticate the test user and approve consent through
 the normal application services. Browser cookies and OIDC callbacks are retained.
 
-Under **Actions**, select the workflow, choose an OP profile, and click **Run
-workflow**. `suite_ref` selects a branch, tag, or full SHA from the official
+Under **Actions**, select the workflow and click **Run workflow**. Every supported
+OP plan from `plans.py` runs automatically: Basic, Implicit, Hybrid, Config,
+the three Form Post plans, Third Party Initiated Login, RP Initiated Logout,
+Session Management, and Backchannel Logout (11 plans). Each plan has its own
+runner, database, keys, browser sessions, Quick Tunnel, and report. Up to three
+plans run concurrently; a failure or manual review in one plan does not cancel
+the others. The workflow succeeds only when every plan job succeeds. A final
+summary job collects the per-plan reports into one table, including missing or
+incomplete reports. Artifacts are named separately for each profile.
+
+`suite_ref` selects a branch, tag, or full SHA from the official
 [`openid/conformance-suite`](https://gitlab.com/openid/conformance-suite) source.
-The workflow resolves it to an exact commit before building and records the SHA
+The workflow resolves it once to an exact commit shared by all plans and records the SHA
 with the artifacts. The existing Python harness creates and drives the official
 suite's test modules via its API, including automated browser login and consent;
 protocol assertions are performed by the official Java suite.

@@ -3,22 +3,6 @@ name: OIDC conformance through Cloudflare Tunnel
 on:
   workflow_dispatch:
     inputs:
-      profile:
-        description: Official OP certification profile
-        type: choice
-        default: basic
-        options:
-          - basic
-          - implicit
-          - hybrid
-          - config
-          - formpost-basic
-          - formpost-implicit
-          - formpost-hybrid
-          - third-party-init
-          - rp-init-logout
-          - session
-          - backchannel
       suite_ref:
         description: Official openid/conformance-suite branch, tag, or full commit SHA
         type: string
@@ -33,18 +17,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  conformance:
+  prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      COMPOSE_FILE: conformance/docker-compose.yml:conformance/docker-compose.ci.yml
-      COMPOSE_PROJECT_NAME: oidc-conformance
-      PROFILE: ${{ inputs.profile }}
-      PYTHONUNBUFFERED: '1'
+    timeout-minutes: 10
+    outputs:
+      profiles: ${{ steps.profiles.outputs.profiles }}
+      suite_ref: ${{ steps.suite.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve official suite revision
+      - name: Select every supported OP plan
+        id: profiles
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'conformance')
+          from plans import PLANS
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('profiles=' + json.dumps(list(PLANS)) + '\n')
+          PY
+
+      - name: Resolve one official suite revision for all plans
+        id: suite
         env:
           REQUESTED_REF: ${{ inputs.suite_ref }}
         run: |
@@ -52,10 +46,33 @@ jobs:
           git -C "$RUNNER_TEMP/official-suite" remote add origin https://gitlab.com/openid/conformance-suite.git
           git -C "$RUNNER_TEMP/official-suite" fetch --depth 1 origin "$REQUESTED_REF"
           revision=$(git -C "$RUNNER_TEMP/official-suite" rev-parse FETCH_HEAD)
-          echo "SUITE_REF=$revision" >> "$GITHUB_ENV"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "Official suite revision for all plans: \`$revision\`" >> "$GITHUB_STEP_SUMMARY"
+
+  conformance:
+    name: OP plan (${{ matrix.profile }})
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        profile: ${{ fromJSON(needs.prepare.outputs.profiles) }}
+    env:
+      COMPOSE_FILE: conformance/docker-compose.yml:conformance/docker-compose.ci.yml
+      COMPOSE_PROJECT_NAME: oidc-conformance
+      PROFILE: ${{ matrix.profile }}
+      SUITE_REF: ${{ needs.prepare.outputs.suite_ref }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Record official suite revision
+        run: |
           mkdir -p conformance/results
-          echo "$revision" > conformance/results/suite-revision.txt
-          echo "Official suite revision: \`$revision\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "$SUITE_REF" > conformance/results/suite-revision.txt
+          echo "Official suite revision: \`$SUITE_REF\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -125,6 +142,49 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: oidc-conformance-${{ inputs.profile }}-${{ github.run_id }}
+          name: oidc-conformance-${{ matrix.profile }}-${{ github.run_id }}
           path: conformance/results/
           retention-days: 14
+
+  summary:
+    name: Summarize all OP plans
+    needs: [prepare, conformance]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download all plan reports
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          pattern: oidc-conformance-*-${{ github.run_id }}
+          path: reports
+
+      - name: Summarize results including failed and incomplete plans
+        env:
+          PROFILES: ${{ needs.prepare.outputs.profiles }}
+          PLAN_JOBS_RESULT: ${{ needs.conformance.result }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          reports = {}
+          for path in Path('reports').rglob('results.json'):
+              report = json.loads(path.read_text())
+              reports[report['profile']] = report
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write('All plan jobs: **' + os.environ['PLAN_JOBS_RESULT'] + '**\n\n')
+              output.write('| Plan | Status | Passed | Failed | UI review |\n|---|---|---:|---:|---:|\n')
+              for profile in json.loads(os.environ['PROFILES']):
+                  report = reports.get(profile)
+                  if report is None:
+                      output.write(f'| {profile} | NO_REPORT | — | — | — |\n')
+                      continue
+                  counts = report['summary']
+                  results = report['results']
+                  expected = len(report['plan']['modules'])
+                  incomplete = (not results or len(results) != expected
+                                or any(r['status'] != 'FINISHED' for r in results))
+                  status = 'INCOMPLETE' if incomplete else ('FAILED' if counts['FAILED'] else 'COMPLETED')
+                  output.write(f"| {profile} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('MANUAL_REVIEW_REQUIRED', 0)} |\n")
+          PY
