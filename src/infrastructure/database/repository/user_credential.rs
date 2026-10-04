@@ -2,6 +2,7 @@ use crate::database::entity::{
     user, user::Entity as UserEntity, user_credential,
     user_credential::Entity as UserCredentialEntity,
 };
+use crate::database::query::{json_text, jsonb_set};
 use async_trait::async_trait;
 use chrono::Utc;
 use identity_application::user::{
@@ -13,7 +14,8 @@ use identity_application::user::{
 use super::shared::lock_user_credentials;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
-    QuerySelect, Set, TransactionTrait, sea_query::Expr,
+    QuerySelect, Set, TransactionTrait,
+    sea_query::{Expr, ExprTrait, Func},
 };
 
 pub struct UserCredentialRepositoryImpl {
@@ -123,9 +125,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         let result = UserCredentialEntity::update_many()
             .col_expr(
                 user_credential::Column::Data,
-                Expr::cust_with_values(
-                    r#"jsonb_set("user_credential"."data", '{last_used_counter}', to_jsonb($1::bigint), true)"#,
-                    [counter],
+                jsonb_set(
+                    (user_credential::Entity, user_credential::Column::Data),
+                    "last_used_counter",
+                    Func::cust("to_jsonb").arg(Expr::value(counter).cast_as("bigint")),
                 ),
             )
             .col_expr(
@@ -139,15 +142,20 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                     .add(user_credential::Column::ExpiresAt.is_null())
                     .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
             )
-            .filter(Expr::cust_with_values(
-                r#"COALESCE(("user_credential"."data"->>'last_used_counter')::bigint, -1) < $1"#,
-                [counter],
-            ))
+            .filter(
+                Expr::expr(Func::coalesce([
+                    json_text(
+                        (user_credential::Entity, user_credential::Column::Data),
+                        "last_used_counter",
+                    )
+                    .cast_as("bigint"),
+                    Expr::value(-1_i64),
+                ]))
+                .lt(counter),
+            )
             .exec(&self.db)
             .await
-            .map_err(|error| {
-                UserCredentialRepositoryError::ConsumeTotpFailed(Box::new(error))
-            })?;
+            .map_err(|error| UserCredentialRepositoryError::ConsumeTotpFailed(Box::new(error)))?;
         Ok(result.rows_affected == 1)
     }
 

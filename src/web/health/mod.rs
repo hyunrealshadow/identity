@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use http::StatusCode;
 use salvo::{Depot, Response, Router, handler};
-use sea_orm::ConnectionTrait;
+use sea_orm::{ConnectionTrait, sea_query::Query};
 use serde::Serialize;
 
 /// Whether the last probe result matched the current one. Only transitions are
@@ -87,7 +87,12 @@ async fn health_handler(depot: &mut Depot, res: &mut Response) {
 }
 
 async fn check_database(state: &AppState) -> HealthCheckResult {
-    match state.resources().db().execute_unprepared("SELECT 1").await {
+    match state
+        .resources()
+        .db()
+        .execute(&Query::select().expr(1).to_owned())
+        .await
+    {
         Ok(_) => HealthCheckResult {
             status: "ok",
             detail: None,

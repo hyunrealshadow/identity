@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
+use crate::database::entity::client_openid_connect_cors_origin;
 use async_trait::async_trait;
 use identity_application::{
     error::{AppError, codes::common::CommonErrorCode},
     setting::runtime::RefreshableSetting,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
+use sea_orm::{DatabaseConnection, EntityTrait, QuerySelect};
 
 /// A global, read-only setting derived from per-client CORS origin rows.
 pub struct CachedCorsOrigins {
@@ -24,22 +25,15 @@ impl CachedCorsOrigins {
     }
 
     async fn load(db: &DatabaseConnection) -> Result<HashSet<String>, AppError> {
-        let rows = db
-            .query_all_raw(Statement::from_string(
-                DatabaseBackend::Postgres,
-                "SELECT DISTINCT origin FROM client_openid_connect_cors_origin".to_owned(),
-            ))
+        client_openid_connect_cors_origin::Entity::find()
+            .select_only()
+            .column(client_openid_connect_cors_origin::Column::Origin)
+            .distinct()
+            .into_tuple::<String>()
+            .all(db)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
-        rows.into_iter()
-            .map(|row| {
-                row.try_get("", "origin").map_err(|error| {
-                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-                })
-            })
-            .collect()
+            .map(|origins| origins.into_iter().collect())
+            .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
     }
 
     #[must_use]

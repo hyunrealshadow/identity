@@ -1,3 +1,4 @@
+use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
@@ -55,7 +56,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
         now: DateTime<Utc>,
     ) -> Result<bool, AppError> {
         let txn = self.db.begin().await.map_err(internal)?;
-        txn.execute_unprepared("SELECT pg_advisory_xact_lock(684395120247316902)")
+        txn.execute(&advisory_transaction_lock(684395120247316902_i64))
             .await
             .map_err(internal)?;
 

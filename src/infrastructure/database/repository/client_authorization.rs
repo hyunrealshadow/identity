@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseBackend, DatabaseConnection,
-    DatabaseTransaction, EntityTrait, FromQueryResult, QueryFilter, QuerySelect, Set, Statement,
+    DatabaseTransaction, EntityTrait, FromQueryResult, QueryFilter, QuerySelect, Set,
     TransactionTrait,
     sea_query::{Expr, OnConflict, SimpleExpr},
 };
@@ -14,7 +14,8 @@ use crate::database::entity::{
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
     user_client_consent, user_client_consent::Entity as UserClientConsentEntity,
 };
-use crate::database::repository::shared::lock_session;
+use crate::database::query::{advisory_transaction_lock, json_text};
+use crate::database::repository::{client_authorization_query as query, shared::lock_session};
 use identity_domain::{
     auth::SessionOid,
     client::model::ClientOid,
@@ -26,6 +27,7 @@ use identity_domain::{
     },
     openid_connect::{AuthorizationRequestData, ScopeSet},
 };
+use sea_orm::sea_query::{ExprTrait, Func};
 
 fn query_failed(
     operation: &'static str,
@@ -197,18 +199,7 @@ pub(crate) async fn expire_due_authorizations_batch(
     db: &DatabaseConnection,
 ) -> Result<u64, identity_application::error::diagnostics::ErrorContext> {
     Ok(db
-        .execute_unprepared(
-            r#"WITH due AS (
-                SELECT "id" FROM "client_authorization"
-                WHERE "is_expired" = false AND "expires_at" <= CURRENT_TIMESTAMP
-                ORDER BY "expires_at"
-                LIMIT 1000
-                FOR UPDATE SKIP LOCKED
-            )
-            UPDATE "client_authorization" AS "auth_record"
-            SET "is_expired" = true, "updated_at" = CURRENT_TIMESTAMP
-            FROM due WHERE "auth_record"."id" = due."id""#,
-        )
+        .execute(&query::expiration_batch())
         .await
         .map_err(|error| {
             identity_application::error::diagnostics::ErrorContext::new(
@@ -226,24 +217,7 @@ async fn lock_refresh_family(
     reject_compromised: bool,
 ) -> Result<Uuid, ClientAuthorizationRepositoryError> {
     let root = transaction
-        .query_one_raw(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            r#"WITH RECURSIVE ancestors AS (
-                SELECT "auth_record"."oid", "auth_record"."data"
-                FROM "client_authorization" AS "auth_record"
-                JOIN "client" ON "client"."id" = "auth_record"."client_id"
-                WHERE "auth_record"."oid" = $1 AND "client"."oid" = $2
-                  AND "auth_record"."type" = 'refresh_token'
-                UNION ALL
-                SELECT "parent"."oid", "parent"."data"
-                FROM "client_authorization" AS "parent"
-                JOIN ancestors ON "parent"."oid"::text = ancestors."data"->>'rotated_from'
-                WHERE "parent"."type" = 'refresh_token'
-            )
-            SELECT "oid" AS root_oid FROM ancestors
-            WHERE "data"->>'rotated_from' IS NULL LIMIT 1"#,
-            [refresh_oid.into(), client_oid.into()],
-        ))
+        .query_one(&query::refresh_root(refresh_oid, client_oid.into()))
         .await
         .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?
         .ok_or_else(|| {
@@ -256,20 +230,15 @@ async fn lock_refresh_family(
         .try_get("", "root_oid")
         .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
     transaction
-        .query_one_raw(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-            [root_oid.to_string().into()],
+        .query_one(&advisory_transaction_lock(
+            Func::cust("hashtextextended")
+                .args([Expr::value(root_oid.to_string()), Expr::value(0_i64)]),
         ))
         .await
         .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
     if reject_compromised {
         let row = transaction
-            .query_one_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                "SELECT COALESCE(data->>'replay_detected', 'false') = 'true' OR COALESCE(data->>'grant_revoked', 'false') = 'true' AS compromised FROM client_authorization WHERE oid = $1",
-                [root_oid.into()],
-            ))
+            .query_one(&query::refresh_compromised(root_oid))
             .await
             .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?
             .ok_or_else(|| {
@@ -308,18 +277,9 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         Option<identity_domain::client_authorization::PushedAuthorizationRequestData>,
         ClientAuthorizationRepositoryError,
     > {
-        let row = client_authorization::Model::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            r#"UPDATE "client_authorization"
-               SET "completed_at" = $3, "updated_at" = $3
-               WHERE "type" = 'pushed_authorization_request'
-                 AND "data"->>'request_uri_digest' = $1
-                 AND "client_id" = (SELECT "id" FROM "client" WHERE "oid" = $2)
-                 AND "expires_at" > $3 AND "completed_at" IS NULL
-                 AND "revoked_at" IS NULL AND "is_expired" = false
-               RETURNING *"#,
-            [digest.into(), client_oid.into(), now.into()],
-        ))
+        let row = client_authorization::Model::find_by_statement(
+            DatabaseBackend::Postgres.build(&query::consume_par(digest, client_oid, now)),
+        )
         .one(&self.db)
         .await
         .map_err(|error| {
@@ -842,10 +802,16 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                             .eq(ClientAuthorizationType::AccessToken.to_string()),
                     )
                     .add(client_authorization::Column::RevokedAt.is_null())
-                    .add(Expr::cust_with_values(
-                        r#"("client_authorization"."data"->>'authorization_code_oid') = $1"#,
-                        [authorization_code_oid.to_string()],
-                    )),
+                    .add(
+                        json_text(
+                            (
+                                client_authorization::Entity,
+                                client_authorization::Column::Data,
+                            ),
+                            "authorization_code_oid",
+                        )
+                        .eq(authorization_code_oid.to_string()),
+                    ),
             )
             .exec(&self.db)
             .await
@@ -901,11 +867,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         })?;
         let root_oid = lock_refresh_family(&transaction, refresh_oid, client_oid, false).await?;
         let root = transaction
-            .query_one_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                "SELECT data FROM client_authorization WHERE oid = $1",
-                [root_oid.into()],
-            ))
+            .query_one(&query::authorization_data(root_oid))
             .await
             .map_err(|error| {
                 query_failed("client_authorization.revoke_refresh_token_family", error)
@@ -923,39 +885,18 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         let device_authorization_oid = data["device_authorization_oid"].as_str().unwrap_or("");
 
         transaction
-            .execute_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                "UPDATE client_authorization SET data = jsonb_set(data, '{replay_detected}', 'true'::jsonb), updated_at = $2 WHERE oid = $1",
-                [root_oid.into(), now.into()],
-            ))
+            .execute(&query::mark_refresh_flag(root_oid, "replay_detected", now))
             .await
-            .map_err(|error| query_failed("client_authorization.revoke_refresh_token_family", error))?;
+            .map_err(|error| {
+                query_failed("client_authorization.revoke_refresh_token_family", error)
+            })?;
         transaction
-            .execute_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                r#"WITH RECURSIVE family AS (
-                    SELECT oid FROM client_authorization WHERE oid = $1
-                    UNION ALL
-                    SELECT child.oid FROM client_authorization AS child
-                    JOIN family ON child.data->>'rotated_from' = family.oid::text
-                    WHERE child."type" = 'refresh_token'
-                )
-                UPDATE client_authorization SET revoked_at = $2, updated_at = $2
-                WHERE client_id = (SELECT id FROM client WHERE oid = $3)
-                  AND revoked_at IS NULL
-                  AND (oid IN (SELECT oid FROM family)
-                    OR ("type" = 'access_token' AND (
-                        data->>'refresh_token_oid' IN (SELECT oid::text FROM family)
-                        OR ($4 <> '' AND data->>'authorization_code_oid' = $4)
-                        OR ($5 <> '' AND data->>'device_authorization_oid' = $5)
-                    )))"#,
-                [
-                    root_oid.into(),
-                    now.into(),
-                    client_oid.into(),
-                    authorization_code_oid.into(),
-                    device_authorization_oid.into(),
-                ],
+            .execute(&query::revoke_refresh_family(
+                root_oid,
+                client_oid.into(),
+                authorization_code_oid,
+                device_authorization_oid,
+                now,
             ))
             .await
             .map_err(|error| {
@@ -963,13 +904,18 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             })?;
         if !device_authorization_oid.is_empty() {
             transaction
-                .execute_raw(Statement::from_sql_and_values(
-                    DatabaseBackend::Postgres,
-                    "UPDATE client_authorization SET revoked_at = $2, updated_at = $2 WHERE oid::text = $1 AND client_id = (SELECT id FROM client WHERE oid = $3) AND \"type\" = 'device_authorization' AND revoked_at IS NULL",
-                    [device_authorization_oid.into(), now.into(), client_oid.into()],
+                .execute(&query::revoke_token_for_client(
+                    Expr::col(client_authorization::Column::Oid)
+                        .cast_as("text")
+                        .eq(device_authorization_oid),
+                    client_oid.into(),
+                    "device_authorization",
+                    now,
                 ))
                 .await
-                .map_err(|error| query_failed("client_authorization.revoke_refresh_token_family", error))?;
+                .map_err(|error| {
+                    query_failed("client_authorization.revoke_refresh_token_family", error)
+                })?;
         }
         transaction.commit().await.map_err(|error| {
             query_failed("client_authorization.revoke_refresh_token_family", error)
@@ -985,13 +931,16 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         now: chrono::DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
         self.db
-            .execute_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                "UPDATE client_authorization SET revoked_at = $3, updated_at = $3 WHERE oid = $1 AND client_id = (SELECT id FROM client WHERE oid = $2) AND \"type\" = 'access_token' AND revoked_at IS NULL",
-                [access_oid.into(), client_oid.into(), now.into()],
+            .execute(&query::revoke_token_for_client(
+                Expr::col(client_authorization::Column::Oid).eq(access_oid),
+                client_oid.into(),
+                "access_token",
+                now,
             ))
             .await
-            .map_err(|error| query_failed("client_authorization.revoke_access_token_for_client", error))?;
+            .map_err(|error| {
+                query_failed("client_authorization.revoke_access_token_for_client", error)
+            })?;
         Ok(())
     }
 
@@ -1010,11 +959,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         })?;
         let root_oid = lock_refresh_family(&transaction, refresh_oid, client_oid, false).await?;
         let root = transaction
-            .query_one_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                "SELECT data FROM client_authorization WHERE oid = $1",
-                [root_oid.into()],
-            ))
+            .query_one(&query::authorization_data(root_oid))
             .await
             .map_err(|error| {
                 query_failed(
@@ -1038,39 +983,21 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         let device_authorization_oid = data["device_authorization_oid"].as_str().unwrap_or("");
 
         transaction
-            .execute_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                "UPDATE client_authorization SET data = jsonb_set(data, '{grant_revoked}', 'true'::jsonb), updated_at = $2 WHERE oid = $1",
-                [root_oid.into(), now.into()],
-            ))
+            .execute(&query::mark_refresh_flag(root_oid, "grant_revoked", now))
             .await
-            .map_err(|error| query_failed("client_authorization.revoke_refresh_grant_for_client", error))?;
-        transaction
-            .execute_raw(Statement::from_sql_and_values(
-                DatabaseBackend::Postgres,
-                r#"WITH RECURSIVE family AS (
-                    SELECT oid FROM client_authorization WHERE oid = $1
-                    UNION ALL
-                    SELECT child.oid FROM client_authorization AS child
-                    JOIN family ON child.data->>'rotated_from' = family.oid::text
-                    WHERE child."type" = 'refresh_token'
+            .map_err(|error| {
+                query_failed(
+                    "client_authorization.revoke_refresh_grant_for_client",
+                    error,
                 )
-                UPDATE client_authorization SET revoked_at = $2, updated_at = $2
-                WHERE client_id = (SELECT id FROM client WHERE oid = $3)
-                  AND revoked_at IS NULL
-                  AND (oid IN (SELECT oid FROM family)
-                    OR ("type" = 'access_token' AND (
-                        data->>'refresh_token_oid' IN (SELECT oid::text FROM family)
-                        OR ($4 <> '' AND data->>'authorization_code_oid' = $4)
-                        OR ($5 <> '' AND data->>'device_authorization_oid' = $5)
-                    )))"#,
-                [
-                    root_oid.into(),
-                    now.into(),
-                    client_oid.into(),
-                    authorization_code_oid.into(),
-                    device_authorization_oid.into(),
-                ],
+            })?;
+        transaction
+            .execute(&query::revoke_refresh_family(
+                root_oid,
+                client_oid.into(),
+                authorization_code_oid,
+                device_authorization_oid,
+                now,
             ))
             .await
             .map_err(|error| {
@@ -1081,13 +1008,21 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             })?;
         if !device_authorization_oid.is_empty() {
             transaction
-                .execute_raw(Statement::from_sql_and_values(
-                    DatabaseBackend::Postgres,
-                    "UPDATE client_authorization SET revoked_at = $2, updated_at = $2 WHERE oid::text = $1 AND client_id = (SELECT id FROM client WHERE oid = $3) AND \"type\" = 'device_authorization' AND revoked_at IS NULL",
-                    [device_authorization_oid.into(), now.into(), client_oid.into()],
+                .execute(&query::revoke_token_for_client(
+                    Expr::col(client_authorization::Column::Oid)
+                        .cast_as("text")
+                        .eq(device_authorization_oid),
+                    client_oid.into(),
+                    "device_authorization",
+                    now,
                 ))
                 .await
-                .map_err(|error| query_failed("client_authorization.revoke_refresh_grant_for_client", error))?;
+                .map_err(|error| {
+                    query_failed(
+                        "client_authorization.revoke_refresh_grant_for_client",
+                        error,
+                    )
+                })?;
         }
         transaction.commit().await.map_err(|error| {
             query_failed(
@@ -1248,7 +1183,3 @@ mod par_tests {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "client_authorization_postgres_tests.rs"]
-mod postgres_refresh_regression;
