@@ -18,11 +18,14 @@ impl TokenService {
         &self,
         params: AuthorizationCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
-        let result = self.exchange_authorization_code_inner(params).await;
+        let mut event = BusinessEvent::business("token.issuance.result");
+        let result = self
+            .exchange_authorization_code_inner(params, &mut event)
+            .await;
         if let Err(error) = &result {
             let (outcome, reason) = issuance_result(error);
             self.events.emit(
-                BusinessEvent::business("token.issuance.result")
+                event
                     .outcome(outcome)
                     .reason(reason)
                     .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
@@ -34,6 +37,7 @@ impl TokenService {
     async fn exchange_authorization_code_inner(
         &self,
         params: AuthorizationCodeGrantParams,
+        event: &mut BusinessEvent,
     ) -> Result<TokenResponse, AppError> {
         let client_authentication_mode = ClientAuthenticationMode::from_credentials(
             params.client_secret.is_some() || params.client_assertion.is_some(),
@@ -53,6 +57,10 @@ impl TokenService {
                 params.client_assertion.as_deref(),
             )
             .await?;
+        event.attributes.push((
+            "client_oid",
+            EventValue::Text(authenticated_client_oid.to_string()),
+        ));
         let authenticated_client = self
             .client_repo
             .find_by_oid(authenticated_client_oid)
@@ -79,6 +87,10 @@ impl TokenService {
         let code_oid = Uuid::from_slice(&code_oid_bytes).map_err(|error| {
             AppError::from_code(TokenErrorCode::AuthCodeNotFound).with_source(error)
         })?;
+        event.attributes.push((
+            "authorization_code_id",
+            EventValue::Text(code_oid.to_string()),
+        ));
         tracing::Span::current().record("authorization_code_id", tracing::field::display(code_oid));
         tracing::Span::current().record(
             "client_oid",
@@ -307,6 +319,10 @@ impl TokenService {
                 client_authentication_mode,
             )
             .await?;
+        event.attributes.push((
+            "access_token_oid",
+            EventValue::Text(access_token_record.oid.to_string()),
+        ));
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &selection.resources,
@@ -360,57 +376,67 @@ impl TokenService {
             && code_scope.contains_offline_access()
         {
             Some(
-                self.store_refresh_token(StoreRefreshTokenParams {
-                    device_authorization_oid: None,
-                    client_oid: record.client_oid,
-                    scope: &refresh_scope_string,
-                    resources: refresh_resources,
-                    user_oid: &data.user_oid,
-                    session_oid: Some(data.session_oid),
-                    protected_session_id: Some(&protected_session_id),
-                    auth_time: data.auth_time,
-                    acr: session_acr.as_deref(),
-                    amr: &session_amr,
-                    rotated_from: None,
-                    authorization_code_oid: Some(record.oid),
-                    client_authentication_mode,
-                })
+                self.store_refresh_token(
+                    StoreRefreshTokenParams {
+                        device_authorization_oid: None,
+                        client_oid: record.client_oid,
+                        scope: &refresh_scope_string,
+                        resources: refresh_resources,
+                        user_oid: &data.user_oid,
+                        session_oid: Some(data.session_oid),
+                        protected_session_id: Some(&protected_session_id),
+                        auth_time: data.auth_time,
+                        acr: session_acr.as_deref(),
+                        amr: &session_amr,
+                        rotated_from: None,
+                        authorization_code_oid: Some(record.oid),
+                        client_authentication_mode,
+                    },
+                    event,
+                )
                 .await?,
             )
         } else {
             None
         };
 
-        self.events.emit(
-            BusinessEvent::business("token.issuance.result")
-                .outcome("success")
-                .attribute(
-                    "authorization_code_id",
-                    EventValue::Text(record.oid.to_string()),
-                )
-                .attribute(
-                    "client_oid",
-                    EventValue::Text(record.client_oid.to_string()),
-                )
-                .attribute(
-                    "user_oid",
-                    EventValue::Pseudonymized {
-                        purpose: "user_oid",
-                        value: data.user_oid.clone(),
-                    },
-                )
-                .attribute(
-                    "session_oid",
-                    EventValue::Pseudonymized {
-                        purpose: "session_oid",
-                        value: data.session_oid.0.to_string(),
-                    },
-                ),
-        );
+        let mut issuance_event = BusinessEvent::business("token.issuance.result")
+            .outcome("success")
+            .attribute(
+                "access_token_oid",
+                EventValue::Text(access_token_record.oid.to_string()),
+            )
+            .attribute(
+                "authorization_code_id",
+                EventValue::Text(record.oid.to_string()),
+            )
+            .attribute(
+                "client_oid",
+                EventValue::Text(record.client_oid.to_string()),
+            )
+            .attribute(
+                "user_oid",
+                EventValue::Pseudonymized {
+                    purpose: "user_oid",
+                    value: data.user_oid.clone(),
+                },
+            )
+            .attribute(
+                "session_oid",
+                EventValue::Pseudonymized {
+                    purpose: "session_oid",
+                    value: data.session_oid.0.to_string(),
+                },
+            );
+        if let Some((oid, _)) = &refresh_token {
+            issuance_event =
+                issuance_event.attribute("refresh_token_oid", EventValue::Text(oid.to_string()));
+        }
+        self.events.emit(issuance_event);
         Ok(TokenResponse {
             access_token,
             id_token,
-            refresh_token,
+            refresh_token: refresh_token.map(|(_, token)| token),
             token_type: TokenType::Bearer,
             expires_in: 3600,
             scope: selection.scope,
@@ -422,11 +448,12 @@ impl TokenService {
         &self,
         params: RefreshTokenGrantParams,
     ) -> Result<TokenResponse, AppError> {
-        let result = self.exchange_refresh_token_inner(params).await;
+        let mut event = BusinessEvent::business("token.refresh.result");
+        let result = self.exchange_refresh_token_inner(params, &mut event).await;
         if let Err(error) = &result {
             let (outcome, reason) = issuance_result(error);
             self.events.emit(
-                BusinessEvent::business("token.refresh.result")
+                event
                     .outcome(outcome)
                     .reason(reason)
                     .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
@@ -438,6 +465,7 @@ impl TokenService {
     async fn exchange_refresh_token_inner(
         &self,
         params: RefreshTokenGrantParams,
+        event: &mut BusinessEvent,
     ) -> Result<TokenResponse, AppError> {
         let client_authentication_mode = ClientAuthenticationMode::from_credentials(
             params.client_secret.is_some() || params.client_assertion.is_some(),
@@ -457,6 +485,10 @@ impl TokenService {
                 params.client_assertion.as_deref(),
             )
             .await?;
+        event.attributes.push((
+            "client_oid",
+            EventValue::Text(authenticated_client_oid.to_string()),
+        ));
         let authenticated_client = self
             .client_repo
             .find_by_oid(authenticated_client_oid)
@@ -481,6 +513,10 @@ impl TokenService {
         let refresh_oid = Uuid::from_slice(&refresh_oid_bytes).map_err(|error| {
             AppError::from_code(TokenErrorCode::RefreshTokenNotFound).with_source(error)
         })?;
+        event.attributes.push((
+            "refresh_token_oid",
+            EventValue::Text(refresh_oid.to_string()),
+        ));
 
         let refresh_record = self
             .client_authorization_repo
@@ -682,6 +718,10 @@ impl TokenService {
                 issued_mode,
             )
             .await?;
+        event.attributes.push((
+            "access_token_oid",
+            EventValue::Text(access_token_record.oid.to_string()),
+        ));
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &selection.resources,
@@ -734,34 +774,48 @@ impl TokenService {
             None
         };
         let rotated_from = refresh_record.oid.to_string();
-        let refresh_token = Some(
-            self.store_refresh_token(StoreRefreshTokenParams {
-                client_oid: authenticated_client_oid,
-                scope: &grant_scope,
-                resources: refresh_resources,
-                user_oid: &refresh_data.user_oid,
-                session_oid: refresh_data.session_oid,
-                protected_session_id: protected_session_id.as_deref(),
-                auth_time: refresh_data.auth_time,
-                acr: session_acr.as_deref(),
-                amr: &session_amr,
-                rotated_from: Some(rotated_from.as_str()),
-                authorization_code_oid: refresh_data
-                    .authorization_code_oid
-                    .as_deref()
-                    .and_then(|oid| oid.parse::<Uuid>().ok()),
-                device_authorization_oid: refresh_data
-                    .device_authorization_oid
-                    .as_deref()
-                    .and_then(|oid| oid.parse::<Uuid>().ok()),
-                client_authentication_mode: issued_mode,
-            })
-            .await?,
-        );
+        let (rotated_refresh_oid, refresh_token) = self
+            .store_refresh_token(
+                StoreRefreshTokenParams {
+                    client_oid: authenticated_client_oid,
+                    scope: &grant_scope,
+                    resources: refresh_resources,
+                    user_oid: &refresh_data.user_oid,
+                    session_oid: refresh_data.session_oid,
+                    protected_session_id: protected_session_id.as_deref(),
+                    auth_time: refresh_data.auth_time,
+                    acr: session_acr.as_deref(),
+                    amr: &session_amr,
+                    rotated_from: Some(rotated_from.as_str()),
+                    authorization_code_oid: refresh_data
+                        .authorization_code_oid
+                        .as_deref()
+                        .and_then(|oid| oid.parse::<Uuid>().ok()),
+                    device_authorization_oid: refresh_data
+                        .device_authorization_oid
+                        .as_deref()
+                        .and_then(|oid| oid.parse::<Uuid>().ok()),
+                    client_authentication_mode: issued_mode,
+                },
+                event,
+            )
+            .await?;
 
         self.events.emit(
             BusinessEvent::business("token.refresh.result")
                 .outcome("success")
+                .attribute(
+                    "refresh_token_oid",
+                    EventValue::Text(refresh_record.oid.to_string()),
+                )
+                .attribute(
+                    "rotated_refresh_token_oid",
+                    EventValue::Text(rotated_refresh_oid.to_string()),
+                )
+                .attribute(
+                    "access_token_oid",
+                    EventValue::Text(access_token_record.oid.to_string()),
+                )
                 .attribute(
                     "client_oid",
                     EventValue::Text(authenticated_client_oid.to_string()),
@@ -788,6 +842,14 @@ impl TokenService {
             BusinessEvent::business("refresh_token.rotated")
                 .outcome("success")
                 .attribute(
+                    "refresh_token_oid",
+                    EventValue::Text(refresh_record.oid.to_string()),
+                )
+                .attribute(
+                    "rotated_refresh_token_oid",
+                    EventValue::Text(rotated_refresh_oid.to_string()),
+                )
+                .attribute(
                     "client_oid",
                     EventValue::Text(authenticated_client_oid.to_string()),
                 ),
@@ -795,7 +857,7 @@ impl TokenService {
         Ok(TokenResponse {
             access_token,
             id_token,
-            refresh_token,
+            refresh_token: Some(refresh_token),
             token_type: TokenType::Bearer,
             expires_in: 3600,
             scope,
@@ -817,6 +879,10 @@ impl TokenService {
         self.events.emit(
             BusinessEvent::audit("refresh_token.reuse_detected")
                 .outcome("detected")
+                .attribute(
+                    "refresh_token_oid",
+                    EventValue::Text(refresh_oid.to_string()),
+                )
                 .attribute("client_oid", EventValue::Text(client_oid.to_string())),
         );
         Ok(())

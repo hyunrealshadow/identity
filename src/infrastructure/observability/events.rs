@@ -345,6 +345,10 @@ mod tests {
             .outcome("success")
             .attribute("client_oid", EventValue::Text("client-1".to_owned()))
             .attribute(
+                "refresh_token_oid",
+                EventValue::Text("authorization-1".to_owned()),
+            )
+            .attribute(
                 "user_oid",
                 EventValue::Pseudonymized {
                     purpose: "user_oid",
@@ -364,6 +368,11 @@ mod tests {
             .collect();
 
         assert!(values.iter().any(|value| value == "client_oid=client-1"));
+        assert!(
+            values
+                .iter()
+                .any(|value| value == "refresh_token_oid=authorization-1")
+        );
         assert!(values.iter().any(|value| value == "user_oid=[REDACTED]"));
         assert!(values.iter().any(|value| value == "secret=[REDACTED]"));
         assert!(rendered.trace.is_none());

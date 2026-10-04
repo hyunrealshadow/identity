@@ -27,11 +27,12 @@ impl TokenService {
         &self,
         params: DeviceCodeGrantParams,
     ) -> Result<TokenResponse, AppError> {
-        let result = self.exchange_device_code_inner(params).await;
+        let mut event = BusinessEvent::business("token.device_code.result");
+        let result = self.exchange_device_code_inner(params, &mut event).await;
         if let Err(error) = &result {
             let (outcome, reason) = issuance_result(error);
             self.events.emit(
-                BusinessEvent::business("token.device_code.result")
+                event
                     .outcome(outcome)
                     .reason(reason)
                     .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
@@ -43,6 +44,7 @@ impl TokenService {
     async fn exchange_device_code_inner(
         &self,
         params: DeviceCodeGrantParams,
+        event: &mut BusinessEvent,
     ) -> Result<TokenResponse, AppError> {
         let client_authentication_mode =
             identity_domain::client_authorization::ClientAuthenticationMode::from_credentials(
@@ -63,6 +65,10 @@ impl TokenService {
                 params.client_assertion.as_deref(),
             )
             .await?;
+        event.attributes.push((
+            "client_oid",
+            EventValue::Text(authenticated_client_oid.to_string()),
+        ));
         let client = self
             .client_repo
             .find_by_oid(authenticated_client_oid)
@@ -99,6 +105,9 @@ impl TokenService {
                 TokenErrorCode::DeviceCodeClientMismatch,
             ));
         }
+        event
+            .attributes
+            .push(("request_oid", EventValue::Text(record.oid.to_string())));
 
         let data = match &record.data {
             ClientAuthorizationData::DeviceAuthorizationRequest(data) => data.clone(),
@@ -146,6 +155,10 @@ impl TokenService {
         };
 
         let device_authorization_oid = approval.device_authorization_oid;
+        event.attributes.push((
+            "device_authorization_oid",
+            EventValue::Text(device_authorization_oid.to_string()),
+        ));
         let relation = self
             .device_repo
             .find_device_authorization_by_oid(device_authorization_oid)
@@ -409,22 +422,32 @@ impl TokenService {
             }
         }
 
-        self.events.emit(
-            BusinessEvent::business("token.device_code.issued")
-                .outcome("success")
-                .attribute("client_oid", EventValue::Text(client_id.to_owned()))
-                .attribute(
-                    "device_authorization_oid",
-                    EventValue::Text(device_authorization_oid.to_string()),
-                )
-                .attribute(
-                    "user_oid",
-                    EventValue::Pseudonymized {
-                        purpose: "user_oid",
-                        value: approval.user_oid.clone(),
-                    },
-                ),
-        );
+        let mut event = BusinessEvent::business("token.device_code.issued")
+            .outcome("success")
+            .attribute("client_oid", EventValue::Text(client_id.to_owned()))
+            .attribute("request_oid", EventValue::Text(request_oid.to_string()))
+            .attribute(
+                "access_token_oid",
+                EventValue::Text(access_token_oid.to_string()),
+            )
+            .attribute(
+                "device_authorization_oid",
+                EventValue::Text(device_authorization_oid.to_string()),
+            )
+            .attribute(
+                "user_oid",
+                EventValue::Pseudonymized {
+                    purpose: "user_oid",
+                    value: approval.user_oid.clone(),
+                },
+            );
+        if refresh_token.is_some() {
+            event = event.attribute(
+                "refresh_token_oid",
+                EventValue::Text(refresh_token_oid.to_string()),
+            );
+        }
+        self.events.emit(event);
 
         Ok(TokenResponse {
             access_token,

@@ -1,3 +1,4 @@
+use super::decode_unverified_payload;
 use crate::application::error::{code::AppErrorCode, codes::token::TokenErrorCode};
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
@@ -17,12 +18,14 @@ fn request(scope: &str) -> ClientCredentialsGrantParams {
 
 #[tokio::test]
 async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
+    let sink = Arc::new(super::RecordingSink::default());
     let repo = Arc::new(mock_client_auth_repo());
     let service = build_token_service_with_client_repo(
         repo,
         Uuid::new_v4(),
         Arc::new(MachineClientRepository),
-    );
+    )
+    .with_events(sink.clone());
 
     let mut params = request("account.read");
     params.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
@@ -31,6 +34,13 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
     assert_eq!(response.scope, "account.read");
     assert!(response.id_token.is_none());
     assert!(response.refresh_token.is_none());
+    let access = decode_unverified_payload(&response.access_token);
+    sink.assert_attribute(
+        "token.client_credentials.result",
+        "success",
+        "access_token_oid",
+        crate::observability::EventValue::Text(access["jti"].as_str().unwrap().to_owned()),
+    );
 }
 
 #[tokio::test]

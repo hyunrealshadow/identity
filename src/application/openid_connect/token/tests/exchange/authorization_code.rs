@@ -1214,37 +1214,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
     }
 }
 
-/// Records emitted key events so exchange outcome and consumption events can
-/// be asserted without an observability pipeline.
-#[derive(Default)]
-struct RecordingSink {
-    events: std::sync::Mutex<Vec<crate::observability::BusinessEvent>>,
-}
-
-impl RecordingSink {
-    fn names(&self) -> Vec<&'static str> {
-        self.events
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|event| event.name)
-            .collect()
-    }
-
-    fn outcome_of(&self, name: &str) -> Option<&'static str> {
-        let events = self.events.lock().unwrap();
-        events
-            .iter()
-            .find(|event| event.name == name)
-            .and_then(|event| event.outcome)
-    }
-}
-
-impl crate::observability::EventSink for RecordingSink {
-    fn emit(&self, event: crate::observability::BusinessEvent) {
-        self.events.lock().unwrap().push(event);
-    }
-}
+use super::RecordingSink;
 
 #[tokio::test]
 async fn successful_exchange_emits_consumption_and_issuance_events() {
@@ -1339,11 +1309,12 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
     let (service, _) = rs256_token_service_with_public_key(repo.clone(), user_oid);
     let sink = Arc::new(RecordingSink::default());
     let service = service.with_events(sink.clone());
+    let code_oid = Uuid::new_v4();
 
     let error = service
         .exchange_authorization_code(AuthorizationCodeGrantParams {
             resources: Vec::new(),
-            code: STANDARD.encode(Uuid::new_v4().as_bytes()),
+            code: STANDARD.encode(code_oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
             client_id: Some(Uuid::nil().to_string()),
             client_secret: Some("secret-123".to_owned()),
@@ -1365,6 +1336,12 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
         1
     );
     assert_eq!(sink.outcome_of("token.issuance.result"), Some("rejected"));
+    sink.assert_attribute(
+        "token.issuance.result",
+        "rejected",
+        "authorization_code_id",
+        crate::observability::EventValue::Text(code_oid.to_string()),
+    );
     // No code was ever consumed, so no consumption event is fabricated.
     assert!(!names.contains(&"authorization_code.consumed"));
 }

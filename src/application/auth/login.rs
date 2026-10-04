@@ -225,6 +225,10 @@ impl LoginService {
             crate::observability::BusinessEvent::audit("account.credential.changed")
                 .outcome("success")
                 .attribute(
+                    "credential_oid",
+                    crate::observability::EventValue::Text(credential.oid.0.to_string()),
+                )
+                .attribute(
                     "user_oid",
                     crate::observability::EventValue::Pseudonymized {
                         purpose: "user_oid",
@@ -403,7 +407,7 @@ impl LoginService {
         let result = self
             .challenge_inner(login_oid, credential_type, credential, ctx)
             .await;
-        self.record_authentication_result(credential_type, &result);
+        self.record_authentication_result(login_oid, credential_type, &result);
         result
     }
 
@@ -411,6 +415,7 @@ impl LoginService {
     /// events never carry credentials, OTP codes or recovery codes.
     fn record_authentication_result(
         &self,
+        login_oid: Uuid,
         credential_type: CredentialType,
         result: &Result<ChallengeOutcome, AppError>,
     ) {
@@ -429,6 +434,7 @@ impl LoginService {
                     .unwrap_or_default();
                 self.events.emit(
                     BusinessEvent::audit("authentication.result")
+                        .attribute("login_oid", EventValue::Text(login_oid.to_string()))
                         .outcome("success")
                         .reason("authenticated")
                         .attribute("factor", EventValue::Text(factor.to_owned()))
@@ -453,6 +459,7 @@ impl LoginService {
                 );
                 self.events.emit(
                     BusinessEvent::business("session.established")
+                        .attribute("login_oid", EventValue::Text(login_oid.to_string()))
                         .outcome("success")
                         .attribute(
                             "user_oid",
@@ -473,6 +480,7 @@ impl LoginService {
             Ok(ChallengeOutcome::MfaRequired { login }) => {
                 self.events.emit(
                     BusinessEvent::audit("authentication.result")
+                        .attribute("login_oid", EventValue::Text(login_oid.to_string()))
                         .outcome("success")
                         .reason("mfa_required")
                         .attribute("factor", EventValue::Text(factor.to_owned()))
@@ -492,6 +500,7 @@ impl LoginService {
                 let (outcome, reason) = authentication_outcome(error);
                 self.events.emit(
                     BusinessEvent::audit("authentication.result")
+                        .attribute("login_oid", EventValue::Text(login_oid.to_string()))
                         .outcome(outcome)
                         .reason(reason)
                         .attribute("factor", EventValue::Text(factor.to_owned()))
