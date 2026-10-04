@@ -188,15 +188,15 @@ pub(crate) async fn expire_due_authorizations_batch(
     Ok(db
         .execute_unprepared(
             r#"WITH due AS (
-                SELECT id FROM client_authorization
-                WHERE is_expired = false AND expires_at <= CURRENT_TIMESTAMP
-                ORDER BY expires_at
+                SELECT "id" FROM "client_authorization"
+                WHERE "is_expired" = false AND "expires_at" <= CURRENT_TIMESTAMP
+                ORDER BY "expires_at"
                 LIMIT 1000
                 FOR UPDATE SKIP LOCKED
             )
-            UPDATE client_authorization AS authorization
-            SET is_expired = true, updated_at = CURRENT_TIMESTAMP
-            FROM due WHERE authorization.id = due.id"#,
+            UPDATE "client_authorization" AS "auth_record"
+            SET "is_expired" = true, "updated_at" = CURRENT_TIMESTAMP
+            FROM due WHERE "auth_record"."id" = due."id""#,
         )
         .await?
         .rows_affected())
@@ -212,19 +212,19 @@ async fn lock_refresh_family(
         .query_one_raw(Statement::from_sql_and_values(
             DatabaseBackend::Postgres,
             r#"WITH RECURSIVE ancestors AS (
-                SELECT authorization.oid, authorization.data
-                FROM client_authorization AS authorization
-                JOIN client ON client.id = authorization.client_id
-                WHERE authorization.oid = $1 AND client.oid = $2
-                  AND authorization."type" = 'refresh_token'
+                SELECT "auth_record"."oid", "auth_record"."data"
+                FROM "client_authorization" AS "auth_record"
+                JOIN "client" ON "client"."id" = "auth_record"."client_id"
+                WHERE "auth_record"."oid" = $1 AND "client"."oid" = $2
+                  AND "auth_record"."type" = 'refresh_token'
                 UNION ALL
-                SELECT parent.oid, parent.data
-                FROM client_authorization AS parent
-                JOIN ancestors ON parent.oid::text = ancestors.data->>'rotated_from'
-                WHERE parent."type" = 'refresh_token'
+                SELECT "parent"."oid", "parent"."data"
+                FROM "client_authorization" AS "parent"
+                JOIN ancestors ON "parent"."oid"::text = ancestors."data"->>'rotated_from'
+                WHERE "parent"."type" = 'refresh_token'
             )
-            SELECT oid AS root_oid FROM ancestors
-            WHERE data->>'rotated_from' IS NULL LIMIT 1"#,
+            SELECT "oid" AS root_oid FROM ancestors
+            WHERE "data"->>'rotated_from' IS NULL LIMIT 1"#,
             [refresh_oid.into(), client_oid.into()],
         ))
         .await
@@ -1119,3 +1119,7 @@ mod par_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "client_authorization_postgres_tests.rs"]
+mod postgres_refresh_regression;

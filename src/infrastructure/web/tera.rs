@@ -271,7 +271,7 @@ mod tests {
 
         assert_eq!(
             i18n.t_code_with_params(&langid!("zh-CN"), 25002, &application_type_params),
-            "不支持 application_type：browser_extension。"
+            "不支持 application_type：browser_extension"
         );
         assert_eq!(
             i18n.t_code_with_params(&langid!("en-US"), 25003, &subject_type_params),
@@ -289,7 +289,7 @@ mod tests {
                 24000,
                 &ErrorParams::new().insert("grant_type", "device_code")
             ),
-            "不支持 grant_type：device_code。"
+            "不支持 grant_type：device_code"
         );
         assert_eq!(
             i18n.t_code_with_params(
@@ -305,7 +305,7 @@ mod tests {
                 22001,
                 &ErrorParams::new().insert("method", "PUT")
             ),
-            "不支持请求方法：PUT，请使用 GET 或 POST。"
+            "不支持请求方法：PUT，请使用 GET 或 POST"
         );
         assert_eq!(
             i18n.t_code_with_params(

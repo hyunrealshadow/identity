@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
+import { forwardRequestContext } from './request-context.server'
 import { PASSWORD_CHANGE_CONTINUATION } from './account-reauth'
 import {
   type OAuthFlowSession,
@@ -145,6 +146,7 @@ async function startAuthorizationFlow(
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
+    ui_locales: requestLocale(),
   }).toString()
   if (mode === 'reauth') {
     if (!requirements) {
@@ -479,11 +481,8 @@ export async function accessToken() {
       oauthClient.client_secret,
     )
   } catch (error) {
-    if (
-      error instanceof OAuthTokenExchangeError &&
-      error.oauthError === 'invalid_grant'
-    ) {
-      await session.clear()
+    if (error instanceof OAuthTokenExchangeError) {
+      await clearAuthorizationCookie()
       return
     }
     throw error
@@ -591,11 +590,11 @@ async function performTokenExchange(
     new URL('/oauth2/token', backchannelIdentityApiUrl()),
     {
       method: 'POST',
-      headers: {
+      headers: forwardRequestContext(new Headers({
         accept: 'application/json',
         authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
         'content-type': 'application/x-www-form-urlencoded',
-      },
+      })),
       body,
     },
   )

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeader: vi.fn(() => undefined),
+}))
+
 /**
  * The login observability module is configured from environment variables at
  * initialization time, so every test loads a fresh module instance after
