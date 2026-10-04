@@ -94,7 +94,8 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
 async fn exchange_refresh_token_returns_new_access_token() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
-    let service = build_token_service(repo.clone(), user_oid);
+    let sink = Arc::new(super::RecordingSink::default());
+    let service = build_token_service(repo.clone(), user_oid).with_events(sink.clone());
 
     let refresh_record = repo
         .create(
@@ -196,6 +197,52 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .await
         .unwrap_err();
     assert_eq!(error.code(), 24015);
+    use crate::observability::EventValue;
+    for name in ["token.refresh.result", "refresh_token.rotated"] {
+        sink.assert_attribute(
+            name,
+            "success",
+            "refresh_token_oid",
+            EventValue::Text(initial_refresh_oid.to_string()),
+        );
+        sink.assert_attribute(
+            name,
+            "success",
+            "rotated_refresh_token_oid",
+            EventValue::Text(rotated_oid.to_string()),
+        );
+    }
+    sink.assert_attribute(
+        "token.refresh.result",
+        "success",
+        "access_token_oid",
+        EventValue::Text(access_oid.to_string()),
+    );
+    sink.assert_attribute(
+        "token.refresh.result",
+        "rejected",
+        "refresh_token_oid",
+        EventValue::Text(initial_refresh_oid.to_string()),
+    );
+    sink.assert_attribute(
+        "refresh_token.reuse_detected",
+        "detected",
+        "refresh_token_oid",
+        EventValue::Text(initial_refresh_oid.to_string()),
+    );
+    let initial_access = super::decode_unverified_payload(&initial.access_token);
+    sink.assert_attribute(
+        "token.issuance.result",
+        "success",
+        "access_token_oid",
+        EventValue::Text(initial_access["jti"].as_str().unwrap().to_owned()),
+    );
+    sink.assert_attribute(
+        "token.issuance.result",
+        "success",
+        "refresh_token_oid",
+        EventValue::Text(initial_refresh_oid.to_string()),
+    );
     assert!(
         repo.find_by_oid(rotated_oid)
             .await

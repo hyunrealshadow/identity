@@ -1,4 +1,5 @@
 use super::*;
+use crate::observability::{BusinessEvent, EventValue};
 use crate::openid_connect::client_encryption::select_client_encryption_jwk;
 use crate::openid_connect::dto::scoped_standard_claims;
 use crate::openid_connect::jose::{
@@ -557,7 +558,8 @@ impl TokenService {
     pub(super) async fn store_refresh_token(
         &self,
         params: StoreRefreshTokenParams<'_>,
-    ) -> Result<String, AppError> {
+        event: &mut BusinessEvent,
+    ) -> Result<(Uuid, String), AppError> {
         let data = ClientAuthorizationData::RefreshToken(RefreshTokenData {
             scope: params.scope.to_string(),
             resources: params.resources.to_vec(),
@@ -585,12 +587,23 @@ impl TokenService {
                 AppError::from_code(TokenErrorCode::StoreRefreshFailed).with_source(error)
             })?;
 
-        self.data_protector
+        // Keep the persisted record identifiable even if protecting its token fails.
+        event.attributes.push((
+            if params.rotated_from.is_some() {
+                "rotated_refresh_token_oid"
+            } else {
+                "refresh_token_oid"
+            },
+            EventValue::Text(record.oid.to_string()),
+        ));
+        let token = self
+            .data_protector
             .protect("refresh-token", record.oid.as_bytes())
             .await
             .map_err(|error| {
                 AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-            })
+            })?;
+        Ok((record.oid, token))
     }
 
     #[allow(clippy::too_many_arguments)]

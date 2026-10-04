@@ -218,7 +218,7 @@ impl DeviceAuthorizationService {
         let device_code = generate_device_code();
         let now = Utc::now();
         let expires_at = now + chrono::Duration::seconds(settings.request_ttl_seconds);
-        let request = self
+        let (request_oid, request) = self
             .create_request(
                 &client,
                 &scope,
@@ -239,6 +239,7 @@ impl DeviceAuthorizationService {
         self.events.emit(
             BusinessEvent::audit("device_authorization.requested")
                 .outcome("success")
+                .attribute("request_oid", EventValue::Text(request_oid.to_string()))
                 .attribute(
                     "client_oid",
                     EventValue::Text(client.client().oid.to_string()),
@@ -474,6 +475,7 @@ impl DeviceAuthorizationService {
         }
 
         let now = Utc::now();
+        let device_authorization_oid = Uuid::new_v4();
         let applied = match decision {
             DeviceVerificationDecision::Approve => self
                 .device_repo
@@ -485,7 +487,7 @@ impl DeviceAuthorizationService {
                         auth_time: user.auth_time,
                         acr: user.acr.clone(),
                         amr: user.amr.clone(),
-                        device_authorization_oid: Uuid::new_v4(),
+                        device_authorization_oid,
                     },
                     now,
                 )
@@ -513,18 +515,23 @@ impl DeviceAuthorizationService {
             ));
         }
 
-        self.events.emit(
-            BusinessEvent::audit(match decision {
-                DeviceVerificationDecision::Approve => "device_authorization.approved",
-                DeviceVerificationDecision::Deny => "device_authorization.denied",
-            })
-            .outcome("success")
-            .attribute(
-                "client_oid",
-                EventValue::Text(record.client_oid.to_string()),
-            )
-            .attribute("request_oid", EventValue::Text(record.oid.to_string())),
-        );
+        let mut event = BusinessEvent::audit(match decision {
+            DeviceVerificationDecision::Approve => "device_authorization.approved",
+            DeviceVerificationDecision::Deny => "device_authorization.denied",
+        })
+        .outcome("success")
+        .attribute(
+            "client_oid",
+            EventValue::Text(record.client_oid.to_string()),
+        )
+        .attribute("request_oid", EventValue::Text(record.oid.to_string()));
+        if decision == DeviceVerificationDecision::Approve {
+            event = event.attribute(
+                "device_authorization_oid",
+                EventValue::Text(device_authorization_oid.to_string()),
+            );
+        }
+        self.events.emit(event);
 
         Ok(())
     }
@@ -584,7 +591,7 @@ impl DeviceAuthorizationService {
         interval_seconds: i64,
         expires_at: DateTime<Utc>,
         client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
-    ) -> Result<DeviceAuthorizationRequestData, AppError> {
+    ) -> Result<(Uuid, DeviceAuthorizationRequestData), AppError> {
         for _ in 0..USER_CODE_ATTEMPTS {
             let user_code = generate_user_code();
             let data = DeviceAuthorizationRequestData {
@@ -610,7 +617,7 @@ impl DeviceAuthorizationService {
                 .create_device_request(client.client().oid, data.clone(), expires_at)
                 .await
             {
-                Ok(_) => return Ok(data),
+                Ok(record) => return Ok((record.oid, data)),
                 Err(DeviceAuthorizationRepositoryError::UserCodeConflict) => continue,
                 Err(error) => {
                     return Err(AppError::from_code(

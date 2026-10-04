@@ -1,12 +1,36 @@
 use super::signing::SignAccessTokenInput;
 use super::*;
 use crate::domain::openid_connect::TokenEndpointAuthMethod;
+use crate::observability::{BusinessEvent, EventValue};
 
 impl TokenService {
     #[tracing::instrument(skip_all, name = "token.client_credentials")]
     pub async fn exchange_client_credentials(
         &self,
         params: ClientCredentialsGrantParams,
+    ) -> Result<TokenResponse, AppError> {
+        let mut event = BusinessEvent::business("token.client_credentials.result");
+        let result = self
+            .exchange_client_credentials_inner(params, &mut event)
+            .await;
+        event = match &result {
+            Ok(_) => event.outcome("success"),
+            Err(error) => {
+                let (outcome, reason) = super::exchange::issuance_result(error);
+                event
+                    .outcome(outcome)
+                    .reason(reason)
+                    .attribute("error_code", EventValue::Integer(i64::from(error.code())))
+            }
+        };
+        self.events.emit(event);
+        result
+    }
+
+    async fn exchange_client_credentials_inner(
+        &self,
+        params: ClientCredentialsGrantParams,
+        event: &mut BusinessEvent,
     ) -> Result<TokenResponse, AppError> {
         let client_id = resolve_client_id(
             params.client_id,
@@ -23,6 +47,10 @@ impl TokenService {
                 params.client_assertion.as_deref(),
             )
             .await?;
+        event.attributes.push((
+            "client_oid",
+            EventValue::Text(client.client().oid.to_string()),
+        ));
         let methods = client.metadata();
         let valid_proof = if params.client_assertion.is_some() {
             params.client_secret.is_none()
@@ -90,6 +118,9 @@ impl TokenService {
                 identity_domain::client_authorization::ClientAuthenticationMode::Confidential,
             )
             .await?;
+        event
+            .attributes
+            .push(("access_token_oid", EventValue::Text(record.oid.to_string())));
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &selection.resources,

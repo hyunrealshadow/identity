@@ -297,10 +297,7 @@ impl crate::domain::openid_connect::OpenIdConnectClientRepository for DeviceClie
     }
 }
 
-fn decode_unverified_payload(token: &str) -> serde_json::Value {
-    let payload = token.split('.').nth(1).unwrap();
-    serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload).unwrap()).unwrap()
-}
+use super::decode_unverified_payload;
 
 #[tokio::test]
 async fn unknown_device_code_is_invalid_grant() {
@@ -361,11 +358,19 @@ async fn pending_requests_report_authorization_pending() {
         None,
         DeviceRepoOptions::default(),
     );
-    let service = build_service(device_client(vec![GrantType::DeviceCode]), repo);
+    let sink = Arc::new(super::RecordingSink::default());
+    let service =
+        build_service(device_client(vec![GrantType::DeviceCode]), repo).with_events(sink.clone());
 
     let error = service.exchange_device_code(params()).await.unwrap_err();
 
     assert_eq!(error.code(), 24064);
+    sink.assert_attribute(
+        "token.device_code.result",
+        "rejected",
+        "request_oid",
+        crate::observability::EventValue::Text("11111111-1111-1111-1111-111111111111".to_owned()),
+    );
 }
 
 #[tokio::test]
@@ -424,6 +429,7 @@ async fn consumed_requests_report_invalid_grant() {
 
 #[tokio::test]
 async fn an_approved_request_issues_its_token_set_once() {
+    let sink = Arc::new(super::RecordingSink::default());
     let (repo, mut records) = device_repo(
         request_record(
             DeviceRequestStatus::Approved,
@@ -435,7 +441,8 @@ async fn an_approved_request_issues_its_token_set_once() {
     let service = build_service(
         device_client(vec![GrantType::DeviceCode, GrantType::RefreshToken]),
         repo,
-    );
+    )
+    .with_events(sink.clone());
 
     let mut request = params();
     request.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
@@ -461,6 +468,25 @@ async fn an_approved_request_issues_its_token_set_once() {
     assert!(id_claims.get("sid").is_none());
 
     let stored = records.try_recv().unwrap();
+    for record in &stored {
+        let field = match record.data {
+            ClientAuthorizationData::AccessToken(_) => "access_token_oid",
+            ClientAuthorizationData::RefreshToken(_) => "refresh_token_oid",
+            _ => panic!("unexpected token record"),
+        };
+        sink.assert_attribute(
+            "token.device_code.issued",
+            "success",
+            field,
+            crate::observability::EventValue::Text(record.oid.to_string()),
+        );
+    }
+    sink.assert_attribute(
+        "token.device_code.issued",
+        "success",
+        "request_oid",
+        crate::observability::EventValue::Text("11111111-1111-1111-1111-111111111111".to_owned()),
+    );
     assert_eq!(
         stored.len(),
         2,
