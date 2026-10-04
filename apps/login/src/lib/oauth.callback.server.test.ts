@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
       return_to: '/',
     },
     clear: vi.fn(),
+    update: vi.fn(),
   },
   authorization: { data: {}, clear: vi.fn(), update: vi.fn() },
   mfa: { data: {}, clear: vi.fn(), update: vi.fn() },
@@ -43,7 +44,37 @@ vi.mock('./oauth-session.server', () => ({
   storeAccountFlash: mocks.storeAccountFlash,
 }))
 
-import { finishAuthorization } from './oauth.server'
+import { accessToken, finishAuthorization, startSignIn } from './oauth.server'
+
+describe('refresh failure recovery', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it.each(['invalid_grant', 'server_error'])('starts a new sign-in after %s', async (oauthError) => {
+    vi.clearAllMocks()
+    mocks.getRequestHeader.mockReturnValue(undefined)
+    mocks.authorization.data = {
+      access_token: 'expired-access', refresh_token: 'old-refresh', expires_at: 0,
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      error: oauthError, error_description: 'Refresh failed',
+    }, { status: oauthError === 'server_error' ? 500 : 400 })))
+
+    await expect(accessToken()).resolves.toBeUndefined()
+    expect(mocks.authorization.clear).toHaveBeenCalledOnce()
+    expect(mocks.mfa.clear).toHaveBeenCalledOnce()
+    expect(mocks.flash.clear).toHaveBeenCalledOnce()
+
+    const location = await startSignIn('/account/security')
+    expect(location.pathname).toBe('/oauth2/authorize')
+    expect(location.searchParams.get('state')).toBeTruthy()
+    expect(location.searchParams.get('code_challenge')).toBeTruthy()
+    expect(location.searchParams.get('ui_locales')).toBe('en-US')
+    expect(mocks.flow.update).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'signin', return_to: '/account/security',
+    }))
+    mocks.authorization.data = {}
+  })
+})
 
 describe('OAuth callback errors', () => {
   beforeEach(() => {

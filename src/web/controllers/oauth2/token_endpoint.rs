@@ -308,6 +308,28 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
 mod tests {
     use super::*;
     use http::{HeaderMap, StatusCode, header::AUTHORIZATION};
+    use salvo::test::ResponseExt;
+
+    #[tokio::test]
+    async fn refresh_revocation_errors_respect_chinese_request_language() {
+        let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ACCEPT_LANGUAGE, "zh-CN,zh;q=0.9".parse().unwrap());
+        let locale = resolve_locale_from_headers(&headers);
+        let mut response = token_error_response(
+            AppError::from_code(TokenErrorCode::RevokeRefreshFailed),
+            ctx.resources().i18n(),
+            &locale,
+        );
+        assert_eq!(
+            response.status_code,
+            Some(StatusCode::INTERNAL_SERVER_ERROR)
+        );
+        let body = response.take_string().await.unwrap();
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["error"], "server_error");
+        assert_eq!(body["error_description"], "撤销刷新令牌时发生意外错误");
+    }
 
     #[test]
     fn token_error_status_for_invalid_grant_is_bad_request() {

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const requestHeaders = vi.hoisted(() => ({ get: vi.fn() }))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeader: requestHeaders.get,
+}))
+
 import {
   callbackUrl,
   exchangeToken,
@@ -12,6 +17,7 @@ import {
 } from './oauth.server'
 
 afterEach(() => {
+  requestHeaders.get.mockReset()
   delete process.env.IDENTITY_API_URL
   delete process.env.IDENTITY_BACKCHANNEL_API_URL
   delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
@@ -126,6 +132,19 @@ describe('RP-initiated logout', () => {
 })
 
 describe('OAuth token exchange', () => {
+  it('forwards Chinese locale to the token endpoint', async () => {
+    requestHeaders.get.mockImplementation((name) =>
+      name === 'accept-language' ? 'zh-CN,zh;q=0.9' : undefined,
+    )
+    const fetchMock = vi.fn(async (_input: unknown, _options?: RequestInit) => Response.json({
+      access_token: 'access', expires_in: 3600,
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    await exchangeToken(new URLSearchParams({ grant_type: 'refresh_token' }), 'client', 'secret')
+    const options = fetchMock.mock.calls[0]?.[1]
+    expect(new Headers(options?.headers).get('accept-language')).toBe('zh-CN,zh;q=0.9')
+  })
+
   it('coalesces concurrent exchanges of the same one-time grant', async () => {
     process.env.IDENTITY_BACKCHANNEL_API_URL = 'http://identity-server:5150'
     process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP = 'true'
