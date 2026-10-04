@@ -64,7 +64,20 @@ async fn handle_expiration_tick(
 async fn handle_expiration_job(_: ExpirationJob, state: Data<AppState>) -> Result<(), BoxDynError> {
     let mut total = 0_u64;
     loop {
-        let updated = expire_due_authorizations_batch(state.resources().db()).await?;
+        let updated = expire_due_authorizations_batch(state.resources().db())
+            .await
+            .map_err(|error| {
+                let diagnostics =
+                    identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error);
+                tracing::error!(
+                    error_cause = %diagnostics.cause,
+                    error_operation = diagnostics.operation,
+                    stacktrace = diagnostics.backtrace.map(ToString::to_string),
+                    completed_rows = total,
+                    "authorization expiration batch failed"
+                );
+                error
+            })?;
         total += updated;
         if updated < EXPIRATION_BATCH_SIZE {
             break;

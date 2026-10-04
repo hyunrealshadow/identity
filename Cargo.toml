@@ -125,3 +125,7 @@ required-features = []
 
 [dev-dependencies]
 serial_test = { workspace = true }
+
+[profile.release]
+# Retain line tables so production stack traces can resolve source locations.
+debug = "line-tables-only"

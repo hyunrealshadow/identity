@@ -1,5 +1,3 @@
-use std::error::Error as _;
-
 use http::StatusCode;
 use salvo::{Depot, Request, Router, handler};
 use serde::{Deserialize, Serialize};
@@ -63,9 +61,14 @@ fn log_install_failure(error: &identity_application::error::AppError, request: &
     let context = InstallFailureLogContext::from_request(request);
 
     if should_log_install_failure_as_error(error) {
+        let diagnostics =
+            identity_application::error::diagnostics::ErrorDiagnostics::from_error(error);
         tracing::error!(
             error = %error,
-            source = ?error.source(),
+            has_source = std::error::Error::source(error).is_some(),
+            error_cause = %diagnostics.cause,
+            error_operation = diagnostics.operation,
+            stacktrace = diagnostics.backtrace.map(ToString::to_string),
             code = error.code(),
             domain = %context.domain,
             key_algorithm = %context.key_algorithm,

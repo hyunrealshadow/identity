@@ -58,7 +58,7 @@ impl SessionMutation {
                 })?,
             )
             .await
-            .map_err(internal_error)?;
+            .map_err(|error| internal_error(error))?;
         if outcome.has_failures() {
             tracing::warn!(
                 target: "identity.graphql",

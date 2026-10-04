@@ -27,6 +27,15 @@ use identity_domain::{
     openid_connect::{AuthorizationRequestData, ScopeSet},
 };
 
+fn query_failed(
+    operation: &'static str,
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> ClientAuthorizationRepositoryError {
+    ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+        identity_application::error::diagnostics::ErrorContext::new(operation, error),
+    ))
+}
+
 fn parse_stored_authorization_request(
     data: serde_json::Value,
 ) -> Result<StoredAuthorizationRequest, ClientAuthorizationRepositoryError> {
@@ -40,9 +49,10 @@ fn parse_stored_authorization_request(
             })
         })
         .map_err(|_| {
-            ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
-                "invalid authorization_request payload".into(),
-            )))
+            query_failed(
+                "client_authorization.parse_stored_authorization_request",
+                sea_orm::DbErr::Type("invalid authorization_request payload".into()),
+            )
         })
 }
 
@@ -59,7 +69,7 @@ pub(super) fn serialize_data(
         ClientAuthorizationData::DeviceAuthorizationRequest(value) => serde_json::to_value(value),
         ClientAuthorizationData::DeviceAuthorization(value) => serde_json::to_value(value),
     }
-    .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+    .map_err(|error| query_failed("client_authorization.serialize_data", error))
 }
 
 fn scope_ids_cover(mut granted: Vec<i64>, mut requested: Vec<i64>) -> bool {
@@ -82,34 +92,34 @@ fn parse_data(
             identity_domain::client_authorization::PushedAuthorizationRequestData,
         >(data)
         .map(ClientAuthorizationData::PushedAuthorizationRequest)
-        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))),
+        .map_err(|error| query_failed("client_authorization.parse_data", error)),
         ClientAuthorizationType::AuthorizationRequest => parse_stored_authorization_request(data)
             .map(ClientAuthorizationData::AuthorizationRequest),
         ClientAuthorizationType::AuthorizationCode => {
             serde_json::from_value::<AuthorizationCodeData>(data)
                 .map(ClientAuthorizationData::AuthorizationCode)
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
         ClientAuthorizationType::AccessToken => serde_json::from_value::<AccessTokenData>(data)
             .map(ClientAuthorizationData::AccessToken)
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))),
+            .map_err(|error| query_failed("client_authorization.parse_data", error)),
         ClientAuthorizationType::RefreshToken => serde_json::from_value::<RefreshTokenData>(data)
             .map(ClientAuthorizationData::RefreshToken)
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))),
+            .map_err(|error| query_failed("client_authorization.parse_data", error)),
         ClientAuthorizationType::RegistrationAccessToken => {
             serde_json::from_value::<RegistrationAccessTokenData>(data)
                 .map(ClientAuthorizationData::RegistrationAccessToken)
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
         ClientAuthorizationType::DeviceAuthorizationRequest => {
             serde_json::from_value::<DeviceAuthorizationRequestData>(data)
                 .map(ClientAuthorizationData::DeviceAuthorizationRequest)
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
         ClientAuthorizationType::DeviceAuthorization => {
             serde_json::from_value::<DeviceAuthorizationData>(data)
                 .map(ClientAuthorizationData::DeviceAuthorization)
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
     }
 }
@@ -157,9 +167,10 @@ pub(super) fn to_domain(
         .r#type
         .parse::<ClientAuthorizationType>()
         .map_err(|_| {
-            ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
-                "invalid client_authorization.type".into(),
-            )))
+            query_failed(
+                "client_authorization.to_domain",
+                sea_orm::DbErr::Type("invalid client_authorization.type".into()),
+            )
         })?;
     let data = parse_data(&type_, model.data)?;
 
@@ -184,7 +195,7 @@ pub struct ClientAuthorizationRepositoryImpl {
 /// The caller repeats until fewer than the batch limit were updated.
 pub(crate) async fn expire_due_authorizations_batch(
     db: &DatabaseConnection,
-) -> Result<u64, sea_orm::DbErr> {
+) -> Result<u64, identity_application::error::diagnostics::ErrorContext> {
     Ok(db
         .execute_unprepared(
             r#"WITH due AS (
@@ -198,7 +209,13 @@ pub(crate) async fn expire_due_authorizations_batch(
             SET "is_expired" = true, "updated_at" = CURRENT_TIMESTAMP
             FROM due WHERE "auth_record"."id" = due."id""#,
         )
-        .await?
+        .await
+        .map_err(|error| {
+            identity_application::error::diagnostics::ErrorContext::new(
+                "client_authorization.expire_due_authorizations_batch",
+                error,
+            )
+        })?
         .rows_affected())
 }
 
@@ -228,15 +245,16 @@ async fn lock_refresh_family(
             [refresh_oid.into(), client_oid.into()],
         ))
         .await
-        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+        .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?
         .ok_or_else(|| {
-            ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+            query_failed(
+                "client_authorization.lock_refresh_family",
                 sea_orm::DbErr::RecordNotFound("refresh token family not found".into()),
-            ))
+            )
         })?;
     let root_oid: Uuid = root
         .try_get("", "root_oid")
-        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
     transaction
         .query_one_raw(Statement::from_sql_and_values(
             DatabaseBackend::Postgres,
@@ -244,7 +262,7 @@ async fn lock_refresh_family(
             [root_oid.to_string().into()],
         ))
         .await
-        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
     if reject_compromised {
         let row = transaction
             .query_one_raw(Statement::from_sql_and_values(
@@ -253,17 +271,21 @@ async fn lock_refresh_family(
                 [root_oid.into()],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
-            .ok_or_else(|| ClientAuthorizationRepositoryError::QueryFailed(Box::new(
-                sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
-            )))?;
+            .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?
+            .ok_or_else(|| {
+                query_failed(
+                    "client_authorization.lock_refresh_family",
+                    sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
+                )
+            })?;
         let compromised: bool = row
             .try_get("", "compromised")
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
         if compromised {
-            return Err(ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+            return Err(query_failed(
+                "client_authorization.lock_refresh_family",
                 sea_orm::DbErr::RecordNotFound("refresh token family was revoked".into()),
-            )));
+            ));
         }
     }
     Ok(root_oid)
@@ -300,12 +322,22 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         ))
         .one(&self.db)
         .await
-        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        .map_err(|error| {
+            query_failed(
+                "client_authorization.consume_pushed_authorization_request",
+                error,
+            )
+        })?;
         row.map(|row| {
             serde_json::from_value::<
                 identity_domain::client_authorization::PushedAuthorizationRequestData,
             >(row.data)
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+            .map_err(|error| {
+                query_failed(
+                    "client_authorization.consume_pushed_authorization_request",
+                    error,
+                )
+            })
         })
         .transpose()
     }
@@ -330,17 +362,16 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         }
         .map(Uuid::parse_str)
         .transpose()
-        .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
-        let transaction =
-            self.db.begin().await.map_err(|error| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
-            })?;
+        .map_err(|error| query_failed("client_authorization.create", error))?;
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|error| query_failed("client_authorization.create", error))?;
         if let Some(session_oid) = session_oid {
             lock_session(&transaction, session_oid)
                 .await
-                .map_err(|error| {
-                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
-                })?;
+                .map_err(|error| query_failed("client_authorization.create", error))?;
             let now = Utc::now();
             let session_available = SessionEntity::find()
                 .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
@@ -352,15 +383,16 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .filter(session::Column::ExpiresAt.gt(now))
                 .one(&transaction)
                 .await
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+                .map_err(|error| query_failed("client_authorization.create", error))?
                 .is_some();
             if !session_available {
-                return Err(ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                return Err(query_failed(
+                    "client_authorization.create",
                     sea_orm::DbErr::RecordNotFound(format!(
                         "session {} is not active",
                         Uuid::from(session_oid)
                     )),
-                )));
+                ));
             }
         }
         if let Some(parent_oid) = family_refresh_oid {
@@ -370,11 +402,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client::Column::Oid.eq(client_oid))
             .one(&transaction)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
+            .map_err(|e| query_failed("client_authorization.create", e))?
             .ok_or_else(|| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                query_failed(
+                    "client_authorization.create",
                     sea_orm::DbErr::RecordNotFound(format!("client {client_oid} not found")),
-                ))
+                )
             })?;
 
         let now = Utc::now();
@@ -394,11 +427,11 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         }
         .insert(&transaction)
         .await
-        .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+        .map_err(|e| query_failed("client_authorization.create", e))?;
         transaction
             .commit()
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.create", error))?;
         to_domain(model, client_oid)
     }
 
@@ -413,7 +446,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .select_also(ClientEntity)
             .one(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
+            .map_err(|e| query_failed("client_authorization.find_by_oid", e))?
         else {
             return Ok(None);
         };
@@ -434,7 +467,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
+            .map_err(|e| {
+                query_failed(
+                    "client_authorization.update_authorization_request_selection",
+                    e,
+                )
+            })?
         else {
             return Ok(false);
         };
@@ -458,8 +496,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         stored.interaction.selection_source = Some(source);
 
         let now = Utc::now();
-        let stored_data = serde_json::to_value(stored)
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+        let stored_data = serde_json::to_value(stored).map_err(|e| {
+            query_failed(
+                "client_authorization.update_authorization_request_selection",
+                e,
+            )
+        })?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::Data,
@@ -472,7 +514,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(selection_update_condition(&model, now))
             .exec(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+            .map_err(|e| {
+                query_failed(
+                    "client_authorization.update_authorization_request_selection",
+                    e,
+                )
+            })?;
 
         Ok(result.rows_affected == 1)
     }
@@ -488,7 +535,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client_authorization::Column::Oid.eq(oid))
             .one(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?
+            .map_err(|e| {
+                query_failed(
+                    "client_authorization.record_authorization_request_consent",
+                    e,
+                )
+            })?
         else {
             return Ok(false);
         };
@@ -512,16 +564,23 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .selected_user_oid
                 .as_deref()
                 .ok_or_else(|| {
-                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(sea_orm::DbErr::Type(
-                        "approved consent has no selected user".into(),
-                    )))
+                    query_failed(
+                        "client_authorization.record_authorization_request_consent",
+                        sea_orm::DbErr::Type("approved consent has no selected user".into()),
+                    )
                 })?
                 .parse::<Uuid>()
                 .map_err(|error| {
-                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                    query_failed(
+                        "client_authorization.record_authorization_request_consent",
+                        error,
+                    )
                 })?;
             let scope = ScopeSet::parse(&stored.request.scope).map_err(|error| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                query_failed(
+                    "client_authorization.record_authorization_request_consent",
+                    error,
+                )
             })?;
             Some((user_oid, scope))
         } else {
@@ -532,12 +591,18 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
 
         let now = Utc::now();
-        let stored_data = serde_json::to_value(stored)
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
-        let transaction =
-            self.db.begin().await.map_err(|error| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
-            })?;
+        let stored_data = serde_json::to_value(stored).map_err(|e| {
+            query_failed(
+                "client_authorization.record_authorization_request_consent",
+                e,
+            )
+        })?;
+        let transaction = self.db.begin().await.map_err(|error| {
+            query_failed(
+                "client_authorization.record_authorization_request_consent",
+                error,
+            )
+        })?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::Data,
@@ -550,7 +615,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(selection_update_condition(&model, now))
             .exec(&transaction)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+            .map_err(|e| {
+                query_failed(
+                    "client_authorization.record_authorization_request_consent",
+                    e,
+                )
+            })?;
 
         if result.rows_affected != 1 {
             return Ok(false);
@@ -564,11 +634,17 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .into_tuple::<i64>()
                 .one(&transaction)
                 .await
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+                .map_err(|error| {
+                    query_failed(
+                        "client_authorization.record_authorization_request_consent",
+                        error,
+                    )
+                })?
                 .ok_or_else(|| {
-                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                    query_failed(
+                        "client_authorization.record_authorization_request_consent",
                         sea_orm::DbErr::RecordNotFound(format!("user {user_oid} not found")),
-                    ))
+                    )
                 })?;
             let requested_scope_names = requested_scope.names();
             let mut scope_ids = ScopeEntity::find()
@@ -580,16 +656,20 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .all(&transaction)
                 .await
                 .map_err(|error| {
-                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                    query_failed(
+                        "client_authorization.record_authorization_request_consent",
+                        error,
+                    )
                 })?;
             scope_ids.sort_unstable();
             scope_ids.dedup();
             if scope_ids.len() != requested_scope_names.len() {
-                return Err(ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                return Err(query_failed(
+                    "client_authorization.record_authorization_request_consent",
                     sea_orm::DbErr::RecordNotFound(
                         "one or more consent scopes were not found".to_owned(),
                     ),
-                )));
+                ));
             }
             let grants = scope_ids
                 .into_iter()
@@ -613,14 +693,19 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .exec(&transaction)
                 .await
                 .map_err(|error| {
-                    ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
+                    query_failed(
+                        "client_authorization.record_authorization_request_consent",
+                        error,
+                    )
                 })?;
         }
 
-        transaction
-            .commit()
-            .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        transaction.commit().await.map_err(|error| {
+            query_failed(
+                "client_authorization.record_authorization_request_consent",
+                error,
+            )
+        })?;
         Ok(true)
     }
 
@@ -635,7 +720,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(user::Column::Oid.eq(user_oid))
             .one(&self.db)
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?
         else {
             return Ok(false);
         };
@@ -643,7 +728,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client::Column::Oid.eq(client_oid))
             .one(&self.db)
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?
         else {
             return Ok(false);
         };
@@ -656,7 +741,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .into_tuple::<i64>()
             .all(&self.db)
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?;
         requested_scope_ids.sort_unstable();
         requested_scope_ids.dedup();
         if requested_scope_ids.len() != requested_scope_names.len() {
@@ -671,7 +756,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .into_tuple::<i64>()
             .all(&self.db)
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?;
         Ok(scope_ids_cover(granted_scope_ids, requested_scope_ids))
     }
 
@@ -693,7 +778,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .into_tuple::<String>()
             .all(&self.db)
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))
+            .map_err(|error| query_failed("client_authorization.user_consented_scope_names", error))
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "mark_authorization_request_completed"))]
@@ -725,7 +810,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             )
             .exec(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+            .map_err(|e| {
+                query_failed(
+                    "client_authorization.mark_authorization_request_completed",
+                    e,
+                )
+            })?;
 
         Ok(result.rows_affected == 1)
     }
@@ -759,7 +849,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             )
             .exec(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+            .map_err(|e| {
+                query_failed(
+                    "client_authorization.revoke_access_tokens_for_authorization_code",
+                    e,
+                )
+            })?;
 
         Ok(())
     }
@@ -789,7 +884,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             )
             .exec(&self.db)
             .await
-            .map_err(|e| ClientAuthorizationRepositoryError::QueryFailed(Box::new(e)))?;
+            .map_err(|e| query_failed("client_authorization.revoke_if_active", e))?;
 
         Ok(result.rows_affected == 1)
     }
@@ -801,10 +896,9 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         client_oid: ClientOid,
         now: chrono::DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
-        let transaction =
-            self.db.begin().await.map_err(|error| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
-            })?;
+        let transaction = self.db.begin().await.map_err(|error| {
+            query_failed("client_authorization.revoke_refresh_token_family", error)
+        })?;
         let root_oid = lock_refresh_family(&transaction, refresh_oid, client_oid, false).await?;
         let root = transaction
             .query_one_raw(Statement::from_sql_and_values(
@@ -813,15 +907,18 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 [root_oid.into()],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+            .map_err(|error| {
+                query_failed("client_authorization.revoke_refresh_token_family", error)
+            })?
             .ok_or_else(|| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                query_failed(
+                    "client_authorization.revoke_refresh_token_family",
                     sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
-                ))
+                )
             })?;
-        let data: serde_json::Value = root
-            .try_get("", "data")
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        let data: serde_json::Value = root.try_get("", "data").map_err(|error| {
+            query_failed("client_authorization.revoke_refresh_token_family", error)
+        })?;
         let authorization_code_oid = data["authorization_code_oid"].as_str().unwrap_or("");
         let device_authorization_oid = data["device_authorization_oid"].as_str().unwrap_or("");
 
@@ -832,7 +929,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 [root_oid.into(), now.into()],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.revoke_refresh_token_family", error))?;
         transaction
             .execute_raw(Statement::from_sql_and_values(
                 DatabaseBackend::Postgres,
@@ -861,7 +958,9 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 ],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| {
+                query_failed("client_authorization.revoke_refresh_token_family", error)
+            })?;
         if !device_authorization_oid.is_empty() {
             transaction
                 .execute_raw(Statement::from_sql_and_values(
@@ -870,12 +969,11 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                     [device_authorization_oid.into(), now.into(), client_oid.into()],
                 ))
                 .await
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+                .map_err(|error| query_failed("client_authorization.revoke_refresh_token_family", error))?;
         }
-        transaction
-            .commit()
-            .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        transaction.commit().await.map_err(|error| {
+            query_failed("client_authorization.revoke_refresh_token_family", error)
+        })?;
         Ok(())
     }
 
@@ -893,7 +991,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 [access_oid.into(), client_oid.into(), now.into()],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.revoke_access_token_for_client", error))?;
         Ok(())
     }
 
@@ -904,10 +1002,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         client_oid: ClientOid,
         now: chrono::DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
-        let transaction =
-            self.db.begin().await.map_err(|error| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(error))
-            })?;
+        let transaction = self.db.begin().await.map_err(|error| {
+            query_failed(
+                "client_authorization.revoke_refresh_grant_for_client",
+                error,
+            )
+        })?;
         let root_oid = lock_refresh_family(&transaction, refresh_oid, client_oid, false).await?;
         let root = transaction
             .query_one_raw(Statement::from_sql_and_values(
@@ -916,15 +1016,24 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 [root_oid.into()],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?
+            .map_err(|error| {
+                query_failed(
+                    "client_authorization.revoke_refresh_grant_for_client",
+                    error,
+                )
+            })?
             .ok_or_else(|| {
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(
+                query_failed(
+                    "client_authorization.revoke_refresh_grant_for_client",
                     sea_orm::DbErr::RecordNotFound("refresh grant root not found".into()),
-                ))
+                )
             })?;
-        let data: serde_json::Value = root
-            .try_get("", "data")
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        let data: serde_json::Value = root.try_get("", "data").map_err(|error| {
+            query_failed(
+                "client_authorization.revoke_refresh_grant_for_client",
+                error,
+            )
+        })?;
         let authorization_code_oid = data["authorization_code_oid"].as_str().unwrap_or("");
         let device_authorization_oid = data["device_authorization_oid"].as_str().unwrap_or("");
 
@@ -935,7 +1044,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 [root_oid.into(), now.into()],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| query_failed("client_authorization.revoke_refresh_grant_for_client", error))?;
         transaction
             .execute_raw(Statement::from_sql_and_values(
                 DatabaseBackend::Postgres,
@@ -964,7 +1073,12 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 ],
             ))
             .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+            .map_err(|error| {
+                query_failed(
+                    "client_authorization.revoke_refresh_grant_for_client",
+                    error,
+                )
+            })?;
         if !device_authorization_oid.is_empty() {
             transaction
                 .execute_raw(Statement::from_sql_and_values(
@@ -973,12 +1087,14 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                     [device_authorization_oid.into(), now.into(), client_oid.into()],
                 ))
                 .await
-                .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+                .map_err(|error| query_failed("client_authorization.revoke_refresh_grant_for_client", error))?;
         }
-        transaction
-            .commit()
-            .await
-            .map_err(|error| ClientAuthorizationRepositoryError::QueryFailed(Box::new(error)))?;
+        transaction.commit().await.map_err(|error| {
+            query_failed(
+                "client_authorization.revoke_refresh_grant_for_client",
+                error,
+            )
+        })?;
         Ok(())
     }
 }
@@ -987,6 +1103,19 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
 mod selection_tests {
     use super::{can_overwrite_selection, scope_ids_cover};
     use identity_domain::client_authorization::SelectionSource;
+
+    #[test]
+    fn query_diagnostics_capture_a_real_stack_before_application_wrapping() {
+        let error = super::query_failed("test.query", sea_orm::DbErr::Custom("bad SQL".into()));
+        let diagnostics =
+            identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error);
+        assert_eq!(diagnostics.operation, Some("test.query"));
+        assert_eq!(
+            diagnostics.backtrace.unwrap().status(),
+            std::backtrace::BacktraceStatus::Captured
+        );
+        assert_eq!(diagnostics.cause, "Custom Error: bad SQL");
+    }
 
     #[test]
     fn reauthentication_cannot_be_replaced_by_another_selection_flow() {
