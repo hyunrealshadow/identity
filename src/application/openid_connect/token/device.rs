@@ -373,15 +373,16 @@ impl TokenService {
 
         let mut records = vec![PreparedAuthorizationRecord {
             oid: access_token_oid,
-            data: self.access_token_data(
-                &scope_string,
-                &approval.user_oid,
-                None,
-                None,
-                None,
-                Some(device_authorization_oid),
-                client_authentication_mode,
-            ),
+            data: ClientAuthorizationData::AccessToken(AccessTokenData {
+                scope: scope_string.clone(),
+                user_oid: approval.user_oid.clone(),
+                session_oid: None,
+                protected_session_id: None,
+                authorization_code_oid: None,
+                refresh_token_oid: None,
+                device_authorization_oid: Some(device_authorization_oid.to_string()),
+                client_authentication_mode: Some(client_authentication_mode),
+            }),
             expires_at: now + chrono::Duration::hours(1),
         }];
         if refresh_token.is_some() {

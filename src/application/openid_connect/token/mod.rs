@@ -14,10 +14,9 @@ use crate::{
     domain::{
         auth::repository::SessionRepository,
         client_authorization::{
-            AccessTokenData, ClientAuthorization, ClientAuthorizationData,
-            ClientAuthorizationRepository, ClientAuthorizationType, DeviceAuthorizationRepository,
-            DevicePollOutcome, DeviceRequestStatus, PreparedAuthorizationRecord, RefreshTokenData,
-            device_code_digest,
+            AccessTokenData, ClientAuthorizationData, ClientAuthorizationRepository,
+            ClientAuthorizationType, DeviceAuthorizationRepository, DevicePollOutcome,
+            DeviceRequestStatus, PreparedAuthorizationRecord, RefreshTokenData, device_code_digest,
         },
         key::{
             JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
@@ -196,16 +195,20 @@ impl TokenService {
     }
 }
 
+mod authorization_code;
 mod client_credentials;
 mod device;
+mod encryption;
 mod exchange;
 mod introspection;
+mod refresh_token;
 mod revocation;
 
 pub(crate) use exchange::resolve_client_id;
 
 pub(crate) mod helpers;
 mod signing;
+mod signing_key;
 
 use helpers::{client_id_from_assertion, verify_pkce};
 

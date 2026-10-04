@@ -107,17 +107,23 @@ impl TokenService {
             .load_access_token_signing_key(&configured_signing_key)
             .await?;
         let record = self
-            .create_access_token_record(
+            .client_authorization_repo
+            .create(
                 client_oid,
-                &scope,
-                &client_oid.to_string(),
-                None,
-                None,
-                None,
-                None,
-                identity_domain::client_authorization::ClientAuthenticationMode::Confidential,
+                ClientAuthorizationData::AccessToken(AccessTokenData {
+                    scope: scope.clone(),
+                    user_oid: client_oid.to_string(),
+                    session_oid: None,
+                    protected_session_id: None,
+                    authorization_code_oid: None,
+                    refresh_token_oid: None,
+                    device_authorization_oid: None,
+                    client_authentication_mode: Some(identity_domain::client_authorization::ClientAuthenticationMode::Confidential),
+                }),
+                chrono::Utc::now() + chrono::Duration::hours(1),
             )
-            .await?;
+            .await
+            .map_err(|error| AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error))?;
         event
             .attributes
             .push(("access_token_oid", EventValue::Text(record.oid.to_string())));

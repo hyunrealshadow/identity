@@ -1130,15 +1130,20 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
         let service = build_token_service_with_key(repo.clone(), key.clone(), user_oid);
         let issuer = provider_service().issuer().unwrap();
         let access_record = service
-            .create_access_token_record(
+            .client_authorization_repo
+            .create(
                 Uuid::nil(),
-                "openid profile",
-                &user_oid.to_string(),
-                Some(SessionOid::from(Uuid::new_v4())),
-                None,
-                None,
-                None,
-                identity_domain::client_authorization::ClientAuthenticationMode::Confidential,
+                ClientAuthorizationData::AccessToken(identity_domain::client_authorization::AccessTokenData {
+                    scope: "openid profile".to_owned(),
+                    user_oid: user_oid.to_string(),
+                    session_oid: Some(SessionOid::from(Uuid::new_v4())),
+                    protected_session_id: None,
+                    authorization_code_oid: None,
+                    refresh_token_oid: None,
+                    device_authorization_oid: None,
+                    client_authentication_mode: Some(identity_domain::client_authorization::ClientAuthenticationMode::Confidential),
+                }),
+                Utc::now() + chrono::Duration::hours(1),
             )
             .await
             .unwrap();

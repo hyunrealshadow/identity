@@ -2,27 +2,8 @@ use super::flow::{AuthorizationCodeContext, session_state_for_authorize_response
 use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
 use super::*;
 use identity_domain::auth::SessionOid;
+use identity_domain::client_authorization::{AccessTokenData, ClientAuthorizationData};
 use uuid::Uuid;
-
-struct CreateFrontChannelAccessTokenInput<'a> {
-    resources: &'a [String],
-    client_id: Uuid,
-    client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
-    user_oid: Uuid,
-    session_oid: SessionOid,
-    protected_session_id: &'a str,
-    request: &'a AuthorizationRequestData,
-    authorization_code_oid: Option<Uuid>,
-    signing_key_id: &'a str,
-    signing_key_pem: &'a str,
-    signing_alg: identity_domain::key::JwaSigningAlgorithm,
-    issuer: &'a Url,
-    audience: &'a str,
-    claims: Option<&'a ClaimsRequest>,
-    auth_time: i64,
-    acr: Option<&'a str>,
-    amr: &'a [String],
-}
 
 fn front_channel_token_mode(
     client: &OpenIdConnectClient,
@@ -108,37 +89,47 @@ impl AuthorizeService {
             .map(Self::parse_claims_request)
             .transpose()?;
 
-        let include_access_token = response_type.includes_access_token();
-
-        let (access_token, expires_in) = if include_access_token {
-            (
-                Some(
-                    self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
-                        resources: &request.resources,
-                        client_id,
-                        client_authentication_mode: front_channel_token_mode(&client),
-                        user_oid,
-                        session_oid,
-                        protected_session_id,
-                        request,
+        let access_token = if response_type.includes_access_token() {
+            let (token_oid, resources) = self
+                .create_front_channel_access_token_record(
+                    client_id,
+                    &request.resources,
+                    AccessTokenData {
+                        scope: request.scope.clone(),
+                        user_oid: user_oid.to_string(),
+                        session_oid: Some(session_oid),
+                        protected_session_id: Some(protected_session_id.to_owned()),
                         authorization_code_oid: None,
-                        signing_key_id: &signing_key_id,
-                        signing_key_pem: &signing_key_pem,
-                        signing_alg,
-                        issuer: &issuer,
-                        audience: access_token_audience,
-                        claims: claims.as_ref(),
-                        auth_time: auth_time_val,
-                        acr: authentication.acr,
-                        amr: authentication.amr,
-                    })
-                    .await?,
-                ),
-                3600u64,
+                        refresh_token_oid: None,
+                        device_authorization_oid: None,
+                        client_authentication_mode: Some(front_channel_token_mode(&client)),
+                    },
+                )
+                .await?;
+            Some(
+                self.sign_implicit_access_token(SignImplicitAccessTokenInput {
+                    resources: &resources,
+                    key_id: &signing_key_id,
+                    private_key_pem: &signing_key_pem,
+                    alg: signing_alg,
+                    issuer: &issuer,
+                    audience: access_token_audience,
+                    client_id: &audience,
+                    user_oid: &user_oid.to_string(),
+                    protected_session_id,
+                    scope: &request.scope,
+                    token_id: &token_oid.to_string(),
+                    claims: claims.as_ref(),
+                    auth_time: auth_time_val,
+                    acr: authentication.acr,
+                    amr: authentication.amr,
+                })?,
             )
         } else {
-            (None, 0)
+            None
         };
+
+        let expires_in = if access_token.is_some() { 3600u64 } else { 0 };
 
         let (id_key_id, id_key_pem, id_token_alg) = self
             .load_id_token_signing_key_impl(
@@ -251,29 +242,43 @@ impl AuthorizeService {
             .transpose()?;
 
         let access_token = if response_type.includes_access_token() {
-            Some(
-                self.create_front_channel_access_token(CreateFrontChannelAccessTokenInput {
-                    resources: &request.resources,
+            let auth_time_val = authentication
+                .auth_time
+                .unwrap_or_else(|| chrono::Utc::now().timestamp());
+            let (token_oid, resources) = self
+                .create_front_channel_access_token_record(
                     client_id,
-                    client_authentication_mode: front_channel_token_mode(&client),
-                    user_oid,
-                    session_oid,
-                    protected_session_id,
-                    request,
-                    authorization_code_oid: Some(authorization_code_oid),
-                    signing_key_id: &signing_key_id,
-                    signing_key_pem: &signing_key_pem,
-                    signing_alg,
+                    &request.resources,
+                    AccessTokenData {
+                        scope: request.scope.clone(),
+                        user_oid: user_oid.to_string(),
+                        session_oid: Some(session_oid),
+                        protected_session_id: Some(protected_session_id.to_owned()),
+                        authorization_code_oid: Some(authorization_code_oid.to_string()),
+                        refresh_token_oid: None,
+                        device_authorization_oid: None,
+                        client_authentication_mode: Some(front_channel_token_mode(&client)),
+                    },
+                )
+                .await?;
+            Some(
+                self.sign_implicit_access_token(SignImplicitAccessTokenInput {
+                    resources: &resources,
+                    key_id: &signing_key_id,
+                    private_key_pem: &signing_key_pem,
+                    alg: signing_alg,
                     issuer: &issuer,
                     audience: access_token_audience,
+                    client_id: &audience,
+                    user_oid: &user_oid.to_string(),
+                    protected_session_id,
+                    scope: &request.scope,
+                    token_id: &token_oid.to_string(),
                     claims: claims.as_ref(),
-                    auth_time: authentication
-                        .auth_time
-                        .unwrap_or_else(|| chrono::Utc::now().timestamp()),
+                    auth_time: auth_time_val,
                     acr: authentication.acr,
                     amr: authentication.amr,
-                })
-                .await?,
+                })?,
             )
         } else {
             None
@@ -348,60 +353,32 @@ impl AuthorizeService {
         Ok(url)
     }
 
-    async fn create_front_channel_access_token(
+    async fn create_front_channel_access_token_record(
         &self,
-        input: CreateFrontChannelAccessTokenInput<'_>,
-    ) -> Result<String, AppError> {
+        client_id: Uuid,
+        resources: &[String],
+        data: AccessTokenData,
+    ) -> Result<(Uuid, Vec<String>), AppError> {
         let selection = self
             .provider_service
-            .select_resources(input.resources, input.resources, &input.request.scope)
+            .select_resources(resources, resources, &data.scope)
             .await?;
-        if selection.scope != input.request.scope {
+        if selection.scope != data.scope {
             return Err(AppError::from_code(
                 crate::error::codes::common::CommonErrorCode::InvalidTarget,
             ));
         }
-        let access_token_record = self
+        let record = self
             .client_authorization_repo
             .create(
-                input.client_id,
-                identity_domain::client_authorization::ClientAuthorizationData::AccessToken(
-                    identity_domain::client_authorization::AccessTokenData {
-                        scope: selection.scope.clone(),
-                        user_oid: input.user_oid.to_string(),
-                        session_oid: Some(input.session_oid),
-                        protected_session_id: Some(input.protected_session_id.to_string()),
-                        authorization_code_oid: input
-                            .authorization_code_oid
-                            .map(|oid| oid.to_string()),
-                        refresh_token_oid: None,
-                        device_authorization_oid: None,
-                        client_authentication_mode: Some(input.client_authentication_mode),
-                    },
-                ),
+                client_id,
+                ClientAuthorizationData::AccessToken(data),
                 chrono::Utc::now() + chrono::Duration::hours(1),
             )
             .await
             .map_err(|error| {
                 AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
             })?;
-
-        self.sign_implicit_access_token(SignImplicitAccessTokenInput {
-            resources: &selection.resources,
-            key_id: input.signing_key_id,
-            private_key_pem: input.signing_key_pem,
-            alg: input.signing_alg,
-            issuer: input.issuer,
-            audience: input.audience,
-            client_id: &input.client_id.to_string(),
-            user_oid: &input.user_oid.to_string(),
-            protected_session_id: input.protected_session_id,
-            scope: &selection.scope,
-            token_id: &access_token_record.oid.to_string(),
-            claims: input.claims,
-            auth_time: input.auth_time,
-            acr: input.acr,
-            amr: input.amr,
-        })
+        Ok((record.oid, selection.resources))
     }
 }
