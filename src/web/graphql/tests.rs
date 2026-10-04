@@ -51,13 +51,13 @@ struct GraphqlFixture {
     token: String,
 }
 
-struct FixtureOptions<'a> {
-    audience: &'a str,
-    scope: &'a str,
+struct FixtureOptions {
+    audience: &'static str,
+    scope: &'static str,
     revoked: bool,
 }
 
-impl Default for FixtureOptions<'static> {
+impl Default for FixtureOptions {
     fn default() -> Self {
         Self {
             audience: RESOURCE_AUDIENCE,
@@ -204,7 +204,7 @@ async fn graphql_post(fixture: &GraphqlFixture, query: &str) -> salvo::Response 
         .await
 }
 
-async fn fixture(options: FixtureOptions<'_>) -> GraphqlFixture {
+async fn fixture(options: FixtureOptions) -> GraphqlFixture {
     let now = Utc::now();
     let user_oid = Uuid::new_v4();
     let client_oid = Uuid::new_v4();
