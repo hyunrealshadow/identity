@@ -6,6 +6,7 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use crate::config::DatabaseConfig;
 
 pub mod entity;
+pub mod query;
 pub mod repository;
 pub mod seed;
 

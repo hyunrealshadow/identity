@@ -1,3 +1,4 @@
+use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
 use base64::Engine as _;
 use chrono::Utc;
@@ -326,8 +327,7 @@ async fn acquire_install_transaction_lock<C>(db: &C) -> Result<(), AppError>
 where
     C: ConnectionTrait,
 {
-    let statement = format!("SELECT pg_advisory_xact_lock({INSTALL_TRANSACTION_LOCK_ID})");
-    db.execute_unprepared(&statement)
+    db.execute(&advisory_transaction_lock(INSTALL_TRANSACTION_LOCK_ID))
         .await
         .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
     Ok(())
@@ -347,7 +347,8 @@ fn built_in_logout_url(application_url: &url::Url) -> Result<url::Url, AppError>
 
 #[cfg(test)]
 mod tests {
-    use sea_orm::{DbBackend, MockDatabase, MockExecResult, Statement, Transaction};
+    use crate::database::query::advisory_transaction_lock;
+    use sea_orm::{DbBackend, MockDatabase, MockExecResult, Transaction};
 
     use super::{
         INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock, built_in_callback_url,
@@ -384,9 +385,8 @@ mod tests {
 
         assert_eq!(
             db.into_transaction_log(),
-            [Transaction::one(Statement::from_string(
-                DbBackend::Postgres,
-                format!("SELECT pg_advisory_xact_lock({INSTALL_TRANSACTION_LOCK_ID})"),
+            [Transaction::one(DbBackend::Postgres.build(
+                &advisory_transaction_lock(INSTALL_TRANSACTION_LOCK_ID)
             ))]
         );
     }

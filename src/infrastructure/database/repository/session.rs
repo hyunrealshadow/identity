@@ -1,9 +1,10 @@
+use crate::database::query::json_text;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, SelectTwo, Set, TransactionTrait,
-    sea_query::{Expr, SimpleExpr},
+    sea_query::{Expr, ExprTrait, SimpleExpr},
 };
 use uuid::Uuid;
 
@@ -467,10 +468,16 @@ impl SessionRepository for SessionRepositoryImpl {
                         ClientAuthorizationType::AccessToken.to_string(),
                         ClientAuthorizationType::RefreshToken.to_string(),
                     ]))
-                    .add(Expr::cust_with_values(
-                        r#"("client_authorization"."data"->>'session_oid') = $1"#,
-                        [Uuid::from(oid).to_string()],
-                    )),
+                    .add(
+                        json_text(
+                            (
+                                client_authorization::Entity,
+                                client_authorization::Column::Data,
+                            ),
+                            "session_oid",
+                        )
+                        .eq(Uuid::from(oid).to_string()),
+                    ),
             )
             .exec(&transaction)
             .await

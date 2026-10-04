@@ -1,7 +1,8 @@
+use crate::database::query::advisory_transaction_lock;
 use chrono::{DateTime, FixedOffset, Utc};
 use identity_domain::auth::SessionOid;
 use identity_domain::user::UserOid;
-use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement};
+use sea_orm::{ConnectionTrait, DbErr};
 
 /// Sentinel value used to represent "no expiry" in the database,
 /// since nullable timestamp columns would require schema changes.
@@ -48,11 +49,7 @@ pub async fn lock_session<C: ConnectionTrait>(
     oid: SessionOid,
 ) -> Result<(), DbErr> {
     connection
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT pg_advisory_xact_lock($1)",
-            [session_lock_id(oid).into()],
-        ))
+        .execute(&advisory_transaction_lock(session_lock_id(oid)))
         .await?;
     Ok(())
 }
@@ -71,11 +68,7 @@ pub async fn lock_user_credentials<C: ConnectionTrait>(
     oid: UserOid,
 ) -> Result<(), DbErr> {
     connection
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT pg_advisory_xact_lock($1)",
-            [user_credential_lock_id(oid).into()],
-        ))
+        .execute(&advisory_transaction_lock(user_credential_lock_id(oid)))
         .await?;
     Ok(())
 }

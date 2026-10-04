@@ -1,6 +1,8 @@
+use crate::database::query::json_text;
 use async_trait::async_trait;
 use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set, sea_query::Expr,
+    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+    sea_query::{Expr, ExprTrait},
 };
 use uuid::Uuid;
 
@@ -109,8 +111,12 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
             .order_by_desc(Expr::col((key::Entity, key::Column::CreatedAt)))
             .order_by_desc(Expr::col((key::Entity, key::Column::Oid)))
-            .order_by_asc(Expr::cust(
-                "CASE WHEN \"key_jwk\".\"jwk\"->>'use' = 'sig' THEN 0 ELSE 1 END",
+            .order_by_asc(Expr::expr(
+                Expr::case(
+                    json_text((key_jwk::Entity, key_jwk::Column::Jwk), "use").eq("sig"),
+                    0,
+                )
+                .finally(1),
             ))
             .order_by_asc(Expr::col((key_jwk::Entity, key_jwk::Column::Algorithm)))
             .order_by_asc(Expr::col((key_jwk::Entity, key_jwk::Column::Oid)))

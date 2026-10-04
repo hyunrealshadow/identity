@@ -2,7 +2,7 @@ use std::io;
 
 use sea_orm::{
     ConnectionTrait, DatabaseConnection,
-    sea_query::{Alias, Expr, Query},
+    sea_query::{Alias, Func, Query},
 };
 
 use identity_application::setting::{InstallationSettings, SettingsSource};
@@ -43,7 +43,7 @@ pub async fn ensure_install_startup_guard(
 async fn try_acquire_install_lock(db: &DatabaseConnection) -> AppResult<bool> {
     let statement = Query::select()
         .expr_as(
-            Expr::cust("pg_try_advisory_lock(841463791178241511)"),
+            Func::cust("pg_try_advisory_lock").arg(841463791178241511_i64),
             Alias::new("acquired"),
         )
         .to_owned();

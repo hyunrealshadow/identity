@@ -1,3 +1,4 @@
+use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -132,7 +133,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         policy: &LoginRotationPolicy,
     ) -> Result<u64, LoginRuntimeRepositoryError> {
         let txn = self.db.begin().await.map_err(query_error)?;
-        txn.execute_unprepared("SELECT pg_advisory_xact_lock(684395120247316901)")
+        txn.execute(&advisory_transaction_lock(684395120247316901_i64))
             .await
             .map_err(query_error)?;
         let clients = client::Entity::find()

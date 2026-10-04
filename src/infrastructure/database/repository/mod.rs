@@ -1,4 +1,5 @@
 pub mod client_authorization;
+mod client_authorization_query;
 pub mod device_authorization;
 pub mod install;
 pub mod key;
