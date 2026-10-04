@@ -1,12 +1,24 @@
-use std::error::Error as _;
-
 use async_graphql::{Context, Error, ErrorExtensions};
 use identity_application::error::{AppError, kind::ErrorKind};
 
 use super::authorization::request_context;
 
-pub(super) fn internal_error(error: impl std::fmt::Display) -> Error {
-    tracing::error!(error = %error, "graphql resolver failed");
+pub(super) fn internal_error(error: impl std::error::Error + 'static) -> Error {
+    let diagnostics =
+        identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error);
+    let fallback = diagnostics
+        .backtrace
+        .is_none()
+        .then(std::backtrace::Backtrace::force_capture);
+    let backtrace = diagnostics.backtrace.or(fallback.as_ref());
+    tracing::error!(
+        error = %error,
+        has_source = error.source().is_some(),
+        error_cause = %diagnostics.cause,
+        error_operation = diagnostics.operation,
+        stacktrace = backtrace.map(ToString::to_string),
+        "graphql resolver failed"
+    );
     Error::new("internal server error")
 }
 
@@ -15,14 +27,7 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
         Ok(request) => request,
         Err(error) => return error,
     };
-    if error.kind() == ErrorKind::Internal {
-        tracing::error!(
-            error = %error,
-            source = ?error.source(),
-            code = error.code(),
-            "graphql application error"
-        );
-    }
+    crate::controllers::response::log_app_error(&error, "graphql application request failed");
     let i18n = request.state.resources().i18n();
     let message = crate::controllers::response::error_message(i18n, &request.locale, &error);
     let kind = match error.kind() {

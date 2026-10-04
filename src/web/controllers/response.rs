@@ -35,17 +35,39 @@ pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError)
     localized_error_message(i18n, locale, error.code(), error.params())
 }
 
-pub fn error_source_chain(error: &AppError) -> String {
-    let mut sources = Vec::new();
-    let mut current = error.source();
-    while let Some(source) = current {
-        sources.push(source.to_string());
-        current = source.source();
+pub fn app_error_log_level(error: &AppError) -> tracing::Level {
+    match error.kind() {
+        ErrorKind::Internal => tracing::Level::ERROR,
+        ErrorKind::Unauthorized | ErrorKind::Forbidden | ErrorKind::RateLimit => {
+            tracing::Level::WARN
+        }
+        ErrorKind::NotFound | ErrorKind::Conflict | ErrorKind::Validation | ErrorKind::Gone => {
+            tracing::Level::DEBUG
+        }
     }
-    if sources.is_empty() {
-        "<no source>".to_owned()
-    } else {
-        sources.join(" -> ")
+}
+
+pub fn log_app_error(error: &AppError, message: &'static str) {
+    let diagnostics = identity_application::error::diagnostics::ErrorDiagnostics::from_error(error);
+    macro_rules! log {
+        ($level:expr) => {
+            tracing::event!(
+                $level,
+                error_code = error.code(),
+                error_kind = ?error.kind(),
+                error = %error,
+                has_source = error.source().is_some(),
+                error_cause = %diagnostics.cause,
+                error_operation = diagnostics.operation,
+                stacktrace = diagnostics.backtrace.map(ToString::to_string),
+                "{message}"
+            )
+        };
+    }
+    match app_error_log_level(error) {
+        tracing::Level::ERROR => log!(tracing::Level::ERROR),
+        tracing::Level::WARN => log!(tracing::Level::WARN),
+        _ => log!(tracing::Level::DEBUG),
     }
 }
 
@@ -264,16 +286,7 @@ pub fn write_error_response(
 ) {
     let status = error_http_status(error.kind());
 
-    if status.is_server_error() {
-        tracing::error!(
-            error = %error,
-            source_chain = %error_source_chain(&error),
-            code = error.code(),
-            "internal error"
-        );
-    } else {
-        tracing::debug!(error = %error, code = error.code(), "business error");
-    }
+    log_app_error(&error, "application request failed");
 
     let message = error_message(i18n, locale, &error);
     let fields = error
@@ -316,14 +329,7 @@ pub fn render_app_error(res: &mut Response, headers: &HeaderMap, ctx: &AppState,
 pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState, error: AppError) {
     let status = error_http_status(error.kind());
 
-    if status.is_server_error() {
-        tracing::error!(
-            error = %error,
-            source_chain = %error_source_chain(&error),
-            code = error.code(),
-            "internal error rendered as html"
-        );
-    }
+    log_app_error(&error, "application request failed (html)");
 
     let i18n = ctx.resources().i18n();
     let locale = resolve_locale_from_headers(headers);
@@ -349,6 +355,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
 }
 
 fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
+    log_app_error(&error, "application request failed without localization");
     let status = error_http_status(error.kind());
     let message = error
         .params()
@@ -426,13 +433,78 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn logs_distinguish_internal_failures_rejections_and_validation() {
+        use identity_application::error::{AppError, codes::common::CommonErrorCode};
+        use std::io::Write;
+        use std::sync::{Arc, Mutex};
+        #[derive(Clone)]
+        struct Capture(Arc<Mutex<Vec<u8>>>);
+        impl Write for Capture {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let writer = Capture(bytes.clone());
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_max_level(tracing::Level::TRACE)
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            let error = AppError::from_code(CommonErrorCode::InternalError).with_source(
+                identity_application::error::diagnostics::ErrorContext::new(
+                    "client_authorization.lock_refresh_family",
+                    std::io::Error::other("database unavailable"),
+                ),
+            );
+            super::log_app_error(&error, "internal-test");
+            super::log_app_error(
+                &AppError::from_code(CommonErrorCode::Unauthorized),
+                "rejection-test",
+            );
+            super::log_app_error(
+                &AppError::from_code(CommonErrorCode::InvalidRequest),
+                "validation-test",
+            );
+        });
+        let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        let internal = output
+            .lines()
+            .find(|line| line.contains("internal-test"))
+            .unwrap();
+        assert!(internal.contains("ERROR") && internal.contains("has_source=true"));
+        assert!(internal.contains("database unavailable"));
+        assert_eq!(internal.matches("database unavailable").count(), 1);
+        assert!(internal.contains("error_operation=\"client_authorization.lock_refresh_family\""));
+        assert!(internal.contains("stacktrace="));
+        assert!(!internal.contains("error_file=") && !internal.contains("app_error_line="));
+        assert!(!internal.contains("source_chain") && !internal.contains(" -> "));
+        let rejection = output
+            .lines()
+            .find(|line| line.contains("rejection-test"))
+            .unwrap();
+        assert!(rejection.contains("WARN") && rejection.contains("has_source=false"));
+        let validation = output
+            .lines()
+            .find(|line| line.contains("validation-test"))
+            .unwrap();
+        assert!(validation.contains("DEBUG"));
+    }
+
     use http::StatusCode;
     use salvo::{
         Router, Service, handler,
         test::{ResponseExt, TestClient},
     };
 
-    use super::{JsonWebResult, WebResult, error_source_chain};
+    use super::{JsonWebResult, WebResult};
 
     use crate::{
         application::error::{
@@ -495,13 +567,16 @@ mod tests {
     }
 
     #[test]
-    fn error_source_chain_preserves_internal_error_details() {
+    fn diagnostics_preserve_internal_error_details() {
         let error =
             AppError::from_code(CommonErrorCode::InternalError).with_source(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
                 "database unavailable",
             ));
 
-        assert_eq!(error_source_chain(&error), "database unavailable");
+        assert_eq!(
+            identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error).cause,
+            "database unavailable"
+        );
     }
 }

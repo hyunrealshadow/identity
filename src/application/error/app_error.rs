@@ -16,6 +16,7 @@ pub struct AppError {
     params: ErrorParams,
     details: Option<AppErrorDetails>,
     source: Option<Box<dyn StdError + Send + Sync + 'static>>,
+    backtrace: Option<Box<std::backtrace::Backtrace>>,
 }
 
 impl AppError {
@@ -26,6 +27,8 @@ impl AppError {
             params: ErrorParams::new(),
             details: None,
             source: None,
+            backtrace: (code.kind() == ErrorKind::Internal)
+                .then(|| Box::new(std::backtrace::Backtrace::force_capture())),
         }
     }
 
@@ -61,6 +64,10 @@ impl AppError {
 
     pub fn code(&self) -> u32 {
         self.code
+    }
+
+    pub fn backtrace(&self) -> Option<&std::backtrace::Backtrace> {
+        self.backtrace.as_deref()
     }
 
     pub fn params(&self) -> &ErrorParams {

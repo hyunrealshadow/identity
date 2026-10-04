@@ -14,8 +14,8 @@ use identity_application::{
 use identity_domain::openid_connect::{ClientAssertionType, GrantType};
 
 use crate::controllers::response::{
-    AppResponse, app_state, error_message, error_source_chain, insert_no_store_headers,
-    json_response, parse_form,
+    AppResponse, app_state, error_message, insert_no_store_headers, json_response, log_app_error,
+    parse_form,
 };
 use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers};
 
@@ -169,13 +169,7 @@ impl From<AppError> for TokenWebError {
 #[async_trait]
 impl Writer for TokenWebError {
     async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        tracing::warn!(
-            error_code = self.0.code(),
-            oauth_error = app_error_to_rfc6749(&self.0),
-            error = %self.0,
-            source_chain = %error_source_chain(&self.0),
-            "token endpoint request failed"
-        );
+        log_app_error(&self.0, "token endpoint request failed");
         match error_i18n() {
             Some(i18n) => {
                 let locale = resolve_locale_from_headers(req.headers());

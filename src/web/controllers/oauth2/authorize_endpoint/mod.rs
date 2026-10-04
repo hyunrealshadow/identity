@@ -2,7 +2,7 @@ use http::HeaderMap;
 use salvo::{Depot, Request, Response, handler};
 
 use crate::controllers::{
-    response::{WebResult, app_state, error_source_chain, redirect_to_response},
+    response::{WebResult, app_state, log_app_error, redirect_to_response},
     shared::load_op_active_session_entries,
 };
 use identity_application::error::AppError;
@@ -33,12 +33,7 @@ async fn render_error(
     raw: &RawAuthorizeRequest,
     error: AppError,
 ) -> Response {
-    tracing::warn!(
-        error_code = error.code(),
-        error = %error,
-        source_chain = %error_source_chain(&error),
-        "authorize validation error"
-    );
+    log_app_error(&error, "authorization request failed");
 
     let mut resolved_raw = raw.clone();
     if resolved_raw

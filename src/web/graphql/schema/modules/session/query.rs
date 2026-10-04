@@ -76,7 +76,7 @@ impl SessionViewer {
                     .session()
                     .list_active_sessions_page(user_oid, after, before, requested, direction)
                     .await
-                    .map_err(internal_error)?;
+                    .map_err(|error| internal_error(error))?;
                 let cursor_payloads = page
                     .items
                     .iter()
@@ -84,7 +84,7 @@ impl SessionViewer {
                     .collect::<Vec<_>>();
                 let protected_cursors = protect_many(data_protector.as_ref(), &cursor_payloads)
                     .await
-                    .map_err(internal_error)?;
+                    .map_err(|error| internal_error(error))?;
                 let mut connection = Connection::new(page.has_previous_page, page.has_next_page);
                 connection
                     .edges
