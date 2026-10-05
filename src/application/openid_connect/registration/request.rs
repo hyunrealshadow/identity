@@ -1,4 +1,8 @@
+use serde::Deserializer;
+use serde::de::Error;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use url::Url;
 
 use crate::domain::key::PublicJwk;
@@ -47,11 +51,11 @@ pub struct DynamicClientRegistrationRequest {
 
 fn deserialize_redirect_uris<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: Deserializer<'de>,
 {
     let raw_uris = Vec::<String>::deserialize(deserializer)?;
     for raw in &raw_uris {
-        Url::parse(raw).map_err(serde::de::Error::custom)?;
+        Url::parse(raw).map_err(Error::custom)?;
     }
     Ok(raw_uris)
 }
@@ -87,5 +91,5 @@ pub struct DynamicClientUpdateRequest {
     #[serde(flatten)]
     pub metadata: DynamicClientRegistrationRequest,
     #[serde(flatten)]
-    pub forbidden_fields: std::collections::BTreeMap<String, serde_json::Value>,
+    pub forbidden_fields: BTreeMap<String, Value>,
 }

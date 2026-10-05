@@ -1,4 +1,7 @@
+use crate::client::model::ClientOid;
+use chrono::Duration;
 use chrono::{DateTime, Utc};
+use std::error::Error as StdError;
 use thiserror::Error;
 
 /// Workloads that Identity recognizes on its internal management API.
@@ -24,7 +27,7 @@ pub trait WorkloadAuthenticator: Send + Sync {
 /// generation that is active right now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoginRuntimeConfig {
-    pub client_oid: crate::client::model::ClientOid,
+    pub client_oid: ClientOid,
     pub client_secret: String,
     pub generation: i64,
     pub secret_expires_at: DateTime<Utc>,
@@ -32,19 +35,19 @@ pub struct LoginRuntimeConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoginRotationPolicy {
-    pub credential_lifetime: chrono::Duration,
-    pub rotate_before_expiry: chrono::Duration,
-    pub retire_after: chrono::Duration,
+    pub credential_lifetime: Duration,
+    pub rotate_before_expiry: Duration,
+    pub retire_after: Duration,
 }
 
-pub const BUILTIN_CLIENT_SECRET_LIFETIME: chrono::Duration = chrono::Duration::days(90);
+pub const BUILTIN_CLIENT_SECRET_LIFETIME: Duration = Duration::days(90);
 
 impl Default for LoginRotationPolicy {
     fn default() -> Self {
         Self {
             credential_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
-            rotate_before_expiry: chrono::Duration::days(30),
-            retire_after: chrono::Duration::hours(24),
+            rotate_before_expiry: Duration::days(30),
+            retire_after: Duration::hours(24),
         }
     }
 }
@@ -52,7 +55,7 @@ impl Default for LoginRotationPolicy {
 #[derive(Debug, Error)]
 pub enum LoginRuntimeRepositoryError {
     #[error("failed to query login runtime state")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 #[async_trait::async_trait]
@@ -61,7 +64,7 @@ pub trait LoginRuntimeRepository: Send + Sync {
     /// `None` when installation has not created one yet.
     async fn login_runtime_config(
         &self,
-        client_oid: crate::client::model::ClientOid,
+        client_oid: ClientOid,
         now: DateTime<Utc>,
     ) -> Result<Option<LoginRuntimeConfig>, LoginRuntimeRepositoryError>;
 

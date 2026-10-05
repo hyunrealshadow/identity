@@ -52,23 +52,27 @@ pub enum DeviceAuthorizationErrorCode {
 impl AppErrorCode for DeviceAuthorizationErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::GrantNotAllowed => ErrorKind::Validation,
-            Self::ScopeInvalid => ErrorKind::Validation,
-            Self::ScopeNotAssignedToClient => ErrorKind::Validation,
-            Self::UserCodeUnavailable => ErrorKind::Internal,
-            Self::CodeGenerationFailed => ErrorKind::Internal,
-            Self::StoreRequestFailed => ErrorKind::Internal,
-            Self::IssuerInvalid | Self::LoginDomainInvalid => ErrorKind::Internal,
-            Self::UserCodeNotFound => ErrorKind::Validation,
-            Self::LoadRequestFailed => ErrorKind::Internal,
-            Self::DeserializeRequestFailed => ErrorKind::Internal,
+            Self::GrantNotAllowed
+            | Self::ScopeInvalid
+            | Self::ScopeNotAssignedToClient
+            | Self::UserCodeNotFound
+            | Self::ClientNotFound
+            | Self::UserNotFound => ErrorKind::Validation,
+
+            Self::UserCodeUnavailable
+            | Self::CodeGenerationFailed
+            | Self::StoreRequestFailed
+            | Self::IssuerInvalid
+            | Self::LoginDomainInvalid
+            | Self::LoadRequestFailed
+            | Self::DeserializeRequestFailed
+            | Self::InvalidAuthorizationState
+            | Self::StoreDecisionFailed
+            | Self::UserLookupFailed
+            | Self::ClientLookupFailed => ErrorKind::Internal,
+
             Self::RequestAlreadyDecided => ErrorKind::Conflict,
-            Self::InvalidAuthorizationState => ErrorKind::Internal,
-            Self::StoreDecisionFailed => ErrorKind::Internal,
-            Self::UserLookupFailed => ErrorKind::Internal,
-            Self::ClientLookupFailed => ErrorKind::Internal,
-            Self::ClientNotFound => ErrorKind::Validation,
-            Self::UserNotFound => ErrorKind::Validation,
+
             Self::RequestExpired => ErrorKind::Gone,
             Self::VerificationLoginRequired => ErrorKind::Unauthorized,
         }

@@ -1,3 +1,8 @@
+use crate::observability::EventSink;
+use crate::observability::NoopEventSink;
+use identity_domain::openid_connect::scope_catalog::ScopeCatalogRepository;
+use identity_domain::openid_connect::scope_catalog::ScopeDescription;
+use reqwest::Client;
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -39,8 +44,7 @@ pub use identity_domain::openid_connect::model::authorization_request::Authoriza
 
 #[derive(Clone)]
 pub struct AuthorizeService {
-    scope_catalog:
-        Option<Arc<dyn identity_domain::openid_connect::scope_catalog::ScopeCatalogRepository>>,
+    scope_catalog: Option<Arc<dyn ScopeCatalogRepository>>,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
@@ -50,9 +54,9 @@ pub struct AuthorizeService {
     key_jwk_repo: Arc<dyn KeyJwkRepository>,
     provider_service: Arc<OpenIdProviderService>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    http_client: reqwest::Client,
+    http_client: Client,
     data_protector: Arc<dyn DataProtector>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 pub struct AuthorizeServiceDependencies {
@@ -66,7 +70,7 @@ pub struct AuthorizeServiceDependencies {
     pub provider_service: Arc<OpenIdProviderService>,
     pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     pub data_protector: Arc<dyn DataProtector>,
-    pub http_client: reqwest::Client,
+    pub http_client: Client,
 }
 
 impl AuthorizeService {
@@ -88,15 +92,12 @@ impl AuthorizeService {
             signing_algorithm_detector: deps.signing_algorithm_detector,
             http_client: deps.http_client,
             data_protector: deps.data_protector,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
     #[must_use]
-    pub fn with_scope_catalog(
-        mut self,
-        repository: Arc<dyn identity_domain::openid_connect::scope_catalog::ScopeCatalogRepository>,
-    ) -> Self {
+    pub fn with_scope_catalog(mut self, repository: Arc<dyn ScopeCatalogRepository>) -> Self {
         self.scope_catalog = Some(repository);
         self
     }
@@ -104,8 +105,7 @@ impl AuthorizeService {
     pub async fn scope_descriptions(
         &self,
         scope: &ScopeSet,
-    ) -> Result<Vec<identity_domain::openid_connect::scope_catalog::ScopeDescription>, AppError>
-    {
+    ) -> Result<Vec<ScopeDescription>, AppError> {
         let repository = self
             .scope_catalog
             .as_ref()
@@ -113,9 +113,7 @@ impl AuthorizeService {
         let descriptions = repository
             .find_by_names(&scope.names())
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
         if scope
             .names()
             .iter()
@@ -128,7 +126,7 @@ impl AuthorizeService {
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }

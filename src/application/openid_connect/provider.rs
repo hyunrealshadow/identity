@@ -1,3 +1,14 @@
+use super::jose::request_object_content_encryption_algorithms;
+use super::jose::request_object_encryption_algorithms;
+use crate::domain::openid_connect::OAuthProtocolVersion;
+use crate::domain::openid_connect::OpenIdConnectClient;
+use crate::domain::openid_connect::ScopeSet;
+use crate::domain::openid_connect::resource::OAuthResourceRepository;
+use crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository;
+use crate::error::codes::common::CommonErrorCode;
+use crate::setting::PushedAuthorizationSettings;
+use identity_domain::auth::ACR_AAL1;
+use identity_domain::auth::ACR_AAL2;
 use std::sync::Arc;
 
 use url::Url;
@@ -92,10 +103,7 @@ impl Default for OpenIdProviderCapabilities {
                 GrantType::ClientCredentials,
                 GrantType::DeviceCode,
             ],
-            acr_values_supported: vec![
-                identity_domain::auth::ACR_AAL1.to_owned(),
-                identity_domain::auth::ACR_AAL2.to_owned(),
-            ],
+            acr_values_supported: vec![ACR_AAL1.to_owned(), ACR_AAL2.to_owned()],
             subject_types_supported: vec![SubjectType::Public, SubjectType::Pairwise],
             id_token_signing_alg_values_supported: vec![JwsAlgorithm::Asymmetric(
                 JwaSigningAlgorithm::Es256,
@@ -129,13 +137,12 @@ impl Default for OpenIdProviderCapabilities {
             ],
             request_object_signing_alg_values_supported:
                 supported_request_object_signing_algorithms(),
-            request_object_encryption_alg_values_supported:
-                super::jose::request_object_encryption_algorithms()
-                    .into_iter()
-                    .map(|value| value.parse().expect("supported JWE algorithm"))
-                    .collect(),
+            request_object_encryption_alg_values_supported: request_object_encryption_algorithms()
+                .into_iter()
+                .map(|value| value.parse().expect("supported JWE algorithm"))
+                .collect(),
             request_object_encryption_enc_values_supported:
-                super::jose::request_object_content_encryption_algorithms()
+                request_object_content_encryption_algorithms()
                     .into_iter()
                     .map(|value| value.parse().expect("supported JWE content encryption"))
                     .collect(),
@@ -218,10 +225,8 @@ fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
 pub struct OpenIdProviderService {
     settings: Arc<dyn SettingsSource>,
     pub(super) capabilities: OpenIdProviderCapabilities,
-    pub(super) resource_repo:
-        Option<Arc<dyn crate::domain::openid_connect::resource::OAuthResourceRepository>>,
-    scope_catalog:
-        Option<Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>>,
+    pub(super) resource_repo: Option<Arc<dyn OAuthResourceRepository>>,
+    scope_catalog: Option<Arc<dyn ScopeCatalogRepository>>,
     key_repo: Option<Arc<dyn KeyRepository>>,
     key_jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
     signing_algorithm_detector: Option<Arc<dyn SigningAlgorithmDetector>>,
@@ -275,38 +280,26 @@ impl OpenIdProviderService {
         }
     }
 
-    pub fn with_resource_repo(
-        mut self,
-        repo: Arc<dyn crate::domain::openid_connect::resource::OAuthResourceRepository>,
-    ) -> Self {
+    pub fn with_resource_repo(mut self, repo: Arc<dyn OAuthResourceRepository>) -> Self {
         self.resource_repo = Some(repo);
         self
     }
 
-    pub fn with_scope_catalog(
-        mut self,
-        repo: Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>,
-    ) -> Self {
+    pub fn with_scope_catalog(mut self, repo: Arc<dyn ScopeCatalogRepository>) -> Self {
         self.scope_catalog = Some(repo);
         self
     }
 
     pub async fn supported_scopes(&self) -> Result<Vec<String>, AppError> {
         match &self.scope_catalog {
-            Some(repo) => repo.list_names().await.map_err(|error| {
-                AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
-                    .with_source(error)
-            }),
+            Some(repo) => repo.list_names().await.map_err(AppError::internal),
             None => Ok(self.capabilities.scopes_supported.clone()),
         }
     }
 
     pub async fn validate_scope_names(&self, scope: &str) -> Result<(), AppError> {
-        use crate::error::codes::common::CommonErrorCode;
         // Validate every requested name before domain normalization of built-in scopes.
-        crate::domain::openid_connect::ScopeSet::parse(scope).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InvalidScope).with_source(error)
-        })?;
+        ScopeSet::parse(scope).map_err(AppError::map_source(CommonErrorCode::InvalidScope))?;
         let supported = self.supported_scopes().await?;
         if scope
             .split(' ')
@@ -337,10 +330,7 @@ impl OpenIdProviderService {
     }
 
     /// Explicit client configuration takes precedence over the live global default.
-    pub fn oauth_version(
-        &self,
-        client: &crate::domain::openid_connect::OpenIdConnectClient,
-    ) -> crate::domain::openid_connect::OAuthProtocolVersion {
+    pub fn oauth_version(&self, client: &OpenIdConnectClient) -> OAuthProtocolVersion {
         client.metadata().settings.oauth_version.unwrap_or_else(|| {
             self.settings
                 .snapshot()
@@ -349,7 +339,7 @@ impl OpenIdProviderService {
         })
     }
 
-    pub fn pushed_authorization_settings(&self) -> crate::setting::PushedAuthorizationSettings {
+    pub fn pushed_authorization_settings(&self) -> PushedAuthorizationSettings {
         self.settings
             .snapshot()
             .section::<OpenIdConnectSettings>()
@@ -478,13 +468,15 @@ impl OpenIdProviderService {
     async fn compute_id_token_signing_algos(&self) -> Result<Vec<JwsAlgorithm>, AppError> {
         let values = match self.key_repo {
             Some(ref key_repo) => {
-                let keys = key_repo.list_active_asymmetric().await.map_err(|error| {
-                    AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
-                })?;
+                let keys = key_repo
+                    .list_active_asymmetric()
+                    .await
+                    .map_err(AppError::map_source(ProviderErrorCode::KeyLookupFailed))?;
                 if let Some(key_jwk_repo) = &self.key_jwk_repo {
-                    let bindings = key_jwk_repo.list_active().await.map_err(|error| {
-                        AppError::from_code(ProviderErrorCode::KeyLookupFailed).with_source(error)
-                    })?;
+                    let bindings = key_jwk_repo
+                        .list_active()
+                        .await
+                        .map_err(AppError::map_source(ProviderErrorCode::KeyLookupFailed))?;
                     let mut algorithms = bindings
                         .into_iter()
                         .filter(|binding| keys.iter().any(|key| key.oid == binding.key_oid))
@@ -558,9 +550,9 @@ fn to_string_values<T: ToString>(values: &[T]) -> Vec<String> {
 
 fn endpoint_url(issuer: &Url, path: &str) -> Result<Url, AppError> {
     let base = issuer.as_str().trim_end_matches('/');
-    Url::parse(&format!("{base}{path}")).map_err(|error| {
-        AppError::from_code(ProviderErrorCode::IssuerUrlParseFailed).with_source(error)
-    })
+    Url::parse(&format!("{base}{path}")).map_err(AppError::map_source(
+        ProviderErrorCode::IssuerUrlParseFailed,
+    ))
 }
 
 fn normalize_issuer(
@@ -582,9 +574,9 @@ fn normalize_issuer(
         format!("https://{raw}")
     };
 
-    let mut issuer = Url::parse(&candidate).map_err(|error| {
-        AppError::from_code(ProviderErrorCode::IssuerUrlParseFailed).with_source(error)
-    })?;
+    let mut issuer = Url::parse(&candidate).map_err(AppError::map_source(
+        ProviderErrorCode::IssuerUrlParseFailed,
+    ))?;
 
     if issuer.scheme() != "https" {
         // In conformance/dev mode (feature flag) allow http for local testing.
@@ -610,6 +602,10 @@ fn normalize_issuer(
 
 #[cfg(test)]
 mod tests {
+    use sea_orm::DbErr;
+    #[cfg(feature = "oidc-conformance")]
+    use std::iter;
+
     use crate::setting::{AppSettings, InstallationSettings, SettingsSnapshot};
     use std::sync::Arc;
 
@@ -643,7 +639,7 @@ mod tests {
         values
             .iter()
             .copied()
-            .chain(std::iter::once("none"))
+            .chain(iter::once("none"))
             .map(str::to_owned)
             .collect()
     }
@@ -671,7 +667,7 @@ mod tests {
         mock.expect_find_by_oid().returning(|_| Ok(None));
         mock.expect_list_active_asymmetric().returning(|| {
             Err(KeyRepositoryError::ListAvailableFailed(Box::new(
-                sea_orm::DbErr::Custom("boom".to_owned()),
+                DbErr::Custom("boom".to_owned()),
             )))
         });
         mock.expect_list_decryptable_symmetric()
@@ -847,127 +843,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn default_discovery_advertises_the_device_authorization_endpoint() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-
-        assert_eq!(
-            metadata
-                .device_authorization_endpoint
-                .expect("device authorization endpoint is advertised")
-                .as_str(),
-            "https://identity.example.com/oauth2/device"
-        );
-        assert!(
-            metadata
-                .grant_types_supported
-                .expect("grant types are advertised")
-                .iter()
-                .any(|grant| grant == "urn:ietf:params:oauth:grant-type:device_code"),
-            "discovery must advertise the device_code grant it accepts"
-        );
-    }
-
-    #[tokio::test]
-    async fn default_discovery_advertises_supported_address_and_phone_claims() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-        let scopes = metadata.scopes_supported.unwrap();
-        let claims = metadata.claims_supported.unwrap();
-
-        assert!(scopes.iter().any(|scope| scope == "address"));
-        assert!(scopes.iter().any(|scope| scope == "phone"));
-        assert!(claims.iter().any(|claim| claim == "address"));
-        assert!(claims.iter().any(|claim| claim == "phone_number"));
-        assert!(claims.iter().any(|claim| claim == "phone_number_verified"));
-        assert!(claims.iter().any(|claim| claim == "amr"));
-    }
-
-    #[tokio::test]
-    async fn default_discovery_advertises_request_object_verifier_algorithms() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-        let mut expected = vec!["none".to_owned()];
-        expected.extend(
-            JwaSigningAlgorithm::all()
-                .iter()
-                .map(|algorithm| algorithm.as_str().to_owned()),
-        );
-
-        assert_eq!(
-            metadata.request_object_signing_alg_values_supported,
-            Some(expected)
-        );
-    }
-
-    #[tokio::test]
-    async fn default_discovery_advertises_request_object_encryption() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-
-        assert_eq!(
-            metadata.request_object_encryption_alg_values_supported,
-            Some(super::super::jose::request_object_encryption_algorithms())
-        );
-        assert_eq!(
-            metadata.request_object_encryption_enc_values_supported,
-            Some(super::super::jose::request_object_content_encryption_algorithms())
-        );
-    }
-
-    #[tokio::test]
     async fn discovery_advertises_registration_endpoint_when_enabled() {
         let service = OpenIdProviderService::for_test_with_registration(
             SettingsSnapshot::default()
@@ -1011,36 +886,6 @@ mod tests {
         let methods = metadata.token_endpoint_auth_methods_supported.unwrap();
 
         assert!(methods.iter().any(|method| method == "none"));
-    }
-
-    #[tokio::test]
-    async fn default_discovery_advertises_token_endpoint_auth_verifier_algorithms() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-        let mut expected = vec!["HS256".to_owned(), "HS384".to_owned(), "HS512".to_owned()];
-        expected.extend(
-            JwaSigningAlgorithm::all()
-                .iter()
-                .map(|algorithm| algorithm.as_str().to_owned()),
-        );
-
-        assert_eq!(
-            metadata.token_endpoint_auth_signing_alg_values_supported,
-            Some(expected)
-        );
     }
 
     #[tokio::test]

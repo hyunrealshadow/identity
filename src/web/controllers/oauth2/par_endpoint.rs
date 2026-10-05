@@ -6,6 +6,8 @@ use crate::controllers::response::{
     AppResponse, app_state, error_message, insert_no_store_headers, json_response,
 };
 use crate::infrastructure::i18n::{error_i18n, resolve_locale_from_headers};
+use http::HeaderMap;
+use http::HeaderValue;
 use http::{StatusCode, header};
 use identity_application::{
     error::{
@@ -16,7 +18,11 @@ use identity_application::{
     openid_connect::{authorize::AuthorizationRequestParams, par::PushedAuthorizationParams},
 };
 use identity_domain::openid_connect::ClientAssertionType;
+use salvo::http::ParseError;
 use salvo::{Depot, Request, Response, Writer, async_trait, handler};
+use std::collections::BTreeMap;
+use std::str;
+use url::form_urlencoded::parse;
 
 pub struct ParWebError {
     error: AppError,
@@ -67,7 +73,7 @@ impl Writer for ParWebError {
         if status == StatusCode::UNAUTHORIZED && req.headers().contains_key(header::AUTHORIZATION) {
             res.headers_mut().insert(
                 header::WWW_AUTHENTICATE,
-                http::HeaderValue::from_static("Basic realm=\"par\""),
+                HeaderValue::from_static("Basic realm=\"par\""),
             );
         }
     }
@@ -75,23 +81,22 @@ impl Writer for ParWebError {
 
 fn parse_pushed_parameters(
     body: &[u8],
-    headers: &http::HeaderMap,
+    headers: &HeaderMap,
 ) -> Result<PushedAuthorizationParams, AppError> {
-    let encoded = std::str::from_utf8(body)
-        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
+    let encoded =
+        str::from_utf8(body).map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
     for component in encoded.split(['&', '=']) {
-        urlencoding::decode(component).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error)
-        })?;
+        urlencoding::decode(component)
+            .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
     }
-    let mut pairs = std::collections::BTreeMap::<String, String>::new();
-    for (key, value) in url::form_urlencoded::parse(body) {
+    let mut pairs = BTreeMap::<String, String>::new();
+    for (key, value) in parse(body) {
         if key != "resource" && pairs.insert(key.into_owned(), value.into_owned()).is_some() {
             return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
         }
     }
     if pairs.contains_key("request")
-        && url::form_urlencoded::parse(body).any(|(key, _)| {
+        && parse(body).any(|(key, _)| {
             !matches!(
                 key.as_ref(),
                 "request"
@@ -172,7 +177,7 @@ pub async fn par(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, Pa
         .payload_with_max_size(64 * 1024)
         .await
         .map_err(|error| {
-            let status = matches!(&error, salvo::http::ParseError::PayloadTooLarge)
+            let status = matches!(&error, ParseError::PayloadTooLarge)
                 .then_some(StatusCode::PAYLOAD_TOO_LARGE);
             ParWebError {
                 error: AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error),
@@ -196,15 +201,19 @@ pub async fn method_not_allowed(res: &mut Response) {
         StatusCode::METHOD_NOT_ALLOWED,
         serde_json::json!({"error":"invalid_request"}),
     );
-    res.headers_mut().insert(
-        header::ALLOW,
-        http::HeaderValue::from_static("POST, OPTIONS"),
-    );
+    res.headers_mut()
+        .insert(header::ALLOW, HeaderValue::from_static("POST, OPTIONS"));
     insert_no_store_headers(res);
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::routes;
+    use http::HeaderMap;
+    use http::HeaderValue;
+    use salvo::affix_state::inject;
+    use serde_json::Value;
+
     use super::*;
     use salvo::{
         Service,
@@ -212,7 +221,7 @@ mod tests {
     };
     #[test]
     fn par_form_rejects_ambiguous_credentials_and_mixed_request_objects() {
-        let empty = http::HeaderMap::new();
+        let empty = HeaderMap::new();
         for body in [
             "client_id=a&client_id=b",
             "client_id=%FF",
@@ -233,10 +242,10 @@ mod tests {
         assert_eq!(parsed.authorization.resources, ["urn:x", "urn:y"]);
         let stored = serde_json::to_value(parsed.authorization).unwrap();
         assert!(stored.get("client_secret").is_none());
-        let mut basic = http::HeaderMap::new();
+        let mut basic = HeaderMap::new();
         basic.insert(
             header::AUTHORIZATION,
-            http::HeaderValue::from_static("Basic YTpzZWNyZXQ="),
+            HeaderValue::from_static("Basic YTpzZWNyZXQ="),
         );
         assert!(parse_pushed_parameters(b"client_id=b", &basic).is_err());
         assert!(parse_pushed_parameters(b"response_type=code", &basic).is_err());
@@ -248,7 +257,7 @@ mod tests {
     #[tokio::test]
     async fn par_route_returns_protocol_errors_and_enforces_method_and_size() {
         let state = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let service = Service::new(super::super::routes().hoop(salvo::affix_state::inject(state)));
+        let service = Service::new(routes().hoop(inject(state)));
         for (body, status) in [
             ("client_id=".to_owned(), StatusCode::BAD_REQUEST),
             ("x".repeat(65537), StatusCode::PAYLOAD_TOO_LARGE),
@@ -272,7 +281,7 @@ mod tests {
                     .unwrap()
                     .contains("no-store")
             );
-            let body: serde_json::Value = response.take_json().await.unwrap();
+            let body: Value = response.take_json().await.unwrap();
             assert_eq!(body["error"], "invalid_request");
         }
         let response = TestClient::get("http://localhost/oauth2/par")

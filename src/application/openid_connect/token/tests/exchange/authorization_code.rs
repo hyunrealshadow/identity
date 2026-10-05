@@ -1,10 +1,28 @@
 use crate::key::asymmetric::AsymmetricKeyService;
+use crate::observability::EventValue;
+use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
+use crate::openid_connect::token::TokenType;
 use crate::openid_connect::token::signing::{SignAccessTokenInput, SignIdTokenInput};
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use crate::openid_connect::user_info::UserInfoService;
+use crate::setting::AppSettings;
+use crate::setting::InstallationSettings;
+use crate::setting::OpenIdConnectSettings;
+use crate::setting::SettingsSnapshot;
+use chrono::Duration;
+use chrono::Utc;
 use identity_domain::auth::ACR_AAL1;
 use identity_domain::auth::SessionOid;
+use identity_domain::client_authorization::AccessTokenData;
+use identity_domain::client_authorization::ClientAuthenticationMode;
 use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
+use identity_domain::openid_connect::OAuthProtocolVersion;
+use identity_domain::openid_connect::OpenIdConnectClientSettings;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use serde_json::Value;
+use std::iter;
 
 fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
@@ -34,7 +52,7 @@ async fn expired_authorization_code_has_a_distinct_error() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() - chrono::Duration::seconds(1),
+            Utc::now() - Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -100,7 +118,7 @@ async fn oauth20_client_may_omit_token_redirect_when_authorization_omitted_it() 
                 redirect_uri_was_supplied: false,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -148,7 +166,7 @@ async fn oidc10_single_redirect_client_may_omit_token_redirect() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -199,7 +217,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -220,10 +238,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
         .await
         .unwrap();
 
-    assert!(matches!(
-        result.token_type,
-        crate::openid_connect::token::TokenType::Bearer
-    ));
+    assert!(matches!(result.token_type, TokenType::Bearer));
     assert!(result.id_token.is_some());
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (access_payload, _) = jwt::decode_with_verifier(&result.access_token, &verifier).unwrap();
@@ -290,7 +305,7 @@ async fn exchange_authorization_code_without_openid_issues_no_id_token() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -337,12 +352,12 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
                 protected_session_id: None,
                 acr: Some(ACR_AAL1.to_string()),
                 amr: vec!["pwd".to_owned()],
-                auth_time: Some(chrono::Utc::now().timestamp()),
+                auth_time: Some(Utc::now().timestamp()),
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -395,7 +410,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -468,7 +483,7 @@ async fn scoped_claims_client_omits_claims_outside_granted_scope_in_code_flow_id
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -522,7 +537,7 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -558,9 +573,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
     let key_repo = Arc::new(key_repo_with_keys(vec![key.clone()]));
     let user = test_user(user_oid);
     let service = TokenService::new(TokenServiceDependencies {
-        device_repo: Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
         client_authorization_repo: repo.clone(),
         key_repo: key_repo.clone(),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -574,7 +587,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
             data: OpenIdConnectCredentialData::ClientSecret {
                 secret: "secret-123".to_string(),
             },
-            expires_at: Utc::now() + chrono::Duration::days(1),
+            expires_at: Utc::now() + Duration::days(1),
             revoked_at: None,
             created_at: Utc::now(),
             updated_at: None,
@@ -603,7 +616,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -651,7 +664,7 @@ async fn exchange_authorization_code_rejects_reused_code() {
             .revoked_at
             .is_some()
     );
-    let user_info_service = crate::openid_connect::user_info::UserInfoService::new(
+    let user_info_service = UserInfoService::new(
         Arc::new(InMemoryUserRepository { user }),
         Arc::new(InMemoryClientRepository),
         Arc::new(cred_repo_with(vec![])),
@@ -697,7 +710,7 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -765,7 +778,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                     redirect_uri_was_supplied: true,
                     claims: None,
                 }),
-                Utc::now() + chrono::Duration::minutes(10),
+                Utc::now() + Duration::minutes(10),
             )
             .await
             .unwrap();
@@ -829,9 +842,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
     };
 
     let service = TokenService::new(TokenServiceDependencies {
-        device_repo: Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
         client_authorization_repo: repo.clone(),
         key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -847,7 +858,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
             data: OpenIdConnectCredentialData::ClientSecret {
                 secret: "secret-123".to_string(),
             },
-            expires_at: Utc::now() + chrono::Duration::days(1),
+            expires_at: Utc::now() + Duration::days(1),
             revoked_at: None,
             created_at: Utc::now(),
             updated_at: None,
@@ -876,7 +887,7 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -963,7 +974,7 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
                     redirect_uri_was_supplied: true,
                     claims: None,
                 }),
-                Utc::now() + chrono::Duration::minutes(10),
+                Utc::now() + Duration::minutes(10),
             )
             .await
             .unwrap();
@@ -998,7 +1009,7 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
 
         for tokens in [&issued, &refreshed] {
             assert_eq!(tokens.id_token.is_some(), has_openid);
-            for token in std::iter::once(&tokens.access_token).chain(tokens.id_token.iter()) {
+            for token in iter::once(&tokens.access_token).chain(tokens.id_token.iter()) {
                 let header = jwt::decode_header(token).unwrap();
                 assert_eq!(
                     header.claim(JwtClaimNames::ALG).and_then(|v| v.as_str()),
@@ -1050,7 +1061,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
                     redirect_uri_was_supplied: true,
                     claims: None,
                 }),
-                Utc::now() + chrono::Duration::minutes(10),
+                Utc::now() + Duration::minutes(10),
             )
             .await
             .unwrap();
@@ -1083,7 +1094,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             .unwrap();
 
         for tokens in [&issued, &refreshed] {
-            let access_claims = serde_json::from_slice::<serde_json::Value>(
+            let access_claims = serde_json::from_slice::<Value>(
                 &URL_SAFE_NO_PAD
                     .decode(tokens.access_token.split('.').nth(1).unwrap())
                     .unwrap(),
@@ -1100,7 +1111,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             }
             assert_eq!(tokens.id_token.is_some(), has_openid);
             if let Some(id_token) = &tokens.id_token {
-                let id_claims = serde_json::from_slice::<serde_json::Value>(
+                let id_claims = serde_json::from_slice::<Value>(
                     &URL_SAFE_NO_PAD
                         .decode(id_token.split('.').nth(1).unwrap())
                         .unwrap(),
@@ -1133,7 +1144,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             .client_authorization_repo
             .create(
                 Uuid::nil(),
-                ClientAuthorizationData::AccessToken(identity_domain::client_authorization::AccessTokenData {
+                ClientAuthorizationData::AccessToken(AccessTokenData {
                     scope: "openid profile".to_owned(),
                     user_oid: user_oid.to_string(),
                     session_oid: Some(SessionOid::from(Uuid::new_v4())),
@@ -1141,9 +1152,9 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                     authorization_code_oid: None,
                     refresh_token_oid: None,
                     device_authorization_oid: None,
-                    client_authentication_mode: Some(identity_domain::client_authorization::ClientAuthenticationMode::Confidential),
+                    client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
                 }),
-                Utc::now() + chrono::Duration::hours(1),
+                Utc::now() + Duration::hours(1),
             )
             .await
             .unwrap();
@@ -1248,7 +1259,7 @@ async fn successful_exchange_emits_consumption_and_issuance_events() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -1294,15 +1305,14 @@ async fn successful_exchange_emits_consumption_and_issuance_events() {
         .find(|event| event.name == "token.issuance.result")
         .unwrap();
     assert!(issuance.attributes.iter().any(|(key, value)| {
-        *key == "authorization_code_id"
-            && *value == crate::observability::EventValue::Text(record.oid.to_string())
+        *key == "authorization_code_id" && *value == EventValue::Text(record.oid.to_string())
     }));
     // The user identifier is pseudonymized, never raw.
     assert!(issuance.attributes.iter().any(|(key, value)| {
         *key == "user_oid"
             && matches!(
                 value,
-                crate::observability::EventValue::Pseudonymized { purpose, .. } if *purpose == "user_oid"
+                EventValue::Pseudonymized { purpose, .. } if *purpose == "user_oid"
             )
     }));
 }
@@ -1345,7 +1355,7 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
         "token.issuance.result",
         "rejected",
         "authorization_code_id",
-        crate::observability::EventValue::Text(code_oid.to_string()),
+        EventValue::Text(code_oid.to_string()),
     );
     // No code was ever consumed, so no consumption event is fabricated.
     assert!(!names.contains(&"authorization_code.consumed"));
@@ -1353,14 +1363,6 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
 
 #[tokio::test]
 async fn code_exchange_inherits_global_oauth_version_and_honors_client_override() {
-    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-    use crate::setting::{
-        AppSettings, InstallationSettings, OpenIdConnectSettings, SettingsSnapshot,
-    };
-    use identity_domain::openid_connect::{
-        OAuthProtocolVersion, OpenIdConnectClientSettings, TokenEndpointAuthMethod,
-    };
-
     for (global, client, may_omit_redirect) in [
         (OAuthProtocolVersion::V2_0, None, false),
         (OAuthProtocolVersion::V2_1, None, true),
@@ -1396,7 +1398,7 @@ async fn code_exchange_inherits_global_oauth_version_and_honors_client_override(
                     redirect_uri_was_supplied: true,
                     claims: None,
                 }),
-                Utc::now() + chrono::Duration::minutes(10),
+                Utc::now() + Duration::minutes(10),
             )
             .await
             .unwrap();

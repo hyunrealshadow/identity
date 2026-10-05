@@ -1,3 +1,9 @@
+use crate::controllers::oauth2::routes;
+use identity_infrastructure::AppState;
+use salvo::Response;
+use salvo::affix_state::inject;
+use url::Url;
+use uuid::Uuid;
 mod fixtures;
 
 use chrono::{Duration, Utc};
@@ -10,7 +16,7 @@ use http::{StatusCode, header};
 use identity_domain::client_authorization::ConsentState;
 use salvo::{Service, test::TestClient};
 
-fn location(response: &salvo::Response) -> &str {
+fn location(response: &Response) -> &str {
     response
         .headers()
         .get(header::LOCATION)
@@ -19,7 +25,7 @@ fn location(response: &salvo::Response) -> &str {
 }
 
 fn query_param(location: &str, name: &str) -> Option<String> {
-    url::Url::parse(location)
+    Url::parse(location)
         .ok()?
         .query_pairs()
         .find(|(key, _)| key == name)
@@ -28,10 +34,10 @@ fn query_param(location: &str, name: &str) -> Option<String> {
 
 async fn call_continue_with_state(
     login_id: &str,
-    state: identity_infrastructure::AppState,
+    state: AppState,
     session_cookie: Option<String>,
-) -> salvo::Response {
-    let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state));
+) -> Response {
+    let app = routes().hoop(inject(state));
     let service = Service::new(app);
 
     let request = TestClient::get(format!(
@@ -113,7 +119,7 @@ async fn continue_with_denied_consent_returns_access_denied() {
     let (state, protected_login_id, _) =
         continue_selected_session_with_consent_state(ConsentState::Denied).await;
 
-    let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state));
+    let app = routes().hoop(inject(state));
     let service = Service::new(app);
     let response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/continue?login_id={protected_login_id}"
@@ -175,8 +181,8 @@ async fn continue_skips_consent_when_user_previously_approved_requested_scopes()
 
 #[tokio::test]
 async fn continue_does_not_select_from_browser_session_transport() {
-    let session_oid = uuid::Uuid::new_v4();
-    let user_oid = uuid::Uuid::new_v4();
+    let session_oid = Uuid::new_v4();
+    let user_oid = Uuid::new_v4();
     let (state, protected_login_id, _) = continue_state(ContinueFixture {
         active_session: Some((session_oid, user_oid)),
         ..ContinueFixture::default()

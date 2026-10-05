@@ -79,6 +79,9 @@ fn numeric_date(value: &Value) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+    use std::time::SystemTime;
+
     use super::{
         JwtTimeValidationError, audience_value_matches, validate_required_exp_and_optional_window,
     };
@@ -134,8 +137,8 @@ mod tests {
     #[test]
     fn required_exp_accepts_josekit_numeric_date() {
         let mut payload = JwtPayload::new();
-        let now = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(100);
-        payload.set_expires_at(&(now + std::time::Duration::from_secs(1)));
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(100);
+        payload.set_expires_at(&(now + Duration::from_secs(1)));
 
         assert_eq!(
             validate_required_exp_and_optional_window(&payload, 100),

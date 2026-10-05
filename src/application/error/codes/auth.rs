@@ -28,24 +28,25 @@ pub enum AuthErrorCode {
 impl AppErrorCode for AuthErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            AuthErrorCode::UserNotFound => ErrorKind::NotFound,
-            AuthErrorCode::InvalidCredential => ErrorKind::Unauthorized,
-            AuthErrorCode::UserLocked => ErrorKind::Forbidden,
-            AuthErrorCode::UserDisabled => ErrorKind::Forbidden,
+            AuthErrorCode::UserNotFound | AuthErrorCode::SessionNotFound => ErrorKind::NotFound,
+            AuthErrorCode::InvalidCredential
+            | AuthErrorCode::InvalidOtp
+            | AuthErrorCode::SessionExpired
+            | AuthErrorCode::SessionRevoked => ErrorKind::Unauthorized,
+            AuthErrorCode::UserLocked | AuthErrorCode::UserDisabled => ErrorKind::Forbidden,
+
             AuthErrorCode::LoginExpired => ErrorKind::Gone,
-            AuthErrorCode::InvalidLoginState => ErrorKind::Conflict,
-            AuthErrorCode::CredentialTypeUnsupported => ErrorKind::Validation,
-            AuthErrorCode::InvalidOtp => ErrorKind::Unauthorized,
+            AuthErrorCode::InvalidLoginState
+            | AuthErrorCode::TotpAlreadyEnabled
+            | AuthErrorCode::TotpNotEnabled => ErrorKind::Conflict,
+            AuthErrorCode::CredentialTypeUnsupported
+            | AuthErrorCode::IdentifierRequired
+            | AuthErrorCode::PasswordTooShort
+            | AuthErrorCode::PasswordUnchanged
+            | AuthErrorCode::InvalidTotpEnrollment => ErrorKind::Validation,
+
             AuthErrorCode::TooManyAttempts => ErrorKind::RateLimit,
-            AuthErrorCode::SessionNotFound => ErrorKind::NotFound,
-            AuthErrorCode::SessionExpired => ErrorKind::Unauthorized,
-            AuthErrorCode::SessionRevoked => ErrorKind::Unauthorized,
-            AuthErrorCode::IdentifierRequired => ErrorKind::Validation,
-            AuthErrorCode::PasswordTooShort => ErrorKind::Validation,
-            AuthErrorCode::PasswordUnchanged => ErrorKind::Validation,
-            AuthErrorCode::TotpAlreadyEnabled => ErrorKind::Conflict,
-            AuthErrorCode::TotpNotEnabled => ErrorKind::Conflict,
-            AuthErrorCode::InvalidTotpEnrollment => ErrorKind::Validation,
+
             AuthErrorCode::DeviceAuthorizationRevocationFailed => ErrorKind::Internal,
         }
     }

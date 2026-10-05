@@ -1,8 +1,11 @@
 use josekit::JoseError;
+use josekit::jwe::deserialize_compact;
+use josekit::jwe::serialize_compact;
 use josekit::jwe::{
     ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweDecrypter, JweEncrypter, JweHeader, RSA_OAEP,
     RSA_OAEP_256,
 };
+use josekit::jwk::Jwk;
 
 use identity_domain::key::PublicJwk;
 
@@ -18,10 +21,10 @@ pub enum JweError {
     InvalidJwk(String),
 }
 
-fn public_jwk_to_josekit(jwk: &PublicJwk) -> Result<josekit::jwk::Jwk, JweError> {
+fn public_jwk_to_josekit(jwk: &PublicJwk) -> Result<Jwk, JweError> {
     let value = serde_json::to_value(jwk).map_err(|e| JweError::InvalidJwk(e.to_string()))?;
     let json = value.to_string();
-    josekit::jwk::Jwk::from_bytes(json.as_bytes()).map_err(|e| JweError::InvalidJwk(e.to_string()))
+    Jwk::from_bytes(json.as_bytes()).map_err(|e| JweError::InvalidJwk(e.to_string()))
 }
 
 pub fn build_encrypter(jwk: &PublicJwk, alg: &str) -> Result<Box<dyn JweEncrypter>, JweError> {
@@ -96,12 +99,12 @@ pub fn encrypt_jwe(
     encrypter: &dyn JweEncrypter,
     header: &JweHeader,
 ) -> Result<String, JweError> {
-    josekit::jwe::serialize_compact(payload, header, encrypter).map_err(JweError::EncryptFailed)
+    serialize_compact(payload, header, encrypter).map_err(JweError::EncryptFailed)
 }
 
 pub fn decrypt_jwe(
     encoded: &str,
     decrypter: &dyn JweDecrypter,
 ) -> Result<(Vec<u8>, JweHeader), JweError> {
-    josekit::jwe::deserialize_compact(encoded, decrypter).map_err(JweError::DecryptFailed)
+    deserialize_compact(encoded, decrypter).map_err(JweError::DecryptFailed)
 }

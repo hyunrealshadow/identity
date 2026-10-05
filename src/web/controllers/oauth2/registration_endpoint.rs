@@ -1,4 +1,5 @@
 use http::{HeaderValue, StatusCode, header};
+use identity_application::error::codes::common::CommonErrorCode;
 use salvo::{Depot, Request, Response, Writer, async_trait, handler};
 use subtle::ConstantTimeEq;
 use unic_langid::LanguageIdentifier;
@@ -125,12 +126,8 @@ pub async fn register(
 ) -> Result<(), RegistrationWebError> {
     let ctx = app_state(depot)?;
     let registration_config = depot
-        .obtain::<DynamicClientRegistrationConfig>()
-        .map_err(|_| {
-            AppError::from_code(
-                identity_application::error::codes::common::CommonErrorCode::InternalError,
-            )
-        })?;
+        .get_typed::<DynamicClientRegistrationConfig>()
+        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
     validate_initial_access_token(registration_config, ctx.context().is_conformance(), req)?;
     let request: DynamicClientRegistrationRequest = parse_json(req).await?;
     let response = ctx
@@ -256,11 +253,7 @@ fn bearer_token(req: &Request) -> Result<&str, AppError> {
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            AppError::from_code(
-                identity_application::error::codes::registration::RegistrationErrorCode::InvalidRegistrationAccessToken,
-            )
-        })
+        .ok_or_else(|| AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken))
 }
 
 #[cfg(test)]
@@ -327,6 +320,10 @@ mod tests {
 }
 #[cfg(test)]
 mod update_route_tests {
+    use crate::controllers::oauth2::routes;
+    use salvo::affix_state::inject;
+    use serde_json::Value;
+
     use http::{StatusCode, header};
     use salvo::{
         Service,
@@ -337,9 +334,7 @@ mod update_route_tests {
         let state =
             identity_infrastructure::test_app_state_with_cors_origin(Some("http://localhost:3000"))
                 .await;
-        let service = Service::new(
-            crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state)),
-        );
+        let service = Service::new(routes().hoop(inject(state)));
         let url = "http://127.0.0.1:5800/oauth2/register/11111111-1111-1111-1111-111111111111";
         let mut response = TestClient::put(url)
             .json(&serde_json::json!({"client_id":"11111111-1111-1111-1111-111111111111"}))
@@ -350,8 +345,7 @@ mod update_route_tests {
             response.headers().get(header::WWW_AUTHENTICATE).unwrap(),
             "Bearer error=\"invalid_token\""
         );
-        let json: serde_json::Value =
-            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        let json: Value = serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
         assert_eq!(json["error"], "invalid_token");
         let response = TestClient::options(url)
             .add_header(header::ORIGIN, "http://localhost:3000", true)

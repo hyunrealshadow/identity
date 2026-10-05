@@ -1,4 +1,5 @@
 use sha2::Digest;
+use sha2::Sha256;
 
 const PROTOCOL_INFO_PREFIX: &[u8] = b"app:data-protection:v1\0";
 
@@ -16,7 +17,7 @@ impl Purpose {
 
     pub fn hash_prefix(&self) -> [u8; 8] {
         let mut out = [0u8; 8];
-        let full = sha2::Sha256::digest(self.0.as_bytes());
+        let full = Sha256::digest(self.0.as_bytes());
         out.copy_from_slice(&full[..8]);
         out
     }

@@ -17,17 +17,13 @@ impl KeyJwkGenerator for KeyJwkGeneratorImpl {
         certificate_pem: Option<&str>,
     ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
         generate_all_jwks_for_key(private_key_pem, key_id, certificate_pem)
-            .map_err(|error| {
-                AppError::from_code(KeyErrorCode::JwkGenerationFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(KeyErrorCode::JwkGenerationFailed))?
             .into_iter()
             .map(|(algorithm, jwk)| {
-                let jwk_value = serde_json::to_value(jwk).map_err(|error| {
-                    AppError::from_code(KeyErrorCode::JwkSerializationFailed).with_source(error)
-                })?;
-                let jwk = serde_json::from_value::<PublicJwk>(jwk_value).map_err(|error| {
-                    AppError::from_code(KeyErrorCode::JwkSerializationFailed).with_source(error)
-                })?;
+                let jwk_value = serde_json::to_value(jwk)
+                    .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
+                let jwk = serde_json::from_value::<PublicJwk>(jwk_value)
+                    .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
                 let algorithm = algorithm
                     .parse()
                     .map_err(|_| AppError::from_code(KeyErrorCode::UnsupportedAlgorithm))?;

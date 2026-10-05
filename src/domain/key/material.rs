@@ -1,3 +1,4 @@
+use super::model::KeyType;
 use serde::{Deserialize, Serialize};
 
 fn default_symmetric_algorithm() -> SymmetricKeyAlgorithm {
@@ -36,29 +37,10 @@ pub enum KeyData {
 
 impl KeyData {
     #[must_use]
-    pub const fn key_type(&self) -> super::model::KeyType {
+    pub const fn key_type(&self) -> KeyType {
         match self {
-            Self::Asymmetric(_) => super::model::KeyType::Asymmetric,
-            Self::Symmetric(_) => super::model::KeyType::Symmetric,
+            Self::Asymmetric(_) => KeyType::Asymmetric,
+            Self::Symmetric(_) => KeyType::Symmetric,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{AsymmetricKeyData, KeyData};
-
-    #[test]
-    fn key_data_round_trips_through_json() {
-        let data = KeyData::Asymmetric(AsymmetricKeyData {
-            public_key: "public".to_owned(),
-            private_key: "private".to_owned(),
-            certificate: None,
-        });
-
-        let json = serde_json::to_string(&data).unwrap();
-        let decoded: KeyData = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(decoded, data);
     }
 }

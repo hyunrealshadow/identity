@@ -46,9 +46,7 @@ impl TokenService {
                     .key_repo
                     .list_active_asymmetric()
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-                    })?;
+                    .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
                 for key in keys {
                     let KeyData::Asymmetric(data) = &key.data else {
                         continue;
@@ -62,9 +60,7 @@ impl TokenService {
                         .key_jwk_repo
                         .find_active_by_key_oid_and_algorithm(key.oid, alg)
                         .await
-                        .map_err(|error| {
-                            AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-                        })?
+                        .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?
                     {
                         return Ok((
                             Uuid::from(binding.oid).to_string(),
@@ -105,9 +101,7 @@ impl TokenService {
             .key_repo
             .list_active_asymmetric()
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
 
         for key in keys {
             if let KeyData::Asymmetric(data) = &key.data {
@@ -124,9 +118,7 @@ impl TokenService {
                     .key_jwk_repo
                     .find_active_by_key_oid_and_algorithm(key.oid, alg)
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-                    })?
+                    .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?
                 else {
                     continue;
                 };

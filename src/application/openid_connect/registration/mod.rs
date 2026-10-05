@@ -1,3 +1,12 @@
+use crate::domain::key::JwsAlgorithm;
+use crate::domain::openid_connect::OpenIdConnectClientRepositoryError;
+use crate::domain::openid_connect::ScopeSet;
+use crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository;
+use crate::observability::BusinessEvent;
+use crate::observability::EventSink;
+use crate::observability::EventValue;
+use crate::observability::NoopEventSink;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
@@ -47,9 +56,8 @@ use validation::{
 pub struct DynamicClientRegistrationService {
     settings: Arc<dyn SettingsSource>,
     repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
-    scope_catalog:
-        Option<Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>>,
-    events: Arc<dyn crate::observability::EventSink>,
+    scope_catalog: Option<Arc<dyn ScopeCatalogRepository>>,
+    events: Arc<dyn EventSink>,
 }
 
 impl DynamicClientRegistrationService {
@@ -62,21 +70,18 @@ impl DynamicClientRegistrationService {
             settings,
             repo,
             scope_catalog: None,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
 
-    pub fn with_scope_catalog(
-        mut self,
-        repo: Arc<dyn crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository>,
-    ) -> Self {
+    pub fn with_scope_catalog(mut self, repo: Arc<dyn ScopeCatalogRepository>) -> Self {
         self.scope_catalog = Some(repo);
         self
     }
@@ -90,7 +95,6 @@ impl DynamicClientRegistrationService {
     }
 
     fn record_client_change(&self, event: &'static str, client_oid: Uuid, outcome: &'static str) {
-        use crate::observability::{BusinessEvent, EventValue};
         self.events.emit(
             BusinessEvent::audit(event)
                 .outcome(outcome)
@@ -106,7 +110,10 @@ impl DynamicClientRegistrationService {
     ) -> Result<DynamicClientRegistrationResponse, AppError> {
         let (registration, mut response) = self.prepare_registration(request, issuer).await?;
         let client_id = self.repo.create(registration).await.map_err(|error| {
-            if matches!(&error, crate::domain::openid_connect::OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "scope", .. }) {
+            if matches!(
+                &error,
+                OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "scope", .. }
+            ) {
                 return AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
                     .with_param("field", "scope")
                     .with_source(error);
@@ -160,10 +167,9 @@ impl DynamicClientRegistrationService {
             .redirect_uris
             .iter()
             .map(|raw| {
-                Url::parse(raw).map_err(|error| {
-                    AppError::from_code(RegistrationErrorCode::InvalidRedirectUri)
-                        .with_source(error)
-                })
+                Url::parse(raw).map_err(AppError::map_source(
+                    RegistrationErrorCode::InvalidRedirectUri,
+                ))
             })
             .collect::<Result<Vec<_>, _>>()?;
         if parsed_redirect_uris
@@ -278,7 +284,7 @@ impl DynamicClientRegistrationService {
         let auth_signing_alg = request
             .token_endpoint_auth_signing_alg
             .as_deref()
-            .map(str::parse::<crate::domain::key::JwsAlgorithm>)
+            .map(str::parse::<JwsAlgorithm>)
             .transpose()
             .map_err(|_| {
                 AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
@@ -289,12 +295,10 @@ impl DynamicClientRegistrationService {
                 (token_auth_method, alg),
                 (
                     TokenEndpointAuthMethod::ClientSecretJwt,
-                    crate::domain::key::JwsAlgorithm::Hs256
-                        | crate::domain::key::JwsAlgorithm::Hs384
-                        | crate::domain::key::JwsAlgorithm::Hs512
+                    JwsAlgorithm::Hs256 | JwsAlgorithm::Hs384 | JwsAlgorithm::Hs512
                 ) | (
                     TokenEndpointAuthMethod::PrivateKeyJwt,
-                    crate::domain::key::JwsAlgorithm::Asymmetric(_)
+                    JwsAlgorithm::Asymmetric(_)
                 )
             )
         }) {
@@ -366,24 +370,18 @@ impl DynamicClientRegistrationService {
         let registration_access_token = generate_registration_access_token();
         let assigned_scopes = split_scope(request.scope.as_deref());
         let raw_scope = assigned_scopes.join(" ");
-        crate::domain::openid_connect::ScopeSet::parse(
-            request.scope.as_deref().unwrap_or(&raw_scope),
-        )
-        .map_err(|error| {
+        ScopeSet::parse(request.scope.as_deref().unwrap_or(&raw_scope)).map_err(|error| {
             AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
                 .with_param("field", "scope")
                 .with_source(error)
         })?;
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = BTreeSet::new();
         let assigned_scopes = assigned_scopes
             .into_iter()
             .filter(|name| seen.insert(name.clone()))
             .collect::<Vec<_>>();
         if let Some(catalog) = &self.scope_catalog {
-            let names = catalog.list_names().await.map_err(|error| {
-                AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
-                    .with_source(error)
-            })?;
+            let names = catalog.list_names().await.map_err(AppError::internal)?;
             if assigned_scopes.iter().any(|scope| !names.contains(scope)) {
                 return Err(
                     AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
@@ -599,9 +597,9 @@ impl DynamicClientRegistrationService {
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
             .await
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                RegistrationErrorCode::ClientLookupFailed,
+            ))?
             .ok_or_else(|| {
                 AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
             })?;
@@ -625,15 +623,23 @@ impl DynamicClientRegistrationService {
             .settings
             .require_pushed_authorization_requests = require_par;
         registration.registration_access_token = registration_access_token.to_owned();
-        self.repo.update(registration, registration_access_token, request.client_secret).await.map_err(|error| {
-            match error {
-                crate::domain::openid_connect::OpenIdConnectClientRepositoryError::InvalidMetadataValue { .. } =>
-                    AppError::from_code(RegistrationErrorCode::InvalidClientMetadata),
-                crate::domain::openid_connect::OpenIdConnectClientRepositoryError::ClientNotFound =>
-                    AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken),
-                _ => AppError::from_code(RegistrationErrorCode::ClientUpdateFailed).with_source(error),
-            }
-        })?;
+        self.repo
+            .update(
+                registration,
+                registration_access_token,
+                request.client_secret,
+            )
+            .await
+            .map_err(|error| match error {
+                OpenIdConnectClientRepositoryError::InvalidMetadataValue { .. } => {
+                    AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                }
+                OpenIdConnectClientRepositoryError::ClientNotFound => {
+                    AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+                }
+                _ => AppError::from_code(RegistrationErrorCode::ClientUpdateFailed)
+                    .with_source(error),
+            })?;
         response.client_id = client_oid.to_string();
         response.registration_client_uri = Some(registration_client_uri(issuer, client_oid)?);
         response.registration_access_token = Some(registration_access_token.to_owned());
@@ -660,9 +666,9 @@ impl DynamicClientRegistrationService {
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
             .await
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                RegistrationErrorCode::ClientLookupFailed,
+            ))?
             .ok_or_else(|| {
                 AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
             })?;
@@ -689,9 +695,9 @@ impl DynamicClientRegistrationService {
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
             .await
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                RegistrationErrorCode::ClientLookupFailed,
+            ))?
             .ok_or_else(|| {
                 AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
             })?;
@@ -703,9 +709,12 @@ impl DynamicClientRegistrationService {
         }
 
         let client_oid = client.client().oid;
-        self.repo.delete_by_oid(client_oid).await.map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::ClientDeleteFailed).with_source(error)
-        })?;
+        self.repo
+            .delete_by_oid(client_oid)
+            .await
+            .map_err(AppError::map_source(
+                RegistrationErrorCode::ClientDeleteFailed,
+            ))?;
         self.record_client_change("client.deleted", client_oid, "success");
 
         Ok(())

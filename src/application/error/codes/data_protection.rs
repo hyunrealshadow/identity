@@ -13,8 +13,7 @@ impl AppErrorCode for DataProtectionErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
             Self::InvalidProtectedPayload => ErrorKind::Validation,
-            Self::KeyRingEmpty => ErrorKind::Internal,
-            Self::EncryptionFailed => ErrorKind::Internal,
+            Self::KeyRingEmpty | Self::EncryptionFailed => ErrorKind::Internal,
         }
     }
 

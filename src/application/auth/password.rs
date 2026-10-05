@@ -1,9 +1,10 @@
 use std::sync::{Arc, OnceLock};
+use tokio::task::spawn_blocking;
 
 use tokio::sync::Semaphore;
 
 pub use super::hash::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult};
-use crate::error::{AppError, codes::common::CommonErrorCode};
+use crate::error::AppError;
 
 const MAX_CONCURRENT_PASSWORD_HASHES: usize = 4;
 
@@ -20,13 +21,13 @@ where
     let permit = password_hash_semaphore()
         .acquire_owned()
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
-    tokio::task::spawn_blocking(move || {
+    spawn_blocking(move || {
         let _permit = permit;
         operation()
     })
     .await
-    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+    .map_err(AppError::internal)?
     .map_err(AppError::from)
 }

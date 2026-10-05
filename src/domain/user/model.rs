@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use std::{fmt, str::FromStr};
+use uuid::Uuid;
 
 #[derive(
     Debug,
@@ -13,7 +14,7 @@ use std::{fmt, str::FromStr};
     derive_more::From,
     derive_more::Into,
 )]
-pub struct UserOid(pub uuid::Uuid);
+pub struct UserOid(pub Uuid);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UserTheme {

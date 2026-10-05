@@ -1,3 +1,15 @@
+use crate::controllers::response::accepts_html;
+use crate::controllers::response::app_state;
+use crate::controllers::response::insert_no_store_headers;
+use crate::infrastructure::i18n::resolve_locale_from_headers;
+use crate::middleware::security_headers_middleware;
+use async_graphql::Response as AsyncGraphqlResponse;
+use async_graphql::Value;
+use salvo::affix_state::inject;
+use salvo::prelude::Json;
+use std::time::Duration;
+use tokio::time::timeout;
+use url::form_urlencoded::parse;
 mod schema;
 #[cfg(test)]
 mod tests;
@@ -23,10 +35,10 @@ const MAX_URI_BYTES: usize = 16 * 1024;
 pub fn router(state: AppState, config: &GraphqlConfig) -> Router {
     let schema = build_schema(config.max_depth, config.max_complexity);
     Router::with_path("graphql")
-        .hoop(crate::middleware::security_headers_middleware)
-        .hoop(salvo::affix_state::inject(state))
-        .hoop(salvo::affix_state::inject(config.clone()))
-        .hoop(salvo::affix_state::inject(schema))
+        .hoop(security_headers_middleware)
+        .hoop(inject(state))
+        .hoop(inject(config.clone()))
+        .hoop(inject(schema))
         .options(graphql_options)
         .get(graphql_handler)
         .post(graphql_handler)
@@ -34,7 +46,7 @@ pub fn router(state: AppState, config: &GraphqlConfig) -> Router {
 
 #[handler]
 async fn graphql_options(depot: &mut Depot, req: &mut Request, res: &mut Response) {
-    let Ok(config) = depot.obtain::<GraphqlConfig>() else {
+    let Ok(config) = depot.get_typed::<GraphqlConfig>() else {
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         return;
     };
@@ -56,7 +68,7 @@ async fn graphql_options(depot: &mut Depot, req: &mut Request, res: &mut Respons
 #[handler]
 async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Response) {
     set_graphql_response_headers(res);
-    let Ok(state) = crate::controllers::response::app_state(depot) else {
+    let Ok(state) = app_state(depot) else {
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -64,7 +76,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         );
         return;
     };
-    let Ok(config) = depot.obtain::<GraphqlConfig>() else {
+    let Ok(config) = depot.get_typed::<GraphqlConfig>() else {
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -81,13 +93,14 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         return;
     }
 
-    let has_query = req.uri().query().is_some_and(|query| {
-        url::form_urlencoded::parse(query.as_bytes()).any(|(key, _)| key == "query")
-    });
+    let has_query = req
+        .uri()
+        .query()
+        .is_some_and(|query| parse(query.as_bytes()).any(|(key, _)| key == "query"));
     if req.method() == Method::GET
         && !has_query
         && !state.context().environment().is_production()
-        && crate::controllers::response::accepts_html(req.headers())
+        && accepts_html(req.headers())
     {
         res.headers_mut().insert(
             header::CONTENT_TYPE,
@@ -150,7 +163,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         }
     };
 
-    let Some(schema) = depot.obtain::<ApiSchema>().ok().cloned() else {
+    let Some(schema) = depot.get_typed::<ApiSchema>().ok().cloned() else {
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -169,7 +182,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             state,
             claims,
             user,
-            locale: crate::infrastructure::i18n::resolve_locale_from_headers(req.headers()),
+            locale: resolve_locale_from_headers(req.headers()),
         })
         .data(config.max_page_size);
     let operation_span = tracing::info_span!(
@@ -177,8 +190,8 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         graphql.operation.type = %operation_type,
         graphql.operation.name = %operation_name,
     );
-    let response = match tokio::time::timeout(
-        std::time::Duration::from_secs(config.timeout_secs),
+    let response = match timeout(
+        Duration::from_secs(config.timeout_secs),
         schema.execute(request).instrument(operation_span),
     )
     .await
@@ -197,15 +210,15 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     } else {
         res.status_code(StatusCode::OK);
     }
-    res.render(salvo::prelude::Json(response));
+    res.render(Json(response));
 }
 
-fn step_up_challenge(response: &async_graphql::Response) -> Option<String> {
+fn step_up_challenge(response: &AsyncGraphqlResponse) -> Option<String> {
     let extensions = response.errors.iter().find_map(|error| {
         error.extensions.as_ref().filter(|extensions| {
             matches!(
                 extensions.get("code"),
-                Some(async_graphql::Value::String(code))
+                Some(Value::String(code))
                     if code == "insufficient_user_authentication"
             )
         })
@@ -215,10 +228,10 @@ fn step_up_challenge(response: &async_graphql::Response) -> Option<String> {
         "error=\"insufficient_user_authentication\"".to_owned(),
         "error_description=\"A different authentication level or more recent authentication is required\"".to_owned(),
     ];
-    if let Some(async_graphql::Value::String(acr_values)) = extensions.get("acr_values") {
+    if let Some(Value::String(acr_values)) = extensions.get("acr_values") {
         parameters.push(format!("acr_values=\"{acr_values}\""));
     }
-    if let Some(async_graphql::Value::Number(max_age)) = extensions.get("max_age") {
+    if let Some(Value::Number(max_age)) = extensions.get("max_age") {
         parameters.push(format!("max_age=\"{max_age}\""));
     }
     Some(parameters.join(", "))
@@ -305,7 +318,7 @@ fn set_graphql_response_headers(res: &mut Response) {
         header::CONTENT_TYPE,
         HeaderValue::from_static("application/graphql-response+json; charset=utf-8"),
     );
-    crate::controllers::response::insert_no_store_headers(res);
+    insert_no_store_headers(res);
 }
 
 fn write_unauthorized(res: &mut Response, message: &'static str) {
@@ -318,7 +331,7 @@ fn write_unauthorized(res: &mut Response, message: &'static str) {
 
 fn write_protocol_error(res: &mut Response, status: StatusCode, message: &'static str) {
     res.status_code(status);
-    res.render(salvo::prelude::Json(serde_json::json!({
+    res.render(Json(serde_json::json!({
         "errors": [{ "message": message }]
     })));
 }

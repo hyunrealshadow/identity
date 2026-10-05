@@ -12,6 +12,7 @@ use crate::{
     },
     web::controllers::shared::protocol_continue_uri,
 };
+use chrono::Utc;
 
 pub(super) struct LoadedConsentContext {
     pub(super) stored: StoredAuthorizationRequest,
@@ -32,16 +33,14 @@ pub(super) async fn load_consent_context(
         .load_continue_context_by_login(login_id)
         .await?;
 
-    if continue_context.expires_at <= chrono::Utc::now() || continue_context.completed_at.is_some()
-    {
+    if continue_context.expires_at <= Utc::now() || continue_context.completed_at.is_some() {
         return Err(AppError::from_code(
             AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
         ));
     }
 
-    let scope = ScopeSet::parse(&continue_context.stored.request.scope).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
-    })?;
+    let scope = ScopeSet::parse(&continue_context.stored.request.scope)
+        .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
     let selected_session_oid = continue_context.login.session_oid;
     let active_sessions = match selected_session_oid {
         Some(session_oid) => {

@@ -1,12 +1,13 @@
 use super::*;
 use crate::openid_connect::client_encryption::select_client_encryption_jwk;
 use crate::openid_connect::jose::encrypt_compact_with_public_jwk_with_content_type;
+use identity_domain::openid_connect::OpenIdConnectClient;
 
 impl TokenService {
     pub(super) async fn encrypt_token_for_client(
         &self,
         signed_jwt: &str,
-        client: &identity_domain::openid_connect::OpenIdConnectClient,
+        client: &OpenIdConnectClient,
     ) -> Result<String, AppError> {
         let Some(algorithms) = client
             .metadata()
@@ -29,9 +30,7 @@ impl TokenService {
                 algorithm.as_str(),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::EncryptionKeyNotFound).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::EncryptionKeyNotFound))?
             else {
                 continue;
             };

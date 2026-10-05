@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::io;
 
 use sea_orm::{
@@ -54,6 +55,6 @@ async fn try_acquire_install_lock(db: &DatabaseConnection) -> AppResult<bool> {
         .ok_or_else(|| io::Error::other("failed to query installation lock state"))?;
 
     row.try_get("", "acquired").map_err(|error| {
-        Box::new(io::Error::other(error.to_string())) as Box<dyn std::error::Error + Send + Sync>
+        Box::new(io::Error::other(error.to_string())) as Box<dyn Error + Send + Sync>
     })
 }

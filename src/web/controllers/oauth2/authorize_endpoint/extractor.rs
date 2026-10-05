@@ -1,6 +1,7 @@
 use http::{Method, header};
 use salvo::Request;
 use serde::Deserialize;
+use url::form_urlencoded::parse;
 
 use identity_application::{
     error::{
@@ -100,7 +101,7 @@ pub struct AuthorizeRequestExtractor {
 pub fn parse_authorize_pairs(input: &[u8]) -> RawAuthorizeRequest {
     let mut raw = RawAuthorizeRequest::default();
 
-    for (key, value) in url::form_urlencoded::parse(input) {
+    for (key, value) in parse(input) {
         raw.insert(key.as_ref(), value.into_owned());
     }
 
@@ -129,9 +130,7 @@ pub async fn extract_authorize_request(
             let body = request
                 .payload_with_max_size(64 * 1024)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error)
-                })?;
+                .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
 
             parse_authorize_pairs(body)
         }

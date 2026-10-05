@@ -1,4 +1,10 @@
 use async_graphql::{Context, Error, ErrorExtensions, Result};
+use chrono::Utc;
+use identity_domain::auth::ACR_AAL2;
+use identity_domain::auth::ELEVATED_AUTHENTICATION_TTL;
+use identity_domain::auth::RECENT_AUTHENTICATION_TTL;
+use identity_domain::auth::acr_satisfies;
+use identity_domain::auth::authentication_is_fresh;
 use identity_domain::openid_connect::ApiScope;
 
 use super::context::RequestContext;
@@ -26,21 +32,22 @@ pub(super) fn require_recent_authentication(
     required_acr: Option<&str>,
 ) -> Result<()> {
     let claims = &request_context(ctx)?.claims;
-    let now = chrono::Utc::now().timestamp();
-    let max_age = if required_acr == Some(identity_domain::auth::ACR_AAL2) {
-        identity_domain::auth::ELEVATED_AUTHENTICATION_TTL
+    let now = Utc::now().timestamp();
+    let max_age = if required_acr == Some(ACR_AAL2) {
+        ELEVATED_AUTHENTICATION_TTL
     } else {
-        identity_domain::auth::RECENT_AUTHENTICATION_TTL
+        RECENT_AUTHENTICATION_TTL
     }
     .as_secs();
-    if claims.auth_time.is_some_and(|auth_time| {
-        identity_domain::auth::authentication_is_fresh(auth_time, now, max_age)
-    }) && claims.acr.is_some()
+    if claims
+        .auth_time
+        .is_some_and(|auth_time| authentication_is_fresh(auth_time, now, max_age))
+        && claims.acr.is_some()
         && required_acr.is_none_or(|required| {
             claims
                 .acr
                 .as_deref()
-                .is_some_and(|acr| identity_domain::auth::acr_satisfies(acr, required))
+                .is_some_and(|acr| acr_satisfies(acr, required))
         })
     {
         Ok(())

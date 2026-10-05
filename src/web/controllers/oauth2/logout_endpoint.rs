@@ -1,6 +1,12 @@
+use crate::controllers::shared::SessionCookieEntry;
+use crate::controllers::shared::parse_op_session_cookie;
+use crate::views::oauth2::FrontChannelNotificationView;
+use crate::views::oauth2::LogoutPageData;
 use http::{HeaderMap, HeaderValue, StatusCode, header};
+use identity_application::error::AppError;
 use salvo::{Depot, Request, Response, handler};
 use serde::Deserialize;
+use url::Url;
 
 use identity_application::openid_connect::logout::{
     FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogoutRequest,
@@ -46,10 +52,7 @@ impl From<LogoutParams> for RpInitiatedLogoutRequest {
     }
 }
 
-pub fn session_cookie_without(
-    entries: &[crate::controllers::shared::SessionCookieEntry],
-    revoked: SessionOid,
-) -> String {
+pub fn session_cookie_without(entries: &[SessionCookieEntry], revoked: SessionOid) -> String {
     let remaining = entries
         .iter()
         .filter(|entry| entry.session_oid != revoked)
@@ -88,11 +91,11 @@ pub(super) async fn render_logout_page(
             notifications,
             post_logout_redirect_uri,
         } => {
-            let data = crate::views::oauth2::LogoutPageData {
+            let data = LogoutPageData {
                 title: "Signed out".to_owned(),
                 frontchannel_notifications: notifications
                     .iter()
-                    .map(|n| crate::views::oauth2::FrontChannelNotificationView {
+                    .map(|n| FrontChannelNotificationView {
                         logout_uri: n.logout_uri.to_string(),
                     })
                     .collect(),
@@ -103,7 +106,7 @@ pub(super) async fn render_logout_page(
             (data, Some(csp))
         }
         LogoutOutcome::LoggedOut => (
-            crate::views::oauth2::LogoutPageData {
+            LogoutPageData {
                 title: "Signed out".to_owned(),
                 frontchannel_notifications: vec![],
                 post_logout_redirect_uri: None,
@@ -152,7 +155,7 @@ fn frontchannel_logout_content_security_policy(
     .unwrap_or_else(|_| HeaderValue::from_static("default-src 'none'"))
 }
 
-fn csp_origin_source(uri: &url::Url) -> Option<String> {
+fn csp_origin_source(uri: &Url) -> Option<String> {
     let host = uri.host_str()?;
     let mut origin = format!("{}://{}", uri.scheme(), host);
     if let Some(port) = uri.port() {
@@ -166,10 +169,10 @@ async fn handle_logout(
     depot: &mut Depot,
     req: &mut Request,
     params: LogoutParams,
-) -> Result<AppResponse, identity_application::error::AppError> {
+) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
     let headers = req.headers().clone();
-    let session_entries = crate::controllers::shared::parse_op_session_cookie(&ctx, &headers).await;
+    let session_entries = parse_op_session_cookie(&ctx, &headers).await;
     let active_entries = load_op_active_session_entries(&ctx, &headers).await?;
     let session_to_revoke = active_entries.first().map(|entry| {
         (
@@ -219,26 +222,39 @@ pub async fn logout_post(depot: &mut Depot, req: &mut Request) -> WebResult {
 
 #[cfg(test)]
 mod tests {
+    use identity_application::openid_connect::logout::FrontChannelLogoutNotification;
+
+    use super::redirect_or_page_response;
+    use super::render_logout_page;
+    use super::session_cookie_without;
+    use crate::controllers::oauth2::routes;
+    use crate::controllers::shared::SessionCookieEntry;
+    use http::HeaderMap;
+    use identity_application::openid_connect::logout::LogoutOutcome;
+    use salvo::affix_state::inject;
+    use url::Url;
+    use uuid::Uuid;
+
     use http::{StatusCode, header};
     use identity_domain::auth::SessionOid;
     use salvo::{Service, test::TestClient};
 
     #[test]
     fn remove_session_cookie_entry_keeps_other_sessions() {
-        let first = uuid::Uuid::new_v4();
-        let second = uuid::Uuid::new_v4();
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
         let entries = [
-            crate::controllers::shared::SessionCookieEntry {
+            SessionCookieEntry {
                 session_oid: SessionOid(first),
                 protected_session_id: "protected-first".to_string(),
             },
-            crate::controllers::shared::SessionCookieEntry {
+            SessionCookieEntry {
                 session_oid: SessionOid(second),
                 protected_session_id: "protected-second".to_string(),
             },
         ];
 
-        let cookie = super::session_cookie_without(&entries, SessionOid(first));
+        let cookie = session_cookie_without(&entries, SessionOid(first));
 
         assert!(!cookie.contains(&first.to_string()));
         assert!(!cookie.contains("protected-first"));
@@ -247,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_route_renders_logged_out_page_without_redirect() {
-        let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
@@ -262,12 +278,12 @@ mod tests {
     #[tokio::test]
     async fn redirect_response_preserves_set_cookie_header() {
         let state = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let headers = http::HeaderMap::new();
-        let response = super::redirect_or_page_response(
+        let headers = HeaderMap::new();
+        let response = redirect_or_page_response(
             &state,
             &headers,
-            identity_application::openid_connect::logout::LogoutOutcome::Redirect {
-                redirect_uri: url::Url::parse("https://rp.example.com/logout?state=abc").unwrap(),
+            LogoutOutcome::Redirect {
+                redirect_uri: Url::parse("https://rp.example.com/logout?state=abc").unwrap(),
             },
             Some("sessions=[]; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=3600".to_owned()),
         )
@@ -284,14 +300,14 @@ mod tests {
     #[tokio::test]
     async fn frontchannel_logout_sets_csp_header() {
         let state = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let headers = http::HeaderMap::new();
-        let response = super::render_logout_page(
+        let headers = HeaderMap::new();
+        let response = render_logout_page(
             &state,
             &headers,
-            identity_application::openid_connect::logout::LogoutOutcome::FrontChannel {
-                notifications: vec![identity_application::openid_connect::logout::FrontChannelLogoutNotification {
-                    client_id: uuid::Uuid::new_v4(),
-                    logout_uri: url::Url::parse(
+            LogoutOutcome::FrontChannel {
+                notifications: vec![FrontChannelLogoutNotification {
+                    client_id: Uuid::new_v4(),
+                    logout_uri: Url::parse(
                         "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout",
                     )
                     .unwrap(),
@@ -316,14 +332,8 @@ mod tests {
     #[tokio::test]
     async fn frontchannel_logout_renders_title() {
         let state = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let headers = http::HeaderMap::new();
-        let response = super::render_logout_page(
-            &state,
-            &headers,
-            identity_application::openid_connect::logout::LogoutOutcome::LoggedOut,
-            None,
-        )
-        .await;
+        let headers = HeaderMap::new();
+        let response = render_logout_page(&state, &headers, LogoutOutcome::LoggedOut, None).await;
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
     }

@@ -1,4 +1,20 @@
+use super::mfa::recovery_code_hash;
+use super::password::run_password_hashing;
+use super::session::revoke_other_sessions_with;
+use crate::error::code::AppErrorCode as _;
+use crate::error::codes::common::CommonErrorCode;
+use crate::observability::BusinessEvent;
+use crate::observability::EventSink;
+use crate::observability::EventValue;
+use crate::observability::NoopEventSink;
+use crate::observability::error_outcome;
+use crate::user::UserOid;
+use chrono::DateTime;
+use chrono::Duration;
+use identity_domain::auth::RECENT_AUTHENTICATION_TTL;
+use identity_domain::auth::SessionOid;
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 
 use chrono::Utc;
 use uuid::Uuid;
@@ -44,7 +60,7 @@ pub struct PasswordChangeOutcome {
 #[derive(Default)]
 pub struct SessionContext {
     /// Only sessions presented by this browser may be reused after authentication.
-    pub browser_session_oids: Vec<identity_domain::auth::SessionOid>,
+    pub browser_session_oids: Vec<SessionOid>,
     pub device_name: Option<String>,
     pub device_type: Option<String>,
     pub os_name: Option<String>,
@@ -87,7 +103,7 @@ pub struct LoginService {
     /// them. Optional: services built without it simply have no device
     /// authorizations to revoke.
     device_repo: Option<Arc<dyn DeviceAuthorizationRepository>>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 impl LoginService {
@@ -110,7 +126,7 @@ impl LoginService {
             totp_verifier,
             settings,
             device_repo: None,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
@@ -127,7 +143,7 @@ impl LoginService {
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
@@ -147,7 +163,7 @@ impl LoginService {
     /// password again.
     pub async fn credential_types(
         &self,
-        user_oid: crate::user::UserOid,
+        user_oid: UserOid,
     ) -> Result<Vec<CredentialType>, AppError> {
         let mut credential_types = Vec::new();
         for credential_type in [
@@ -169,17 +185,16 @@ impl LoginService {
 
     pub async fn change_password(
         &self,
-        user_oid: crate::user::UserOid,
+        user_oid: UserOid,
         new_password: &str,
     ) -> Result<(), AppError> {
         if new_password.len() < 12 {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::ValidationFailed,
-            )
-            .with_field_error(
-                "newPassword",
-                AppError::from_code(AuthErrorCode::PasswordTooShort),
-            ));
+            return Err(
+                AppError::from_code(CommonErrorCode::ValidationFailed).with_field_error(
+                    "newPassword",
+                    AppError::from_code(AuthErrorCode::PasswordTooShort),
+                ),
+            );
         }
         let credential = self
             .credential_repo
@@ -200,45 +215,39 @@ impl LoginService {
         let hasher = Arc::clone(&self.password_hasher);
         let new_password_to_verify = new_password.to_owned();
         let verify_options = options.clone();
-        let verified = super::password::run_password_hashing(move || {
+        let verified = run_password_hashing(move || {
             hasher.verify(&new_password_to_verify, &stored_password, &verify_options)
         })
         .await?;
         if verified != VerifyResult::Failure {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::ValidationFailed,
-            )
-            .with_field_error(
-                "newPassword",
-                AppError::from_code(AuthErrorCode::PasswordUnchanged),
-            ));
+            return Err(
+                AppError::from_code(CommonErrorCode::ValidationFailed).with_field_error(
+                    "newPassword",
+                    AppError::from_code(AuthErrorCode::PasswordUnchanged),
+                ),
+            );
         }
         let hasher = Arc::clone(&self.password_hasher);
         let new_password = new_password.to_owned();
-        let password =
-            super::password::run_password_hashing(move || hasher.hash(&new_password, &options))
-                .await?;
+        let password = run_password_hashing(move || hasher.hash(&new_password, &options)).await?;
         self.credential_repo
             .update_password_by_oid(credential.oid, &password)
             .await?;
         self.events.emit(
-            crate::observability::BusinessEvent::audit("account.credential.changed")
+            BusinessEvent::audit("account.credential.changed")
                 .outcome("success")
                 .attribute(
                     "credential_oid",
-                    crate::observability::EventValue::Text(credential.oid.0.to_string()),
+                    EventValue::Text(credential.oid.0.to_string()),
                 )
                 .attribute(
                     "user_oid",
-                    crate::observability::EventValue::Pseudonymized {
+                    EventValue::Pseudonymized {
                         purpose: "user_oid",
-                        value: uuid::Uuid::from(user_oid).to_string(),
+                        value: Uuid::from(user_oid).to_string(),
                     },
                 )
-                .attribute(
-                    "change_category",
-                    crate::observability::EventValue::Text("password".to_owned()),
-                ),
+                .attribute("change_category", EventValue::Text("password".to_owned())),
         );
         Ok(())
     }
@@ -251,12 +260,12 @@ impl LoginService {
     #[tracing::instrument(skip_all, name = "account.password.change")]
     pub async fn change_password_with_session_revocation(
         &self,
-        user_oid: crate::user::UserOid,
+        user_oid: UserOid,
         new_password: &str,
-        current_session: identity_domain::auth::SessionOid,
+        current_session: SessionOid,
     ) -> Result<PasswordChangeOutcome, AppError> {
         self.change_password(user_oid, new_password).await?;
-        let revocation = super::session::revoke_other_sessions_with(
+        let revocation = revoke_other_sessions_with(
             self.session_repo.as_ref(),
             Uuid::from(user_oid),
             current_session,
@@ -265,19 +274,19 @@ impl LoginService {
         let revoked_device_authorizations = self
             .revoke_device_authorizations(Uuid::from(user_oid))
             .await?;
-        let mut event = crate::observability::BusinessEvent::audit("account.sessions_revoked")
+        let mut event = BusinessEvent::audit("account.sessions_revoked")
             .outcome("success")
             .attribute(
                 "revoked_sessions",
-                crate::observability::EventValue::Integer(i64::from(revocation.revoked)),
+                EventValue::Integer(i64::from(revocation.revoked)),
             )
             .attribute(
                 "revoked_device_authorizations",
-                crate::observability::EventValue::Integer(i64::from(revoked_device_authorizations)),
+                EventValue::Integer(i64::from(revoked_device_authorizations)),
             )
             .attribute(
                 "user_oid",
-                crate::observability::EventValue::Pseudonymized {
+                EventValue::Pseudonymized {
                     purpose: "user_oid",
                     value: Uuid::from(user_oid).to_string(),
                 },
@@ -303,18 +312,17 @@ impl LoginService {
         };
 
         let revoked = device_repo
-            .revoke_device_authorizations_for_user(user_oid, chrono::Utc::now())
+            .revoke_device_authorizations_for_user(user_oid, Utc::now())
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthErrorCode::DeviceAuthorizationRevocationFailed)
-                    .with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                AuthErrorCode::DeviceAuthorizationRevocationFailed,
+            ))?;
 
         Ok(u32::try_from(revoked).unwrap_or(u32::MAX))
     }
 
     /// Fetch the user associated with a login by their OID.
-    pub async fn get_user(&self, user_oid: crate::user::UserOid) -> Result<User, AppError> {
+    pub async fn get_user(&self, user_oid: UserOid) -> Result<User, AppError> {
         self.user_repo
             .find_by_oid(user_oid)
             .await?
@@ -419,8 +427,6 @@ impl LoginService {
         credential_type: CredentialType,
         result: &Result<ChallengeOutcome, AppError>,
     ) {
-        use crate::observability::{BusinessEvent, EventValue};
-
         let factor = match credential_type {
             CredentialType::Password => "password",
             CredentialType::Otp => "otp",
@@ -613,7 +619,7 @@ impl LoginService {
         let stored_password = stored_password.clone();
         let hash_options = hash_options.clone();
         let verify_hash_options = hash_options.clone();
-        let verify_result = super::password::run_password_hashing(move || {
+        let verify_result = run_password_hashing(move || {
             password_hasher.verify(&verify_password, &stored_password, &verify_hash_options)
         })
         .await?;
@@ -646,7 +652,7 @@ impl LoginService {
                 if verify_result == VerifyResult::NeedsRehash {
                     let password_hasher = Arc::clone(&self.password_hasher);
                     let hash_options = hash_options.clone();
-                    let rehash = super::password::run_password_hashing(move || {
+                    let rehash = run_password_hashing(move || {
                         password_hasher.hash(&credential, &hash_options)
                     })
                     .await;
@@ -874,7 +880,7 @@ impl LoginService {
             .await?
             .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
         self.ensure_user_can_authenticate(&user).await?;
-        let expected_hash = super::mfa::recovery_code_hash(code);
+        let expected_hash = recovery_code_hash(code);
         let credentials = self
             .credential_repo
             .find_by_user_oid_and_type(user_oid, CredentialType::RecoveryCode)
@@ -885,7 +891,7 @@ impl LoginService {
             else {
                 return false;
             };
-            bool::from(subtle::ConstantTimeEq::ct_eq(
+            bool::from(ConstantTimeEq::ct_eq(
                 hash.as_bytes(),
                 expected_hash.as_bytes(),
             ))
@@ -1010,9 +1016,8 @@ impl LoginService {
         amr: &[String],
     ) -> Result<Session, AppError> {
         let now = Utc::now();
-        let expires_at = now
-            + chrono::Duration::from_std(SESSION_EXPIRY)
-                .unwrap_or_else(|_| chrono::Duration::days(7));
+        let expires_at =
+            now + Duration::from_std(SESSION_EXPIRY).unwrap_or_else(|_| Duration::days(7));
         let acr_expires_at = Some(authentication_context_expires_at(acr));
         Ok(self
             .session_repo
@@ -1055,8 +1060,6 @@ impl LoginService {
 /// rejections stay `rejected`; only unexpected internal failures are
 /// `failure`.
 fn authentication_outcome(error: &AppError) -> (&'static str, &'static str) {
-    use crate::error::code::AppErrorCode as _;
-
     match error.code() {
         code if code == AuthErrorCode::InvalidCredential.code() => {
             ("rejected", "invalid_credential")
@@ -1068,17 +1071,17 @@ fn authentication_outcome(error: &AppError) -> (&'static str, &'static str) {
         code if code == AuthErrorCode::LoginExpired.code() => ("rejected", "login_expired"),
         code if code == AuthErrorCode::InvalidLoginState.code() => ("rejected", "invalid_state"),
         code if code == AuthErrorCode::UserNotFound.code() => ("rejected", "not_found"),
-        _ => crate::observability::error_outcome(error),
+        _ => error_outcome(error),
     }
 }
 
-fn authentication_context_expires_at(acr: &str) -> chrono::DateTime<Utc> {
+fn authentication_context_expires_at(acr: &str) -> DateTime<Utc> {
     let ttl = if acr == ACR_AAL2 {
         ELEVATED_AUTHENTICATION_TTL
     } else {
-        identity_domain::auth::RECENT_AUTHENTICATION_TTL
+        RECENT_AUTHENTICATION_TTL
     };
-    Utc::now() + chrono::Duration::from_std(ttl).unwrap_or_else(|_| chrono::Duration::minutes(5))
+    Utc::now() + Duration::from_std(ttl).unwrap_or_else(|_| Duration::minutes(5))
 }
 
 fn can_challenge_second_factor(login: &Login) -> bool {
@@ -1086,14 +1089,34 @@ fn can_challenge_second_factor(login: &Login) -> bool {
         || (login.status == LoginStatus::IDENTIFIER_VERIFIED && login.session_oid.is_some())
 }
 
-fn failed_attempt_lock_until() -> chrono::DateTime<Utc> {
-    Utc::now()
-        + chrono::Duration::from_std(LOCK_DURATION)
-            .unwrap_or_else(|_| chrono::Duration::seconds(900))
+fn failed_attempt_lock_until() -> DateTime<Utc> {
+    Utc::now() + Duration::from_std(LOCK_DURATION).unwrap_or_else(|_| Duration::seconds(900))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
+
+    use crate::user::OtpAlgorithm;
+
+    use super::ChallengeOutcome;
+    use crate::auth::password::PasswordHashError;
+    use crate::auth::password::PasswordHasher;
+    use crate::auth::totp::TotpError;
+    use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
+    use crate::user::RecoveryCodeCredentialData;
+    use crate::user::UserOid as UserUserOid;
+    use crate::user::repository::UserIdentifierUpdate;
+    use crate::user::repository::UserProfilePatch;
+    use chrono::DateTime;
+    use chrono::Duration;
+    use identity_domain::auth::SessionStatus;
+    use identity_domain::auth::model::ActiveSession;
+    use identity_domain::auth::repository::SessionPage;
+    use identity_domain::auth::repository::SessionPageDirection;
+    use identity_domain::auth::repository::SessionSortKey;
+    use tokio::sync::mpsc::unbounded_channel;
+
     use crate::setting::{PasswordHashSetting, SettingsSnapshot};
     use crate::{
         auth::{
@@ -1141,7 +1164,7 @@ mod tests {
             &self,
             _otp_data: &OtpCredentialData,
             _code: &str,
-        ) -> Result<Option<u64>, crate::auth::totp::TotpError> {
+        ) -> Result<Option<u64>, TotpError> {
             Ok(None)
         }
     }
@@ -1150,12 +1173,12 @@ mod tests {
 
     struct TestSignInHasher;
 
-    impl crate::auth::password::PasswordHasher for TestSignInHasher {
+    impl PasswordHasher for TestSignInHasher {
         fn hash(
             &self,
             password: &str,
             options: &HashOptions,
-        ) -> Result<Password, crate::auth::password::PasswordHashError> {
+        ) -> Result<Password, PasswordHashError> {
             StubPasswordHasher.hash(password, options)
         }
 
@@ -1164,7 +1187,7 @@ mod tests {
             password: &str,
             _stored: &Password,
             _options: &HashOptions,
-        ) -> Result<VerifyResult, crate::auth::password::PasswordHashError> {
+        ) -> Result<VerifyResult, PasswordHashError> {
             Ok(if password == "correct-password" {
                 VerifyResult::Success
             } else {
@@ -1177,12 +1200,12 @@ mod tests {
     /// password instead of running the (deliberately expensive) KDF.
     struct RecordingPasswordHasher;
 
-    impl crate::auth::password::PasswordHasher for RecordingPasswordHasher {
+    impl PasswordHasher for RecordingPasswordHasher {
         fn hash(
             &self,
             password: &str,
             options: &HashOptions,
-        ) -> Result<Password, crate::auth::password::PasswordHashError> {
+        ) -> Result<Password, PasswordHashError> {
             let HashOptions::Argon2(argon2) = options;
 
             Ok(Password::Argon2(Argon2Password {
@@ -1197,18 +1220,18 @@ mod tests {
             _password: &str,
             _stored: &Password,
             _options: &HashOptions,
-        ) -> Result<VerifyResult, crate::auth::password::PasswordHashError> {
+        ) -> Result<VerifyResult, PasswordHashError> {
             Ok(VerifyResult::Failure)
         }
     }
 
-    impl crate::auth::password::PasswordHasher for StubPasswordHasher {
+    impl PasswordHasher for StubPasswordHasher {
         fn hash(
             &self,
             _password: &str,
             _options: &HashOptions,
-        ) -> Result<Password, crate::auth::password::PasswordHashError> {
-            Err(crate::auth::password::PasswordHashError::HashFailed(
+        ) -> Result<Password, PasswordHashError> {
+            Err(PasswordHashError::HashFailed(
                 "not used in OTP tests".to_owned(),
             ))
         }
@@ -1218,8 +1241,8 @@ mod tests {
             _password: &str,
             _stored: &Password,
             _options: &HashOptions,
-        ) -> Result<VerifyResult, crate::auth::password::PasswordHashError> {
-            Err(crate::auth::password::PasswordHashError::HashFailed(
+        ) -> Result<VerifyResult, PasswordHashError> {
+            Err(PasswordHashError::HashFailed(
                 "not used in OTP tests".to_owned(),
             ))
         }
@@ -1244,7 +1267,7 @@ mod tests {
             &self,
             user_oid: UserOid,
             lock_threshold: i32,
-            lock_until: chrono::DateTime<chrono::Utc>,
+            lock_until: DateTime<Utc>,
         ) -> Result<i32, UserRepositoryError> {
             let mut user = self.user.lock().unwrap();
             if user.oid != user_oid {
@@ -1275,7 +1298,7 @@ mod tests {
         async fn update_identifier(
             &self,
             _oid: UserOid,
-            _update: crate::user::repository::UserIdentifierUpdate,
+            _update: UserIdentifierUpdate,
         ) -> Result<Option<User>, UserRepositoryError> {
             unimplemented!("identifier updates are not part of this test double")
         }
@@ -1283,7 +1306,7 @@ mod tests {
         async fn update_profile(
             &self,
             _oid: UserOid,
-            _patch: crate::user::repository::UserProfilePatch,
+            _patch: UserProfilePatch,
         ) -> Result<Option<User>, UserRepositoryError> {
             unimplemented!("profile updates are not part of this test double")
         }
@@ -1335,8 +1358,8 @@ mod tests {
         async fn enable_totp_if_disabled(
             &self,
             _user_oid: UserOid,
-            _otp: crate::user::OtpCredentialData,
-            _recovery_codes: Vec<crate::user::RecoveryCodeCredentialData>,
+            _otp: OtpCredentialData,
+            _recovery_codes: Vec<RecoveryCodeCredentialData>,
         ) -> Result<bool, UserCredentialRepositoryError> {
             Ok(false)
         }
@@ -1344,7 +1367,7 @@ mod tests {
         async fn replace_recovery_codes_if_totp_enabled(
             &self,
             _user_oid: UserOid,
-            _recovery_codes: Vec<crate::user::RecoveryCodeCredentialData>,
+            _recovery_codes: Vec<RecoveryCodeCredentialData>,
         ) -> Result<bool, UserCredentialRepositoryError> {
             Ok(false)
         }
@@ -1371,8 +1394,7 @@ mod tests {
         async fn find_active_accounts_by_oids(
             &self,
             _oids: &[SessionOid],
-        ) -> Result<Vec<identity_domain::auth::model::ActiveSession>, SessionRepositoryError>
-        {
+        ) -> Result<Vec<ActiveSession>, SessionRepositoryError> {
             Ok(Vec::new())
         }
 
@@ -1383,7 +1405,7 @@ mod tests {
             Ok(Session {
                 oid: SessionOid(Uuid::new_v4()),
                 user_oid: input.user_oid,
-                status: identity_domain::auth::SessionStatus::ACTIVE,
+                status: SessionStatus::ACTIVE,
                 device_name: input.device_name,
                 device_type: input.device_type,
                 os_name: input.os_name,
@@ -1407,13 +1429,13 @@ mod tests {
             oid: SessionOid,
             expected_user_oid: Uuid,
             acr: &str,
-            acr_expires_at: chrono::DateTime<Utc>,
+            acr_expires_at: DateTime<Utc>,
             amr: &[String],
         ) -> Result<Session, SessionRepositoryError> {
             Ok(Session {
                 oid,
                 user_oid: expected_user_oid,
-                status: identity_domain::auth::SessionStatus::ACTIVE,
+                status: SessionStatus::ACTIVE,
                 device_name: None,
                 device_type: None,
                 os_name: None,
@@ -1442,7 +1464,7 @@ mod tests {
         async fn revoke_by_oid(
             &self,
             _oid: SessionOid,
-            _revoked_at: chrono::DateTime<chrono::Utc>,
+            _revoked_at: DateTime<Utc>,
         ) -> Result<Option<Session>, SessionRepositoryError> {
             Ok(None)
         }
@@ -1457,13 +1479,12 @@ mod tests {
         async fn list_active_page_by_user_oid(
             &self,
             _user_oid: Uuid,
-            _after: Option<identity_domain::auth::repository::SessionSortKey>,
-            _before: Option<identity_domain::auth::repository::SessionSortKey>,
+            _after: Option<SessionSortKey>,
+            _before: Option<SessionSortKey>,
             _limit: usize,
-            _direction: identity_domain::auth::repository::SessionPageDirection,
-        ) -> Result<identity_domain::auth::repository::SessionPage, SessionRepositoryError>
-        {
-            Ok(identity_domain::auth::repository::SessionPage {
+            _direction: SessionPageDirection,
+        ) -> Result<SessionPage, SessionRepositoryError> {
+            Ok(SessionPage {
                 items: Vec::new(),
                 has_previous_page: false,
                 has_next_page: false,
@@ -1627,7 +1648,7 @@ mod tests {
             status: LoginStatus::MFA_REQUIRED,
             failed_attempts,
             created_at: Utc::now(),
-            expires_at: Utc::now() + chrono::Duration::minutes(5),
+            expires_at: Utc::now() + Duration::minutes(5),
             acr: None,
             requested_acr: None,
         }
@@ -1647,7 +1668,7 @@ mod tests {
                         secret: "secret".to_owned(),
                         digits: 6,
                         period: 30,
-                        algorithm: crate::user::OtpAlgorithm::Sha1,
+                        algorithm: OtpAlgorithm::Sha1,
                         last_used_counter: None,
                     }),
                 }],
@@ -1710,9 +1731,8 @@ mod tests {
             fixed_hash_options(options),
         );
 
-        let mut device_repo =
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new();
-        let (sender, mut revoked_users) = tokio::sync::mpsc::unbounded_channel();
+        let mut device_repo = MockDeviceAuthorizationRepository::new();
+        let (sender, mut revoked_users) = unbounded_channel();
         device_repo
             .expect_revoke_device_authorizations_for_user()
             .returning(move |user_oid, _| {
@@ -1724,7 +1744,7 @@ mod tests {
 
         let outcome = service
             .change_password_with_session_revocation(
-                crate::user::UserOid(user_oid),
+                UserUserOid(user_oid),
                 "a-sufficiently-long-password",
                 SessionOid(Uuid::new_v4()),
             )
@@ -1782,18 +1802,18 @@ mod tests {
         assert_eq!(session.acr.as_deref(), Some(ACR_AAL2));
     }
 
-    fn browser_session(user_oid: Uuid) -> identity_domain::auth::model::ActiveSession {
+    fn browser_session(user_oid: Uuid) -> ActiveSession {
         let now = Utc::now();
-        identity_domain::auth::model::ActiveSession {
+        ActiveSession {
             session_oid: SessionOid(Uuid::new_v4()),
             user_oid,
             user_name: "user".to_owned(),
             user_email: "user@example.com".to_owned(),
             user_picture: None,
             last_active_at: Some(now),
-            expires_at: Some(now + chrono::Duration::hours(1)),
-            created_at: now - chrono::Duration::days(6),
-            authenticated_at: now - chrono::Duration::days(6),
+            expires_at: Some(now + Duration::hours(1)),
+            created_at: now - Duration::days(6),
+            authenticated_at: now - Duration::days(6),
             acr: Some(ACR_AAL1.to_owned()),
             amr: vec![AMR_PASSWORD.to_owned()],
         }
@@ -1815,7 +1835,7 @@ mod tests {
                     secret: "secret".to_owned(),
                     digits: 6,
                     period: 30,
-                    algorithm: crate::user::OtpAlgorithm::Sha1,
+                    algorithm: OtpAlgorithm::Sha1,
                     last_used_counter: None,
                 }),
             }]
@@ -1844,8 +1864,6 @@ mod tests {
 
     #[tokio::test]
     async fn repeated_fresh_logins_for_different_clients_reuse_the_browser_session() {
-        use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
-
         let user = test_user();
         let user_oid = Uuid::from(user.oid);
         let existing = browser_session(user_oid);
@@ -1885,7 +1903,7 @@ mod tests {
                 Ok(Session {
                     oid,
                     user_oid: owner,
-                    status: identity_domain::auth::SessionStatus::ACTIVE,
+                    status: SessionStatus::ACTIVE,
                     device_name: None,
                     device_type: None,
                     os_name: None,
@@ -1895,7 +1913,7 @@ mod tests {
                     user_agent: None,
                     ip_address: None,
                     last_active_at: Some(Utc::now()),
-                    expires_at: Some(Utc::now() + chrono::Duration::days(7)),
+                    expires_at: Some(Utc::now() + Duration::days(7)),
                     revoked_at: None,
                     created_at: existing.created_at,
                     acr: Some(acr.to_owned()),
@@ -1918,7 +1936,7 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            let super::ChallengeOutcome::Authenticated { session, .. } = outcome else {
+            let ChallengeOutcome::Authenticated { session, .. } = outcome else {
                 panic!("expected completed password authentication");
             };
             assert_eq!(session.oid, existing.session_oid);
@@ -1927,14 +1945,12 @@ mod tests {
 
     #[tokio::test]
     async fn fresh_login_creates_a_session_when_no_valid_same_user_session_is_presented() {
-        use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
-
         for missing in [false, true] {
             let user = test_user();
             let user_oid = Uuid::from(user.oid);
             let login = test_login(user_oid, 0);
             let mut expired = browser_session(user_oid);
-            expired.expires_at = Some(Utc::now() - chrono::Duration::seconds(1));
+            expired.expires_at = Some(Utc::now() - Duration::seconds(1));
             let foreign = browser_session(Uuid::new_v4());
             let presented = vec![expired.session_oid, foreign.session_oid];
             let mut service = sign_in_service(user, vec![login.clone()], false);
@@ -1953,7 +1969,7 @@ mod tests {
                 Ok(Session {
                     oid: SessionOid(Uuid::new_v4()),
                     user_oid: input.user_oid,
-                    status: identity_domain::auth::SessionStatus::ACTIVE,
+                    status: SessionStatus::ACTIVE,
                     device_name: input.device_name,
                     device_type: input.device_type,
                     os_name: input.os_name,
@@ -1992,8 +2008,6 @@ mod tests {
 
     #[tokio::test]
     async fn browser_session_does_not_bypass_password_or_mfa() {
-        use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
-
         for mfa in [false, true] {
             let user = test_user();
             let existing = browser_session(user.oid.into());
@@ -2021,7 +2035,7 @@ mod tests {
             if mfa {
                 assert!(matches!(
                     result.unwrap(),
-                    super::ChallengeOutcome::MfaRequired { .. }
+                    ChallengeOutcome::MfaRequired { .. }
                 ));
             } else {
                 assert_error_code(result.unwrap_err(), AuthErrorCode::InvalidCredential);
@@ -2108,7 +2122,7 @@ mod tests {
     async fn expired_challenge_transitions_login_to_expired() {
         let user = test_user();
         let mut login = test_login(Uuid::from(user.oid), 0);
-        login.expires_at = Utc::now() - chrono::Duration::seconds(1);
+        login.expires_at = Utc::now() - Duration::seconds(1);
         let login_oid = login.oid;
         let login_repo = Arc::new(TestLoginRepo {
             state: Arc::new(Mutex::new(TestLoginRepoState {

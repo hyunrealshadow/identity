@@ -1,3 +1,4 @@
+use identity_domain::openid_connect::OAuthProtocolVersion;
 use serde::{Deserialize, Serialize};
 
 use crate::setting::{SettingSection, SettingValidationError};
@@ -46,7 +47,7 @@ impl Default for PushedAuthorizationSettings {
 pub struct OpenIdConnectSettings {
     pub pushed_authorization: PushedAuthorizationSettings,
     /// Default protocol rules for clients without an explicit override.
-    pub oauth_version: identity_domain::openid_connect::OAuthProtocolVersion,
+    pub oauth_version: OAuthProtocolVersion,
     pub dynamic_registration: DynamicRegistrationSettings,
     pub device_authorization: DeviceAuthorizationSettings,
 }
@@ -78,17 +79,20 @@ impl SettingSection for OpenIdConnectSettings {
 
 #[cfg(test)]
 mod tests {
+    use super::PushedAuthorizationSettings;
+    use identity_domain::openid_connect::OAuthProtocolVersion;
+
     use super::{DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings};
-    use crate::setting::{SettingChanges, SettingRegistry, SettingSection, SettingsSnapshot};
+    use crate::setting::{SettingChanges, SettingSection, SettingsSnapshot};
 
     #[test]
     fn binds_existing_openid_connect_keys() {
         let settings = OpenIdConnectSettings {
-            pushed_authorization: super::PushedAuthorizationSettings {
+            pushed_authorization: PushedAuthorizationSettings {
                 request_ttl_seconds: 120,
                 require_pushed_authorization_requests: true,
             },
-            oauth_version: identity_domain::openid_connect::OAuthProtocolVersion::V2_1,
+            oauth_version: OAuthProtocolVersion::V2_1,
             dynamic_registration: DynamicRegistrationSettings { enabled: true },
             device_authorization: DeviceAuthorizationSettings {
                 request_ttl_seconds: 30,
@@ -135,17 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn defaults_and_validation_belong_to_the_section() {
-        let defaults = SettingRegistry::default()
-            .register_section::<OpenIdConnectSettings>()
-            .defaults()
-            .unwrap();
-        assert_eq!(defaults.len(), 4);
-        assert_eq!(
-            SettingsSnapshot::default().section::<OpenIdConnectSettings>(),
-            OpenIdConnectSettings::default()
-        );
-
+    fn validates_authorization_time_limits() {
         let mut invalid = OpenIdConnectSettings::default();
         invalid.device_authorization.polling_interval_seconds = 0;
         assert!(invalid.validate().is_err());

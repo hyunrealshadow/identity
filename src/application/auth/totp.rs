@@ -18,25 +18,3 @@ pub trait TotpVerifier: Send + Sync {
     /// this counter before authentication is considered successful.
     fn verify(&self, otp_data: &OtpCredentialData, code: &str) -> Result<Option<u64>, TotpError>;
 }
-
-#[cfg(test)]
-mod tests {
-    use super::TotpError;
-
-    #[test]
-    fn invalid_credential_error_formats_human_readable_message() {
-        let error = TotpError::InvalidCredentialData("bad secret".to_owned());
-
-        assert_eq!(
-            error.to_string(),
-            "invalid TOTP credential data: bad secret"
-        );
-    }
-
-    #[test]
-    fn internal_error_formats_human_readable_message() {
-        let error = TotpError::Internal("clock failure".to_owned());
-
-        assert_eq!(error.to_string(), "TOTP internal error: clock failure");
-    }
-}

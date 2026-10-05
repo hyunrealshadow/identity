@@ -22,20 +22,22 @@ pub enum RegistrationErrorCode {
 impl AppErrorCode for RegistrationErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::DynamicRegistrationDisabled => ErrorKind::Validation,
-            Self::RedirectUrisRequired => ErrorKind::Validation,
-            Self::UnsupportedApplicationType => ErrorKind::Validation,
-            Self::UnsupportedSubjectType => ErrorKind::Validation,
-            Self::ClientCreateFailed => ErrorKind::Internal,
-            Self::ClientUpdateFailed => ErrorKind::Internal,
+            Self::DynamicRegistrationDisabled
+            | Self::RedirectUrisRequired
+            | Self::UnsupportedApplicationType
+            | Self::UnsupportedSubjectType
+            | Self::NoneNotSupported
+            | Self::InvalidRedirectUri
+            | Self::InvalidClientMetadata
+            | Self::BuiltInClientCannotBeDeleted => ErrorKind::Validation,
+
+            Self::ClientCreateFailed
+            | Self::ClientUpdateFailed
+            | Self::ClientLookupFailed
+            | Self::ClientDeleteFailed => ErrorKind::Internal,
+
             Self::ClientUpdateForbidden => ErrorKind::Forbidden,
             Self::InvalidRegistrationAccessToken => ErrorKind::Unauthorized,
-            Self::ClientLookupFailed => ErrorKind::Internal,
-            Self::NoneNotSupported => ErrorKind::Validation,
-            Self::InvalidRedirectUri => ErrorKind::Validation,
-            Self::InvalidClientMetadata => ErrorKind::Validation,
-            Self::ClientDeleteFailed => ErrorKind::Internal,
-            Self::BuiltInClientCannotBeDeleted => ErrorKind::Validation,
         }
     }
 

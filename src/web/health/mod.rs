@@ -1,3 +1,7 @@
+use identity_application::observability::BusinessEvent;
+use identity_application::observability::EventSeverity;
+use identity_application::observability::EventValue;
+use identity_application::observability::event_sink;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use http::StatusCode;
@@ -58,16 +62,15 @@ async fn health_handler(depot: &mut Depot, res: &mut Response) {
         let healthy = result.status == "ok";
         let previous = DATABASE_HEALTHY.swap(healthy, Ordering::Relaxed);
         if previous != healthy {
-            use identity_application::observability::{BusinessEvent, EventValue};
             let event = BusinessEvent::business("health.status.changed")
                 .severity(if healthy {
-                    identity_application::observability::EventSeverity::Info
+                    EventSeverity::Info
                 } else {
-                    identity_application::observability::EventSeverity::Warn
+                    EventSeverity::Warn
                 })
                 .outcome(if healthy { "ok" } else { "error" })
                 .attribute("check", EventValue::Text("database".to_owned()));
-            identity_application::observability::event_sink().emit(event);
+            event_sink().emit(event);
         }
         checks.database = Some(result);
     }

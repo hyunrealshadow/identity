@@ -1,6 +1,10 @@
+use crate::openid_connect::jose::REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS;
+use crate::openid_connect::jose::REQUEST_OBJECT_ENCRYPTION_ALGORITHMS;
+use std::str::FromStr;
+use std::time::Duration;
 use url::Url;
 
-pub(super) fn parse_metadata_value<T: std::str::FromStr>(
+pub(super) fn parse_metadata_value<T: FromStr>(
     field: &'static str,
     value: Option<&str>,
 ) -> Result<Option<T>, AppError> {
@@ -14,7 +18,7 @@ pub(super) fn parse_metadata_value<T: std::str::FromStr>(
         .transpose()
 }
 
-pub(super) fn parse_metadata_values<T: std::str::FromStr>(
+pub(super) fn parse_metadata_values<T: FromStr>(
     field: &'static str,
     values: Option<&[String]>,
 ) -> Result<Option<Vec<T>>, AppError> {
@@ -148,16 +152,11 @@ pub(super) fn validate_request_object_encryption(
     enc: Option<&str>,
 ) -> Result<(), AppError> {
     let invalid_field = alg
-        .filter(|value| {
-            !crate::openid_connect::jose::REQUEST_OBJECT_ENCRYPTION_ALGORITHMS.contains(value)
-        })
+        .filter(|value| !REQUEST_OBJECT_ENCRYPTION_ALGORITHMS.contains(value))
         .map(|_| "request_object_encryption_alg")
         .or_else(|| {
-            enc.filter(|value| {
-                !crate::openid_connect::jose::REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS
-                    .contains(value)
-            })
-            .map(|_| "request_object_encryption_enc")
+            enc.filter(|value| !REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS.contains(value))
+                .map(|_| "request_object_encryption_enc")
         })
         .or_else(|| (enc.is_some() && alg.is_none()).then_some("request_object_encryption_alg"));
 
@@ -217,12 +216,12 @@ pub(super) async fn validate_sector_identifier_uri(
 async fn fetch_sector_redirect_uris(sector_identifier_uri: &Url) -> Result<Vec<String>, AppError> {
     let client = remote_http_client(RemoteFetchPolicy::new(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        std::time::Duration::from_secs(5),
+        Duration::from_secs(5),
         conformance_allows_invalid_certs(),
     ))
-    .map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
-    })?;
+    .map_err(AppError::map_source(
+        RegistrationErrorCode::InvalidClientMetadata,
+    ))?;
 
     let body = fetch_https_public_document(
         &client,
@@ -230,13 +229,13 @@ async fn fetch_sector_redirect_uris(sector_identifier_uri: &Url) -> Result<Vec<S
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
     )
     .await
-    .map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
-    })?;
+    .map_err(AppError::map_source(
+        RegistrationErrorCode::InvalidClientMetadata,
+    ))?;
 
-    serde_json::from_slice::<Vec<String>>(&body).map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata).with_source(error)
-    })
+    serde_json::from_slice::<Vec<String>>(&body).map_err(AppError::map_source(
+        RegistrationErrorCode::InvalidClientMetadata,
+    ))
 }
 
 pub(crate) fn sector_redirect_uris_include_registered_redirects(

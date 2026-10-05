@@ -1,4 +1,8 @@
+use chrono::Duration;
 use chrono::Utc;
+use identity_domain::auth::ACR_AAL1;
+use identity_domain::auth::ACR_AAL2;
+use identity_domain::auth::AMR_PASSWORD;
 use identity_domain::{
     auth::{
         LoginStatus, SessionOid,
@@ -59,7 +63,7 @@ fn login(status: LoginStatus) -> Login {
         acr: None,
         requested_acr: None,
         created_at: Utc::now(),
-        expires_at: Utc::now() + chrono::Duration::minutes(5),
+        expires_at: Utc::now() + Duration::minutes(5),
     }
 }
 
@@ -74,8 +78,8 @@ fn active_session() -> ActiveSession {
         expires_at: None,
         created_at: Utc::now(),
         authenticated_at: Utc::now(),
-        acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
-        amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
+        acr: Some(ACR_AAL1.to_owned()),
+        amr: vec![AMR_PASSWORD.to_owned()],
     }
 }
 
@@ -107,7 +111,7 @@ fn max_age_uses_latest_authentication_instead_of_session_creation() {
     let mut request = request();
     request.max_age = Some(60);
     let mut session = active_session();
-    session.created_at = Utc::now() - chrono::Duration::hours(12);
+    session.created_at = Utc::now() - Duration::hours(12);
     session.authenticated_at = Utc::now();
 
     assert!(!selected_session_exceeds_max_age(&request, &session));
@@ -117,7 +121,7 @@ fn max_age_uses_latest_authentication_instead_of_session_creation() {
 fn continue_action_rejects_an_authentication_that_does_not_meet_requested_acr() {
     let selected_session = active_session();
     let mut stored = stored(ConsentState::Approved);
-    stored.request.acr_values = Some(vec![identity_domain::auth::ACR_AAL2.to_owned()]);
+    stored.request.acr_values = Some(vec![ACR_AAL2.to_owned()]);
 
     let action = determine_continue_action(
         &stored,
@@ -135,9 +139,9 @@ fn continue_action_rejects_an_authentication_that_does_not_meet_requested_acr() 
 #[test]
 fn continue_action_accepts_aal2_for_an_aal1_request() {
     let mut selected_session = active_session();
-    selected_session.acr = Some(identity_domain::auth::ACR_AAL2.to_owned());
+    selected_session.acr = Some(ACR_AAL2.to_owned());
     let mut stored = stored(ConsentState::Approved);
-    stored.request.acr_values = Some(vec![identity_domain::auth::ACR_AAL1.to_owned()]);
+    stored.request.acr_values = Some(vec![ACR_AAL1.to_owned()]);
 
     let action = determine_continue_action(
         &stored,
@@ -183,11 +187,7 @@ fn prompt_consent_forces_confirmation_even_when_consent_was_persisted() {
 fn continue_action_returns_consent_required_for_silent_pending_consent() {
     let selected_session = active_session();
     let mut stored = stored(ConsentState::Pending);
-    stored.request.prompt = Some(
-        [identity_domain::openid_connect::PromptValue::None]
-            .into_iter()
-            .collect(),
-    );
+    stored.request.prompt = Some([PromptValue::None].into_iter().collect());
 
     let action = determine_continue_action(
         &stored,

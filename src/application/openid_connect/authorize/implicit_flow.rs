@@ -1,19 +1,25 @@
 use super::flow::{AuthorizationCodeContext, session_state_for_authorize_response};
 use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
 use super::*;
+use crate::error::codes::common::CommonErrorCode;
+use chrono::Duration;
+use chrono::Utc;
 use identity_domain::auth::SessionOid;
+use identity_domain::client_authorization::ClientAuthenticationMode;
 use identity_domain::client_authorization::{AccessTokenData, ClientAuthorizationData};
+use identity_domain::openid_connect::API_RESOURCE;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use url::form_urlencoded::Serializer;
 use uuid::Uuid;
 
-fn front_channel_token_mode(
-    client: &OpenIdConnectClient,
-) -> identity_domain::client_authorization::ClientAuthenticationMode {
-    if client.metadata().allows_token_endpoint_auth_method(
-        identity_domain::openid_connect::TokenEndpointAuthMethod::None,
-    ) {
-        identity_domain::client_authorization::ClientAuthenticationMode::Public
+fn front_channel_token_mode(client: &OpenIdConnectClient) -> ClientAuthenticationMode {
+    if client
+        .metadata()
+        .allows_token_endpoint_auth_method(TokenEndpointAuthMethod::None)
+    {
+        ClientAuthenticationMode::Public
     } else {
-        identity_domain::client_authorization::ClientAuthenticationMode::Confidential
+        ClientAuthenticationMode::Confidential
     }
 }
 
@@ -39,21 +45,19 @@ impl AuthorizeService {
             .as_deref()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ImplicitNonceRequired))?;
 
-        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
-        })?;
+        let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredRedirectUriInvalid,
+        ))?;
 
-        let client_id = Uuid::parse_str(&request.client_id).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
-        })?;
+        let client_id = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredClientIdInvalid,
+        ))?;
 
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
         if client.metadata().require_auth_time == Some(true) && authentication.auth_time.is_none() {
             return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
@@ -64,9 +68,7 @@ impl AuthorizeService {
             .user_repo
             .find_by_oid(user_oid_obj)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
         let issuer = self.provider_service.issuer()?;
@@ -74,12 +76,11 @@ impl AuthorizeService {
         let audience = client_id.to_string();
         let auth_time_val = authentication
             .auth_time
-            .unwrap_or_else(|| chrono::Utc::now().timestamp());
-        let scope = ScopeSet::parse(&request.scope).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
-        })?;
+            .unwrap_or_else(|| Utc::now().timestamp());
+        let scope = ScopeSet::parse(&request.scope)
+            .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
         let access_token_audience = if scope.has_api_scopes() {
-            identity_domain::openid_connect::API_RESOURCE
+            API_RESOURCE
         } else {
             audience.as_str()
         };
@@ -159,7 +160,7 @@ impl AuthorizeService {
             .encrypt_id_token_for_client(&signed_id_token, &client)
             .await?;
 
-        let mut fragment = url::form_urlencoded::Serializer::new(String::new());
+        let mut fragment = Serializer::new(String::new());
         fragment.append_pair("id_token", &id_token);
         if let Some(ref at) = access_token {
             fragment.append_pair("access_token", at);
@@ -191,19 +192,17 @@ impl AuthorizeService {
         response_type: ResponseType,
         authentication: AuthenticationContext<'_>,
     ) -> Result<Url, AppError> {
-        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
-        })?;
-        let client_id = Uuid::parse_str(&request.client_id).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
-        })?;
+        let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredRedirectUriInvalid,
+        ))?;
+        let client_id = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredClientIdInvalid,
+        ))?;
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
         if response_type.includes_id_token()
             && client.metadata().require_auth_time == Some(true)
@@ -227,11 +226,10 @@ impl AuthorizeService {
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
         let audience = client_id.to_string();
-        let scope = ScopeSet::parse(&request.scope).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
-        })?;
+        let scope = ScopeSet::parse(&request.scope)
+            .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
         let access_token_audience = if scope.has_api_scopes() {
-            identity_domain::openid_connect::API_RESOURCE
+            API_RESOURCE
         } else {
             audience.as_str()
         };
@@ -244,7 +242,7 @@ impl AuthorizeService {
         let access_token = if response_type.includes_access_token() {
             let auth_time_val = authentication
                 .auth_time
-                .unwrap_or_else(|| chrono::Utc::now().timestamp());
+                .unwrap_or_else(|| Utc::now().timestamp());
             let (token_oid, resources) = self
                 .create_front_channel_access_token_record(
                     client_id,
@@ -298,9 +296,7 @@ impl AuthorizeService {
                 .user_repo
                 .find_by_oid(UserOid(user_oid))
                 .await
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
                 .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
             let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
                 key_id: &id_key_id,
@@ -313,7 +309,7 @@ impl AuthorizeService {
                 nonce,
                 auth_time: authentication
                     .auth_time
-                    .unwrap_or_else(|| chrono::Utc::now().timestamp()),
+                    .unwrap_or_else(|| Utc::now().timestamp()),
                 acr: authentication.acr,
                 amr: authentication.amr,
                 access_token: access_token.as_deref(),
@@ -330,7 +326,7 @@ impl AuthorizeService {
             None
         };
 
-        let mut fragment = url::form_urlencoded::Serializer::new(String::new());
+        let mut fragment = Serializer::new(String::new());
         fragment.append_pair("code", &code);
         if let Some(ref id_token) = id_token {
             fragment.append_pair("id_token", id_token);
@@ -364,21 +360,17 @@ impl AuthorizeService {
             .select_resources(resources, resources, &data.scope)
             .await?;
         if selection.scope != data.scope {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::InvalidTarget,
-            ));
+            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
         }
         let record = self
             .client_authorization_repo
             .create(
                 client_id,
                 ClientAuthorizationData::AccessToken(data),
-                chrono::Utc::now() + chrono::Duration::hours(1),
+                Utc::now() + Duration::hours(1),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreCodeFailed))?;
         Ok((record.oid, selection.resources))
     }
 }

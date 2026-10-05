@@ -183,83 +183,83 @@ pub enum TokenErrorCode {
 impl AppErrorCode for TokenErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::UnsupportedGrantType => ErrorKind::Validation,
-            Self::ClientIdRequired => ErrorKind::Validation,
-            Self::CodeLookupFailed => ErrorKind::Internal,
-            Self::AuthCodeNotFound => ErrorKind::Validation,
-            Self::CodeClientMismatch => ErrorKind::Validation,
-            Self::AuthCodeInvalid => ErrorKind::Validation,
-            Self::AuthCodeRevoked => ErrorKind::Validation,
-            Self::AuthCodeExpired => ErrorKind::Validation,
-            Self::AuthCodeSessionNotFound => ErrorKind::Validation,
-            Self::AuthCodeSessionInactive => ErrorKind::Validation,
-            Self::AuthCodeSessionRevoked => ErrorKind::Validation,
-            Self::AuthCodeSessionExpired => ErrorKind::Validation,
-            Self::AuthCodeSessionUserMismatch => ErrorKind::Validation,
-            Self::AuthCodeClaimFailed => ErrorKind::Validation,
-            Self::AuthCodeSessionLookupFailed => ErrorKind::Internal,
+            Self::UnsupportedGrantType
+            | Self::ClientIdRequired
+            | Self::AuthCodeNotFound
+            | Self::CodeClientMismatch
+            | Self::AuthCodeInvalid
+            | Self::AuthCodeRevoked
+            | Self::AuthCodeExpired
+            | Self::AuthCodeSessionNotFound
+            | Self::AuthCodeSessionInactive
+            | Self::AuthCodeSessionRevoked
+            | Self::AuthCodeSessionExpired
+            | Self::AuthCodeSessionUserMismatch
+            | Self::AuthCodeClaimFailed
+            | Self::RedirectUriMismatch
+            | Self::CodeVerifierRequired
+            | Self::AuthCodeUserNotFound
+            | Self::RefreshTokenNotFound
+            | Self::RefreshTokenInvalid
+            | Self::RefreshTokenSubMissing
+            | Self::RefreshTokenUseMissing
+            | Self::RefreshTokenUseInvalid
+            | Self::RefreshTokenClientMismatch
+            | Self::RefreshTokenSubInvalid
+            | Self::RefreshTokenUserNotFound
+            | Self::ClientIdInvalid
+            | Self::ClientNotFound
+            | Self::ClientCredentialsInvalid
+            | Self::ClientAuthRequired
+            | Self::AssertionIssMissing
+            | Self::AssertionSubMissing
+            | Self::AssertionIssSubMismatch
+            | Self::AssertionAudMismatch
+            | Self::AssertionExpired
+            | Self::AssertionNotYetValid
+            | Self::AssertionHeaderInvalid
+            | Self::AssertionVerifyFailed
+            | Self::AssertionAlgUnsupported
+            | Self::AssertionKeyInvalid
+            | Self::RefreshTokenVerifyFailed
+            | Self::PkceMethodUnsupported
+            | Self::PkceVerifierMismatch
+            | Self::ClientGrantNotAllowed
+            | Self::DeviceCodeNotFound
+            | Self::DeviceCodeClientMismatch
+            | Self::DeviceCodePending
+            | Self::DeviceCodeSlowDown
+            | Self::DeviceCodeDenied
+            | Self::DeviceCodeExpired
+            | Self::DeviceCodeRevoked
+            | Self::DeviceCodeUserNotFound
+            | Self::RefreshScopeNotAllowed
+            | Self::ClientCredentialsScopeNotAllowed => ErrorKind::Validation,
 
-            Self::DeserializeCodeFailed => ErrorKind::Internal,
-            Self::RedirectUriMismatch => ErrorKind::Validation,
-            Self::CodeVerifierRequired => ErrorKind::Validation,
-            Self::StoredUserOidInvalid => ErrorKind::Internal,
-            Self::UserLookupFailed => ErrorKind::Internal,
-            Self::AuthCodeUserNotFound => ErrorKind::Validation,
-            Self::RevokeCodeFailed => ErrorKind::Internal,
-            Self::RefreshTokenLookupFailed => ErrorKind::Internal,
-            Self::RefreshTokenNotFound => ErrorKind::Validation,
-            Self::RefreshTokenInvalid => ErrorKind::Validation,
-            Self::DeserializeRefreshFailed => ErrorKind::Internal,
-            Self::RefreshTokenSubMissing => ErrorKind::Validation,
-            Self::RefreshTokenUseMissing => ErrorKind::Validation,
-            Self::RefreshTokenUseInvalid => ErrorKind::Validation,
-            Self::RefreshTokenClientMismatch => ErrorKind::Validation,
-            Self::RefreshTokenSubInvalid => ErrorKind::Validation,
-            Self::RefreshTokenUserNotFound => ErrorKind::Validation,
-            Self::RevokeRefreshFailed => ErrorKind::Internal,
-            Self::KeyListFailed => ErrorKind::Internal,
-            Self::NoSigningKeyAvailable => ErrorKind::Internal,
-            Self::ClientIdInvalid => ErrorKind::Validation,
-            Self::ClientNotFound => ErrorKind::Validation,
-            Self::ClientLookupFailed => ErrorKind::Internal,
-            Self::CredentialLookupFailed => ErrorKind::Internal,
-            Self::ClientCredentialsInvalid => ErrorKind::Validation,
-            Self::ClientAuthRequired => ErrorKind::Validation,
-            Self::AssertionIssMissing => ErrorKind::Validation,
-            Self::AssertionSubMissing => ErrorKind::Validation,
-            Self::AssertionIssSubMismatch => ErrorKind::Validation,
-            Self::AssertionAudMismatch => ErrorKind::Validation,
-            Self::AssertionExpired => ErrorKind::Validation,
-            Self::AssertionNotYetValid => ErrorKind::Validation,
-            Self::AssertionHeaderInvalid => ErrorKind::Validation,
-            Self::AssertionVerifyFailed => ErrorKind::Validation,
-            Self::AssertionAlgUnsupported => ErrorKind::Validation,
-            Self::AssertionKeyInvalid => ErrorKind::Validation,
-            Self::RefreshTokenVerifyFailed => ErrorKind::Validation,
-            Self::SignAccessTokenFailed => ErrorKind::Internal,
-            Self::SignIdTokenFailed => ErrorKind::Internal,
-            Self::SignRefreshTokenFailed => ErrorKind::Internal,
-            Self::SerializeRefreshFailed => ErrorKind::Internal,
-            Self::StoreRefreshFailed => ErrorKind::Internal,
-            Self::PkceMethodUnsupported => ErrorKind::Validation,
-            Self::PkceVerifierMismatch => ErrorKind::Validation,
-            Self::EncryptionKeyNotFound => ErrorKind::Internal,
-            Self::EncryptionFailed => ErrorKind::Internal,
-            Self::ClientGrantNotAllowed => ErrorKind::Validation,
-            Self::DeviceCodeNotFound => ErrorKind::Validation,
-            Self::DeviceCodeClientMismatch => ErrorKind::Validation,
-            Self::DeviceCodePending => ErrorKind::Validation,
-            Self::DeviceCodeSlowDown => ErrorKind::Validation,
-            Self::DeviceCodeDenied => ErrorKind::Validation,
-            Self::DeviceCodeExpired => ErrorKind::Validation,
-            Self::DeviceCodeRevoked => ErrorKind::Validation,
-            Self::DeviceCodeUserNotFound => ErrorKind::Validation,
-            Self::DeviceRequestStateInvalid => ErrorKind::Internal,
-            Self::DeviceRequestLookupFailed => ErrorKind::Internal,
-            Self::DeviceRelationLookupFailed => ErrorKind::Internal,
-            Self::DeviceRedemptionFailed => ErrorKind::Internal,
-            Self::RefreshScopeNotAllowed => ErrorKind::Validation,
-            Self::ClientCredentialsScopeNotAllowed => ErrorKind::Validation,
+            Self::CodeLookupFailed
+            | Self::AuthCodeSessionLookupFailed
+            | Self::DeserializeCodeFailed
+            | Self::StoredUserOidInvalid
+            | Self::UserLookupFailed
+            | Self::RevokeCodeFailed
+            | Self::RefreshTokenLookupFailed
+            | Self::DeserializeRefreshFailed
+            | Self::RevokeRefreshFailed
+            | Self::KeyListFailed
+            | Self::NoSigningKeyAvailable
+            | Self::ClientLookupFailed
+            | Self::CredentialLookupFailed
+            | Self::SignAccessTokenFailed
+            | Self::SignIdTokenFailed
+            | Self::SignRefreshTokenFailed
+            | Self::SerializeRefreshFailed
+            | Self::StoreRefreshFailed
+            | Self::EncryptionKeyNotFound
+            | Self::EncryptionFailed
+            | Self::DeviceRequestStateInvalid
+            | Self::DeviceRequestLookupFailed
+            | Self::DeviceRelationLookupFailed
+            | Self::DeviceRedemptionFailed => ErrorKind::Internal,
         }
     }
 

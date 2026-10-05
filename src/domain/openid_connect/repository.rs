@@ -7,43 +7,49 @@ use super::model::credential::{
 use crate::auth::model::SessionOid;
 use crate::client::model::Client;
 use crate::client::model::ClientOid;
+use crate::client::model::ParseClientProtocolError;
+use crate::openid_connect::model::client::InvalidOpenIdConnectClientError;
+use crate::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError;
+use crate::openid_connect::model::credential::ParseOpenIdConnectCredentialTypeError;
+use crate::openid_connect::model::provider::ParseSubjectTypeError;
+use crate::openid_connect::model::provider::ParseTokenEndpointAuthMethodError;
+use chrono::ParseError as ChronoParseError;
+use serde_json::Error as SerdeJsonError;
+use std::error::Error as StdError;
 use thiserror::Error;
+use url::ParseError;
 
 #[derive(Debug, Error)]
 pub enum OpenIdConnectClientRepositoryError {
     #[error("failed to query openid connect client")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("openid connect metadata row is missing for client {0}")]
     MissingMetadata(ClientOid),
 
     #[error("failed to deserialize openid connect metadata")]
-    DeserializeMetadata(#[source] serde_json::Error),
+    DeserializeMetadata(#[source] SerdeJsonError),
 
     #[error("failed to parse openid connect url")]
-    ParseUrl(#[source] url::ParseError),
+    ParseUrl(#[source] ParseError),
 
     #[error("failed to parse openid connect client platform")]
-    ParseClientPlatform(
-        #[source] crate::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError,
-    ),
+    ParseClientPlatform(#[source] ParseOpenIdConnectClientPlatformKindError),
 
     #[error("failed to parse openid connect subject type")]
-    ParseSubjectType(#[source] crate::openid_connect::model::provider::ParseSubjectTypeError),
+    ParseSubjectType(#[source] ParseSubjectTypeError),
 
     #[error("failed to parse token endpoint authentication method")]
-    ParseTokenEndpointAuthMethod(
-        #[source] crate::openid_connect::model::provider::ParseTokenEndpointAuthMethodError,
-    ),
+    ParseTokenEndpointAuthMethod(#[source] ParseTokenEndpointAuthMethodError),
 
     #[error("invalid openid connect metadata value for {field}: {value}")]
     InvalidMetadataValue { field: &'static str, value: String },
 
     #[error("invalid openid connect client")]
-    InvalidClient(#[source] crate::openid_connect::model::client::InvalidOpenIdConnectClientError),
+    InvalidClient(#[source] InvalidOpenIdConnectClientError),
 
     #[error("failed to parse client protocol")]
-    ParseClientProtocol(#[source] crate::client::model::ParseClientProtocolError),
+    ParseClientProtocol(#[source] ParseClientProtocolError),
 
     #[error("openid connect client not found")]
     ClientNotFound,
@@ -65,24 +71,22 @@ pub struct OpenIdConnectClientRegistration {
 #[derive(Debug, Error)]
 pub enum OpenIdConnectCredentialRepositoryError {
     #[error("failed to query openid connect credentials")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("openid connect credential owner is missing")]
     MissingClient,
 
     #[error("failed to deserialize openid connect credential data")]
-    DeserializeData(#[source] serde_json::Error),
+    DeserializeData(#[source] SerdeJsonError),
 
     #[error("failed to parse openid connect credential url")]
-    ParseUrl(#[source] url::ParseError),
+    ParseUrl(#[source] ParseError),
 
     #[error("failed to parse openid connect credential datetime")]
-    ParseDateTime(#[source] chrono::ParseError),
+    ParseDateTime(#[source] ChronoParseError),
 
     #[error("failed to parse openid connect credential type")]
-    ParseCredentialType(
-        #[source] crate::openid_connect::model::credential::ParseOpenIdConnectCredentialTypeError,
-    ),
+    ParseCredentialType(#[source] ParseOpenIdConnectCredentialTypeError),
 }
 
 #[async_trait::async_trait]

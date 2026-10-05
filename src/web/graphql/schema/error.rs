@@ -1,15 +1,21 @@
+use crate::controllers::response::error_message;
+use crate::controllers::response::log_app_error;
+use async_graphql::Value;
 use async_graphql::{Context, Error, ErrorExtensions};
+use identity_application::error::ErrorDiagnostics;
 use identity_application::error::{AppError, kind::ErrorKind};
+use serde_json::Value as SerdeJsonValue;
+use std::backtrace::Backtrace;
+use std::error::Error as StdError;
 
 use super::authorization::request_context;
 
-pub(super) fn internal_error(error: impl std::error::Error + 'static) -> Error {
-    let diagnostics =
-        identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error);
+pub(super) fn internal_error(error: impl StdError + 'static) -> Error {
+    let diagnostics = ErrorDiagnostics::from_error(&error);
     let fallback = diagnostics
         .backtrace
         .is_none()
-        .then(std::backtrace::Backtrace::force_capture);
+        .then(Backtrace::force_capture);
     let backtrace = diagnostics.backtrace.or(fallback.as_ref());
     tracing::error!(
         error = %error,
@@ -27,9 +33,9 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
         Ok(request) => request,
         Err(error) => return error,
     };
-    crate::controllers::response::log_app_error(&error, "graphql application request failed");
+    log_app_error(&error, "graphql application request failed");
     let i18n = request.state.resources().i18n();
-    let message = crate::controllers::response::error_message(i18n, &request.locale, &error);
+    let message = error_message(i18n, &request.locale, &error);
     let kind = match error.kind() {
         ErrorKind::NotFound => "not_found",
         ErrorKind::Unauthorized => "unauthorized",
@@ -69,8 +75,7 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
         extensions.set("code", error.code());
         extensions.set(
             "fields",
-            async_graphql::Value::from_json(serde_json::Value::Array(fields))
-                .unwrap_or(async_graphql::Value::Null),
+            Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
         );
     })
 }

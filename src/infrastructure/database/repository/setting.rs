@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::database::entity::setting;
 use identity_application::{
-    error::{AppError, codes::common::CommonErrorCode},
+    error::AppError,
     setting::{SettingChanges, SettingDefinition, SettingRegistry, SettingSection},
 };
 
@@ -27,7 +27,7 @@ where
         .filter(setting::Column::Key.eq(S::KEY))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
     match row {
         Some(row) => Ok(S::decode(&row.value)?),
         None => Ok(S::default_value()),
@@ -44,7 +44,7 @@ where
         .filter(setting::Column::Key.starts_with(format!("{}.", T::PREFIX)))
         .all(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
     let raw: HashMap<_, _> = rows.into_iter().map(|row| (row.key, row.value)).collect();
     let snapshot = SettingRegistry::default()
         .register_section::<T>()
@@ -121,12 +121,14 @@ where
         .on_conflict(on_conflict)
         .exec_without_returning(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+
     use identity_application::setting::{
         DynamicRegistrationSettings, InstallationSettings, LoginDomainSetting,
         OpenIdConnectSettings, SettingChanges,
@@ -140,7 +142,7 @@ mod tests {
 
     #[tokio::test]
     async fn reads_a_section_from_separate_dotted_keys() {
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         let row = |id, key: &str, value| setting::Model {
             id,
             oid: Uuid::new_v4(),

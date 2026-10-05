@@ -107,6 +107,8 @@ pub fn routes() -> Router {
 
 #[cfg(test)]
 mod cors_tests {
+    use salvo::affix_state::inject;
+
     use http::{StatusCode, header};
     use salvo::{Service, test::TestClient};
 
@@ -117,7 +119,7 @@ mod cors_tests {
         let state =
             identity_infrastructure::test_app_state_with_cors_origin(Some("http://localhost:3000"))
                 .await;
-        let service = Service::new(routes().hoop(salvo::affix_state::inject(state)));
+        let service = Service::new(routes().hoop(inject(state)));
 
         let allowed = TestClient::options("http://127.0.0.1:5800/oauth2/token")
             .add_header(header::ORIGIN, "http://localhost:3000", true)

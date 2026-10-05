@@ -1,10 +1,11 @@
+use std::collections::BTreeMap;
 #[derive(Debug, Clone)]
 pub struct ScopeDescription {
     pub name: String,
     pub display_name: String,
     pub description: String,
     /// BCP 47 language tag to consent description.
-    pub descriptions: std::collections::BTreeMap<String, String>,
+    pub descriptions: BTreeMap<String, String>,
 }
 
 #[derive(Debug, thiserror::Error)]

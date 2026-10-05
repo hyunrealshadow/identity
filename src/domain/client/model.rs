@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use std::error::Error;
 use std::{fmt, str::FromStr};
 use uuid::Uuid;
 
@@ -28,7 +29,7 @@ impl fmt::Display for ParseClientProtocolError {
     }
 }
 
-impl std::error::Error for ParseClientProtocolError {}
+impl Error for ParseClientProtocolError {}
 
 impl FromStr for ClientProtocol {
     type Err = ParseClientProtocolError;

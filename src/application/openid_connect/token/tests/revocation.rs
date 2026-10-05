@@ -1,7 +1,10 @@
 use super::*;
 use crate::error::code::AppErrorCode;
+use crate::error::codes::token::TokenErrorCode;
 use crate::openid_connect::token::{TokenRevocationParams, signing::SignAccessTokenInput};
+use chrono::Duration;
 use identity_domain::client_authorization::AccessTokenData;
+use identity_domain::client_authorization::ClientAuthenticationMode;
 
 fn request(token: String) -> TokenRevocationParams {
     TokenRevocationParams {
@@ -49,7 +52,7 @@ async fn refresh_token_revokes_its_grant() {
                 device_authorization_oid: None,
                 client_authentication_mode: None,
             }),
-            Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + Duration::hours(1),
         )
         .await
         .unwrap();
@@ -78,11 +81,9 @@ async fn public_flow_disabled_blocks_revocation_of_previously_public_token() {
                 rotated_from: None,
                 authorization_code_oid: None,
                 device_authorization_oid: None,
-                client_authentication_mode: Some(
-                    identity_domain::client_authorization::ClientAuthenticationMode::Public,
-                ),
+                client_authentication_mode: Some(ClientAuthenticationMode::Public),
             }),
-            Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + Duration::hours(1),
         )
         .await
         .unwrap();
@@ -113,21 +114,16 @@ async fn disabled_public_method_cannot_revoke_a_confidential_token_without_crede
                 rotated_from: None,
                 authorization_code_oid: None,
                 device_authorization_oid: None,
-                client_authentication_mode: Some(
-                    identity_domain::client_authorization::ClientAuthenticationMode::Confidential,
-                ),
+                client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
             }),
-            Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + Duration::hours(1),
         )
         .await
         .unwrap();
     let mut request = request(STANDARD.encode(record.oid.as_bytes()));
     request.client_secret = None;
     let error = service.revoke_token(request).await.unwrap_err();
-    assert_eq!(
-        error.code(),
-        crate::error::codes::token::TokenErrorCode::ClientAuthRequired.code()
-    );
+    assert_eq!(error.code(), TokenErrorCode::ClientAuthRequired.code());
 }
 
 #[tokio::test]
@@ -151,7 +147,7 @@ async fn another_clients_refresh_token_is_rejected() {
                 device_authorization_oid: None,
                 client_authentication_mode: None,
             }),
-            Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + Duration::hours(1),
         )
         .await
         .unwrap();
@@ -161,7 +157,7 @@ async fn another_clients_refresh_token_is_rejected() {
         .unwrap_err();
     assert_eq!(
         error.code(),
-        crate::error::codes::token::TokenErrorCode::RefreshTokenClientMismatch.code()
+        TokenErrorCode::RefreshTokenClientMismatch.code()
     );
 }
 
@@ -187,7 +183,7 @@ async fn signed_access_token_revokes_only_its_record() {
                 device_authorization_oid: None,
                 client_authentication_mode: None,
             }),
-            Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + Duration::hours(1),
         )
         .await
         .unwrap();

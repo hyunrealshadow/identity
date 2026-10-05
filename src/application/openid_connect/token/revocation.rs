@@ -1,3 +1,5 @@
+use crate::domain::openid_connect::OpenIdConnectClientMetadata;
+use chrono::Utc;
 use josekit::jwt;
 use uuid::Uuid;
 
@@ -23,16 +25,13 @@ impl TokenService {
             params.client_assertion.as_deref(),
         )?;
         if params.client_secret.is_none() && params.client_assertion.is_none() {
-            let client_oid = Uuid::parse_str(&client_id).map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-            })?;
+            let client_oid = Uuid::parse_str(&client_id)
+                .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
             if !client.metadata().settings.allow_public_client_flow {
                 return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
@@ -91,9 +90,9 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(
+                    TokenErrorCode::RefreshTokenLookupFailed,
+                ))?;
             if let Some(record) =
                 record.filter(|record| record.type_ == ClientAuthorizationType::RefreshToken)
             {
@@ -110,11 +109,9 @@ impl TokenService {
                     return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
                 }
                 self.client_authorization_repo
-                    .revoke_refresh_grant_for_client(oid, client_oid, chrono::Utc::now())
+                    .revoke_refresh_grant_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-                    })?;
+                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
                 return Ok(());
             }
         }
@@ -125,9 +122,9 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(
+                    TokenErrorCode::RefreshTokenLookupFailed,
+                ))?;
             if let Some(record) = record.filter(|record| {
                 record.type_ == ClientAuthorizationType::AccessToken
                     && record.client_oid == token_client_oid
@@ -145,11 +142,9 @@ impl TokenService {
                     return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
                 }
                 self.client_authorization_repo
-                    .revoke_access_token_for_client(oid, client_oid, chrono::Utc::now())
+                    .revoke_access_token_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-                    })?;
+                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
             }
         }
         Ok(())
@@ -171,9 +166,9 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(
+                    TokenErrorCode::RefreshTokenLookupFailed,
+                ))?;
             if let Some(record) = record
                 && record.client_oid == client_oid
                 && matches!(
@@ -183,11 +178,9 @@ impl TokenService {
                 )
             {
                 self.client_authorization_repo
-                    .revoke_refresh_grant_for_client(oid, client_oid, chrono::Utc::now())
+                    .revoke_refresh_grant_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-                    })?;
+                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
                 return Ok(());
             }
         }
@@ -198,9 +191,9 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(
+                    TokenErrorCode::RefreshTokenLookupFailed,
+                ))?;
             if let Some(record) = record
                 && record.client_oid == client_oid
                 && matches!(
@@ -210,11 +203,9 @@ impl TokenService {
                 )
             {
                 self.client_authorization_repo
-                    .revoke_access_token_for_client(oid, client_oid, chrono::Utc::now())
+                    .revoke_access_token_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-                    })?;
+                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
                 return Ok(());
             }
         }
@@ -262,9 +253,11 @@ impl TokenService {
         else {
             return Ok(None);
         };
-        let bindings = self.key_jwk_repo.list_active().await.map_err(|error| {
-            AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-        })?;
+        let bindings = self
+            .key_jwk_repo
+            .list_active()
+            .await
+            .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
         let Some(binding) = bindings.iter().find(|binding| {
             Uuid::from(binding.oid) == kid && binding.algorithm == JwkAlgorithm::Signing(alg)
         }) else {
@@ -274,9 +267,7 @@ impl TokenService {
             .key_repo
             .find_by_oid(binding.key_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::KeyListFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
         let Some(key) = key else {
             return Ok(None);
         };
@@ -311,7 +302,7 @@ impl TokenService {
 
 fn effective_issued_mode(
     stored: Option<ClientAuthenticationMode>,
-    metadata: &crate::domain::openid_connect::OpenIdConnectClientMetadata,
+    metadata: &OpenIdConnectClientMetadata,
 ) -> ClientAuthenticationMode {
     stored.unwrap_or_else(|| {
         if metadata.effective_token_endpoint_auth_methods() == [TokenEndpointAuthMethod::None] {

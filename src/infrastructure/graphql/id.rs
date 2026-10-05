@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::str;
 
 use async_graphql::ID;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -80,7 +81,7 @@ impl DecodedGlobalId {
         if type_name.is_empty() || encoded_oid.len() != 16 {
             return Err(InvalidGlobalId);
         }
-        let type_name = std::str::from_utf8(type_name).map_err(|_| InvalidGlobalId)?;
+        let type_name = str::from_utf8(type_name).map_err(|_| InvalidGlobalId)?;
         if !valid_type_name(type_name) {
             return Err(InvalidGlobalId);
         }
@@ -119,6 +120,8 @@ fn valid_type_name(type_name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use async_graphql::ID;
+
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     use uuid::Uuid;
 
@@ -158,7 +161,7 @@ mod tests {
     #[test]
     fn async_graphql_id_conversion_preserves_type_checks() {
         let uuid = Uuid::new_v4();
-        let id: async_graphql::ID = GlobalId::<SessionId>::new(uuid).into();
+        let id: ID = GlobalId::<SessionId>::new(uuid).into();
 
         assert_eq!(GlobalId::<SessionId>::try_from(&id).unwrap().oid(), uuid);
         assert!(GlobalId::<UserId>::try_from(&id).is_err());

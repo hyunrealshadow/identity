@@ -1,5 +1,7 @@
+use http::HeaderMap;
 use http::StatusCode;
 use salvo::{Depot, Request};
+use url::Url;
 
 use crate::{
     application::error::{AppError, codes::authorize_http::AuthorizeHttpErrorCode},
@@ -24,7 +26,7 @@ pub(super) async fn consent_api(
 ) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
     let query: ConsentQuery = parse_query(req)?;
-    let headers: http::HeaderMap = req.headers().clone();
+    let headers: HeaderMap = req.headers().clone();
 
     if let Some(user_code) = query.device_target()? {
         return Ok(device_consent_api(&ctx, &headers, depot, user_code)
@@ -80,13 +82,13 @@ pub(super) async fn consent_api(
                 .metadata()
                 .logo_uri
                 .as_ref()
-                .map(url::Url::to_string),
+                .map(Url::to_string),
             client_uri: loaded
                 .client
                 .metadata()
                 .client_uri
                 .as_ref()
-                .map(url::Url::to_string),
+                .map(Url::to_string),
             scopes: build_scope_display(
                 &loaded.scope,
                 &previously_granted,
@@ -107,7 +109,7 @@ pub(super) async fn consent_api_submit(
     req: &mut Request,
 ) -> Result<AppResponse, AppError> {
     let ctx = app_state(depot)?;
-    let headers: http::HeaderMap = req.headers().clone();
+    let headers: HeaderMap = req.headers().clone();
     let payload: ConsentDecisionPayload = parse_json(req).await?;
 
     match (payload.login_id.as_deref(), payload.user_code.as_deref()) {

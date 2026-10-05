@@ -1,4 +1,7 @@
+use identity_application::error::ErrorDiagnostics;
 use std::error::Error as StdError;
+use std::mem;
+use tracing::Level;
 
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use salvo::{Depot, Request, Response, Writer, async_trait, handler, prelude::Json, writing::Text};
@@ -35,20 +38,18 @@ pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError)
     localized_error_message(i18n, locale, error.code(), error.params())
 }
 
-pub fn app_error_log_level(error: &AppError) -> tracing::Level {
+pub fn app_error_log_level(error: &AppError) -> Level {
     match error.kind() {
-        ErrorKind::Internal => tracing::Level::ERROR,
-        ErrorKind::Unauthorized | ErrorKind::Forbidden | ErrorKind::RateLimit => {
-            tracing::Level::WARN
-        }
+        ErrorKind::Internal => Level::ERROR,
+        ErrorKind::Unauthorized | ErrorKind::Forbidden | ErrorKind::RateLimit => Level::WARN,
         ErrorKind::NotFound | ErrorKind::Conflict | ErrorKind::Validation | ErrorKind::Gone => {
-            tracing::Level::DEBUG
+            Level::DEBUG
         }
     }
 }
 
 pub fn log_app_error(error: &AppError, message: &'static str) {
-    let diagnostics = identity_application::error::diagnostics::ErrorDiagnostics::from_error(error);
+    let diagnostics = ErrorDiagnostics::from_error(error);
     macro_rules! log {
         ($level:expr) => {
             tracing::event!(
@@ -65,9 +66,9 @@ pub fn log_app_error(error: &AppError, message: &'static str) {
         };
     }
     match app_error_log_level(error) {
-        tracing::Level::ERROR => log!(tracing::Level::ERROR),
-        tracing::Level::WARN => log!(tracing::Level::WARN),
-        _ => log!(tracing::Level::DEBUG),
+        Level::ERROR => log!(Level::ERROR),
+        Level::WARN => log!(Level::WARN),
+        _ => log!(Level::DEBUG),
     }
 }
 
@@ -98,7 +99,7 @@ pub fn accepts_html(headers: &HeaderMap) -> bool {
 
 pub fn app_state(depot: &Depot) -> Result<AppState, AppError> {
     depot
-        .obtain::<AppState>()
+        .get_typed::<AppState>()
         .cloned()
         .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))
 }
@@ -197,7 +198,7 @@ impl Writer for AppResponse {
                 res.headers_mut().append(name, value);
             }
         }
-        *res.body_mut() = std::mem::take(response.body_mut());
+        *res.body_mut() = mem::take(response.body_mut());
     }
 }
 
@@ -433,19 +434,28 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    use super::log_app_error;
+    use identity_application::error::{ErrorContext, ErrorDiagnostics};
+    use std::io::Error;
+    use std::io::ErrorKind;
+    use std::io::Result as IoResult;
+    use tracing::Level;
+    use tracing::subscriber::with_default;
+
     #[test]
     fn logs_distinguish_internal_failures_rejections_and_validation() {
-        use identity_application::error::{AppError, codes::common::CommonErrorCode};
-        use std::io::Write;
-        use std::sync::{Arc, Mutex};
         #[derive(Clone)]
         struct Capture(Arc<Mutex<Vec<u8>>>);
         impl Write for Capture {
-            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            fn write(&mut self, bytes: &[u8]) -> IoResult<usize> {
                 self.0.lock().unwrap().extend_from_slice(bytes);
                 Ok(bytes.len())
             }
-            fn flush(&mut self) -> std::io::Result<()> {
+            fn flush(&mut self) -> IoResult<()> {
                 Ok(())
             }
         }
@@ -454,22 +464,21 @@ mod tests {
         let subscriber = tracing_subscriber::fmt()
             .with_ansi(false)
             .without_time()
-            .with_max_level(tracing::Level::TRACE)
+            .with_max_level(Level::TRACE)
             .with_writer(move || writer.clone())
             .finish();
-        tracing::subscriber::with_default(subscriber, || {
-            let error = AppError::from_code(CommonErrorCode::InternalError).with_source(
-                identity_application::error::diagnostics::ErrorContext::new(
+        with_default(subscriber, || {
+            let error =
+                AppError::from_code(CommonErrorCode::InternalError).with_source(ErrorContext::new(
                     "client_authorization.lock_refresh_family",
-                    std::io::Error::other("database unavailable"),
-                ),
-            );
-            super::log_app_error(&error, "internal-test");
-            super::log_app_error(
+                    Error::other("database unavailable"),
+                ));
+            log_app_error(&error, "internal-test");
+            log_app_error(
                 &AppError::from_code(CommonErrorCode::Unauthorized),
                 "rejection-test",
             );
-            super::log_app_error(
+            log_app_error(
                 &AppError::from_code(CommonErrorCode::InvalidRequest),
                 "validation-test",
             );
@@ -568,14 +577,13 @@ mod tests {
 
     #[test]
     fn diagnostics_preserve_internal_error_details() {
-        let error =
-            AppError::from_code(CommonErrorCode::InternalError).with_source(std::io::Error::new(
-                std::io::ErrorKind::ConnectionRefused,
-                "database unavailable",
-            ));
+        let error = AppError::from_code(CommonErrorCode::InternalError).with_source(Error::new(
+            ErrorKind::ConnectionRefused,
+            "database unavailable",
+        ));
 
         assert_eq!(
-            identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error).cause,
+            ErrorDiagnostics::from_error(&error).cause,
             "database unavailable"
         );
     }

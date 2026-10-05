@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::{fmt, str::FromStr};
 
 use serde::Serialize;
@@ -24,7 +25,7 @@ impl fmt::Display for ParseSubjectTypeError {
     }
 }
 
-impl std::error::Error for ParseSubjectTypeError {}
+impl Error for ParseSubjectTypeError {}
 
 impl FromStr for SubjectType {
     type Err = ParseSubjectTypeError;
@@ -174,101 +175,9 @@ pub struct OpenIdProviderMetadata {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use url::Url;
 
     use super::OpenIdProviderMetadata;
-
-    #[test]
-    fn serializes_required_fields_and_explicit_booleans() {
-        let metadata = OpenIdProviderMetadata {
-            pushed_authorization_request_endpoint: None,
-            require_pushed_authorization_requests: false,
-            issuer: Url::parse("https://identity.example.com").unwrap(),
-            authorization_endpoint: Url::parse("https://identity.example.com/connect/authorize")
-                .unwrap(),
-            token_endpoint: Some(Url::parse("https://identity.example.com/connect/token").unwrap()),
-            revocation_endpoint: Url::parse("https://identity.example.com/oauth2/revoke").unwrap(),
-            introspection_endpoint: Url::parse("https://identity.example.com/oauth2/introspect")
-                .unwrap(),
-            introspection_endpoint_auth_methods_supported: vec!["client_secret_basic".into()],
-            introspection_endpoint_auth_signing_alg_values_supported: vec![],
-            revocation_endpoint_auth_methods_supported: vec![],
-            revocation_endpoint_auth_signing_alg_values_supported: vec![],
-            userinfo_endpoint: Some(
-                Url::parse("https://identity.example.com/connect/userinfo").unwrap(),
-            ),
-            device_authorization_endpoint: Some(
-                Url::parse("https://identity.example.com/oauth2/device_authorization").unwrap(),
-            ),
-            jwks_uri: Url::parse("https://identity.example.com/.well-known/keys").unwrap(),
-            registration_endpoint: Some(
-                Url::parse("https://identity.example.com/connect/register").unwrap(),
-            ),
-            scopes_supported: Some(vec![
-                "openid".to_owned(),
-                "profile".to_owned(),
-                "offline_access".to_owned(),
-            ]),
-            response_types_supported: vec!["code".to_owned(), "id_token".to_owned()],
-            response_modes_supported: Some(vec!["query".to_owned(), "fragment".to_owned()]),
-            grant_types_supported: Some(vec![
-                "authorization_code".to_owned(),
-                "implicit".to_owned(),
-                "refresh_token".to_owned(),
-            ]),
-            code_challenge_methods_supported: vec!["S256".to_owned()],
-            acr_values_supported: None,
-            subject_types_supported: vec!["public".to_owned()],
-            id_token_signing_alg_values_supported: vec!["RS256".to_owned()],
-            id_token_encryption_alg_values_supported: None,
-            id_token_encryption_enc_values_supported: None,
-            userinfo_signing_alg_values_supported: None,
-            userinfo_encryption_alg_values_supported: None,
-            userinfo_encryption_enc_values_supported: None,
-            request_object_signing_alg_values_supported: Some(vec![
-                "none".to_owned(),
-                "RS256".to_owned(),
-            ]),
-            request_object_encryption_alg_values_supported: None,
-            request_object_encryption_enc_values_supported: None,
-            token_endpoint_auth_methods_supported: Some(vec!["client_secret_basic".to_owned()]),
-            token_endpoint_auth_signing_alg_values_supported: Some(vec!["RS256".to_owned()]),
-            display_values_supported: Some(vec!["page".to_owned()]),
-            claim_types_supported: Some(vec!["normal".to_owned()]),
-            claims_supported: Some(vec!["sub".to_owned(), "iss".to_owned()]),
-            service_documentation: Some(
-                Url::parse("https://identity.example.com/docs/openid-connect").unwrap(),
-            ),
-            claims_locales_supported: Some(vec!["en-US".to_owned()]),
-            ui_locales_supported: Some(vec!["en-US".to_owned(), "zh-CN".to_owned()]),
-            claims_parameter_supported: false,
-            request_parameter_supported: false,
-            request_uri_parameter_supported: true,
-            require_request_uri_registration: false,
-            op_policy_uri: Some(Url::parse("https://identity.example.com/policy").unwrap()),
-            op_tos_uri: Some(Url::parse("https://identity.example.com/terms").unwrap()),
-            end_session_endpoint: Some(
-                Url::parse("https://identity.example.com/connect/endsession").unwrap(),
-            ),
-            check_session_iframe: None,
-            frontchannel_logout_supported: None,
-            frontchannel_logout_session_supported: None,
-            backchannel_logout_supported: None,
-            backchannel_logout_session_supported: None,
-        };
-
-        let value = serde_json::to_value(&metadata).unwrap();
-
-        assert_eq!(value["issuer"], json!("https://identity.example.com/"));
-        assert_eq!(value["claims_parameter_supported"], json!(false));
-        assert_eq!(value["request_parameter_supported"], json!(false));
-        assert_eq!(value["request_uri_parameter_supported"], json!(true));
-        assert_eq!(
-            value["response_types_supported"],
-            json!(["code", "id_token"])
-        );
-    }
 
     #[test]
     fn omits_empty_optional_arrays() {

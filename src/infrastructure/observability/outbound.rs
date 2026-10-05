@@ -5,6 +5,8 @@
 //! here from the configured origin allow-list; being "internal", using a
 //! backchannel URL or having an authenticated user never grants propagation.
 
+use tracing::field::Empty;
+
 use std::sync::Arc;
 
 use http::HeaderMap;
@@ -41,7 +43,7 @@ impl OutboundTrace for OutboundTraceImpl {
             http.request.method = %method,
             server.address = %host,
             url.scheme = %url.scheme(),
-            http.response.status_code = tracing::field::Empty,
+            http.response.status_code = Empty,
         )
     }
 
@@ -54,6 +56,10 @@ impl OutboundTrace for OutboundTraceImpl {
 
 #[cfg(test)]
 mod tests {
+    use opentelemetry::trace::SpanId;
+    use opentelemetry::trace::TraceId;
+    use tracing::Span;
+
     use std::sync::Arc;
 
     use http::HeaderMap;
@@ -104,10 +110,10 @@ mod tests {
         // The formatting helper compiles against the same W3C shape used for
         // inbound parsing.
         let _ = format_traceparent(
-            opentelemetry::trace::TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap(),
-            opentelemetry::trace::SpanId::from_hex("00f067aa0ba902b7").unwrap(),
+            TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap(),
+            SpanId::from_hex("00f067aa0ba902b7").unwrap(),
             true,
         );
-        let _ = OpenTelemetrySpanExt::context(&tracing::Span::none());
+        let _ = OpenTelemetrySpanExt::context(&Span::none());
     }
 }

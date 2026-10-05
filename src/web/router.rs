@@ -1,3 +1,4 @@
+use salvo::affix_state::inject;
 use std::sync::Arc;
 
 use salvo::{Router, serve_static::StaticDir};
@@ -36,10 +37,8 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
             config.observability.trace_context.clone(),
         )))
         .hoop(security_headers_middleware)
-        .hoop(salvo::affix_state::inject(state.clone()))
-        .hoop(salvo::affix_state::inject(
-            config.openid_connect.dynamic_registration.clone(),
-        ))
+        .hoop(inject(state.clone()))
+        .hoop(inject(config.openid_connect.dynamic_registration.clone()))
         .push(
             Router::with_path("static/{**path}")
                 .get(StaticDir::new(["assets/static"]).fallback("404.html")),
@@ -95,7 +94,7 @@ pub fn internal_router(
             config.observability.trace_context.clone(),
         )))
         .hoop(security_headers_middleware)
-        .hoop(salvo::affix_state::inject(state))
+        .hoop(inject(state))
         .push(internal)
         .goal(handle_404)
 }

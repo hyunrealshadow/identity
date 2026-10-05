@@ -1,5 +1,10 @@
 //! Current SeaORM persistence entity.
 
+use super::login::Entity as LoginEntity;
+use super::session::Entity as SessionEntity;
+use super::user_client_consent::Entity as UserClientConsentEntity;
+use super::user_credential::Entity as UserCredentialEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -65,25 +70,25 @@ pub enum Relation {
     UserClientConsent,
 }
 
-impl Related<super::login::Entity> for Entity {
+impl Related<LoginEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Login.def()
     }
 }
 
-impl Related<super::session::Entity> for Entity {
+impl Related<SessionEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Session.def()
     }
 }
 
-impl Related<super::user_credential::Entity> for Entity {
+impl Related<UserCredentialEntity> for Entity {
     fn to() -> RelationDef {
         Relation::UserCredential.def()
     }
 }
 
-impl Related<super::user_client_consent::Entity> for Entity {
+impl Related<UserClientConsentEntity> for Entity {
     fn to() -> RelationDef {
         Relation::UserClientConsent.def()
     }

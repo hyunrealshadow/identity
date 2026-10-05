@@ -1,5 +1,7 @@
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use http::{HeaderMap, StatusCode, header};
+use identity_application::error::codes::common::CommonErrorCode;
 use salvo::{Depot, Request, Response, Writer, async_trait, handler};
 use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
@@ -46,17 +48,8 @@ struct TokenErrorResponse {
 
 pub(super) fn app_error_to_rfc6749(error: &AppError) -> &'static str {
     match error.code() {
-        code if code
-            == identity_application::error::codes::common::CommonErrorCode::InvalidScope.code() =>
-        {
-            "invalid_scope"
-        }
-        c if c
-            == identity_application::error::codes::common::CommonErrorCode::InvalidTarget
-                .code() =>
-        {
-            "invalid_target"
-        }
+        code if code == CommonErrorCode::InvalidScope.code() => "invalid_scope",
+        c if c == CommonErrorCode::InvalidTarget.code() => "invalid_target",
         // Authorization code errors → invalid_grant
         c if c == TokenErrorCode::AuthCodeNotFound.code() => "invalid_grant",
         c if c == TokenErrorCode::AuthCodeInvalid.code() => "invalid_grant",
@@ -193,9 +186,7 @@ impl Writer for TokenWebError {
 pub(super) fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
     let header = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let encoded = header.strip_prefix("Basic ")?;
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .ok()?;
+    let decoded = STANDARD.decode(encoded).ok()?;
     let decoded = String::from_utf8(decoded).ok()?;
     let (client_id, client_secret) = decoded.split_once(':')?;
     Some((client_id.to_string(), client_secret.to_string()))
@@ -300,6 +291,17 @@ pub async fn token(depot: &mut Depot, req: &mut Request) -> Result<AppResponse, 
 
 #[cfg(test)]
 mod tests {
+    use salvo::Service;
+    use salvo::test::TestClient;
+
+    use super::token_error_status;
+
+    use crate::controllers::oauth2::routes;
+    use http::header::CONTENT_TYPE;
+    use identity_application::error::codes::common::CommonErrorCode;
+    use salvo::affix_state::inject;
+    use serde_json::Value;
+
     use super::*;
     use http::{HeaderMap, StatusCode, header::AUTHORIZATION};
     use salvo::test::ResponseExt;
@@ -320,7 +322,7 @@ mod tests {
             Some(StatusCode::INTERNAL_SERVER_ERROR)
         );
         let body = response.take_string().await.unwrap();
-        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let body: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(body["error"], "server_error");
         assert_eq!(body["error_description"], "撤销刷新令牌时发生意外错误");
     }
@@ -390,21 +392,12 @@ mod tests {
 
     #[tokio::test]
     async fn token_route_dispatches_the_device_code_grant() {
-        use salvo::{
-            Service,
-            test::{ResponseExt, TestClient},
-        };
-
-        let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
         let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/token")
-            .add_header(
-                http::header::CONTENT_TYPE,
-                "application/x-www-form-urlencoded",
-                true,
-            )
+            .add_header(CONTENT_TYPE, "application/x-www-form-urlencoded", true)
             .body("grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=unknown")
             .send(&service)
             .await;
@@ -435,16 +428,13 @@ mod tests {
         ] {
             let error = AppError::from_code(code);
             assert_eq!(app_error_to_rfc6749(&error), "invalid_grant", "{code:?}");
-            assert_eq!(
-                super::token_error_status(&error),
-                http::StatusCode::BAD_REQUEST
-            );
+            assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
         }
         let error = AppError::from_code(TokenErrorCode::AuthCodeSessionLookupFailed);
         assert_eq!(app_error_to_rfc6749(&error), "server_error");
         assert_eq!(
-            super::token_error_status(&error),
-            http::StatusCode::INTERNAL_SERVER_ERROR
+            token_error_status(&error),
+            StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 
@@ -465,7 +455,6 @@ mod tests {
 
     #[tokio::test]
     async fn token_form_retains_repeated_resources_and_empty_targets() {
-        use salvo::test::TestClient;
         for (body, expected) in [
             (
                 "grant_type=client_credentials&resource=https%3A%2F%2Fa.example%2F&resource=urn%3Ab",
@@ -485,9 +474,7 @@ mod tests {
             let form: TokenForm = parse_form(&mut req).await.unwrap();
             assert_eq!(form.resources, expected);
         }
-        let error = AppError::from_code(
-            identity_application::error::codes::common::CommonErrorCode::InvalidTarget,
-        );
+        let error = AppError::from_code(CommonErrorCode::InvalidTarget);
         assert_eq!(app_error_to_rfc6749(&error), "invalid_target");
         assert_eq!(token_error_status(&error), StatusCode::BAD_REQUEST);
     }

@@ -1,5 +1,15 @@
 //! Device authorization endpoint use case (RFC 8628 §3.1, §3.2).
 
+use crate::observability::NoopEventSink;
+use chrono::Duration;
+use identity_domain::auth::LoginStatus;
+use identity_domain::auth::SessionOid;
+use identity_domain::auth::model::Login;
+use identity_domain::client_authorization::ClientAuthenticationMode;
+use identity_domain::client_authorization::ClientAuthorization;
+use identity_domain::client_authorization::USER_CODE_ALPHABET;
+use identity_domain::openid_connect::ClientAssertionType;
+
 use std::sync::Arc;
 
 use crate::error::{code::AppErrorCode, codes::common::CommonErrorCode};
@@ -48,7 +58,7 @@ pub struct DeviceAuthorizationParams {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
-    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion_type: Option<ClientAssertionType>,
     pub client_assertion: Option<String>,
     pub scope: Option<String>,
 }
@@ -136,7 +146,7 @@ impl DeviceAuthorizationService {
             device_repo: deps.device_repo,
             provider_service: deps.provider_service,
             settings: deps.settings,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
@@ -178,10 +188,9 @@ impl DeviceAuthorizationService {
             )
             .await?;
 
-        let client_authentication_mode =
-            identity_domain::client_authorization::ClientAuthenticationMode::from_credentials(
-                params.client_secret.is_some() || params.client_assertion.is_some(),
-            );
+        let client_authentication_mode = ClientAuthenticationMode::from_credentials(
+            params.client_secret.is_some() || params.client_assertion.is_some(),
+        );
 
         self.check_client_grant(&client)?;
         self.provider_service
@@ -202,9 +211,7 @@ impl DeviceAuthorizationService {
                 .select_resources(&[], &[], &scope.to_scope_string())
                 .await?;
             if selection.scope != scope.to_scope_string() {
-                return Err(AppError::from_code(
-                    crate::error::codes::common::CommonErrorCode::InvalidTarget,
-                ));
+                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
             }
             selection.resources
         } else {
@@ -217,7 +224,7 @@ impl DeviceAuthorizationService {
 
         let device_code = generate_device_code();
         let now = Utc::now();
-        let expires_at = now + chrono::Duration::seconds(settings.request_ttl_seconds);
+        let expires_at = now + Duration::seconds(settings.request_ttl_seconds);
         let (request_oid, request) = self
             .create_request(
                 &client,
@@ -299,15 +306,14 @@ impl DeviceAuthorizationService {
     /// Resolve a device login without interpreting it as an OAuth authorization request.
     pub async fn login_request(
         &self,
-        login: &identity_domain::auth::model::Login,
-    ) -> Result<Option<identity_domain::client_authorization::ClientAuthorization>, AppError> {
+        login: &Login,
+    ) -> Result<Option<ClientAuthorization>, AppError> {
         self.device_repo
             .find_device_request_by_oid(login.client_authorization_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(DeviceAuthorizationErrorCode::LoadRequestFailed)
-                    .with_source(error)
-            })
+            .map_err(AppError::map_source(
+                DeviceAuthorizationErrorCode::LoadRequestFailed,
+            ))
     }
 
     pub async fn begin_verification(&self, user_code: &str) -> Result<(Uuid, Uuid), AppError> {
@@ -328,8 +334,8 @@ impl DeviceAuthorizationService {
 
     pub async fn complete_login(
         &self,
-        login: &identity_domain::auth::model::Login,
-        session_oid: identity_domain::auth::SessionOid,
+        login: &Login,
+        session_oid: SessionOid,
     ) -> Result<(), AppError> {
         if !self
             .device_repo
@@ -340,10 +346,9 @@ impl DeviceAuthorizationService {
                 Utc::now(),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(DeviceAuthorizationErrorCode::StoreDecisionFailed)
-                    .with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                DeviceAuthorizationErrorCode::StoreDecisionFailed,
+            ))?
         {
             return Err(AppError::from_code(
                 DeviceAuthorizationErrorCode::UserCodeNotFound,
@@ -352,10 +357,7 @@ impl DeviceAuthorizationService {
         Ok(())
     }
 
-    async fn bound_request(
-        &self,
-        login: &identity_domain::auth::model::Login,
-    ) -> Result<identity_domain::client_authorization::ClientAuthorization, AppError> {
+    async fn bound_request(&self, login: &Login) -> Result<ClientAuthorization, AppError> {
         let record = self
             .login_request(login)
             .await?
@@ -363,7 +365,7 @@ impl DeviceAuthorizationService {
         let data = request_data(&record)?;
         if data.claimed_login_oid != Some(login.oid)
             || login.session_oid.is_none()
-            || login.status != identity_domain::auth::LoginStatus::AUTHENTICATED
+            || login.status != LoginStatus::AUTHENTICATED
         {
             return Err(AppError::from_code(
                 DeviceAuthorizationErrorCode::VerificationLoginRequired,
@@ -379,7 +381,7 @@ impl DeviceAuthorizationService {
 
     pub async fn describe_login(
         &self,
-        login: &identity_domain::auth::model::Login,
+        login: &Login,
     ) -> Result<DeviceVerificationDescription, AppError> {
         let record = self.bound_request(login).await?;
         let client = self.load_client(record.client_oid).await?;
@@ -392,7 +394,7 @@ impl DeviceAuthorizationService {
 
     pub async fn decide_login(
         &self,
-        login: &identity_domain::auth::model::Login,
+        login: &Login,
         user: &DeviceVerificationUser,
         decision: DeviceVerificationDecision,
     ) -> Result<(), AppError> {
@@ -428,10 +430,7 @@ impl DeviceAuthorizationService {
     }
 
     /// Resolves the active request behind a user code.
-    async fn resolve_verification(
-        &self,
-        user_code: &str,
-    ) -> Result<identity_domain::client_authorization::ClientAuthorization, AppError> {
+    async fn resolve_verification(&self, user_code: &str) -> Result<ClientAuthorization, AppError> {
         let normalized = normalize_user_code(user_code);
         if normalized.len() != USER_CODE_LENGTH {
             return Err(AppError::from_code(
@@ -443,10 +442,9 @@ impl DeviceAuthorizationService {
             .device_repo
             .find_active_device_request_by_user_code(&normalized)
             .await
-            .map_err(|error| {
-                AppError::from_code(DeviceAuthorizationErrorCode::LoadRequestFailed)
-                    .with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                DeviceAuthorizationErrorCode::LoadRequestFailed,
+            ))?
             .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::UserCodeNotFound))?;
         if request_data(&record)?.claimed_login_oid.is_some() {
             return Err(AppError::from_code(
@@ -458,7 +456,7 @@ impl DeviceAuthorizationService {
 
     async fn record_decision(
         &self,
-        record: &identity_domain::client_authorization::ClientAuthorization,
+        record: &ClientAuthorization,
         data: &DeviceAuthorizationRequestData,
         user: &DeviceVerificationUser,
         decision: DeviceVerificationDecision,
@@ -492,19 +490,17 @@ impl DeviceAuthorizationService {
                     now,
                 )
                 .await
-                .map_err(|error| {
-                    AppError::from_code(DeviceAuthorizationErrorCode::StoreDecisionFailed)
-                        .with_source(error)
-                })?
+                .map_err(AppError::map_source(
+                    DeviceAuthorizationErrorCode::StoreDecisionFailed,
+                ))?
                 .is_some(),
             DeviceVerificationDecision::Deny => self
                 .device_repo
                 .deny_device_request(record.oid, user.user_oid, now)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(DeviceAuthorizationErrorCode::StoreDecisionFailed)
-                        .with_source(error)
-                })?,
+                .map_err(AppError::map_source(
+                    DeviceAuthorizationErrorCode::StoreDecisionFailed,
+                ))?,
         };
 
         if !applied {
@@ -540,10 +536,9 @@ impl DeviceAuthorizationService {
         self.client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(DeviceAuthorizationErrorCode::ClientLookupFailed)
-                    .with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                DeviceAuthorizationErrorCode::ClientLookupFailed,
+            ))?
             .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::ClientNotFound))
     }
 
@@ -564,9 +559,9 @@ impl DeviceAuthorizationService {
         requested: Option<&str>,
     ) -> Result<ScopeSet, AppError> {
         let requested = requested.unwrap_or("openid");
-        let scope = ScopeSet::parse(requested).map_err(|error| {
-            AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid).with_source(error)
-        })?;
+        let scope = ScopeSet::parse(requested).map_err(AppError::map_source(
+            DeviceAuthorizationErrorCode::ScopeInvalid,
+        ))?;
 
         if scope
             .names()
@@ -590,7 +585,7 @@ impl DeviceAuthorizationService {
         device_code: &str,
         interval_seconds: i64,
         expires_at: DateTime<Utc>,
-        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
+        client_authentication_mode: ClientAuthenticationMode,
     ) -> Result<(Uuid, DeviceAuthorizationRequestData), AppError> {
         for _ in 0..USER_CODE_ATTEMPTS {
             let user_code = generate_user_code();
@@ -634,9 +629,7 @@ impl DeviceAuthorizationService {
     }
 }
 
-fn request_data(
-    record: &identity_domain::client_authorization::ClientAuthorization,
-) -> Result<DeviceAuthorizationRequestData, AppError> {
+fn request_data(record: &ClientAuthorization) -> Result<DeviceAuthorizationRequestData, AppError> {
     match &record.data {
         ClientAuthorizationData::DeviceAuthorizationRequest(data) => Ok(data.clone()),
         _ => Err(AppError::from_code(
@@ -646,7 +639,7 @@ fn request_data(
 }
 
 fn verification_status(
-    record: &identity_domain::client_authorization::ClientAuthorization,
+    record: &ClientAuthorization,
     now: DateTime<Utc>,
 ) -> DeviceVerificationStatus {
     if record.expires_at <= now {
@@ -701,7 +694,7 @@ fn generate_device_code() -> String {
 
 /// A user code is drawn from the unambiguous alphabet, so it stays typable.
 fn generate_user_code() -> String {
-    let alphabet = identity_domain::client_authorization::USER_CODE_ALPHABET;
+    let alphabet = USER_CODE_ALPHABET;
     let mut rng = rand::rng();
 
     (0..USER_CODE_LENGTH)
@@ -717,21 +710,23 @@ fn generate_user_code() -> String {
 /// A malformed login domain fails the request rather than silently pointing
 /// users at the wrong host.
 fn device_page(base: &str) -> Result<Url, AppError> {
-    let base = Url::parse(base).map_err(|error| {
-        AppError::from_code(DeviceAuthorizationErrorCode::LoginDomainInvalid).with_source(error)
-    })?;
+    let base = Url::parse(base).map_err(AppError::map_source(
+        DeviceAuthorizationErrorCode::LoginDomainInvalid,
+    ))?;
 
-    base.join(DEVICE_VERIFICATION_PATH).map_err(|error| {
-        AppError::from_code(DeviceAuthorizationErrorCode::LoginDomainInvalid).with_source(error)
-    })
+    base.join(DEVICE_VERIFICATION_PATH)
+        .map_err(AppError::map_source(
+            DeviceAuthorizationErrorCode::LoginDomainInvalid,
+        ))
 }
 
 fn verification_uri(issuer: &Url) -> Result<Url, AppError> {
     let mut base = issuer.clone();
     base.set_path("");
-    base.join(DEVICE_VERIFICATION_PATH).map_err(|error| {
-        AppError::from_code(DeviceAuthorizationErrorCode::IssuerInvalid).with_source(error)
-    })
+    base.join(DEVICE_VERIFICATION_PATH)
+        .map_err(AppError::map_source(
+            DeviceAuthorizationErrorCode::IssuerInvalid,
+        ))
 }
 
 fn verification_uri_complete(verification_uri: &Url, user_code: &str) -> Url {

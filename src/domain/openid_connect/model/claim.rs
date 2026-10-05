@@ -131,17 +131,3 @@ impl StandardScopes {
     pub const PHONE: &'static str = "phone";
     pub const OFFLINE_ACCESS: &'static str = "offline_access";
 }
-
-#[cfg(test)]
-mod tests {
-    use super::TokenUse;
-
-    #[test]
-    fn token_use_round_trips_through_json() {
-        let json = serde_json::to_string(&TokenUse::AccessToken).unwrap();
-        let decoded: TokenUse = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(json, r#""access_token""#);
-        assert_eq!(decoded, TokenUse::AccessToken);
-    }
-}

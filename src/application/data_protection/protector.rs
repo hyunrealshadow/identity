@@ -1,4 +1,10 @@
+use crate::key::runtime::RuntimeKeyRingProvider;
+use identity_domain::key::Key;
+use identity_domain::key::KeyData;
+use identity_domain::key::KeyOid;
+use std::io::Error;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -49,13 +55,13 @@ pub trait DataProtector: Send + Sync {
 }
 
 pub struct DataProtectorImpl {
-    key_ring_provider: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+    key_ring_provider: Arc<dyn RuntimeKeyRingProvider>,
     cipher: Arc<dyn DataProtectionCipher>,
 }
 
 impl DataProtectorImpl {
     pub fn new(
-        key_ring_provider: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+        key_ring_provider: Arc<dyn RuntimeKeyRingProvider>,
         cipher: Arc<dyn DataProtectionCipher>,
     ) -> Self {
         Self {
@@ -92,7 +98,7 @@ impl DataProtectorImpl {
 }
 
 struct ProtectionContext {
-    key_id: identity_domain::key::KeyOid,
+    key_id: KeyOid,
     subkey: [u8; DATA_PROTECTION_KEY_SIZE],
     purpose_hash: [u8; 8],
 }
@@ -122,12 +128,12 @@ impl DataProtector for DataProtectorImpl {
         let ring = key_ring.data_protection();
 
         let key = ring.decrypting_key(&payload.key_id).ok_or_else(|| {
-            warn!(key_id = %uuid::Uuid::from(payload.key_id), "key not found for decryption");
+            warn!(key_id = %Uuid::from(payload.key_id), "key not found for decryption");
             DataProtectionError::InvalidProtectedPayload
         })?;
 
         if key.revoked_at.is_some() {
-            warn!(key_id = %uuid::Uuid::from(payload.key_id), "key has been revoked");
+            warn!(key_id = %Uuid::from(payload.key_id), "key has been revoked");
             return Err(DataProtectionError::InvalidProtectedPayload);
         }
 
@@ -158,14 +164,11 @@ impl DataProtector for DataProtectorImpl {
     }
 }
 
-fn decode_master_key(
-    key: &identity_domain::key::Key,
-) -> Result<[u8; DATA_PROTECTION_KEY_SIZE], DataProtectionError> {
-    use identity_domain::key::KeyData;
+fn decode_master_key(key: &Key) -> Result<[u8; DATA_PROTECTION_KEY_SIZE], DataProtectionError> {
     let KeyData::Symmetric(sym_data) = &key.data else {
-        return Err(DataProtectionError::Internal(Box::new(
-            std::io::Error::other("expected symmetric key"),
-        )));
+        return Err(DataProtectionError::Internal(Box::new(Error::other(
+            "expected symmetric key",
+        ))));
     };
 
     let raw = STANDARD
@@ -173,13 +176,13 @@ fn decode_master_key(
         .map_err(|e| DataProtectionError::Internal(Box::new(e)))?;
 
     if raw.len() != DATA_PROTECTION_KEY_SIZE {
-        return Err(DataProtectionError::Internal(Box::new(
-            std::io::Error::other(format!(
+        return Err(DataProtectionError::Internal(Box::new(Error::other(
+            format!(
                 "expected {}-byte key, got {}",
                 DATA_PROTECTION_KEY_SIZE,
                 raw.len()
-            )),
-        )));
+            ),
+        ))));
     }
 
     let mut out = [0u8; DATA_PROTECTION_KEY_SIZE];
@@ -197,6 +200,12 @@ pub fn derive_subkey(master_key: &[u8], info: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
+    use identity_domain::data_protection::ProtectedPayload;
+
+    use crate::error::AppError;
+    use base64::engine::general_purpose::STANDARD;
+    use identity_domain::data_protection::KeyRing;
+
     use async_trait::async_trait;
     use base64::Engine;
     use chrono::{DateTime, Duration, Utc};
@@ -264,10 +273,7 @@ mod tests {
     impl MockKeyRingProvider {
         fn new(keys: Vec<Key>) -> Self {
             Self {
-                value: Arc::new(RuntimeKeyRing::new(
-                    identity_domain::data_protection::KeyRing::new(keys),
-                    None,
-                )),
+                value: Arc::new(RuntimeKeyRing::new(KeyRing::new(keys), None)),
             }
         }
     }
@@ -278,7 +284,7 @@ mod tests {
             Arc::clone(&self.value)
         }
 
-        async fn refresh_value(&self) -> Result<(), crate::error::AppError> {
+        async fn refresh_value(&self) -> Result<(), AppError> {
             Ok(())
         }
     }
@@ -297,7 +303,7 @@ mod tests {
         expires: Option<DateTime<Utc>>,
         revoked: Option<DateTime<Utc>>,
     ) -> Key {
-        let raw_key = base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]);
+        let raw_key = STANDARD.encode([0x42u8; 32]);
         Key {
             oid: KeyOid::from(id),
             r#type: KeyType::Symmetric,
@@ -435,7 +441,7 @@ mod tests {
         let KeyData::Symmetric(next_data) = &mut successor.data else {
             unreachable!()
         };
-        next_data.key = base64::engine::general_purpose::STANDARD.encode([0x24u8; 32]);
+        next_data.key = STANDARD.encode([0x24u8; 32]);
         let previous = Key {
             expires_at: Some(now - Duration::seconds(1)),
             ..previous
@@ -447,9 +453,7 @@ mod tests {
 
         let new_token = rotated.protect("refresh-token", b"new").await.unwrap();
         assert_eq!(
-            identity_domain::data_protection::ProtectedPayload::decode(&new_token)
-                .unwrap()
-                .key_id,
+            ProtectedPayload::decode(&new_token).unwrap().key_id,
             successor.oid
         );
         assert_eq!(

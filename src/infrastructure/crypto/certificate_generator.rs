@@ -1,8 +1,5 @@
 use crate::{
-    application::{
-        error::{AppError, codes::common::CommonErrorCode},
-        install::CertificateGenerator,
-    },
+    application::{error::AppError, install::CertificateGenerator},
     domain::key::AsymmetricKeyAlgorithm,
 };
 
@@ -18,6 +15,6 @@ impl CertificateGenerator for CertificateGeneratorImpl {
         algorithm: &AsymmetricKeyAlgorithm,
     ) -> Result<String, AppError> {
         generate_self_signed_certificate(private_key_pem, domain, algorithm)
-            .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+            .map_err(AppError::internal)
     }
 }

@@ -1,3 +1,5 @@
+use crate::domain::auth::SessionStatus;
+use crate::openid_connect::jwt_checks::validate_required_exp_and_optional_window;
 use chrono::Utc;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -42,11 +44,7 @@ impl TokenService {
         {
             oid
         } else if let Some(payload) = self.verified_access_token_payload(&params.token).await? {
-            if crate::openid_connect::jwt_checks::validate_required_exp_and_optional_window(
-                &payload,
-                Utc::now().timestamp(),
-            )
-            .is_err()
+            if validate_required_exp_and_optional_window(&payload, Utc::now().timestamp()).is_err()
             {
                 return Ok(json!({"active": false}));
             }
@@ -68,9 +66,9 @@ impl TokenService {
             .client_authorization_repo
             .find_by_oid(oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                TokenErrorCode::RefreshTokenLookupFailed,
+            ))?;
         let Some(record) = record else {
             return Ok(json!({"active": false}));
         };
@@ -109,10 +107,9 @@ impl TokenService {
                 .device_repo
                 .find_device_authorization_by_oid(device)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::DeviceRelationLookupFailed)
-                        .with_source(error)
-                })?
+                .map_err(AppError::map_source(
+                    TokenErrorCode::DeviceRelationLookupFailed,
+                ))?
                 .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
             if !active {
                 return Ok(json!({"active": false}));
@@ -122,12 +119,12 @@ impl TokenService {
             let active = repo
                 .find_by_oid(session)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(
+                    TokenErrorCode::RefreshTokenLookupFailed,
+                ))?
                 .is_some_and(|session| {
                     session.revoked_at.is_none()
-                        && session.status == crate::domain::auth::SessionStatus::ACTIVE
+                        && session.status == SessionStatus::ACTIVE
                         && session.expires_at.is_none_or(|expiry| expiry > now)
                         && session.user_oid.to_string() == *subject
                 });

@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use thiserror::Error;
 
 use crate::key::{AsymmetricKeyAlgorithm, AsymmetricKeyData};
@@ -8,7 +9,7 @@ pub enum KeyMaterialError {
     InvalidInput(String),
 
     #[error(transparent)]
-    Internal(#[from] Box<dyn std::error::Error + Send + Sync + 'static>),
+    Internal(#[from] Box<dyn StdError + Send + Sync + 'static>),
 }
 
 #[derive(Debug, Clone)]

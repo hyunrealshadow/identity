@@ -1,4 +1,7 @@
+use crate::controllers::response::JsonWebResult;
+use crate::controllers::response::parse_json;
 use http::{HeaderMap, StatusCode};
+use identity_application::error::codes::common::CommonErrorCode;
 use salvo::{Depot, Request, Response, Writer, async_trait, handler};
 use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
@@ -45,10 +48,10 @@ struct DeviceAuthorizationErrorResponse {
 /// `unauthorized_client` instead.
 fn device_error_code(error: &AppError) -> &'static str {
     let code = error.code();
-    if code == identity_application::error::codes::common::CommonErrorCode::InvalidScope.code() {
+    if code == CommonErrorCode::InvalidScope.code() {
         return "invalid_scope";
     }
-    if code == identity_application::error::codes::common::CommonErrorCode::InvalidTarget.code() {
+    if code == CommonErrorCode::InvalidTarget.code() {
         return "invalid_target";
     }
 
@@ -197,7 +200,7 @@ pub async fn device_authorization(
 pub async fn begin_verification(
     depot: &mut Depot,
     req: &mut Request,
-) -> crate::controllers::response::JsonWebResult<AppResponse> {
+) -> JsonWebResult<AppResponse> {
     #[derive(Debug, Deserialize)]
     struct BeginBody {
         user_code: String,
@@ -209,7 +212,7 @@ pub async fn begin_verification(
     }
 
     let ctx = app_state(depot)?;
-    let body: BeginBody = crate::controllers::response::parse_json(req).await?;
+    let body: BeginBody = parse_json(req).await?;
 
     let (client_oid, request_oid) = ctx
         .services()
@@ -236,6 +239,9 @@ pub async fn begin_verification(
 
 #[cfg(test)]
 mod tests {
+    use salvo::Response;
+    use salvo::affix_state::inject;
+
     use super::*;
     use crate::controllers::oauth2::routes;
     use http::header;
@@ -244,8 +250,8 @@ mod tests {
         test::{ResponseExt, TestClient},
     };
 
-    async fn post_device_authorization(body: String) -> salvo::Response {
-        let app = routes().hoop(salvo::affix_state::inject(
+    async fn post_device_authorization(body: String) -> Response {
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);

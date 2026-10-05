@@ -1,3 +1,5 @@
+use crate::domain::auth::acr_satisfies;
+use crate::domain::auth::authentication_is_fresh;
 use crate::domain::{
     auth::{
         LoginStatus,
@@ -6,6 +8,9 @@ use crate::domain::{
     client_authorization::{ConsentState, SelectionSource, StoredAuthorizationRequest},
     openid_connect::{AuthorizationRequestData, OAuthErrorCode, PromptValue},
 };
+use chrono::Utc;
+use std::collections::HashSet;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContinueAction {
@@ -14,7 +19,7 @@ pub enum ContinueAction {
     Consent,
     Approve {
         session_oid: SessionOid,
-        user_oid: uuid::Uuid,
+        user_oid: Uuid,
         auth_time: Option<i64>,
         acr: Option<String>,
         amr: Vec<String>,
@@ -24,7 +29,7 @@ pub enum ContinueAction {
 
 #[must_use]
 pub fn stored_request_has_prompt(
-    prompt: Option<&std::collections::HashSet<PromptValue>>,
+    prompt: Option<&HashSet<PromptValue>>,
     value: PromptValue,
 ) -> bool {
     prompt.is_some_and(|items| items.contains(&value))
@@ -39,9 +44,9 @@ pub fn selected_session_exceeds_max_age(
         let Ok(max_age) = u64::try_from(max_age) else {
             return true;
         };
-        !crate::domain::auth::authentication_is_fresh(
+        !authentication_is_fresh(
             selected_session.authenticated_at.timestamp(),
-            chrono::Utc::now().timestamp(),
+            Utc::now().timestamp(),
             max_age,
         )
     })
@@ -53,11 +58,10 @@ pub fn selected_session_satisfies_acr(
     selected_session: &ActiveSession,
 ) -> bool {
     request.acr_values.as_ref().is_none_or(|requested| {
-        selected_session.acr.as_ref().is_some_and(|acr| {
-            requested
-                .iter()
-                .any(|value| crate::domain::auth::acr_satisfies(acr, value))
-        })
+        selected_session
+            .acr
+            .as_ref()
+            .is_some_and(|acr| requested.iter().any(|value| acr_satisfies(acr, value)))
     })
 }
 

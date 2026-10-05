@@ -3,11 +3,12 @@ use std::str::FromStr;
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use url::Url;
+use uuid::Uuid;
 
 use crate::client::model::ClientOid;
 use crate::key::PublicJwk;
 
-pub type OpenIdConnectCredentialOid = uuid::Uuid;
+pub type OpenIdConnectCredentialOid = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
@@ -64,18 +65,4 @@ pub struct OpenIdConnectCredential {
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::OpenIdConnectCredentialType;
-    use std::str::FromStr;
-
-    #[test]
-    fn parses_credential_type() {
-        assert_eq!(
-            OpenIdConnectCredentialType::from_str("client_secret").unwrap(),
-            OpenIdConnectCredentialType::ClientSecret
-        );
-    }
 }

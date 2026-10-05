@@ -7,6 +7,14 @@
 //! `none` authenticate with a `client_id` only. Keeping one implementation
 //! means a flow cannot accidentally accept a weaker method than the registration allows.
 
+use crate::openid_connect::remote::RemoteFetchError;
+use chrono::Utc;
+use identity_domain::key::PublicJwk;
+use identity_domain::openid_connect::ClientAssertionType;
+use identity_domain::openid_connect::OpenIdConnectClient as OpenidConnectOpenIdConnectClient;
+use subtle::ConstantTimeEq;
+use url::Url;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -63,7 +71,7 @@ impl ClientAuthenticator {
         client_id: &str,
         client_secret: Option<&str>,
         client_secret_basic: bool,
-        client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+        client_assertion_type: Option<ClientAssertionType>,
         client_assertion: Option<&str>,
     ) -> Result<Uuid, AppError> {
         let mut authenticator = self.clone();
@@ -81,16 +89,13 @@ impl ClientAuthenticator {
     }
 
     async fn load_client(&self, client_id: &str) -> Result<OpenIdConnectClient, AppError> {
-        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_oid = Uuid::parse_str(client_id)
+            .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
 
         self.client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))
     }
 
@@ -117,16 +122,13 @@ impl ClientAuthenticator {
         client_id: &str,
         client_secret: &str,
     ) -> Result<Uuid, AppError> {
-        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_oid = Uuid::parse_str(client_id)
+            .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let credentials = self
@@ -136,13 +138,11 @@ impl ClientAuthenticator {
                 OpenIdConnectCredentialType::ClientSecret,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::CredentialLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::CredentialLookupFailed))?;
 
         let valid = credentials.into_iter().any(|credential| {
             if let OpenIdConnectCredentialData::ClientSecret { secret } = &credential.data {
-                subtle::ConstantTimeEq::ct_eq(secret.as_bytes(), client_secret.as_bytes()).into()
+                ConstantTimeEq::ct_eq(secret.as_bytes(), client_secret.as_bytes()).into()
             } else {
                 false
             }
@@ -162,7 +162,7 @@ impl ClientAuthenticator {
         client_id: &str,
         client_secret: Option<&str>,
         client_secret_basic: bool,
-        client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+        client_assertion_type: Option<ClientAssertionType>,
         client_assertion: Option<&str>,
     ) -> Result<Uuid, AppError> {
         if client_assertion_type.is_some() != client_assertion.is_some()
@@ -170,34 +170,28 @@ impl ClientAuthenticator {
         {
             return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
         }
-        if let (
-            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
-            Some(assertion),
-        ) = (client_assertion_type, client_assertion)
+        if let (Some(ClientAssertionType::JwtBearer), Some(assertion)) =
+            (client_assertion_type, client_assertion)
         {
-            let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-            })?;
+            let client_oid = Uuid::parse_str(client_id)
+                .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
-            let header = jwt::decode_header(assertion).map_err(|error| {
-                AppError::from_code(TokenErrorCode::AssertionHeaderInvalid).with_source(error)
-            })?;
+            let header = jwt::decode_header(assertion)
+                .map_err(AppError::map_source(TokenErrorCode::AssertionHeaderInvalid))?;
             let algorithm = header
                 .claim(JwtClaimNames::ALG)
                 .and_then(|value| value.as_str())
                 .unwrap_or("none")
                 .parse::<JwsAlgorithm>()
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_source(error)
-                })?;
+                .map_err(AppError::map_source(
+                    TokenErrorCode::AssertionAlgUnsupported,
+                ))?;
             let method = match algorithm {
                 JwsAlgorithm::Hs256 | JwsAlgorithm::Hs384 | JwsAlgorithm::Hs512 => {
                     TokenEndpointAuthMethod::ClientSecretJwt
@@ -224,16 +218,13 @@ impl ClientAuthenticator {
         }
 
         let Some(client_secret) = client_secret else {
-            let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-            })?;
+            let client_oid = Uuid::parse_str(client_id)
+                .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
             if client
@@ -246,16 +237,13 @@ impl ClientAuthenticator {
             return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
         };
 
-        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_oid = Uuid::parse_str(client_id)
+            .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         if client_secret_basic
@@ -289,7 +277,7 @@ impl ClientAuthenticator {
         client_id: &str,
         client_secret: Option<&str>,
         client_secret_basic: bool,
-        client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+        client_assertion_type: Option<ClientAssertionType>,
         client_assertion: Option<&str>,
     ) -> Result<OpenIdConnectClient, AppError> {
         if client_secret.is_none() && client_assertion.is_none() {
@@ -322,16 +310,13 @@ impl ClientAuthenticator {
         client_id: &str,
         assertion: &str,
     ) -> Result<Uuid, AppError> {
-        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_oid = Uuid::parse_str(client_id)
+            .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let payload = self.verify_client_assertion(&client, assertion).await?;
@@ -345,16 +330,13 @@ impl ClientAuthenticator {
         client_id: &str,
         assertion: &str,
     ) -> Result<Uuid, AppError> {
-        let client_oid = Uuid::parse_str(client_id).map_err(|error| {
-            AppError::from_code(TokenErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_oid = Uuid::parse_str(client_id)
+            .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let payload = self
@@ -402,7 +384,7 @@ impl ClientAuthenticator {
             return Err(AppError::from_code(TokenErrorCode::AssertionAudMismatch));
         }
 
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         validate_required_exp_and_optional_window(payload, now).map_err(|error| match error {
             JwtTimeValidationError::ExpMissing | JwtTimeValidationError::Expired => {
                 AppError::from_code(TokenErrorCode::AssertionExpired)
@@ -417,20 +399,19 @@ impl ClientAuthenticator {
 
     pub async fn verify_client_assertion(
         &self,
-        client: &identity_domain::openid_connect::OpenIdConnectClient,
+        client: &OpenidConnectOpenIdConnectClient,
         assertion: &str,
     ) -> Result<JwtPayload, AppError> {
-        let header = jwt::decode_header(assertion).map_err(|error| {
-            AppError::from_code(TokenErrorCode::AssertionHeaderInvalid).with_source(error)
-        })?;
+        let header = jwt::decode_header(assertion)
+            .map_err(AppError::map_source(TokenErrorCode::AssertionHeaderInvalid))?;
         let algorithm = header
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none")
             .parse::<JwsAlgorithm>()
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                TokenErrorCode::AssertionAlgUnsupported,
+            ))?;
         if algorithm == JwsAlgorithm::None && !cfg!(feature = "allow-none-alg") {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
@@ -447,9 +428,7 @@ impl ClientAuthenticator {
                 OpenIdConnectCredentialType::ClientPublicKey,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::CredentialLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::CredentialLookupFailed))?;
 
         for credential in credentials {
             if let OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } =
@@ -475,9 +454,7 @@ impl ClientAuthenticator {
                 OpenIdConnectCredentialType::ClientJsonWebKeySet,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::CredentialLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::CredentialLookupFailed))?;
         for credential in jwks_credentials {
             if let OpenIdConnectCredentialData::ClientJsonWebKeySet {
                 public_keys,
@@ -511,20 +488,19 @@ impl ClientAuthenticator {
 
     pub async fn verify_client_secret_assertion(
         &self,
-        client: &identity_domain::openid_connect::OpenIdConnectClient,
+        client: &OpenidConnectOpenIdConnectClient,
         assertion: &str,
     ) -> Result<JwtPayload, AppError> {
-        let header = jwt::decode_header(assertion).map_err(|error| {
-            AppError::from_code(TokenErrorCode::AssertionHeaderInvalid).with_source(error)
-        })?;
+        let header = jwt::decode_header(assertion)
+            .map_err(AppError::map_source(TokenErrorCode::AssertionHeaderInvalid))?;
         let algorithm = header
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none")
             .parse::<JwsAlgorithm>()
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::AssertionAlgUnsupported).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                TokenErrorCode::AssertionAlgUnsupported,
+            ))?;
         if algorithm == JwsAlgorithm::None && !cfg!(feature = "allow-none-alg") {
             return Err(AppError::from_code(TokenErrorCode::AssertionVerifyFailed));
         }
@@ -541,9 +517,7 @@ impl ClientAuthenticator {
                 OpenIdConnectCredentialType::ClientSecret,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::CredentialLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::CredentialLookupFailed))?;
 
         for credential in credentials {
             if let OpenIdConnectCredentialData::ClientSecret { secret } = credential.data
@@ -560,11 +534,11 @@ impl ClientAuthenticator {
 
 #[derive(Debug, serde::Deserialize)]
 struct RemoteJwks {
-    keys: Vec<identity_domain::key::PublicJwk>,
+    keys: Vec<PublicJwk>,
 }
 
 async fn fetch_and_verify_jwks_uri(
-    jwks_uri: &url::Url,
+    jwks_uri: &Url,
     algorithm: JwsAlgorithm,
     assertion: &str,
 ) -> Result<Option<JwtPayload>, AppError> {
@@ -573,15 +547,13 @@ async fn fetch_and_verify_jwks_uri(
         Duration::from_secs(5),
         conformance_allows_invalid_certs(),
     ))
-    .map_err(|error| {
-        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
-    })?;
+    .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
     let body =
         match fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
             .await
         {
             Ok(body) => body,
-            Err(crate::openid_connect::remote::RemoteFetchError::NotOk) => return Ok(None),
+            Err(RemoteFetchError::NotOk) => return Ok(None),
             Err(error) => {
                 return Err(
                     AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
@@ -589,9 +561,8 @@ async fn fetch_and_verify_jwks_uri(
             }
         };
 
-    let jwks = serde_json::from_slice::<RemoteJwks>(&body).map_err(|error| {
-        AppError::from_code(TokenErrorCode::AssertionVerifyFailed).with_source(error)
-    })?;
+    let jwks = serde_json::from_slice::<RemoteJwks>(&body)
+        .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
     if !cfg!(feature = "allow-none-alg")
         && jwks.keys.iter().any(|jwk| jwk.algorithm() == Some("none"))
     {

@@ -1,4 +1,6 @@
+use super::inline_script_csp_header_value;
 use http::{StatusCode, header};
+use identity_infrastructure::web::tera::render_view;
 use salvo::{Depot, Request, Response, handler};
 
 use crate::{
@@ -31,25 +33,23 @@ pub async fn check_session_iframe(
         nonce: nonce.clone(),
     };
 
-    match identity_infrastructure::web::tera::render_view(
-        &ctx,
-        req.headers(),
-        "oauth2/check_session.html",
-        data,
-    ) {
+    match render_view(&ctx, req.headers(), "oauth2/check_session.html", data) {
         Ok(body) => render_html(res, StatusCode::OK, body),
         Err(error) => render_app_error(res, req.headers(), &ctx, error),
     }
 
     res.headers_mut().insert(
         header::HeaderName::from_static("content-security-policy"),
-        super::inline_script_csp_header_value(&nonce),
+        inline_script_csp_header_value(&nonce),
     );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::controllers::oauth2::routes;
+    use salvo::affix_state::inject;
+
     use http::{StatusCode, header};
     use salvo::{
         Service,
@@ -58,7 +58,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_session_iframe_renders_post_message_script() {
-        let app = crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);

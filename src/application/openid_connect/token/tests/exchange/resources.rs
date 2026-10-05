@@ -1,5 +1,8 @@
 use crate::openid_connect::token::tests::{fixtures::*, *};
+use chrono::Duration;
 use identity_domain::auth::SessionOid;
+use identity_domain::openid_connect::API_RESOURCE;
+use identity_domain::openid_connect::ScopeSet;
 use identity_domain::openid_connect::resource::{
     OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
 };
@@ -40,7 +43,7 @@ impl OAuthResourceRepository for Resources {
                 scopes: vec!["profile".to_owned(), "email".to_owned()],
                 enabled: true,
             }),
-            identity_domain::openid_connect::API_RESOURCE => Some(OAuthResource {
+            API_RESOURCE => Some(OAuthResource {
                 uri: uri.to_owned(),
                 scopes: vec!["account".to_owned()],
                 enabled: false,
@@ -105,7 +108,7 @@ async fn resource_validation_rejects_invalid_targets_and_deduplicates_exact_uris
             .code(),
         10006
     );
-    let scope = identity_domain::openid_connect::ScopeSet::parse("profile email").unwrap();
+    let scope = ScopeSet::parse("profile email").unwrap();
     assert!(
         provider
             .validate_authorization_resources(&[PROFILE.to_owned(), EMAIL.to_owned()], &scope)
@@ -182,7 +185,7 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
                 redirect_uri: "https://client.example.com/callback".to_owned(),
                 redirect_uri_was_supplied: true,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();

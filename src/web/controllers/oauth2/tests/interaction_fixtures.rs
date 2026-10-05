@@ -1,4 +1,10 @@
+use crate::infrastructure::database::entity::session::Model;
+use crate::infrastructure::database::entity::user::Model as UserModel;
+use base64::engine::general_purpose::STANDARD;
+use identity_domain::auth::SessionStatus;
+use identity_domain::key::KeyType;
 use std::{collections::BTreeMap, sync::Arc};
+use uuid::Uuid;
 
 use base64::Engine;
 use chrono::{Duration, Utc};
@@ -31,18 +37,18 @@ use crate::infrastructure::database::entity::{
     login, setting,
 };
 
-pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uuid) {
+pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
     let now = Utc::now();
-    let client_oid = uuid::Uuid::nil();
-    let selected_session_oid = uuid::Uuid::new_v4();
-    let selected_user_oid = uuid::Uuid::new_v4();
-    let symmetric_key_oid = uuid::Uuid::new_v4();
-    let authorization_oid = uuid::Uuid::new_v4();
-    let login_oid = uuid::Uuid::new_v4();
+    let client_oid = Uuid::nil();
+    let selected_session_oid = Uuid::new_v4();
+    let selected_user_oid = Uuid::new_v4();
+    let symmetric_key_oid = Uuid::new_v4();
+    let authorization_oid = Uuid::new_v4();
+    let login_oid = Uuid::new_v4();
 
     let password_setting = setting::Model {
         id: 1,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
         value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
         created_at: now.into(),
@@ -50,7 +56,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
     let installation_initialized_setting = setting::Model {
         id: 2,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
         created_at: now.into(),
@@ -58,7 +64,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
     let domain_setting = setting::Model {
         id: 3,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
         created_at: now.into(),
@@ -66,7 +72,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
     let installation_initialized_at_setting = setting::Model {
         id: 6,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(now).unwrap(),
         created_at: now.into(),
@@ -74,7 +80,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
     let dynamic_registration_setting = setting::Model {
         id: 7,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
         value: serde_json::to_value(false).unwrap(),
         created_at: now.into(),
@@ -82,7 +88,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
     let login_domain_setting = setting::Model {
         id: 12,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
         value: serde_json::to_value(Some("https://ui.example.com".to_owned())).unwrap(),
         created_at: now.into(),
@@ -90,7 +96,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     };
     let device_authorization_setting = setting::Model {
         id: 10,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
         value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: now.into(),
@@ -206,9 +212,9 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
     let symmetric_key = key::Model {
         id: 41,
         oid: symmetric_key_oid,
-        r#type: identity_domain::key::KeyType::Symmetric.to_string(),
+        r#type: KeyType::Symmetric.to_string(),
         data: serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
-            key: base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]),
+            key: STANDARD.encode([0x42u8; 32]),
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
         .unwrap(),
@@ -219,11 +225,11 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         created_at: now.into(),
         updated_at: None,
     };
-    let active_session = crate::infrastructure::database::entity::session::Model {
+    let active_session = Model {
         id: 43,
         oid: selected_session_oid,
         user_id: 47,
-        status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
+        status: SessionStatus::ACTIVE.to_string(),
         acr: None,
         acr_expires_at: None,
         amr: serde_json::json!([]),
@@ -244,7 +250,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, uuid::Uu
         created_at: now.into(),
         updated_at: None,
     };
-    let active_user = crate::infrastructure::database::entity::user::Model {
+    let active_user = UserModel {
         id: 47,
         oid: selected_user_oid,
         name: "Ada Lovelace".to_owned(),

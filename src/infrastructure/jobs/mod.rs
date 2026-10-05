@@ -1,3 +1,4 @@
+use std::time::Duration;
 pub mod authorization_expiration;
 pub mod rotation;
 
@@ -13,9 +14,7 @@ pub async fn spawn_background_workers(
     // backends connect to the same database through separate pools.
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
-        .acquire_timeout(std::time::Duration::from_millis(
-            config.database.connect_timeout,
-        ))
+        .acquire_timeout(Duration::from_millis(config.database.connect_timeout))
         .connect(&config.database.uri)
         .await?;
     if config.database.auto_migrate {

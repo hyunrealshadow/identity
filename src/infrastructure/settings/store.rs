@@ -1,14 +1,18 @@
+use identity_application::observability::BusinessEvent;
+use identity_application::observability::EventValue;
+use identity_application::observability::event_sink;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 use sea_orm::{DatabaseConnection, EntityTrait};
 
 use crate::database::entity::setting;
 use identity_application::{
-    error::{AppError, codes::common::CommonErrorCode},
+    error::AppError,
     setting::{SettingRegistry, SettingsSnapshot, SettingsSource, runtime::RefreshableSetting},
 };
 
@@ -18,7 +22,7 @@ pub struct SettingsStore {
     db: DatabaseConnection,
     registry: SettingRegistry,
     snapshot: RwLock<Arc<SettingsSnapshot>>,
-    refresh_lock: tokio::sync::Mutex<()>,
+    refresh_lock: Mutex<()>,
 }
 
 impl SettingsStore {
@@ -28,7 +32,7 @@ impl SettingsStore {
             db,
             registry,
             snapshot: RwLock::new(Arc::new(snapshot)),
-            refresh_lock: tokio::sync::Mutex::new(()),
+            refresh_lock: Mutex::new(()),
         })
     }
 
@@ -58,13 +62,12 @@ async fn load(
     let rows = setting::Entity::find()
         .all(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
     let raw: HashMap<_, _> = rows.into_iter().map(|row| (row.key, row.value)).collect();
     Ok(registry.resolve(&raw, previous)?)
 }
 
 fn emit_changes(previous: &SettingsSnapshot, next: &SettingsSnapshot) {
-    use identity_application::observability::{BusinessEvent, EventValue, event_sink};
     for key in previous.changed_keys(next) {
         event_sink().emit(
             BusinessEvent::business("configuration.changed")
@@ -96,6 +99,8 @@ impl SettingsSource for SettingsStore {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use chrono::Utc;
     use identity_application::setting::{
         DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, OpenIdConnectSettings,
@@ -107,11 +112,11 @@ mod tests {
 
     use super::*;
 
-    fn row<S: SettingDefinition>(id: i32, value: serde_json::Value) -> setting::Model {
+    fn row<S: SettingDefinition>(id: i32, value: Value) -> setting::Model {
         row_at(id, S::KEY, value)
     }
 
-    fn row_at(id: i32, key: &str, value: serde_json::Value) -> setting::Model {
+    fn row_at(id: i32, key: &str, value: Value) -> setting::Model {
         setting::Model {
             id,
             oid: Uuid::new_v4(),

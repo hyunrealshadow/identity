@@ -174,75 +174,76 @@ pub enum AuthorizeErrorCode {
 impl AppErrorCode for AuthorizeErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::ClientIdInvalid => ErrorKind::Validation,
-            Self::ClientNotFound => ErrorKind::Validation,
-            Self::ClientLookupFailed => ErrorKind::Internal,
-            Self::ResponseTypeInvalid => ErrorKind::Validation,
-            Self::ResponseModeInvalid => ErrorKind::Validation,
-            Self::RedirectUriInvalid => ErrorKind::Validation,
-            Self::ScopeInvalid => ErrorKind::Validation,
-            Self::OpenidScopeRequired => ErrorKind::Validation,
-            Self::DisplayValueInvalid => ErrorKind::Validation,
-            Self::PromptValueInvalid => ErrorKind::Validation,
-            Self::PromptNoneCombined => ErrorKind::Validation,
-            Self::MaxAgeInvalid => ErrorKind::Validation,
-            Self::RequestUriInvalid => ErrorKind::Validation,
-            Self::CodeChallengeMethodInvalid => ErrorKind::Validation,
-            Self::RequestAndUriConflict => ErrorKind::Validation,
-            Self::RequiredParamMissing => ErrorKind::Validation,
-            Self::RedirectUriNotRegistered => ErrorKind::Validation,
-            Self::RequestUriNotHttps => ErrorKind::Validation,
-            Self::RequestUriHasFragment => ErrorKind::Validation,
-            Self::RequestUriUnsafeHost => ErrorKind::Validation,
-            Self::RequestUriNotRegistered => ErrorKind::Validation,
-            Self::RequestUriFetchFailed => ErrorKind::Validation,
-            Self::RequestUriNot200 => ErrorKind::Validation,
-            Self::RequestUriTooLarge => ErrorKind::Validation,
-            Self::RequestUriReadFailed => ErrorKind::Validation,
-            Self::RequestObjectHeaderInvalid => ErrorKind::Validation,
-            Self::RequestObjectDecodeFailed => ErrorKind::Validation,
-            Self::RequestObjectAlgUnsupported => ErrorKind::Validation,
-            Self::CredentialLookupFailed => ErrorKind::Internal,
-            Self::RequestObjectKeyInvalid => ErrorKind::Validation,
-            Self::RequestObjectVerifyFailed => ErrorKind::Validation,
-            Self::RequestObjectIssMismatch => ErrorKind::Validation,
-            Self::RequestObjectAudMismatch => ErrorKind::Validation,
-            Self::RequestObjectExpired => ErrorKind::Validation,
-            Self::RequestObjectNotYetValid => ErrorKind::Validation,
-            Self::RequestObjectIatFuture => ErrorKind::Validation,
-            Self::RequestObjectFieldMismatch => ErrorKind::Validation,
-            Self::RequestObjectJsonInvalid => ErrorKind::Validation,
-            Self::ClaimsParamInvalid => ErrorKind::Validation,
-            Self::ClaimsNotObject => ErrorKind::Validation,
-            Self::ClaimsFieldNotObject => ErrorKind::Validation,
-            Self::RequestObjectEncodingInvalid => ErrorKind::Validation,
-            Self::RequestObjectBase64Invalid => ErrorKind::Validation,
-            Self::RequestObjectPayloadInvalid => ErrorKind::Validation,
-            Self::SerializeRequestFailed => ErrorKind::Internal,
-            Self::StoreRequestFailed => ErrorKind::Internal,
-            Self::StoreLoginFailed => ErrorKind::Internal,
-            Self::LoadRequestFailed => ErrorKind::Internal,
-            Self::AuthzRequestNotFound => ErrorKind::Validation,
-            Self::AuthzRequestTypeMismatch => ErrorKind::Validation,
-            Self::DeserializeRequestFailed => ErrorKind::Internal,
-            Self::StoredClientIdInvalid => ErrorKind::Internal,
-            Self::LoadLoginFailed => ErrorKind::Internal,
-            Self::LoginNotFound => ErrorKind::Validation,
-            Self::StoredRedirectUriInvalid => ErrorKind::Internal,
-            Self::SerializeCodeFailed => ErrorKind::Internal,
-            Self::StoreCodeFailed => ErrorKind::Internal,
-            Self::LoginIdInvalid => ErrorKind::Validation,
-            Self::ScopeNotAssignedToClient => ErrorKind::Validation,
-            Self::ImplicitNonceRequired => ErrorKind::Validation,
-            Self::ImplicitUserNotFound => ErrorKind::Validation,
-            Self::IdTokenHintIssuerInvalid => ErrorKind::Validation,
-            Self::RequestObjectEncryptionUnsupported => ErrorKind::Validation,
-            Self::AuthzInteractionConflict => ErrorKind::Validation,
-            Self::StoredSessionIdInvalid => ErrorKind::Internal,
-            Self::EncryptionKeyNotFound => ErrorKind::Internal,
-            Self::EncryptionFailed => ErrorKind::Internal,
-            Self::InitiateLoginUriNotRegistered => ErrorKind::Validation,
-            Self::ClientGrantNotAllowed => ErrorKind::Validation,
+            Self::ClientIdInvalid
+            | Self::ClientNotFound
+            | Self::ResponseTypeInvalid
+            | Self::ResponseModeInvalid
+            | Self::RedirectUriInvalid
+            | Self::ScopeInvalid
+            | Self::OpenidScopeRequired
+            | Self::DisplayValueInvalid
+            | Self::PromptValueInvalid
+            | Self::PromptNoneCombined
+            | Self::MaxAgeInvalid
+            | Self::RequestUriInvalid
+            | Self::CodeChallengeMethodInvalid
+            | Self::RequestAndUriConflict
+            | Self::RequiredParamMissing
+            | Self::RedirectUriNotRegistered
+            | Self::RequestUriNotHttps
+            | Self::RequestUriHasFragment
+            | Self::RequestUriUnsafeHost
+            | Self::RequestUriNotRegistered
+            | Self::RequestUriFetchFailed
+            | Self::RequestUriNot200
+            | Self::RequestUriTooLarge
+            | Self::RequestUriReadFailed
+            | Self::RequestObjectHeaderInvalid
+            | Self::RequestObjectDecodeFailed
+            | Self::RequestObjectAlgUnsupported
+            | Self::RequestObjectKeyInvalid
+            | Self::RequestObjectVerifyFailed
+            | Self::RequestObjectIssMismatch
+            | Self::RequestObjectAudMismatch
+            | Self::RequestObjectExpired
+            | Self::RequestObjectNotYetValid
+            | Self::RequestObjectIatFuture
+            | Self::RequestObjectFieldMismatch
+            | Self::RequestObjectJsonInvalid
+            | Self::ClaimsParamInvalid
+            | Self::ClaimsNotObject
+            | Self::ClaimsFieldNotObject
+            | Self::RequestObjectEncodingInvalid
+            | Self::RequestObjectBase64Invalid
+            | Self::RequestObjectPayloadInvalid
+            | Self::AuthzRequestNotFound
+            | Self::AuthzRequestTypeMismatch
+            | Self::LoginNotFound
+            | Self::LoginIdInvalid
+            | Self::ScopeNotAssignedToClient
+            | Self::ImplicitNonceRequired
+            | Self::ImplicitUserNotFound
+            | Self::IdTokenHintIssuerInvalid
+            | Self::RequestObjectEncryptionUnsupported
+            | Self::AuthzInteractionConflict
+            | Self::InitiateLoginUriNotRegistered
+            | Self::ClientGrantNotAllowed => ErrorKind::Validation,
+
+            Self::ClientLookupFailed
+            | Self::CredentialLookupFailed
+            | Self::SerializeRequestFailed
+            | Self::StoreRequestFailed
+            | Self::StoreLoginFailed
+            | Self::LoadRequestFailed
+            | Self::DeserializeRequestFailed
+            | Self::StoredClientIdInvalid
+            | Self::LoadLoginFailed
+            | Self::StoredRedirectUriInvalid
+            | Self::SerializeCodeFailed
+            | Self::StoreCodeFailed
+            | Self::StoredSessionIdInvalid
+            | Self::EncryptionKeyNotFound
+            | Self::EncryptionFailed => ErrorKind::Internal,
         }
     }
 

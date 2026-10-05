@@ -10,6 +10,7 @@ use identity_application::user::{
     UserCredential, UserCredentialOid, UserOid,
     repository::{UserCredentialRepository, UserCredentialRepositoryError},
 };
+use uuid::Uuid;
 
 use super::shared::lock_user_credentials;
 use sea_orm::{
@@ -37,7 +38,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         credential_type: CredentialType,
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError> {
         let rows = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
             .inner_join(UserCredentialEntity)
             .filter(user_credential::Column::Type.eq(credential_type.as_ref()))
             .filter(
@@ -98,7 +99,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 user_credential::Column::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
             .filter(user_credential::Column::Type.eq(CredentialType::Password.as_ref()))
             .filter(
                 Condition::any()
@@ -135,7 +136,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 user_credential::Column::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
             .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
             .filter(
                 Condition::any()
@@ -197,7 +198,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
             .one(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
@@ -211,7 +212,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
             for value in serialized {
                 user_credential::ActiveModel {
-                    oid: Set(uuid::Uuid::new_v4()),
+                    oid: Set(Uuid::new_v4()),
                     user_id: Set(user.id),
                     r#type: Set(credential_type.clone()),
                     data: Set(value),
@@ -253,7 +254,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
             .one(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
@@ -287,7 +288,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         user_credential::ActiveModel {
-            oid: Set(uuid::Uuid::new_v4()),
+            oid: Set(Uuid::new_v4()),
             user_id: Set(user.id),
             r#type: Set(CredentialType::Otp.to_string()),
             data: Set(otp),
@@ -300,7 +301,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         for value in recovery_codes {
             user_credential::ActiveModel {
-                oid: Set(uuid::Uuid::new_v4()),
+                oid: Set(Uuid::new_v4()),
                 user_id: Set(user.id),
                 r#type: Set(CredentialType::RecoveryCode.to_string()),
                 data: Set(value),
@@ -338,7 +339,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(user_oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
             .one(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
@@ -369,7 +370,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         for value in serialized {
             user_credential::ActiveModel {
-                oid: Set(uuid::Uuid::new_v4()),
+                oid: Set(Uuid::new_v4()),
                 user_id: Set(user.id),
                 r#type: Set(CredentialType::RecoveryCode.to_string()),
                 data: Set(value),
@@ -393,7 +394,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         credential_oid: UserCredentialOid,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let result = UserCredentialEntity::delete_many()
-            .filter(user_credential::Column::Oid.eq(uuid::Uuid::from(credential_oid)))
+            .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
             .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
             .filter(
                 Condition::any()
@@ -409,6 +410,8 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
+    use identity_application::user::OtpAlgorithm;
+
     use crate::database::entity::user_credential;
     use chrono::Utc;
     use identity_application::user::{
@@ -467,7 +470,7 @@ mod tests {
         let repo = UserCredentialRepositoryImpl::new(db);
         let otp = OtpCredentialData {
             secret: "secret".to_owned(),
-            algorithm: identity_application::user::OtpAlgorithm::Sha1,
+            algorithm: OtpAlgorithm::Sha1,
             digits: 6,
             period: 30,
             last_used_counter: None,

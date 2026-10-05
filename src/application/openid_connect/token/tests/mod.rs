@@ -1,4 +1,23 @@
-use crate::setting::{AppSettings, InstallationSettings, SettingsSnapshot};
+use crate::openid_connect::tests::fixtures::client::test_client;
+use crate::openid_connect::tests::fixtures::client::test_metadata;
+use crate::openid_connect::tests::fixtures::client::test_platforms;
+use crate::openid_connect::tests::fixtures::client::test_scopes;
+use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
+use crate::openid_connect::user_info::UserInfoService;
+use crate::setting::{AppSettings, InstallationSettings};
+use chrono::Duration;
+use identity_domain::data_protection::KeyRing;
+use identity_domain::key::JwsAlgorithm;
+use josekit::jwk::Jwk;
+use josekit::jwk::alg::ec::EcCurve;
+use josekit::jwk::alg::ec::EcKeyPair;
+use josekit::jwk::alg::ed::EdCurve;
+use josekit::jwk::alg::ed::EdKeyPair;
+use josekit::jwk::alg::rsa::RsaKeyPair;
+use josekit::jwk::alg::rsapss::RsaPssKeyPair;
+use josekit::util::SHA_256;
+use josekit::util::SHA_384;
+use josekit::util::SHA_512;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -97,15 +116,13 @@ fn key_jwk_binding(key: &Key, alg: &str, binding_oid: Uuid) -> KeyJwk {
         KeyData::Symmetric(_) => panic!("signing key bindings require asymmetric keys"),
     };
 
-    let mut jwk = if let Ok(key_pair) =
-        josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(private_key, None, None, None)
-    {
+    let mut jwk = if let Ok(key_pair) = RsaPssKeyPair::from_pem(private_key, None, None, None) {
         key_pair.to_jwk_public_key()
-    } else if let Ok(key_pair) = josekit::jwk::alg::rsa::RsaKeyPair::from_pem(private_key) {
+    } else if let Ok(key_pair) = RsaKeyPair::from_pem(private_key) {
         key_pair.to_jwk_public_key()
-    } else if let Ok(key_pair) = josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key, None) {
+    } else if let Ok(key_pair) = EcKeyPair::from_pem(private_key, None) {
         key_pair.to_jwk_public_key()
-    } else if let Ok(key_pair) = josekit::jwk::alg::ed::EdKeyPair::from_pem(private_key) {
+    } else if let Ok(key_pair) = EdKeyPair::from_pem(private_key) {
         key_pair.to_jwk_public_key()
     } else {
         panic!("unsupported test key format");
@@ -160,18 +177,18 @@ fn key_data_for_algorithm(alg: &str) -> AsymmetricKeyData {
         "RS256" => rsa_key_data(2048),
         "RS384" => rsa_key_data(3072),
         "RS512" => rsa_key_data(4096),
-        "ES256" => ec_key_data(josekit::jwk::alg::ec::EcCurve::P256),
-        "ES384" => ec_key_data(josekit::jwk::alg::ec::EcCurve::P384),
-        "ES512" => ec_key_data(josekit::jwk::alg::ec::EcCurve::P521),
-        "ES256K" => ec_key_data(josekit::jwk::alg::ec::EcCurve::Secp256k1),
-        "EdDSA" => ed_key_data(josekit::jwk::alg::ed::EdCurve::Ed25519),
+        "ES256" => ec_key_data(EcCurve::P256),
+        "ES384" => ec_key_data(EcCurve::P384),
+        "ES512" => ec_key_data(EcCurve::P521),
+        "ES256K" => ec_key_data(EcCurve::Secp256k1),
+        "EdDSA" => ed_key_data(EdCurve::Ed25519),
         other => panic!("unsupported test alg: {other}"),
     }
 }
 
 fn rsa_key_data(bits: u32) -> AsymmetricKeyData {
-    let jwk = josekit::jwk::Jwk::generate_rsa_key(bits).unwrap();
-    let key_pair = josekit::jwk::alg::rsa::RsaKeyPair::from_jwk(&jwk).unwrap();
+    let jwk = Jwk::generate_rsa_key(bits).unwrap();
+    let key_pair = RsaKeyPair::from_jwk(&jwk).unwrap();
     AsymmetricKeyData {
         private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
         public_key: String::from_utf8(key_pair.to_pem_public_key()).unwrap(),
@@ -179,9 +196,9 @@ fn rsa_key_data(bits: u32) -> AsymmetricKeyData {
     }
 }
 
-fn ec_key_data(curve: josekit::jwk::alg::ec::EcCurve) -> AsymmetricKeyData {
-    let jwk = josekit::jwk::Jwk::generate_ec_key(curve).unwrap();
-    let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
+fn ec_key_data(curve: EcCurve) -> AsymmetricKeyData {
+    let jwk = Jwk::generate_ec_key(curve).unwrap();
+    let key_pair = EcKeyPair::from_jwk(&jwk).unwrap();
     AsymmetricKeyData {
         private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
         public_key: String::from_utf8(key_pair.to_pem_public_key()).unwrap(),
@@ -189,9 +206,9 @@ fn ec_key_data(curve: josekit::jwk::alg::ec::EcCurve) -> AsymmetricKeyData {
     }
 }
 
-fn ed_key_data(curve: josekit::jwk::alg::ed::EdCurve) -> AsymmetricKeyData {
-    let jwk = josekit::jwk::Jwk::generate_ed_key(curve).unwrap();
-    let key_pair = josekit::jwk::alg::ed::EdKeyPair::from_jwk(&jwk).unwrap();
+fn ed_key_data(curve: EdCurve) -> AsymmetricKeyData {
+    let jwk = Jwk::generate_ed_key(curve).unwrap();
+    let key_pair = EdKeyPair::from_jwk(&jwk).unwrap();
     AsymmetricKeyData {
         private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
         public_key: String::from_utf8(key_pair.to_pem_public_key()).unwrap(),
@@ -226,13 +243,12 @@ fn test_key_jwk_generator() -> Arc<dyn KeyJwkGenerator> {
 
 fn rsa_pss_key_for_algorithm(alg: &str) -> Option<AsymmetricKeyData> {
     let (hash, salt_len) = match alg {
-        "PS256" => (josekit::util::SHA_256, 32),
-        "PS384" => (josekit::util::SHA_384, 48),
-        "PS512" => (josekit::util::SHA_512, 64),
+        "PS256" => (SHA_256, 32),
+        "PS384" => (SHA_384, 48),
+        "PS512" => (SHA_512, 64),
         _ => return None,
     };
-    let key_pair =
-        josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(2048, hash, hash, salt_len).unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, hash, hash, salt_len).unwrap();
 
     Some(AsymmetricKeyData {
         private_key: String::from_utf8(key_pair.to_pem_private_key()).unwrap(),
@@ -270,9 +286,7 @@ fn build_token_service_with_key(
 ) -> TokenService {
     let binding = key_jwk_binding(&key, &key_data_algorithm(&key), Uuid::new_v4());
     TokenService::new(TokenServiceDependencies {
-        device_repo: Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
         client_authorization_repo: repo,
         key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -288,7 +302,7 @@ fn build_token_service_with_key(
             data: OpenIdConnectCredentialData::ClientSecret {
                 secret: "secret-123".to_string(),
             },
-            expires_at: Utc::now() + chrono::Duration::days(1),
+            expires_at: Utc::now() + Duration::days(1),
             revoked_at: None,
             created_at: Utc::now(),
             updated_at: None,
@@ -312,7 +326,7 @@ fn build_token_service_with_scoped_claims(
     let user = test_user(user_oid);
     (
         TokenService::new(TokenServiceDependencies {
-            device_repo: Arc::new(crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new()),
+            device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
             client_authorization_repo: repo,
             key_repo: Arc::new(key_repo_with_keys(vec![key.clone()])),
             key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -326,7 +340,7 @@ fn build_token_service_with_scoped_claims(
                 data: OpenIdConnectCredentialData::ClientSecret {
                     secret: "secret-123".to_string(),
                 },
-                expires_at: Utc::now() + chrono::Duration::days(1),
+                expires_at: Utc::now() + Duration::days(1),
                 revoked_at: None,
                 created_at: Utc::now(),
                 updated_at: None,
@@ -363,7 +377,7 @@ async fn signing_key_provider_avoids_hot_path_repository_queries() {
     };
     let provider = Arc::new(StaticRuntimeKeyRingProvider {
         value: Arc::new(RuntimeKeyRing::new(
-            identity_domain::data_protection::KeyRing::new(vec![]),
+            KeyRing::new(vec![]),
             Some(RuntimeSigningKey {
                 key_id: Uuid::new_v4().to_string(),
                 private_key_pem,
@@ -373,9 +387,7 @@ async fn signing_key_provider_avoids_hot_path_repository_queries() {
     });
 
     let service = TokenService::new(TokenServiceDependencies {
-        device_repo: Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
         client_authorization_repo: Arc::new(MockClientAuthorizationRepository::new()),
         key_repo: Arc::new(MockKeyRepository::new()),
         key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
@@ -411,7 +423,7 @@ async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
     ]));
 
     let (kid, _, alg) = service
-        .load_configured_signing_key(Some(&[identity_domain::key::JwsAlgorithm::Asymmetric(
+        .load_configured_signing_key(Some(&[JwsAlgorithm::Asymmetric(
             JwaSigningAlgorithm::Es256,
         )]))
         .await
@@ -420,15 +432,15 @@ async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
     assert_eq!(alg.as_str(), "ES256");
     let (_, _, fallback_alg) = service
         .load_configured_signing_key(Some(&[
-            identity_domain::key::JwsAlgorithm::Asymmetric(JwaSigningAlgorithm::Es384),
-            identity_domain::key::JwsAlgorithm::Asymmetric(JwaSigningAlgorithm::Es256),
+            JwsAlgorithm::Asymmetric(JwaSigningAlgorithm::Es384),
+            JwsAlgorithm::Asymmetric(JwaSigningAlgorithm::Es256),
         ]))
         .await
         .unwrap();
     assert_eq!(fallback_alg.as_str(), "ES256");
     assert!(
         service
-            .load_configured_signing_key(Some(&[identity_domain::key::JwsAlgorithm::Asymmetric(
+            .load_configured_signing_key(Some(&[JwsAlgorithm::Asymmetric(
                 JwaSigningAlgorithm::Es384,
             )]))
             .await
@@ -439,9 +451,6 @@ async fn id_token_key_selection_uses_client_algorithm_and_published_binding() {
 
 #[tokio::test]
 async fn require_auth_time_never_invents_an_authentication_timestamp() {
-    use crate::openid_connect::tests::fixtures::client::{
-        test_client, test_metadata, test_platforms, test_scopes,
-    };
     let user_oid = Uuid::new_v4();
     let user = test_user(user_oid);
     let service =
@@ -494,8 +503,8 @@ fn user_info_service_with_key(
     repo: Arc<MockClientAuthorizationRepository>,
     key: Key,
     user_oid: Uuid,
-) -> crate::openid_connect::user_info::UserInfoService {
-    crate::openid_connect::user_info::UserInfoService::new(
+) -> UserInfoService {
+    UserInfoService::new(
         Arc::new(InMemoryUserRepository {
             user: test_user(user_oid),
         }),

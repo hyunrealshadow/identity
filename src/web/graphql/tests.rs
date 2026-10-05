@@ -1,4 +1,9 @@
+use chrono::DateTime;
+use http::header::WWW_AUTHENTICATE;
+use salvo::Response;
 use std::sync::Arc;
+use std::time::Duration as TimeDuration;
+use std::time::SystemTime;
 
 use chrono::{Duration, Utc};
 use http::StatusCode;
@@ -93,12 +98,7 @@ async fn graphql_http_rejects_a_token_for_another_audience() {
     let mut response = graphql_post(&fixture, "query { viewer { account { id } } }").await;
 
     assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
-    assert!(
-        response
-            .headers()
-            .get(http::header::WWW_AUTHENTICATE)
-            .is_some()
-    );
+    assert!(response.headers().get(WWW_AUTHENTICATE).is_some());
     let body: Value = response.take_json().await.unwrap();
     assert_eq!(body["errors"][0]["message"], "invalid access token");
 }
@@ -196,7 +196,7 @@ async fn graphql_http_rejects_an_unconfigured_origin() {
     assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
 }
 
-async fn graphql_post(fixture: &GraphqlFixture, query: &str) -> salvo::Response {
+async fn graphql_post(fixture: &GraphqlFixture, query: &str) -> Response {
     TestClient::post("http://identity.test/graphql")
         .bearer_auth(&fixture.token)
         .json(&json!({ "query": query }))
@@ -314,7 +314,7 @@ fn access_token(
     audience: &str,
     scope: &str,
 ) -> String {
-    let now = std::time::SystemTime::now();
+    let now = SystemTime::now();
     let mut header = JwsHeader::new();
     header.set_token_type(JwtTokenType::ACCESS_TOKEN);
     header.set_key_id(key_oid.to_string());
@@ -323,7 +323,7 @@ fn access_token(
     payload.set_subject(user_oid.to_string());
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
-    payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
+    payload.set_expires_at(&(now + TimeDuration::from_secs(3600)));
     payload.set_jwt_id(token_oid.to_string());
     payload
         .set_claim(JwtClaimNames::CLIENT_ID, Some(json!(client_oid)))
@@ -341,7 +341,7 @@ fn access_token(
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()
 }
 
-fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
+fn setting_rows(now: DateTime<Utc>) -> Vec<setting::Model> {
     vec![
         setting::Model {
             id: 1,
@@ -381,7 +381,7 @@ fn setting_rows(now: chrono::DateTime<Utc>) -> Vec<setting::Model> {
     ]
 }
 
-fn setting_model<S>(id: i32, value: S::Value, now: chrono::DateTime<Utc>) -> setting::Model
+fn setting_model<S>(id: i32, value: S::Value, now: DateTime<Utc>) -> setting::Model
 where
     S: SettingDefinition,
 {
@@ -395,7 +395,7 @@ where
     }
 }
 
-fn test_user(oid: Uuid, now: chrono::DateTime<Utc>) -> user::Model {
+fn test_user(oid: Uuid, now: DateTime<Utc>) -> user::Model {
     user::Model {
         id: 10,
         oid,

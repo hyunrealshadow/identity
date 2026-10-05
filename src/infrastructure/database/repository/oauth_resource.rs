@@ -17,6 +17,9 @@ impl OAuthResourceRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+    use uuid::Uuid;
+
     use super::*;
     use sea_orm::{DatabaseBackend, MockDatabase};
 
@@ -24,12 +27,12 @@ mod tests {
     async fn lookup_preserves_exact_identifiers_scopes_and_disabled_state() {
         let uri = "https://API.example.com/resource?tenant=1";
         let model = resource::Model {
-            oid: uuid::Uuid::new_v4(),
+            oid: Uuid::new_v4(),
             uri: uri.to_owned(),
             name: "Resource".to_owned(),
             scopes: serde_json::json!(["account.read"]),
             enabled: false,
-            created_at: chrono::Utc::now().into(),
+            created_at: Utc::now().into(),
             updated_at: None,
         };
         let db = MockDatabase::new(DatabaseBackend::Postgres)

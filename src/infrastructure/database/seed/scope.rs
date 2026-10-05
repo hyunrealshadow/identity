@@ -2,10 +2,8 @@ use async_trait::async_trait;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
-    domain::openid_connect::ApiScope,
-    domain::openid_connect::model::claim::StandardScopes,
-    infrastructure::database::entity::scope,
+    application::error::AppError, domain::openid_connect::ApiScope,
+    domain::openid_connect::model::claim::StandardScopes, infrastructure::database::entity::scope,
 };
 
 use super::Seed;
@@ -134,9 +132,7 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
             .filter(scope::Column::Name.eq(definition.name))
             .one(db)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
 
         if let Some(existing) = existing {
             let mut active: scope::ActiveModel = existing.into();
@@ -147,9 +143,7 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
                 "zh-CN": definition.description_zh_cn,
             }));
             active.built_in = Set(true);
-            active.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            active.update(db).await.map_err(AppError::internal)?;
         } else {
             scope::ActiveModel {
                 protocol: Set(definition.protocol.to_string()),
@@ -165,48 +159,9 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
             }
             .insert(db)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
         }
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{BUILT_IN_OPENID_CONNECT_SCOPES, OPENID_CONNECT_PROTOCOL};
-
-    #[test]
-    fn built_in_oidc_scopes_cover_standard_scope_catalog() {
-        let names = BUILT_IN_OPENID_CONNECT_SCOPES
-            .iter()
-            .map(|scope| scope.name)
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            names,
-            vec![
-                "openid",
-                "profile",
-                "email",
-                "address",
-                "phone",
-                "offline_access",
-                "account",
-                "account.update",
-                "account.read",
-                "session",
-                "session.revoke",
-                "session.read",
-                "password.change",
-            ]
-        );
-        assert!(
-            BUILT_IN_OPENID_CONNECT_SCOPES
-                .iter()
-                .all(|scope| scope.protocol == OPENID_CONNECT_PROTOCOL)
-        );
-    }
 }

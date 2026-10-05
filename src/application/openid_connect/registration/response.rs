@@ -98,9 +98,9 @@ pub struct DynamicClientRegistrationResponse {
 
 pub(super) fn registration_client_uri(issuer: &Url, client_id: Uuid) -> Result<Url, AppError> {
     let base = issuer.as_str().trim_end_matches('/');
-    Url::parse(&format!("{base}/oauth2/register/{client_id}")).map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
-    })
+    Url::parse(&format!("{base}/oauth2/register/{client_id}")).map_err(AppError::map_source(
+        RegistrationErrorCode::ClientLookupFailed,
+    ))
 }
 
 pub(super) fn response_from_client(

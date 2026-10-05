@@ -1,3 +1,6 @@
+use super::rotation::KEY_LIFETIME;
+use crate::key::runtime::RuntimeKeyRingProvider;
+use identity_domain::key::KeyJwk;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -39,7 +42,7 @@ pub struct AsymmetricKeyService {
     generator: Arc<dyn AsymmetricKeyGenerator>,
     jwk_generator: Arc<dyn KeyJwkGenerator>,
     jwk_repo: Option<Arc<dyn KeyJwkRepository>>,
-    runtime_key_ring: Option<Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>>,
+    runtime_key_ring: Option<Arc<dyn RuntimeKeyRingProvider>>,
 }
 
 impl AsymmetricKeyService {
@@ -62,7 +65,7 @@ impl AsymmetricKeyService {
     #[must_use]
     pub fn with_runtime_key_ring(
         mut self,
-        runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+        runtime_key_ring: Arc<dyn RuntimeKeyRingProvider>,
     ) -> Self {
         self.runtime_key_ring = Some(runtime_key_ring);
         self
@@ -79,7 +82,7 @@ impl AsymmetricKeyService {
         Ok(self.repo.list_active_asymmetric().await?)
     }
 
-    pub async fn list_available_jwks(&self) -> Result<Vec<identity_domain::key::KeyJwk>, AppError> {
+    pub async fn list_available_jwks(&self) -> Result<Vec<KeyJwk>, AppError> {
         match self.jwk_repo {
             Some(ref jwk_repo) => {
                 let mut jwks = jwk_repo.list_active().await?;
@@ -117,7 +120,7 @@ impl AsymmetricKeyService {
             data.certificate = Some(certificate);
         }
 
-        let expires_at = Some(Utc::now() + super::rotation::KEY_LIFETIME);
+        let expires_at = Some(Utc::now() + KEY_LIFETIME);
         let key = self
             .repo
             .create(&KeyData::Asymmetric(data.clone()), expires_at)
@@ -191,7 +194,7 @@ impl AsymmetricKeyService {
     }
 }
 
-fn prioritize_current_signing_key(jwks: &mut [identity_domain::key::KeyJwk], key_id: &str) {
+fn prioritize_current_signing_key(jwks: &mut [KeyJwk], key_id: &str) {
     if let Some(position) = jwks
         .iter()
         .position(|binding| binding.jwk.key_id() == Some(key_id))

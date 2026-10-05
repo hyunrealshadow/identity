@@ -1,4 +1,10 @@
+use crate::infrastructure::database::entity::session::Model;
+use crate::infrastructure::database::entity::user::Model as UserModel;
+use base64::engine::general_purpose::STANDARD;
+use identity_domain::auth::SessionStatus;
+use identity_domain::key::KeyType;
 use std::{collections::BTreeMap, sync::Arc};
+use uuid::Uuid;
 
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
@@ -34,9 +40,9 @@ use crate::infrastructure::database::entity::{
 
 #[derive(Debug, Clone)]
 pub(super) struct ContinueFixture {
-    pub(super) selection: Option<(uuid::Uuid, uuid::Uuid)>,
-    pub(super) active_session: Option<(uuid::Uuid, uuid::Uuid)>,
-    pub(super) additional_active_sessions: Vec<(uuid::Uuid, uuid::Uuid, String, String)>,
+    pub(super) selection: Option<(Uuid, Uuid)>,
+    pub(super) active_session: Option<(Uuid, Uuid)>,
+    pub(super) additional_active_sessions: Vec<(Uuid, Uuid, String, String)>,
     pub(super) use_selection_as_active_session: bool,
     pub(super) selection_source: Option<SelectionSource>,
     pub(super) prompt: Option<String>,
@@ -73,18 +79,16 @@ impl Default for ContinueFixture {
     }
 }
 
-pub(super) async fn continue_state(
-    fixture: ContinueFixture,
-) -> (AppState, String, Option<uuid::Uuid>) {
+pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, String, Option<Uuid>) {
     let now = Utc::now();
     let should_mock_auto_selection_write = fixture.selection.is_none()
         && (fixture.active_session.is_some() || !fixture.additional_active_sessions.is_empty())
         && fixture.max_age.is_none()
         && !matches!(fixture.prompt.as_deref(), Some("login" | "select_account"));
-    let client_oid = uuid::Uuid::new_v4();
-    let authorization_oid = uuid::Uuid::new_v4();
-    let login_oid = uuid::Uuid::new_v4();
-    let symmetric_key_oid = uuid::Uuid::new_v4();
+    let client_oid = Uuid::new_v4();
+    let authorization_oid = Uuid::new_v4();
+    let login_oid = Uuid::new_v4();
+    let symmetric_key_oid = Uuid::new_v4();
     let selected_session_oid = fixture
         .selection
         .as_ref()
@@ -106,7 +110,7 @@ pub(super) async fn continue_state(
 
     let password_setting = setting::Model {
         id: 1,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
         value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
         created_at: now.into(),
@@ -114,7 +118,7 @@ pub(super) async fn continue_state(
     };
     let installation_initialized_setting = setting::Model {
         id: 2,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
         created_at: now.into(),
@@ -122,7 +126,7 @@ pub(super) async fn continue_state(
     };
     let domain_setting = setting::Model {
         id: 3,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
         created_at: now.into(),
@@ -130,7 +134,7 @@ pub(super) async fn continue_state(
     };
     let installation_initialized_at_setting = setting::Model {
         id: 6,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(now).unwrap(),
         created_at: now.into(),
@@ -138,7 +142,7 @@ pub(super) async fn continue_state(
     };
     let dynamic_registration_setting = setting::Model {
         id: 7,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
         value: serde_json::to_value(false).unwrap(),
         created_at: now.into(),
@@ -146,7 +150,7 @@ pub(super) async fn continue_state(
     };
     let login_domain_setting = setting::Model {
         id: 12,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
         value: serde_json::to_value(Some("https://ui.example.com".to_owned())).unwrap(),
         created_at: now.into(),
@@ -154,7 +158,7 @@ pub(super) async fn continue_state(
     };
     let device_authorization_setting = setting::Model {
         id: 10,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
         value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: now.into(),
@@ -226,7 +230,7 @@ pub(super) async fn continue_state(
     };
     let authorization_code_model = client_authorization::Model {
         id: 53,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         client_id: client_model.id,
         r#type: ClientAuthorizationType::AuthorizationCode.to_string(),
         data: serde_json::json!({
@@ -234,8 +238,8 @@ pub(super) async fn continue_state(
             "nonce": null,
             "code_challenge": null,
             "code_challenge_method": null,
-            "user_oid": selected_user_oid.unwrap_or_else(uuid::Uuid::new_v4).to_string(),
-            "session_oid": selected_session_oid.unwrap_or_else(uuid::Uuid::new_v4).to_string(),
+            "user_oid": selected_user_oid.unwrap_or_else(Uuid::new_v4).to_string(),
+            "session_oid": selected_session_oid.unwrap_or_else(Uuid::new_v4).to_string(),
             "acr": null,
             "redirect_uri": "https://client.example.com/callback",
             "auth_time": selected_session_oid.map(|_| now.timestamp()),
@@ -320,9 +324,9 @@ pub(super) async fn continue_state(
     let symmetric_key = key::Model {
         id: 41,
         oid: symmetric_key_oid,
-        r#type: identity_domain::key::KeyType::Symmetric.to_string(),
+        r#type: KeyType::Symmetric.to_string(),
         data: serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
-            key: base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]),
+            key: STANDARD.encode([0x42u8; 32]),
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
         .unwrap(),
@@ -337,11 +341,11 @@ pub(super) async fn continue_state(
     let mut active_session_and_users = Vec::new();
     if let Some((session_oid, user_oid)) = active_session_selection {
         active_session_and_users.push((
-            crate::infrastructure::database::entity::session::Model {
+            Model {
                 id: 43,
                 oid: session_oid,
                 user_id: 47,
-                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
+                status: SessionStatus::ACTIVE.to_string(),
                 acr: None,
                 acr_expires_at: None,
                 amr: serde_json::json!([]),
@@ -362,7 +366,7 @@ pub(super) async fn continue_state(
                 created_at: session_created_at.into(),
                 updated_at: None,
             },
-            crate::infrastructure::database::entity::user::Model {
+            UserModel {
                 id: 47,
                 oid: user_oid,
                 name: "Ada Lovelace".to_owned(),
@@ -405,11 +409,11 @@ pub(super) async fn continue_state(
     {
         let id = 100_i64 + i64::try_from(index).unwrap();
         active_session_and_users.push((
-            crate::infrastructure::database::entity::session::Model {
+            Model {
                 id,
                 oid: session_oid,
                 user_id: id,
-                status: identity_domain::auth::SessionStatus::ACTIVE.to_string(),
+                status: SessionStatus::ACTIVE.to_string(),
                 acr: None,
                 acr_expires_at: None,
                 amr: serde_json::json!([]),
@@ -430,7 +434,7 @@ pub(super) async fn continue_state(
                 created_at: session_created_at.into(),
                 updated_at: None,
             },
-            crate::infrastructure::database::entity::user::Model {
+            UserModel {
                 id,
                 oid: user_oid,
                 name: user_name,
@@ -510,10 +514,7 @@ pub(super) async fn continue_state(
         .first()
         .map(|(_, user)| user.clone());
     let db = if active_session_and_users.is_empty() {
-        db.append_query_results([Vec::<(
-            crate::infrastructure::database::entity::session::Model,
-            crate::infrastructure::database::entity::user::Model,
-        )>::new()])
+        db.append_query_results([Vec::<(Model, UserModel)>::new()])
     } else {
         db.append_query_results([active_session_and_users])
     };
@@ -607,9 +608,9 @@ pub(super) async fn continue_test_state() -> (AppState, String) {
     (state, protected_login_id)
 }
 
-pub(super) async fn continue_selected_session_state() -> (AppState, String, uuid::Uuid) {
-    let session_oid = uuid::Uuid::new_v4();
-    let user_oid = uuid::Uuid::new_v4();
+pub(super) async fn continue_selected_session_state() -> (AppState, String, Uuid) {
+    let session_oid = Uuid::new_v4();
+    let user_oid = Uuid::new_v4();
     let (state, protected_login_id, selected_session_oid) = continue_state(ContinueFixture {
         selection: Some((session_oid, user_oid)),
         ..ContinueFixture::default()
@@ -620,9 +621,9 @@ pub(super) async fn continue_selected_session_state() -> (AppState, String, uuid
 
 pub(super) async fn continue_selected_session_with_prompt_state(
     prompt: &str,
-) -> (AppState, String, uuid::Uuid) {
-    let session_oid = uuid::Uuid::new_v4();
-    let user_oid = uuid::Uuid::new_v4();
+) -> (AppState, String, Uuid) {
+    let session_oid = Uuid::new_v4();
+    let user_oid = Uuid::new_v4();
     let (state, protected_login_id, selected_session_oid) = continue_state(ContinueFixture {
         selection: Some((session_oid, user_oid)),
         prompt: Some(prompt.to_owned()),
@@ -634,9 +635,9 @@ pub(super) async fn continue_selected_session_with_prompt_state(
 
 pub(super) async fn continue_selected_session_with_consent_state(
     consent_state: ConsentState,
-) -> (AppState, String, uuid::Uuid) {
-    let session_oid = uuid::Uuid::new_v4();
-    let user_oid = uuid::Uuid::new_v4();
+) -> (AppState, String, Uuid) {
+    let session_oid = Uuid::new_v4();
+    let user_oid = Uuid::new_v4();
     let (state, protected_login_id, selected_session_oid) = continue_state(ContinueFixture {
         selection: Some((session_oid, user_oid)),
         consent_state,
@@ -648,9 +649,9 @@ pub(super) async fn continue_selected_session_with_consent_state(
 
 pub(super) async fn continue_selected_session_with_fixture(
     fixture: ContinueFixture,
-) -> (AppState, String, uuid::Uuid) {
-    let session_oid = uuid::Uuid::new_v4();
-    let user_oid = uuid::Uuid::new_v4();
+) -> (AppState, String, Uuid) {
+    let session_oid = Uuid::new_v4();
+    let user_oid = Uuid::new_v4();
     let (state, protected_login_id, selected_session_oid) = continue_state(ContinueFixture {
         selection: Some((session_oid, user_oid)),
         ..fixture

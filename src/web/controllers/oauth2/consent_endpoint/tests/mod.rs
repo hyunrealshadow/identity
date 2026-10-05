@@ -1,3 +1,4 @@
+use serde_json::Value;
 mod fixtures;
 
 use fixtures::{
@@ -35,7 +36,7 @@ async fn consent_get_is_a_json_api_without_content_negotiation() {
     assert!(body.contains("\"login_id\""), "{body}");
     assert!(body.contains("\"client_name\""), "{body}");
     assert!(!body.contains("\"logo_uri\""), "{body}");
-    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let payload: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(payload["scopes"][0]["name"], "openid");
     assert_eq!(payload["scopes"][0]["previously_granted"], true);
     assert_eq!(payload["scopes"][1]["name"], "profile");
@@ -76,8 +77,7 @@ async fn consent_get_displays_registered_custom_scope() {
     .send(&service)
     .await;
     assert_eq!(response.status_code, Some(StatusCode::OK));
-    let payload: serde_json::Value =
-        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    let payload: Value = serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
     assert_eq!(payload["scopes"][1]["name"], "orders.read");
     assert_eq!(
         payload["scopes"][1]["display_name"],
@@ -97,7 +97,7 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
     .send(&service)
     .await;
     assert!(context_response.headers().get(header::SET_COOKIE).is_none());
-    let context: serde_json::Value =
+    let context: Value =
         serde_json::from_str(&context_response.take_string().await.unwrap()).unwrap();
     let csrf_token = context["csrf_token"].as_str().unwrap();
 
@@ -112,7 +112,7 @@ async fn consent_post_accepts_json_and_returns_continue_uri() {
     let body = response.take_string().await.unwrap();
     assert_eq!(response.status_code, Some(StatusCode::OK), "{body}");
     assert!(body.contains("\"status\":\"approved\""), "{body}");
-    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let payload: Value = serde_json::from_str(&body).unwrap();
     assert!(
         payload["continue_uri"]
             .as_str()
@@ -197,7 +197,7 @@ async fn device_code_check_does_not_choose_an_account() {
 
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let body = response.take_string().await.unwrap();
-    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let payload: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(payload["user_code"], "WDJB-MJHT");
     assert_eq!(payload["status"], "pending");
     assert!(payload.get("account").is_none());
@@ -220,7 +220,7 @@ async fn device_decision_is_recorded_against_the_bound_login() {
     .send(&service)
     .await;
     let body = description.take_string().await.unwrap();
-    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let payload: Value = serde_json::from_str(&body).unwrap();
     let csrf_token = payload["csrf_token"].as_str().unwrap_or_else(|| {
         panic!(
             "expected csrf_token in {body}; queries: {:?}",
@@ -258,8 +258,7 @@ async fn device_begin_preserves_unknown_code_error_for_the_entry_form() {
     ))
     .send(&bootstrap)
     .await;
-    let body: serde_json::Value =
-        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    let body: Value = serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
     let (state, _, _) = unknown_user_code_test_state().await;
     let service = Service::new(app_router(state, &consent_test_config()));
     let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/device/login")

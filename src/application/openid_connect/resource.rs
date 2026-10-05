@@ -68,9 +68,9 @@ impl OpenIdProviderService {
         let mut allowed = Vec::new();
         for uri in &resources {
             let definition = if let Some(repo) = &self.resource_repo {
-                repo.find_by_uri(uri).await.map_err(|error| {
-                    AppError::from_code(CommonErrorCode::ResourceLookupFailed).with_source(error)
-                })?
+                repo.find_by_uri(uri)
+                    .await
+                    .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
             } else {
                 // Standalone providers retain the built-in resource; production injects the DB store.
                 if uri == API_RESOURCE {

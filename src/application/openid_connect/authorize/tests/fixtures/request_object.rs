@@ -2,9 +2,14 @@ use super::*;
 use crate::openid_connect::authorize::tests::fixtures::repositories::{
     ClientAuthorizationState, mock_client_auth_repo_with_state,
 };
+use crate::openid_connect::remote::test_http_client;
+use crate::openid_connect::tests::fixtures::mocks::MockKeyRepository;
 use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockOpenIdConnectCredentialRepository,
 };
+use chrono::Utc;
+use serde_json::Value;
+use tokio::time::sleep;
 
 pub(in crate::openid_connect) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
     let rsa = Rsa::generate(2048).unwrap();
@@ -26,9 +31,9 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
             public_key: String::from_utf8(public_key).unwrap(),
             jwk: None,
         },
-        expires_at: chrono::Utc::now(),
+        expires_at: Utc::now(),
         revoked_at: None,
-        created_at: chrono::Utc::now(),
+        created_at: Utc::now(),
         updated_at: None,
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
@@ -49,7 +54,7 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     })
 }
 
@@ -69,9 +74,9 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
             public_key: String::from_utf8(client_signing_public_key).unwrap(),
             jwk: None,
         },
-        expires_at: chrono::Utc::now(),
+        expires_at: Utc::now(),
         revoked_at: None,
-        created_at: chrono::Utc::now(),
+        created_at: Utc::now(),
         updated_at: None,
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
@@ -93,7 +98,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
         created_at: Utc::now(),
         updated_at: None,
     };
-    let mut key_repo = crate::openid_connect::tests::fixtures::mocks::MockKeyRepository::new();
+    let mut key_repo = MockKeyRepository::new();
     let found_key = key.clone();
     key_repo
         .expect_find_by_oid()
@@ -157,7 +162,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     })
 }
 
@@ -179,7 +184,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_uri(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     })
 }
 
@@ -208,7 +213,7 @@ pub(in crate::openid_connect) async fn spawn_chunked_response_server(
             stream.write_all(b"\r\n").await.unwrap();
         }
 
-        tokio::time::sleep(keep_open_for).await;
+        sleep(keep_open_for).await;
     });
 
     Url::parse(&format!("http://{address}/request.jwt")).unwrap()
@@ -238,7 +243,7 @@ pub(in crate::openid_connect) async fn spawn_redirect_response_server(_location:
 
 pub(in crate::openid_connect) fn signed_request_object(
     private_key: &[u8],
-    fields: impl IntoIterator<Item = (&'static str, serde_json::Value)>,
+    fields: impl IntoIterator<Item = (&'static str, Value)>,
 ) -> String {
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");

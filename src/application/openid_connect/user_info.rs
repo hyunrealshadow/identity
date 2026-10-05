@@ -1,4 +1,13 @@
+use super::client_encryption::select_client_encryption_jwk;
+use chrono::Utc;
+use identity_domain::key::JwaSigningAlgorithm;
+use identity_domain::key::JweContentEncryption;
+use identity_domain::key::JwkAlgorithm;
+use identity_domain::key::JwsAlgorithm;
+use identity_domain::key::Key;
 use std::sync::Arc;
+use std::time::Duration;
+use std::time::SystemTime;
 
 use crate::{
     application::{
@@ -108,10 +117,8 @@ impl UserInfoService {
         let relation = device_repo
             .find_device_authorization_by_oid(device_authorization_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-            })?;
-        let now = chrono::Utc::now();
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+        let now = Utc::now();
         let active = relation
             .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
 
@@ -141,9 +148,7 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-            })?
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
         claims.sub = client.subject_identifier(Uuid::from(user.oid), &issuer);
         claims.apply_scope_filter(scope, claims_request);
@@ -159,9 +164,7 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-            })?
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         let Some(algorithms) = client.metadata().userinfo_signed_response_algs.as_deref() else {
@@ -174,15 +177,14 @@ impl UserInfoService {
 
         let mut payload = user_info_payload(claims)?;
         let issuer = self.provider_service.issuer()?;
-        let now = std::time::SystemTime::now();
+        let now = SystemTime::now();
         payload.set_issuer(issuer.as_str());
         payload.set_audience(vec![client.client().oid.to_string()]);
         payload.set_issued_at(&now);
 
         let signer = build_user_info_signer(&private_key, alg)?;
-        let token = jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
+        let token =
+            jwt::encode_with_signer(&payload, &header, &*signer).map_err(AppError::internal)?;
 
         Ok(Some(token))
     }
@@ -197,9 +199,7 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-            })?
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         let Some(algorithms) = client
@@ -209,7 +209,7 @@ impl UserInfoService {
         else {
             return Ok(None);
         };
-        let default_content_encryption = [identity_domain::key::JweContentEncryption::A128CbcHs256];
+        let default_content_encryption = [JweContentEncryption::A128CbcHs256];
         let content_encryptions = client
             .metadata()
             .userinfo_encrypted_response_encs
@@ -218,20 +218,16 @@ impl UserInfoService {
 
         let json_body = match signed_response {
             Some(signed) => signed.to_owned(),
-            None => serde_json::to_string(claims).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?,
+            None => serde_json::to_string(claims).map_err(AppError::internal)?,
         };
         for algorithm in algorithms {
-            let Some(public_jwk) = super::client_encryption::select_client_encryption_jwk(
+            let Some(public_jwk) = select_client_encryption_jwk(
                 &*self.credential_repo,
                 client.client().oid,
                 algorithm.as_str(),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?
+            .map_err(AppError::internal)?
             else {
                 continue;
             };
@@ -252,18 +248,13 @@ impl UserInfoService {
     }
 
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {
-        let header = jwt::decode_header(raw_token).map_err(|error| {
-            AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-        })?;
+        let header = jwt::decode_header(raw_token)
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
 
         let alg = header
             .claim(JwtClaimNames::ALG)
             .and_then(|v| v.as_str())
-            .and_then(|value| {
-                value
-                    .parse::<identity_domain::key::JwaSigningAlgorithm>()
-                    .ok()
-            })
+            .and_then(|value| value.parse::<JwaSigningAlgorithm>().ok())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
         let kid = header
@@ -305,13 +296,13 @@ impl UserInfoService {
         let expires_at = payload
             .expires_at()
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-        if expires_at <= std::time::SystemTime::now() {
+        if expires_at <= SystemTime::now() {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
         let issued_at = payload
             .issued_at()
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-        if issued_at > std::time::SystemTime::now() + std::time::Duration::from_secs(60) {
+        if issued_at > SystemTime::now() + Duration::from_secs(60) {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
         let issuer = self.provider_service.issuer()?;
@@ -352,13 +343,11 @@ impl UserInfoService {
             .client_authorization_repo
             .find_by_oid(access_token_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::InvalidToken).with_source(error)
-            })?
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
         if access_token_record.type_ != ClientAuthorizationType::AccessToken
             || access_token_record.revoked_at.is_some()
-            || access_token_record.expires_at <= chrono::Utc::now()
+            || access_token_record.expires_at <= Utc::now()
         {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
@@ -443,8 +432,8 @@ impl UserInfoService {
     fn verify_jwt_with_key_and_alg(
         &self,
         token: &str,
-        key: &identity_domain::key::Key,
-        alg: identity_domain::key::JwaSigningAlgorithm,
+        key: &Key,
+        alg: JwaSigningAlgorithm,
     ) -> Result<(jwt::JwtPayload, JwsHeader), AppError> {
         let public_key = match &key.data {
             KeyData::Asymmetric(data) => data.public_key.as_bytes(),
@@ -461,18 +450,19 @@ impl UserInfoService {
 
     async fn load_signing_key_for_algs(
         &self,
-        algorithms: &[identity_domain::key::JwsAlgorithm],
-    ) -> Result<(identity_domain::key::JwaSigningAlgorithm, String, String), AppError> {
+        algorithms: &[JwsAlgorithm],
+    ) -> Result<(JwaSigningAlgorithm, String, String), AppError> {
         let keys = self.key_service.list_available().await?;
         let bindings = self.key_service.list_available_jwks().await?;
 
         for requested in algorithms {
-            let identity_domain::key::JwsAlgorithm::Asymmetric(alg) = requested else {
+            let JwsAlgorithm::Asymmetric(alg) = requested else {
                 continue;
             };
-            for binding in bindings.iter().filter(|binding| {
-                binding.algorithm == identity_domain::key::JwkAlgorithm::Signing(*alg)
-            }) {
+            for binding in bindings
+                .iter()
+                .filter(|binding| binding.algorithm == JwkAlgorithm::Signing(*alg))
+            {
                 let Some(key) = keys.iter().find(|key| key.oid == binding.key_oid) else {
                     continue;
                 };
@@ -493,8 +483,7 @@ impl UserInfoService {
 }
 
 fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppError> {
-    let value = serde_json::to_value(claims)
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    let value = serde_json::to_value(claims).map_err(AppError::internal)?;
     let object = value
         .as_object()
         .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
@@ -502,17 +491,14 @@ fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppErro
     for (name, value) in object {
         payload
             .set_claim(name, Some(value.clone()))
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
     }
     Ok(payload)
 }
 
 fn build_user_info_signer(
     private_key_pem: &str,
-    alg: identity_domain::key::JwaSigningAlgorithm,
+    alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
-    asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes())
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+    asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes()).map_err(AppError::internal)
 }

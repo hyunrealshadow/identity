@@ -1,13 +1,22 @@
 use super::*;
+use crate::error::AppError;
+use crate::key::runtime::RuntimeKeyRing;
+use crate::key::runtime::RuntimeKeyRingProvider;
 use crate::openid_connect::authorize::tests::fixtures::repositories::{
     ClientAuthorizationState, mock_client_auth_repo_with_state,
 };
+use crate::openid_connect::remote::test_http_client;
 use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
     MockOpenIdConnectCredentialRepository, MockUserRepository,
 };
 use crate::setting::{SettingsSnapshot, SettingsSource};
 use crate::user::repository::UserRepositoryError;
+use base64::engine::general_purpose::STANDARD;
+use chrono::Duration;
+use chrono::Utc;
+use identity_domain::data_protection::DataProtectionError;
+use identity_domain::data_protection::KeyRing;
 
 pub(in crate::openid_connect) struct StaticInstallationProvider {
     pub(in crate::openid_connect) value: Arc<SettingsSnapshot>,
@@ -31,7 +40,7 @@ pub(in crate::openid_connect) fn provider_service() -> Arc<OpenIdProviderService
                     })
                     .with_section(&InstallationSettings {
                         initialized: true,
-                        initialized_at: Some(chrono::Utc::now()),
+                        initialized_at: Some(Utc::now()),
                     }),
             ),
         },
@@ -46,7 +55,7 @@ impl DataProtectionCipher for TestCipher {
         _key: &[u8; DATA_PROTECTION_KEY_SIZE],
         plaintext: &[u8],
         _aad: &[u8],
-    ) -> Result<([u8; 24], Vec<u8>), identity_domain::data_protection::DataProtectionError> {
+    ) -> Result<([u8; 24], Vec<u8>), DataProtectionError> {
         Ok(([0u8; 24], plaintext.to_vec()))
     }
 
@@ -56,7 +65,7 @@ impl DataProtectionCipher for TestCipher {
         _nonce: &[u8; 24],
         ciphertext: &[u8],
         _aad: &[u8],
-    ) -> Result<Vec<u8>, identity_domain::data_protection::DataProtectionError> {
+    ) -> Result<Vec<u8>, DataProtectionError> {
         Ok(ciphertext.to_vec())
     }
 }
@@ -67,17 +76,17 @@ pub(in crate::openid_connect) fn test_signing_algorithm_detector()
 }
 
 pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector> {
-    let raw_key = base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]);
+    let raw_key = STANDARD.encode([0x42u8; 32]);
     let provider = StaticRuntimeKeyRingProvider {
-        value: Arc::new(crate::key::runtime::RuntimeKeyRing::new(
-            identity_domain::data_protection::KeyRing::new(vec![Key {
+        value: Arc::new(RuntimeKeyRing::new(
+            KeyRing::new(vec![Key {
                 oid: KeyOid::from(Uuid::new_v4()),
                 r#type: KeyType::Symmetric,
                 data: KeyData::Symmetric(SymmetricKeyData {
                     key: raw_key,
                     algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
                 }),
-                expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+                expires_at: Some(Utc::now() + Duration::hours(1)),
                 revoked_at: None,
                 created_at: Utc::now(),
                 updated_at: None,
@@ -92,16 +101,16 @@ pub(in crate::openid_connect) fn test_data_protector() -> Arc<dyn DataProtector>
 }
 
 struct StaticRuntimeKeyRingProvider {
-    value: Arc<crate::key::runtime::RuntimeKeyRing>,
+    value: Arc<RuntimeKeyRing>,
 }
 
 #[async_trait::async_trait]
-impl crate::key::runtime::RuntimeKeyRingProvider for StaticRuntimeKeyRingProvider {
-    fn current_value(&self) -> Arc<crate::key::runtime::RuntimeKeyRing> {
+impl RuntimeKeyRingProvider for StaticRuntimeKeyRingProvider {
+    fn current_value(&self) -> Arc<RuntimeKeyRing> {
         Arc::clone(&self.value)
     }
 
-    async fn refresh_value(&self) -> Result<(), crate::error::AppError> {
+    async fn refresh_value(&self) -> Result<(), AppError> {
         Ok(())
     }
 }
@@ -135,7 +144,7 @@ pub(in crate::openid_connect) fn build_test_service(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     })
 }
 

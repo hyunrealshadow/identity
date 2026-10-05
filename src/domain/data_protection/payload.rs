@@ -1,4 +1,5 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use uuid::Uuid;
 
 use crate::key::KeyOid;
 
@@ -43,7 +44,7 @@ impl ProtectedPayload {
         let mut out = Vec::with_capacity(HEADER_SIZE + TAG_SIZE + self.ciphertext.len());
         out.push(self.version);
         out.push(self.alg_id);
-        let oid_bytes: [u8; 16] = uuid::Uuid::from(self.key_id).into_bytes();
+        let oid_bytes: [u8; 16] = Uuid::from(self.key_id).into_bytes();
         out.extend_from_slice(&oid_bytes);
         out.extend_from_slice(&self.nonce);
         out.extend_from_slice(&self.ciphertext);
@@ -64,7 +65,7 @@ impl ProtectedPayload {
         }
         let mut key_id_bytes = [0u8; 16];
         key_id_bytes.copy_from_slice(&bytes[2..18]);
-        let key_id = KeyOid::from(uuid::Uuid::from_bytes(key_id_bytes));
+        let key_id = KeyOid::from(Uuid::from_bytes(key_id_bytes));
         let mut nonce = [0u8; NONCE_SIZE];
         nonce.copy_from_slice(&bytes[18..18 + NONCE_SIZE]);
         let ciphertext = bytes[18 + NONCE_SIZE..].to_vec();
@@ -81,7 +82,7 @@ impl ProtectedPayload {
         let mut out = Vec::with_capacity(1 + 1 + 16 + 8);
         out.push(self.version);
         out.push(self.alg_id);
-        let oid_bytes: [u8; 16] = uuid::Uuid::from(self.key_id).into_bytes();
+        let oid_bytes: [u8; 16] = Uuid::from(self.key_id).into_bytes();
         out.extend_from_slice(&oid_bytes);
         out.extend_from_slice(purpose_hash);
         out
@@ -90,13 +91,15 @@ impl ProtectedPayload {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::*;
 
     fn make_payload() -> ProtectedPayload {
         ProtectedPayload {
             version: VERSION,
             alg_id: ALG_ID,
-            key_id: KeyOid::from(uuid::Uuid::new_v4()),
+            key_id: KeyOid::from(Uuid::new_v4()),
             nonce: [0x01u8; NONCE_SIZE],
             ciphertext: vec![0xAAu8; TAG_SIZE + 4], // minimum size is TAG_SIZE
         }
@@ -165,7 +168,7 @@ mod tests {
         let aad = payload.aad(&purpose_hash);
         assert_eq!(aad[0], VERSION);
         assert_eq!(aad[1], ALG_ID);
-        assert_eq!(&aad[2..18], &uuid::Uuid::from(payload.key_id).into_bytes());
+        assert_eq!(&aad[2..18], &Uuid::from(payload.key_id).into_bytes());
         assert_eq!(&aad[18..], purpose_hash);
     }
 }

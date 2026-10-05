@@ -1,5 +1,6 @@
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use chrono::Duration;
 use identity_domain::auth::SessionOid;
 use identity_domain::openid_connect::GrantType;
 
@@ -51,7 +52,7 @@ async fn code_exchange_rejects_client_without_authorization_code_grant() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -109,7 +110,7 @@ async fn code_exchange_does_not_issue_unusable_refresh_token() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -147,7 +148,7 @@ async fn refresh_exchange_rejects_client_without_refresh_token_grant() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(refresh_token_data(user_oid)),
-            Utc::now() + chrono::Duration::days(1),
+            Utc::now() + Duration::days(1),
         )
         .await
         .unwrap();

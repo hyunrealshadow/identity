@@ -2,6 +2,7 @@
 name = "identity-infrastructure"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.99"
 publish = false
 
 [lib]
@@ -11,24 +12,24 @@ path = "mod.rs"
 apalis = { workspace = true }
 apalis-cron = { workspace = true }
 apalis-sql = { workspace = true }
-argon2 = { version = "0.5", features = ["std"] }
+argon2 = { version = "0.6.0" }
 async-graphql = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chacha20poly1305 = { workspace = true }
 chrono = { workspace = true }
-fluent-templates = { version = "0.14.0", features = ["tera"] }
-hex = { version = "0.4" }
+fluent-templates = { version = "0.15.1" }
+hex = { version = "0.4.3" }
 hmac = { workspace = true }
 http = { workspace = true }
-icu_list = { version = "2.2", features = ["compiled_data"] }
-icu_locale_core = "2.0"
-icu_provider = { version = "2.2", features = ["sync"] }
+icu_list = { version = "2.3.0", features = ["compiled_data"] }
+icu_locale_core = "2.3.0"
+icu_provider = { version = "2.3.1", features = ["sync"] }
 identity-application = { workspace = true }
 identity-domain = { workspace = true }
 idna = { workspace = true }
 ipnet = { workspace = true }
-include_dir = { version = "0.7" }
+include_dir = { version = "0.7.4" }
 josekit = { workspace = true }
 migration = { workspace = true }
 opentelemetry = { workspace = true }
@@ -36,12 +37,10 @@ opentelemetry-appender-tracing = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 openssl = { workspace = true }
-password-hash = { version = "0.6.1", features = ["rand_core"] }
 rand = { workspace = true }
-rand_core = { version = "0.6", features = ["getrandom"] }
 regex = { workspace = true }
 reqwest = { workspace = true }
-writeable = "0.6"
+writeable = "0.6.4"
 salvo = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
@@ -52,10 +51,10 @@ subtle = { workspace = true }
 tera = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
+totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 ulid = { workspace = true }
 unic-langid = { workspace = true }
 url = { workspace = true }

@@ -2,6 +2,7 @@
 name = "identity-boot"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.99"
 publish = false
 
 [lib]
@@ -13,7 +14,7 @@ identity-application = { workspace = true }
 identity-domain = { workspace = true }
 identity-infrastructure = { workspace = true }
 identity-web = { workspace = true }
-rustls = { version = "0.23" }
+rustls = { version = "0.23.45" }
 salvo = { workspace = true }
 sea-orm = { workspace = true }
 tera = { workspace = true }

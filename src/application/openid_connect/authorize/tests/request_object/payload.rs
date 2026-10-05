@@ -4,12 +4,15 @@ use crate::openid_connect::authorize::tests::fixtures::repositories::{
 };
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
+use crate::openid_connect::remote::test_http_client;
 use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
 use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockOpenIdConnectCredentialRepository,
 };
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use chrono::Utc;
 
 #[tokio::test]
 async fn parse_request_object_payload_preserves_registered_claims() {
@@ -20,7 +23,7 @@ async fn parse_request_object_payload_preserves_registered_claims() {
         .await
         .unwrap()
         .unwrap();
-    let now = chrono::Utc::now().timestamp();
+    let now = Utc::now().timestamp();
     let jwt = signed_request_object(
         &private_key,
         [
@@ -78,7 +81,7 @@ async fn parse_unsecured_request_object_is_accepted() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     });
     let client = FoundClientRepository
         .find_by_oid(Uuid::nil())
@@ -247,7 +250,7 @@ async fn parse_encrypted_request_object_enforces_registered_alg_and_enc() {
         test_scopes(),
     )
     .unwrap();
-    let protected = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+    let protected = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&json!({
             "alg": "RSA-OAEP",
             "enc": "A128GCM"
@@ -316,9 +319,9 @@ async fn parse_rs256_request_object_extracts_payload() {
             public_key: String::from_utf8(public_key).unwrap(),
             jwk: None,
         },
-        expires_at: chrono::Utc::now(),
+        expires_at: Utc::now(),
         revoked_at: None,
-        created_at: chrono::Utc::now(),
+        created_at: Utc::now(),
         updated_at: None,
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
@@ -339,7 +342,7 @@ async fn parse_rs256_request_object_extracts_payload() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     });
 
     let client = FoundClientRepository
@@ -379,9 +382,9 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
             public_key: String::from_utf8(public_key).unwrap(),
             jwk: None,
         },
-        expires_at: chrono::Utc::now(),
+        expires_at: Utc::now(),
         revoked_at: None,
-        created_at: chrono::Utc::now(),
+        created_at: Utc::now(),
         updated_at: None,
     }];
     let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
@@ -401,7 +404,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     });
     let mut metadata = test_metadata(None, None);
     metadata.request_object_signing_algs = Some(vec!["RS384".parse().unwrap()]);

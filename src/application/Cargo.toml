@@ -2,6 +2,7 @@
 name = "identity-application"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.99"
 publish = false
 
 [lib]
@@ -29,15 +30,15 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
-validator = { version = "0.20" }
+validator = { version = "0.21.0" }
 
 [features]
 allow-none-alg = []
 oidc-conformance = ["allow-none-alg"]
 
 [dev-dependencies]
-mockall = { version = "0.14" }
+mockall = { version = "0.15.0" }
 openssl = { workspace = true }
 regex = { workspace = true }
-rstest = { version = "0.25" }
+rstest = { version = "0.27.0" }
 sea-orm = { workspace = true }

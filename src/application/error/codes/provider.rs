@@ -14,12 +14,12 @@ pub enum ProviderErrorCode {
 impl AppErrorCode for ProviderErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::NotInitialized => ErrorKind::Validation,
-            Self::DomainMissing => ErrorKind::Validation,
-            Self::IssuerMustUseHttps => ErrorKind::Validation,
-            Self::IssuerMustNotHaveQueryOrFragment => ErrorKind::Validation,
-            Self::IssuerUrlParseFailed => ErrorKind::Internal,
-            Self::KeyLookupFailed => ErrorKind::Internal,
+            Self::NotInitialized
+            | Self::DomainMissing
+            | Self::IssuerMustUseHttps
+            | Self::IssuerMustNotHaveQueryOrFragment => ErrorKind::Validation,
+
+            Self::IssuerUrlParseFailed | Self::KeyLookupFailed => ErrorKind::Internal,
         }
     }
 

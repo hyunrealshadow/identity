@@ -1,5 +1,8 @@
 //! Current SeaORM persistence entity.
 
+use super::client_scope::Entity as ClientScopeEntity;
+use super::user_client_consent::Entity as UserClientConsentEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -34,13 +37,13 @@ pub enum Relation {
     UserClientConsent,
 }
 
-impl Related<super::client_scope::Entity> for Entity {
+impl Related<ClientScopeEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientScope.def()
     }
 }
 
-impl Related<super::user_client_consent::Entity> for Entity {
+impl Related<UserClientConsentEntity> for Entity {
     fn to() -> RelationDef {
         Relation::UserClientConsent.def()
     }

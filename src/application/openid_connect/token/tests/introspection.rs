@@ -1,6 +1,8 @@
 use super::*;
 use crate::error::{code::AppErrorCode, codes::token::TokenErrorCode};
+use crate::openid_connect::jose::asymmetric_signer_from_pem;
 use crate::openid_connect::token::{TokenRevocationParams, signing::SignAccessTokenInput};
+use chrono::Duration;
 use identity_domain::client_authorization::AccessTokenData;
 
 fn request(token: String) -> TokenRevocationParams {
@@ -32,7 +34,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
                 device_authorization_oid: None,
                 client_authentication_mode: None,
             }),
-            Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + Duration::hours(1),
         )
         .await
         .unwrap();
@@ -87,11 +89,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
         .await
         .unwrap()
         .unwrap();
-    let signer = crate::openid_connect::jose::asymmetric_signer_from_pem(
-        alg.as_str(),
-        private_key_pem.as_bytes(),
-    )
-    .unwrap();
+    let signer = asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes()).unwrap();
     let mut header = JwsHeader::new();
     header.set_token_type("at+jwt");
     header.set_key_id(&key_id);
@@ -151,7 +149,7 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
                     device_authorization_oid: None,
                     client_authentication_mode: None,
                 }),
-                Utc::now() + chrono::Duration::seconds(if expired { -60 } else { 3600 }),
+                Utc::now() + Duration::seconds(if expired { -60 } else { 3600 }),
             )
             .await
             .unwrap();

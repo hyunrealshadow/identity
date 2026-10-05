@@ -1,4 +1,5 @@
 use super::claim::StandardScopes;
+use std::error::Error;
 use std::{collections::BTreeSet, fmt, str::FromStr};
 
 pub const API_RESOURCE: &str = "urn:identity:graphql";
@@ -85,7 +86,7 @@ impl fmt::Display for ScopeParseError {
     }
 }
 
-impl std::error::Error for ScopeParseError {}
+impl Error for ScopeParseError {}
 
 impl ScopeSet {
     pub fn parse(scope_str: &str) -> Result<Self, ScopeParseError> {

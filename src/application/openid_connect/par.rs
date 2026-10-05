@@ -2,12 +2,15 @@ use crate::error::{
     AppError,
     codes::{common::CommonErrorCode, token::TokenErrorCode},
 };
+use crate::openid_connect::token::resolve_client_id;
 use crate::openid_connect::{
     authorize::{AuthorizationRequestParams, AuthorizeService},
     client_authentication::ClientAuthenticator,
     provider::OpenIdProviderService,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Duration;
+use chrono::Utc;
 use identity_domain::client_authorization::{
     ClientAuthorizationData, ClientAuthorizationRepository, PushedAuthorizationRequestData,
 };
@@ -73,7 +76,7 @@ impl PushedAuthorizationService {
         {
             params.authorization.client_id = client_id;
         }
-        params.authorization.client_id = crate::openid_connect::token::resolve_client_id(
+        params.authorization.client_id = resolve_client_id(
             (!params.authorization.client_id.is_empty())
                 .then(|| params.authorization.client_id.clone()),
             params.client_assertion_type,
@@ -118,12 +121,12 @@ impl PushedAuthorizationService {
                         parameters: params.authorization,
                     },
                 ),
-                chrono::Utc::now() + chrono::Duration::seconds(expires_in),
+                Utc::now() + Duration::seconds(expires_in),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::PushedRequestStorageFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                CommonErrorCode::PushedRequestStorageFailed,
+            ))?;
         Ok(PushedAuthorizationResponse {
             request_uri,
             expires_in,

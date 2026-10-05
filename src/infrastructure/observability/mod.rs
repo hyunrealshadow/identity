@@ -4,6 +4,13 @@
 //! See `docs/observability-design.md` and `docs/observability-coverage.md` for
 //! the confirmed design this module implements.
 
+use crate::config::PiiConfig;
+use identity_application::observability::install_event_sink;
+use identity_application::observability::install_outbound_trace;
+use opentelemetry::global::set_text_map_propagator;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::layer;
+
 pub mod context;
 pub mod events;
 pub mod metrics;
@@ -54,12 +61,10 @@ pub fn init(config: &AppConfig, environment: &AppEnvironment) -> ObservabilityRe
     let (policy, policy_warning) = resolve_pii_policy(&config.observability.pii);
     pii::install(policy);
 
-    opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
-    identity_application::observability::install_outbound_trace(
-        outbound::OutboundTraceImpl::shared(context::TraceTrustPolicy::new(
-            observability.trace_context.clone(),
-        )),
-    );
+    set_text_map_propagator(TraceContextPropagator::new());
+    install_outbound_trace(outbound::OutboundTraceImpl::shared(
+        context::TraceTrustPolicy::new(observability.trace_context.clone()),
+    ));
 
     let excluded_paths = excluded_trace_paths(config);
     let providers = pipeline::build_providers(
@@ -78,7 +83,7 @@ pub fn init(config: &AppConfig, environment: &AppEnvironment) -> ObservabilityRe
         providers.diagnostics_logs.as_ref(),
     );
     events::install(&observability.events, &providers.events_logs);
-    identity_application::observability::install_event_sink(events::sink());
+    install_event_sink(events::sink());
     let _ = PROVIDERS.set(providers);
 
     if let Some(warning) = policy_warning {
@@ -102,7 +107,7 @@ pub fn is_initialized() -> bool {
     PROVIDERS.get().is_some()
 }
 
-fn resolve_pii_policy(config: &crate::config::PiiConfig) -> (Option<PiiPolicy>, Option<String>) {
+fn resolve_pii_policy(config: &PiiConfig) -> (Option<PiiPolicy>, Option<String>) {
     let Some(source) = config.hmac_key.as_ref() else {
         return (None, None);
     };
@@ -149,16 +154,12 @@ fn normalize_route(route: &str) -> String {
 }
 
 fn init_console_only(logger: &LoggerConfig) {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(logger.level.clone()));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(logger.level.clone()));
     let subscriber = tracing_subscriber::registry().with(filter);
     match logger.format {
-        LogFormat::Json => subscriber
-            .with(tracing_subscriber::fmt::layer().json())
-            .init(),
-        LogFormat::Pretty => subscriber
-            .with(tracing_subscriber::fmt::layer().pretty())
-            .init(),
-        LogFormat::Compact => subscriber.with(tracing_subscriber::fmt::layer()).init(),
+        LogFormat::Json => subscriber.with(layer().json()).init(),
+        LogFormat::Pretty => subscriber.with(layer().pretty()).init(),
+        LogFormat::Compact => subscriber.with(layer()).init(),
     }
 }

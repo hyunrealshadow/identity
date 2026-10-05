@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_json::Value;
 use thiserror::Error;
 
 use super::error::SettingError;
@@ -58,7 +59,7 @@ pub trait SettingDefinition: Send + Sync + 'static {
     }
 
     /// Decodes and validates a stored value.
-    fn decode(raw: &serde_json::Value) -> Result<Self::Value, SettingError> {
+    fn decode(raw: &Value) -> Result<Self::Value, SettingError> {
         let value = Self::Value::deserialize(raw).map_err(SettingError::Deserialize)?;
         Self::validate(&value)
             .map_err(|error| SettingError::Validation(error.message().to_owned()))?;

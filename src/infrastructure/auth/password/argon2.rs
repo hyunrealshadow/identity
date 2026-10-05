@@ -3,11 +3,12 @@
 //! This is an internal module; external code uses [`super::PasswordHasherImpl`]
 //! through the application-layer [`PasswordHasher`] trait.
 
+use subtle::ConstantTimeEq;
+
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHasher as _, SaltString},
+    password_hash::{PasswordHasher as _, phc::Salt},
 };
-use rand_core::OsRng;
 
 use identity_application::{
     auth::password::{HashOptions, PasswordHashError, VerifyResult},
@@ -46,10 +47,12 @@ fn build_argon2(opts: &Argon2Options) -> Result<Argon2<'static>, PasswordHashErr
 
 pub(super) fn hash(password: &str, opts: &Argon2Options) -> Result<Password, PasswordHashError> {
     let argon2 = build_argon2(opts)?;
-    let salt = SaltString::generate(&mut OsRng);
     let hashed = argon2
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map_err(|e| PasswordHashError::HashFailed(e.to_string()))?;
+    let salt = hashed
+        .salt
+        .ok_or_else(|| PasswordHashError::HashFailed("missing salt output".to_owned()))?;
     let hash = hashed
         .hash
         .ok_or_else(|| PasswordHashError::HashFailed("missing hash output".to_owned()))?
@@ -57,7 +60,7 @@ pub(super) fn hash(password: &str, opts: &Argon2Options) -> Result<Password, Pas
 
     Ok(Password::Argon2(Argon2Password {
         hash,
-        salt: salt.to_string(),
+        salt: salt.to_salt_string().to_string(),
         options: opts.clone(),
     }))
 }
@@ -67,18 +70,18 @@ pub(super) fn verify(
     stored: &Argon2Password,
     current_opts: &Argon2Options,
 ) -> Result<VerifyResult, PasswordHashError> {
-    let salt = SaltString::from_b64(&stored.salt)
+    let salt = Salt::from_b64(&stored.salt)
         .map_err(|e| PasswordHashError::InvalidStoredHash(e.to_string()))?;
 
     let argon2 = build_argon2(&stored.options)?;
     let actual_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password_with_salt(password.as_bytes(), &salt)
         .map_err(|e| PasswordHashError::HashFailed(e.to_string()))?
         .hash
         .ok_or_else(|| PasswordHashError::HashFailed("missing hash output".to_owned()))?
         .to_string();
 
-    if !bool::from(subtle::ConstantTimeEq::ct_eq(
+    if !bool::from(ConstantTimeEq::ct_eq(
         actual_hash.as_bytes(),
         stored.hash.as_bytes(),
     )) {
@@ -94,6 +97,8 @@ pub(super) fn verify(
 
 #[cfg(test)]
 mod tests {
+    use identity_application::auth::password::PasswordHashError;
+
     use super::{build_argon2, hash, verify};
     use identity_application::{
         auth::password::VerifyResult,
@@ -119,10 +124,7 @@ mod tests {
 
         let error = build_argon2(&options).unwrap_err();
 
-        assert!(matches!(
-            error,
-            identity_application::auth::password::PasswordHashError::HashFailed(_)
-        ));
+        assert!(matches!(error, PasswordHashError::HashFailed(_)));
     }
 
     #[test]
@@ -146,10 +148,7 @@ mod tests {
 
         let error = verify("secret", &stored, &opts()).unwrap_err();
 
-        assert!(matches!(
-            error,
-            identity_application::auth::password::PasswordHashError::InvalidStoredHash(_)
-        ));
+        assert!(matches!(error, PasswordHashError::InvalidStoredHash(_)));
     }
 
     #[test]
@@ -160,5 +159,32 @@ mod tests {
         let result = verify("secret", &stored, &opts()).unwrap();
 
         assert_eq!(result, VerifyResult::Failure);
+    }
+
+    #[test]
+    fn verifies_password_hashes_created_before_argon2_upgrade() {
+        // Known-answer fixture from RustCrypto argon2 0.5's reference tests.
+        let options = Argon2Options {
+            memory_cost: 256,
+            time_cost: 2,
+            ..opts()
+        };
+        let stored = Argon2Password {
+            hash: "nf65EOgLrQMR/uIPnA4rEsF5h7TKyQwu9U1bMCHGi/4".to_owned(),
+            salt: "c29tZXNhbHQ".to_owned(),
+            options: options.clone(),
+        };
+        assert_eq!(
+            verify("password", &stored, &options).unwrap(),
+            VerifyResult::Success
+        );
+        assert_eq!(
+            verify("wrong", &stored, &options).unwrap(),
+            VerifyResult::Failure
+        );
+        assert_eq!(
+            verify("password", &stored, &opts()).unwrap(),
+            VerifyResult::NeedsRehash
+        );
     }
 }

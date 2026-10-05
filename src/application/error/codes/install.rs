@@ -19,17 +19,17 @@ pub enum InstallErrorCode {
 impl AppErrorCode for InstallErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::AlreadyInitialized => ErrorKind::Conflict,
-            Self::UsernameRequired => ErrorKind::Validation,
-            Self::EmailRequired => ErrorKind::Validation,
-            Self::PasswordRequired => ErrorKind::Validation,
-            Self::DomainRequired => ErrorKind::Validation,
-            Self::DomainInvalid => ErrorKind::Validation,
-            Self::EmailInvalid => ErrorKind::Validation,
-            Self::UsernameExists => ErrorKind::Conflict,
-            Self::EmailExists => ErrorKind::Conflict,
-            Self::UnsupportedAlgorithm => ErrorKind::Validation,
-            Self::ApplicationUrlInvalid => ErrorKind::Validation,
+            Self::AlreadyInitialized | Self::UsernameExists | Self::EmailExists => {
+                ErrorKind::Conflict
+            }
+            Self::UsernameRequired
+            | Self::EmailRequired
+            | Self::PasswordRequired
+            | Self::DomainRequired
+            | Self::DomainInvalid
+            | Self::EmailInvalid
+            | Self::UnsupportedAlgorithm
+            | Self::ApplicationUrlInvalid => ErrorKind::Validation,
         }
     }
 

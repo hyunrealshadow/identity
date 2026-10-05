@@ -1,4 +1,5 @@
 use async_graphql::{Context, Error, Object, Result};
+use identity_domain::auth::ACR_AAL2;
 use identity_domain::openid_connect::ApiScope;
 
 use super::types::{
@@ -15,7 +16,7 @@ use crate::graphql::schema::{
 pub(crate) struct SecurityMutation;
 
 fn password_change_required_acr(totp_enabled: bool) -> Option<&'static str> {
-    totp_enabled.then_some(identity_domain::auth::ACR_AAL2)
+    totp_enabled.then_some(ACR_AAL2)
 }
 
 #[Object]
@@ -156,7 +157,7 @@ impl SecurityMutation {
         client_mutation_id: Option<String>,
     ) -> Result<TotpChangedPayload> {
         require_scope(ctx, ApiScope::AccountUpdate)?;
-        require_recent_authentication(ctx, Some(identity_domain::auth::ACR_AAL2))?;
+        require_recent_authentication(ctx, Some(ACR_AAL2))?;
         let request = request_context(ctx)?;
         request
             .state
@@ -174,7 +175,7 @@ impl SecurityMutation {
         client_mutation_id: Option<String>,
     ) -> Result<RecoveryCodesPayload> {
         require_scope(ctx, ApiScope::AccountUpdate)?;
-        require_recent_authentication(ctx, Some(identity_domain::auth::ACR_AAL2))?;
+        require_recent_authentication(ctx, Some(ACR_AAL2))?;
         let request = request_context(ctx)?;
         let regenerated = request
             .state
@@ -192,14 +193,13 @@ impl SecurityMutation {
 
 #[cfg(test)]
 mod tests {
+    use identity_domain::auth::ACR_AAL2;
+
     use super::password_change_required_acr;
 
     #[test]
     fn password_change_requires_aal2_when_totp_is_enabled() {
-        assert_eq!(
-            password_change_required_acr(true),
-            Some(identity_domain::auth::ACR_AAL2)
-        );
+        assert_eq!(password_change_required_acr(true), Some(ACR_AAL2));
         assert_eq!(password_change_required_acr(false), None);
     }
 }

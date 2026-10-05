@@ -1,9 +1,12 @@
 use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
 use crate::openid_connect::token::tests::{fixtures::*, *};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use chrono::Duration;
 use identity_domain::auth::SessionOid;
 use identity_domain::openid_connect::resource::{
     OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
 };
+use serde_json::Value;
 
 struct Orders;
 #[async_trait::async_trait]
@@ -56,7 +59,7 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
                 redirect_uri: "https://client.example.com/callback".into(),
                 redirect_uri_was_supplied: true,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -78,8 +81,8 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
         response.scope,
         "openid offline_access orders.read orders.write"
     );
-    let payload: serde_json::Value = serde_json::from_slice(
-        &base64::engine::general_purpose::URL_SAFE_NO_PAD
+    let payload: Value = serde_json::from_slice(
+        &URL_SAFE_NO_PAD
             .decode(response.access_token.split('.').nth(1).unwrap())
             .unwrap(),
     )

@@ -1,4 +1,19 @@
+use crate::application::error::kind::ErrorKind;
+use crate::domain::client_authorization::DeviceRequestStatus;
+use crate::domain::client_authorization::format_user_code;
+use chrono::Duration;
+use josekit::jws::JwsHeader;
+use josekit::jws::RS256;
+use josekit::jwt;
+use josekit::jwt::JwtPayload;
+use openssl::rsa::Rsa;
+use std::io::Error;
 use std::sync::Arc;
+use std::time::Duration as TimeDuration;
+use std::time::SystemTime;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::unbounded_channel;
+use url::Url;
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -124,7 +139,7 @@ fn client_secret_credential() -> OpenIdConnectCredential {
         data: OpenIdConnectCredentialData::ClientSecret {
             secret: "secret-123".to_owned(),
         },
-        expires_at: Utc::now() + chrono::Duration::days(1),
+        expires_at: Utc::now() + Duration::days(1),
         revoked_at: None,
         created_at: Utc::now(),
         updated_at: None,
@@ -222,9 +237,9 @@ fn request_record(
 /// Device repository mock that accepts one request and reports it back.
 fn accepting_device_repo() -> (
     Arc<MockDeviceAuthorizationRepository>,
-    tokio::sync::mpsc::UnboundedReceiver<DeviceAuthorizationRequestData>,
+    UnboundedReceiver<DeviceAuthorizationRequestData>,
 ) {
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, receiver) = unbounded_channel();
     let mut repo = MockDeviceAuthorizationRepository::new();
     repo.expect_create_device_request()
         .returning(move |client_oid, data, expires_at| {
@@ -280,10 +295,7 @@ async fn request_returns_rfc_8628_fields_and_stores_only_the_digest() {
     assert!(response.device_code.len() >= 43, "256 bits of base64url");
 
     let stored = created.try_recv().unwrap();
-    assert_eq!(
-        stored.status,
-        crate::domain::client_authorization::DeviceRequestStatus::Pending
-    );
+    assert_eq!(stored.status, DeviceRequestStatus::Pending);
     assert_eq!(stored.scope, "openid offline_access");
     assert_eq!(
         stored.device_code_digest,
@@ -345,7 +357,7 @@ fn private_key_jwt_client(public_key: String) -> (OpenIdConnectClient, OpenIdCon
             public_key,
             jwk: None,
         },
-        expires_at: Utc::now() + chrono::Duration::days(1),
+        expires_at: Utc::now() + Duration::days(1),
         revoked_at: None,
         created_at: Utc::now(),
         updated_at: None,
@@ -364,18 +376,15 @@ fn sign_assertion(private_key: &str, client_id: Uuid) -> String {
 }
 
 fn sign_assertion_with_audience(private_key: &str, client_id: Uuid, audience: &str) -> String {
-    use josekit::jws::{JwsHeader, RS256};
-    use josekit::jwt::{self, JwtPayload};
-
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
-    let now = std::time::SystemTime::now();
+    let now = SystemTime::now();
     payload.set_issuer(client_id.to_string());
     payload.set_subject(client_id.to_string());
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
-    payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
+    payload.set_expires_at(&(now + TimeDuration::from_secs(300)));
     payload.set_jwt_id(Uuid::new_v4().to_string());
 
     jwt::encode_with_signer(
@@ -387,7 +396,7 @@ fn sign_assertion_with_audience(private_key: &str, client_id: Uuid, audience: &s
 }
 
 fn key_pair() -> (String, String) {
-    let rsa = openssl::rsa::Rsa::generate(2048).unwrap();
+    let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
     let public_key = String::from_utf8(rsa.public_key_to_pem().unwrap()).unwrap();
 
@@ -594,7 +603,7 @@ async fn unparsable_scope_is_rejected() {
 
 #[tokio::test]
 async fn user_code_collision_is_retried() {
-    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, mut receiver) = unbounded_channel();
     let mut device_repo = MockDeviceAuthorizationRepository::new();
     device_repo
         .expect_create_device_request()
@@ -624,7 +633,7 @@ async fn storage_failures_surface_as_server_errors() {
         .expect_create_device_request()
         .returning(|_, _, _| {
             Err(DeviceAuthorizationRepositoryError::QueryFailed(Box::new(
-                ClientAuthorizationRepositoryError::QueryFailed(Box::new(std::io::Error::other(
+                ClientAuthorizationRepositoryError::QueryFailed(Box::new(Error::other(
                     "database unavailable",
                 ))),
             )))
@@ -640,18 +649,15 @@ async fn storage_failures_surface_as_server_errors() {
         error.code(),
         DeviceAuthorizationErrorCode::StoreRequestFailed.code()
     );
-    assert!(matches!(
-        error.kind(),
-        crate::application::error::kind::ErrorKind::Internal
-    ));
+    assert!(matches!(error.kind(), ErrorKind::Internal));
 }
 
 fn skip_consent_device_client() -> OpenIdConnectClient {
     let mut metadata = test_metadata(None, Some("client_secret_basic"));
     metadata.grant_types = Some(vec![GrantType::DeviceCode]);
     metadata.settings.skip_consent = true;
-    metadata.client_uri = Some(url::Url::parse("https://client.example.com").unwrap());
-    metadata.logo_uri = Some(url::Url::parse("https://client.example.com/logo.png").unwrap());
+    metadata.client_uri = Some(Url::parse("https://client.example.com").unwrap());
+    metadata.logo_uri = Some(Url::parse("https://client.example.com/logo.png").unwrap());
 
     OpenIdConnectClient::new(
         test_client(CLIENT_ID),
@@ -671,11 +677,11 @@ fn pending_record(user_code: &str, scope: &str, expires_at: DateTime<Utc>) -> Cl
             device_code_digest: device_code_digest("device-code"),
             claimed_login_oid: None,
             user_code: user_code.to_owned(),
-            user_code_display: crate::domain::client_authorization::format_user_code(user_code),
+            user_code_display: format_user_code(user_code),
             interval_seconds: 5,
             slow_down_seconds: 0,
             last_polled_at: None,
-            status: crate::domain::client_authorization::DeviceRequestStatus::Pending,
+            status: DeviceRequestStatus::Pending,
             approval: None,
             denied_by_user_oid: None,
             decided_at: None,
@@ -708,7 +714,7 @@ async fn describe_reports_the_pending_request_to_the_user() {
     let record = pending_record(
         "WDJBMJHT",
         "openid profile",
-        Utc::now() + chrono::Duration::minutes(10),
+        Utc::now() + Duration::minutes(10),
     );
     let service = build_service(
         device_client(device_grant(), false),
@@ -729,11 +735,7 @@ async fn describe_reports_the_pending_request_to_the_user() {
 
 #[tokio::test]
 async fn describe_never_changes_authorization_state() {
-    let record = pending_record(
-        "WDJBMJHT",
-        "openid",
-        Utc::now() + chrono::Duration::minutes(10),
-    );
+    let record = pending_record("WDJBMJHT", "openid", Utc::now() + Duration::minutes(10));
     // A trusted client would be auto approved by an eager implementation; the
     // mock panics if the read path calls the approve transition at all.
     let service = build_service(skip_consent_device_client(), device_repo_with(record));
@@ -757,17 +759,13 @@ async fn describe_never_changes_authorization_state() {
 
 #[tokio::test]
 async fn trusted_clients_still_approve_through_the_decision_path() {
-    let record = pending_record(
-        "WDJBMJHT",
-        "openid",
-        Utc::now() + chrono::Duration::minutes(10),
-    );
+    let record = pending_record("WDJBMJHT", "openid", Utc::now() + Duration::minutes(10));
     let mut device_repo = MockDeviceAuthorizationRepository::new();
     let record_for_lookup = record.clone();
     device_repo
         .expect_find_active_device_request_by_user_code()
         .returning(move |_| Ok(Some(record_for_lookup.clone())));
-    let (sender, mut approvals) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, mut approvals) = unbounded_channel();
     device_repo
         .expect_approve_device_request()
         .returning(move |_, approval, _| {
@@ -797,7 +795,7 @@ async fn decide_approves_with_the_session_authentication_context() {
     let record = pending_record(
         "WDJBMJHT",
         "openid profile",
-        Utc::now() + chrono::Duration::minutes(10),
+        Utc::now() + Duration::minutes(10),
     );
     let mut device_repo = MockDeviceAuthorizationRepository::new();
     let record_for_lookup = record.clone();
@@ -808,7 +806,7 @@ async fn decide_approves_with_the_session_authentication_context() {
 
             Ok(Some(record_for_lookup.clone()))
         });
-    let (sender, mut approvals) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, mut approvals) = unbounded_channel();
     device_repo
         .expect_approve_device_request()
         .returning(move |_, approval, _| {
@@ -838,16 +836,12 @@ async fn decide_approves_with_the_session_authentication_context() {
 
 #[tokio::test]
 async fn decide_denies_the_request() {
-    let record = pending_record(
-        "WDJBMJHT",
-        "openid",
-        Utc::now() + chrono::Duration::minutes(10),
-    );
+    let record = pending_record("WDJBMJHT", "openid", Utc::now() + Duration::minutes(10));
     let mut device_repo = MockDeviceAuthorizationRepository::new();
     device_repo
         .expect_find_active_device_request_by_user_code()
         .returning(move |_| Ok(Some(record.clone())));
-    let (sender, mut denials) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, mut denials) = unbounded_channel();
     device_repo
         .expect_deny_device_request()
         .returning(move |_, user_oid, _| {
@@ -872,11 +866,7 @@ async fn decide_denies_the_request() {
 
 #[tokio::test]
 async fn decide_is_rejected_when_another_decision_won_the_race() {
-    let record = pending_record(
-        "WDJBMJHT",
-        "openid",
-        Utc::now() + chrono::Duration::minutes(10),
-    );
+    let record = pending_record("WDJBMJHT", "openid", Utc::now() + Duration::minutes(10));
     let mut device_repo = MockDeviceAuthorizationRepository::new();
     device_repo
         .expect_find_active_device_request_by_user_code()
@@ -904,11 +894,7 @@ async fn decide_is_rejected_when_another_decision_won_the_race() {
 
 #[tokio::test]
 async fn expired_requests_cannot_be_decided() {
-    let record = pending_record(
-        "WDJBMJHT",
-        "openid",
-        Utc::now() - chrono::Duration::seconds(1),
-    );
+    let record = pending_record("WDJBMJHT", "openid", Utc::now() - Duration::seconds(1));
     let service = build_service(
         device_client(device_grant(), false),
         device_repo_with(record),

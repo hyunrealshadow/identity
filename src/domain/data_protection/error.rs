@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -12,5 +13,5 @@ pub enum DataProtectionError {
     EncryptionFailed,
 
     #[error(transparent)]
-    Internal(#[from] Box<dyn std::error::Error + Send + Sync + 'static>),
+    Internal(#[from] Box<dyn StdError + Send + Sync + 'static>),
 }

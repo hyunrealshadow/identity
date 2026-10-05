@@ -1,3 +1,14 @@
+use crate::auth::password::run_password_hashing;
+use crate::key::runtime::RuntimeKeyRingProvider;
+use crate::observability::BusinessEvent;
+use crate::observability::EventValue;
+use crate::observability::error_outcome;
+use crate::observability::event_sink;
+use chrono::Duration;
+use identity_domain::key::AsymmetricKeyData;
+use identity_domain::key::generator::AsymmetricKeySpec;
+use identity_domain::user::normalization::EmailNormalizationError;
+use identity_domain::user::normalization::normalize_email as normalization_normalize_email;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -47,8 +58,8 @@ pub struct InstallService {
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
     pub certificate_generator: Arc<dyn CertificateGenerator>,
     pub repository: Arc<dyn InstallRepository>,
-    pub runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
-    pub client_secret_lifetime: chrono::Duration,
+    pub runtime_key_ring: Arc<dyn RuntimeKeyRingProvider>,
+    pub client_secret_lifetime: Duration,
 }
 
 pub trait CertificateGenerator: Send + Sync {
@@ -70,9 +81,9 @@ pub struct InstallationData {
     pub application_url: Url,
     pub client_id: Uuid,
     pub client_secret: String,
-    pub client_secret_lifetime: chrono::Duration,
+    pub client_secret_lifetime: Duration,
     pub key_oid: Uuid,
-    pub key_data: identity_domain::key::AsymmetricKeyData,
+    pub key_data: AsymmetricKeyData,
     /// The installation settings, written in the same transaction.
     pub settings: SettingChanges,
 }
@@ -96,20 +107,20 @@ impl InstallService {
     #[tracing::instrument(skip_all, name = "install")]
     pub async fn install(&self, input: InstallInput) -> Result<(), AppError> {
         let result = self.install_inner(input).await;
-        use crate::observability::{BusinessEvent, EventValue};
+
         let event = match &result {
             Ok(()) => BusinessEvent::audit("install.result")
                 .outcome("success")
                 .attribute("stage", EventValue::Text("completed".to_owned())),
             Err(error) => {
-                let (outcome, reason) = crate::observability::error_outcome(error);
+                let (outcome, reason) = error_outcome(error);
                 BusinessEvent::audit("install.result")
                     .outcome(outcome)
                     .reason(reason)
                     .attribute("error_code", EventValue::Integer(i64::from(error.code())))
             }
         };
-        crate::observability::event_sink().emit(event);
+        event_sink().emit(event);
         result
     }
 
@@ -122,15 +133,12 @@ impl InstallService {
 
         let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
         let password_hasher = Arc::clone(&self.password_hasher);
-        let password = crate::auth::password::run_password_hashing(move || {
-            password_hasher.hash(&input.password, &hash_options)
-        })
-        .await?;
-        let mut key_data =
-            self.key_generator
-                .generate(&identity_domain::key::generator::AsymmetricKeySpec {
-                    algorithm: input.key_algorithm.clone(),
-                })?;
+        let password =
+            run_password_hashing(move || password_hasher.hash(&input.password, &hash_options))
+                .await?;
+        let mut key_data = self.key_generator.generate(&AsymmetricKeySpec {
+            algorithm: input.key_algorithm.clone(),
+        })?;
         let certificate = self.certificate_generator.generate_self_signed(
             &key_data.private_key,
             &input.domain,
@@ -259,7 +267,6 @@ fn normalize_required(value: &str, field: &'static str) -> Result<String, AppErr
     let value = value.trim();
     if value.is_empty() {
         let code = match field {
-            "username" => InstallErrorCode::UsernameRequired,
             "email" => InstallErrorCode::EmailRequired,
             "password" => InstallErrorCode::PasswordRequired,
             "domain" => InstallErrorCode::DomainRequired,
@@ -284,12 +291,9 @@ fn normalize_domain(domain: &str) -> Result<String, AppError> {
 }
 
 fn normalize_email(email: &str) -> Result<String, AppError> {
-    identity_domain::user::normalization::normalize_email(email).map_err(|error| match error {
-        identity_domain::user::normalization::EmailNormalizationError::Empty => {
-            AppError::from_code(InstallErrorCode::EmailRequired)
-        }
-        identity_domain::user::normalization::EmailNormalizationError::InvalidFormat
-        | identity_domain::user::normalization::EmailNormalizationError::InvalidDomain => {
+    normalization_normalize_email(email).map_err(|error| match error {
+        EmailNormalizationError::Empty => AppError::from_code(InstallErrorCode::EmailRequired),
+        EmailNormalizationError::InvalidFormat | EmailNormalizationError::InvalidDomain => {
             AppError::from_code(InstallErrorCode::EmailInvalid)
         }
     })
@@ -321,6 +325,9 @@ fn parse_install_key_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, Ap
 
 #[cfg(test)]
 mod tests {
+    use crate::domain::key::ALL_ASYMMETRIC_KEY_ALGORITHMS;
+    use crate::domain::key::AsymmetricKeyAlgorithm;
+
     use super::{InstallInput, validate_install_input};
     use crate::application::error::code::AppErrorCode;
     use crate::application::error::codes::common::CommonErrorCode;
@@ -364,8 +371,6 @@ mod tests {
 
     #[test]
     fn install_validation_accepts_every_offered_name() {
-        use crate::domain::key::{ALL_ASYMMETRIC_KEY_ALGORITHMS, AsymmetricKeyAlgorithm};
-
         for algorithm in ALL_ASYMMETRIC_KEY_ALGORITHMS.iter().filter(|algorithm| {
             !matches!(
                 algorithm,

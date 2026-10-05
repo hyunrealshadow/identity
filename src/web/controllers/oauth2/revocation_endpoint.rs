@@ -165,6 +165,9 @@ pub async fn revoke(
 
 #[cfg(test)]
 mod tests {
+    use crate::controllers::oauth2::routes;
+    use salvo::affix_state::inject;
+
     use http::{StatusCode, header};
     use salvo::{
         Service,
@@ -176,9 +179,7 @@ mod tests {
         let state =
             identity_infrastructure::test_app_state_with_cors_origin(Some("http://localhost:3000"))
                 .await;
-        let service = Service::new(
-            crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state)),
-        );
+        let service = Service::new(routes().hoop(inject(state)));
         let preflight = TestClient::options("http://127.0.0.1:5800/oauth2/revoke")
             .add_header(header::ORIGIN, "http://localhost:3000", true)
             .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST", true)

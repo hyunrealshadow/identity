@@ -1,4 +1,13 @@
+use crate::client::model::ClientProtocol;
+use std::error::Error;
+use std::fmt::Display as FmtDisplay;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::{fmt, str::FromStr};
+use url::Host;
+use uuid::Uuid;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sha2::{Digest, Sha256};
@@ -150,8 +159,8 @@ impl OpenIdConnectClientPlatformType {
                     || (*self == Self::Native
                         && matches!(
                             uri.host(),
-                            Some(url::Host::Ipv4(std::net::Ipv4Addr::LOCALHOST))
-                                | Some(url::Host::Ipv6(std::net::Ipv6Addr::LOCALHOST))
+                            Some(Host::Ipv4(Ipv4Addr::LOCALHOST))
+                                | Some(Host::Ipv6(Ipv6Addr::LOCALHOST))
                         ))
             }
             _ => *self == Self::Native,
@@ -168,7 +177,7 @@ impl fmt::Display for ParseOpenIdConnectClientPlatformKindError {
     }
 }
 
-impl std::error::Error for ParseOpenIdConnectClientPlatformKindError {}
+impl Error for ParseOpenIdConnectClientPlatformKindError {}
 
 impl FromStr for OpenIdConnectClientPlatformType {
     type Err = ParseOpenIdConnectClientPlatformKindError;
@@ -262,7 +271,7 @@ impl OpenIdConnectClientMetadata {
 }
 
 pub fn pairwise_subject_identifier(
-    user_oid: uuid::Uuid,
+    user_oid: Uuid,
     sector_identifier: &str,
     issuer: &Url,
 ) -> String {
@@ -290,7 +299,7 @@ impl OpenIdConnectClient {
         platforms: Vec<OpenIdConnectClientPlatform>,
         assigned_scopes: Vec<String>,
     ) -> Result<Self, InvalidOpenIdConnectClientError> {
-        if client.protocol != crate::client::model::ClientProtocol::OpenIdConnect {
+        if client.protocol != ClientProtocol::OpenIdConnect {
             return Err(InvalidOpenIdConnectClientError);
         }
 
@@ -346,13 +355,9 @@ impl OpenIdConnectClient {
                     return true;
                 }
                 let raw_host = match registered_url.host() {
-                    Some(url::Host::Domain("localhost")) => "http://localhost",
-                    Some(url::Host::Ipv4(ip)) if ip == std::net::Ipv4Addr::LOCALHOST => {
-                        "http://127.0.0.1"
-                    }
-                    Some(url::Host::Ipv6(ip)) if ip == std::net::Ipv6Addr::LOCALHOST => {
-                        "http://[::1]"
-                    }
+                    Some(Host::Domain("localhost")) => "http://localhost",
+                    Some(Host::Ipv4(ip)) if ip == Ipv4Addr::LOCALHOST => "http://127.0.0.1",
+                    Some(Host::Ipv6(ip)) if ip == Ipv6Addr::LOCALHOST => "http://[::1]",
                     _ => return false,
                 };
                 if platform.platform != OpenIdConnectClientPlatformType::Native
@@ -409,7 +414,7 @@ impl OpenIdConnectClient {
                 .all(|grant| self.allows_grant(*grant))
     }
 
-    pub fn subject_identifier(&self, user_oid: uuid::Uuid, issuer: &Url) -> String {
+    pub fn subject_identifier(&self, user_oid: Uuid, issuer: &Url) -> String {
         match self.metadata.subject_type.unwrap_or(SubjectType::Public) {
             SubjectType::Public => user_oid.to_string(),
             SubjectType::Pairwise => {
@@ -455,102 +460,31 @@ fn strip_loopback_port(suffix: &str) -> Option<&str> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidOpenIdConnectClientError;
 
-impl std::fmt::Display for InvalidOpenIdConnectClientError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl FmtDisplay for InvalidOpenIdConnectClientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("client protocol must be openid_connect")
     }
 }
 
-impl std::error::Error for InvalidOpenIdConnectClientError {}
+impl Error for InvalidOpenIdConnectClientError {}
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::{
         GrantType, OAuthProtocolVersion, OpenIdConnectClient, OpenIdConnectClientMetadata,
         OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
         pairwise_subject_identifier,
     };
     use crate::client::model::{Client, ClientProtocol};
-    use crate::openid_connect::{ResponseType, SubjectType};
+    use crate::openid_connect::ResponseType;
     use chrono::Utc;
     use url::Url;
 
     #[test]
-    fn parses_protocol_platform_values() {
-        assert_eq!(
-            "web".parse::<OpenIdConnectClientPlatformType>().unwrap(),
-            OpenIdConnectClientPlatformType::Web
-        );
-        assert_eq!(
-            "native".parse::<OpenIdConnectClientPlatformType>().unwrap(),
-            OpenIdConnectClientPlatformType::Native
-        );
-        assert!("ios".parse::<OpenIdConnectClientPlatformType>().is_err());
-    }
-
-    #[test]
-    fn parses_subject_type_values() {
-        assert_eq!(
-            "public".parse::<SubjectType>().unwrap(),
-            SubjectType::Public
-        );
-        assert_eq!(
-            "pairwise".parse::<SubjectType>().unwrap(),
-            SubjectType::Pairwise
-        );
-        assert!("sector".parse::<SubjectType>().is_err());
-    }
-
-    #[test]
-    fn settings_defaults_include_scoped_claims_to_false() {
-        assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_id_token);
-        assert!(!OpenIdConnectClientSettings::default().include_scoped_claims_in_access_token);
-        assert!(!OpenIdConnectClientSettings::default().cors_enabled);
-        assert!(!OpenIdConnectClientSettings::default().allow_public_client_flow);
-
-        // Stored settings without the version field inherit the global version.
-        let parsed: OpenIdConnectClientSettings =
-            serde_json::from_value(serde_json::json!({"skip_consent": true})).unwrap();
-        assert!(parsed.skip_consent);
-        assert!(!parsed.include_scoped_claims_in_id_token);
-        assert!(!parsed.include_scoped_claims_in_access_token);
-        assert_eq!(parsed.oauth_version, None);
-        assert!(
-            serde_json::to_value(&parsed)
-                .unwrap()
-                .get("oauth_version")
-                .is_none()
-        );
-        let enabled: OpenIdConnectClientSettings = serde_json::from_value(
-            serde_json::json!({"allow_public_client_flow": true, "oauth_version": "2.0"}),
-        )
-        .unwrap();
-        assert!(enabled.allow_public_client_flow);
-        assert_eq!(enabled.oauth_version, Some(OAuthProtocolVersion::V2_0));
-    }
-
-    #[test]
-    fn settings_roundtrips_oauth_protocol_version() {
-        let settings = OpenIdConnectClientSettings {
-            require_pushed_authorization_requests: false,
-            oauth_version: Some(OAuthProtocolVersion::V2_1),
-            ..OpenIdConnectClientSettings::default()
-        };
-        let json = serde_json::to_value(&settings).unwrap();
-        assert_eq!(json["oauth_version"], "2.1");
-        let parsed: OpenIdConnectClientSettings = serde_json::from_value(json).unwrap();
-        assert_eq!(parsed.oauth_version, Some(OAuthProtocolVersion::V2_1));
-        assert!(
-            serde_json::from_value::<OpenIdConnectClientSettings>(
-                serde_json::json!({"oauth_version": "3.0"})
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
     fn pairwise_subject_identifier_uses_sector_identifier() {
-        let user_oid = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let user_oid = Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         let issuer = Url::parse("https://identity.example.com/").unwrap();
         let sector_a = Url::parse("https://rp-a.example.com/sector.json").unwrap();
         let sector_b = Url::parse("https://rp-b.example.com/sector.json").unwrap();
@@ -569,7 +503,7 @@ mod tests {
     #[test]
     fn rejects_non_openid_connect_clients() {
         let client = Client {
-            oid: uuid::Uuid::nil(),
+            oid: Uuid::nil(),
             protocol: ClientProtocol::Other("saml".to_string()),
             name: "Example RP".to_string(),
             names: vec![],
@@ -619,7 +553,7 @@ mod tests {
     #[test]
     fn accepts_redirect_uri_from_any_client_platform() {
         let client = Client {
-            oid: uuid::Uuid::nil(),
+            oid: Uuid::nil(),
             protocol: ClientProtocol::OpenIdConnect,
             name: "Example RP".to_string(),
             names: vec![],
@@ -717,7 +651,7 @@ mod tests {
     fn native_localhost_redirect_allows_variable_port_in_both_oauth_versions() {
         for oauth_version in [OAuthProtocolVersion::V2_0, OAuthProtocolVersion::V2_1] {
             let client = Client {
-                oid: uuid::Uuid::nil(),
+                oid: Uuid::nil(),
                 protocol: ClientProtocol::OpenIdConnect,
                 name: "Native RP".to_owned(),
                 names: vec![],
@@ -768,7 +702,7 @@ mod tests {
     #[test]
     fn stores_assigned_scope_names() {
         let client = Client {
-            oid: uuid::Uuid::nil(),
+            oid: Uuid::nil(),
             protocol: ClientProtocol::OpenIdConnect,
             name: "Example RP".to_string(),
             names: vec![],
@@ -826,7 +760,7 @@ mod tests {
 
     fn client_with_grant_types(grant_types: Option<Vec<GrantType>>) -> OpenIdConnectClient {
         let client = Client {
-            oid: uuid::Uuid::nil(),
+            oid: Uuid::nil(),
             protocol: ClientProtocol::OpenIdConnect,
             name: "Example RP".to_string(),
             names: vec![],

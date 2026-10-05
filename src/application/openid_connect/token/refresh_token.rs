@@ -1,7 +1,14 @@
 use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
+use crate::domain::auth::SessionStatus;
 use crate::observability::{BusinessEvent, EventValue};
+use chrono::DateTime;
+use chrono::Duration;
+use chrono::Utc;
 use identity_domain::client_authorization::ClientAuthenticationMode;
+use identity_domain::openid_connect::API_RESOURCE;
+use identity_domain::openid_connect::ScopeSet;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
 
 use super::exchange::{issuance_result, resolve_client_id};
 
@@ -56,9 +63,7 @@ impl TokenService {
             .client_repo
             .find_by_oid(authenticated_client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         if !authenticated_client.allows_grant(GrantType::RefreshToken) {
@@ -70,12 +75,9 @@ impl TokenService {
             .data_protector
             .unprotect("refresh-token", &params.refresh_token)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RefreshTokenNotFound).with_source(error)
-            })?;
-        let refresh_oid = Uuid::from_slice(&refresh_oid_bytes).map_err(|error| {
-            AppError::from_code(TokenErrorCode::RefreshTokenNotFound).with_source(error)
-        })?;
+            .map_err(AppError::map_source(TokenErrorCode::RefreshTokenNotFound))?;
+        let refresh_oid = Uuid::from_slice(&refresh_oid_bytes)
+            .map_err(AppError::map_source(TokenErrorCode::RefreshTokenNotFound))?;
         event.attributes.push((
             "refresh_token_oid",
             EventValue::Text(refresh_oid.to_string()),
@@ -85,14 +87,14 @@ impl TokenService {
             .client_authorization_repo
             .find_by_oid(refresh_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RefreshTokenLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                TokenErrorCode::RefreshTokenLookupFailed,
+            ))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenNotFound))?;
         if refresh_record.type_ != ClientAuthorizationType::RefreshToken {
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenNotFound));
         }
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         if refresh_record.client_oid != authenticated_client_oid {
             return Err(AppError::from_code(
                 TokenErrorCode::RefreshTokenClientMismatch,
@@ -118,7 +120,7 @@ impl TokenService {
             if authenticated_client
                 .metadata()
                 .effective_token_endpoint_auth_methods()
-                == [identity_domain::openid_connect::TokenEndpointAuthMethod::None]
+                == [TokenEndpointAuthMethod::None]
             {
                 ClientAuthenticationMode::Public
             } else {
@@ -142,10 +144,9 @@ impl TokenService {
                 .device_repo
                 .find_device_authorization_by_oid(device_authorization_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::DeviceRelationLookupFailed)
-                        .with_source(error)
-                })?
+                .map_err(AppError::map_source(
+                    TokenErrorCode::DeviceRelationLookupFailed,
+                ))?
                 .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
             if !active {
                 return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
@@ -158,11 +159,9 @@ impl TokenService {
             let session = session_repo
                 .find_by_oid(refresh_session_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RefreshTokenInvalid).with_source(error)
-                })?
+                .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenInvalid))?;
-            let session_is_active = session.status == crate::domain::auth::SessionStatus::ACTIVE
+            let session_is_active = session.status == SessionStatus::ACTIVE
                 && session.revoked_at.is_none()
                 && session.expires_at.is_none_or(|expires_at| expires_at > now)
                 && session.user_oid.to_string() == refresh_data.user_oid;
@@ -189,9 +188,9 @@ impl TokenService {
             ));
         }
 
-        let granted_scope = ScopeSet::parse(&refresh_data.scope).map_err(|error| {
-            AppError::from_code(TokenErrorCode::DeserializeRefreshFailed).with_source(error)
-        })?;
+        let granted_scope = ScopeSet::parse(&refresh_data.scope).map_err(AppError::map_source(
+            TokenErrorCode::DeserializeRefreshFailed,
+        ))?;
         let requested_scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
         let grant_scope = requested_scope.to_scope_string();
         let selection = self
@@ -229,36 +228,31 @@ impl TokenService {
                 now,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
         if !claimed {
             self.revoke_replayed_refresh_token(refresh_record.oid, authenticated_client_oid, now)
                 .await?;
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
 
-        let user_oid = Uuid::parse_str(&refresh_data.user_oid).map_err(|error| {
-            AppError::from_code(TokenErrorCode::RefreshTokenSubInvalid).with_source(error)
-        })?;
+        let user_oid = Uuid::parse_str(&refresh_data.user_oid)
+            .map_err(AppError::map_source(TokenErrorCode::RefreshTokenSubInvalid))?;
         let user = self
             .user_repo
             .find_by_oid(UserOid(user_oid))
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::UserLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenUserNotFound))?;
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self
             .load_access_token_signing_key(&configured_signing_key)
             .await?;
-        let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&scope)
+        let access_token_audience = if ScopeSet::parse(&scope)
             .map(|scope| scope.has_api_scopes())
             .unwrap_or(false)
         {
-            identity_domain::openid_connect::API_RESOURCE
+            API_RESOURCE
         } else {
             client_id.as_str()
         };
@@ -284,12 +278,10 @@ impl TokenService {
                     refresh_token_oid: Some(refresh_record.oid.to_string()),
                     client_authentication_mode: Some(issued_mode),
                 }),
-                chrono::Utc::now() + chrono::Duration::hours(1),
+                Utc::now() + Duration::hours(1),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         event.attributes.push((
             "access_token_oid",
             EventValue::Text(access_token_record.oid.to_string()),
@@ -442,14 +434,12 @@ impl TokenService {
         &self,
         refresh_oid: Uuid,
         client_oid: Uuid,
-        now: chrono::DateTime<chrono::Utc>,
+        now: DateTime<Utc>,
     ) -> Result<(), AppError> {
         self.client_authorization_repo
             .revoke_refresh_token_family(refresh_oid, client_oid, now)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RevokeRefreshFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
         self.events.emit(
             BusinessEvent::audit("refresh_token.reuse_detected")
                 .outcome("detected")
@@ -473,12 +463,10 @@ impl TokenService {
             .create(
                 client_oid,
                 ClientAuthorizationData::RefreshToken(data),
-                chrono::Utc::now() + chrono::Duration::days(30),
+                Utc::now() + Duration::days(30),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::StoreRefreshFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::StoreRefreshFailed))?;
 
         // Keep the persisted record identifiable even if protecting its token fails.
         event.attributes.push((
@@ -493,9 +481,7 @@ impl TokenService {
             .data_protector
             .protect("refresh-token", record.oid.as_bytes())
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignRefreshTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignRefreshTokenFailed))?;
         Ok((record.oid, token))
     }
 }
@@ -508,9 +494,8 @@ fn refresh_scope(granted: &ScopeSet, requested: Option<&str>) -> Result<ScopeSet
     let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(granted.clone());
     };
-    let requested = ScopeSet::parse(requested).map_err(|error| {
-        AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed).with_source(error)
-    })?;
+    let requested = ScopeSet::parse(requested)
+        .map_err(AppError::map_source(TokenErrorCode::RefreshScopeNotAllowed))?;
     if !granted.covers(&requested) {
         return Err(AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed));
     }

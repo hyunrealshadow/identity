@@ -145,12 +145,7 @@ impl ObservabilityMetrics {
 
     pub(crate) fn export_failed(&self, signal: ExportSignal, pipeline: ExportPipeline) {
         let counter = match (signal, pipeline) {
-            (ExportSignal::Traces, ExportPipeline::Diagnostics) => {
-                &self.export_failures_traces_diagnostics
-            }
-            (ExportSignal::Traces, ExportPipeline::Events) => {
-                &self.export_failures_traces_diagnostics
-            }
+            (ExportSignal::Traces, _) => &self.export_failures_traces_diagnostics,
             (ExportSignal::Logs, ExportPipeline::Diagnostics) => {
                 &self.export_failures_logs_diagnostics
             }

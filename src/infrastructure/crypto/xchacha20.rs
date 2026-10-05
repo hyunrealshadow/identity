@@ -1,8 +1,7 @@
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{Aead, AeadCore, KeyInit, Payload},
+    aead::{Aead, Generate, KeyInit, Payload},
 };
-use rand_core::OsRng;
 
 pub const KEY_SIZE: usize = 32;
 
@@ -19,7 +18,7 @@ pub fn encrypt(
     plaintext: &[u8],
     aad: &[u8],
 ) -> Result<([u8; 24], Vec<u8>), CryptoError> {
-    let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let nonce = XNonce::generate();
     let cipher = XChaCha20Poly1305::new(key.into());
     let ciphertext = cipher
         .encrypt(
@@ -42,7 +41,7 @@ pub fn decrypt(
     aad: &[u8],
 ) -> Result<Vec<u8>, CryptoError> {
     let cipher = XChaCha20Poly1305::new(key.into());
-    let nonce = XNonce::from_slice(nonce);
+    let nonce: &XNonce = nonce.into();
     cipher
         .decrypt(
             nonce,

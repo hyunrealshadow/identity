@@ -1,5 +1,9 @@
 use async_trait::async_trait;
+use chrono::DateTime;
+use chrono::Duration;
 use chrono::Utc;
+use identity_domain::auth::LoginFailureReason;
+use identity_domain::auth::SessionStatus;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
     sea_query::Expr,
@@ -36,8 +40,8 @@ fn to_domain(
         user_oid,
         status,
         failed_attempts: m.failed_attempts,
-        created_at: chrono::DateTime::<Utc>::from(m.created_at),
-        expires_at: chrono::DateTime::<Utc>::from(m.expires_at),
+        created_at: DateTime::<Utc>::from(m.created_at),
+        expires_at: DateTime::<Utc>::from(m.expires_at),
         acr: m.acr,
         requested_acr: m.requested_acr,
     })
@@ -128,8 +132,8 @@ impl LoginRepository for LoginRepositoryImpl {
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let now = Utc::now();
-        let expiry_duration = chrono::Duration::from_std(LOGIN_EXPIRY)
-            .unwrap_or_else(|_| chrono::Duration::minutes(5));
+        let expiry_duration =
+            Duration::from_std(LOGIN_EXPIRY).unwrap_or_else(|_| Duration::minutes(5));
         let active = login::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(client.id),
@@ -236,10 +240,7 @@ impl LoginRepository for LoginRepositoryImpl {
             let session = SessionEntity::find()
                 .filter(session::Column::Oid.eq(Uuid::from(s_oid)))
                 .filter(session::Column::UserId.eq(user_id))
-                .filter(
-                    session::Column::Status
-                        .eq(identity_domain::auth::SessionStatus::ACTIVE.as_str()),
-                )
+                .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
                 .filter(session::Column::RevokedAt.is_null())
                 .filter(session::Column::ExpiresAt.gt(now))
                 .one(&self.db)
@@ -284,7 +285,7 @@ impl LoginRepository for LoginRepositoryImpl {
     async fn increment_failed_attempts(
         &self,
         login_oid: Uuid,
-        failure_reason: Option<identity_domain::auth::LoginFailureReason>,
+        failure_reason: Option<LoginFailureReason>,
     ) -> Result<i32, LoginRepositoryError> {
         let now = Utc::now().fixed_offset();
         let mut update = LoginEntity::update_many()

@@ -1,9 +1,13 @@
 use chrono::{DateTime, Utc};
 use identity_domain::auth::SessionOid;
 use identity_domain::auth::model::{ActiveSession, Session};
+use identity_domain::auth::repository::SessionPage;
+use identity_domain::auth::repository::SessionPageDirection;
+use identity_domain::auth::repository::SessionSortKey;
 use identity_domain::auth::repository::{
     CreateSessionInput, SessionRepository, SessionRepositoryError,
 };
+use uuid::Uuid;
 
 mockall::mock! {
     pub SessionRepository {}
@@ -23,7 +27,7 @@ mockall::mock! {
         async fn reauthenticate_by_oid(
             &self,
             oid: SessionOid,
-            expected_user_oid: uuid::Uuid,
+            expected_user_oid: Uuid,
             acr: &str,
             acr_expires_at: DateTime<Utc>,
             amr: &[String],
@@ -39,15 +43,15 @@ mockall::mock! {
         ) -> Result<Option<Session>, SessionRepositoryError>;
         async fn list_by_user_oid(
             &self,
-            user_oid: uuid::Uuid,
+            user_oid: Uuid,
         ) -> Result<Vec<Session>, SessionRepositoryError>;
         async fn list_active_page_by_user_oid(
             &self,
-            user_oid: uuid::Uuid,
-            after: Option<identity_domain::auth::repository::SessionSortKey>,
-            before: Option<identity_domain::auth::repository::SessionSortKey>,
+            user_oid: Uuid,
+            after: Option<SessionSortKey>,
+            before: Option<SessionSortKey>,
             limit: usize,
-            direction: identity_domain::auth::repository::SessionPageDirection,
-        ) -> Result<identity_domain::auth::repository::SessionPage, SessionRepositoryError>;
+            direction: SessionPageDirection,
+        ) -> Result<SessionPage, SessionRepositoryError>;
     }
 }

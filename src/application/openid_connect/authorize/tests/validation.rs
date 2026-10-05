@@ -1,6 +1,13 @@
 use super::fixtures::*;
 use super::*;
+use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+use crate::setting::OpenIdConnectSettings;
+use crate::setting::SettingsSnapshot;
+use identity_domain::openid_connect::API_RESOURCE;
 use identity_domain::openid_connect::GrantType;
+use identity_domain::openid_connect::OAuthProtocolVersion;
+use identity_domain::openid_connect::OpenIdConnectClientSettings;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
 
 #[tokio::test]
 async fn public_client_requires_pkce_s256() {
@@ -515,19 +522,13 @@ async fn api_scopes_accept_graphql_resource() {
         Arc::new(mock_login_repo()),
     );
     let mut request = params("openid account");
-    request.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_string()];
+    request.resources = vec![API_RESOURCE.to_string()];
 
     assert!(service.validate_request(request).await.is_ok());
 }
 
 #[tokio::test]
 async fn global_oauth_version_applies_unless_client_explicitly_overrides_it() {
-    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-    use crate::setting::{OpenIdConnectSettings, SettingsSnapshot};
-    use identity_domain::openid_connect::{
-        OAuthProtocolVersion, OpenIdConnectClientSettings, TokenEndpointAuthMethod,
-    };
-
     for (global, client, requires_pkce) in [
         (OAuthProtocolVersion::V2_0, None, false),
         (OAuthProtocolVersion::V2_1, None, true),
@@ -581,9 +582,6 @@ async fn global_oauth_version_applies_unless_client_explicitly_overrides_it() {
 
 #[tokio::test]
 async fn disabled_public_flow_rejects_authorization_even_with_none_and_pkce() {
-    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-    use identity_domain::openid_connect::{OpenIdConnectClientSettings, TokenEndpointAuthMethod};
-
     let service = build_test_service(
         Arc::new(ConfiguredClientRepository {
             settings: OpenIdConnectClientSettings::default(),

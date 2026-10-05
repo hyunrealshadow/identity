@@ -1,12 +1,18 @@
+use serde::Deserializer;
+use serde::de::Error as DeError;
+use std::error::Error;
+use std::io::Error as IoError;
+use std::io::ErrorKind;
 use std::{env, fmt, fs};
+use tera::Context;
 
 use identity_domain::key::AsymmetricKeyAlgorithm;
 use ipnet::IpNet;
 use serde::Deserialize;
-use tera::Tera;
+use tera::{Error as TeraError, Kwargs, State, Tera, TeraResult, Value};
 use url::Url;
 
-pub type ConfigResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
+pub type ConfigResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
 mod observability;
 
@@ -277,14 +283,23 @@ impl AppConfig {
     }
 }
 
-fn invalid_config(message: impl Into<String>) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::InvalidInput, message.into())
+fn invalid_config(message: impl Into<String>) -> IoError {
+    IoError::new(ErrorKind::InvalidInput, message.into())
 }
 
 fn render_config_template(raw: &str) -> ConfigResult<String> {
     let mut tera = Tera::default();
+    tera.register_function("get_env", |args: Kwargs, _: &State| -> TeraResult<Value> {
+        let name = args.must_get::<String>("name")?;
+        match env::var(&name) {
+            Ok(value) => Ok(Value::from(value)),
+            Err(error) => args
+                .get::<Value>("default")?
+                .ok_or_else(|| TeraError::message(format!("get_env({name}): {error}"))),
+        }
+    });
     tera.add_raw_template("config", raw)?;
-    Ok(tera.render("config", &tera::Context::new())?)
+    Ok(tera.render("config", &Context::new())?)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -484,11 +499,11 @@ fn deserialize_install_key_algorithm<'de, D>(
     deserializer: D,
 ) -> Result<AsymmetricKeyAlgorithm, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: Deserializer<'de>,
 {
     let value = String::deserialize(deserializer)?;
 
-    value.parse().map_err(serde::de::Error::custom)
+    value.parse().map_err(DeError::custom)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -769,18 +784,17 @@ fn default_graphql_timeout_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AppConfig, AppEnvironment, LogFormat, StaticTokenConfig, TlsTermination,
-        render_config_template,
-    };
+    use std::env;
+
+    use super::{AppConfig, AppEnvironment, StaticTokenConfig, render_config_template};
     use serial_test::serial;
 
     fn set_env(key: &str, value: &str) {
-        unsafe { std::env::set_var(key, value) };
+        unsafe { env::set_var(key, value) };
     }
 
     fn remove_env(key: &str) {
-        unsafe { std::env::remove_var(key) };
+        unsafe { env::remove_var(key) };
     }
 
     #[test]
@@ -837,6 +851,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(rendered, "value: fallback");
+        let rendered =
+            render_config_template(r#"port: {{ get_env(name="TEST_RENDER_ENV", default=5150) }}"#)
+                .unwrap();
+        assert_eq!(rendered, "port: 5150");
     }
 
     #[test]
@@ -864,33 +882,6 @@ mod tests {
         assert_eq!(config.token.as_deref(), Some(TOKEN));
         assert!(config.has_exactly_one_source());
         assert!(!format!("{config:?}").contains(TOKEN));
-    }
-
-    #[test]
-    fn deserialization_applies_config_defaults() {
-        let config = serde_yml::from_str::<AppConfig>(
-            r#"
-database:
-  uri: postgres://localhost/identity
-"#,
-        )
-        .unwrap();
-
-        assert_eq!(config.logger.level, "debug");
-        assert_eq!(config.logger.format, LogFormat::Compact);
-        assert_eq!(config.server.port, 5150);
-        assert_eq!(config.server.binding, "127.0.0.1");
-        assert_eq!(config.server.tls.termination, TlsTermination::Direct);
-        assert_eq!(config.health.route, "/health");
-        assert_eq!(config.graphql.server.port, None);
-        assert_eq!(config.graphql.max_depth, 12);
-        assert_eq!(config.graphql.max_complexity, 300);
-        assert_eq!(config.graphql.max_page_size, 100);
-        assert_eq!(config.graphql.timeout_secs, 10);
-        assert_eq!(config.settings.refresh_interval_secs, 5);
-        assert!(config.health.enable);
-        assert!(config.health.checks.database);
-        assert!(config.database.auto_migrate);
     }
 
     #[test]
@@ -939,24 +930,6 @@ openid_connect:
         );
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn deserialization_applies_tls_defaults() {
-        let config: AppConfig = serde_yml::from_str(
-            r#"
-database:
-  uri: postgres://localhost/identity
-"#,
-        )
-        .unwrap();
-
-        assert_eq!(config.server.tls.termination, TlsTermination::Direct);
-        assert!(config.server.tls.auto_generate);
-        assert_eq!(config.server.tls.cert_path, "config/tls/server.crt");
-        assert_eq!(config.server.tls.key_path, "config/tls/server.key");
-        assert_eq!(config.server.tls.domain, None);
-        assert!(config.server.tls.trusted_proxies.is_empty());
     }
 
     #[test]

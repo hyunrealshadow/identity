@@ -18,16 +18,17 @@ pub enum CommonErrorCode {
 impl AppErrorCode for CommonErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::InvalidRequest => ErrorKind::Validation,
-            Self::InternalError => ErrorKind::Internal,
-            Self::ValidationFailed => ErrorKind::Validation,
+            Self::InvalidRequest
+            | Self::ValidationFailed
+            | Self::InvalidTarget
+            | Self::InvalidScope => ErrorKind::Validation,
+            Self::InternalError | Self::ResourceLookupFailed | Self::PushedRequestStorageFailed => {
+                ErrorKind::Internal
+            }
+
             Self::Unauthorized => ErrorKind::Unauthorized,
             Self::Forbidden => ErrorKind::Forbidden,
             Self::NotFound => ErrorKind::NotFound,
-            Self::InvalidTarget => ErrorKind::Validation,
-            Self::InvalidScope => ErrorKind::Validation,
-            Self::ResourceLookupFailed => ErrorKind::Internal,
-            Self::PushedRequestStorageFailed => ErrorKind::Internal,
         }
     }
 

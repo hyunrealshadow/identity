@@ -22,6 +22,8 @@ pub(super) fn oauth_error_response(
 
 #[cfg(test)]
 mod tests {
+    use super::oauth_error_response;
+
     use http::{HeaderMap, HeaderValue, header};
     use identity_domain::openid_connect::OAuthErrorCode;
 
@@ -35,7 +37,7 @@ mod tests {
             (OAuthErrorCode::LoginRequired, "需要登录后才能继续"),
             (OAuthErrorCode::AccessDenied, "授权请求已被拒绝"),
         ] {
-            let response = super::oauth_error_response(&ctx, &headers, code, None);
+            let response = oauth_error_response(&ctx, &headers, code, None);
             assert_eq!(response.error_description.as_deref(), Some(expected));
         }
     }

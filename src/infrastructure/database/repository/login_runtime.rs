@@ -1,12 +1,15 @@
 use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Duration;
 use chrono::{DateTime, Utc};
 use rand::RngExt;
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseConnection,
     EntityTrait, QueryFilter, QueryOrder, TransactionTrait,
 };
+use std::error::Error;
 use uuid::Uuid;
 
 use identity_domain::openid_connect::{
@@ -29,16 +32,14 @@ impl LoginRuntimeRepositoryImpl {
     }
 }
 
-fn query_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> LoginRuntimeRepositoryError {
+fn query_error(error: impl Error + Send + Sync + 'static) -> LoginRuntimeRepositoryError {
     LoginRuntimeRepositoryError::QueryFailed(Box::new(error))
 }
 
 fn retirement_expiry(
     current_expires_at: DateTime<Utc>,
     now: DateTime<Utc>,
-    retire_after: chrono::Duration,
+    retire_after: Duration,
 ) -> Option<DateTime<Utc>> {
     (current_expires_at > now).then(|| current_expires_at.min(now + retire_after))
 }
@@ -49,8 +50,7 @@ fn secret_is_due(
     now: DateTime<Utc>,
     policy: &LoginRotationPolicy,
 ) -> bool {
-    created_at <= now - chrono::Duration::days(60)
-        || expires_at <= now + policy.rotate_before_expiry
+    created_at <= now - Duration::days(60) || expires_at <= now + policy.rotate_before_expiry
 }
 
 async fn builtin_login_client<C: ConnectionTrait>(
@@ -183,11 +183,11 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
                 client_openid_connect_credential::Entity::update_many()
                     .col_expr(
                         client_openid_connect_credential::Column::ExpiresAt,
-                        sea_orm::sea_query::Expr::value(retiring.fixed_offset()),
+                        Expr::value(retiring.fixed_offset()),
                     )
                     .col_expr(
                         client_openid_connect_credential::Column::UpdatedAt,
-                        sea_orm::sea_query::Expr::value(Some(now.fixed_offset())),
+                        Expr::value(Some(now.fixed_offset())),
                     )
                     .filter(client_openid_connect_credential::Column::Id.eq(current.id))
                     .exec(&txn)

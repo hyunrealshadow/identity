@@ -1,9 +1,16 @@
 use super::*;
+use chrono::DateTime;
+use chrono::Duration;
+use chrono::Utc;
 use identity_domain::client_authorization::{
-    ClientAuthorizationData, ConsentState, SelectionSource, StoredAuthorizationRequest,
+    ClientAuthorizationData, ConsentState, StoredAuthorizationRequest,
 };
 use identity_domain::openid_connect::AuthorizationRequest;
 use identity_domain::openid_connect::AuthorizationRequestData;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex;
+use uuid::Uuid;
 
 use crate::openid_connect::tests::fixtures::mocks::MockClientAuthorizationRepository;
 
@@ -11,31 +18,18 @@ use crate::openid_connect::tests::fixtures::mocks::MockClientAuthorizationReposi
 ///
 /// Kept public so test helpers can manipulate records directly.
 pub(in crate::openid_connect) struct ClientAuthorizationState {
-    pub(in crate::openid_connect) records:
-        std::sync::Mutex<std::collections::HashMap<uuid::Uuid, ClientAuthorization>>,
+    pub(in crate::openid_connect) records: Mutex<HashMap<Uuid, ClientAuthorization>>,
 }
 
 impl Default for ClientAuthorizationState {
     fn default() -> Self {
         Self {
-            records: std::sync::Mutex::new(std::collections::HashMap::new()),
+            records: Mutex::new(HashMap::new()),
         }
     }
 }
 
 // ── State-machine helpers (ported from old InMemoryClientAuthorizationRepository) ──
-
-fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSource) -> bool {
-    match (current, next) {
-        (Some(SelectionSource::FreshLogin), SelectionSource::AccountPicker) => false,
-        (Some(existing), incoming) if existing == incoming => true,
-        (Some(SelectionSource::Reauthentication), _) => false,
-        (Some(SelectionSource::Auto), SelectionSource::AccountPicker) => true,
-        (Some(SelectionSource::Auto), SelectionSource::FreshLogin) => true,
-        (None, _) => true,
-        _ => true,
-    }
-}
 
 // ── Public test helpers (replace the old InMemoryClientAuthorizationRepository methods) ──
 
@@ -43,8 +37,8 @@ fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSour
 pub(in crate::openid_connect) fn insert_legacy_authorization_request_for_test(
     state: &ClientAuthorizationState,
     request: &AuthorizationRequest,
-) -> uuid::Uuid {
-    let oid = uuid::Uuid::new_v4();
+) -> Uuid {
+    let oid = Uuid::new_v4();
     state.records.lock().unwrap().insert(
         oid,
         ClientAuthorization {
@@ -55,10 +49,10 @@ pub(in crate::openid_connect) fn insert_legacy_authorization_request_for_test(
                 request: AuthorizationRequestData::from(request),
                 interaction: Default::default(),
             }),
-            expires_at: chrono::Utc::now() + chrono::Duration::minutes(10),
+            expires_at: Utc::now() + Duration::minutes(10),
             completed_at: None,
             revoked_at: None,
-            created_at: chrono::Utc::now(),
+            created_at: Utc::now(),
             updated_at: None,
         },
     );
@@ -68,7 +62,7 @@ pub(in crate::openid_connect) fn insert_legacy_authorization_request_for_test(
 /// Modify the stored request's redirect_uri on an existing record.
 pub(in crate::openid_connect) fn set_stored_request_redirect_uri_for_test(
     state: &ClientAuthorizationState,
-    oid: uuid::Uuid,
+    oid: Uuid,
     redirect_uri: &str,
 ) {
     let mut records = state.records.lock().unwrap();
@@ -77,14 +71,14 @@ pub(in crate::openid_connect) fn set_stored_request_redirect_uri_for_test(
         panic!("test record should be authorization request");
     };
     stored.request.redirect_uri = redirect_uri.to_string();
-    record.updated_at = Some(chrono::Utc::now());
+    record.updated_at = Some(Utc::now());
 }
 
 /// Check whether a record has a completed_at timestamp.
 pub(in crate::openid_connect) fn completed_at_for_test(
     state: &ClientAuthorizationState,
-    oid: uuid::Uuid,
-) -> Option<chrono::DateTime<chrono::Utc>> {
+    oid: Uuid,
+) -> Option<DateTime<Utc>> {
     state
         .records
         .lock()
@@ -98,7 +92,7 @@ pub(in crate::openid_connect) fn completed_at_for_test(
 /// Creates a MockClientAuthorizationRepository backed by a `ClientAuthorizationState`,
 /// implementing the full authorization request state machine.
 pub fn mock_client_auth_repo_with_state(
-    state: std::sync::Arc<ClientAuthorizationState>,
+    state: Arc<ClientAuthorizationState>,
 ) -> MockClientAuthorizationRepository {
     let mut mock = MockClientAuthorizationRepository::new();
 
@@ -108,14 +102,14 @@ pub fn mock_client_auth_repo_with_state(
         .returning(move |client_oid, data, expires_at| {
             let type_ = data.authorization_type();
             let record = ClientAuthorization {
-                oid: uuid::Uuid::new_v4(),
+                oid: Uuid::new_v4(),
                 client_oid,
                 type_,
                 data,
                 expires_at,
                 completed_at: None,
                 revoked_at: None,
-                created_at: chrono::Utc::now(),
+                created_at: Utc::now(),
                 updated_at: None,
             };
             s.records.lock().unwrap().insert(record.oid, record.clone());
@@ -143,7 +137,7 @@ pub fn mock_client_auth_repo_with_state(
                 let ClientAuthorizationData::AuthorizationRequest(stored) = &mut record.data else {
                     return Ok(false);
                 };
-                if !can_overwrite_selection(stored.interaction.selection_source, source) {
+                if !source.can_replace(stored.interaction.selection_source) {
                     return Ok(false);
                 }
 
@@ -151,7 +145,7 @@ pub fn mock_client_auth_repo_with_state(
                 stored.interaction.selected_protected_session_id = protected_session_id;
                 stored.interaction.selected_user_oid = Some(user_oid.to_string());
                 stored.interaction.selection_source = Some(source);
-                record.updated_at = Some(chrono::Utc::now());
+                record.updated_at = Some(Utc::now());
                 Ok(true)
             },
         );
@@ -177,7 +171,7 @@ pub fn mock_client_auth_repo_with_state(
 
             stored.interaction.consent_state = consent_state;
             stored.interaction.consent_decided_at = Some(decided_at.to_rfc3339());
-            record.updated_at = Some(chrono::Utc::now());
+            record.updated_at = Some(Utc::now());
             Ok(true)
         });
 
@@ -196,7 +190,7 @@ pub fn mock_client_auth_repo_with_state(
                 return Ok(false);
             }
             record.completed_at = Some(completed_at);
-            record.updated_at = Some(chrono::Utc::now());
+            record.updated_at = Some(Utc::now());
             Ok(true)
         });
 
