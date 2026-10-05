@@ -1,3 +1,9 @@
+use super::response::redirect_oauth_error_response;
+use crate::controllers::response::redirect_to_response;
+use crate::controllers::shared::login_redirect;
+use chrono::Utc;
+use http::HeaderMap;
+use identity_domain::auth::acr_satisfies;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::future::Future;
@@ -32,22 +38,14 @@ pub enum FlowDecision {
 }
 
 impl FlowDecision {
-    pub fn into_response(
-        self,
-        ctx: &AppState,
-        headers: &http::HeaderMap,
-    ) -> Result<Response, AppError> {
+    pub fn into_response(self, ctx: &AppState, headers: &HeaderMap) -> Result<Response, AppError> {
         Ok(match self {
-            FlowDecision::LoginRequired { login_id } => {
-                crate::controllers::shared::login_redirect(ctx, &login_id)?
-            }
+            FlowDecision::LoginRequired { login_id } => login_redirect(ctx, &login_id)?,
             FlowDecision::Continue { login_id } => {
-                crate::controllers::response::redirect_to_response(&format!(
-                    "/oauth2/continue?login_id={login_id}"
-                ))
+                redirect_to_response(&format!("/oauth2/continue?login_id={login_id}"))
             }
             FlowDecision::OAuthError { request, error } => {
-                super::response::redirect_oauth_error_response(ctx, headers, &request, error)
+                redirect_oauth_error_response(ctx, headers, &request, error)
             }
         })
     }
@@ -145,11 +143,10 @@ where
     }
 
     if request.acr_values.as_ref().is_some_and(|requested| {
-        selected_session.acr.as_ref().is_none_or(|acr| {
-            !requested
-                .iter()
-                .any(|value| identity_domain::auth::acr_satisfies(acr, value))
-        })
+        selected_session
+            .acr
+            .as_ref()
+            .is_none_or(|acr| !requested.iter().any(|value| acr_satisfies(acr, value)))
     }) {
         if has_prompt(request.prompt.as_ref(), PromptValue::None) {
             return Ok(FlowDecision::OAuthError {
@@ -168,7 +165,7 @@ where
     }
 
     if let Some(max_age) = request.max_age {
-        let session_age = chrono::Utc::now()
+        let session_age = Utc::now()
             .signed_duration_since(selected_session.authenticated_at)
             .num_seconds();
         if session_age > max_age as i64 {
@@ -236,6 +233,16 @@ pub async fn determine_authorize_flow(
 
 #[cfg(test)]
 mod tests {
+    use identity_application::error::codes::authorize_http::AuthorizeHttpErrorCode;
+    use identity_application::error::kind::ErrorKind;
+
+    use identity_domain::auth::AMR_PASSWORD;
+
+    use chrono::DateTime;
+    use identity_domain::auth::ACR_AAL1;
+    use identity_domain::auth::ACR_AAL2;
+    use std::slice;
+
     use super::*;
     use chrono::{Duration, Utc};
     use identity_application::error::{
@@ -277,7 +284,7 @@ mod tests {
         }
     }
 
-    fn active_session(created_at: chrono::DateTime<Utc>) -> ActiveSession {
+    fn active_session(created_at: DateTime<Utc>) -> ActiveSession {
         ActiveSession {
             session_oid: SessionOid(Uuid::new_v4()),
             user_oid: Uuid::new_v4(),
@@ -288,8 +295,8 @@ mod tests {
             expires_at: None,
             created_at,
             authenticated_at: created_at,
-            acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
-            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
+            acr: Some(ACR_AAL1.to_owned()),
+            amr: vec![AMR_PASSWORD.to_owned()],
         }
     }
 
@@ -305,8 +312,8 @@ mod tests {
             expires_at: None,
             created_at: Utc::now(),
             authenticated_at: Utc::now(),
-            acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
-            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
+            acr: Some(ACR_AAL1.to_owned()),
+            amr: vec![AMR_PASSWORD.to_owned()],
         };
         let other = ActiveSession {
             session_oid: SessionOid(Uuid::new_v4()),
@@ -318,8 +325,8 @@ mod tests {
             expires_at: None,
             created_at: Utc::now(),
             authenticated_at: Utc::now(),
-            acr: Some(identity_domain::auth::ACR_AAL1.to_owned()),
-            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
+            acr: Some(ACR_AAL1.to_owned()),
+            amr: vec![AMR_PASSWORD.to_owned()],
         };
 
         let sessions = [other, matching.clone()];
@@ -336,12 +343,7 @@ mod tests {
 
     #[test]
     fn internal_client_without_session_returns_err() {
-        use identity_application::error::codes::authorize_http::AuthorizeHttpErrorCode;
-        use identity_application::error::kind::ErrorKind;
-
-        let error = identity_application::error::AppError::from_code(
-            AuthorizeHttpErrorCode::InternalClientLoginRequired,
-        );
+        let error = AppError::from_code(AuthorizeHttpErrorCode::InternalClientLoginRequired);
 
         assert_eq!(error.kind(), ErrorKind::Validation);
     }
@@ -355,7 +357,7 @@ mod tests {
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&session),
+            slice::from_ref(&session),
             authorization_request_id,
             "login-123".to_string(),
             {
@@ -391,13 +393,13 @@ mod tests {
     #[tokio::test]
     async fn determine_authorize_flow_accepts_aal2_for_an_aal1_request() {
         let mut request = request(None, None);
-        request.acr_values = Some(vec![identity_domain::auth::ACR_AAL1.to_owned()]);
+        request.acr_values = Some(vec![ACR_AAL1.to_owned()]);
         let mut session = active_session(Utc::now());
-        session.acr = Some(identity_domain::auth::ACR_AAL2.to_owned());
+        session.acr = Some(ACR_AAL2.to_owned());
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&session),
+            slice::from_ref(&session),
             Uuid::new_v4(),
             "login-123".to_string(),
             |_authorization_request_id, _session_oid, _user_oid, _source| async { Ok(()) },
@@ -542,7 +544,7 @@ mod tests {
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&session),
+            slice::from_ref(&session),
             Uuid::new_v4(),
             "login-123".to_string(),
             {
@@ -576,7 +578,7 @@ mod tests {
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&session),
+            slice::from_ref(&session),
             authorization_request_id,
             "login-123".to_string(),
             {
@@ -617,7 +619,7 @@ mod tests {
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&session),
+            slice::from_ref(&session),
             Uuid::new_v4(),
             "login-123".to_string(),
             |_authorization_request_id, _session_oid, _user_oid, _source| async { Ok(()) },
@@ -635,7 +637,7 @@ mod tests {
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&session),
+            slice::from_ref(&session),
             Uuid::new_v4(),
             "login-123".to_string(),
             |_authorization_request_id, _session_oid, _user_oid, _source| async { Ok(()) },
@@ -656,7 +658,7 @@ mod tests {
 
         let error = determine_authorize_flow_with_selection_recorder(
             &request,
-            std::slice::from_ref(&competing_session),
+            slice::from_ref(&competing_session),
             Uuid::new_v4(),
             "login-123".to_string(),
             |_authorization_request_id, _session_oid, _user_oid, _source| async {

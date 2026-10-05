@@ -1,4 +1,10 @@
+use super::codes::common::CommonErrorCode;
+use std::backtrace::Backtrace;
 use std::error::Error as StdError;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
+use std::mem;
 
 use super::{
     code::AppErrorCode, kind::ErrorKind, params::ErrorParams, validation::ValidationError,
@@ -16,10 +22,20 @@ pub struct AppError {
     params: ErrorParams,
     details: Option<AppErrorDetails>,
     source: Option<Box<dyn StdError + Send + Sync + 'static>>,
-    backtrace: Option<Box<std::backtrace::Backtrace>>,
+    backtrace: Option<Box<Backtrace>>,
 }
 
 impl AppError {
+    pub fn internal(source: impl StdError + Send + Sync + 'static) -> Self {
+        Self::from_code(CommonErrorCode::InternalError).with_source(source)
+    }
+
+    pub fn map_source<E: StdError + Send + Sync + 'static>(
+        code: impl AppErrorCode,
+    ) -> impl FnOnce(E) -> Self {
+        move |source| Self::from_code(code).with_source(source)
+    }
+
     pub fn from_code(code: impl AppErrorCode) -> Self {
         Self {
             kind: code.kind(),
@@ -28,12 +44,12 @@ impl AppError {
             details: None,
             source: None,
             backtrace: (code.kind() == ErrorKind::Internal)
-                .then(|| Box::new(std::backtrace::Backtrace::force_capture())),
+                .then(|| Box::new(Backtrace::force_capture())),
         }
     }
 
     pub fn with_param(mut self, key: &'static str, value: impl Into<String>) -> Self {
-        self.params = std::mem::take(&mut self.params).insert(key, value);
+        self.params = mem::take(&mut self.params).insert(key, value);
         self
     }
 
@@ -66,7 +82,7 @@ impl AppError {
         self.code
     }
 
-    pub fn backtrace(&self) -> Option<&std::backtrace::Backtrace> {
+    pub fn backtrace(&self) -> Option<&Backtrace> {
         self.backtrace.as_deref()
     }
 
@@ -90,8 +106,8 @@ impl AppError {
     }
 }
 
-impl std::fmt::Display for AppError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for AppError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "[{:?}] error {}", self.kind, self.code)
     }
 }

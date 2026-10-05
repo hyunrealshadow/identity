@@ -12,17 +12,14 @@ impl AuthorizeService {
         &self,
         request: ThirdPartyInitiatedLoginRequest,
     ) -> Result<Url, AppError> {
-        let client_id = Uuid::parse_str(request.client_id.trim()).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_id = Uuid::parse_str(request.client_id.trim())
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
 
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
         let mut redirect_uri = client

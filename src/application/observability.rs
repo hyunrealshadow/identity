@@ -6,6 +6,12 @@
 //! records to a bounded, non-blocking exporter. Implementing this trait must
 //! never block the caller and must never fail business operations.
 
+use crate::error::AppError;
+use crate::error::kind::ErrorKind;
+use http::HeaderMap;
+use tracing::Span;
+use url::Url;
+
 use std::sync::{Arc, OnceLock};
 
 /// Whether a record is a security audit fact or a business result.
@@ -119,11 +125,11 @@ pub trait EventSink: Send + Sync + 'static {
 pub trait OutboundTrace: Send + Sync + 'static {
     /// Span describing one real outbound HTTP call. It records the method and
     /// target host, but not query strings or credentials.
-    fn client_span(&self, method: &str, url: &url::Url) -> tracing::Span;
+    fn client_span(&self, method: &str, url: &Url) -> Span;
 
     /// Inject the active client trace context into outbound headers when the
     /// target origin is allowed. A no-op otherwise.
-    fn inject(&self, url: &url::Url, headers: &mut http::HeaderMap);
+    fn inject(&self, url: &Url, headers: &mut HeaderMap);
 }
 
 /// Used when no outbound trace policy is installed. Spans are disabled and no
@@ -132,11 +138,11 @@ pub trait OutboundTrace: Send + Sync + 'static {
 pub struct NoopOutboundTrace;
 
 impl OutboundTrace for NoopOutboundTrace {
-    fn client_span(&self, _method: &str, _url: &url::Url) -> tracing::Span {
-        tracing::Span::none()
+    fn client_span(&self, _method: &str, _url: &Url) -> Span {
+        Span::none()
     }
 
-    fn inject(&self, _url: &url::Url, _headers: &mut http::HeaderMap) {}
+    fn inject(&self, _url: &Url, _headers: &mut HeaderMap) {}
 }
 
 /// Sink used when observability is disabled, in tests and in composition
@@ -152,16 +158,16 @@ impl EventSink for NoopEventSink {
 /// code carries the specific cause; free-form error text never becomes a
 /// metric label or event name.
 #[must_use]
-pub fn error_outcome(error: &crate::error::AppError) -> (&'static str, &'static str) {
+pub fn error_outcome(error: &AppError) -> (&'static str, &'static str) {
     match error.kind() {
-        crate::error::kind::ErrorKind::Internal => ("failure", "system_error"),
-        crate::error::kind::ErrorKind::Unauthorized => ("rejected", "unauthorized"),
-        crate::error::kind::ErrorKind::Forbidden => ("rejected", "forbidden"),
-        crate::error::kind::ErrorKind::Conflict => ("rejected", "conflict"),
-        crate::error::kind::ErrorKind::Gone => ("rejected", "expired"),
-        crate::error::kind::ErrorKind::Validation => ("rejected", "invalid_request"),
-        crate::error::kind::ErrorKind::NotFound => ("rejected", "not_found"),
-        crate::error::kind::ErrorKind::RateLimit => ("rejected", "rate_limited"),
+        ErrorKind::Internal => ("failure", "system_error"),
+        ErrorKind::Unauthorized => ("rejected", "unauthorized"),
+        ErrorKind::Forbidden => ("rejected", "forbidden"),
+        ErrorKind::Conflict => ("rejected", "conflict"),
+        ErrorKind::Gone => ("rejected", "expired"),
+        ErrorKind::Validation => ("rejected", "invalid_request"),
+        ErrorKind::NotFound => ("rejected", "not_found"),
+        ErrorKind::RateLimit => ("rejected", "rate_limited"),
     }
 }
 

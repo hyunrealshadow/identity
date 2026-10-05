@@ -21,23 +21,16 @@ pub fn calculate_session_state(
 
 #[cfg(test)]
 mod tests {
+    use super::calculate_session_state;
+
     #[test]
     fn calculate_session_state_is_deterministic_and_space_free() {
-        let state = super::calculate_session_state(
-            "client-1",
-            "https://rp.example.com",
-            "session-a",
-            "salt",
-        );
+        let state =
+            calculate_session_state("client-1", "https://rp.example.com", "session-a", "salt");
 
         assert_eq!(
             state,
-            super::calculate_session_state(
-                "client-1",
-                "https://rp.example.com",
-                "session-a",
-                "salt",
-            )
+            calculate_session_state("client-1", "https://rp.example.com", "session-a", "salt",)
         );
         assert!(!state.contains(' '));
         assert!(state.ends_with(".salt"));
@@ -45,18 +38,10 @@ mod tests {
 
     #[test]
     fn calculate_session_state_changes_with_browser_state() {
-        let first = super::calculate_session_state(
-            "client-1",
-            "https://rp.example.com",
-            "session-a",
-            "salt",
-        );
-        let second = super::calculate_session_state(
-            "client-1",
-            "https://rp.example.com",
-            "session-b",
-            "salt",
-        );
+        let first =
+            calculate_session_state("client-1", "https://rp.example.com", "session-a", "salt");
+        let second =
+            calculate_session_state("client-1", "https://rp.example.com", "session-b", "salt");
 
         assert_ne!(first, second);
     }

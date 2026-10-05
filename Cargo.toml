@@ -11,53 +11,53 @@ members = [
 resolver = "3"
 
 [workspace.dependencies]
-apalis = { version = "=0.7.4" }
-apalis-cron = { version = "=0.7.4" }
-apalis-sql = { version = "=0.7.4", features = ["postgres", "tokio-comp"] }
-anyhow = { version = "1" }
-async-trait = { version = "0.1" }
-async-graphql = { version = "=7.0.17", default-features = false, features = ["chrono", "graphiql", "url"] }
-base64 = { version = "0.22" }
-chacha20poly1305 = { version = "0.10" }
-chrono = { version = "0.4", features = ["serde"] }
-http = "1"
-idna = { version = "1" }
-ipnet = { version = "2", features = ["serde"] }
+apalis = { version = "0.7.4" }
+apalis-cron = { version = "0.7.4" }
+apalis-sql = { version = "0.7.4", features = ["postgres", "tokio-comp"] }
+anyhow = { version = "1.0.104" }
+async-trait = { version = "0.1.92" }
+async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "graphiql", "url"] }
+base64 = { version = "0.23.1" }
+chacha20poly1305 = { version = "0.11.0" }
+chrono = { version = "0.4.45", features = ["serde"] }
+http = "1.5.0"
+idna = { version = "1.1.0" }
+ipnet = { version = "2.12.2", features = ["serde"] }
 josekit = { version = "0.10.3" }
 migration = { path = "migration" }
-openssl = { version = "0.10" }
-rand = { version = "0.10.1" }
-regex = { version = "1.11" }
-reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "form"] }
-salvo = { version = "0.93.0", features = ["affix-state", "csrf", "serve-static", "test", "rustls"] }
-sea-orm = { version = "=2.0.2", features = [
+openssl = { version = "0.10.81" }
+rand = { version = "0.10.3" }
+regex = { version = "1.13.1" }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form"] }
+salvo = { version = "1.0.1", features = ["affix-state", "csrf", "serve-static", "test", "rustls"] }
+sea-orm = { version = "2.0.4", features = [
   "sqlx-postgres",
   "runtime-tokio-rustls",
   "macros",
   "mock",
 ] }
-serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1" }
-serial_test = { version = "3.1.1" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151" }
+serial_test = { version = "4.0.1" }
 strum = { version = "0.28.0", features = ["derive"] }
-derive_more = { version = "2", features = ["from", "into"] }
+derive_more = { version = "2.1.1", features = ["from", "into"] }
 hmac = { version = "0.13.0" }
-opentelemetry = "0.32"
-opentelemetry-appender-tracing = { version = "0.32", default-features = false }
-opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+opentelemetry = "0.33.0"
+opentelemetry-appender-tracing = { version = "0.33.0", default-features = false }
+opentelemetry-otlp = { version = "0.33.0", default-features = false, features = [
   "http-proto",
   "reqwest-blocking-client",
   "logs",
   "metrics",
   "trace",
 ] }
-opentelemetry_sdk = "0.32"
+opentelemetry_sdk = "0.33.0"
 sha2 = { version = "0.11.0" }
-subtle = { version = "2" }
-tera = { version = "1.20" }
-thiserror = { version = "2.0.18" }
-tracing-opentelemetry = "0.33.0"
-tokio = { version = "1.45", default-features = false, features = [
+subtle = { version = "2.6.1" }
+tera = { version = "2.4.0", features = ["glob_fs"] }
+thiserror = { version = "2.0.21" }
+tracing-opentelemetry = "0.34.0"
+tokio = { version = "1.53.2", default-features = false, features = [
   "rt-multi-thread",
   "macros",
   "signal",
@@ -65,12 +65,12 @@ tokio = { version = "1.45", default-features = false, features = [
   "sync",
   "time",
 ] }
-tracing = { version = "0.1" }
-unic-langid = { version = "0.9" }
-url = { version = "2", features = ["serde"] }
-uuid = { version = "1.6", features = ["v4", "serde"] }
-ulid = { version = "1.2.1" }
-woothee = { version = "0.13" }
+tracing = { version = "0.1.44" }
+unic-langid = { version = "0.9.6" }
+url = { version = "2.5.8", features = ["serde"] }
+uuid = { version = "1.27.0", features = ["v4", "serde"] }
+ulid = { version = "3.0.0" }
+woothee = { version = "0.13.0" }
 
 [workspace.dependencies.identity-application]
 path = "src/application"
@@ -91,6 +91,7 @@ path = "src/web"
 name = "identity"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.99"
 publish = false
 default-run = "identity"
 

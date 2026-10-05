@@ -1,12 +1,16 @@
 use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use chrono::Utc;
+use identity_domain::user::normalization::normalize_email;
+use identity_domain::user::normalization::normalize_username;
 use rand::RngExt;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     Set, TransactionTrait,
 };
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -65,22 +69,15 @@ impl InstallRepository for InstallRepositoryImpl {
         let user_oid = data.user_oid;
         let key_oid = data.key_oid;
         let client_oid = data.client_id;
-        let normalized_username =
-            identity_domain::user::normalization::normalize_username(&data.username)
-                .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
-        let normalized_email = identity_domain::user::normalization::normalize_email(&data.email)
+        let normalized_username = normalize_username(&data.username)
+            .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
+        let normalized_email = normalize_email(&data.email)
             .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
-        let password_json = serde_json::to_value(&data.password).map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
-        let key_json =
-            serde_json::to_value(KeyData::Asymmetric(data.key_data.clone())).map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+        let password_json = serde_json::to_value(&data.password).map_err(AppError::internal)?;
+        let key_json = serde_json::to_value(KeyData::Asymmetric(data.key_data.clone()))
+            .map_err(AppError::internal)?;
 
-        let txn = self.db.begin().await.map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
+        let txn = self.db.begin().await.map_err(AppError::internal)?;
 
         acquire_install_transaction_lock(&txn).await?;
         if read_section::<InstallationSettings, _>(&txn)
@@ -94,9 +91,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .filter(user::Column::NameNormalized.eq(&normalized_username))
             .one(&txn)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?
+            .map_err(AppError::internal)?
             .is_some()
         {
             return Err(AppError::from_code(InstallErrorCode::UsernameExists));
@@ -106,9 +101,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .filter(user::Column::EmailNormalized.eq(&normalized_email))
             .one(&txn)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?
+            .map_err(AppError::internal)?
             .is_some()
         {
             return Err(AppError::from_code(InstallErrorCode::EmailExists));
@@ -130,7 +123,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         user_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
@@ -142,7 +135,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         let created_client = client::ActiveModel {
             oid: Set(client_oid),
@@ -158,7 +151,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         let callback_url = built_in_callback_url(&data.application_url)?;
         let logout_url = built_in_logout_url(&data.application_url)?;
@@ -184,7 +177,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         client_openid_connect_platform::ActiveModel {
             client_id: Set(created_client.id),
@@ -195,7 +188,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         let assigned_scope_names = [
             "openid",
@@ -211,9 +204,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .filter(scope::Column::Name.is_in(assigned_scope_names))
             .all(&txn)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
         if assigned_scopes.len() != assigned_scope_names.len() {
             return Err(AppError::from_code(CommonErrorCode::InternalError));
         }
@@ -227,7 +218,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }))
         .exec(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         let serialized_credential =
             serialize_credential_data(OpenIdConnectCredentialData::ClientSecret {
@@ -247,7 +238,7 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         key::ActiveModel {
             oid: Set(key_oid),
@@ -261,14 +252,14 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         let jwks = generate_all_jwks_for_key(
             &data.key_data.private_key,
             &key_oid.to_string(),
             data.key_data.certificate.as_deref(),
         )
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
         let jwk_models = jwks
             .into_iter()
             .map(|(algorithm, jwk)| {
@@ -282,24 +273,20 @@ impl InstallRepository for InstallRepositoryImpl {
                 })
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
         key_jwk::Entity::insert_many(jwk_models)
             .exec(&txn)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
 
         let mut sym_key_bytes = [0u8; 32];
         rand::rng().fill(&mut sym_key_bytes[..]);
-        let sym_key_b64 = base64::engine::general_purpose::STANDARD.encode(sym_key_bytes);
+        let sym_key_b64 = STANDARD.encode(sym_key_bytes);
         let sym_key_json = serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
             key: sym_key_b64,
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
         key::ActiveModel {
             oid: Set(Uuid::new_v4()),
             r#type: Set(KeyType::Symmetric.to_string()),
@@ -311,13 +298,11 @@ impl InstallRepository for InstallRepositoryImpl {
         }
         .insert(&txn)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
         write_settings(&txn, data.settings).await?;
 
-        txn.commit().await.map_err(|error| {
-            AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-        })?;
+        txn.commit().await.map_err(AppError::internal)?;
 
         Ok(())
     }
@@ -329,24 +314,22 @@ where
 {
     db.execute(&advisory_transaction_lock(INSTALL_TRANSACTION_LOCK_ID))
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
     Ok(())
 }
 
-fn built_in_callback_url(application_url: &url::Url) -> Result<url::Url, AppError> {
-    application_url
-        .join("callback")
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+fn built_in_callback_url(application_url: &Url) -> Result<Url, AppError> {
+    application_url.join("callback").map_err(AppError::internal)
 }
 
-fn built_in_logout_url(application_url: &url::Url) -> Result<url::Url, AppError> {
-    application_url
-        .join("logout")
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+fn built_in_logout_url(application_url: &Url) -> Result<Url, AppError> {
+    application_url.join("logout").map_err(AppError::internal)
 }
 
 #[cfg(test)]
 mod tests {
+    use url::Url;
+
     use crate::database::query::advisory_transaction_lock;
     use sea_orm::{DbBackend, MockDatabase, MockExecResult, Transaction};
 
@@ -357,7 +340,7 @@ mod tests {
 
     #[test]
     fn built_in_client_uses_top_level_callback_route() {
-        let application_url = url::Url::parse("https://identity.example/").unwrap();
+        let application_url = Url::parse("https://identity.example/").unwrap();
 
         assert_eq!(
             built_in_callback_url(&application_url).unwrap().as_str(),
@@ -367,7 +350,7 @@ mod tests {
 
     #[test]
     fn built_in_client_uses_top_level_logout_route() {
-        let application_url = url::Url::parse("https://identity.example/").unwrap();
+        let application_url = Url::parse("https://identity.example/").unwrap();
 
         assert_eq!(
             built_in_logout_url(&application_url).unwrap().as_str(),

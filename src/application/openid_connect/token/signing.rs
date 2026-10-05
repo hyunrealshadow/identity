@@ -2,7 +2,14 @@ use super::*;
 use crate::openid_connect::dto::scoped_standard_claims;
 use crate::openid_connect::jose::{asymmetric_signer_from_pem, front_channel_hash};
 use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
+use identity_domain::openid_connect::OpenIdConnectClient;
 use identity_domain::openid_connect::{ClaimsRequest, ScopeSet};
+use identity_domain::user::User;
+use josekit::jws::JwsSigner;
+use std::time::Duration;
+use std::time::SystemTime;
+use tokio::task::spawn_blocking;
+use url::Url;
 
 pub(super) struct SignAccessTokenInput<'a> {
     pub resources: &'a [String],
@@ -10,12 +17,12 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
     pub alg: JwaSigningAlgorithm,
-    pub issuer: &'a url::Url,
+    pub issuer: &'a Url,
     pub audience: &'a str,
     pub client_id: &'a str,
     pub user_oid: &'a Uuid,
-    pub client: &'a identity_domain::openid_connect::OpenIdConnectClient,
-    pub user: Option<&'a identity_domain::user::User>,
+    pub client: &'a OpenIdConnectClient,
+    pub user: Option<&'a User>,
     /// `None` for device issued tokens: they have no browser session, so no
     /// `sid` claim is emitted (a forged one would be a lie).
     pub protected_session_id: Option<&'a str>,
@@ -30,10 +37,10 @@ pub(super) struct SignIdTokenInput<'a> {
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
     pub alg: JwsAlgorithm,
-    pub issuer: &'a url::Url,
+    pub issuer: &'a Url,
     pub audience: &'a str,
-    pub client: &'a identity_domain::openid_connect::OpenIdConnectClient,
-    pub user: &'a identity_domain::user::User,
+    pub client: &'a OpenIdConnectClient,
+    pub user: &'a User,
     /// Granted scope for the issued token; consulted only when the client
     /// opts in to scoped standard claims in the ID Token.
     pub scope: &'a str,
@@ -55,7 +62,7 @@ impl TokenService {
         header.set_key_id(input.key_id);
 
         let mut payload = JwtPayload::new();
-        let now = std::time::SystemTime::now();
+        let now = SystemTime::now();
         payload.set_issuer(input.issuer.as_str());
         payload.set_subject(input.user_oid.to_string());
         payload.set_audience(if input.resources.is_empty() {
@@ -64,70 +71,54 @@ impl TokenService {
             input.resources.iter().map(String::as_str).collect()
         });
         payload.set_issued_at(&now);
-        payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
+        payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload.set_jwt_id(input.token_id);
         payload
             .set_claim(
                 JwtClaimNames::CLIENT_ID,
                 Some(serde_json::json!(input.client_id)),
             )
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         payload
             .set_claim(JwtClaimNames::SCOPE, Some(serde_json::json!(input.scope)))
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         if let Some(protected_session_id) = input.protected_session_id {
             payload
                 .set_claim(
                     JwtClaimNames::SID,
                     Some(serde_json::json!(protected_session_id)),
                 )
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         payload
             .set_claim(
                 JwtClaimNames::TOKEN_USE,
                 Some(serde_json::json!(TokenUse::AccessToken)),
             )
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         if let Some(auth_time) = input.auth_time {
             payload
                 .set_claim(JwtClaimNames::AUTH_TIME, Some(serde_json::json!(auth_time)))
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         if let Some(acr) = input.acr {
             payload
                 .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         payload
             .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         if let Some(claims_value) = input.claims {
             payload
                 .set_claim(
                     "claims",
-                    Some(serde_json::to_value(claims_value).map_err(|error| {
-                        AppError::from_code(TokenErrorCode::SignAccessTokenFailed)
-                            .with_source(error)
-                    })?),
+                    Some(
+                        serde_json::to_value(claims_value)
+                            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?,
+                    ),
                 )
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         if input
             .client
@@ -136,29 +127,24 @@ impl TokenService {
             .include_scoped_claims_in_access_token
             && let Some(user) = input.user
         {
-            let scope = ScopeSet::parse(input.scope).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            let scope = ScopeSet::parse(input.scope)
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
             for (name, value) in scoped_standard_claims(user, &scope, None, input.issuer.as_str()) {
-                payload.set_claim(&name, Some(value)).map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-                })?;
+                payload
+                    .set_claim(&name, Some(value))
+                    .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
             }
         }
 
         let private_key_pem = input.private_key_pem.to_owned();
         let alg = input.alg;
-        tokio::task::spawn_blocking(move || {
+        spawn_blocking(move || {
             let signer = build_access_token_signer(&private_key_pem, alg)?;
-            jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })
+            jwt::encode_with_signer(&payload, &header, &*signer)
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))
         })
         .await
-        .map_err(|error| {
-            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
-                .with_source(error)
-        })?
+        .map_err(AppError::internal)?
     }
 
     pub(super) async fn sign_id_token(
@@ -173,7 +159,7 @@ impl TokenService {
         header.set_key_id(input.key_id);
 
         let mut payload = JwtPayload::new();
-        let now = std::time::SystemTime::now();
+        let now = SystemTime::now();
         payload.set_issuer(input.issuer.as_str());
         payload.set_subject(
             input
@@ -182,53 +168,39 @@ impl TokenService {
         );
         payload.set_audience(vec![input.audience]);
         payload.set_issued_at(&now);
-        payload.set_expires_at(&(now + std::time::Duration::from_secs(3600)));
+        payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload
             .set_claim(
                 JwtClaimNames::AZP,
                 Some(serde_json::json!(input.client.client().oid.to_string())),
             )
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         payload
             .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         if let Some(nonce) = input.nonce {
             payload
                 .set_claim(JwtClaimNames::NONCE, Some(serde_json::json!(nonce)))
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         }
         if let Some(auth_time) = input.auth_time {
             payload
                 .set_claim(JwtClaimNames::AUTH_TIME, Some(serde_json::json!(auth_time)))
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         }
         if let Some(acr) = input.acr {
             payload
                 .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         }
         if input.alg != JwsAlgorithm::None
             && let Some(access_token) = input.access_token
         {
-            let at_hash =
-                front_channel_hash(access_token, input.alg.as_str()).map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+            let at_hash = front_channel_hash(access_token, input.alg.as_str())
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         }
         if let Some(protected_session_id) = input.protected_session_id {
             payload
@@ -236,9 +208,7 @@ impl TokenService {
                     JwtClaimNames::SID,
                     Some(serde_json::json!(protected_session_id)),
                 )
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         }
 
         if input
@@ -247,15 +217,14 @@ impl TokenService {
             .settings
             .include_scoped_claims_in_id_token
         {
-            let scope = ScopeSet::parse(input.scope).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })?;
+            let scope = ScopeSet::parse(input.scope)
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
             let standard_claims =
                 scoped_standard_claims(input.user, &scope, None, input.issuer.as_str());
             for (name, value) in standard_claims {
-                payload.set_claim(&name, Some(value)).map_err(|error| {
-                    AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-                })?;
+                payload
+                    .set_claim(&name, Some(value))
+                    .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
             }
         }
 
@@ -269,17 +238,13 @@ impl TokenService {
 
         let private_key_pem = input.private_key_pem.to_owned();
         let alg = input.alg;
-        tokio::task::spawn_blocking(move || {
+        spawn_blocking(move || {
             let signer = build_id_token_signer(&private_key_pem, alg)?;
-            jwt::encode_with_signer(&payload, &header, &*signer).map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-            })
+            jwt::encode_with_signer(&payload, &header, &*signer)
+                .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))
         })
         .await
-        .map_err(|error| {
-            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
-                .with_source(error)
-        })?
+        .map_err(AppError::internal)?
     }
 
     #[cfg(feature = "allow-none-alg")]
@@ -287,16 +252,15 @@ impl TokenService {
         header: &JwsHeader,
         payload: &JwtPayload,
     ) -> Result<String, AppError> {
-        jwt::encode_unsecured(payload, header).map_err(|error| {
-            AppError::from_code(TokenErrorCode::SignIdTokenFailed).with_source(error)
-        })
+        jwt::encode_unsecured(payload, header)
+            .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))
     }
 }
 
 fn build_access_token_signer(
     private_key_pem: &str,
     alg: JwaSigningAlgorithm,
-) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
+) -> Result<Box<dyn JwsSigner>, AppError> {
     build_jws_signer(
         private_key_pem,
         alg.as_str(),
@@ -307,7 +271,7 @@ fn build_access_token_signer(
 fn build_id_token_signer(
     private_key_pem: &str,
     alg: JwsAlgorithm,
-) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
+) -> Result<Box<dyn JwsSigner>, AppError> {
     let JwsAlgorithm::Asymmetric(alg) = alg else {
         return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
     };
@@ -322,7 +286,7 @@ fn build_jws_signer(
     private_key_pem: &str,
     alg: &str,
     error_code: TokenErrorCode,
-) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
+) -> Result<Box<dyn JwsSigner>, AppError> {
     asymmetric_signer_from_pem(alg, private_key_pem.as_bytes())
         .map_err(|error| AppError::from_code(error_code).with_source(error))
 }

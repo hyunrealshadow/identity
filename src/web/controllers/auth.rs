@@ -6,6 +6,9 @@
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/challenge`  – verify credential, create session
 
+use identity_domain::auth::LoginStatus;
+use url::form_urlencoded::Serializer;
+
 use http::{HeaderMap, StatusCode};
 use salvo::{Depot, Request, Response, Router, handler};
 
@@ -149,7 +152,7 @@ async fn login_status(
         .login_request(&login)
         .await?
         .is_some();
-    let continue_uri = if login.status == identity_domain::auth::LoginStatus::AUTHENTICATED {
+    let continue_uri = if login.status == LoginStatus::AUTHENTICATED {
         Some(if is_device {
             format!("/device?login_id={}", urlencoding::encode(&id))
         } else {
@@ -210,7 +213,7 @@ fn login_challenge_uri(
     credential_type: &str,
     ui_locales: Option<&[String]>,
 ) -> String {
-    let mut query = url::form_urlencoded::Serializer::new(String::new());
+    let mut query = Serializer::new(String::new());
     query.append_pair("login_id", login_id);
     query.append_pair("credential_type", credential_type);
     if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
@@ -321,7 +324,7 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
 
     let resp = IdentifierResponse {
         id: protected_id,
-        status: identity_domain::auth::LoginStatus::IdentifierVerified,
+        status: LoginStatus::IdentifierVerified,
         credential_types: result.credential_types,
         user: UserDisplayInfo {
             email: result.user.email.clone(),
@@ -406,7 +409,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 res,
                 StatusCode::OK,
                 ChallengeResponse {
-                    status: identity_domain::auth::LoginStatus::MfaRequired,
+                    status: LoginStatus::MfaRequired,
                     session: None,
                     acr: None,
                     continue_uri: None,
@@ -455,7 +458,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 res,
                 StatusCode::CREATED,
                 ChallengeResponse {
-                    status: identity_domain::auth::LoginStatus::Authenticated,
+                    status: LoginStatus::Authenticated,
                     session: Some(SessionInfo {
                         id: selected.protected_session_id.clone(),
                         expires_at: session.expires_at,

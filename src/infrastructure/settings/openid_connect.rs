@@ -3,10 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::database::entity::client_openid_connect_cors_origin;
 use async_trait::async_trait;
-use identity_application::{
-    error::{AppError, codes::common::CommonErrorCode},
-    setting::runtime::RefreshableSetting,
-};
+use identity_application::{error::AppError, setting::runtime::RefreshableSetting};
 use sea_orm::{DatabaseConnection, EntityTrait, QuerySelect};
 
 /// A global, read-only setting derived from per-client CORS origin rows.
@@ -33,7 +30,7 @@ impl CachedCorsOrigins {
             .all(db)
             .await
             .map(|origins| origins.into_iter().collect())
-            .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+            .map_err(AppError::internal)
     }
 
     #[must_use]

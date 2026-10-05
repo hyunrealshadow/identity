@@ -5,22 +5,36 @@ use crate::openid_connect::authorize::tests::fixtures::repositories::{
     ClientAuthorizationState, completed_at_for_test, insert_legacy_authorization_request_for_test,
     mock_client_auth_repo_with_state, set_stored_request_redirect_uri_for_test,
 };
+use crate::openid_connect::remote::test_http_client;
+use crate::openid_connect::tests::fixtures::client::test_client;
+use crate::openid_connect::tests::fixtures::client::test_metadata;
+use crate::openid_connect::tests::fixtures::client::test_platforms;
+use crate::openid_connect::tests::fixtures::client::test_scopes;
 use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository, user_repo_with,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Duration;
+use identity_domain::auth::ACR_AAL1;
+use identity_domain::auth::ACR_AAL2;
+use identity_domain::auth::LoginStatus;
+use identity_domain::auth::model::Login;
 use identity_domain::client_authorization::{ConsentState, SelectionSource};
 use identity_domain::key::material::AsymmetricKeyData;
+use identity_domain::openid_connect::API_RESOURCE;
 use identity_domain::openid_connect::ClaimsRequest;
+use identity_domain::openid_connect::PromptValue;
+use identity_domain::openid_connect::ScopeSet;
+use identity_domain::openid_connect::SubjectType;
 use identity_domain::openid_connect::model::claim::JwtClaimNames;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::str;
+use url::form_urlencoded::parse;
 
 type AuthorizeServiceWithRequestRepo = (AuthorizeService, Arc<ClientAuthorizationState>);
 
 fn implicit_client() -> OpenIdConnectClient {
-    use crate::openid_connect::tests::fixtures::client::{
-        test_client, test_metadata, test_platforms, test_scopes,
-    };
     OpenIdConnectClient::new(
         test_client(Uuid::nil()),
         test_metadata(None, None),
@@ -31,11 +45,8 @@ fn implicit_client() -> OpenIdConnectClient {
 }
 
 fn pairwise_implicit_client() -> OpenIdConnectClient {
-    use crate::openid_connect::tests::fixtures::client::{
-        test_client, test_metadata, test_platforms, test_scopes,
-    };
     let mut metadata = test_metadata(None, None);
-    metadata.subject_type = Some(identity_domain::openid_connect::SubjectType::Pairwise);
+    metadata.subject_type = Some(SubjectType::Pairwise);
     metadata.sector_identifier_uri = Some("https://sector.example.com/redirects".parse().unwrap());
     OpenIdConnectClient::new(
         test_client(Uuid::nil()),
@@ -158,7 +169,7 @@ fn default_authorize_service_with_request_repo() -> AuthorizeServiceWithRequestR
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: crate::openid_connect::remote::test_http_client(),
+        http_client: test_http_client(),
     });
 
     (service, state)
@@ -174,7 +185,7 @@ fn hybrid_key_repos(
         r#type: KeyType::Asymmetric,
         data: KeyData::Asymmetric(AsymmetricKeyData {
             public_key: String::new(),
-            private_key: std::str::from_utf8(private_key).unwrap().to_string(),
+            private_key: str::from_utf8(private_key).unwrap().to_string(),
             certificate: None,
         }),
         expires_at: None,
@@ -272,20 +283,19 @@ async fn restart_login_flow_creates_fresh_login_for_same_authorization() {
         .await
         .unwrap();
     let old_login_oid = Uuid::new_v4();
-    *login_repo.find_by_oid_result.lock().unwrap() =
-        Some(Some(identity_domain::auth::model::Login {
-            oid: old_login_oid,
-            client_oid: request.client_id,
-            client_authorization_oid: authorization_oid,
-            session_oid: None,
-            user_oid: Some(Uuid::new_v4()),
-            status: identity_domain::auth::LoginStatus::EXPIRED,
-            failed_attempts: 0,
-            created_at: Utc::now() - chrono::Duration::minutes(6),
-            expires_at: Utc::now() - chrono::Duration::minutes(1),
-            acr: None,
-            requested_acr: Some("urn:identity:aal2".to_owned()),
-        }));
+    *login_repo.find_by_oid_result.lock().unwrap() = Some(Some(Login {
+        oid: old_login_oid,
+        client_oid: request.client_id,
+        client_authorization_oid: authorization_oid,
+        session_oid: None,
+        user_oid: Some(Uuid::new_v4()),
+        status: LoginStatus::EXPIRED,
+        failed_attempts: 0,
+        created_at: Utc::now() - Duration::minutes(6),
+        expires_at: Utc::now() - Duration::minutes(1),
+        acr: None,
+        requested_acr: Some("urn:identity:aal2".to_owned()),
+    }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
     let restarted_id = service.restart_login_flow(&old_login_id).await.unwrap();
@@ -314,21 +324,20 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         .await
         .unwrap();
     let old_login_oid = Uuid::new_v4();
-    let original_expires_at = Utc::now() + chrono::Duration::minutes(5);
-    *login_repo.find_by_oid_result.lock().unwrap() =
-        Some(Some(identity_domain::auth::model::Login {
-            oid: old_login_oid,
-            client_oid: request.client_id,
-            client_authorization_oid: authorization_oid,
-            session_oid: Some(SessionOid(Uuid::new_v4())),
-            user_oid: Some(Uuid::new_v4()),
-            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED,
-            failed_attempts: 2,
-            created_at: Utc::now(),
-            expires_at: original_expires_at,
-            acr: Some("urn:identity:aal1".to_owned()),
-            requested_acr: Some("urn:identity:aal2".to_owned()),
-        }));
+    let original_expires_at = Utc::now() + Duration::minutes(5);
+    *login_repo.find_by_oid_result.lock().unwrap() = Some(Some(Login {
+        oid: old_login_oid,
+        client_oid: request.client_id,
+        client_authorization_oid: authorization_oid,
+        session_oid: Some(SessionOid(Uuid::new_v4())),
+        user_oid: Some(Uuid::new_v4()),
+        status: LoginStatus::IDENTIFIER_VERIFIED,
+        failed_attempts: 2,
+        created_at: Utc::now(),
+        expires_at: original_expires_at,
+        acr: Some("urn:identity:aal1".to_owned()),
+        requested_acr: Some("urn:identity:aal2".to_owned()),
+    }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
     let switched_id = service.switch_login_account(&old_login_id).await.unwrap();
@@ -350,10 +359,7 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         .clone()
         .flatten()
         .unwrap();
-    assert_eq!(
-        reset_login.status,
-        identity_domain::auth::LoginStatus::CREATED
-    );
+    assert_eq!(reset_login.status, LoginStatus::CREATED);
     assert_eq!(reset_login.expires_at, original_expires_at);
     assert_eq!(
         reset_login.requested_acr.as_deref(),
@@ -394,20 +400,19 @@ async fn switch_login_account_rejects_forced_reauthentication() {
         .await
         .unwrap();
     let login_oid = Uuid::new_v4();
-    *login_repo.find_by_oid_result.lock().unwrap() =
-        Some(Some(identity_domain::auth::model::Login {
-            oid: login_oid,
-            client_oid: request.client_id,
-            client_authorization_oid: authorization_oid,
-            session_oid: Some(selected_session_oid),
-            user_oid: Some(selected_user_oid),
-            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED,
-            failed_attempts: 0,
-            created_at: Utc::now(),
-            expires_at: Utc::now() + chrono::Duration::minutes(5),
-            acr: None,
-            requested_acr: None,
-        }));
+    *login_repo.find_by_oid_result.lock().unwrap() = Some(Some(Login {
+        oid: login_oid,
+        client_oid: request.client_id,
+        client_authorization_oid: authorization_oid,
+        session_oid: Some(selected_session_oid),
+        user_oid: Some(selected_user_oid),
+        status: LoginStatus::IDENTIFIER_VERIFIED,
+        failed_attempts: 0,
+        created_at: Utc::now(),
+        expires_at: Utc::now() + Duration::minutes(5),
+        acr: None,
+        requested_acr: None,
+    }));
     let login_id = service.encrypt_login_id(login_oid).await.unwrap();
 
     let error = service.switch_login_account(&login_id).await.unwrap_err();
@@ -452,20 +457,19 @@ async fn restart_login_flow_preserves_reauthentication_subject_and_session() {
         .await
         .unwrap();
     let old_login_oid = Uuid::new_v4();
-    *login_repo.find_by_oid_result.lock().unwrap() =
-        Some(Some(identity_domain::auth::model::Login {
-            oid: old_login_oid,
-            client_oid: request.client_id,
-            client_authorization_oid: authorization_oid,
-            session_oid: Some(selected_session_oid),
-            user_oid: Some(selected_user_oid),
-            status: identity_domain::auth::LoginStatus::EXPIRED,
-            failed_attempts: 0,
-            created_at: Utc::now() - chrono::Duration::minutes(6),
-            expires_at: Utc::now() - chrono::Duration::minutes(1),
-            acr: None,
-            requested_acr: Some("urn:identity:aal2".to_owned()),
-        }));
+    *login_repo.find_by_oid_result.lock().unwrap() = Some(Some(Login {
+        oid: old_login_oid,
+        client_oid: request.client_id,
+        client_authorization_oid: authorization_oid,
+        session_oid: Some(selected_session_oid),
+        user_oid: Some(selected_user_oid),
+        status: LoginStatus::EXPIRED,
+        failed_attempts: 0,
+        created_at: Utc::now() - Duration::minutes(6),
+        expires_at: Utc::now() - Duration::minutes(1),
+        acr: None,
+        requested_acr: Some("urn:identity:aal2".to_owned()),
+    }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
     let restarted_id = service.restart_login_flow(&old_login_id).await.unwrap();
@@ -497,20 +501,19 @@ async fn restart_login_flow_rejects_a_login_that_is_still_in_progress() {
         .await
         .unwrap();
     let old_login_oid = Uuid::new_v4();
-    *login_repo.find_by_oid_result.lock().unwrap() =
-        Some(Some(identity_domain::auth::model::Login {
-            oid: old_login_oid,
-            client_oid: request.client_id,
-            client_authorization_oid: authorization_oid,
-            session_oid: None,
-            user_oid: Some(Uuid::new_v4()),
-            status: identity_domain::auth::LoginStatus::IDENTIFIER_VERIFIED.to_owned(),
-            failed_attempts: 0,
-            created_at: Utc::now(),
-            expires_at: Utc::now() + chrono::Duration::minutes(5),
-            acr: None,
-            requested_acr: None,
-        }));
+    *login_repo.find_by_oid_result.lock().unwrap() = Some(Some(Login {
+        oid: old_login_oid,
+        client_oid: request.client_id,
+        client_authorization_oid: authorization_oid,
+        session_oid: None,
+        user_oid: Some(Uuid::new_v4()),
+        status: LoginStatus::IDENTIFIER_VERIFIED.to_owned(),
+        failed_attempts: 0,
+        created_at: Utc::now(),
+        expires_at: Utc::now() + Duration::minutes(5),
+        acr: None,
+        requested_acr: None,
+    }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
     let error = service.restart_login_flow(&old_login_id).await.unwrap_err();
@@ -561,20 +564,14 @@ async fn client_authentication_defaults_apply_and_request_values_override_them()
     );
     let (request, _) = service.validate_request(params("openid")).await.unwrap();
     assert_eq!(request.max_age, Some(300));
-    assert_eq!(
-        request.acr_values,
-        Some(vec![identity_domain::auth::ACR_AAL2.to_owned()])
-    );
+    assert_eq!(request.acr_values, Some(vec![ACR_AAL2.to_owned()]));
 
     let mut explicit = params("openid");
     explicit.max_age = Some("0".to_owned());
-    explicit.acr_values = Some(identity_domain::auth::ACR_AAL1.to_owned());
+    explicit.acr_values = Some(ACR_AAL1.to_owned());
     let (request, _) = service.validate_request(explicit).await.unwrap();
     assert_eq!(request.max_age, Some(0));
-    assert_eq!(
-        request.acr_values,
-        Some(vec![identity_domain::auth::ACR_AAL1.to_owned()])
-    );
+    assert_eq!(request.acr_values, Some(vec![ACR_AAL1.to_owned()]));
 }
 
 #[tokio::test]
@@ -934,7 +931,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: test_http_client(),
         })
     };
 
@@ -953,9 +950,9 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
 
     assert_eq!(redirect.query(), None);
     let fragment = redirect.fragment().unwrap();
-    let pairs = url::form_urlencoded::parse(fragment.as_bytes())
+    let pairs = parse(fragment.as_bytes())
         .map(|(name, value)| (name.into_owned(), value.into_owned()))
-        .collect::<std::collections::HashMap<_, _>>();
+        .collect::<HashMap<_, _>>();
     let code = pairs.get("code").unwrap();
     let id_token = pairs.get("id_token").unwrap();
     assert_eq!(pairs.get("state").map(String::as_str), Some("state123"));
@@ -1003,7 +1000,7 @@ async fn approve_implicit_flow_returns_session_state() {
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: test_http_client(),
         })
     };
 
@@ -1021,9 +1018,9 @@ async fn approve_implicit_flow_returns_session_state() {
         .unwrap();
 
     let fragment = redirect.fragment().unwrap();
-    let pairs = url::form_urlencoded::parse(fragment.as_bytes())
+    let pairs = parse(fragment.as_bytes())
         .map(|(name, value)| (name.into_owned(), value.into_owned()))
-        .collect::<std::collections::HashMap<_, _>>();
+        .collect::<HashMap<_, _>>();
 
     assert!(pairs.contains_key("id_token"));
     assert_eq!(pairs.get("state").map(String::as_str), Some("state123"));
@@ -1052,13 +1049,13 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: test_http_client(),
         })
     };
 
     let mut request_params = params("openid profile");
     request_params.response_type = "code id_token token".to_string();
-    request_params.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
+    request_params.resources = vec![API_RESOURCE.to_owned()];
     request_params.nonce = Some("nonce-hybrid".to_string());
     let (request, _) = service.validate_request(request_params).await.unwrap();
     let oid = service
@@ -1071,9 +1068,9 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
         .unwrap();
 
     let fragment = redirect.fragment().unwrap();
-    let pairs = url::form_urlencoded::parse(fragment.as_bytes())
+    let pairs = parse(fragment.as_bytes())
         .map(|(name, value)| (name.into_owned(), value.into_owned()))
-        .collect::<std::collections::HashMap<_, _>>();
+        .collect::<HashMap<_, _>>();
     let code = pairs.get("code").unwrap();
     let access_token = pairs.get("access_token").unwrap();
     let id_token = pairs.get("id_token").unwrap();
@@ -1086,10 +1083,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
 
     let verifier = RS256.verifier_from_pem(&public_key).unwrap();
     let (access, _) = jwt::decode_with_verifier(access_token, &verifier).unwrap();
-    assert_eq!(
-        access.audience().unwrap(),
-        [identity_domain::openid_connect::API_RESOURCE]
-    );
+    assert_eq!(access.audience().unwrap(), [API_RESOURCE]);
     let (payload, _) = jwt::decode_with_verifier(id_token, &verifier).unwrap();
     assert_eq!(
         payload.audience().unwrap(),
@@ -1127,7 +1121,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: crate::openid_connect::remote::test_http_client(),
+            http_client: test_http_client(),
         })
     };
 
@@ -1144,9 +1138,9 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
         .unwrap();
 
     let fragment = redirect.fragment().unwrap();
-    let pairs = url::form_urlencoded::parse(fragment.as_bytes())
+    let pairs = parse(fragment.as_bytes())
         .map(|(name, value)| (name.into_owned(), value.into_owned()))
-        .collect::<std::collections::HashMap<_, _>>();
+        .collect::<HashMap<_, _>>();
 
     assert!(pairs.contains_key("code"));
     assert!(pairs.contains_key("access_token"));
@@ -1187,8 +1181,8 @@ async fn create_authorization_request_persists_prompt() {
     let loaded = service.load_authorization_request(oid).await.unwrap();
 
     let prompt = loaded.prompt.unwrap();
-    assert!(prompt.contains(&identity_domain::openid_connect::PromptValue::Consent));
-    assert!(prompt.contains(&identity_domain::openid_connect::PromptValue::Login));
+    assert!(prompt.contains(&PromptValue::Consent));
+    assert!(prompt.contains(&PromptValue::Login));
 }
 
 #[tokio::test]
@@ -1261,12 +1255,12 @@ fn sign_implicit_id_token_includes_scope_claims() {
     };
     let issuer = Url::parse("https://identity.example.com").unwrap();
     let client = pairwise_implicit_client();
-    let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
+    let scope = ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
-            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            private_key_pem: str::from_utf8(&private_key).unwrap(),
             alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
@@ -1324,7 +1318,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     let user_oid = Uuid::new_v4();
     let user = id_token_user(user_oid);
     let issuer = Url::parse("https://identity.example.com").unwrap();
-    let scope = identity_domain::openid_connect::ScopeSet::parse("openid").unwrap();
+    let scope = ScopeSet::parse("openid").unwrap();
     let claims_request: ClaimsRequest = serde_json::from_value(serde_json::json!({
         "id_token": {
             "name": {"essential": true}
@@ -1335,7 +1329,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     let token = service
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
-            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            private_key_pem: str::from_utf8(&private_key).unwrap(),
             alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
@@ -1377,12 +1371,12 @@ fn sign_implicit_id_token_omits_scope_claims_when_access_token_is_returned() {
     let user_oid = Uuid::new_v4();
     let user = id_token_user(user_oid);
     let issuer = Url::parse("https://identity.example.com").unwrap();
-    let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
+    let scope = ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
-            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            private_key_pem: str::from_utf8(&private_key).unwrap(),
             alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",
@@ -1418,12 +1412,12 @@ fn sign_implicit_id_token_omits_scope_claims_when_code_is_returned() {
     let user_oid = Uuid::new_v4();
     let user = id_token_user(user_oid);
     let issuer = Url::parse("https://identity.example.com").unwrap();
-    let scope = identity_domain::openid_connect::ScopeSet::parse("openid profile email").unwrap();
+    let scope = ScopeSet::parse("openid profile email").unwrap();
 
     let token = service
         .sign_implicit_id_token(SignImplicitIdTokenInput {
             key_id: "kid",
-            private_key_pem: std::str::from_utf8(&private_key).unwrap(),
+            private_key_pem: str::from_utf8(&private_key).unwrap(),
             alg: "RS256".parse().unwrap(),
             issuer: &issuer,
             audience: "client-1",

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use uuid::Uuid;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
@@ -70,11 +71,11 @@ impl KeyRotationService {
                 Ok(changed) => {
                     rotated += u64::from(changed);
                     if changed {
-                        tracing::info!(key_oid = %uuid::Uuid::from(previous.oid), "key rotated");
+                        tracing::info!(key_oid = %Uuid::from(previous.oid), "key rotated");
                     }
                 }
                 Err(error) => {
-                    tracing::error!(key_oid = %uuid::Uuid::from(previous.oid), error = %error, "key rotation failed");
+                    tracing::error!(key_oid = %Uuid::from(previous.oid), error = %error, "key rotation failed");
                     first_error.get_or_insert(error);
                 }
             }

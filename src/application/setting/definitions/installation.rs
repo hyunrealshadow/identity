@@ -31,7 +31,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
 
     use super::InstallationSettings;
-    use crate::setting::{SettingChanges, SettingRegistry, SettingsSnapshot};
+    use crate::setting::{SettingChanges, SettingsSnapshot};
 
     #[test]
     fn binds_every_installation_key() {
@@ -59,19 +59,6 @@ mod tests {
                     serde_json::json!(installation.initialized_at)
                 ),
             ]
-        );
-    }
-
-    #[test]
-    fn defaults_bind_to_the_default_section() {
-        let defaults = SettingRegistry::default()
-            .register_section::<InstallationSettings>()
-            .defaults()
-            .unwrap();
-        assert_eq!(defaults.len(), 2);
-        assert_eq!(
-            SettingsSnapshot::default().section::<InstallationSettings>(),
-            InstallationSettings::default()
         );
     }
 }

@@ -1,5 +1,7 @@
+use crate::database::entity::key;
 use crate::database::query::json_text;
 use async_trait::async_trait;
+use chrono::Utc;
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
     sea_query::{Expr, ExprTrait},
@@ -42,7 +44,7 @@ fn validate_jwk_algorithm(
 }
 
 fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
-    let created_at = model.created_at.with_timezone(&chrono::Utc);
+    let created_at = model.created_at.with_timezone(&Utc);
     let jwk = serde_json::from_value::<PublicJwk>(model.jwk)
         .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
     let algorithm = model
@@ -70,7 +72,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
             return Ok(vec![]);
         }
 
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         let models: Vec<key_jwk::ActiveModel> = inputs
             .into_iter()
             .map(|input| {
@@ -104,11 +106,10 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_active"))]
     async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
-        use crate::database::entity::key;
         KeyJwkEntity::find()
             .inner_join(key::Entity)
             .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
+            .filter(key::Column::ExpiresAt.gt(Utc::now()))
             .order_by_desc(Expr::col((key::Entity, key::Column::CreatedAt)))
             .order_by_desc(Expr::col((key::Entity, key::Column::Oid)))
             .order_by_asc(Expr::expr(
@@ -134,12 +135,10 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
         key_oid: KeyOid,
         algorithm: JwaSigningAlgorithm,
     ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
-        use crate::database::entity::key;
-
         KeyJwkEntity::find()
             .inner_join(key::Entity)
             .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::ExpiresAt.gt(chrono::Utc::now()))
+            .filter(key::Column::ExpiresAt.gt(Utc::now()))
             .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))
             .filter(key_jwk::Column::Algorithm.eq(algorithm.as_str()))
             .one(&self.db)
@@ -162,6 +161,8 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
+    use super::to_domain;
+
     use super::{KeyJwkRepositoryImpl, normalize_jwk_kid};
     use crate::database::entity::key_jwk;
     use chrono::Utc;
@@ -197,7 +198,7 @@ mod tests {
     #[test]
     fn key_jwk_repository_rewrites_legacy_kid_to_binding_oid() {
         let binding_oid = Uuid::new_v4();
-        let binding = super::to_domain(key_jwk::Model {
+        let binding = to_domain(key_jwk::Model {
             id: 1,
             oid: binding_oid,
             key_oid: Uuid::new_v4(),
@@ -220,7 +221,7 @@ mod tests {
 
     #[test]
     fn key_jwk_repository_rejects_algorithm_mismatch() {
-        let error = super::to_domain(key_jwk::Model {
+        let error = to_domain(key_jwk::Model {
             id: 1,
             oid: Uuid::new_v4(),
             key_oid: Uuid::new_v4(),

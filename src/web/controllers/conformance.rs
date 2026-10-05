@@ -10,6 +10,12 @@
 //!                                    redirect chain
 //!   GET/POST /conformance/auto-consent – automatically approve test consent
 
+use identity_application::user::CredentialType;
+use identity_domain::auth::model::Session;
+use identity_domain::client_authorization::ConsentState;
+use std::future::Future;
+use uuid::Uuid;
+
 use http::{HeaderMap, StatusCode, header};
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::{Deserialize, Serialize};
@@ -107,13 +113,10 @@ async fn auto_consent(depot: &mut Depot, req: &mut Request) -> WebResult {
     let body: AutoConsentRequest = req
         .parse_body()
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
+        .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
     ctx.services()
         .oidc_authorize()
-        .record_consent_by_login(
-            &body.login_id,
-            identity_domain::client_authorization::ConsentState::Approved,
-        )
+        .record_consent_by_login(&body.login_id, ConsentState::Approved)
         .await?;
     Ok(auto_login_success_response(&body.login_id).into())
 }
@@ -174,12 +177,12 @@ fn auto_login_success_response(login_id: &str) -> Response {
 
 async fn record_auto_login_selection<F, Fut>(
     login_id: &str,
-    session: &identity_domain::auth::model::Session,
+    session: &Session,
     record_selection: F,
 ) -> Result<(), AppError>
 where
-    F: FnOnce(String, uuid::Uuid, uuid::Uuid, SelectionSource) -> Fut,
-    Fut: std::future::Future<Output = Result<(), AppError>>,
+    F: FnOnce(String, Uuid, Uuid, SelectionSource) -> Fut,
+    Fut: Future<Output = Result<(), AppError>>,
 {
     record_selection(
         login_id.to_owned(),
@@ -265,7 +268,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         .login()
         .challenge(
             login_oid,
-            identity_application::user::CredentialType::Password,
+            CredentialType::Password,
             &body.password,
             sess_ctx,
         )
@@ -337,7 +340,7 @@ async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()>
         })
         .await?;
 
-    let key_oid = uuid::Uuid::from(key.oid).to_string();
+    let key_oid = Uuid::from(key.oid).to_string();
     render_json(
         res,
         StatusCode::OK,
@@ -351,6 +354,15 @@ async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()>
 
 #[cfg(test)]
 mod tests {
+    use identity_domain::auth::AMR_PASSWORD;
+
+    use super::auto_login_success_response;
+    use super::record_auto_login_selection;
+    use super::routes;
+    use identity_domain::auth::SessionStatus;
+    use salvo::affix_state::inject;
+    use uuid::Uuid;
+
     use std::sync::{Arc, Mutex};
 
     use chrono::Utc;
@@ -366,7 +378,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_consent_page_posts_to_the_op_with_a_nonce() {
-        let app = super::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let mut response =
@@ -377,7 +389,7 @@ mod tests {
         assert!(response.headers().contains_key("content-security-policy"));
         let body = response.take_string().await.unwrap();
         assert!(
-            body.contains("action=\"&#x2F;conformance&#x2F;auto-consent\""),
+            body.contains("action=\"/conformance/auto-consent\""),
             "{body}"
         );
         assert!(
@@ -389,7 +401,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_login_page_renders_auto_submit_form() {
-        let app = super::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
@@ -418,7 +430,7 @@ mod tests {
         let body = response.take_string().await.unwrap();
         assert!(body.contains("<form"), "{body}");
         assert!(
-            body.contains("action=\"&#x2F;conformance&#x2F;auto-login\""),
+            body.contains("action=\"/conformance/auto-login\""),
             "{body}"
         );
         assert!(
@@ -438,7 +450,7 @@ mod tests {
 
     #[test]
     fn auto_login_success_response_redirects_back_to_oauth2_continue() {
-        let response = super::auto_login_success_response("login-123");
+        let response = auto_login_success_response("login-123");
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         assert_eq!(
@@ -451,9 +463,9 @@ mod tests {
     #[tokio::test]
     async fn record_auto_login_selection_records_fresh_login_source() {
         let session = Session {
-            oid: SessionOid(uuid::Uuid::new_v4()),
-            user_oid: uuid::Uuid::new_v4(),
-            status: identity_domain::auth::SessionStatus::ACTIVE,
+            oid: SessionOid(Uuid::new_v4()),
+            user_oid: Uuid::new_v4(),
+            status: SessionStatus::ACTIVE,
             device_name: None,
             device_type: None,
             os_name: None,
@@ -468,11 +480,11 @@ mod tests {
             created_at: Utc::now(),
             acr: Some("pwd".to_owned()),
             acr_expires_at: None,
-            amr: vec![identity_domain::auth::AMR_PASSWORD.to_owned()],
+            amr: vec![AMR_PASSWORD.to_owned()],
         };
         let recorded = Arc::new(Mutex::new(None));
 
-        super::record_auto_login_selection("login-123", &session, {
+        record_auto_login_selection("login-123", &session, {
             let recorded = recorded.clone();
             move |login_id, session_oid, user_oid, source| {
                 let recorded = recorded.clone();
@@ -499,7 +511,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_login_returns_bad_request_for_invalid_login_id() {
-        let app = super::routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);

@@ -1,3 +1,4 @@
+use std::env;
 use std::{fmt, fs};
 
 use ipnet::IpNet;
@@ -200,7 +201,7 @@ impl SecretSourceConfig {
             .as_deref()
             .filter(|value| !value.is_empty())
         {
-            return Ok(std::env::var(name).ok().map(String::into_bytes));
+            return Ok(env::var(name).ok().map(String::into_bytes));
         }
         Ok(self
             .token

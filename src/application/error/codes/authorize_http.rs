@@ -24,11 +24,12 @@ pub enum AuthorizeHttpErrorCode {
 impl AppErrorCode for AuthorizeHttpErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::PostContentTypeInvalid => ErrorKind::Validation,
-            Self::MethodNotAllowed => ErrorKind::Validation,
-            Self::RequiredParamMissing => ErrorKind::Validation,
-            Self::InternalClientLoginRequired => ErrorKind::Validation,
-            Self::ConsentSessionNotFound => ErrorKind::Validation,
+            Self::PostContentTypeInvalid
+            | Self::MethodNotAllowed
+            | Self::RequiredParamMissing
+            | Self::InternalClientLoginRequired
+            | Self::ConsentSessionNotFound => ErrorKind::Validation,
+
             Self::ContinueInteractionUnavailable => ErrorKind::Gone,
             Self::LoginDomainNotConfigured => ErrorKind::Internal,
         }

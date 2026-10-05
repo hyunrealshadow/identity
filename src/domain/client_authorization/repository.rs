@@ -1,5 +1,8 @@
+use super::model::PushedAuthorizationRequestData;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use std::error::Error;
+use std::io::Error as IoError;
 use uuid::Uuid;
 
 use super::device::{
@@ -21,10 +24,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         digest: &str,
         client_oid: ClientOid,
         now: DateTime<Utc>,
-    ) -> Result<
-        Option<super::model::PushedAuthorizationRequestData>,
-        ClientAuthorizationRepositoryError,
-    >;
+    ) -> Result<Option<PushedAuthorizationRequestData>, ClientAuthorizationRepositoryError>;
 
     async fn create(
         &self,
@@ -116,7 +116,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
 #[derive(Debug, thiserror::Error)]
 pub enum ClientAuthorizationRepositoryError {
     #[error("failed to query client authorization")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn Error + Send + Sync>),
 }
 
 /// A fully prepared authorization row, committed together with the device
@@ -192,7 +192,7 @@ pub trait DeviceAuthorizationRepository: Send + Sync {
     ) -> Result<bool, DeviceAuthorizationRepositoryError> {
         let _ = (request_oid, login_oid, session_oid, now);
         Err(DeviceAuthorizationRepositoryError::QueryFailed(Box::new(
-            std::io::Error::other("device login claim not implemented"),
+            IoError::other("device login claim not implemented"),
         )))
     }
 
@@ -260,7 +260,7 @@ pub trait DeviceAuthorizationRepository: Send + Sync {
 #[derive(Debug, thiserror::Error)]
 pub enum DeviceAuthorizationRepositoryError {
     #[error("failed to query device authorization")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn Error + Send + Sync>),
     #[error("user code is already in use by an active device request")]
     UserCodeConflict,
     #[error("approved scope is not covered by the requested scope")]

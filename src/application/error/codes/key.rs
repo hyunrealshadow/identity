@@ -18,12 +18,12 @@ impl AppErrorCode for KeyErrorCode {
         match self {
             Self::NotFound => ErrorKind::NotFound,
             Self::Revoked => ErrorKind::Unauthorized,
-            Self::UnsupportedAlgorithm => ErrorKind::Validation,
-            Self::InvalidCertificatePem => ErrorKind::Validation,
-            Self::InvalidKeyType => ErrorKind::Validation,
-            Self::CertificateRequiresAsymmetricKey => ErrorKind::Validation,
-            Self::JwkGenerationFailed => ErrorKind::Internal,
-            Self::JwkSerializationFailed => ErrorKind::Internal,
+            Self::UnsupportedAlgorithm
+            | Self::InvalidCertificatePem
+            | Self::InvalidKeyType
+            | Self::CertificateRequiresAsymmetricKey => ErrorKind::Validation,
+
+            Self::JwkGenerationFailed | Self::JwkSerializationFailed => ErrorKind::Internal,
         }
     }
 

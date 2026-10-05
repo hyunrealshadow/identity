@@ -1,4 +1,10 @@
+use apalis_sql::Config;
+use apalis_sql::sqlx::Error;
+use identity_application::error::ErrorDiagnostics;
 use std::str::FromStr;
+use std::time::Duration;
+use ulid::Ulid;
+use uuid::Uuid;
 
 use apalis::prelude::{
     BoxDynError, Data, Request, Storage, TaskId, WorkerBuilder, WorkerFactoryFn,
@@ -26,7 +32,7 @@ fn expiration_task_id(timestamp: DateTime<Utc>) -> TaskId {
     let interval_start_millis = timestamp.timestamp_millis().div_euclid(300_000) * 300_000;
     let interval_start_millis =
         u64::try_from(interval_start_millis).expect("expiration schedule must be after Unix epoch");
-    ulid::Ulid::from_parts(interval_start_millis, EXPIRATION_JOB_ID_SUFFIX)
+    Ulid::from_parts(interval_start_millis, EXPIRATION_JOB_ID_SUFFIX)
         .to_string()
         .parse()
         .expect("generated ULID must be a valid task ID")
@@ -35,12 +41,12 @@ fn expiration_task_id(timestamp: DateTime<Utc>) -> TaskId {
 async fn enqueue_expiration(
     storage: &mut PostgresStorage<ExpirationJob>,
     timestamp: DateTime<Utc>,
-) -> Result<(), apalis_sql::sqlx::Error> {
+) -> Result<(), Error> {
     let mut request = Request::new(ExpirationJob);
     request.parts.task_id = expiration_task_id(timestamp);
     match storage.push_request(request).await {
         Ok(_) => Ok(()),
-        Err(apalis_sql::sqlx::Error::Database(error))
+        Err(Error::Database(error))
             if error.code().as_deref() == Some("23505")
                 && error.constraint() == Some("unique_job_id") =>
         {
@@ -67,8 +73,7 @@ async fn handle_expiration_job(_: ExpirationJob, state: Data<AppState>) -> Resul
         let updated = expire_due_authorizations_batch(state.resources().db())
             .await
             .map_err(|error| {
-                let diagnostics =
-                    identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error);
+                let diagnostics = ErrorDiagnostics::from_error(&error);
                 tracing::error!(
                     error_cause = %diagnostics.cause,
                     error_operation = diagnostics.operation,
@@ -89,14 +94,10 @@ async fn handle_expiration_job(_: ExpirationJob, state: Data<AppState>) -> Resul
     Ok(())
 }
 
-pub(super) async fn spawn_expiration_workers(
-    state: AppState,
-    pool: PgPool,
-) -> Result<(), apalis_sql::sqlx::Error> {
+pub(super) async fn spawn_expiration_workers(state: AppState, pool: PgPool) -> Result<(), Error> {
     let storage = PostgresStorage::<ExpirationJob>::new_with_config(
         pool,
-        apalis_sql::Config::new(EXPIRATION_JOB_NAMESPACE)
-            .set_poll_interval(std::time::Duration::from_secs(30)),
+        Config::new(EXPIRATION_JOB_NAMESPACE).set_poll_interval(Duration::from_secs(30)),
     );
     enqueue_expiration(&mut storage.clone(), Utc::now()).await?;
 
@@ -104,11 +105,10 @@ pub(super) async fn spawn_expiration_workers(
     let job_storage = storage.clone();
     tokio::spawn(async move {
         let mut shutdown = job_state.lifecycle().subscribe_shutdown();
-        let worker =
-            WorkerBuilder::new(format!("authorization-expiration-{}", uuid::Uuid::new_v4()))
-                .data(job_state)
-                .backend(job_storage)
-                .build_fn(handle_expiration_job);
+        let worker = WorkerBuilder::new(format!("authorization-expiration-{}", Uuid::new_v4()))
+            .data(job_state)
+            .backend(job_storage)
+            .build_fn(handle_expiration_job);
         tokio::select! {
             () = worker.run() => tracing::error!("authorization expiration worker stopped"),
             _ = async {

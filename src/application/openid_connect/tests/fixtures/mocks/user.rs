@@ -1,4 +1,6 @@
 use chrono::{DateTime, Utc};
+use identity_domain::user::repository::UserIdentifierUpdate;
+use identity_domain::user::repository::UserProfilePatch;
 use identity_domain::user::repository::{UserRepository, UserRepositoryError};
 use identity_domain::user::{User, UserOid};
 
@@ -22,12 +24,12 @@ mockall::mock! {
         async fn update_identifier(
             &self,
             oid: UserOid,
-            update: identity_domain::user::repository::UserIdentifierUpdate,
+            update: UserIdentifierUpdate,
         ) -> Result<Option<User>, UserRepositoryError>;
         async fn update_profile(
             &self,
             oid: UserOid,
-            patch: identity_domain::user::repository::UserProfilePatch,
+            patch: UserProfilePatch,
         ) -> Result<Option<User>, UserRepositoryError>;
     }
 }

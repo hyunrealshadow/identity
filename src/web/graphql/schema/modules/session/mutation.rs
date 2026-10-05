@@ -1,6 +1,7 @@
 use async_graphql::{Context, Error, ID, Object, Result};
 use identity_domain::{auth::SessionOid, openid_connect::ApiScope};
 use identity_infrastructure::graphql::id::GlobalId;
+use uuid::Uuid;
 
 use super::{
     SessionGlobalId,
@@ -31,7 +32,7 @@ impl SessionMutation {
             .state
             .services()
             .session()
-            .revoke_for_user(SessionOid(oid), uuid::Uuid::from(request.claims.user_oid))
+            .revoke_for_user(SessionOid(oid), Uuid::from(request.claims.user_oid))
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(RevokeSessionPayload::new(
@@ -52,13 +53,13 @@ impl SessionMutation {
             .services()
             .session()
             .revoke_other_sessions(
-                uuid::Uuid::from(request.claims.user_oid),
+                Uuid::from(request.claims.user_oid),
                 request.claims.session_oid.ok_or_else(|| {
                     Error::new("this token was not issued from a browser session")
                 })?,
             )
             .await
-            .map_err(|error| internal_error(error))?;
+            .map_err(internal_error)?;
         if outcome.has_failures() {
             tracing::warn!(
                 target: "identity.graphql",

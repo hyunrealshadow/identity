@@ -1,3 +1,12 @@
+use crate::observability::BusinessEvent;
+use crate::observability::EventSeverity;
+use crate::observability::EventSink;
+use crate::observability::EventValue;
+use crate::observability::NoopEventSink;
+use identity_domain::auth::repository::SessionPage;
+use identity_domain::auth::repository::SessionPageDirection;
+use identity_domain::auth::repository::SessionSortKey;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -36,7 +45,7 @@ impl BatchRevocation {
 
 pub struct SessionService {
     session_repo: Arc<dyn SessionRepository>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 impl SessionService {
@@ -44,13 +53,13 @@ impl SessionService {
     pub fn new(session_repo: Arc<dyn SessionRepository>) -> Self {
         Self {
             session_repo,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
@@ -78,7 +87,7 @@ impl SessionService {
         views.retain(|v| v.expires_at.is_none_or(|exp| now <= exp));
 
         // Preserve the original cookie order.
-        let oid_order: std::collections::HashMap<SessionOid, usize> = session_oids
+        let oid_order: HashMap<SessionOid, usize> = session_oids
             .iter()
             .enumerate()
             .map(|(i, oid)| (*oid, i))
@@ -138,7 +147,6 @@ impl SessionService {
     }
 
     fn record_session_revoked(&self, session: &Session) {
-        use crate::observability::{BusinessEvent, EventValue};
         self.events.emit(
             BusinessEvent::audit("session.revoked")
                 .outcome("success")
@@ -194,11 +202,11 @@ impl SessionService {
     ) -> Result<BatchRevocation, AppError> {
         let outcome =
             revoke_other_sessions_with(self.session_repo.as_ref(), user_oid, keep).await?;
-        use crate::observability::{BusinessEvent, EventValue};
+
         let (outcome_label, severity) = if outcome.has_failures() {
-            ("partial_failure", crate::observability::EventSeverity::Warn)
+            ("partial_failure", EventSeverity::Warn)
         } else {
-            ("success", crate::observability::EventSeverity::Info)
+            ("success", EventSeverity::Info)
         };
         self.events.emit(
             BusinessEvent::audit("session.revocation.batch")
@@ -227,11 +235,11 @@ impl SessionService {
     pub async fn list_active_sessions_page(
         &self,
         user_oid: Uuid,
-        after: Option<identity_domain::auth::repository::SessionSortKey>,
-        before: Option<identity_domain::auth::repository::SessionSortKey>,
+        after: Option<SessionSortKey>,
+        before: Option<SessionSortKey>,
         limit: usize,
-        direction: identity_domain::auth::repository::SessionPageDirection,
-    ) -> Result<identity_domain::auth::repository::SessionPage, AppError> {
+        direction: SessionPageDirection,
+    ) -> Result<SessionPage, AppError> {
         self.session_repo
             .list_active_page_by_user_oid(user_oid, after, before, limit, direction)
             .await
@@ -284,6 +292,9 @@ pub(crate) async fn revoke_other_sessions_with(
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
+    use std::io::Error;
+
     use async_trait::async_trait;
     use chrono::Utc;
     use identity_domain::auth::{
@@ -351,7 +362,7 @@ mod tests {
             _input: CreateSessionInput,
         ) -> Result<Session, SessionRepositoryError> {
             Err(SessionRepositoryError::CreateFailed(Box::new(
-                std::io::Error::other("not used"),
+                Error::other("not used"),
             )))
         }
 
@@ -360,11 +371,11 @@ mod tests {
             _oid: SessionOid,
             _expected_user_oid: Uuid,
             _acr: &str,
-            _acr_expires_at: chrono::DateTime<Utc>,
+            _acr_expires_at: DateTime<Utc>,
             _amr: &[String],
         ) -> Result<Session, SessionRepositoryError> {
             Err(SessionRepositoryError::ReauthenticateFailed(Box::new(
-                std::io::Error::other("not used"),
+                Error::other("not used"),
             )))
         }
 
@@ -378,11 +389,11 @@ mod tests {
         async fn revoke_by_oid(
             &self,
             oid: SessionOid,
-            _revoked_at: chrono::DateTime<Utc>,
+            _revoked_at: DateTime<Utc>,
         ) -> Result<Option<Session>, SessionRepositoryError> {
             if self.failing_oid == Some(oid) {
                 return Err(SessionRepositoryError::RevokeFailed(Box::new(
-                    std::io::Error::other("database unavailable"),
+                    Error::other("database unavailable"),
                 )));
             }
             Ok(self

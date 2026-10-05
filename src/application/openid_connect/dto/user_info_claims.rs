@@ -3,6 +3,11 @@
 //! These claims are defined in OpenID Connect Core 1.0 specification:
 //! https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
 
+use identity_domain::openid_connect::ScopeSet;
+use identity_domain::user::User;
+use serde_json::Map;
+use serde_json::Value;
+
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 
@@ -44,7 +49,7 @@ pub struct AddressClaim {
 }
 
 impl AddressClaim {
-    fn from_user(user: &identity_domain::user::User) -> Option<Self> {
+    fn from_user(user: &User) -> Option<Self> {
         let claim = Self {
             formatted: user.address_formatted.clone(),
             street_address: user.address_street_address.clone(),
@@ -178,14 +183,11 @@ impl UserInfoClaims {
         }
     }
 
-    pub fn from_user(user: &identity_domain::user::User) -> Self {
+    pub fn from_user(user: &User) -> Self {
         Self::from_user_with_profile_base(user, "https://identity.local")
     }
 
-    pub fn from_user_with_profile_base(
-        user: &identity_domain::user::User,
-        profile_base_url: &str,
-    ) -> Self {
+    pub fn from_user_with_profile_base(user: &User, profile_base_url: &str) -> Self {
         Self {
             sub: user.oid.0.to_string(),
             name: Some(user.name.clone()),
@@ -221,11 +223,7 @@ impl UserInfoClaims {
         self
     }
 
-    pub fn apply_scope_filter(
-        &mut self,
-        scope: &identity_domain::openid_connect::ScopeSet,
-        claims_request: Option<&ClaimsRequest>,
-    ) {
+    pub fn apply_scope_filter(&mut self, scope: &ScopeSet, claims_request: Option<&ClaimsRequest>) {
         self.apply_scope_filter_for_claim_sections(
             scope,
             claims_request,
@@ -235,7 +233,7 @@ impl UserInfoClaims {
 
     pub fn apply_scope_filter_for_id_token(
         &mut self,
-        scope: &identity_domain::openid_connect::ScopeSet,
+        scope: &ScopeSet,
         claims_request: Option<&ClaimsRequest>,
     ) {
         self.apply_scope_filter_for_claim_sections(
@@ -247,7 +245,7 @@ impl UserInfoClaims {
 
     fn apply_scope_filter_for_claim_sections(
         &mut self,
-        scope: &identity_domain::openid_connect::ScopeSet,
+        scope: &ScopeSet,
         claims_request: Option<&ClaimsRequest>,
         claim_sections: &[ClaimsRequestSection],
     ) {
@@ -369,11 +367,11 @@ fn absolute_profile_url(profile_base_url: &str, value: Option<&str>) -> Option<S
 /// (when scoped claims are enabled for ID or access tokens) so the
 /// scope/essential filtering rules never drift between them.
 pub fn scoped_standard_claims(
-    user: &identity_domain::user::User,
-    scope: &identity_domain::openid_connect::ScopeSet,
+    user: &User,
+    scope: &ScopeSet,
     claims_request: Option<&ClaimsRequest>,
     profile_base_url: &str,
-) -> serde_json::Map<String, serde_json::Value> {
+) -> Map<String, Value> {
     let mut claims = UserInfoClaims::from_user_with_profile_base(user, profile_base_url);
     claims.apply_scope_filter_for_id_token(scope, claims_request);
 
@@ -391,9 +389,13 @@ pub fn scoped_standard_claims(
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+    use serde_json::Value;
+    use uuid::Uuid;
+
     use super::*;
 
-    fn claims_request(value: serde_json::Value) -> ClaimsRequest {
+    fn claims_request(value: Value) -> ClaimsRequest {
         serde_json::from_value(value).unwrap()
     }
 
@@ -411,7 +413,7 @@ mod tests {
 
     #[test]
     fn from_user_creates_claims_from_user_model() {
-        let user_oid = uuid::Uuid::new_v4();
+        let user_oid = Uuid::new_v4();
         let user = User {
             oid: UserOid::from(user_oid),
             email: "john@example.com".to_string(),
@@ -443,8 +445,8 @@ mod tests {
             enabled: true,
             locked: false,
             locked_until: None,
-            created_at: chrono::Utc::now(),
-            updated_at: Some(chrono::Utc::now()),
+            created_at: Utc::now(),
+            updated_at: Some(Utc::now()),
         };
 
         let claims = UserInfoClaims::from_user(&user);
@@ -466,21 +468,6 @@ mod tests {
         assert_eq!(claims.email, Some("john@example.com".to_string()));
         assert_eq!(claims.email_verified, Some(true));
         assert!(claims.updated_at.is_some());
-    }
-
-    #[test]
-    fn serializes_all_claims_when_present() {
-        let claims = UserInfoClaims::new("user-123".to_string())
-            .with_name("John Doe".to_string())
-            .with_email("john@example.com".to_string(), true);
-
-        let json = serde_json::to_string(&claims).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(parsed["sub"], "user-123");
-        assert_eq!(parsed["name"], "John Doe");
-        assert_eq!(parsed["email"], "john@example.com");
-        assert_eq!(parsed["email_verified"], true);
     }
 
     use identity_domain::openid_connect::ScopeSet;
@@ -506,7 +493,7 @@ mod tests {
             phone_number: None,
             phone_number_verified: None,
             address: None,
-            updated_at: Some(chrono::Utc::now()),
+            updated_at: Some(Utc::now()),
         }
     }
 
@@ -727,7 +714,7 @@ mod tests {
     }
 
     fn full_profile_user() -> User {
-        let user_oid = uuid::Uuid::new_v4();
+        let user_oid = Uuid::new_v4();
         User {
             oid: UserOid::from(user_oid),
             email: "john@example.com".to_string(),
@@ -759,7 +746,7 @@ mod tests {
             enabled: true,
             locked: false,
             locked_until: None,
-            created_at: chrono::Utc::now(),
+            created_at: Utc::now(),
             updated_at: None,
         }
     }

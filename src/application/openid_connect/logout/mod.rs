@@ -1,4 +1,12 @@
+use crate::observability::BusinessEvent;
+use crate::observability::EventSink;
+use crate::observability::EventValue;
+use crate::observability::NoopEventSink;
+use crate::observability::error_outcome;
+use josekit::JoseError;
+use josekit::jws::JwsSigner;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 #[cfg(test)]
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -93,7 +101,7 @@ pub struct LogoutService {
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     backchannel_sender: Arc<dyn BackChannelLogoutSender>,
     session_repo: Option<Arc<dyn SessionRepository>>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 pub struct LogoutServiceDependencies {
@@ -115,13 +123,13 @@ impl LogoutService {
             signing_algorithm_detector: deps.signing_algorithm_detector,
             backchannel_sender: deps.backchannel_sender,
             session_repo: None,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
@@ -137,8 +145,6 @@ impl LogoutService {
         &self,
         request: RpInitiatedLogoutRequest,
     ) -> Result<LogoutOutcome, AppError> {
-        use crate::observability::{BusinessEvent, EventValue};
-
         let session_oid = request.session_oid;
         let result = self.rp_initiated_logout_inner(request).await;
         let mut event = BusinessEvent::audit("logout.local.result");
@@ -157,7 +163,7 @@ impl LogoutService {
                 );
             }
             Err(error) => {
-                let (outcome, reason) = crate::observability::error_outcome(error);
+                let (outcome, reason) = error_outcome(error);
                 event = event
                     .outcome(outcome)
                     .reason(reason)
@@ -196,10 +202,9 @@ impl LogoutService {
                 .await;
         };
 
-        let redirect_uri = Url::parse(raw_redirect_uri).map_err(|error| {
-            AppError::from_code(OpenIdConnectErrorCode::PostLogoutRedirectUriInvalid)
-                .with_source(error)
-        })?;
+        let redirect_uri = Url::parse(raw_redirect_uri).map_err(AppError::map_source(
+            OpenIdConnectErrorCode::PostLogoutRedirectUriInvalid,
+        ))?;
 
         let client_id = request
             .client_id
@@ -209,9 +214,9 @@ impl LogoutService {
 
         let client_id = client_id
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::IdTokenHintRequired))?;
-        let client_oid = Uuid::parse_str(&client_id).map_err(|error| {
-            AppError::from_code(OpenIdConnectErrorCode::LogoutClientInvalid).with_source(error)
-        })?;
+        let client_oid = Uuid::parse_str(&client_id).map_err(AppError::map_source(
+            OpenIdConnectErrorCode::LogoutClientInvalid,
+        ))?;
 
         if id_token_hint.as_ref().is_some_and(|claims| {
             !claims
@@ -232,10 +237,9 @@ impl LogoutService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::LogoutClientLookupFailed)
-                    .with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                OpenIdConnectErrorCode::LogoutClientLookupFailed,
+            ))?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::LogoutClientNotFound))?;
 
         validate_registered_post_logout_redirect_uri(&client, &redirect_uri)?;
@@ -293,10 +297,9 @@ impl LogoutService {
             .client_repo
             .find_frontchannel_logout_clients_by_session_oid(session_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::LogoutClientLookupFailed)
-                    .with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                OpenIdConnectErrorCode::LogoutClientLookupFailed,
+            ))?;
 
         Ok(clients
             .into_iter()
@@ -337,9 +340,7 @@ impl LogoutService {
             session_repo
                 .find_by_oid(session_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-                })?
+                .map_err(AppError::internal)?
                 .map(|session| session.user_oid)
         } else {
             None
@@ -353,10 +354,9 @@ impl LogoutService {
             .client_repo
             .find_backchannel_logout_clients_by_session_oid(session_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(OpenIdConnectErrorCode::LogoutClientLookupFailed)
-                    .with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                OpenIdConnectErrorCode::LogoutClientLookupFailed,
+            ))?;
         let candidates = clients
             .into_iter()
             .filter_map(|client| {
@@ -427,7 +427,6 @@ impl LogoutService {
             BackChannelLogoutDelivery::TransportFailed => ("failure", Some("transport_error")),
         };
 
-        use crate::observability::{BusinessEvent, EventValue};
         let mut event = BusinessEvent::audit("logout.backchannel.result")
             .outcome(outcome)
             .attribute(
@@ -445,9 +444,7 @@ impl LogoutService {
             .key_repo
             .list_active_asymmetric()
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
 
         for key in keys {
             if let KeyData::Asymmetric(data) = &key.data {
@@ -464,9 +461,7 @@ impl LogoutService {
                     .key_jwk_repo
                     .find_active_by_key_oid_and_algorithm(key.oid, alg)
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-                    })?
+                    .map_err(AppError::internal)?
                 else {
                     continue;
                 };
@@ -496,7 +491,7 @@ impl LogoutService {
         header.set_token_type("logout+jwt");
         header.set_key_id(key_id);
 
-        let now = std::time::SystemTime::now();
+        let now = SystemTime::now();
         let mut payload = JwtPayload::new();
         payload.set_issuer(issuer.as_str());
         payload.set_audience(vec![audience.to_string()]);
@@ -505,9 +500,7 @@ impl LogoutService {
         if let Some(protected_session_id) = protected_session_id {
             payload
                 .set_claim("sid", Some(serde_json::json!(protected_session_id)))
-                .map_err(|error| {
-                    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-                })?;
+                .map_err(AppError::internal)?;
         }
         if let Some(subject) = subject {
             payload.set_subject(subject);
@@ -519,13 +512,10 @@ impl LogoutService {
                     "http://schemas.openid.net/event/backchannel-logout": {}
                 })),
             )
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
 
         let signer = build_logout_token_signer(private_key_pem, alg)?;
-        jwt::encode_with_signer(&payload, &header, &*signer)
-            .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+        jwt::encode_with_signer(&payload, &header, &*signer).map_err(AppError::internal)
     }
 
     async fn verify_id_token_hint(&self, raw: &str) -> Result<IdTokenHintClaims, AppError> {
@@ -548,9 +538,7 @@ impl LogoutService {
             .key_repo
             .list_active_asymmetric()
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
         let mut verified_payload = None;
         for key in keys {
             let KeyData::Asymmetric(data) = key.data else {
@@ -626,10 +614,9 @@ fn audience_client_id(claims: Option<&IdTokenHintClaims>) -> Option<String> {
 fn build_logout_token_signer(
     private_key_pem: &str,
     alg: JwaSigningAlgorithm,
-) -> Result<Box<dyn josekit::jws::JwsSigner>, AppError> {
+) -> Result<Box<dyn JwsSigner>, AppError> {
     let pem = private_key_pem.as_bytes();
-    let err =
-        |e: josekit::JoseError| AppError::from_code(CommonErrorCode::InternalError).with_source(e);
+    let err = |e: JoseError| AppError::from_code(CommonErrorCode::InternalError).with_source(e);
     match alg {
         JwaSigningAlgorithm::Rs256 => Ok(Box::new(RS256.signer_from_pem(pem).map_err(err)?)),
         JwaSigningAlgorithm::Rs384 => Ok(Box::new(RS384.signer_from_pem(pem).map_err(err)?)),
@@ -658,6 +645,12 @@ fn unsigned_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Map;
+
+    use crate::setting::SettingsSource;
+    use std::time::Duration;
+    use std::time::SystemTime;
+
     use super::{
         BackChannelLogoutDelivery, BackChannelLogoutNotification, BackChannelLogoutSender,
         LogoutOutcome, LogoutService, LogoutServiceDependencies, RpInitiatedLogoutRequest,
@@ -755,8 +748,8 @@ mod tests {
 
     struct TestInstallationSetting(Arc<SettingsSnapshot>);
 
-    impl crate::setting::SettingsSource for TestInstallationSetting {
-        fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
+    impl SettingsSource for TestInstallationSetting {
+        fn snapshot(&self) -> Arc<SettingsSnapshot> {
             Arc::clone(&self.0)
         }
     }
@@ -905,13 +898,13 @@ mod tests {
         let mut header = JwsHeader::new();
         header.set_token_type("JWT");
         header.set_key_id(Uuid::from(signing.binding.oid).to_string());
-        let now = std::time::SystemTime::now();
+        let now = SystemTime::now();
         let mut payload = JwtPayload::new();
         payload.set_issuer(issuer);
         payload.set_subject(Uuid::new_v4().to_string());
         payload.set_audience(vec![audience.to_string()]);
         payload.set_issued_at(&now);
-        payload.set_expires_at(&(now - std::time::Duration::from_secs(60)));
+        payload.set_expires_at(&(now - Duration::from_secs(60)));
         payload
             .set_claim("azp", Some(serde_json::json!(audience.to_string())))
             .unwrap();
@@ -1295,7 +1288,7 @@ mod tests {
                 .and_then(|value| value.as_object())
                 .and_then(|events| events.get("http://schemas.openid.net/event/backchannel-logout"))
                 .and_then(|value| value.as_object())
-                .map(serde_json::Map::is_empty),
+                .map(Map::is_empty),
             Some(true)
         );
     }

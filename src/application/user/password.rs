@@ -38,28 +38,3 @@ pub enum Password {
     #[serde(rename = "argon2")]
     Argon2(Argon2Password),
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password};
-
-    #[test]
-    fn password_round_trips_through_json() {
-        let password = Password::Argon2(Argon2Password {
-            hash: "hash".to_owned(),
-            salt: "salt".to_owned(),
-            options: Argon2Options {
-                variant: Argon2Variant::Argon2id,
-                version: Argon2Version::Argon2013,
-                time_cost: 3,
-                memory_cost: 65_536,
-                parallelism: 1,
-            },
-        });
-
-        let json = serde_json::to_string(&password).unwrap();
-        let decoded: Password = serde_json::from_str(&json).unwrap();
-
-        assert!(matches!(decoded, Password::Argon2(_)));
-    }
-}

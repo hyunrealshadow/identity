@@ -1,3 +1,4 @@
+use std::vec::IntoIter;
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
@@ -226,7 +227,7 @@ impl SettingChanges {
 
 impl IntoIterator for SettingChanges {
     type Item = (String, Value);
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.values.into_iter()
@@ -349,6 +350,8 @@ impl SettingRegistry {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use std::collections::HashMap;
 
     use serde::{Deserialize, Serialize};
@@ -406,7 +409,7 @@ mod tests {
             .register::<TestDeviceSetting>()
     }
 
-    fn raw(entries: &[(&str, serde_json::Value)]) -> HashMap<String, serde_json::Value> {
+    fn raw(entries: &[(&str, Value)]) -> HashMap<String, Value> {
         entries
             .iter()
             .map(|(key, value)| ((*key).to_owned(), value.clone()))

@@ -1,8 +1,12 @@
+use super::RecordingSink;
 use super::decode_unverified_payload;
 use crate::application::error::{code::AppErrorCode, codes::token::TokenErrorCode};
+use crate::observability::EventValue;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use identity_domain::openid_connect::API_RESOURCE;
 use identity_domain::openid_connect::GrantType;
+use serde_json::Value;
 
 fn request(scope: &str) -> ClientCredentialsGrantParams {
     ClientCredentialsGrantParams {
@@ -18,7 +22,7 @@ fn request(scope: &str) -> ClientCredentialsGrantParams {
 
 #[tokio::test]
 async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
-    let sink = Arc::new(super::RecordingSink::default());
+    let sink = Arc::new(RecordingSink::default());
     let repo = Arc::new(mock_client_auth_repo());
     let service = build_token_service_with_client_repo(
         repo,
@@ -28,7 +32,7 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
     .with_events(sink.clone());
 
     let mut params = request("account.read");
-    params.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
+    params.resources = vec![API_RESOURCE.to_owned()];
     let response = service.exchange_client_credentials(params).await.unwrap();
     assert!(!response.access_token.is_empty());
     assert_eq!(response.scope, "account.read");
@@ -39,7 +43,7 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
         "token.client_credentials.result",
         "success",
         "access_token_oid",
-        crate::observability::EventValue::Text(access["jti"].as_str().unwrap().to_owned()),
+        EventValue::Text(access["jti"].as_str().unwrap().to_owned()),
     );
 }
 
@@ -69,7 +73,7 @@ async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
         .await
         .unwrap();
     assert!(response.id_token.is_none());
-    let access_claims = serde_json::from_slice::<serde_json::Value>(
+    let access_claims = serde_json::from_slice::<Value>(
         &URL_SAFE_NO_PAD
             .decode(response.access_token.split('.').nth(1).unwrap())
             .unwrap(),

@@ -1,10 +1,25 @@
 use super::*;
+use crate::data_protection::DataProtector;
+use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
 pub(super) use crate::openid_connect::tests::fixtures::mocks::{
     MockClientAuthorizationRepository, mock_client_auth_repo,
 };
 use crate::openid_connect::tests::fixtures::mocks::{
     MockKeyJwkRepository, MockKeyRepository, MockOpenIdConnectCredentialRepository,
 };
+use crate::setting::SettingsSnapshot;
+use crate::setting::SettingsSource;
+use crate::user::repository::UserIdentifierUpdate;
+use crate::user::repository::UserProfilePatch;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+use chrono::DateTime;
+use chrono::Duration as ChronoDuration;
+use chrono::Utc;
+use identity_domain::data_protection::DataProtectionError;
+use openssl::pkey::PKey;
+use std::time::Duration;
+use std::time::SystemTime;
 
 mod clients;
 
@@ -84,7 +99,7 @@ impl SigningAlgorithmDetector for InMemorySigningAlgorithmDetector {
 }
 
 fn preferred_rsa_algorithm(pem: &[u8]) -> JwaSigningAlgorithm {
-    let Ok(key) = openssl::pkey::PKey::private_key_from_pem(pem) else {
+    let Ok(key) = PKey::private_key_from_pem(pem) else {
         return JwaSigningAlgorithm::Rs256;
     };
     let Ok(rsa) = key.rsa() else {
@@ -101,25 +116,19 @@ fn preferred_rsa_algorithm(pem: &[u8]) -> JwaSigningAlgorithm {
 }
 
 #[async_trait::async_trait]
-impl crate::data_protection::DataProtector for InMemoryDataProtector {
+impl DataProtector for InMemoryDataProtector {
     async fn protect(
         &self,
         _purpose: &str,
         plaintext: &[u8],
-    ) -> Result<String, identity_domain::data_protection::DataProtectionError> {
-        use base64::{Engine, engine::general_purpose::STANDARD};
+    ) -> Result<String, DataProtectionError> {
         Ok(STANDARD.encode(plaintext))
     }
 
-    async fn unprotect(
-        &self,
-        _purpose: &str,
-        token: &str,
-    ) -> Result<Vec<u8>, identity_domain::data_protection::DataProtectionError> {
-        use base64::{Engine, engine::general_purpose::STANDARD};
-        STANDARD.decode(token).map_err(|_| {
-            identity_domain::data_protection::DataProtectionError::InvalidProtectedPayload
-        })
+    async fn unprotect(&self, _purpose: &str, token: &str) -> Result<Vec<u8>, DataProtectionError> {
+        STANDARD
+            .decode(token)
+            .map_err(|_| DataProtectionError::InvalidProtectedPayload)
     }
 }
 
@@ -127,8 +136,8 @@ pub(super) struct StaticInstallationProvider {
     pub(super) value: Arc<SettingsSnapshot>,
 }
 
-impl crate::setting::SettingsSource for StaticInstallationProvider {
-    fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
+impl SettingsSource for StaticInstallationProvider {
+    fn snapshot(&self) -> Arc<SettingsSnapshot> {
         Arc::clone(&self.value)
     }
 }
@@ -198,7 +207,7 @@ impl UserRepository for InMemoryUserRepository {
         &self,
         _user_oid: UserOid,
         _lock_threshold: i32,
-        _lock_until: chrono::DateTime<chrono::Utc>,
+        _lock_until: DateTime<Utc>,
     ) -> Result<i32, UserRepositoryError> {
         Ok(self.user.failed_attempts + 1)
     }
@@ -210,7 +219,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn update_identifier(
         &self,
         _oid: UserOid,
-        _update: crate::user::repository::UserIdentifierUpdate,
+        _update: UserIdentifierUpdate,
     ) -> Result<Option<User>, UserRepositoryError> {
         Ok(None)
     }
@@ -218,7 +227,7 @@ impl UserRepository for InMemoryUserRepository {
     async fn update_profile(
         &self,
         _oid: UserOid,
-        _patch: crate::user::repository::UserProfilePatch,
+        _patch: UserProfilePatch,
     ) -> Result<Option<User>, UserRepositoryError> {
         Ok(None)
     }
@@ -249,9 +258,7 @@ pub(super) fn build_token_service_with_client_repo(
         repo.clone(),
         user_oid,
         client_repo,
-        Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        Arc::new(MockDeviceAuthorizationRepository::new()),
     )
 }
 
@@ -259,9 +266,7 @@ pub(super) fn build_token_service_with_device_repo(
     repo: Arc<MockClientAuthorizationRepository>,
     user_oid: Uuid,
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
-    device_repo: Arc<
-        crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository,
-    >,
+    device_repo: Arc<MockDeviceAuthorizationRepository>,
 ) -> TokenService {
     let rsa = Rsa::generate(2048).unwrap();
     let private_key = String::from_utf8(rsa.private_key_to_pem().unwrap()).unwrap();
@@ -332,7 +337,7 @@ pub(super) fn build_token_service_with_device_repo(
                 data: OpenIdConnectCredentialData::ClientSecret {
                     secret: "secret-123".to_string(),
                 },
-                expires_at: Utc::now() + chrono::Duration::days(1),
+                expires_at: Utc::now() + ChronoDuration::days(1),
                 revoked_at: None,
                 created_at: Utc::now(),
                 updated_at: None,
@@ -346,7 +351,7 @@ pub(super) fn build_token_service_with_device_repo(
                     public_key,
                     jwk: None,
                 },
-                expires_at: Utc::now() + chrono::Duration::days(1),
+                expires_at: Utc::now() + ChronoDuration::days(1),
                 revoked_at: None,
                 created_at: Utc::now(),
                 updated_at: None,
@@ -368,12 +373,12 @@ pub(super) fn build_client_assertion_with_algorithm(
     header.set_token_type("JWT");
 
     let mut payload = JwtPayload::new();
-    let now = std::time::SystemTime::now();
+    let now = SystemTime::now();
     payload.set_issuer(client_id);
     payload.set_subject(client_id);
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
-    payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
+    payload.set_expires_at(&(now + Duration::from_secs(300)));
     payload.set_jwt_id(Uuid::new_v4().to_string());
 
     match alg {
@@ -417,12 +422,12 @@ pub(super) fn build_client_secret_assertion_with_algorithm(
     header.set_token_type("JWT");
 
     let mut payload = JwtPayload::new();
-    let now = std::time::SystemTime::now();
+    let now = SystemTime::now();
     payload.set_issuer(client_id);
     payload.set_subject(client_id);
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
-    payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
+    payload.set_expires_at(&(now + Duration::from_secs(300)));
     payload.set_jwt_id(Uuid::new_v4().to_string());
 
     match alg {

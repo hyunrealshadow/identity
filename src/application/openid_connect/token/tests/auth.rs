@@ -5,6 +5,13 @@ use crate::error::codes::token::TokenErrorCode;
 use crate::openid_connect::client_authentication::{
     ClientAuthenticator, ClientAuthenticatorDependencies,
 };
+use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
+use chrono::Duration;
+use identity_domain::openid_connect::ClientAssertionType;
+use identity_domain::openid_connect::OpenIdConnectClientSettings;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use std::time::Duration as TimeDuration;
+use std::time::SystemTime;
 
 /// Builds the authenticator under test with an explicit credential set.
 fn authenticator(
@@ -42,7 +49,7 @@ async fn par_accepts_issuer_token_and_par_assertion_audiences_without_weakening_
                     &client_id,
                     None,
                     false,
-                    Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+                    Some(ClientAssertionType::JwtBearer),
                     Some(&assertion)
                 )
                 .await
@@ -53,7 +60,7 @@ async fn par_accepts_issuer_token_and_par_assertion_audiences_without_weakening_
                 &client_id,
                 None,
                 false,
-                Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+                Some(ClientAssertionType::JwtBearer),
                 Some(&assertion),
             )
             .await;
@@ -70,7 +77,7 @@ async fn par_accepts_issuer_token_and_par_assertion_audiences_without_weakening_
                 &client_id,
                 None,
                 false,
-                Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+                Some(ClientAssertionType::JwtBearer),
                 Some(&assertion)
             )
             .await
@@ -89,7 +96,7 @@ fn secret_credential(secret: &str) -> OpenIdConnectCredential {
         data: OpenIdConnectCredentialData::ClientSecret {
             secret: secret.to_owned(),
         },
-        expires_at: Utc::now() + chrono::Duration::days(1),
+        expires_at: Utc::now() + Duration::days(1),
         revoked_at: None,
         created_at: Utc::now(),
         updated_at: None,
@@ -106,7 +113,7 @@ fn public_key_credential(public_key: String) -> OpenIdConnectCredential {
             public_key,
             jwk: None,
         },
-        expires_at: Utc::now() + chrono::Duration::days(1),
+        expires_at: Utc::now() + Duration::days(1),
         revoked_at: None,
         created_at: Utc::now(),
         updated_at: None,
@@ -119,13 +126,13 @@ fn sign_assertion(private_key: &str, client_id: &str, with_expiry: bool) -> Stri
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
-    let now = std::time::SystemTime::now();
+    let now = SystemTime::now();
     payload.set_issuer(client_id);
     payload.set_subject(client_id);
     payload.set_audience(vec!["https://identity.example.com/oauth2/token"]);
     payload.set_issued_at(&now);
     if with_expiry {
-        payload.set_expires_at(&(now + std::time::Duration::from_secs(300)));
+        payload.set_expires_at(&(now + TimeDuration::from_secs(300)));
     }
     payload.set_jwt_id(Uuid::new_v4().to_string());
 
@@ -189,7 +196,7 @@ async fn authenticate_client_secret_jwt_accepts_hs256_assertion() {
             "00000000-0000-0000-0000-000000000000",
             None,
             false,
-            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+            Some(ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .await;
@@ -218,7 +225,7 @@ async fn authenticate_client_secret_jwt_uses_registered_signing_algorithm() {
             "00000000-0000-0000-0000-000000000000",
             None,
             false,
-            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+            Some(ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .await;
@@ -247,7 +254,7 @@ async fn authenticate_client_secret_jwt_rejects_unregistered_signing_algorithm()
             "00000000-0000-0000-0000-000000000000",
             None,
             false,
-            Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer),
+            Some(ClientAssertionType::JwtBearer),
             Some(&assertion),
         )
         .await
@@ -392,7 +399,7 @@ async fn mixed_client_accepts_public_and_confidential_proofs_without_downgrade()
             .await
             .unwrap_err()
             .code(),
-        crate::error::codes::token::TokenErrorCode::ClientCredentialsInvalid.code()
+        TokenErrorCode::ClientCredentialsInvalid.code()
     );
 }
 
@@ -521,9 +528,6 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
 
 #[tokio::test]
 async fn public_flow_switch_blocks_none_but_preserves_confidential_authentication() {
-    use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-    use identity_domain::openid_connect::{OpenIdConnectClientSettings, TokenEndpointAuthMethod};
-
     for methods in [
         vec![TokenEndpointAuthMethod::None],
         vec![

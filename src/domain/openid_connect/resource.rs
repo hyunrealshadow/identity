@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 /// A resource server accepted by this authorization server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,7 +52,7 @@ pub fn valid_resource_uri(uri: &str) -> bool {
     if outside_authority.contains(['[', ']']) {
         return false;
     }
-    url::Url::parse(uri).is_ok_and(|url| url.fragment().is_none())
+    Url::parse(uri).is_ok_and(|url| url.fragment().is_none())
 }
 
 #[cfg(test)]

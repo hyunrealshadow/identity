@@ -1,15 +1,21 @@
+use super::RecordingSink;
+use super::decode_unverified_payload;
+use crate::observability::EventValue;
+use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
+use crate::openid_connect::token::TokenType;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use chrono::Duration;
 use identity_domain::auth::SessionOid;
+use identity_domain::client_authorization::ClientAuthorization;
 use identity_domain::openid_connect::{ApiScope, ScopeSet};
+use serde_json::Value;
 
 fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-fn refresh_token_data(
-    record: identity_domain::client_authorization::ClientAuthorization,
-) -> RefreshTokenData {
+fn refresh_token_data(record: ClientAuthorization) -> RefreshTokenData {
     match record.data {
         ClientAuthorizationData::RefreshToken(data) => data,
         _ => panic!("expected refresh token data"),
@@ -41,7 +47,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -94,7 +100,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
 async fn exchange_refresh_token_returns_new_access_token() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
-    let sink = Arc::new(super::RecordingSink::default());
+    let sink = Arc::new(RecordingSink::default());
     let service = build_token_service(repo.clone(), user_oid).with_events(sink.clone());
 
     let refresh_record = repo
@@ -116,7 +122,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -154,10 +160,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .await
         .unwrap();
 
-    assert!(matches!(
-        refreshed.token_type,
-        crate::openid_connect::token::TokenType::Bearer
-    ));
+    assert!(matches!(refreshed.token_type, TokenType::Bearer));
     assert!(refreshed.id_token.is_some());
     assert!(refreshed.refresh_token.is_some());
     let rotated_oid = Uuid::from_slice(
@@ -177,7 +180,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
     );
 
     let access_payload = refreshed.access_token.split('.').nth(1).unwrap();
-    let access_payload: serde_json::Value =
+    let access_payload: Value =
         serde_json::from_slice(&URL_SAFE_NO_PAD.decode(access_payload).unwrap()).unwrap();
     let access_oid = Uuid::parse_str(access_payload["jti"].as_str().unwrap()).unwrap();
     let access = repo.find_by_oid(access_oid).await.unwrap().unwrap();
@@ -197,7 +200,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
         .await
         .unwrap_err();
     assert_eq!(error.code(), 24015);
-    use crate::observability::EventValue;
+
     for name in ["token.refresh.result", "refresh_token.rotated"] {
         sink.assert_attribute(
             name,
@@ -230,7 +233,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
         "refresh_token_oid",
         EventValue::Text(initial_refresh_oid.to_string()),
     );
-    let initial_access = super::decode_unverified_payload(&initial.access_token);
+    let initial_access = decode_unverified_payload(&initial.access_token);
     sink.assert_attribute(
         "token.issuance.result",
         "success",
@@ -285,9 +288,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         Uuid::new_v4(),
     );
     let service = TokenService::new(TokenServiceDependencies {
-        device_repo: Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
         client_authorization_repo: repo.clone(),
         key_repo: Arc::new(key_repo_with_keys(vec![signing_key])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -336,7 +337,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             data: OpenIdConnectCredentialData::ClientSecret {
                 secret: "secret-123".to_string(),
             },
-            expires_at: Utc::now() + chrono::Duration::days(1),
+            expires_at: Utc::now() + Duration::days(1),
             revoked_at: None,
             created_at: Utc::now(),
             updated_at: None,
@@ -365,7 +366,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -428,9 +429,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         Uuid::new_v4(),
     );
     let service = TokenService::new(TokenServiceDependencies {
-        device_repo: Arc::new(
-            crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository::new(),
-        ),
+        device_repo: Arc::new(MockDeviceAuthorizationRepository::new()),
         client_authorization_repo: repo.clone(),
         key_repo: Arc::new(key_repo_with_keys(vec![signing_key])),
         key_jwk_repo: Arc::new(jwk_repo_with_bindings(vec![binding])),
@@ -479,7 +478,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             data: OpenIdConnectCredentialData::ClientSecret {
                 secret: "secret-123".to_string(),
             },
-            expires_at: Utc::now() + chrono::Duration::days(1),
+            expires_at: Utc::now() + Duration::days(1),
             revoked_at: None,
             created_at: Utc::now(),
             updated_at: None,
@@ -509,7 +508,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();
@@ -627,7 +626,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
                 redirect_uri_was_supplied: true,
                 claims: None,
             }),
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         )
         .await
         .unwrap();

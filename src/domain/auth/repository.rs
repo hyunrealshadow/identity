@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use std::error::Error as StdError;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -11,31 +12,31 @@ use crate::auth::{
 #[derive(Debug, Error)]
 pub enum SessionRepositoryError {
     #[error("failed to query session")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("database contains an unknown session status")]
     InvalidStoredStatus,
 
     #[error("failed to query active sessions")]
-    ListActiveFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ListActiveFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("user not found while creating session")]
     UserNotFound,
 
     #[error("failed to create session")]
-    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    CreateFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("session not found for touch")]
     SessionNotFound,
 
     #[error("failed to update session activity")]
-    TouchFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    TouchFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to reauthenticate session")]
-    ReauthenticateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ReauthenticateFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to revoke session")]
-    RevokeFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    RevokeFailed(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 /// Stable sort key for session pagination.
@@ -69,13 +70,13 @@ pub struct SessionPageItem {
 #[derive(Debug, Error)]
 pub enum LoginRepositoryError {
     #[error("failed to query login")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("user not found while creating login")]
     UserNotFound,
 
     #[error("failed to create login")]
-    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    CreateFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("login not found")]
     LoginNotFound,
@@ -84,7 +85,7 @@ pub enum LoginRepositoryError {
     SessionNotFound,
 
     #[error("failed to update login")]
-    UpdateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    UpdateFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("invalid login state transition")]
     InvalidTransition,
@@ -93,10 +94,10 @@ pub enum LoginRepositoryError {
     InvalidStoredStatus,
 
     #[error("failed to increment login failed attempts")]
-    IncrementFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
+    IncrementFailedAttempts(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to reset login failed attempts")]
-    ResetFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ResetFailedAttempts(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 #[derive(Debug)]

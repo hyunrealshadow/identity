@@ -1,9 +1,14 @@
 use async_trait::async_trait;
+use chrono::FixedOffset;
 use chrono::{DateTime, Utc};
+use identity_domain::user::normalization::normalize_identifier;
+use sea_orm::Condition;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
     TransactionTrait, sea_query::Expr,
 };
+use serde_json::Value;
+use uuid::Uuid;
 
 use crate::database::entity::{user, user::Entity as UserEntity};
 use identity_domain::user::{
@@ -15,7 +20,7 @@ fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
     let theme = m
         .preferences
         .get("theme")
-        .and_then(serde_json::Value::as_str)
+        .and_then(Value::as_str)
         .map(str::parse)
         .transpose()
         .map_err(|_| UserRepositoryError::InvalidStoredTheme)?;
@@ -49,13 +54,13 @@ fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
         failed_attempts: m.failed_attempts,
         enabled: m.enabled,
         locked: m.locked,
-        locked_until: m.locked_until.map(chrono::DateTime::<Utc>::from),
+        locked_until: m.locked_until.map(DateTime::<Utc>::from),
         created_at: DateTime::<Utc>::from(m.created_at),
         updated_at: m.updated_at.map(DateTime::<Utc>::from),
     })
 }
 
-fn update_theme_preference(preferences: &mut serde_json::Value, theme: Option<UserTheme>) {
+fn update_theme_preference(preferences: &mut Value, theme: Option<UserTheme>) {
     if !preferences.is_object() {
         *preferences = serde_json::json!({});
     }
@@ -64,10 +69,7 @@ fn update_theme_preference(preferences: &mut serde_json::Value, theme: Option<Us
         .expect("normalized preference value must be an object");
     match theme {
         Some(theme) => {
-            object.insert(
-                "theme".to_owned(),
-                serde_json::Value::String(theme.to_string()),
-            );
+            object.insert("theme".to_owned(), Value::String(theme.to_string()));
         }
         None => {
             object.remove("theme");
@@ -101,7 +103,7 @@ impl UserRepositoryImpl {
         mut patch: UserProfilePatch,
     ) -> Result<Option<User>, UserRepositoryError> {
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
@@ -149,7 +151,7 @@ impl UserRepositoryImpl {
         update: UserIdentifierUpdate,
     ) -> Result<Option<User>, UserRepositoryError> {
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
@@ -233,9 +235,8 @@ impl UserRepositoryImpl {
 impl UserRepository for UserRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_identifier"))]
     async fn find_by_identifier(&self, identifier: &str) -> Result<User, UserRepositoryError> {
-        use sea_orm::Condition;
-        let normalized = identity_domain::user::normalization::normalize_identifier(identifier)
-            .ok_or(UserRepositoryError::UserNotFound)?;
+        let normalized =
+            normalize_identifier(identifier).ok_or(UserRepositoryError::UserNotFound)?;
         let model = UserEntity::find()
             .filter(
                 Condition::any()
@@ -254,7 +255,7 @@ impl UserRepository for UserRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
         let model = UserEntity::find()
-            .filter(user::Column::Oid.eq(uuid::Uuid::from(oid)))
+            .filter(user::Column::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
             .map_err(|e| UserRepositoryError::QueryFailed(Box::new(e)))?;
@@ -268,7 +269,7 @@ impl UserRepository for UserRepositoryImpl {
         lock_threshold: i32,
         lock_until: DateTime<Utc>,
     ) -> Result<i32, UserRepositoryError> {
-        let oid = uuid::Uuid::from(user_oid);
+        let oid = Uuid::from(user_oid);
         let now = Utc::now().fixed_offset();
         let transaction = self
             .db
@@ -312,13 +313,13 @@ impl UserRepository for UserRepositoryImpl {
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_failed_attempts"))]
     async fn reset_failed_attempts(&self, user_oid: UserOid) -> Result<(), UserRepositoryError> {
-        let oid = uuid::Uuid::from(user_oid);
+        let oid = Uuid::from(user_oid);
         UserEntity::update_many()
             .col_expr(user::Column::FailedAttempts, Expr::value(0i32))
             .col_expr(user::Column::Locked, Expr::value(false))
             .col_expr(
                 user::Column::LockedUntil,
-                Expr::value(Option::<chrono::DateTime<chrono::FixedOffset>>::None),
+                Expr::value(Option::<DateTime<FixedOffset>>::None),
             )
             .col_expr(
                 user::Column::UpdatedAt,
@@ -352,6 +353,9 @@ impl UserRepository for UserRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+    use uuid::Uuid;
+
     use sea_orm::{DatabaseBackend, MockDatabase};
 
     use super::{UserRepositoryImpl, to_domain, update_theme_preference};
@@ -411,7 +415,7 @@ mod tests {
 
         let user = repo
             .update_identifier(
-                uuid::Uuid::nil().into(),
+                Uuid::nil().into(),
                 UserIdentifierUpdate::Email {
                     value: "ada@new.example".to_owned(),
                     normalized: "ada@new.example".to_owned(),
@@ -427,10 +431,10 @@ mod tests {
     }
 
     fn user_model() -> user::Model {
-        let now = chrono::Utc::now().into();
+        let now = Utc::now().into();
         user::Model {
             id: 1,
-            oid: uuid::Uuid::nil(),
+            oid: Uuid::nil(),
             email: "user@example.com".to_string(),
             email_normalized: "user@example.com".to_string(),
             name: "User".to_string(),

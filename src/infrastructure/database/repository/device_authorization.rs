@@ -5,6 +5,15 @@
 //! concurrency guarantees come from row locks and partial unique indexes, not
 //! from process-local state.
 
+use crate::database::entity::login;
+use crate::database::entity::session;
+
+use chrono::Duration;
+use identity_domain::auth::SessionOid;
+use serde_json::Value;
+use std::error::Error;
+use std::fmt::Display;
+
 use crate::database::query::json_text;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -46,10 +55,12 @@ fn device_authorization_type() -> String {
     ClientAuthorizationType::DeviceAuthorization.to_string()
 }
 
-fn query_failed(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> DeviceAuthorizationRepositoryError {
+fn query_failed(error: impl Error + Send + Sync + 'static) -> DeviceAuthorizationRepositoryError {
     DeviceAuthorizationRepositoryError::QueryFailed(Box::new(error))
+}
+
+fn transition_failed(error: impl Display) -> DeviceAuthorizationRepositoryError {
+    query_failed(DbErr::Type(error.to_string()))
 }
 
 /// Compares a JSON field of the row against a parameter.
@@ -76,7 +87,7 @@ fn json_field_is_null(field: &str) -> SimpleExpr {
 }
 
 fn parse_device_request(
-    data: serde_json::Value,
+    data: Value,
 ) -> Result<DeviceAuthorizationRequestData, DeviceAuthorizationRepositoryError> {
     serde_json::from_value(data).map_err(query_failed)
 }
@@ -104,7 +115,7 @@ impl DeviceAuthorizationRepositoryImpl {
 
     fn write_data(
         data: &ClientAuthorizationData,
-    ) -> Result<serde_json::Value, DeviceAuthorizationRepositoryError> {
+    ) -> Result<Value, DeviceAuthorizationRepositoryError> {
         serialize_data(data).map_err(|error| match error {
             ClientAuthorizationRepositoryError::QueryFailed(source) => {
                 DeviceAuthorizationRepositoryError::QueryFailed(source)
@@ -182,10 +193,9 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         &self,
         request_oid: Uuid,
         login_oid: Uuid,
-        session_oid: identity_domain::auth::SessionOid,
+        session_oid: SessionOid,
         now: DateTime<Utc>,
     ) -> Result<bool, DeviceAuthorizationRepositoryError> {
-        use crate::database::entity::{login, session};
         let transaction = self.db.begin().await.map_err(query_failed)?;
         let Some(request) = Self::lock_row(&transaction, request_oid).await? else {
             transaction.rollback().await.map_err(query_failed)?;
@@ -430,7 +440,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             return Ok(DevicePollOutcome::NotPollable);
         }
 
-        let effective_interval = chrono::Duration::seconds(request.effective_interval_seconds());
+        let effective_interval = Duration::seconds(request.effective_interval_seconds());
         let too_frequent = request
             .last_polled_at
             .is_some_and(|last_polled_at| polled_at < last_polled_at + effective_interval);
@@ -525,7 +535,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
 
         request
             .approve(approval, decided_at)
-            .map_err(|error| query_failed(DbErr::Type(error.to_string())))?;
+            .map_err(transition_failed)?;
         let data = Self::write_data(&ClientAuthorizationData::DeviceAuthorizationRequest(
             request,
         ))?;
@@ -639,9 +649,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             return Ok(DeviceConsumeOutcome::AuthorizationRevoked);
         }
 
-        request
-            .consume()
-            .map_err(|error| query_failed(DbErr::Type(error.to_string())))?;
+        request.consume().map_err(transition_failed)?;
         let data = Self::write_data(&ClientAuthorizationData::DeviceAuthorizationRequest(
             request,
         ))?;

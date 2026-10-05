@@ -7,7 +7,7 @@ COPY assets/views/ assets/views/
 RUN pnpm install --frozen-lockfile
 RUN pnpm build:error-css
 
-FROM rust:1.96-bookworm AS builder
+FROM rust:1.99-bookworm AS builder
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends pkg-config libssl-dev \

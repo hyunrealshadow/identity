@@ -72,6 +72,9 @@ impl SettingsRefresher {
 
 #[cfg(test)]
 mod tests {
+    use tokio::time::sleep;
+    use tokio::time::timeout;
+
     use std::{
         sync::{
             Arc,
@@ -111,9 +114,9 @@ mod tests {
         refresher.register(setting);
 
         let handle = refresher.spawn();
-        tokio::time::timeout(Duration::from_millis(250), async {
+        timeout(Duration::from_millis(250), async {
             while refresh_calls.load(Ordering::SeqCst) == 0 {
-                tokio::time::sleep(Duration::from_millis(5)).await;
+                sleep(Duration::from_millis(5)).await;
             }
         })
         .await

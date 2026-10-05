@@ -1,12 +1,17 @@
 use super::*;
+use crate::error::codes::common::CommonErrorCode;
+use crate::openid_connect::par::request_uri_digest;
+use chrono::Utc;
+use identity_domain::openid_connect::par::PAR_REQUEST_URI_PREFIX;
 use identity_domain::openid_connect::{OAuthProtocolVersion, TokenEndpointAuthMethod};
+use serde_json::Value;
+use std::collections::HashSet;
 
 impl AuthorizeService {
     pub async fn validate_request(
         &self,
         params: AuthorizationRequestParams,
     ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
-        use identity_domain::openid_connect::par::PAR_REQUEST_URI_PREFIX;
         if let Some(uri) = params
             .request_uri
             .as_deref()
@@ -18,26 +23,21 @@ impl AuthorizeService {
                 ..Default::default()
             };
             if params != expected {
-                return Err(AppError::from_code(
-                    crate::error::codes::common::CommonErrorCode::InvalidRequest,
-                ));
+                return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
             }
             let client_oid = Uuid::parse_str(&params.client_id)
                 .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
             let stored = self
                 .client_authorization_repo
                 .consume_pushed_authorization_request(
-                    &crate::openid_connect::par::request_uri_digest(uri),
+                    &request_uri_digest(uri),
                     client_oid,
-                    chrono::Utc::now(),
+                    Utc::now(),
                 )
                 .await
-                .map_err(|error| {
-                    AppError::from_code(
-                        crate::error::codes::common::CommonErrorCode::PushedRequestStorageFailed,
-                    )
-                    .with_source(error)
-                })?
+                .map_err(AppError::map_source(
+                    CommonErrorCode::PushedRequestStorageFailed,
+                ))?
                 .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
             let stored = stored.parameters;
             if stored.client_id != params.client_id || stored.request_uri.is_some() {
@@ -53,9 +53,7 @@ impl AuthorizeService {
         params: AuthorizationRequestParams,
     ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
         if params.request_uri.is_some() {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::InvalidRequest,
-            ));
+            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
         }
         self.validate_request_params(params, true).await
     }
@@ -78,17 +76,14 @@ impl AuthorizeService {
             Self::validate_required_params(&params)?;
         }
 
-        let client_id = Uuid::parse_str(&params.client_id).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ClientIdInvalid).with_source(error)
-        })?;
+        let client_id = Uuid::parse_str(&params.client_id)
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
 
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
         if !pushed
@@ -101,9 +96,7 @@ impl AuthorizeService {
                     .settings
                     .require_pushed_authorization_requests)
         {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::InvalidRequest,
-            ));
+            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
         }
 
         let oauth_version = self.provider_service.oauth_version(&client);
@@ -113,7 +106,7 @@ impl AuthorizeService {
                 .parse_request_object_payload(&client, &raw_request_object)
                 .await?;
             if pushed
-                && payload.get("client_id").and_then(serde_json::Value::as_str)
+                && payload.get("client_id").and_then(Value::as_str)
                     != Some(params.client_id.as_str())
             {
                 return Err(
@@ -166,9 +159,8 @@ impl AuthorizeService {
             );
         }
 
-        let redirect_uri = Url::parse(&params.redirect_uri).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RedirectUriInvalid).with_source(error)
-        })?;
+        let redirect_uri = Url::parse(&params.redirect_uri)
+            .map_err(AppError::map_source(AuthorizeErrorCode::RedirectUriInvalid))?;
 
         let response_mode = match params.response_mode {
             Some(value) => Some(value.parse::<ResponseMode>().map_err(|error| {
@@ -182,9 +174,8 @@ impl AuthorizeService {
         self.provider_service
             .validate_scope_names(&params.scope)
             .await?;
-        let scope = ScopeSet::parse(&params.scope).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_source(error)
-        })?;
+        let scope = ScopeSet::parse(&params.scope)
+            .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
 
         let resources = self
             .provider_service
@@ -220,7 +211,7 @@ impl AuthorizeService {
                                 .with_source(error)
                         })
                     })
-                    .collect::<Result<std::collections::HashSet<_>, _>>()?,
+                    .collect::<Result<HashSet<_>, _>>()?,
             ),
             None => None,
         };
@@ -236,9 +227,7 @@ impl AuthorizeService {
             .max_age
             .map(|value| value.parse::<i32>())
             .transpose()
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::MaxAgeInvalid).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::MaxAgeInvalid))?
             .or_else(|| {
                 scope
                     .contains_openid()
@@ -253,9 +242,7 @@ impl AuthorizeService {
             .request_uri
             .map(|value| Url::parse(&value))
             .transpose()
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::RequestUriInvalid).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::RequestUriInvalid))?;
 
         let code_challenge_method = match params.code_challenge_method {
             Some(value) => Some(value.parse::<CodeChallengeMethod>().map_err(|error| {
@@ -415,12 +402,14 @@ impl AuthorizeService {
             .split('.')
             .next()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid))?;
-        let header = URL_SAFE_NO_PAD.decode(header_segment).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
-        })?;
-        let header = serde_json::from_slice::<serde_json::Value>(&header).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
-        })?;
+        let header = URL_SAFE_NO_PAD
+            .decode(header_segment)
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::IdTokenHintIssuerInvalid,
+            ))?;
+        let header = serde_json::from_slice::<Value>(&header).map_err(AppError::map_source(
+            AuthorizeErrorCode::IdTokenHintIssuerInvalid,
+        ))?;
         if !cfg!(feature = "allow-none-alg")
             && header
                 .get(JwtClaimNames::ALG)
@@ -436,12 +425,14 @@ impl AuthorizeService {
             .split('.')
             .nth(1)
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid))?;
-        let payload = URL_SAFE_NO_PAD.decode(payload_segment).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
-        })?;
-        let payload = serde_json::from_slice::<serde_json::Value>(&payload).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid).with_source(error)
-        })?;
+        let payload = URL_SAFE_NO_PAD
+            .decode(payload_segment)
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::IdTokenHintIssuerInvalid,
+            ))?;
+        let payload = serde_json::from_slice::<Value>(&payload).map_err(AppError::map_source(
+            AuthorizeErrorCode::IdTokenHintIssuerInvalid,
+        ))?;
 
         if payload
             .get(JwtClaimNames::ISS)

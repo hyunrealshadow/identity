@@ -1,5 +1,11 @@
+use crate::controllers::response::error_message;
 use http::{HeaderMap, HeaderValue, StatusCode, header};
+use identity_application::error::code::AppErrorCode;
+use identity_application::error::codes::authorize::AuthorizeErrorCode;
+use identity_application::error::codes::common::CommonErrorCode;
 use salvo::Response;
+use url::Url;
+use url::form_urlencoded::parse;
 
 use crate::{
     application::error::{AppError, kind::ErrorKind},
@@ -60,7 +66,7 @@ pub fn redirect_oauth_error_response(
 pub fn render_form_post_response(
     ctx: &AppState,
     headers: &HeaderMap,
-    redirect_uri: &url::Url,
+    redirect_uri: &Url,
     error_response: &OAuthErrorResponse,
 ) -> Response {
     let mut fields = vec![FormPostField {
@@ -92,7 +98,7 @@ pub fn render_form_post_response(
 pub fn render_form_post_redirect_response(
     ctx: &AppState,
     headers: &HeaderMap,
-    redirect_uri: &url::Url,
+    redirect_uri: &Url,
 ) -> Response {
     let (action, fields) = form_post_action_and_fields(redirect_uri);
     render_form_post_page(ctx, headers, action, fields)
@@ -101,7 +107,7 @@ pub fn render_form_post_redirect_response(
 pub fn finish_authorize_redirect(
     ctx: &AppState,
     headers: &HeaderMap,
-    redirect_uri: &url::Url,
+    redirect_uri: &Url,
     response_mode: Option<ResponseMode>,
 ) -> Response {
     match response_mode {
@@ -144,12 +150,12 @@ fn render_form_post_page(
     response
 }
 
-fn form_post_action_and_fields(redirect_uri: &url::Url) -> (String, Vec<FormPostField>) {
+fn form_post_action_and_fields(redirect_uri: &Url) -> (String, Vec<FormPostField>) {
     let mut action = redirect_uri.clone();
     let pairs = action
         .fragment()
         .map(|fragment| {
-            url::form_urlencoded::parse(fragment.as_bytes())
+            parse(fragment.as_bytes())
                 .map(|(name, value)| (name.into_owned(), value.into_owned()))
                 .collect::<Vec<_>>()
         })
@@ -186,24 +192,16 @@ fn authorize_error_status(kind: ErrorKind) -> StatusCode {
 pub(in crate::controllers::oauth2) fn authorize_oauth_error_code(
     error: &AppError,
 ) -> OAuthErrorCode {
-    use identity_application::error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode};
-
     if error.kind() == ErrorKind::Internal {
         return OAuthErrorCode::ServerError;
     }
 
     match error.code() {
-        c if c
-            == identity_application::error::codes::common::CommonErrorCode::InvalidTarget
-                .code() =>
-        {
-            OAuthErrorCode::InvalidTarget
-        }
+        c if c == CommonErrorCode::InvalidTarget.code() => OAuthErrorCode::InvalidTarget,
         code if code == AuthorizeErrorCode::ResponseTypeInvalid.code() => {
             OAuthErrorCode::UnsupportedResponseType
         }
-        code if code
-            == identity_application::error::codes::common::CommonErrorCode::InvalidScope.code()
+        code if code == CommonErrorCode::InvalidScope.code()
             || code == AuthorizeErrorCode::ScopeInvalid.code()
             || code == AuthorizeErrorCode::OpenidScopeRequired.code()
             || code == AuthorizeErrorCode::ScopeNotAssignedToClient.code() =>
@@ -251,7 +249,7 @@ pub fn render_authorize_error_page(
     let locale = resolve_locale_from_headers(headers);
     let status = authorize_error_status(error.kind());
     let oauth_error_code = authorize_oauth_error_code(&error);
-    let message = crate::controllers::response::error_message(i18n, &locale, &error);
+    let message = error_message(i18n, &locale, &error);
 
     let data = ErrorPageData {
         status_code: status.as_u16(),
@@ -272,6 +270,16 @@ pub fn render_authorize_error_page(
 
 #[cfg(test)]
 mod tests {
+    use super::inline_script_csp_header_value;
+
+    use super::finish_authorize_redirect;
+    use super::form_post_action_and_fields;
+    use super::localized_authorize_error_response;
+    use super::redirect_oauth_error_response;
+    use std::collections::HashMap;
+    use url::Url;
+    use uuid::Uuid;
+
     use http::{HeaderMap, HeaderValue, StatusCode, header};
     use identity_application::error::AppError;
     use identity_application::error::codes::authorize::AuthorizeErrorCode;
@@ -289,7 +297,7 @@ mod tests {
         let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
         let error = AppError::from_code(AuthorizeErrorCode::ScopeNotAssignedToClient)
             .with_param("scopes", "email");
-        let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
+        let redirect_uri = Url::parse("https://client.example.com/callback").unwrap();
 
         for (language, expected) in [
             ("zh-CN", "客户端无权请求 scope：email"),
@@ -303,13 +311,11 @@ mod tests {
                 header::ACCEPT_LANGUAGE,
                 HeaderValue::from_str(language).unwrap(),
             );
-            let response = super::localized_authorize_error_response(&ctx, &headers, &error)
+            let response = localized_authorize_error_response(&ctx, &headers, &error)
                 .with_state("state123")
                 .with_issuer("https://identity.example.com/");
             let redirect = response.to_redirect_url(&redirect_uri);
-            let params = redirect
-                .query_pairs()
-                .collect::<std::collections::HashMap<_, _>>();
+            let params = redirect.query_pairs().collect::<HashMap<_, _>>();
 
             assert_eq!(params.len(), 4);
             assert_eq!(
@@ -350,8 +356,6 @@ mod tests {
 
     #[test]
     fn authorize_oauth_error_code_maps_protocol_errors() {
-        use identity_application::error::codes::authorize::AuthorizeErrorCode;
-
         assert_eq!(
             authorize_oauth_error_code(&AppError::from_code(
                 AuthorizeErrorCode::ResponseTypeInvalid
@@ -377,13 +381,13 @@ mod tests {
     #[tokio::test]
     async fn form_post_error_uses_autopost_template() {
         let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let headers = http::HeaderMap::new();
+        let headers = HeaderMap::new();
         let request = AuthorizationRequest {
             resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: Some(ResponseMode::FormPost),
-            client_id: uuid::Uuid::nil(),
-            redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            client_id: Uuid::nil(),
+            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             redirect_uri_was_supplied: true,
             scope: ScopeSet::parse("openid").unwrap(),
@@ -403,17 +407,13 @@ mod tests {
             code_challenge_method: None,
         };
 
-        let mut response = super::redirect_oauth_error_response(
-            &ctx,
-            &headers,
-            &request,
-            OAuthErrorCode::LoginRequired,
-        );
+        let mut response =
+            redirect_oauth_error_response(&ctx, &headers, &request, OAuthErrorCode::LoginRequired);
         let body = response.take_string().await.unwrap();
 
         assert!(body.contains("method=\"post\""), "{body}");
         assert!(
-            body.contains("action=\"https:&#x2F;&#x2F;client.example.com&#x2F;callback\""),
+            body.contains("action=\"https://client.example.com/callback\""),
             "{body}"
         );
         assert!(
@@ -434,9 +434,9 @@ mod tests {
     #[test]
     fn form_post_action_and_fields_moves_query_into_fields() {
         let redirect_uri =
-            url::Url::parse("https://client.example.com/callback?code=abc&state=xyz").unwrap();
+            Url::parse("https://client.example.com/callback?code=abc&state=xyz").unwrap();
 
-        let (action, fields) = super::form_post_action_and_fields(&redirect_uri);
+        let (action, fields) = form_post_action_and_fields(&redirect_uri);
 
         assert_eq!(action, "https://client.example.com/callback");
         assert_eq!(fields[0].name, "code");
@@ -448,37 +448,33 @@ mod tests {
     #[tokio::test]
     async fn finish_authorize_redirect_renders_form_post_page() {
         let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let headers = http::HeaderMap::new();
+        let headers = HeaderMap::new();
         let redirect_uri =
-            url::Url::parse("https://client.example.com/callback#code=abc&state=xyz").unwrap();
+            Url::parse("https://client.example.com/callback#code=abc&state=xyz").unwrap();
 
-        let response = super::finish_authorize_redirect(
-            &ctx,
-            &headers,
-            &redirect_uri,
-            Some(identity_domain::openid_connect::ResponseMode::FormPost),
-        );
+        let response =
+            finish_authorize_redirect(&ctx, &headers, &redirect_uri, Some(ResponseMode::FormPost));
 
-        assert_eq!(response.status_code, Some(http::StatusCode::OK));
+        assert_eq!(response.status_code, Some(StatusCode::OK));
     }
 
     #[tokio::test]
     async fn finish_authorize_redirect_uses_http_redirect_for_non_form_post() {
         let ctx = identity_infrastructure::test_app_state_with_mock_settings().await;
-        let headers = http::HeaderMap::new();
+        let headers = HeaderMap::new();
         let redirect_uri =
-            url::Url::parse("https://client.example.com/callback?code=abc&state=xyz").unwrap();
+            Url::parse("https://client.example.com/callback?code=abc&state=xyz").unwrap();
 
-        let response = super::finish_authorize_redirect(&ctx, &headers, &redirect_uri, None);
+        let response = finish_authorize_redirect(&ctx, &headers, &redirect_uri, None);
 
-        assert_eq!(response.status_code, Some(http::StatusCode::SEE_OTHER));
+        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
     }
 
     #[test]
     fn inline_script_csp_header_value_allows_inline_scripts() {
         let nonce = "test-nonce-123";
         assert_eq!(
-            super::inline_script_csp_header_value(nonce),
+            inline_script_csp_header_value(nonce),
             HeaderValue::from_static("default-src 'self'; script-src 'nonce-test-nonce-123'")
         );
     }

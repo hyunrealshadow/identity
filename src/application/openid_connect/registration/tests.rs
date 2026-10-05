@@ -1,4 +1,22 @@
+#[cfg(not(feature = "oidc-conformance"))]
+use super::DynamicClientJwks;
+use super::validation::sector_redirect_uris_include_registered_redirects;
+use crate::openid_connect::registration::DynamicClientUpdateRequest;
+use crate::openid_connect::remote::conformance_mode_active;
+use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
+use crate::setting::DynamicRegistrationSettings;
+use crate::setting::OpenIdConnectSettings;
+use crate::setting::SettingsSnapshot;
+use crate::setting::SettingsSource;
+use identity_domain::openid_connect::GrantType;
+use identity_domain::openid_connect::OpenIdConnectCredentialData;
+use identity_domain::openid_connect::ResponseType;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use serde_json::Value;
 use std::sync::Arc;
+use std::sync::Mutex;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::unbounded_channel;
 
 use chrono::Utc;
 use identity_domain::{
@@ -22,11 +40,10 @@ struct TestRegistrationSetting(bool);
 
 #[tokio::test]
 async fn registration_validates_catalog_and_preserves_custom_scope_assignments() {
-    use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
-    let captured = Arc::new(std::sync::Mutex::new(None));
+    let captured = Arc::new(Mutex::new(None));
     let repo = Arc::new(capturing_registration_repo(
         captured.clone(),
-        Arc::new(std::sync::Mutex::new(Vec::new())),
+        Arc::new(Mutex::new(Vec::new())),
     ));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo)
@@ -49,16 +66,14 @@ async fn registration_validates_catalog_and_preserves_custom_scope_assignments()
     );
 }
 
-impl crate::setting::SettingsSource for TestRegistrationSetting {
-    fn snapshot(&self) -> Arc<crate::setting::SettingsSnapshot> {
-        Arc::new(crate::setting::SettingsSnapshot::default().with_section(
-            &crate::setting::OpenIdConnectSettings {
-                dynamic_registration: crate::setting::DynamicRegistrationSettings {
-                    enabled: self.0,
-                },
-                ..crate::setting::OpenIdConnectSettings::default()
-            },
-        ))
+impl SettingsSource for TestRegistrationSetting {
+    fn snapshot(&self) -> Arc<SettingsSnapshot> {
+        Arc::new(
+            SettingsSnapshot::default().with_section(&OpenIdConnectSettings {
+                dynamic_registration: DynamicRegistrationSettings { enabled: self.0 },
+                ..OpenIdConnectSettings::default()
+            }),
+        )
     }
 }
 
@@ -66,8 +81,8 @@ impl crate::setting::SettingsSource for TestRegistrationSetting {
 /// registration passed to `create` and supports setting a found client and
 /// tracking deletions.
 fn capturing_registration_repo(
-    captured: Arc<std::sync::Mutex<Option<OpenIdConnectClientRegistration>>>,
-    deleted: Arc<std::sync::Mutex<Vec<ClientOid>>>,
+    captured: Arc<Mutex<Option<OpenIdConnectClientRegistration>>>,
+    deleted: Arc<Mutex<Vec<ClientOid>>>,
 ) -> MockOpenIdConnectClientRegistrationRepository {
     let mut mock = MockOpenIdConnectClientRegistrationRepository::new();
     let c = captured.clone();
@@ -153,8 +168,8 @@ fn registered_client_with_built_in(client_oid: ClientOid, built_in: bool) -> Ope
 
 #[tokio::test]
 async fn register_rejects_requests_when_dynamic_registration_is_disabled() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(false)),
@@ -179,8 +194,8 @@ async fn register_rejects_requests_when_dynamic_registration_is_disabled() {
 #[tokio::test]
 async fn dynamic_registration_does_not_expose_internal_oauth_version() {
     for request_includes_internal_field in [false, true] {
-        let captured = Arc::new(std::sync::Mutex::new(None));
-        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = Arc::new(Mutex::new(None));
+        let deleted = Arc::new(Mutex::new(Vec::new()));
         let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
         let service =
             DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -223,8 +238,8 @@ async fn registration_only_allows_http_for_localhost_or_native_loopback() {
         ("native", "http://localhost:53000/callback", true),
         ("native", "http://app.localhost:3000/callback", false),
     ] {
-        let captured = Arc::new(std::sync::Mutex::new(None));
-        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = Arc::new(Mutex::new(None));
+        let deleted = Arc::new(Mutex::new(Vec::new()));
         let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
         let service =
             DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -257,8 +272,8 @@ async fn registration_only_allows_http_for_localhost_or_native_loopback() {
 
 #[tokio::test]
 async fn register_maps_supported_client_metadata_and_generates_secret() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -355,19 +370,19 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
         vec!["openid", "profile", "email"]
     );
     assert!(captured_val.credentials.iter().any(|credential| {
-        matches!(credential, identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { secret } if response.client_secret.as_ref() == Some(secret))
+        matches!(credential, OpenIdConnectCredentialData::ClientSecret { secret } if response.client_secret.as_ref() == Some(secret))
     }));
     assert!(!captured_val.registration_access_token.is_empty());
     assert_eq!(
         captured_val.metadata.settings.skip_consent,
-        crate::openid_connect::remote::conformance_mode_active()
+        conformance_mode_active()
     );
 }
 
 #[tokio::test]
 async fn register_defaults_to_openid_scope_when_scope_is_omitted() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -410,8 +425,8 @@ async fn register_defaults_to_openid_scope_when_scope_is_omitted() {
 
 #[tokio::test]
 async fn register_rejects_non_https_initiate_login_uri() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -436,8 +451,8 @@ async fn register_rejects_non_https_initiate_login_uri() {
 
 #[tokio::test]
 async fn register_accepts_supported_request_object_encryption_metadata() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -496,8 +511,8 @@ async fn register_rejects_invalid_request_object_encryption_metadata() {
             ..DynamicClientRegistrationRequest::default()
         },
     ] {
-        let captured = Arc::new(std::sync::Mutex::new(None));
-        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = Arc::new(Mutex::new(None));
+        let deleted = Arc::new(Mutex::new(Vec::new()));
         let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
         let service =
             DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -511,8 +526,8 @@ async fn register_rejects_invalid_request_object_encryption_metadata() {
 
 #[tokio::test]
 async fn register_rejects_invalid_request_object_signing_algorithm() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -535,8 +550,8 @@ async fn register_rejects_invalid_request_object_signing_algorithm() {
 
 #[tokio::test]
 async fn register_rejects_unsafe_sector_identifier_uri_before_fetch() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -561,8 +576,8 @@ async fn register_rejects_unsafe_sector_identifier_uri_before_fetch() {
 
 #[tokio::test]
 async fn register_rejects_unsafe_jwks_uri_before_fetch() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -588,8 +603,8 @@ async fn register_rejects_unsafe_jwks_uri_before_fetch() {
 #[tokio::test]
 async fn delete_removes_client_found_by_registration_access_token() {
     let client_oid = Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
-    let found_client = Arc::new(std::sync::Mutex::new(Some(registered_client(client_oid))));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let found_client = Arc::new(Mutex::new(Some(registered_client(client_oid))));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
     let fc = found_client.clone();
     repo.expect_find_by_registration_access_token()
@@ -640,8 +655,8 @@ async fn delete_rejects_built_in_client() {
 
 #[tokio::test]
 async fn register_allows_public_client_none_auth() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -674,23 +689,23 @@ async fn register_allows_public_client_none_auth() {
     assert_eq!(response.token_endpoint_auth_method.as_deref(), Some("none"));
     let registration = captured.lock().unwrap().clone().unwrap();
     assert!(!registration.client.built_in);
-    assert!(registration.credentials.iter().all(|credential| !matches!(
-        credential,
-        identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { .. }
-    )));
+    assert!(
+        registration.credentials.iter().all(|credential| !matches!(
+            credential,
+            OpenIdConnectCredentialData::ClientSecret { .. }
+        ))
+    );
     assert_eq!(
         registration.metadata.token_endpoint_auth_methods,
-        Some(vec![
-            identity_domain::openid_connect::TokenEndpointAuthMethod::None
-        ])
+        Some(vec![TokenEndpointAuthMethod::None])
     );
 }
 
 #[cfg(feature = "allow-none-alg")]
 #[tokio::test]
 async fn register_allows_none_id_token_algorithm_with_feature() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -716,8 +731,8 @@ async fn register_allows_none_id_token_algorithm_with_feature() {
 #[cfg(not(feature = "allow-none-alg"))]
 #[tokio::test]
 async fn register_rejects_none_id_token_signing_alg() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service = DynamicClientRegistrationService::new(
         Arc::new(TestRegistrationSetting(true)),
@@ -760,8 +775,8 @@ async fn register_rejects_none_in_other_client_algorithm_metadata() {
             ..DynamicClientRegistrationRequest::default()
         },
     ] {
-        let captured = Arc::new(std::sync::Mutex::new(None));
-        let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = Arc::new(Mutex::new(None));
+        let deleted = Arc::new(Mutex::new(Vec::new()));
         let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
         let service =
             DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -776,8 +791,8 @@ async fn register_rejects_none_in_other_client_algorithm_metadata() {
 #[cfg(not(feature = "allow-none-alg"))]
 #[tokio::test]
 async fn register_rejects_jwk_with_none_algorithm() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -795,7 +810,7 @@ async fn register_rejects_jwk_with_none_algorithm() {
         .register(
             DynamicClientRegistrationRequest {
                 redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
-                jwks: Some(super::DynamicClientJwks { keys: vec![jwk] }),
+                jwks: Some(DynamicClientJwks { keys: vec![jwk] }),
                 ..DynamicClientRegistrationRequest::default()
             },
             &issuer(),
@@ -809,8 +824,8 @@ async fn register_rejects_jwk_with_none_algorithm() {
 
 #[tokio::test]
 async fn register_allows_none_request_object_signing_algorithm() {
-    let captured = Arc::new(std::sync::Mutex::new(None));
-    let deleted = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = Arc::new(Mutex::new(None));
+    let deleted = Arc::new(Mutex::new(Vec::new()));
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
@@ -835,19 +850,17 @@ fn sector_identifier_uris_must_include_registered_redirects() {
     let sector_redirect_uris = vec!["https://rp.example.com/allowed-callback".to_owned()];
     let redirect_uris = vec!["https://rp.example.com/callback".to_owned()];
 
-    assert!(
-        !super::validation::sector_redirect_uris_include_registered_redirects(
-            &sector_redirect_uris,
-            &redirect_uris
-        )
-    );
+    assert!(!sector_redirect_uris_include_registered_redirects(
+        &sector_redirect_uris,
+        &redirect_uris
+    ));
 }
 
 fn registration_service() -> (
     DynamicClientRegistrationService,
-    tokio::sync::mpsc::UnboundedReceiver<OpenIdConnectClientRegistration>,
+    UnboundedReceiver<OpenIdConnectClientRegistration>,
 ) {
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, receiver) = unbounded_channel();
     let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
     repo.expect_create()
         .returning(move |registration: OpenIdConnectClientRegistration| {
@@ -888,13 +901,11 @@ async fn register_defaults_to_code_response_and_authorization_code_grant() {
     let stored = captured.try_recv().unwrap();
     assert_eq!(
         stored.metadata.response_types,
-        Some(vec![identity_domain::openid_connect::ResponseType::Code])
+        Some(vec![ResponseType::Code])
     );
     assert_eq!(
         stored.metadata.grant_types,
-        Some(vec![
-            identity_domain::openid_connect::GrantType::AuthorizationCode
-        ])
+        Some(vec![GrantType::AuthorizationCode])
     );
 }
 
@@ -990,7 +1001,7 @@ async fn register_allows_device_only_client_without_redirect_uris() {
     let stored = captured.try_recv().unwrap();
     assert_eq!(
         stored.metadata.grant_types,
-        Some(vec![identity_domain::openid_connect::GrantType::DeviceCode])
+        Some(vec![GrantType::DeviceCode])
     );
 }
 
@@ -1027,7 +1038,6 @@ async fn register_client_credentials_requires_confidential_authentication() {
 }
 #[tokio::test]
 async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields() {
-    use crate::openid_connect::registration::DynamicClientUpdateRequest;
     let client_oid = Uuid::new_v4();
     let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
     repo.expect_find_by_registration_access_token()
@@ -1089,7 +1099,7 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
         "client_id_issued_at",
     ] {
         let mut body = serde_json::json!({"client_id": client_oid.to_string(), "redirect_uris": ["https://rp.example.com/new"]});
-        body[field] = serde_json::Value::Null;
+        body[field] = Value::Null;
         let request = serde_json::from_value(body).unwrap();
         assert_eq!(
             service

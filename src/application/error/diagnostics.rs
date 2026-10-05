@@ -1,3 +1,6 @@
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::{backtrace::Backtrace, error::Error};
 
 use super::AppError;
@@ -20,8 +23,8 @@ impl ErrorContext {
     }
 }
 
-impl std::fmt::Display for ErrorContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for ErrorContext {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str(self.operation)
     }
 }
@@ -65,6 +68,10 @@ impl<'a> ErrorDiagnostics<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
+    use std::io::Error;
+
     use super::*;
     use crate::error::codes::common::CommonErrorCode;
     use std::backtrace::BacktraceStatus;
@@ -73,7 +80,7 @@ mod tests {
     fn application_wrapping_preserves_the_original_stack() {
         let query = ErrorContext::new(
             "client_authorization.lock_refresh_family",
-            std::io::Error::other("syntax error at or near dot"),
+            Error::other("syntax error at or near dot"),
         );
         let query_trace = query.backtrace.to_string();
         let error = AppError::from_code(CommonErrorCode::InternalError).with_source(query);
@@ -88,7 +95,7 @@ mod tests {
             BacktraceStatus::Captured
         );
         assert_eq!(diagnostics.backtrace.unwrap().to_string(), query_trace);
-        assert!(!std::ptr::eq(
+        assert!(!ptr::eq(
             diagnostics.backtrace.unwrap(),
             error.backtrace().unwrap()
         ));
@@ -98,7 +105,7 @@ mod tests {
     fn internal_errors_without_a_source_have_a_stack_but_business_rejections_do_not() {
         let error = AppError::from_code(CommonErrorCode::InternalError);
         let diagnostics = ErrorDiagnostics::from_error(&error);
-        assert!(std::ptr::eq(
+        assert!(ptr::eq(
             diagnostics.backtrace.unwrap(),
             error.backtrace().unwrap()
         ));

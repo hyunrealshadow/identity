@@ -1,3 +1,4 @@
+use super::m20260319_121151_create_key::Key;
 use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
     prelude::{
@@ -44,10 +45,7 @@ impl MigrationTrait for Migration {
                         ForeignKey::create()
                             .name("fk_key_jwk_key_oid")
                             .from(KeyJwk::Table, KeyJwk::KeyOid)
-                            .to(
-                                super::m20260319_121151_create_key::Key::Table,
-                                super::m20260319_121151_create_key::Key::Oid,
-                            )
+                            .to(Key::Table, Key::Oid)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),

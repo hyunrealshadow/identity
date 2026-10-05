@@ -1,6 +1,26 @@
+use crate::config::HealthChecksConfig;
+use crate::database::entity::setting;
+use crate::services::AppServices;
+use crate::settings::AppRuntimeSettings;
+use crate::web::tera::build_i18n;
+use crate::web::tera::build_tera;
+use chrono::Utc;
+use identity_application::setting::DeviceAuthorizationSettings;
+use identity_application::setting::DomainSetting;
+use identity_application::setting::LoginDomainSetting;
+use identity_application::setting::PasswordHashSetting;
+use identity_application::setting::SettingDefinition;
+use sea_orm::DatabaseBackend;
+use sea_orm::MockDatabase;
+use sea_orm::Value;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 extern crate identity_application as application;
 extern crate identity_domain as domain;
 extern crate self as infrastructure;
+use crate::infrastructure::database::entity::key::Model;
+use crate::infrastructure::database::entity::key_jwk::Model as KeyJwkModel;
+use uuid::Uuid;
 
 pub mod auth;
 pub mod config;
@@ -44,26 +64,9 @@ async fn test_app_state_with_environment_and_cors_origin(
     environment: config::AppEnvironment,
     cors_origin: Option<&str>,
 ) -> AppState {
-    use std::{collections::BTreeMap, sync::Arc};
-
-    use chrono::Utc;
-    use identity_application::setting::{
-        DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
-        SettingDefinition,
-    };
-    use sea_orm::{DatabaseBackend, MockDatabase, Value};
-
-    use crate::{
-        config::HealthChecksConfig,
-        database::entity::setting,
-        services::AppServices,
-        settings::AppRuntimeSettings,
-        web::tera::{build_i18n, build_tera},
-    };
-
     let password_setting = setting::Model {
         id: 1,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
         value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
         created_at: Utc::now().into(),
@@ -71,7 +74,7 @@ async fn test_app_state_with_environment_and_cors_origin(
     };
     let installation_initialized_setting = setting::Model {
         id: 2,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
         created_at: Utc::now().into(),
@@ -79,7 +82,7 @@ async fn test_app_state_with_environment_and_cors_origin(
     };
     let domain_setting = setting::Model {
         id: 3,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
         created_at: Utc::now().into(),
@@ -87,7 +90,7 @@ async fn test_app_state_with_environment_and_cors_origin(
     };
     let installation_initialized_at_setting = setting::Model {
         id: 6,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(Utc::now()).unwrap(),
         created_at: Utc::now().into(),
@@ -95,7 +98,7 @@ async fn test_app_state_with_environment_and_cors_origin(
     };
     let dynamic_registration_setting = setting::Model {
         id: 7,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
         value: serde_json::to_value(false).unwrap(),
         created_at: Utc::now().into(),
@@ -103,7 +106,7 @@ async fn test_app_state_with_environment_and_cors_origin(
     };
     let device_authorization_setting = setting::Model {
         id: 10,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
         value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: Utc::now().into(),
@@ -111,7 +114,7 @@ async fn test_app_state_with_environment_and_cors_origin(
     };
     let login_domain_setting = setting::Model {
         id: 12,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
         value: serde_json::to_value(LoginDomainSetting::default_value()).unwrap(),
         created_at: Utc::now().into(),
@@ -135,14 +138,8 @@ async fn test_app_state_with_environment_and_cors_origin(
             device_authorization_setting,
         ]])
         .append_query_results([cors_rows])
-        .append_query_results([
-            Vec::<crate::infrastructure::database::entity::key::Model>::new(),
-            Vec::<crate::infrastructure::database::entity::key::Model>::new(),
-        ])
-        .append_query_results([
-            Vec::<crate::infrastructure::database::entity::key_jwk::Model>::new(),
-            Vec::<crate::infrastructure::database::entity::key_jwk::Model>::new(),
-        ])
+        .append_query_results([Vec::<Model>::new(), Vec::<Model>::new()])
+        .append_query_results([Vec::<KeyJwkModel>::new(), Vec::<KeyJwkModel>::new()])
         .append_query_results([[
             BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]),
             BTreeMap::from([("name".to_owned(), Value::String(Some("profile".to_owned())))]),

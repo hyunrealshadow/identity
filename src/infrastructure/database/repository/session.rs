@@ -1,6 +1,10 @@
 use crate::database::query::json_text;
 use async_trait::async_trait;
+use chrono::Duration;
 use chrono::{DateTime, Utc};
+use identity_domain::auth::ACR_AAL1;
+use identity_domain::auth::ACR_AAL2;
+use identity_domain::auth::SESSION_EXPIRY;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, SelectTwo, Set, TransactionTrait,
@@ -281,11 +285,11 @@ impl SessionRepository for SessionRepositoryImpl {
                     expires_at: decode_nonnullable_expiry(s.expires_at),
                     created_at,
                     authenticated_at,
-                    acr: if s.acr.as_deref() == Some(identity_domain::auth::ACR_AAL2)
+                    acr: if s.acr.as_deref() == Some(ACR_AAL2)
                         && s.acr_expires_at
                             .is_some_and(|expires_at| expires_at.with_timezone(&Utc) <= Utc::now())
                     {
-                        Some(identity_domain::auth::ACR_AAL1.to_owned())
+                        Some(ACR_AAL1.to_owned())
                     } else {
                         s.acr
                     },
@@ -399,8 +403,7 @@ impl SessionRepository for SessionRepositoryImpl {
         active.last_active_at = Set(now.into());
         active.authenticated_at = Set(Some(now.into()));
         active.expires_at = Set((now
-            + chrono::Duration::from_std(identity_domain::auth::SESSION_EXPIRY)
-                .unwrap_or_else(|_| chrono::Duration::days(7)))
+            + Duration::from_std(SESSION_EXPIRY).unwrap_or_else(|_| Duration::days(7)))
         .into());
         active.acr = Set(Some(acr.to_owned()));
         active.acr_expires_at = Set(Some(acr_expires_at.into()));
@@ -492,6 +495,18 @@ impl SessionRepository for SessionRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
+    use identity_domain::auth::repository::SessionRepositoryError;
+
+    use super::SessionPageDirection;
+    use super::SessionRepositoryImpl;
+    use super::build_session_page;
+    use crate::database::entity::user::Model;
+    use chrono::Duration;
+    use identity_domain::auth::ACR_AAL1;
+    use identity_domain::auth::AMR_PASSWORD;
+    use identity_domain::auth::SESSION_EXPIRY;
+    use sea_orm::sea_query::Value;
+
     use sea_orm::{
         DatabaseBackend, DbBackend, EntityTrait as _, MockDatabase, MockExecResult,
         QueryFilter as _, QueryTrait as _,
@@ -509,7 +524,7 @@ mod tests {
         SessionOid, SessionStatus, model::Session, repository::SessionRepository as _,
     };
 
-    fn reauthentication_models() -> (session::Model, crate::database::entity::user::Model) {
+    fn reauthentication_models() -> (session::Model, Model) {
         let now = Utc::now().fixed_offset();
         let session = session::Model {
             id: 1,
@@ -529,14 +544,14 @@ mod tests {
             ip_address: None,
             country: None,
             city: None,
-            last_active_at: now - chrono::Duration::days(6),
-            authenticated_at: Some(now - chrono::Duration::days(6)),
-            expires_at: now + chrono::Duration::hours(1),
+            last_active_at: now - Duration::days(6),
+            authenticated_at: Some(now - Duration::days(6)),
+            expires_at: now + Duration::hours(1),
             revoked_at: None,
-            created_at: now - chrono::Duration::days(6),
+            created_at: now - Duration::days(6),
             updated_at: None,
         };
-        let user = crate::database::entity::user::Model {
+        let user = Model {
             id: 42,
             oid: Uuid::new_v4(),
             name: "user".to_owned(),
@@ -588,15 +603,15 @@ mod tests {
             .append_query_results([[(session.clone(), user)]])
             .append_query_results([[session]])
             .into_connection();
-        let repo = super::SessionRepositoryImpl::new(db);
+        let repo = SessionRepositoryImpl::new(db);
         let started = Utc::now();
         let renewed = repo
             .reauthenticate_by_oid(
                 oid,
                 owner,
-                identity_domain::auth::ACR_AAL1,
-                started + chrono::Duration::hours(1),
-                &[identity_domain::auth::AMR_PASSWORD.to_owned()],
+                ACR_AAL1,
+                started + Duration::hours(1),
+                &[AMR_PASSWORD.to_owned()],
             )
             .await
             .unwrap();
@@ -621,13 +636,11 @@ mod tests {
             .0
             .iter()
             .filter_map(|value| match value {
-                sea_orm::sea_query::Value::ChronoDateTimeWithTimeZone(Some(value)) => {
-                    Some(value.with_timezone(&Utc))
-                }
+                Value::ChronoDateTimeWithTimeZone(Some(value)) => Some(value.with_timezone(&Utc)),
                 _ => None,
             })
             .collect();
-        let lifetime = chrono::Duration::from_std(identity_domain::auth::SESSION_EXPIRY).unwrap();
+        let lifetime = Duration::from_std(SESSION_EXPIRY).unwrap();
         assert!(
             timestamps
                 .iter()
@@ -651,7 +664,7 @@ mod tests {
                 user.oid
             };
             match invalid {
-                0 => session.expires_at = (Utc::now() - chrono::Duration::seconds(1)).into(),
+                0 => session.expires_at = (Utc::now() - Duration::seconds(1)).into(),
                 1 => session.revoked_at = Some(Utc::now().into()),
                 2 => session.status = "expired".to_owned(),
                 _ => {}
@@ -663,19 +676,13 @@ mod tests {
                 }])
                 .append_query_results([[(session, user)]])
                 .into_connection();
-            let repo = super::SessionRepositoryImpl::new(db);
+            let repo = SessionRepositoryImpl::new(db);
             let result = repo
-                .reauthenticate_by_oid(
-                    oid,
-                    owner,
-                    identity_domain::auth::ACR_AAL1,
-                    Utc::now() + chrono::Duration::hours(1),
-                    &[],
-                )
+                .reauthenticate_by_oid(oid, owner, ACR_AAL1, Utc::now() + Duration::hours(1), &[])
                 .await;
             assert!(matches!(
                 result,
-                Err(identity_domain::auth::repository::SessionRepositoryError::SessionNotFound)
+                Err(SessionRepositoryError::SessionNotFound)
             ));
             assert!(
                 !repo
@@ -696,7 +703,7 @@ mod tests {
                 rows_affected: 1,
             }])
             .into_connection();
-        let repo = super::SessionRepositoryImpl::new(db);
+        let repo = SessionRepositoryImpl::new(db);
 
         let touched = repo
             .touch_active_by_oid(SessionOid(Uuid::new_v4()))
@@ -721,7 +728,7 @@ mod tests {
                 rows_affected: 0,
             }])
             .into_connection();
-        let repo = super::SessionRepositoryImpl::new(db);
+        let repo = SessionRepositoryImpl::new(db);
 
         let touched = repo
             .touch_active_by_oid(SessionOid(Uuid::new_v4()))
@@ -804,14 +811,14 @@ mod tests {
         let first_oid = Uuid::from_u128(1);
         let second_oid = Uuid::from_u128(2);
         let third_oid = Uuid::from_u128(3);
-        let page = super::build_session_page(
+        let page = build_session_page(
             vec![
                 page_item(1, first_oid),
                 page_item(2, second_oid),
                 page_item(3, third_oid),
             ],
             2,
-            super::SessionPageDirection::Backward,
+            SessionPageDirection::Backward,
             false,
             true,
         );
@@ -829,14 +836,14 @@ mod tests {
 
     #[test]
     fn first_relay_page_only_reports_a_next_page_when_one_more_row_exists() {
-        let page = super::build_session_page(
+        let page = build_session_page(
             vec![
                 page_item(3, Uuid::from_u128(3)),
                 page_item(2, Uuid::from_u128(2)),
                 page_item(1, Uuid::from_u128(1)),
             ],
             2,
-            super::SessionPageDirection::Forward,
+            SessionPageDirection::Forward,
             false,
             false,
         );

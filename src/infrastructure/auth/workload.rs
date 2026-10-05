@@ -1,9 +1,18 @@
+use identity_application::openid_connect::jose::asymmetric_verifier_from_public_jwk;
+use reqwest::Certificate;
+use reqwest::Client;
+use reqwest::RequestBuilder;
+use reqwest::Url;
+use serde_json::Value;
+use std::env;
+use std::time::SystemTime;
 use std::{
     fs,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 use josekit::jwt::{self, JwtPayload};
@@ -44,7 +53,7 @@ pub fn build_login_workload_authenticator(
             .iter()
             .filter_map(|source| source.environment.as_deref())
             .map(|name| {
-                std::env::var(name)
+                env::var(name)
                     .map_err(|error| format!("failed to read static token from {name}: {error}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -71,15 +80,13 @@ pub fn build_login_workload_authenticator(
     Ok(Arc::new(AnyWorkloadAuthenticator::new(adapters)))
 }
 
-fn kubernetes_http_client(
-    config: &KubernetesServiceAccountConfig,
-) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder();
+fn kubernetes_http_client(config: &KubernetesServiceAccountConfig) -> Result<Client, String> {
+    let mut builder = Client::builder();
     if let Some(path) = config.ca_file.as_deref() {
         let pem = fs::read(path).map_err(|error| {
             format!("failed to read Kubernetes issuer CA bundle {path}: {error}")
         })?;
-        let certificates = reqwest::Certificate::from_pem_bundle(&pem).map_err(|error| {
+        let certificates = Certificate::from_pem_bundle(&pem).map_err(|error| {
             format!("failed to parse Kubernetes issuer CA bundle {path}: {error}")
         })?;
         if certificates.is_empty() {
@@ -171,28 +178,28 @@ impl WorkloadAuthenticator for StaticTokenWorkloadAuthenticator {
 /// subject.
 pub struct KubernetesServiceAccountWorkloadAuthenticator {
     config: KubernetesServiceAccountConfig,
-    http: reqwest::Client,
-    keys: tokio::sync::Mutex<Option<(Instant, Vec<PublicJwk>)>>,
+    http: Client,
+    keys: Mutex<Option<(Instant, Vec<PublicJwk>)>>,
 }
 
 impl KubernetesServiceAccountWorkloadAuthenticator {
     #[must_use]
-    pub fn new(config: &KubernetesServiceAccountConfig, http: reqwest::Client) -> Self {
+    pub fn new(config: &KubernetesServiceAccountConfig, http: Client) -> Self {
         Self {
             config: config.clone(),
             http,
-            keys: tokio::sync::Mutex::new(None),
+            keys: Mutex::new(None),
         }
     }
 
-    fn request(&self, url: &str) -> Result<reqwest::RequestBuilder, String> {
+    fn request(&self, url: &str) -> Result<RequestBuilder, String> {
         let request = self.http.get(url);
         let Some(path) = self.config.token_file.as_deref() else {
             return Ok(request);
         };
-        let issuer = reqwest::Url::parse(&self.config.issuer)
+        let issuer = Url::parse(&self.config.issuer)
             .map_err(|error| format!("invalid Kubernetes issuer URL: {error}"))?;
-        let target = reqwest::Url::parse(url)
+        let target = Url::parse(url)
             .map_err(|error| format!("invalid Kubernetes discovery URL: {error}"))?;
         if issuer.origin() != target.origin() {
             return Ok(request);
@@ -277,7 +284,7 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
         }
         payload
             .expires_at()
-            .is_some_and(|expires| expires > std::time::SystemTime::now())
+            .is_some_and(|expires| expires > SystemTime::now())
     }
 }
 
@@ -290,11 +297,7 @@ impl WorkloadAuthenticator for KubernetesServiceAccountWorkloadAuthenticator {
         let keys = self.jwks().await.ok()?;
         for key in keys {
             let alg = key.algorithm().unwrap_or("RS256");
-            let Ok(verifier) =
-                identity_application::openid_connect::jose::asymmetric_verifier_from_public_jwk(
-                    alg, &key,
-                )
-            else {
+            let Ok(verifier) = asymmetric_verifier_from_public_jwk(alg, &key) else {
                 continue;
             };
             let Ok((payload, _)) = jwt::decode_with_verifier(token, &*verifier) else {
@@ -340,11 +343,18 @@ struct OidcDiscovery {
 
 #[derive(Debug, Deserialize)]
 struct Jwks {
-    keys: Vec<serde_json::Value>,
+    keys: Vec<Value>,
 }
 
 #[cfg(test)]
 mod tests {
+    use std::process;
+
+    use super::kubernetes_http_client;
+    use reqwest::Client;
+    use std::env;
+    use std::time::SystemTime;
+
     use std::{fs, path::PathBuf, time::Duration};
 
     use identity_domain::openid_connect::{
@@ -359,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn static_token_accepts_configured_tokens() {
-        let dir = std::env::temp_dir().join(format!("identity-wl-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("identity-wl-{}", process::id()));
         fs::create_dir_all(&dir).unwrap();
         let current = dir.join("current");
         let previous = dir.join("previous");
@@ -396,7 +406,7 @@ mod tests {
 
     #[tokio::test]
     async fn static_token_normalizes_file_whitespace() {
-        let dir = std::env::temp_dir().join(format!("identity-wl-trim-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("identity-wl-trim-{}", process::id()));
         fs::create_dir_all(&dir).unwrap();
         let token_file = dir.join("token");
         fs::write(&token_file, "workload-token-with-32-characters-minimum\r\n").unwrap();
@@ -439,12 +449,12 @@ mod tests {
             token_file: None,
         };
         let authenticator =
-            KubernetesServiceAccountWorkloadAuthenticator::new(&config, reqwest::Client::new());
+            KubernetesServiceAccountWorkloadAuthenticator::new(&config, Client::new());
         let mut payload = JwtPayload::new();
         payload.set_issuer(&config.issuer);
         payload.set_subject("system:serviceaccount:identity:identity-login");
         payload.set_audience(vec![config.audience.clone()]);
-        payload.set_expires_at(&(std::time::SystemTime::now() + Duration::from_secs(60)));
+        payload.set_expires_at(&(SystemTime::now() + Duration::from_secs(60)));
 
         assert!(authenticator.valid_claims(&payload));
 
@@ -468,7 +478,7 @@ mod tests {
             token_file: None,
         };
 
-        let error = super::kubernetes_http_client(&config).unwrap_err();
+        let error = kubernetes_http_client(&config).unwrap_err();
 
         assert!(error.contains("failed to read Kubernetes issuer CA bundle"));
     }
@@ -485,7 +495,7 @@ mod tests {
             token_file: Some("this-kubernetes-token-does-not-exist".to_owned()),
         };
         let authenticator =
-            KubernetesServiceAccountWorkloadAuthenticator::new(&config, reqwest::Client::new());
+            KubernetesServiceAccountWorkloadAuthenticator::new(&config, Client::new());
 
         let error = authenticator
             .request("https://kubernetes.default.svc.cluster.local/openid/v1/jwks")
@@ -501,7 +511,7 @@ mod tests {
 
     #[test]
     fn static_token_rejects_short_or_missing_sources() {
-        let dir = std::env::temp_dir().join(format!("identity-wl-short-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("identity-wl-short-{}", process::id()));
         fs::create_dir_all(&dir).unwrap();
         let short = dir.join("short");
         fs::write(&short, "too-short").unwrap();

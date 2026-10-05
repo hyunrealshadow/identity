@@ -1,11 +1,17 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use identity_application::error::ErrorContext;
+use identity_domain::auth::SessionStatus;
+use identity_domain::client_authorization::PushedAuthorizationRequestData;
+use sea_orm::DbErr;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseBackend, DatabaseConnection,
     DatabaseTransaction, EntityTrait, FromQueryResult, QueryFilter, QuerySelect, Set,
     TransactionTrait,
     sea_query::{Expr, OnConflict, SimpleExpr},
 };
+use serde_json::Value;
+use std::error::Error;
 use uuid::Uuid;
 
 use crate::database::entity::{
@@ -31,15 +37,19 @@ use sea_orm::sea_query::{ExprTrait, Func};
 
 fn query_failed(
     operation: &'static str,
-    error: impl std::error::Error + Send + Sync + 'static,
+    error: impl Error + Send + Sync + 'static,
 ) -> ClientAuthorizationRepositoryError {
-    ClientAuthorizationRepositoryError::QueryFailed(Box::new(
-        identity_application::error::diagnostics::ErrorContext::new(operation, error),
-    ))
+    ClientAuthorizationRepositoryError::QueryFailed(Box::new(ErrorContext::new(operation, error)))
+}
+
+fn query_error<E: Error + Send + Sync + 'static>(
+    operation: &'static str,
+) -> impl FnOnce(E) -> ClientAuthorizationRepositoryError {
+    move |error| query_failed(operation, error)
 }
 
 fn parse_stored_authorization_request(
-    data: serde_json::Value,
+    data: Value,
 ) -> Result<StoredAuthorizationRequest, ClientAuthorizationRepositoryError> {
     serde_json::from_value::<StoredAuthorizationRequest>(data.clone())
         .or_else(|_| {
@@ -53,14 +63,14 @@ fn parse_stored_authorization_request(
         .map_err(|_| {
             query_failed(
                 "client_authorization.parse_stored_authorization_request",
-                sea_orm::DbErr::Type("invalid authorization_request payload".into()),
+                DbErr::Type("invalid authorization_request payload".into()),
             )
         })
 }
 
 pub(super) fn serialize_data(
     data: &ClientAuthorizationData,
-) -> Result<serde_json::Value, ClientAuthorizationRepositoryError> {
+) -> Result<Value, ClientAuthorizationRepositoryError> {
     match data {
         ClientAuthorizationData::PushedAuthorizationRequest(value) => serde_json::to_value(value),
         ClientAuthorizationData::AuthorizationRequest(value) => serde_json::to_value(value),
@@ -71,7 +81,7 @@ pub(super) fn serialize_data(
         ClientAuthorizationData::DeviceAuthorizationRequest(value) => serde_json::to_value(value),
         ClientAuthorizationData::DeviceAuthorization(value) => serde_json::to_value(value),
     }
-    .map_err(|error| query_failed("client_authorization.serialize_data", error))
+    .map_err(query_error("client_authorization.serialize_data"))
 }
 
 fn scope_ids_cover(mut granted: Vec<i64>, mut requested: Vec<i64>) -> bool {
@@ -87,60 +97,44 @@ fn scope_ids_cover(mut granted: Vec<i64>, mut requested: Vec<i64>) -> bool {
 
 fn parse_data(
     type_: &ClientAuthorizationType,
-    data: serde_json::Value,
+    data: Value,
 ) -> Result<ClientAuthorizationData, ClientAuthorizationRepositoryError> {
     match type_ {
-        ClientAuthorizationType::PushedAuthorizationRequest => serde_json::from_value::<
-            identity_domain::client_authorization::PushedAuthorizationRequestData,
-        >(data)
-        .map(ClientAuthorizationData::PushedAuthorizationRequest)
-        .map_err(|error| query_failed("client_authorization.parse_data", error)),
-        ClientAuthorizationType::AuthorizationRequest => parse_stored_authorization_request(data)
-            .map(ClientAuthorizationData::AuthorizationRequest),
+        ClientAuthorizationType::PushedAuthorizationRequest => {
+            serde_json::from_value::<PushedAuthorizationRequestData>(data)
+                .map(ClientAuthorizationData::PushedAuthorizationRequest)
+        }
+        ClientAuthorizationType::AuthorizationRequest => {
+            return parse_stored_authorization_request(data)
+                .map(ClientAuthorizationData::AuthorizationRequest);
+        }
         ClientAuthorizationType::AuthorizationCode => {
             serde_json::from_value::<AuthorizationCodeData>(data)
                 .map(ClientAuthorizationData::AuthorizationCode)
-                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
         ClientAuthorizationType::AccessToken => serde_json::from_value::<AccessTokenData>(data)
-            .map(ClientAuthorizationData::AccessToken)
-            .map_err(|error| query_failed("client_authorization.parse_data", error)),
+            .map(ClientAuthorizationData::AccessToken),
         ClientAuthorizationType::RefreshToken => serde_json::from_value::<RefreshTokenData>(data)
-            .map(ClientAuthorizationData::RefreshToken)
-            .map_err(|error| query_failed("client_authorization.parse_data", error)),
+            .map(ClientAuthorizationData::RefreshToken),
         ClientAuthorizationType::RegistrationAccessToken => {
             serde_json::from_value::<RegistrationAccessTokenData>(data)
                 .map(ClientAuthorizationData::RegistrationAccessToken)
-                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
         ClientAuthorizationType::DeviceAuthorizationRequest => {
             serde_json::from_value::<DeviceAuthorizationRequestData>(data)
                 .map(ClientAuthorizationData::DeviceAuthorizationRequest)
-                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
         ClientAuthorizationType::DeviceAuthorization => {
             serde_json::from_value::<DeviceAuthorizationData>(data)
                 .map(ClientAuthorizationData::DeviceAuthorization)
-                .map_err(|error| query_failed("client_authorization.parse_data", error))
         }
     }
-}
-
-fn can_overwrite_selection(current: Option<SelectionSource>, next: SelectionSource) -> bool {
-    match (current, next) {
-        (Some(SelectionSource::FreshLogin), SelectionSource::AccountPicker) => false,
-        (Some(existing), incoming) if existing == incoming => true,
-        (Some(SelectionSource::Reauthentication), _) => false,
-        (Some(SelectionSource::Auto), SelectionSource::AccountPicker) => true,
-        (Some(SelectionSource::Auto), SelectionSource::FreshLogin) => true,
-        (None, _) => true,
-        _ => true,
-    }
+    .map_err(query_error("client_authorization.parse_data"))
 }
 
 fn selection_update_condition(
     model: &client_authorization::Model,
-    now: chrono::DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Condition {
     let mut condition = Condition::all()
         .add(client_authorization::Column::Oid.eq(model.oid))
@@ -171,7 +165,7 @@ pub(super) fn to_domain(
         .map_err(|_| {
             query_failed(
                 "client_authorization.to_domain",
-                sea_orm::DbErr::Type("invalid client_authorization.type".into()),
+                DbErr::Type("invalid client_authorization.type".into()),
             )
         })?;
     let data = parse_data(&type_, model.data)?;
@@ -197,12 +191,12 @@ pub struct ClientAuthorizationRepositoryImpl {
 /// The caller repeats until fewer than the batch limit were updated.
 pub(crate) async fn expire_due_authorizations_batch(
     db: &DatabaseConnection,
-) -> Result<u64, identity_application::error::diagnostics::ErrorContext> {
+) -> Result<u64, ErrorContext> {
     Ok(db
         .execute(&query::expiration_batch())
         .await
         .map_err(|error| {
-            identity_application::error::diagnostics::ErrorContext::new(
+            ErrorContext::new(
                 "client_authorization.expire_due_authorizations_batch",
                 error,
             )
@@ -219,41 +213,41 @@ async fn lock_refresh_family(
     let root = transaction
         .query_one(&query::refresh_root(refresh_oid, client_oid.into()))
         .await
-        .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?
+        .map_err(query_error("client_authorization.lock_refresh_family"))?
         .ok_or_else(|| {
             query_failed(
                 "client_authorization.lock_refresh_family",
-                sea_orm::DbErr::RecordNotFound("refresh token family not found".into()),
+                DbErr::RecordNotFound("refresh token family not found".into()),
             )
         })?;
     let root_oid: Uuid = root
         .try_get("", "root_oid")
-        .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
+        .map_err(query_error("client_authorization.lock_refresh_family"))?;
     transaction
         .query_one(&advisory_transaction_lock(
             Func::cust("hashtextextended")
                 .args([Expr::value(root_oid.to_string()), Expr::value(0_i64)]),
         ))
         .await
-        .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
+        .map_err(query_error("client_authorization.lock_refresh_family"))?;
     if reject_compromised {
         let row = transaction
             .query_one(&query::refresh_compromised(root_oid))
             .await
-            .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?
+            .map_err(query_error("client_authorization.lock_refresh_family"))?
             .ok_or_else(|| {
                 query_failed(
                     "client_authorization.lock_refresh_family",
-                    sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
+                    DbErr::RecordNotFound("refresh token family root not found".into()),
                 )
             })?;
         let compromised: bool = row
             .try_get("", "compromised")
-            .map_err(|error| query_failed("client_authorization.lock_refresh_family", error))?;
+            .map_err(query_error("client_authorization.lock_refresh_family"))?;
         if compromised {
             return Err(query_failed(
                 "client_authorization.lock_refresh_family",
-                sea_orm::DbErr::RecordNotFound("refresh token family was revoked".into()),
+                DbErr::RecordNotFound("refresh token family was revoked".into()),
             ));
         }
     }
@@ -273,10 +267,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         digest: &str,
         client_oid: Uuid,
         now: DateTime<Utc>,
-    ) -> Result<
-        Option<identity_domain::client_authorization::PushedAuthorizationRequestData>,
-        ClientAuthorizationRepositoryError,
-    > {
+    ) -> Result<Option<PushedAuthorizationRequestData>, ClientAuthorizationRepositoryError> {
         let row = client_authorization::Model::find_by_statement(
             DatabaseBackend::Postgres.build(&query::consume_par(digest, client_oid, now)),
         )
@@ -289,10 +280,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             )
         })?;
         row.map(|row| {
-            serde_json::from_value::<
-                identity_domain::client_authorization::PushedAuthorizationRequestData,
-            >(row.data)
-            .map_err(|error| {
+            serde_json::from_value::<PushedAuthorizationRequestData>(row.data).map_err(|error| {
                 query_failed(
                     "client_authorization.consume_pushed_authorization_request",
                     error,
@@ -306,7 +294,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         client_oid: ClientOid,
         data: ClientAuthorizationData,
-        expires_at: chrono::DateTime<Utc>,
+        expires_at: DateTime<Utc>,
     ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError> {
         let type_ = data.authorization_type();
         let session_oid = match &data {
@@ -322,33 +310,30 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         }
         .map(Uuid::parse_str)
         .transpose()
-        .map_err(|error| query_failed("client_authorization.create", error))?;
+        .map_err(query_error("client_authorization.create"))?;
         let transaction = self
             .db
             .begin()
             .await
-            .map_err(|error| query_failed("client_authorization.create", error))?;
+            .map_err(query_error("client_authorization.create"))?;
         if let Some(session_oid) = session_oid {
             lock_session(&transaction, session_oid)
                 .await
-                .map_err(|error| query_failed("client_authorization.create", error))?;
+                .map_err(query_error("client_authorization.create"))?;
             let now = Utc::now();
             let session_available = SessionEntity::find()
                 .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
-                .filter(
-                    session::Column::Status
-                        .eq(identity_domain::auth::SessionStatus::ACTIVE.as_str()),
-                )
+                .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
                 .filter(session::Column::RevokedAt.is_null())
                 .filter(session::Column::ExpiresAt.gt(now))
                 .one(&transaction)
                 .await
-                .map_err(|error| query_failed("client_authorization.create", error))?
+                .map_err(query_error("client_authorization.create"))?
                 .is_some();
             if !session_available {
                 return Err(query_failed(
                     "client_authorization.create",
-                    sea_orm::DbErr::RecordNotFound(format!(
+                    DbErr::RecordNotFound(format!(
                         "session {} is not active",
                         Uuid::from(session_oid)
                     )),
@@ -366,7 +351,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .ok_or_else(|| {
                 query_failed(
                     "client_authorization.create",
-                    sea_orm::DbErr::RecordNotFound(format!("client {client_oid} not found")),
+                    DbErr::RecordNotFound(format!("client {client_oid} not found")),
                 )
             })?;
 
@@ -391,7 +376,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         transaction
             .commit()
             .await
-            .map_err(|error| query_failed("client_authorization.create", error))?;
+            .map_err(query_error("client_authorization.create"))?;
         to_domain(model, client_oid)
     }
 
@@ -446,7 +431,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         }
 
         let mut stored = parse_stored_authorization_request(model.data.clone())?;
-        if !can_overwrite_selection(stored.interaction.selection_source, source) {
+        if !source.can_replace(stored.interaction.selection_source) {
             return Ok(false);
         }
 
@@ -489,7 +474,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         oid: Uuid,
         consent_state: ConsentState,
-        decided_at: chrono::DateTime<Utc>,
+        decided_at: DateTime<Utc>,
     ) -> Result<bool, ClientAuthorizationRepositoryError> {
         let Some(model) = ClientAuthorizationEntity::find()
             .filter(client_authorization::Column::Oid.eq(oid))
@@ -526,7 +511,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .ok_or_else(|| {
                     query_failed(
                         "client_authorization.record_authorization_request_consent",
-                        sea_orm::DbErr::Type("approved consent has no selected user".into()),
+                        DbErr::Type("approved consent has no selected user".into()),
                     )
                 })?
                 .parse::<Uuid>()
@@ -603,7 +588,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
                 .ok_or_else(|| {
                     query_failed(
                         "client_authorization.record_authorization_request_consent",
-                        sea_orm::DbErr::RecordNotFound(format!("user {user_oid} not found")),
+                        DbErr::RecordNotFound(format!("user {user_oid} not found")),
                     )
                 })?;
             let requested_scope_names = requested_scope.names();
@@ -626,9 +611,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             if scope_ids.len() != requested_scope_names.len() {
                 return Err(query_failed(
                     "client_authorization.record_authorization_request_consent",
-                    sea_orm::DbErr::RecordNotFound(
-                        "one or more consent scopes were not found".to_owned(),
-                    ),
+                    DbErr::RecordNotFound("one or more consent scopes were not found".to_owned()),
                 ));
             }
             let grants = scope_ids
@@ -680,7 +663,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(user::Column::Oid.eq(user_oid))
             .one(&self.db)
             .await
-            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?
+            .map_err(query_error("client_authorization.has_user_consent"))?
         else {
             return Ok(false);
         };
@@ -688,7 +671,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .filter(client::Column::Oid.eq(client_oid))
             .one(&self.db)
             .await
-            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?
+            .map_err(query_error("client_authorization.has_user_consent"))?
         else {
             return Ok(false);
         };
@@ -701,7 +684,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .into_tuple::<i64>()
             .all(&self.db)
             .await
-            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?;
+            .map_err(query_error("client_authorization.has_user_consent"))?;
         requested_scope_ids.sort_unstable();
         requested_scope_ids.dedup();
         if requested_scope_ids.len() != requested_scope_names.len() {
@@ -716,7 +699,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .into_tuple::<i64>()
             .all(&self.db)
             .await
-            .map_err(|error| query_failed("client_authorization.has_user_consent", error))?;
+            .map_err(query_error("client_authorization.has_user_consent"))?;
         Ok(scope_ids_cover(granted_scope_ids, requested_scope_ids))
     }
 
@@ -738,14 +721,16 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .into_tuple::<String>()
             .all(&self.db)
             .await
-            .map_err(|error| query_failed("client_authorization.user_consented_scope_names", error))
+            .map_err(query_error(
+                "client_authorization.user_consented_scope_names",
+            ))
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "mark_authorization_request_completed"))]
     async fn mark_authorization_request_completed(
         &self,
         oid: Uuid,
-        completed_at: chrono::DateTime<Utc>,
+        completed_at: DateTime<Utc>,
     ) -> Result<bool, ClientAuthorizationRepositoryError> {
         let now = Utc::now();
         let result = ClientAuthorizationEntity::update_many()
@@ -830,7 +815,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         oid: Uuid,
         type_: ClientAuthorizationType,
-        now: chrono::DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Result<bool, ClientAuthorizationRepositoryError> {
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
@@ -860,7 +845,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         refresh_oid: Uuid,
         client_oid: ClientOid,
-        now: chrono::DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
         let transaction = self.db.begin().await.map_err(|error| {
             query_failed("client_authorization.revoke_refresh_token_family", error)
@@ -875,10 +860,10 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .ok_or_else(|| {
                 query_failed(
                     "client_authorization.revoke_refresh_token_family",
-                    sea_orm::DbErr::RecordNotFound("refresh token family root not found".into()),
+                    DbErr::RecordNotFound("refresh token family root not found".into()),
                 )
             })?;
-        let data: serde_json::Value = root.try_get("", "data").map_err(|error| {
+        let data: Value = root.try_get("", "data").map_err(|error| {
             query_failed("client_authorization.revoke_refresh_token_family", error)
         })?;
         let authorization_code_oid = data["authorization_code_oid"].as_str().unwrap_or("");
@@ -928,7 +913,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         access_oid: Uuid,
         client_oid: ClientOid,
-        now: chrono::DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
         self.db
             .execute(&query::revoke_token_for_client(
@@ -949,7 +934,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         &self,
         refresh_oid: Uuid,
         client_oid: ClientOid,
-        now: chrono::DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
         let transaction = self.db.begin().await.map_err(|error| {
             query_failed(
@@ -970,10 +955,10 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .ok_or_else(|| {
                 query_failed(
                     "client_authorization.revoke_refresh_grant_for_client",
-                    sea_orm::DbErr::RecordNotFound("refresh grant root not found".into()),
+                    DbErr::RecordNotFound("refresh grant root not found".into()),
                 )
             })?;
-        let data: serde_json::Value = root.try_get("", "data").map_err(|error| {
+        let data: Value = root.try_get("", "data").map_err(|error| {
             query_failed(
                 "client_authorization.revoke_refresh_grant_for_client",
                 error,
@@ -1036,36 +1021,44 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
 
 #[cfg(test)]
 mod selection_tests {
-    use super::{can_overwrite_selection, scope_ids_cover};
+    use identity_domain::client_authorization::ClientAuthorizationRepository;
+    use sea_orm::DatabaseBackend;
+    use sea_orm::MockDatabase;
+    use sea_orm::Value;
+    use std::collections::BTreeMap;
+    use uuid::Uuid;
+
+    use std::backtrace::BacktraceStatus;
+
+    use super::ClientAuthorizationRepositoryImpl;
+    use super::query_failed;
+    use identity_application::error::ErrorDiagnostics;
+    use sea_orm::DbErr;
+
+    use super::scope_ids_cover;
     use identity_domain::client_authorization::SelectionSource;
 
     #[test]
     fn query_diagnostics_capture_a_real_stack_before_application_wrapping() {
-        let error = super::query_failed("test.query", sea_orm::DbErr::Custom("bad SQL".into()));
-        let diagnostics =
-            identity_application::error::diagnostics::ErrorDiagnostics::from_error(&error);
+        let error = query_failed("test.query", DbErr::Custom("bad SQL".into()));
+        let diagnostics = ErrorDiagnostics::from_error(&error);
         assert_eq!(diagnostics.operation, Some("test.query"));
         assert_eq!(
             diagnostics.backtrace.unwrap().status(),
-            std::backtrace::BacktraceStatus::Captured
+            BacktraceStatus::Captured
         );
         assert_eq!(diagnostics.cause, "Custom Error: bad SQL");
     }
 
     #[test]
     fn reauthentication_cannot_be_replaced_by_another_selection_flow() {
-        assert!(!can_overwrite_selection(
-            Some(SelectionSource::Reauthentication),
-            SelectionSource::AccountPicker,
-        ));
-        assert!(!can_overwrite_selection(
-            Some(SelectionSource::Reauthentication),
-            SelectionSource::FreshLogin,
-        ));
-        assert!(can_overwrite_selection(
-            Some(SelectionSource::Reauthentication),
-            SelectionSource::Reauthentication,
-        ));
+        assert!(
+            !SelectionSource::AccountPicker.can_replace(Some(SelectionSource::Reauthentication))
+        );
+        assert!(!SelectionSource::FreshLogin.can_replace(Some(SelectionSource::Reauthentication)));
+        assert!(
+            SelectionSource::Reauthentication.can_replace(Some(SelectionSource::Reauthentication))
+        );
     }
 
     #[test]
@@ -1076,11 +1069,6 @@ mod selection_tests {
 
     #[tokio::test]
     async fn remembered_scope_lookup_is_scoped_to_account_client_and_protocol() {
-        use identity_domain::client_authorization::ClientAuthorizationRepository;
-        use sea_orm::{DatabaseBackend, MockDatabase, Value};
-        use std::collections::BTreeMap;
-        use uuid::Uuid;
-
         let user_oid = Uuid::new_v4();
         let client_oid = Uuid::new_v4();
         let rows = vec![BTreeMap::from([(
@@ -1090,7 +1078,7 @@ mod selection_tests {
         let db = MockDatabase::new(DatabaseBackend::Postgres)
             .append_query_results([rows, Vec::new()])
             .into_connection();
-        let repo = super::ClientAuthorizationRepositoryImpl::new(db.clone());
+        let repo = ClientAuthorizationRepositoryImpl::new(db.clone());
         assert_eq!(
             repo.user_consented_scope_names(user_oid, client_oid)
                 .await
@@ -1114,6 +1102,8 @@ mod selection_tests {
 
 #[cfg(test)]
 mod par_tests {
+    use chrono::Duration;
+
     use super::*;
     use identity_domain::client_authorization::PushedAuthorizationRequestData;
     use identity_domain::openid_connect::model::authorization_request::AuthorizationRequestParams;
@@ -1137,7 +1127,7 @@ mod par_tests {
                 parameters: params.clone(),
             })
             .unwrap(),
-            expires_at: (now + chrono::Duration::seconds(90)).into(),
+            expires_at: (now + Duration::seconds(90)).into(),
             completed_at: Some(now.into()),
             revoked_at: None,
             is_expired: false,

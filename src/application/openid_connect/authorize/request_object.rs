@@ -1,4 +1,5 @@
 use super::*;
+use crate::error::codes::common::CommonErrorCode;
 use crate::openid_connect::jose::{
     REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
     asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
@@ -10,6 +11,11 @@ use crate::openid_connect::remote::{
     DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
     fetch_https_public_document, validate_https_public_url,
 };
+use chrono::Utc;
+use identity_domain::key::PublicJwk;
+use josekit::jwe::JweHeader;
+use serde_json::Map;
+use serde_json::Value;
 
 impl AuthorizeService {
     pub(super) async fn resolve_request_object(
@@ -22,9 +28,8 @@ impl AuthorizeService {
         }
 
         if let Some(request_uri) = params.request_uri.clone() {
-            let request_uri = Url::parse(&request_uri).map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::RequestUriInvalid).with_source(error)
-            })?;
+            let request_uri = Url::parse(&request_uri)
+                .map_err(AppError::map_source(AuthorizeErrorCode::RequestUriInvalid))?;
             self.validate_request_uri(client, &request_uri)?;
             let raw_request_object = self.fetch_request_object(&request_uri).await?;
             return Ok(Some(raw_request_object));
@@ -70,35 +75,34 @@ impl AuthorizeService {
         .await
         .map_err(map_request_uri_fetch_error)?;
 
-        String::from_utf8(body).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestUriReadFailed).with_source(error)
-        })
+        String::from_utf8(body).map_err(AppError::map_source(
+            AuthorizeErrorCode::RequestUriReadFailed,
+        ))
     }
 
     pub(super) async fn parse_request_object_payload(
         &self,
         client: &OpenIdConnectClient,
         raw: &str,
-    ) -> Result<serde_json::Value, AppError> {
+    ) -> Result<Value, AppError> {
         let raw = if raw.split('.').count() == 5 {
             self.decrypt_request_object(client, raw).await?
         } else {
             raw.to_owned()
         };
 
-        let header = jwt::decode_header(&raw).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
-        })?;
+        let header = jwt::decode_header(&raw).map_err(AppError::map_source(
+            AuthorizeErrorCode::RequestObjectHeaderInvalid,
+        ))?;
 
         let algorithm = header
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none")
             .parse::<JwsAlgorithm>()
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed)
-                    .with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::RequestObjectVerifyFailed,
+            ))?;
         if let Some(registered_algorithms) = &client.metadata().request_object_signing_algs
             && !registered_algorithms.contains(&algorithm)
         {
@@ -110,10 +114,9 @@ impl AuthorizeService {
         let payload = match algorithm {
             JwsAlgorithm::None => jwt::decode_unsecured(&raw)
                 .map(|(payload, _)| payload)
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid)
-                        .with_source(error)
-                })?,
+                .map_err(AppError::map_source(
+                    AuthorizeErrorCode::RequestObjectPayloadInvalid,
+                ))?,
             _ => {
                 self.verify_signed_request_object(client, &raw, algorithm)
                     .await?
@@ -125,7 +128,7 @@ impl AuthorizeService {
                 AuthorizeErrorCode::RequestObjectPayloadInvalid,
             ));
         }
-        let mut value = serde_json::Map::new();
+        let mut value = Map::new();
         for claim in [
             "response_type",
             "response_mode",
@@ -157,7 +160,7 @@ impl AuthorizeService {
             }
         }
 
-        Ok(serde_json::Value::Object(value))
+        Ok(Value::Object(value))
     }
 
     async fn decrypt_request_object(
@@ -169,12 +172,14 @@ impl AuthorizeService {
             .split('.')
             .next()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
-        let protected = URL_SAFE_NO_PAD.decode(protected).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
-        })?;
-        let header = josekit::jwe::JweHeader::from_bytes(&protected).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid).with_source(error)
-        })?;
+        let protected = URL_SAFE_NO_PAD
+            .decode(protected)
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::RequestObjectHeaderInvalid,
+            ))?;
+        let header = JweHeader::from_bytes(&protected).map_err(AppError::map_source(
+            AuthorizeErrorCode::RequestObjectHeaderInvalid,
+        ))?;
         let algorithm = header
             .algorithm()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
@@ -210,9 +215,11 @@ impl AuthorizeService {
         }
 
         let keys = if let Some(kid) = header.key_id() {
-            let bindings = self.key_jwk_repo.list_active().await.map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })?;
+            let bindings = self
+                .key_jwk_repo
+                .list_active()
+                .await
+                .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
             let binding = bindings
                 .into_iter()
                 .find(|binding| binding.jwk.key_id() == Some(kid))
@@ -222,18 +229,14 @@ impl AuthorizeService {
             self.key_repo
                 .find_by_oid(binding.key_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
                 .into_iter()
                 .collect()
         } else {
             self.key_repo
                 .list_active_asymmetric()
                 .await
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-                })?
+                .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
         };
 
         for key in &keys {
@@ -268,9 +271,9 @@ impl AuthorizeService {
                 OpenIdConnectCredentialType::ClientPublicKey,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::CredentialLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::CredentialLookupFailed,
+            ))?;
 
         for credential in credentials {
             if let OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } =
@@ -294,9 +297,9 @@ impl AuthorizeService {
                 OpenIdConnectCredentialType::ClientJsonWebKeySet,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::CredentialLookupFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::CredentialLookupFailed,
+            ))?;
 
         for credential in jwks_credentials {
             if let OpenIdConnectCredentialData::ClientJsonWebKeySet {
@@ -325,7 +328,7 @@ impl AuthorizeService {
 
     pub(super) fn merge_request_object_params(
         mut params: AuthorizationRequestParams,
-        payload: &serde_json::Value,
+        payload: &Value,
     ) -> Result<AuthorizationRequestParams, AppError> {
         if let Some(value) = payload
             .get("response_type")
@@ -350,21 +353,18 @@ impl AuthorizeService {
         }
         if let Some(value) = payload.get("resource") {
             params.resources = match value {
-                serde_json::Value::String(uri) => vec![uri.clone()],
-                serde_json::Value::Array(values) if !values.is_empty() => values
+                Value::String(uri) => vec![uri.clone()],
+                Value::Array(values) if !values.is_empty() => values
                     .iter()
                     .map(|value| {
-                        value.as_str().map(str::to_owned).ok_or_else(|| {
-                            AppError::from_code(
-                                crate::error::codes::common::CommonErrorCode::InvalidTarget,
-                            )
-                        })
+                        value
+                            .as_str()
+                            .map(str::to_owned)
+                            .ok_or_else(|| AppError::from_code(CommonErrorCode::InvalidTarget))
                     })
                     .collect::<Result<Vec<_>, _>>()?,
                 _ => {
-                    return Err(AppError::from_code(
-                        crate::error::codes::common::CommonErrorCode::InvalidTarget,
-                    ));
+                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
                 }
             };
         }
@@ -427,7 +427,7 @@ impl AuthorizeService {
 
     pub(super) fn validate_request_object_claims(
         params: &AuthorizationRequestParams,
-        payload: &serde_json::Value,
+        payload: &Value,
         issuer: &Url,
     ) -> Result<(), AppError> {
         Self::validate_required_request_object_field(
@@ -537,7 +537,7 @@ impl AuthorizeService {
             }
         }
 
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         if let Some(exp) = payload
             .get(JwtClaimNames::EXP)
             .and_then(|value| value.as_i64())
@@ -572,7 +572,7 @@ impl AuthorizeService {
     }
 
     fn validate_required_request_object_field(
-        payload: &serde_json::Value,
+        payload: &Value,
         field: &str,
         outer: &str,
     ) -> Result<(), AppError> {
@@ -593,7 +593,7 @@ impl AuthorizeService {
     }
 
     fn validate_optional_request_object_field(
-        payload: &serde_json::Value,
+        payload: &Value,
         field: &str,
         outer: Option<&str>,
     ) -> Result<(), AppError> {
@@ -611,7 +611,7 @@ impl AuthorizeService {
     }
 
     fn validate_optional_numeric_request_object_field(
-        payload: &serde_json::Value,
+        payload: &Value,
         field: &str,
         outer: Option<&str>,
     ) -> Result<(), AppError> {
@@ -629,14 +629,14 @@ impl AuthorizeService {
     }
 
     fn validate_optional_json_request_object_field(
-        payload: &serde_json::Value,
+        payload: &Value,
         field: &str,
         outer: Option<&str>,
     ) -> Result<(), AppError> {
         if let (Some(inner), Some(outer)) = (payload.get(field), outer) {
-            let outer = serde_json::from_str::<serde_json::Value>(outer).map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::RequestObjectJsonInvalid).with_source(error)
-            })?;
+            let outer = serde_json::from_str::<Value>(outer).map_err(AppError::map_source(
+                AuthorizeErrorCode::RequestObjectJsonInvalid,
+            ))?;
 
             if inner != &outer {
                 return Err(
@@ -650,9 +650,8 @@ impl AuthorizeService {
     }
 
     pub(super) fn parse_claims_request(raw: &str) -> Result<ClaimsRequest, AppError> {
-        let value = serde_json::from_str::<serde_json::Value>(raw).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::ClaimsParamInvalid).with_source(error)
-        })?;
+        let value = serde_json::from_str::<Value>(raw)
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClaimsParamInvalid))?;
         let object = value
             .as_object()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClaimsNotObject))?;
@@ -663,7 +662,7 @@ impl AuthorizeService {
         // unset — would be rejected on re-parse as "field not an object".
         let map_field = |field: &str| -> Result<Option<ClaimRequestMap>, AppError> {
             match object.get(field) {
-                None | Some(serde_json::Value::Null) => Ok(None),
+                None | Some(Value::Null) => Ok(None),
                 Some(value) => value
                     .as_object()
                     .cloned()
@@ -690,19 +689,21 @@ impl AuthorizeService {
             .map(str::to_owned))
     }
 
-    fn decode_request_object_payload_unverified(raw: &str) -> Result<serde_json::Value, AppError> {
+    fn decode_request_object_payload_unverified(raw: &str) -> Result<Value, AppError> {
         let payload_segment = raw
             .split('.')
             .nth(1)
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectEncodingInvalid))?;
 
-        let payload = URL_SAFE_NO_PAD.decode(payload_segment).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestObjectBase64Invalid).with_source(error)
-        })?;
+        let payload = URL_SAFE_NO_PAD
+            .decode(payload_segment)
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::RequestObjectBase64Invalid,
+            ))?;
 
-        serde_json::from_slice::<serde_json::Value>(&payload).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::RequestObjectPayloadInvalid).with_source(error)
-        })
+        serde_json::from_slice::<Value>(&payload).map_err(AppError::map_source(
+            AuthorizeErrorCode::RequestObjectPayloadInvalid,
+        ))
     }
 }
 
@@ -734,16 +735,16 @@ fn map_request_uri_fetch_error(error: RemoteFetchError) -> AppError {
 fn decode_request_object_with_jwk(
     raw: &str,
     alg: JwsAlgorithm,
-    jwk: &identity_domain::key::PublicJwk,
+    jwk: &PublicJwk,
 ) -> Result<jwt::JwtPayload, AppError> {
     let verifier = asymmetric_verifier_from_public_jwk(alg.as_str(), jwk).map_err(|error| {
         AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
             .with_param("alg", alg.to_string())
             .with_source(error)
     })?;
-    decode_with_verifier(raw, verifier.as_ref()).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed).with_source(error)
-    })
+    decode_with_verifier(raw, verifier.as_ref()).map_err(AppError::map_source(
+        AuthorizeErrorCode::RequestObjectVerifyFailed,
+    ))
 }
 
 fn decode_request_object(
@@ -756,7 +757,7 @@ fn decode_request_object(
             .with_param("alg", alg.to_string())
             .with_source(error)
     })?;
-    decode_with_verifier(raw, verifier.as_ref()).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectVerifyFailed).with_source(error)
-    })
+    decode_with_verifier(raw, verifier.as_ref()).map_err(AppError::map_source(
+        AuthorizeErrorCode::RequestObjectVerifyFailed,
+    ))
 }

@@ -1,6 +1,10 @@
+use super::response::error_http_status;
 use http::StatusCode;
+use identity_application::error::AppError;
+use identity_application::error::ErrorDiagnostics;
 use salvo::{Depot, Request, Router, handler};
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 
 use crate::{
     application::install::InstallInput,
@@ -53,19 +57,18 @@ impl InstallFailureLogContext {
     }
 }
 
-fn should_log_install_failure_as_error(error: &identity_application::error::AppError) -> bool {
-    super::response::error_http_status(error.kind()).is_server_error()
+fn should_log_install_failure_as_error(error: &AppError) -> bool {
+    error_http_status(error.kind()).is_server_error()
 }
 
-fn log_install_failure(error: &identity_application::error::AppError, request: &InstallRequest) {
+fn log_install_failure(error: &AppError, request: &InstallRequest) {
     let context = InstallFailureLogContext::from_request(request);
 
     if should_log_install_failure_as_error(error) {
-        let diagnostics =
-            identity_application::error::diagnostics::ErrorDiagnostics::from_error(error);
+        let diagnostics = ErrorDiagnostics::from_error(error);
         tracing::error!(
             error = %error,
-            has_source = std::error::Error::source(error).is_some(),
+            has_source = Error::source(error).is_some(),
             error_cause = %diagnostics.cause,
             error_operation = diagnostics.operation,
             stacktrace = diagnostics.backtrace.map(ToString::to_string),

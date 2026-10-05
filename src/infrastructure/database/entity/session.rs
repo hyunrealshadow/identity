@@ -1,5 +1,8 @@
 //! Current SeaORM persistence entity.
 
+use super::login::Entity as LoginEntity;
+use super::user::Entity as UserEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -52,13 +55,13 @@ pub enum Relation {
     User,
 }
 
-impl Related<super::login::Entity> for Entity {
+impl Related<LoginEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Login.def()
     }
 }
 
-impl Related<super::user::Entity> for Entity {
+impl Related<UserEntity> for Entity {
     fn to() -> RelationDef {
         Relation::User.def()
     }

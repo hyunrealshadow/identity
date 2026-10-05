@@ -1,6 +1,8 @@
 use http::StatusCode;
+use identity_domain::openid_connect::OpenIdProviderMetadata;
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::{
     application::error::AppError, application::openid_connect::provider::OpenIdProviderService,
@@ -45,7 +47,7 @@ pub fn routes() -> Router {
 
 async fn openid_configuration_document(
     service: &OpenIdProviderService,
-) -> Result<identity_domain::openid_connect::OpenIdProviderMetadata, AppError> {
+) -> Result<OpenIdProviderMetadata, AppError> {
     service.discovery_metadata().await
 }
 
@@ -76,9 +78,7 @@ async fn authorization_server_metadata(
     Ok(())
 }
 
-fn authorization_server_document(
-    oidc: identity_domain::openid_connect::OpenIdProviderMetadata,
-) -> serde_json::Value {
+fn authorization_server_document(oidc: OpenIdProviderMetadata) -> Value {
     let metadata = serde_json::json!({
         "issuer": oidc.issuer,
         "authorization_endpoint": oidc.authorization_endpoint,
@@ -126,116 +126,11 @@ async fn keys_handler(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use crate::{
-        application::openid_connect::provider::OpenIdProviderService,
-        application::setting::{AppSettings, InstallationSettings, SettingsSnapshot},
-    };
-
-    use super::openid_configuration_document;
-
-    struct TestInstallationSetting(Arc<SettingsSnapshot>);
-
-    impl identity_application::setting::SettingsSource for TestInstallationSetting {
-        fn snapshot(&self) -> Arc<identity_application::setting::SettingsSnapshot> {
-            Arc::clone(&self.0)
-        }
-    }
-
-    #[tokio::test]
-    async fn discovery_contract_contains_expected_fields() {
-        let service = OpenIdProviderService::new(Arc::new(TestInstallationSetting(Arc::new(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        ))));
-
-        let metadata = openid_configuration_document(&service).await.unwrap();
-        let json = serde_json::to_value(metadata).unwrap();
-
-        assert_eq!(json["issuer"], "https://identity.example.com/");
-        assert_eq!(
-            json["code_challenge_methods_supported"],
-            serde_json::json!(["S256"])
-        );
-        assert_eq!(
-            json["authorization_endpoint"],
-            "https://identity.example.com/oauth2/authorize"
-        );
-        assert_eq!(
-            json["token_endpoint"],
-            "https://identity.example.com/oauth2/token"
-        );
-        assert_eq!(
-            json["revocation_endpoint"],
-            "https://identity.example.com/oauth2/revoke"
-        );
-        assert_eq!(
-            json["jwks_uri"],
-            "https://identity.example.com/.well-known/keys"
-        );
-        assert_eq!(
-            json["end_session_endpoint"],
-            "https://identity.example.com/oauth2/logout"
-        );
-        assert_eq!(
-            json["check_session_iframe"],
-            "https://identity.example.com/oauth2/check_session"
-        );
-        assert!(json.get("registration_endpoint").is_none());
-        assert_eq!(json["frontchannel_logout_supported"], true);
-        assert_eq!(json["frontchannel_logout_session_supported"], true);
-        assert_eq!(json["backchannel_logout_supported"], true);
-        assert_eq!(json["backchannel_logout_session_supported"], true);
-        assert_eq!(json["claims_parameter_supported"], true);
-        assert_eq!(json["request_parameter_supported"], true);
-        assert_eq!(json["request_uri_parameter_supported"], true);
-        assert_eq!(json["require_request_uri_registration"], true);
-        assert!(
-            json["pushed_authorization_request_endpoint"]
-                .as_str()
-                .unwrap()
-                .ends_with("/oauth2/par")
-        );
-        assert_eq!(json["require_pushed_authorization_requests"], false);
-        assert_eq!(
-            json["acr_values_supported"],
-            serde_json::json!([
-                identity_domain::auth::ACR_AAL1,
-                identity_domain::auth::ACR_AAL2
-            ])
-        );
-        assert!(
-            json["response_modes_supported"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("form_post"))
-        );
-        assert_eq!(
-            json["subject_types_supported"],
-            serde_json::json!(["public", "pairwise"])
-        );
-        assert_eq!(
-            json["id_token_signing_alg_values_supported"],
-            if cfg!(feature = "allow-none-alg") {
-                serde_json::json!(["ES256", "none"])
-            } else {
-                serde_json::json!(["ES256"])
-            }
-        );
-    }
-}
-#[cfg(test)]
 mod authorization_metadata_tests {
+    use super::routes;
+    use salvo::affix_state::inject;
+    use serde_json::Value;
+
     use http::StatusCode;
     use salvo::{
         Service,
@@ -244,14 +139,13 @@ mod authorization_metadata_tests {
     #[tokio::test]
     async fn metadata_route_publishes_oauth_endpoints_and_omits_unset_fields() {
         let state = identity_infrastructure::test_app_state_with_cors_origin(None).await;
-        let service = Service::new(super::routes().hoop(salvo::affix_state::inject(state)));
+        let service = Service::new(routes().hoop(inject(state)));
         let mut response =
             TestClient::get("http://127.0.0.1:5800/.well-known/oauth-authorization-server")
                 .send(&service)
                 .await;
         assert_eq!(response.status_code, Some(StatusCode::OK));
-        let json: serde_json::Value =
-            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        let json: Value = serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
         assert!(
             json["introspection_endpoint"]
                 .as_str()

@@ -1,5 +1,13 @@
 //! Shared helpers for the authentication and OAuth protocol controllers.
 
+use rand::RngExt;
+
+use crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use url::Url;
+use woothee::parser::Parser;
+
 use std::convert::Infallible;
 
 use http::{HeaderMap, HeaderValue, header};
@@ -97,7 +105,7 @@ pub async fn protect_session_id(
             Uuid::from(session_oid).as_bytes(),
         )
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))
+        .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))
 }
 
 pub async fn unprotect_session_id(
@@ -109,10 +117,10 @@ pub async fn unprotect_session_id(
         .data_protector()
         .unprotect(SESSION_ID_PROTECTION_PURPOSE, protected_id)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
+        .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
 
-    let uuid = Uuid::from_slice(&bytes)
-        .map_err(|error| AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error))?;
+    let uuid =
+        Uuid::from_slice(&bytes).map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
     Ok(SessionOid(uuid))
 }
 
@@ -426,10 +434,9 @@ pub fn csrf_token(depot: &Depot) -> String {
 }
 
 pub fn generate_csp_nonce() -> String {
-    use rand::RngExt;
     let mut bytes = [0u8; 16];
     rand::rng().fill(&mut bytes);
-    base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes)
+    Engine::encode(&URL_SAFE_NO_PAD, bytes)
 }
 
 // ─── Request helpers ──────────────────────────────────────────────────────────
@@ -458,7 +465,7 @@ pub fn parse_user_agent(headers: &HeaderMap) -> ParsedUserAgent {
         Some(ua_str.to_owned())
     };
 
-    let parser = woothee::parser::Parser::new();
+    let parser = Parser::new();
     let result = parser.parse(ua_str);
 
     match result {
@@ -546,19 +553,15 @@ fn interaction_redirect(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-            AppError::from_code(
-                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
-            )
-            .with_param("route", route)
+            AppError::from_code(AuthorizeHttpErrorCode::LoginDomainNotConfigured)
+                .with_param("route", route)
         })?;
-    let target = url::Url::parse(login_domain)
+    let target = Url::parse(login_domain)
         .and_then(|base| base.join(route))
         .map_err(|error| {
-            AppError::from_code(
-                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
-            )
-            .with_param("route", route)
-            .with_source(error)
+            AppError::from_code(AuthorizeHttpErrorCode::LoginDomainNotConfigured)
+                .with_param("route", route)
+                .with_source(error)
         })?;
     let mut target = target;
     target.query_pairs_mut().append_pair("login_id", login_id);
@@ -568,53 +571,65 @@ fn interaction_redirect(
 
 #[cfg(test)]
 mod tests {
+    use super::op_protected_session_ids;
+    use super::protected_session_ids;
+    #[cfg(feature = "oidc-conformance")]
+    use super::{conformance_interaction_url, consent_redirect, login_redirect};
+    #[cfg(feature = "oidc-conformance")]
+    use http::header::LOCATION;
+
+    use super::SESSION_HEADER_NAME;
+    use super::build_session_cookie_from_protected_ids;
+    use http::header::COOKIE;
+    #[cfg(feature = "oidc-conformance")]
+    use identity_infrastructure::config::AppEnvironment;
+
     use http::{HeaderMap, HeaderValue};
     use uuid::Uuid;
 
     #[cfg(feature = "oidc-conformance")]
     #[tokio::test]
     async fn conformance_redirects_do_not_require_a_login_application() {
-        let ctx = identity_infrastructure::test_app_state_with_environment(
-            identity_infrastructure::config::AppEnvironment::Conformance,
-        )
-        .await;
+        let ctx =
+            identity_infrastructure::test_app_state_with_environment(AppEnvironment::Conformance)
+                .await;
         assert_eq!(
-            super::login_redirect(&ctx, "a+b&c")
+            login_redirect(&ctx, "a+b&c")
                 .unwrap()
                 .headers()
-                .get(http::header::LOCATION)
+                .get(LOCATION)
                 .unwrap(),
             "/conformance/auto-login?login_id=a%2Bb%26c"
         );
         assert_eq!(
-            super::consent_redirect(&ctx, "login-123")
+            consent_redirect(&ctx, "login-123")
                 .unwrap()
                 .headers()
-                .get(http::header::LOCATION)
+                .get(LOCATION)
                 .unwrap(),
             "/conformance/auto-consent?login_id=login-123"
         );
         let ordinary = identity_infrastructure::test_app_state_with_mock_settings().await;
-        assert!(super::login_redirect(&ordinary, "login-123").is_err());
-        assert!(super::consent_redirect(&ordinary, "login-123").is_err());
+        assert!(login_redirect(&ordinary, "login-123").is_err());
+        assert!(consent_redirect(&ordinary, "login-123").is_err());
     }
 
     #[cfg(feature = "oidc-conformance")]
     #[test]
     fn conformance_interactions_stay_on_the_op_origin_and_encode_login_ids() {
         assert_eq!(
-            super::conformance_interaction_url("auto-login", "a+b&c"),
+            conformance_interaction_url("auto-login", "a+b&c"),
             "/conformance/auto-login?login_id=a%2Bb%26c"
         );
         assert_eq!(
-            super::conformance_interaction_url("auto-consent", "login-123"),
+            conformance_interaction_url("auto-consent", "login-123"),
             "/conformance/auto-consent?login_id=login-123"
         );
     }
 
     #[test]
     fn build_session_cookie_is_always_secure_and_cross_site() {
-        let cookie = super::build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()]);
+        let cookie = build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()]);
 
         assert!(cookie.starts_with("sessions="));
         assert!(cookie.contains("; HttpOnly; Secure; SameSite=None;"));
@@ -624,20 +639,17 @@ mod tests {
     fn bff_header_and_op_cookie_are_distinct_transports() {
         let mut headers = HeaderMap::new();
         headers.insert(
-            super::SESSION_HEADER_NAME,
+            SESSION_HEADER_NAME,
             HeaderValue::from_static("[\"header-session\"]"),
         );
         headers.insert(
-            http::header::COOKIE,
+            COOKIE,
             HeaderValue::from_static("sessions=[\"op-cookie-session\"]"),
         );
 
+        assert_eq!(protected_session_ids(&headers), vec!["header-session"]);
         assert_eq!(
-            super::protected_session_ids(&headers),
-            vec!["header-session"]
-        );
-        assert_eq!(
-            super::op_protected_session_ids(&headers),
+            op_protected_session_ids(&headers),
             vec!["op-cookie-session"]
         );
     }

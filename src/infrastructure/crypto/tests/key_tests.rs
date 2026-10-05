@@ -5,10 +5,22 @@ use crate::crypto::key::{
 };
 use identity_domain::key::JwaSigningAlgorithm;
 use identity_domain::key::model::AsymmetricKeyAlgorithm;
+use josekit::jwk::Jwk;
+use josekit::jwk::alg::ec::EcCurve;
+use josekit::jwk::alg::ec::EcKeyPair;
+use josekit::jwk::alg::rsapss::RsaPssKeyPair;
+use josekit::jws::JwsSigner;
 use josekit::jws::{
     ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
 };
 use josekit::jwt;
+use josekit::util::SHA_256;
+use josekit::util::SHA_384;
+use josekit::util::SHA_512;
+use openssl::base64::encode_block;
+use openssl::hash::MessageDigest;
+use openssl::hash::hash;
+use openssl::x509::X509;
 
 /// Generates a minimal RSA 2048 key PEM and a self-signed cert PEM for testing.
 fn test_rsa_key_and_cert() -> (String, String) {
@@ -31,7 +43,7 @@ fn certificate_subject_alt_name_uses_only_domain_hostname() {
         &AsymmetricKeyAlgorithm::EcdsaP256,
     )
     .unwrap();
-    let certificate = openssl::x509::X509::from_pem(certificate.as_bytes()).unwrap();
+    let certificate = X509::from_pem(certificate.as_bytes()).unwrap();
     let alt_names = certificate.subject_alt_names().unwrap();
     assert_eq!(alt_names.len(), 1);
     assert_eq!(alt_names.get(0).unwrap().dnsname(), Some("id.unsvc.net"));
@@ -71,9 +83,6 @@ fn jwk_with_certificate_has_x5c_x5t_x5t_s256() {
 
 #[test]
 fn x5t_s256_matches_sha256_of_der() {
-    use openssl::hash::{MessageDigest, hash};
-    use openssl::x509::X509;
-
     let (private_key, cert_pem) = test_rsa_key_and_cert();
     let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert_pem)).unwrap();
 
@@ -94,9 +103,6 @@ fn x5t_s256_matches_sha256_of_der() {
 
 #[test]
 fn x5t_matches_sha1_of_der() {
-    use openssl::hash::{MessageDigest, hash};
-    use openssl::x509::X509;
-
     let (private_key, cert_pem) = test_rsa_key_and_cert();
     let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert_pem)).unwrap();
 
@@ -111,9 +117,6 @@ fn x5t_matches_sha1_of_der() {
 
 #[test]
 fn x5c_matches_base64_standard_of_der() {
-    use openssl::base64::encode_block;
-    use openssl::x509::X509;
-
     let (private_key, cert_pem) = test_rsa_key_and_cert();
     let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert_pem)).unwrap();
 
@@ -176,13 +179,7 @@ fn generate_all_jwks_for_plain_rsa_key_publishes_signing_and_encryption_algs() {
 
 #[test]
 fn generate_all_jwks_for_rsa_pss_key_produces_ps_jwk() {
-    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-        2048,
-        josekit::util::SHA_256,
-        josekit::util::SHA_256,
-        32,
-    )
-    .unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, SHA_256, SHA_256, 32).unwrap();
     let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
 
     let jwks = generate_all_jwks_for_key(&private_key, "kid-ps", None).unwrap();
@@ -195,13 +192,7 @@ fn generate_all_jwks_for_rsa_pss_key_produces_ps_jwk() {
 
 #[test]
 fn generate_all_jwks_for_rsa_pss_sha384_key_produces_ps384_jwk() {
-    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-        2048,
-        josekit::util::SHA_384,
-        josekit::util::SHA_384,
-        48,
-    )
-    .unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, SHA_384, SHA_384, 48).unwrap();
     let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
 
     assert_generated_signing_jwk(&private_key, "kid-ps", "PS384");
@@ -209,13 +200,7 @@ fn generate_all_jwks_for_rsa_pss_sha384_key_produces_ps384_jwk() {
 
 #[test]
 fn generate_all_jwks_for_rsa_pss_sha512_key_produces_ps512_jwk() {
-    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-        2048,
-        josekit::util::SHA_512,
-        josekit::util::SHA_512,
-        64,
-    )
-    .unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, SHA_512, SHA_512, 64).unwrap();
     let private_key = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
 
     assert_generated_signing_jwk(&private_key, "kid-ps", "PS512");
@@ -259,7 +244,7 @@ fn assert_roundtrip(private_key_pem: &str, public_key_pem: &str, alg_label: &str
     let jwa: JwaSigningAlgorithm = alg_label.parse().unwrap();
     let pem = private_key_pem.as_bytes();
 
-    let signer: Box<dyn josekit::jws::JwsSigner> = match jwa {
+    let signer: Box<dyn JwsSigner> = match jwa {
         JwaSigningAlgorithm::Rs256 => Box::new(RS256.signer_from_pem(pem).unwrap()),
         JwaSigningAlgorithm::Rs384 => Box::new(RS384.signer_from_pem(pem).unwrap()),
         JwaSigningAlgorithm::Rs512 => Box::new(RS512.signer_from_pem(pem).unwrap()),
@@ -363,13 +348,7 @@ fn rs512_roundtrip() {
 
 #[test]
 fn ps256_roundtrip() {
-    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-        2048,
-        josekit::util::SHA_256,
-        josekit::util::SHA_256,
-        32,
-    )
-    .unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, SHA_256, SHA_256, 32).unwrap();
     let private = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
     let public_pem = String::from_utf8(key_pair.to_pem_public_key()).unwrap();
     assert_roundtrip(&private, &public_pem, "PS256");
@@ -377,13 +356,7 @@ fn ps256_roundtrip() {
 
 #[test]
 fn ps384_roundtrip() {
-    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-        2048,
-        josekit::util::SHA_384,
-        josekit::util::SHA_384,
-        48,
-    )
-    .unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, SHA_384, SHA_384, 48).unwrap();
     let private = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
     let public_pem = String::from_utf8(key_pair.to_pem_public_key()).unwrap();
     assert_roundtrip(&private, &public_pem, "PS384");
@@ -391,13 +364,7 @@ fn ps384_roundtrip() {
 
 #[test]
 fn ps512_roundtrip() {
-    let key_pair = josekit::jwk::alg::rsapss::RsaPssKeyPair::generate(
-        2048,
-        josekit::util::SHA_512,
-        josekit::util::SHA_512,
-        64,
-    )
-    .unwrap();
+    let key_pair = RsaPssKeyPair::generate(2048, SHA_512, SHA_512, 64).unwrap();
     let private = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
     let public_pem = String::from_utf8(key_pair.to_pem_public_key()).unwrap();
     assert_roundtrip(&private, &public_pem, "PS512");
@@ -411,8 +378,8 @@ fn es256_roundtrip() {
 
 #[test]
 fn es384_roundtrip() {
-    let jwk = josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::P384).unwrap();
-    let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
+    let jwk = Jwk::generate_ec_key(EcCurve::P384).unwrap();
+    let key_pair = EcKeyPair::from_jwk(&jwk).unwrap();
     let private = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
     let public = String::from_utf8(key_pair.to_pem_public_key()).unwrap();
     assert_roundtrip(&private, &public, "ES384");
@@ -420,8 +387,8 @@ fn es384_roundtrip() {
 
 #[test]
 fn es512_roundtrip() {
-    let jwk = josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::P521).unwrap();
-    let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
+    let jwk = Jwk::generate_ec_key(EcCurve::P521).unwrap();
+    let key_pair = EcKeyPair::from_jwk(&jwk).unwrap();
     let private = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
     let public = String::from_utf8(key_pair.to_pem_public_key()).unwrap();
     assert_roundtrip(&private, &public, "ES512");
@@ -429,9 +396,8 @@ fn es512_roundtrip() {
 
 #[test]
 fn es256k_roundtrip() {
-    let jwk =
-        josekit::jwk::Jwk::generate_ec_key(josekit::jwk::alg::ec::EcCurve::Secp256k1).unwrap();
-    let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(&jwk).unwrap();
+    let jwk = Jwk::generate_ec_key(EcCurve::Secp256k1).unwrap();
+    let key_pair = EcKeyPair::from_jwk(&jwk).unwrap();
     let private = String::from_utf8(key_pair.to_pem_private_key()).unwrap();
     let public = String::from_utf8(key_pair.to_pem_public_key()).unwrap();
     assert_roundtrip(&private, &public, "ES256K");

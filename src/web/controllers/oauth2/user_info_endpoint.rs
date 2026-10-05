@@ -1,4 +1,5 @@
 use http::{HeaderValue, StatusCode, header};
+use identity_application::openid_connect::dto::UserInfoClaims;
 use salvo::{Depot, Request, Response, Writer, async_trait, handler, writing::Text};
 use serde::Deserialize;
 use unic_langid::LanguageIdentifier;
@@ -130,9 +131,7 @@ async fn handle_userinfo_request(
     Ok(AppResponse(build_success_response(user_claims)))
 }
 
-fn build_success_response(
-    claims: identity_application::openid_connect::dto::UserInfoClaims,
-) -> Response {
+fn build_success_response(claims: UserInfoClaims) -> Response {
     let mut response = json_response(StatusCode::OK, claims);
     insert_no_store_headers(&mut response);
     response

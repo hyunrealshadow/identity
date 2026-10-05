@@ -1,5 +1,11 @@
+use crate::infrastructure::database::entity::client_openid_connect_platform::Model as ClientOpenidConnectPlatformModel;
+use crate::infrastructure::database::entity::scope::Model;
+use crate::infrastructure::database::entity::user_client_consent::Model as UserClientConsentModel;
+use base64::engine::general_purpose::STANDARD;
+use identity_domain::key::KeyType;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use base64::Engine;
 use chrono::{Duration, Utc};
@@ -71,44 +77,44 @@ pub(super) fn consent_test_config() -> AppConfig {
     }
 }
 
-pub(super) async fn consent_test_state() -> (AppState, String, uuid::Uuid) {
+pub(super) async fn consent_test_state() -> (AppState, String, Uuid) {
     consent_test_state_with_scope("openid profile").await
 }
 
-pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, String, uuid::Uuid) {
+pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, String, Uuid) {
     consent_test_state_for(QueuedInteraction::Authorization, scope).await
 }
 
 /// State whose queued rows answer the verification page of [`DEVICE_USER_CODE`].
-pub(super) async fn device_verification_test_state() -> (AppState, String, uuid::Uuid) {
+pub(super) async fn device_verification_test_state() -> (AppState, String, Uuid) {
     consent_test_state_for(QueuedInteraction::DeviceRequest, "openid profile").await
 }
 
 /// State whose queued rows answer that page and then a decision on it.
-pub(super) async fn device_decision_test_state() -> (AppState, String, uuid::Uuid) {
+pub(super) async fn device_decision_test_state() -> (AppState, String, Uuid) {
     consent_test_state_for(QueuedInteraction::DeviceDecision, "openid profile").await
 }
 
 /// State whose queued rows report that no request carries the entered code.
-pub(super) async fn unknown_user_code_test_state() -> (AppState, String, uuid::Uuid) {
+pub(super) async fn unknown_user_code_test_state() -> (AppState, String, Uuid) {
     consent_test_state_for(QueuedInteraction::UnknownUserCode, "openid profile").await
 }
 
 async fn consent_test_state_for(
     interaction: QueuedInteraction,
     scope: &str,
-) -> (AppState, String, uuid::Uuid) {
+) -> (AppState, String, Uuid) {
     let now = Utc::now();
-    let client_oid = uuid::Uuid::new_v4();
-    let authorization_oid = uuid::Uuid::new_v4();
-    let login_oid = uuid::Uuid::new_v4();
-    let session_oid = uuid::Uuid::new_v4();
-    let user_oid = uuid::Uuid::new_v4();
-    let symmetric_key_oid = uuid::Uuid::new_v4();
+    let client_oid = Uuid::new_v4();
+    let authorization_oid = Uuid::new_v4();
+    let login_oid = Uuid::new_v4();
+    let session_oid = Uuid::new_v4();
+    let user_oid = Uuid::new_v4();
+    let symmetric_key_oid = Uuid::new_v4();
 
     let password_setting = setting::Model {
         id: 1,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
         value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
         created_at: now.into(),
@@ -116,7 +122,7 @@ async fn consent_test_state_for(
     };
     let installation_initialized_setting = setting::Model {
         id: 2,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
         value: serde_json::to_value(true).unwrap(),
         created_at: now.into(),
@@ -124,7 +130,7 @@ async fn consent_test_state_for(
     };
     let domain_setting = setting::Model {
         id: 3,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
         value: serde_json::to_value("identity.example.com").unwrap(),
         created_at: now.into(),
@@ -132,7 +138,7 @@ async fn consent_test_state_for(
     };
     let installation_initialized_at_setting = setting::Model {
         id: 6,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
         value: serde_json::to_value(now).unwrap(),
         created_at: now.into(),
@@ -140,7 +146,7 @@ async fn consent_test_state_for(
     };
     let dynamic_registration_setting = setting::Model {
         id: 7,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
         value: serde_json::to_value(false).unwrap(),
         created_at: now.into(),
@@ -148,7 +154,7 @@ async fn consent_test_state_for(
     };
     let login_domain_setting = setting::Model {
         id: 12,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
         value: serde_json::to_value(Some("https://ui.example.com".to_owned())).unwrap(),
         created_at: now.into(),
@@ -156,7 +162,7 @@ async fn consent_test_state_for(
     };
     let device_authorization_setting = setting::Model {
         id: 10,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
         value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: now.into(),
@@ -294,7 +300,7 @@ async fn consent_test_state_for(
     };
     let device_request_model = client_authorization::Model {
         id: 41,
-        oid: uuid::Uuid::new_v4(),
+        oid: Uuid::new_v4(),
         client_id: client_model.id,
         r#type: ClientAuthorizationType::DeviceAuthorizationRequest.to_string(),
         data: serde_json::to_value(DeviceAuthorizationRequestData {
@@ -362,9 +368,9 @@ async fn consent_test_state_for(
     let symmetric_key = key::Model {
         id: 37,
         oid: symmetric_key_oid,
-        r#type: identity_domain::key::KeyType::Symmetric.to_string(),
+        r#type: KeyType::Symmetric.to_string(),
         data: serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
-            key: base64::engine::general_purpose::STANDARD.encode([0x42u8; 32]),
+            key: STANDARD.encode([0x42u8; 32]),
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
         .unwrap(),
@@ -382,20 +388,18 @@ async fn consent_test_state_for(
         .split_whitespace()
         .filter(|name| *name != "unknown_scope")
         .enumerate()
-        .map(
-            |(index, name)| crate::infrastructure::database::entity::scope::Model {
-                id: index as i64,
-                oid: uuid::Uuid::new_v4(),
-                protocol: "openid_connect".to_owned(),
-                name: name.to_owned(),
-                display_name: format!("Configured {name}"),
-                description: format!("Database description for {name}"),
-                descriptions: serde_json::json!({"zh-CN": format!("数据库描述 {name}")}),
-                built_in: true,
-                created_at: now.into(),
-                updated_at: None,
-            },
-        )
+        .map(|(index, name)| Model {
+            id: index as i64,
+            oid: Uuid::new_v4(),
+            protocol: "openid_connect".to_owned(),
+            name: name.to_owned(),
+            display_name: format!("Configured {name}"),
+            description: format!("Database description for {name}"),
+            descriptions: serde_json::json!({"zh-CN": format!("数据库描述 {name}")}),
+            built_in: true,
+            created_at: now.into(),
+            updated_at: None,
+        })
         .collect::<Vec<_>>();
 
     let queued = MockDatabase::new(DatabaseBackend::Postgres)
@@ -427,9 +431,7 @@ async fn consent_test_state_for(
             .append_query_results([[active_session.clone()]])
             .append_query_results([[(authorization_model.clone(), client_model.clone())]])
             .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
-            .append_query_results([Vec::<
-                crate::infrastructure::database::entity::client_openid_connect_platform::Model,
-            >::new()])
+            .append_query_results([Vec::<ClientOpenidConnectPlatformModel>::new()])
             .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[(active_session.clone(), active_user.clone())]])
             .append_query_results([[openid_scope_row.clone()]])
@@ -445,9 +447,7 @@ async fn consent_test_state_for(
             .append_query_results([[active_session.clone()]])
             .append_query_results([[(authorization_model.clone(), client_model.clone())]])
             .append_query_results([[(client_model.clone(), oidc_metadata_model.clone())]])
-            .append_query_results([Vec::<
-                crate::infrastructure::database::entity::client_openid_connect_platform::Model,
-            >::new()])
+            .append_query_results([Vec::<ClientOpenidConnectPlatformModel>::new()])
             .append_query_results([[openid_scope_row.clone()]])
             .append_query_results([[(active_session.clone(), active_user.clone())]])
             .append_query_results([[login_model.clone()]])
@@ -472,14 +472,12 @@ async fn consent_test_state_for(
             .append_query_results([scope
                 .split_whitespace()
                 .enumerate()
-                .map(|(index, _)| {
-                    crate::infrastructure::database::entity::user_client_consent::Model {
-                        id: 41 + i64::try_from(index).unwrap(),
-                        user_id: active_user.id,
-                        client_id: client_model.id,
-                        scope_id: 100 + i64::try_from(index).unwrap(),
-                        approved_at: now.into(),
-                    }
+                .map(|(index, _)| UserClientConsentModel {
+                    id: 41 + i64::try_from(index).unwrap(),
+                    user_id: active_user.id,
+                    client_id: client_model.id,
+                    scope_id: 100 + i64::try_from(index).unwrap(),
+                    approved_at: now.into(),
                 })
                 .collect::<Vec<_>>()])
             .append_exec_results([MockExecResult {
@@ -493,9 +491,7 @@ async fn consent_test_state_for(
             .append_query_results([[(device_request_model, client_model.clone())]])
             // The description loads the client the request was registered for.
             .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
-            .append_query_results([Vec::<
-                crate::infrastructure::database::entity::client_openid_connect_platform::Model,
-            >::new()])
+            .append_query_results([Vec::<ClientOpenidConnectPlatformModel>::new()])
             .append_query_results([[openid_scope_row]])
             // The browser session arrives through the login transport.
             .append_query_results([[(active_session, active_user.clone())]])
@@ -516,9 +512,7 @@ async fn consent_test_state_for(
                 .append_query_results([[(device_request_model.clone(), client_model.clone())]])
                 .append_query_results([[(device_request_model.clone(), client_model.clone())]])
                 .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
-                .append_query_results([Vec::<
-                    crate::infrastructure::database::entity::client_openid_connect_platform::Model,
-                >::new()])
+                .append_query_results([Vec::<ClientOpenidConnectPlatformModel>::new()])
                 .append_query_results([[openid_scope_row.clone()]])
                 .append_query_results([[(active_session.clone(), active_user.clone())]])
                 .append_query_results([[openid_scope_row]])

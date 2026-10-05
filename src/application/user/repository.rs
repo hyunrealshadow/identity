@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use serde_json::Error as SerdeJsonError;
+use std::error::Error as StdError;
 use thiserror::Error;
 
 use crate::user::{
@@ -13,31 +15,31 @@ pub use identity_domain::user::repository::{
 #[derive(Debug, Error)]
 pub enum UserCredentialRepositoryError {
     #[error("failed to query credentials")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("credential not found")]
     CredentialNotFound,
 
     #[error("failed to serialize credential data")]
-    Serialization(#[source] serde_json::Error),
+    Serialization(#[source] SerdeJsonError),
 
     #[error("failed to deserialize credential data")]
-    Deserialization(#[source] serde_json::Error),
+    Deserialization(#[source] SerdeJsonError),
 
     #[error("credential data does not match credential type {0}")]
     CredentialTypeMismatch(CredentialType),
 
     #[error("failed to update password credential")]
-    UpdatePasswordFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    UpdatePasswordFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to consume TOTP counter")]
-    ConsumeTotpFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ConsumeTotpFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to replace credentials")]
-    ReplaceFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ReplaceFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to delete credential")]
-    DeleteFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    DeleteFailed(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 // ─── UserCredentialRepository ─────────────────────────────────────────────────

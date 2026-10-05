@@ -1,28 +1,38 @@
+use super::RecordingSink;
+use crate::domain::openid_connect::OpenIdConnectClientRepository;
+use crate::domain::openid_connect::OpenIdConnectClientRepositoryError;
+use crate::observability::EventValue;
 use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
 use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
+use chrono::DateTime;
+use chrono::Duration;
+use identity_domain::client::model::ClientOid;
+use identity_domain::client_authorization::device_code_digest;
 use identity_domain::client_authorization::{
     ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType,
     DeviceAuthorizationApproval, DeviceAuthorizationData, DeviceAuthorizationRequestData,
     DeviceConsumeOutcome, DevicePollOutcome, DeviceRequestStatus, PreparedAuthorizationRecord,
 };
+use identity_domain::key::JwsAlgorithm;
+use identity_domain::openid_connect::API_RESOURCE;
 use identity_domain::openid_connect::GrantType;
+use std::iter;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::unbounded_channel;
 
 const DEVICE_CODE: &str = "device-code-for-tests";
 
-fn request_record(
-    status: DeviceRequestStatus,
-    expires_at: chrono::DateTime<Utc>,
-) -> ClientAuthorization {
+fn request_record(status: DeviceRequestStatus, expires_at: DateTime<Utc>) -> ClientAuthorization {
     request_record_with_scope(status, expires_at, "openid offline_access")
 }
 
 fn request_record_with_scope(
     status: DeviceRequestStatus,
-    expires_at: chrono::DateTime<Utc>,
+    expires_at: DateTime<Utc>,
     scope: &str,
 ) -> ClientAuthorization {
     let approval =
@@ -43,9 +53,7 @@ fn request_record_with_scope(
         data: ClientAuthorizationData::DeviceAuthorizationRequest(DeviceAuthorizationRequestData {
             resources: Vec::new(),
             scope: scope.to_owned(),
-            device_code_digest: identity_domain::client_authorization::device_code_digest(
-                DEVICE_CODE,
-            ),
+            device_code_digest: device_code_digest(DEVICE_CODE),
             claimed_login_oid: None,
             user_code: "WDJBMJHT".to_owned(),
             user_code_display: "WDJB-MJHT".to_owned(),
@@ -88,7 +96,7 @@ fn relation_record_with_scope(revoked: bool, scope: &str) -> ClientAuthorization
             request_oid: Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
             approved_at: Utc::now(),
         }),
-        expires_at: Utc::now() + chrono::Duration::days(365),
+        expires_at: Utc::now() + Duration::days(365),
         completed_at: None,
         revoked_at: revoked.then(Utc::now),
         created_at: Utc::now(),
@@ -119,7 +127,7 @@ fn device_client_with_id_token_algorithm(
     let mut metadata = test_metadata(None, Some("client_secret_basic"));
     metadata.grant_types = Some(grant_types);
     metadata.id_token_signed_response_algs =
-        algorithm.map(|value| vec![identity_domain::key::JwsAlgorithm::Asymmetric(value)]);
+        algorithm.map(|value| vec![JwsAlgorithm::Asymmetric(value)]);
 
     OpenIdConnectClient::new(
         test_client(Uuid::nil()),
@@ -136,7 +144,7 @@ async fn device_grant_uses_client_algorithm_for_access_token() {
         let (repo, _records) = device_repo(
             request_record_with_scope(
                 DeviceRequestStatus::Approved,
-                Utc::now() + chrono::Duration::minutes(10),
+                Utc::now() + Duration::minutes(10),
                 scope,
             ),
             Some(relation_record_with_scope(false, scope)),
@@ -162,7 +170,7 @@ async fn device_grant_uses_client_algorithm_for_access_token() {
         let response = service.exchange_device_code(params()).await.unwrap();
         assert_eq!(response.id_token.is_some(), scope.contains("openid"));
         let expected_kid = Uuid::from(rsa_binding.oid).to_string();
-        for token in std::iter::once(&response.access_token).chain(response.id_token.iter()) {
+        for token in iter::once(&response.access_token).chain(response.id_token.iter()) {
             let header = jwt::decode_header(token).unwrap();
             assert_eq!(
                 header.claim(JwtClaimNames::ALG).and_then(|v| v.as_str()),
@@ -182,7 +190,7 @@ async fn device_grant_includes_scoped_user_claims_in_access_token_when_enabled()
     let (repo, _records) = device_repo(
         request_record_with_scope(
             DeviceRequestStatus::Approved,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
             scope,
         ),
         Some(relation_record_with_scope(false, scope)),
@@ -223,7 +231,7 @@ fn device_repo(
     options: DeviceRepoOptions,
 ) -> (
     Arc<MockDeviceAuthorizationRepository>,
-    tokio::sync::mpsc::UnboundedReceiver<Vec<PreparedAuthorizationRecord>>,
+    UnboundedReceiver<Vec<PreparedAuthorizationRecord>>,
 ) {
     let mut repo = MockDeviceAuthorizationRepository::new();
     let client_oid = options.client_oid.unwrap_or(record.client_oid);
@@ -245,7 +253,7 @@ fn device_repo(
     let poll = options.poll.unwrap_or(DevicePollOutcome::Accepted);
     repo.expect_record_device_poll()
         .returning(move |_, _| Ok(poll));
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (sender, receiver) = unbounded_channel();
     let consume = options.consume.unwrap_or(DeviceConsumeOutcome::Consumed);
     repo.expect_consume_device_request_with_tokens()
         .returning(move |_, records, _| {
@@ -285,14 +293,11 @@ struct DeviceClientRepository {
 }
 
 #[async_trait::async_trait]
-impl crate::domain::openid_connect::OpenIdConnectClientRepository for DeviceClientRepository {
+impl OpenIdConnectClientRepository for DeviceClientRepository {
     async fn find_by_oid(
         &self,
-        _oid: identity_domain::client::model::ClientOid,
-    ) -> Result<
-        Option<OpenIdConnectClient>,
-        crate::domain::openid_connect::OpenIdConnectClientRepositoryError,
-    > {
+        _oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         Ok(Some(self.client.clone()))
     }
 }
@@ -316,7 +321,7 @@ async fn device_codes_of_other_clients_are_rejected() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Pending,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         None,
         DeviceRepoOptions {
@@ -336,7 +341,7 @@ async fn expired_requests_report_expired_token() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Pending,
-            Utc::now() - chrono::Duration::seconds(1),
+            Utc::now() - Duration::seconds(1),
         ),
         None,
         DeviceRepoOptions::default(),
@@ -353,12 +358,12 @@ async fn pending_requests_report_authorization_pending() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Pending,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         None,
         DeviceRepoOptions::default(),
     );
-    let sink = Arc::new(super::RecordingSink::default());
+    let sink = Arc::new(RecordingSink::default());
     let service =
         build_service(device_client(vec![GrantType::DeviceCode]), repo).with_events(sink.clone());
 
@@ -369,7 +374,7 @@ async fn pending_requests_report_authorization_pending() {
         "token.device_code.result",
         "rejected",
         "request_oid",
-        crate::observability::EventValue::Text("11111111-1111-1111-1111-111111111111".to_owned()),
+        EventValue::Text("11111111-1111-1111-1111-111111111111".to_owned()),
     );
 }
 
@@ -378,7 +383,7 @@ async fn too_frequent_polling_reports_slow_down() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Pending,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         None,
         DeviceRepoOptions {
@@ -398,7 +403,7 @@ async fn denied_requests_report_access_denied() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Denied,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         None,
         DeviceRepoOptions::default(),
@@ -415,7 +420,7 @@ async fn consumed_requests_report_invalid_grant() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Consumed,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         None,
         DeviceRepoOptions::default(),
@@ -429,11 +434,11 @@ async fn consumed_requests_report_invalid_grant() {
 
 #[tokio::test]
 async fn an_approved_request_issues_its_token_set_once() {
-    let sink = Arc::new(super::RecordingSink::default());
+    let sink = Arc::new(RecordingSink::default());
     let (repo, mut records) = device_repo(
         request_record(
             DeviceRequestStatus::Approved,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         Some(relation_record(false)),
         DeviceRepoOptions::default(),
@@ -445,15 +450,12 @@ async fn an_approved_request_issues_its_token_set_once() {
     .with_events(sink.clone());
 
     let mut request = params();
-    request.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
+    request.resources = vec![API_RESOURCE.to_owned()];
     let response = service.exchange_device_code(request).await.unwrap();
 
     assert_eq!(response.scope, "openid offline_access");
     let access_token = decode_unverified_payload(&response.access_token);
-    assert_eq!(
-        access_token["aud"],
-        identity_domain::openid_connect::API_RESOURCE
-    );
+    assert_eq!(access_token["aud"], API_RESOURCE);
     assert_eq!(access_token["sub"], Uuid::nil().to_string());
     assert_eq!(access_token["client_id"], Uuid::nil().to_string());
     assert_eq!(access_token["auth_time"], 1_700_000_000);
@@ -478,14 +480,14 @@ async fn an_approved_request_issues_its_token_set_once() {
             "token.device_code.issued",
             "success",
             field,
-            crate::observability::EventValue::Text(record.oid.to_string()),
+            EventValue::Text(record.oid.to_string()),
         );
     }
     sink.assert_attribute(
         "token.device_code.issued",
         "success",
         "request_oid",
-        crate::observability::EventValue::Text("11111111-1111-1111-1111-111111111111".to_owned()),
+        EventValue::Text("11111111-1111-1111-1111-111111111111".to_owned()),
     );
     assert_eq!(
         stored.len(),
@@ -506,10 +508,7 @@ async fn an_approved_request_issues_its_token_set_once() {
             }
             ClientAuthorizationData::RefreshToken(data) => {
                 found_refresh = true;
-                assert_eq!(
-                    data.resources,
-                    [identity_domain::openid_connect::API_RESOURCE]
-                );
+                assert_eq!(data.resources, [API_RESOURCE]);
                 assert!(data.session_oid.is_none());
                 assert_eq!(
                     data.device_authorization_oid.as_deref(),
@@ -528,7 +527,7 @@ async fn offline_access_without_the_refresh_grant_issues_no_refresh_token() {
     let (repo, mut records) = device_repo(
         request_record(
             DeviceRequestStatus::Approved,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         Some(relation_record(false)),
         DeviceRepoOptions::default(),
@@ -547,7 +546,7 @@ async fn revoked_authorizations_report_access_denied() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Approved,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         Some(relation_record(true)),
         DeviceRepoOptions::default(),
@@ -564,7 +563,7 @@ async fn a_lost_redemption_race_reports_invalid_grant_without_tokens() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Approved,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         Some(relation_record(false)),
         DeviceRepoOptions {
@@ -584,7 +583,7 @@ async fn a_revocation_racing_the_redemption_reports_access_denied() {
     let (repo, _records) = device_repo(
         request_record(
             DeviceRequestStatus::Approved,
-            Utc::now() + chrono::Duration::minutes(10),
+            Utc::now() + Duration::minutes(10),
         ),
         Some(relation_record(false)),
         DeviceRepoOptions {
@@ -674,7 +673,7 @@ async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, sco
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(refresh_data),
-            Utc::now() + chrono::Duration::days(30),
+            Utc::now() + Duration::days(30),
         )
         .await
         .unwrap();
@@ -820,7 +819,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(refresh_data),
-            Utc::now() + chrono::Duration::days(30),
+            Utc::now() + Duration::days(30),
         )
         .await
         .unwrap();
@@ -882,7 +881,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::RefreshToken(refresh_data),
-            Utc::now() + chrono::Duration::days(30),
+            Utc::now() + Duration::days(30),
         )
         .await
         .unwrap();

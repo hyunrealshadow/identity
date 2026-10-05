@@ -1,3 +1,4 @@
+use crate::openid_connect::remote::conformance_mode_active;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::RngExt;
 
@@ -16,5 +17,5 @@ fn generate_url_safe_token() -> String {
 }
 
 pub(super) fn default_skip_consent() -> bool {
-    crate::openid_connect::remote::conformance_mode_active()
+    conformance_mode_active()
 }

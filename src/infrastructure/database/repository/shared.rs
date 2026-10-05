@@ -3,6 +3,7 @@ use chrono::{DateTime, FixedOffset, Utc};
 use identity_domain::auth::SessionOid;
 use identity_domain::user::UserOid;
 use sea_orm::{ConnectionTrait, DbErr};
+use uuid::Uuid;
 
 /// Sentinel value used to represent "no expiry" in the database,
 /// since nullable timestamp columns would require schema changes.
@@ -55,7 +56,7 @@ pub async fn lock_session<C: ConnectionTrait>(
 }
 
 fn session_lock_id(oid: SessionOid) -> i64 {
-    let uuid = uuid::Uuid::from(oid);
+    let uuid = Uuid::from(oid);
     let bytes: [u8; 8] = uuid.as_bytes()[..8]
         .try_into()
         .expect("UUID always contains eight leading bytes");
@@ -74,7 +75,7 @@ pub async fn lock_user_credentials<C: ConnectionTrait>(
 }
 
 fn user_credential_lock_id(oid: UserOid) -> i64 {
-    let uuid = uuid::Uuid::from(oid);
+    let uuid = Uuid::from(oid);
     let bytes: [u8; 8] = uuid.as_bytes()[..8]
         .try_into()
         .expect("UUID always contains eight leading bytes");
@@ -83,6 +84,8 @@ fn user_credential_lock_id(oid: UserOid) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use identity_domain::user::UserOid;
+
     use super::{session_lock_id, user_credential_lock_id};
     use identity_domain::auth::SessionOid;
     use uuid::Uuid;
@@ -98,12 +101,8 @@ mod tests {
 
     #[test]
     fn user_credential_lock_id_is_stable_and_user_specific() {
-        let first = identity_domain::user::UserOid(
-            Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap(),
-        );
-        let second = identity_domain::user::UserOid(
-            Uuid::parse_str("019c1234-5678-7abd-9def-0123456789ab").unwrap(),
-        );
+        let first = UserOid(Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap());
+        let second = UserOid(Uuid::parse_str("019c1234-5678-7abd-9def-0123456789ab").unwrap());
 
         assert_eq!(
             user_credential_lock_id(first),

@@ -1,20 +1,28 @@
 use super::{fixtures::*, *};
 use crate::error::code::AppErrorCode;
+use crate::error::codes::token::TokenErrorCode;
+use crate::openid_connect::tests::fixtures::client::test_client;
+use crate::openid_connect::tests::fixtures::client::test_metadata;
+use crate::openid_connect::tests::fixtures::client::test_platforms;
+use crate::openid_connect::tests::fixtures::client::test_scopes;
 use crate::openid_connect::tests::fixtures::mocks::MockClientAuthorizationRepository;
 use crate::openid_connect::{
     client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
     par::{PushedAuthorizationParams, PushedAuthorizationService, request_uri_digest},
 };
+use chrono::DateTime;
+use chrono::Duration;
 use identity_domain::client_authorization::{
     ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
     PushedAuthorizationRequestData,
 };
+use identity_domain::openid_connect::API_RESOURCE;
+use identity_domain::openid_connect::ClientAssertionType;
 use identity_domain::openid_connect::par::PAR_REQUEST_URI_PREFIX;
+use std::sync::Mutex;
 
 #[derive(Default)]
-struct MemoryPar(
-    std::sync::Mutex<HashMap<String, (Uuid, AuthorizationRequestParams, chrono::DateTime<Utc>)>>,
-);
+struct MemoryPar(Mutex<HashMap<String, (Uuid, AuthorizationRequestParams, DateTime<Utc>)>>);
 struct ClientRepo(OpenIdConnectClient);
 #[async_trait]
 impl OpenIdConnectClientRepository for ClientRepo {
@@ -31,7 +39,7 @@ impl MemoryPar {
         digest: &str,
         client: Uuid,
         params: AuthorizationRequestParams,
-        expires: chrono::DateTime<Utc>,
+        expires: DateTime<Utc>,
     ) -> Result<(), ClientAuthorizationRepositoryError> {
         self.0
             .lock()
@@ -58,14 +66,13 @@ fn public_push(authorization: AuthorizationRequestParams) -> PushedAuthorization
 }
 fn setup() -> (PushedAuthorizationService, AuthorizeService, Arc<MemoryPar>) {
     let repository = Arc::new(MemoryPar::default());
-    let mut client =
-        crate::openid_connect::tests::fixtures::client::test_metadata(None, Some("none"));
+    let mut client = test_metadata(None, Some("none"));
     client.settings.allow_public_client_flow = true;
     let client = OpenIdConnectClient::new(
-        crate::openid_connect::tests::fixtures::client::test_client(TEST_CLIENT_ID),
+        test_client(TEST_CLIENT_ID),
         client,
-        crate::openid_connect::tests::fixtures::client::test_platforms(),
-        crate::openid_connect::tests::fixtures::client::test_scopes(),
+        test_platforms(),
+        test_scopes(),
     )
     .unwrap();
     let client_repo = Arc::new(ClientRepo(client));
@@ -136,7 +143,7 @@ fn setup() -> (PushedAuthorizationService, AuthorizeService, Arc<MemoryPar>) {
 async fn pushed_requests_preserve_resources_and_are_client_bound_expiring_and_single_use() {
     let (push, authorize, repository) = setup();
     let mut original = params("openid profile");
-    original.resources = vec![identity_domain::openid_connect::API_RESOURCE.to_owned()];
+    original.resources = vec![API_RESOURCE.to_owned()];
     let response = push.push(public_push(original)).await.unwrap();
     assert!(response.request_uri.starts_with(PAR_REQUEST_URI_PREFIX));
     assert_eq!(response.expires_in, 90);
@@ -159,10 +166,7 @@ async fn pushed_requests_preserve_resources_and_are_client_bound_expiring_and_si
     );
     assert_eq!(first.is_ok() as usize + second.is_ok() as usize, 1);
     let (request, _) = first.or(second).unwrap();
-    assert_eq!(
-        request.resources,
-        [identity_domain::openid_connect::API_RESOURCE]
-    );
+    assert_eq!(request.resources, [API_RESOURCE]);
     assert_eq!(request.scope.to_scope_string(), "openid profile");
     assert_eq!(request.state, "state123");
     assert!(
@@ -178,7 +182,7 @@ async fn pushed_requests_preserve_resources_and_are_client_bound_expiring_and_si
         .unwrap()
         .get_mut(&request_uri_digest(&expired.request_uri))
         .unwrap()
-        .2 = Utc::now() - chrono::Duration::seconds(1);
+        .2 = Utc::now() - Duration::seconds(1);
     assert!(
         authorize
             .validate_request(front(&expired.request_uri))
@@ -192,12 +196,11 @@ async fn par_reuses_pkce_validation_and_rejects_nested_request_uris_before_stora
     let (push, _, repository) = setup();
     let mut unidentified = public_push(params("openid"));
     unidentified.authorization.client_id.clear();
-    unidentified.client_assertion_type =
-        Some(identity_domain::openid_connect::ClientAssertionType::JwtBearer);
+    unidentified.client_assertion_type = Some(ClientAssertionType::JwtBearer);
     unidentified.client_assertion = Some("assertion".to_owned());
     assert_eq!(
         push.push(unidentified).await.unwrap_err().code(),
-        crate::error::codes::token::TokenErrorCode::ClientIdRequired.code()
+        TokenErrorCode::ClientIdRequired.code()
     );
     let mut missing = params("openid");
     missing.code_challenge = None;
@@ -225,7 +228,7 @@ async fn required_par_policy_accepts_pushed_requests_and_revalidates_client_scop
             &request_uri_digest(&uri),
             TEST_CLIENT_ID,
             old.clone(),
-            Utc::now() + chrono::Duration::seconds(90),
+            Utc::now() + Duration::seconds(90),
         )
         .await
         .unwrap();

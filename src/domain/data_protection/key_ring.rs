@@ -34,6 +34,8 @@ impl KeyRing {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::*;
     use crate::key::material::SymmetricKeyData;
     use crate::key::{KeyData, SymmetricKeyAlgorithm};
@@ -45,7 +47,7 @@ mod tests {
         revoked: Option<DateTime<Utc>>,
     ) -> Key {
         Key {
-            oid: KeyOid::from(uuid::Uuid::new_v4()),
+            oid: KeyOid::from(Uuid::new_v4()),
             r#type: KeyType::Symmetric,
             data: KeyData::Symmetric(SymmetricKeyData {
                 key: "test".to_owned(),
@@ -129,7 +131,7 @@ mod tests {
     #[test]
     fn decrypting_key_returns_none_for_missing() {
         let ring = KeyRing::new(vec![]);
-        let fake_oid = KeyOid::from(uuid::Uuid::new_v4());
+        let fake_oid = KeyOid::from(Uuid::new_v4());
         assert!(ring.decrypting_key(&fake_oid).is_none());
     }
 }

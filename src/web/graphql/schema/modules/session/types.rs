@@ -1,4 +1,6 @@
 use async_graphql::{ID, Object};
+use chrono::DateTime;
+use chrono::Utc;
 use identity_domain::auth::{SessionOid, model::Session};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
@@ -70,15 +72,15 @@ impl SessionNode {
         self.session.ip_address.as_deref()
     }
 
-    async fn last_active_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+    async fn last_active_at(&self) -> Option<DateTime<Utc>> {
         self.session.last_active_at
     }
 
-    async fn expires_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+    async fn expires_at(&self) -> Option<DateTime<Utc>> {
         self.session.expires_at
     }
 
-    async fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+    async fn created_at(&self) -> DateTime<Utc> {
         self.session.created_at
     }
 }

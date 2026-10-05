@@ -1,3 +1,9 @@
+use crate::crypto::key_rotation::KeyRotationMaterialGeneratorImpl;
+use crate::database::repository::oauth_resource::OAuthResourceRepositoryImpl;
+use crate::database::repository::scope_catalog::ScopeCatalogRepositoryImpl;
+use crate::observability::events::sink;
+use identity_application::openid_connect::par::PushedAuthorizationService;
+use reqwest::Error;
 use std::sync::Arc;
 
 use sea_orm::DatabaseConnection;
@@ -89,7 +95,7 @@ pub struct AppServices {
     install: AppInstallService,
     oidc: AppOpenIdProviderService,
     oidc_authorize: AppOpenIdAuthorizeService,
-    pushed_authorization: identity_application::openid_connect::par::PushedAuthorizationService,
+    pushed_authorization: PushedAuthorizationService,
     oidc_token: AppOpenIdTokenService,
     oidc_logout: AppOpenIdLogoutService,
     user_info: AppOpenIdUserInfoService,
@@ -104,10 +110,7 @@ pub struct AppServices {
 }
 
 impl AppServices {
-    pub fn from_db(
-        db: DatabaseConnection,
-        settings: &AppRuntimeSettings,
-    ) -> Result<Self, reqwest::Error> {
+    pub fn from_db(db: DatabaseConnection, settings: &AppRuntimeSettings) -> Result<Self, Error> {
         Self::from_db_with_workload_auth(
             db,
             settings,
@@ -120,7 +123,7 @@ impl AppServices {
         db: DatabaseConnection,
         settings: &AppRuntimeSettings,
         workload_authenticator: Arc<dyn WorkloadAuthenticator>,
-    ) -> Result<Self, reqwest::Error> {
+    ) -> Result<Self, Error> {
         let request_uri_http_client = request_uri_http_client()?;
         let backchannel_sender = Arc::new(HttpBackChannelLogoutSender::new(
             conformance_allows_invalid_certs(),
@@ -132,22 +135,16 @@ impl AppServices {
             settings.key_ring(),
             Arc::new(XChaCha20DataProtectionCipher),
         ));
-        let scope_catalog = Arc::new(
-            crate::database::repository::scope_catalog::ScopeCatalogRepositoryImpl::new(db.clone()),
-        );
+        let scope_catalog = Arc::new(ScopeCatalogRepositoryImpl::new(db.clone()));
         let oidc_client_repo = Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
         let oidc_client_registration_repo: Arc<dyn OpenIdConnectClientRegistrationRepository> =
             Arc::new(OpenIdConnectClientRepositoryImpl::new(db.clone()));
-        let oauth_resource_repo = Arc::new(
-            crate::database::repository::oauth_resource::OAuthResourceRepositoryImpl::new(
-                db.clone(),
-            ),
-        );
+        let oauth_resource_repo = Arc::new(OAuthResourceRepositoryImpl::new(db.clone()));
         let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
         let user_credential_repo = Arc::new(UserCredentialRepositoryImpl::new(db.clone()));
         let totp = Arc::new(TotpVerifierImpl);
 
-        let events = crate::observability::events::sink();
+        let events = sink();
 
         let client_authorization_repo =
             Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone()));
@@ -168,9 +165,7 @@ impl AppServices {
             data_protector: data_protector.clone(),
             http_client: request_uri_http_client.clone(),
         })
-        .with_scope_catalog(Arc::new(
-            crate::database::repository::scope_catalog::ScopeCatalogRepositoryImpl::new(db.clone()),
-        ))
+        .with_scope_catalog(Arc::new(ScopeCatalogRepositoryImpl::new(db.clone())))
         .with_events(Arc::clone(&events));
         Ok(Self {
             login: LoginService::new(
@@ -204,7 +199,7 @@ impl AppServices {
             .with_runtime_key_ring(settings.key_ring()),
             key_rotation: KeyRotationService::new(
                 Arc::new(KeyRotationRepositoryImpl::new(db.clone())),
-                Arc::new(crate::crypto::key_rotation::KeyRotationMaterialGeneratorImpl),
+                Arc::new(KeyRotationMaterialGeneratorImpl),
                 settings.key_ring(),
             ),
             install: InstallService {
@@ -223,25 +218,24 @@ impl AppServices {
                 .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
             oidc_authorize: oidc_authorize.clone(),
-            pushed_authorization:
-                identity_application::openid_connect::par::PushedAuthorizationService::new(
-                    Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {
-                        client_repo: oidc_client_repo.clone(),
-                        credential_repo: oidc_credential_repo.clone(),
-                        provider_service: Arc::new(
-                            OpenIdProviderService::new(settings.store())
-                                .with_scope_catalog(scope_catalog.clone())
-                                .with_resource_repo(oauth_resource_repo.clone()),
-                        ),
-                    })),
-                    oidc_authorize,
-                    client_authorization_repo,
-                    Arc::new(
+            pushed_authorization: PushedAuthorizationService::new(
+                Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {
+                    client_repo: oidc_client_repo.clone(),
+                    credential_repo: oidc_credential_repo.clone(),
+                    provider_service: Arc::new(
                         OpenIdProviderService::new(settings.store())
                             .with_scope_catalog(scope_catalog.clone())
                             .with_resource_repo(oauth_resource_repo.clone()),
                     ),
+                })),
+                oidc_authorize,
+                client_authorization_repo,
+                Arc::new(
+                    OpenIdProviderService::new(settings.store())
+                        .with_scope_catalog(scope_catalog.clone())
+                        .with_resource_repo(oauth_resource_repo.clone()),
                 ),
+            ),
             oidc_token: TokenService::new(TokenServiceDependencies {
                 client_authorization_repo: Arc::new(ClientAuthorizationRepositoryImpl::new(
                     db.clone(),
@@ -394,9 +388,7 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn pushed_authorization(
-        &self,
-    ) -> &identity_application::openid_connect::par::PushedAuthorizationService {
+    pub fn pushed_authorization(&self) -> &PushedAuthorizationService {
         &self.pushed_authorization
     }
 

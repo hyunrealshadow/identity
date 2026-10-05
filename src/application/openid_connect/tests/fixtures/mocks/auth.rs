@@ -1,4 +1,9 @@
 // Re-export ClientAuthorizationRepository trait types
+use identity_domain::client_authorization::PushedAuthorizationRequestData;
+
+use std::collections::HashSet;
+use uuid::Uuid;
+
 use chrono::{DateTime, Utc};
 use identity_domain::auth::SessionOid;
 use identity_domain::client::model::ClientOid;
@@ -21,7 +26,7 @@ mockall::mock! {
             digest: &str,
             client_oid: ClientOid,
             now: DateTime<Utc>,
-        ) -> Result<Option<identity_domain::client_authorization::PushedAuthorizationRequestData>, ClientAuthorizationRepositoryError>;
+        ) -> Result<Option<PushedAuthorizationRequestData>, ClientAuthorizationRepositoryError>;
 
         async fn create(
             &self,
@@ -31,63 +36,63 @@ mockall::mock! {
         ) -> Result<ClientAuthorization, ClientAuthorizationRepositoryError>;
         async fn find_by_oid(
             &self,
-            oid: uuid::Uuid,
+            oid: Uuid,
         ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError>;
         async fn update_authorization_request_selection(
             &self,
-            oid: uuid::Uuid,
+            oid: Uuid,
             session_oid: SessionOid,
-            user_oid: uuid::Uuid,
+            user_oid: Uuid,
             protected_session_id: Option<String>,
             source: SelectionSource,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn record_authorization_request_consent(
             &self,
-            oid: uuid::Uuid,
+            oid: Uuid,
             consent_state: ConsentState,
             decided_at: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn user_consented_scope_names(
             &self,
-            user_oid: uuid::Uuid,
+            user_oid: Uuid,
             client_oid: ClientOid,
         ) -> Result<Vec<String>, ClientAuthorizationRepositoryError>;
         async fn has_user_consent(
             &self,
-            user_oid: uuid::Uuid,
+            user_oid: Uuid,
             client_oid: ClientOid,
             requested_scope: &ScopeSet,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn mark_authorization_request_completed(
             &self,
-            oid: uuid::Uuid,
+            oid: Uuid,
             completed_at: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn revoke_access_tokens_for_authorization_code(
             &self,
-            authorization_code_oid: uuid::Uuid,
+            authorization_code_oid: Uuid,
         ) -> Result<(), ClientAuthorizationRepositoryError>;
         async fn revoke_if_active(
             &self,
-            oid: uuid::Uuid,
+            oid: Uuid,
             type_: ClientAuthorizationType,
             now: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn revoke_refresh_token_family(
             &self,
-            refresh_oid: uuid::Uuid,
+            refresh_oid: Uuid,
             client_oid: ClientOid,
             now: DateTime<Utc>,
         ) -> Result<(), ClientAuthorizationRepositoryError>;
         async fn revoke_access_token_for_client(
             &self,
-            access_oid: uuid::Uuid,
+            access_oid: Uuid,
             client_oid: ClientOid,
             now: DateTime<Utc>,
         ) -> Result<(), ClientAuthorizationRepositoryError>;
         async fn revoke_refresh_grant_for_client(
             &self,
-            refresh_oid: uuid::Uuid,
+            refresh_oid: Uuid,
             client_oid: ClientOid,
             now: DateTime<Utc>,
         ) -> Result<(), ClientAuthorizationRepositoryError>;
@@ -100,7 +105,7 @@ use std::sync::{Arc, Mutex};
 /// Creates a MockClientAuthorizationRepository backed by internal state,
 /// matching the previous InMemoryClientAuthorizationRepository from token tests.
 pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
-    let records: Arc<Mutex<HashMap<uuid::Uuid, ClientAuthorization>>> =
+    let records: Arc<Mutex<HashMap<Uuid, ClientAuthorization>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
     let mut mock = MockClientAuthorizationRepository::new();
@@ -110,7 +115,7 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
         .returning(move |client_oid, data, expires_at| {
             let type_ = data.authorization_type();
             let record = ClientAuthorization {
-                oid: uuid::Uuid::new_v4(),
+                oid: Uuid::new_v4(),
                 client_oid,
                 type_,
                 data,
@@ -205,7 +210,7 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
                 ),
                 _ => return Ok(()),
             };
-            let mut family = std::collections::HashSet::from([root_oid]);
+            let mut family = HashSet::from([root_oid]);
             loop {
                 let old_len = family.len();
                 for (oid, record) in records.iter() {

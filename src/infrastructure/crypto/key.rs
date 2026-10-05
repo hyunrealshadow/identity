@@ -1,4 +1,9 @@
 use josekit::jwe::{ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, RSA_OAEP, RSA_OAEP_256};
+use josekit::jwk::alg::ec::EcKeyPair;
+use josekit::jwk::alg::ecx::EcxKeyPair;
+use josekit::jwk::alg::ed::EdKeyPair;
+use josekit::jwk::alg::rsa::RsaKeyPair;
+use josekit::jwk::alg::rsapss::RsaPssKeyPair;
 use josekit::jwk::{
     Jwk, KeyPair,
     alg::{ec::EcCurve, ecx::EcxCurve, ed::EdCurve},
@@ -10,6 +15,7 @@ use openssl::{
     pkey::PKey,
     x509::X509,
 };
+use std::error::Error;
 
 use identity_domain::key::JwaSigningAlgorithm;
 use identity_domain::key::{
@@ -19,7 +25,7 @@ use identity_domain::key::{
 
 fn internal<E>(error: E) -> KeyMaterialError
 where
-    E: std::error::Error + Send + Sync + 'static,
+    E: Error + Send + Sync + 'static,
 {
     KeyMaterialError::Internal(Box::new(error))
 }
@@ -150,7 +156,7 @@ pub fn infer_algorithm_from_private_key_pem(
         return Ok(AsymmetricKeyAlgorithm::Rsa { bits });
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key_pem, None) {
+    if let Ok(key_pair) = EcKeyPair::from_pem(private_key_pem, None) {
         return Ok(match key_pair.curve() {
             EcCurve::P256 => AsymmetricKeyAlgorithm::EcdsaP256,
             EcCurve::P384 => AsymmetricKeyAlgorithm::EcdsaP384,
@@ -159,14 +165,14 @@ pub fn infer_algorithm_from_private_key_pem(
         });
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::ed::EdKeyPair::from_pem(private_key_pem) {
+    if let Ok(key_pair) = EdKeyPair::from_pem(private_key_pem) {
         return Ok(match key_pair.curve() {
             EdCurve::Ed25519 => AsymmetricKeyAlgorithm::Ed25519,
             EdCurve::Ed448 => AsymmetricKeyAlgorithm::Ed448,
         });
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::ecx::EcxKeyPair::from_pem(private_key_pem) {
+    if let Ok(key_pair) = EcxKeyPair::from_pem(private_key_pem) {
         return Ok(match key_pair.curve() {
             EcxCurve::X25519 => AsymmetricKeyAlgorithm::X25519,
             EcxCurve::X448 => AsymmetricKeyAlgorithm::X448,
@@ -271,9 +277,7 @@ fn primary_jwa_algorithm_for_private_key(
 fn primary_rsa_pss_jwa_algorithm(
     private_key_pem: &str,
 ) -> Result<Option<JwaSigningAlgorithm>, KeyMaterialError> {
-    if josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(private_key_pem, None, None, None)
-        .is_err()
-    {
+    if RsaPssKeyPair::from_pem(private_key_pem, None, None, None).is_err() {
         return Ok(None);
     }
 
@@ -296,25 +300,23 @@ fn primary_rsa_pss_jwa_algorithm(
 fn public_jwk_from_private_key_pem_without_alg(
     private_key_pem: &str,
 ) -> Result<Jwk, KeyMaterialError> {
-    if let Ok(key_pair) =
-        josekit::jwk::alg::rsapss::RsaPssKeyPair::from_pem(private_key_pem, None, None, None)
-    {
+    if let Ok(key_pair) = RsaPssKeyPair::from_pem(private_key_pem, None, None, None) {
         return Ok(key_pair.to_jwk_public_key());
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::rsa::RsaKeyPair::from_pem(private_key_pem) {
+    if let Ok(key_pair) = RsaKeyPair::from_pem(private_key_pem) {
         return Ok(key_pair.to_jwk_public_key());
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::ec::EcKeyPair::from_pem(private_key_pem, None) {
+    if let Ok(key_pair) = EcKeyPair::from_pem(private_key_pem, None) {
         return Ok(key_pair.to_jwk_public_key());
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::ed::EdKeyPair::from_pem(private_key_pem) {
+    if let Ok(key_pair) = EdKeyPair::from_pem(private_key_pem) {
         return Ok(key_pair.to_jwk_public_key());
     }
 
-    if let Ok(key_pair) = josekit::jwk::alg::ecx::EcxKeyPair::from_pem(private_key_pem) {
+    if let Ok(key_pair) = EcxKeyPair::from_pem(private_key_pem) {
         return Ok(key_pair.to_jwk_public_key());
     }
 
@@ -334,7 +336,7 @@ fn export_public_pem(jwk: &Jwk) -> Result<String, KeyMaterialError> {
 fn export_pem(jwk: &Jwk, private: bool) -> Result<String, KeyMaterialError> {
     let pem = match jwk.key_type() {
         "RSA" => {
-            let key_pair = josekit::jwk::alg::rsa::RsaKeyPair::from_jwk(jwk).map_err(internal)?;
+            let key_pair = RsaKeyPair::from_jwk(jwk).map_err(internal)?;
             if private {
                 key_pair.to_pem_private_key()
             } else {
@@ -342,7 +344,7 @@ fn export_pem(jwk: &Jwk, private: bool) -> Result<String, KeyMaterialError> {
             }
         }
         "EC" => {
-            let key_pair = josekit::jwk::alg::ec::EcKeyPair::from_jwk(jwk).map_err(internal)?;
+            let key_pair = EcKeyPair::from_jwk(jwk).map_err(internal)?;
             if private {
                 key_pair.to_pem_private_key()
             } else {
@@ -356,8 +358,7 @@ fn export_pem(jwk: &Jwk, private: bool) -> Result<String, KeyMaterialError> {
 
             match curve {
                 "Ed25519" | "Ed448" => {
-                    let key_pair =
-                        josekit::jwk::alg::ed::EdKeyPair::from_jwk(jwk).map_err(internal)?;
+                    let key_pair = EdKeyPair::from_jwk(jwk).map_err(internal)?;
                     if private {
                         key_pair.to_pem_private_key()
                     } else {
@@ -365,8 +366,7 @@ fn export_pem(jwk: &Jwk, private: bool) -> Result<String, KeyMaterialError> {
                     }
                 }
                 "X25519" | "X448" => {
-                    let key_pair =
-                        josekit::jwk::alg::ecx::EcxKeyPair::from_jwk(jwk).map_err(internal)?;
+                    let key_pair = EcxKeyPair::from_jwk(jwk).map_err(internal)?;
                     if private {
                         key_pair.to_pem_private_key()
                     } else {

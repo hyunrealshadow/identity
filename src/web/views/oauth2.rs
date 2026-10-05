@@ -1,4 +1,8 @@
+use identity_application::openid_connect::device::DeviceVerificationStatus;
+use identity_domain::openid_connect::model::claim::StandardScopes;
+use identity_domain::openid_connect::scope_catalog::ScopeDescription;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use identity_domain::openid_connect::ScopeSet;
 
@@ -14,7 +18,7 @@ pub struct ScopeDisplay {
     pub name: String,
     pub display_name: String,
     pub description: String,
-    pub descriptions: std::collections::BTreeMap<String, String>,
+    pub descriptions: BTreeMap<String, String>,
     pub essential: bool,
     pub previously_granted: bool,
 }
@@ -57,7 +61,7 @@ pub struct DeviceConsentAccount {
 pub struct DeviceConsentPageData {
     pub login_id: String,
     pub user_code: String,
-    pub status: identity_application::openid_connect::device::DeviceVerificationStatus,
+    pub status: DeviceVerificationStatus,
     pub consent_required: bool,
     pub client_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -125,7 +129,7 @@ pub struct ErrorPageData {
 pub fn build_scope_display(
     scope: &ScopeSet,
     previously_granted: &[String],
-    descriptions: &[identity_domain::openid_connect::scope_catalog::ScopeDescription],
+    descriptions: &[ScopeDescription],
 ) -> Vec<ScopeDisplay> {
     scope
         .names()
@@ -139,8 +143,7 @@ pub fn build_scope_display(
                 description: metadata.map_or_else(String::new, |entry| entry.description.clone()),
                 descriptions: metadata
                     .map_or_else(Default::default, |entry| entry.descriptions.clone()),
-                essential: name
-                    == identity_domain::openid_connect::model::claim::StandardScopes::OPENID,
+                essential: name == StandardScopes::OPENID,
                 previously_granted: previously_granted.iter().any(|granted| granted == name),
             }
         })
@@ -149,7 +152,7 @@ pub fn build_scope_display(
 
 #[cfg(test)]
 mod tests {
-    use super::{ConsentDecision, build_scope_display};
+    use super::build_scope_display;
     use identity_domain::openid_connect::ScopeSet;
 
     #[test]
@@ -171,12 +174,6 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(names, vec!["openid", "address", "phone"]);
-    }
-
-    #[test]
-    fn consent_decision_deserializes_from_json() {
-        let decision: ConsentDecision = serde_json::from_str("\"approve\"").unwrap();
-        assert!(matches!(decision, ConsentDecision::Approve));
     }
 
     #[test]

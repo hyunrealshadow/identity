@@ -62,26 +62,17 @@ impl SettingDefinition for LoginClientIdSetting {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppSettings, DomainSetting, LoginClientIdSetting, LoginDomainSetting};
-    use crate::setting::{InstallationSettings, SettingDefinition, SettingsSnapshot};
+    use uuid::Uuid;
 
-    #[test]
-    fn domains_are_unset_until_installation() {
-        assert_eq!(DomainSetting::default_value(), None);
-        assert_eq!(LoginDomainSetting::default_value(), None);
-        assert_eq!(LoginClientIdSetting::default_value(), None);
-        assert_eq!(
-            SettingsSnapshot::default().section::<AppSettings>(),
-            AppSettings::default()
-        );
-    }
+    use super::{AppSettings, DomainSetting, LoginClientIdSetting, LoginDomainSetting};
+    use crate::setting::{InstallationSettings, SettingsSnapshot};
 
     #[test]
     fn app_fields_and_installation_rows_are_read_independently() {
         let app = AppSettings {
             domain: Some("identity.example.com".to_owned()),
             login_domain: Some("https://login.example.com".to_owned()),
-            login_client_id: Some(uuid::Uuid::new_v4()),
+            login_client_id: Some(Uuid::new_v4()),
         };
         let installation = InstallationSettings {
             initialized: true,

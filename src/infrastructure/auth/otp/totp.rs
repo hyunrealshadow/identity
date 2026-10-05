@@ -1,5 +1,7 @@
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use subtle::ConstantTimeEq as _;
-use totp_rs::{Algorithm, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 
 use identity_application::{
     auth::mfa::{GeneratedTotpEnrollment, TotpEnrollmentGenerator},
@@ -21,8 +23,8 @@ pub struct TotpVerifierImpl;
 
 impl TotpVerifier for TotpVerifierImpl {
     fn verify(&self, otp_data: &OtpCredentialData, code: &str) -> Result<Option<u64>, TotpError> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
             .map_err(|error| TotpError::Internal(error.to_string()))?
             .as_secs();
         verify_at(otp_data, code, now)
@@ -41,8 +43,7 @@ fn verify_at(
     }
     let algorithm = to_totp_algorithm(&otp_data.algorithm);
 
-    let secret = Secret::Encoded(otp_data.secret.clone())
-        .to_bytes()
+    let secret = Secret::try_from_base32(&otp_data.secret)
         .map_err(|e| TotpError::InvalidCredentialData(e.to_string()))?;
 
     let totp = build_totp(algorithm, otp_data.digits, otp_data.period, secret)?;
@@ -56,7 +57,7 @@ fn verify_at(
         let Some(candidate_time) = counter.checked_mul(u64::from(otp_data.period)) else {
             continue;
         };
-        let expected = totp.generate(candidate_time);
+        let expected = totp.generate(candidate_time).to_string();
         if bool::from(expected.as_bytes().ct_eq(code.as_bytes())) {
             return Ok(Some(counter));
         }
@@ -71,7 +72,7 @@ impl TotpEnrollmentGenerator for TotpVerifierImpl {
         account_name: &str,
     ) -> Result<GeneratedTotpEnrollment, TotpError> {
         let algorithm = OtpAlgorithm::default();
-        let secret = Secret::generate_secret().to_encoded().to_string();
+        let secret = Secret::generate().to_base32();
         let credential = OtpCredentialData {
             secret,
             digits: 6,
@@ -92,19 +93,18 @@ impl TotpEnrollmentGenerator for TotpVerifierImpl {
         account_name: &str,
         credential: &OtpCredentialData,
     ) -> Result<String, TotpError> {
-        let secret = Secret::Encoded(credential.secret.clone())
-            .to_bytes()
+        let secret = Secret::try_from_base32(&credential.secret)
             .map_err(|error| TotpError::InvalidCredentialData(error.to_string()))?;
-        TOTP::new(
+        totp_builder(
             to_totp_algorithm(&credential.algorithm),
-            credential.digits as usize,
-            TOTP_ALLOWED_SKEW_STEPS,
-            credential.period as u64,
+            credential.digits,
+            credential.period,
             secret,
-            Some(issuer.to_owned()),
-            account_name.to_owned(),
         )
-        .map(|totp| totp.get_url())
+        .with_issuer(Some(issuer))
+        .with_account_name(account_name)
+        .build()
+        .and_then(|totp| totp.to_url())
         .map_err(|error| TotpError::InvalidCredentialData(error.to_string()))
     }
 }
@@ -113,45 +113,58 @@ fn build_totp(
     algorithm: Algorithm,
     digits: u8,
     period: u32,
-    secret: Vec<u8>,
-) -> Result<TOTP, TotpError> {
-    TOTP::new(
-        algorithm,
-        digits as usize,
-        TOTP_ALLOWED_SKEW_STEPS,
-        period as u64,
-        secret,
-        None,
-        String::new(),
-    )
-    .map_err(|e| TotpError::InvalidCredentialData(e.to_string()))
+    secret: impl Into<Secret>,
+) -> Result<Totp, TotpError> {
+    totp_builder(algorithm, digits, period, secret)
+        .build()
+        .map_err(|e| TotpError::InvalidCredentialData(e.to_string()))
+}
+
+fn totp_builder(
+    algorithm: Algorithm,
+    digits: u8,
+    period: u32,
+    secret: impl Into<Secret>,
+) -> Builder {
+    Builder::new()
+        .with_algorithm(algorithm)
+        .with_digits(digits)
+        .with_skew(u16::from(TOTP_ALLOWED_SKEW_STEPS))
+        .with_step_duration(u64::from(period))
+        .with_secret(secret)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TOTP_ALLOWED_SKEW_STEPS, TotpVerifierImpl, build_totp, verify_at};
+    use totp_rs::Secret;
+
+    use super::{TotpVerifierImpl, build_totp, verify_at};
     use identity_application::auth::mfa::TotpEnrollmentGenerator;
     use identity_application::user::{OtpAlgorithm, OtpCredentialData};
     use totp_rs::Algorithm;
 
     #[test]
     fn verifier_accepts_previous_and_next_time_steps() {
-        assert_eq!(TOTP_ALLOWED_SKEW_STEPS, 1);
         let totp = build_totp(Algorithm::SHA1, 6, 30, b"01234567890123456789".to_vec()).unwrap();
+        let credential = OtpCredentialData {
+            secret: Secret::from(b"01234567890123456789".as_slice()).to_base32(),
+            digits: 6,
+            period: 30,
+            algorithm: OtpAlgorithm::Sha1,
+            last_used_counter: None,
+        };
         let now = 1_700_000_010;
-
-        assert!(totp.check(&totp.generate(now - 30), now));
-        assert!(totp.check(&totp.generate(now), now));
-        assert!(totp.check(&totp.generate(now + 30), now));
-        assert!(!totp.check(&totp.generate(now + 60), now));
+        for timestamp in [now - 60, now - 30, now, now + 30, now + 60] {
+            let code = totp.generate(timestamp).to_string();
+            let expected = (timestamp.abs_diff(now) <= 30).then_some(timestamp / 30);
+            assert_eq!(verify_at(&credential, &code, now).unwrap(), expected);
+        }
     }
 
     #[test]
     fn verifier_returns_the_exact_matching_counter() {
         let credential = OtpCredentialData {
-            secret: totp_rs::Secret::Raw(b"01234567890123456789".to_vec())
-                .to_encoded()
-                .to_string(),
+            secret: Secret::from(b"01234567890123456789".as_slice()).to_base32(),
             digits: 6,
             period: 30,
             algorithm: OtpAlgorithm::Sha1,
@@ -160,7 +173,7 @@ mod tests {
         let now = 1_700_000_010;
         let counter = (now - 30) / 30;
         let totp = build_totp(Algorithm::SHA1, 6, 30, b"01234567890123456789".to_vec()).unwrap();
-        let code = totp.generate(counter * 30);
+        let code = totp.generate(counter * 30).to_string();
 
         assert_eq!(verify_at(&credential, &code, now).unwrap(), Some(counter));
         assert_eq!(verify_at(&credential, "000000", now).unwrap(), None);

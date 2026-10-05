@@ -1,5 +1,7 @@
 use http::HeaderMap;
+use identity_domain::openid_connect::ScopeSet;
 use salvo::{Depot, Request, Response, handler};
+use url::Url;
 
 use crate::controllers::{
     response::{WebResult, app_state, log_app_error, redirect_to_response},
@@ -40,10 +42,10 @@ async fn render_error(
         .redirect_uri
         .as_deref()
         .is_none_or(str::is_empty)
-        && resolved_raw.scope.as_deref().is_none_or(|scope| {
-            !identity_domain::openid_connect::ScopeSet::parse(scope)
-                .is_ok_and(|scope| scope.contains_openid())
-        })
+        && resolved_raw
+            .scope
+            .as_deref()
+            .is_none_or(|scope| !ScopeSet::parse(scope).is_ok_and(|scope| scope.contains_openid()))
         && let Some(client_oid) = resolved_raw
             .client_id
             .as_deref()
@@ -66,7 +68,7 @@ async fn render_error(
 
     if can_redirect
         && let Some(redirect_uri) = raw.redirect_uri.as_deref()
-        && let Ok(uri) = url::Url::parse(redirect_uri)
+        && let Ok(uri) = Url::parse(redirect_uri)
     {
         let client_oid = raw
             .client_id
@@ -230,6 +232,12 @@ pub async fn authorize(depot: &mut Depot, req: &mut Request) -> WebResult {
 
 #[cfg(test)]
 mod tests {
+    use identity_infrastructure::AppState;
+    use salvo::Response;
+    use salvo::affix_state::inject;
+    use url::Url;
+    use uuid::Uuid;
+
     use crate::controllers::oauth2::tests::interaction_fixtures::authorize_first_hop_state;
     use crate::controllers::oauth2::{redirect_oauth_error_response, routes};
     use crate::controllers::shared::build_session_cookie;
@@ -244,12 +252,12 @@ mod tests {
     };
     use std::collections::HashSet;
 
-    async fn response_body_text(mut response: salvo::Response) -> String {
+    async fn response_body_text(mut response: Response) -> String {
         response.take_string().await.unwrap()
     }
 
-    async fn call_authorize(uri: &str) -> salvo::Response {
-        let app = routes().hoop(salvo::affix_state::inject(
+    async fn call_authorize(uri: &str) -> Response {
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
@@ -261,10 +269,10 @@ mod tests {
 
     async fn call_authorize_with_state(
         uri: &str,
-        state: identity_infrastructure::AppState,
+        state: AppState,
         session_cookie: Option<String>,
-    ) -> salvo::Response {
-        let app = routes().hoop(salvo::affix_state::inject(state));
+    ) -> Response {
+        let app = routes().hoop(inject(state));
         let service = Service::new(app);
 
         let request = TestClient::get(format!("http://127.0.0.1:5800{uri}"));
@@ -279,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn authorize_routes_accept_post_requests() {
-        let app = routes().hoop(salvo::affix_state::inject(
+        let app = routes().hoop(inject(
             identity_infrastructure::test_app_state_with_mock_settings().await,
         ));
         let service = Service::new(app);
@@ -375,8 +383,8 @@ mod tests {
             resources: Vec::new(),
             response_type: ResponseType::Code,
             response_mode: None,
-            client_id: uuid::Uuid::nil(),
-            redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            client_id: Uuid::nil(),
+            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             redirect_uri_was_supplied: true,
             scope: ScopeSet::parse("openid").unwrap(),
@@ -414,8 +422,8 @@ mod tests {
             resources: Vec::new(),
             response_type: ResponseType::IdToken,
             response_mode: None,
-            client_id: uuid::Uuid::nil(),
-            redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            client_id: Uuid::nil(),
+            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             redirect_uri_was_supplied: true,
             scope: ScopeSet::parse("openid").unwrap(),
@@ -444,7 +452,7 @@ mod tests {
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         let location = response.headers().get(header::LOCATION).unwrap();
-        let location = url::Url::parse(location.to_str().unwrap()).unwrap();
+        let location = Url::parse(location.to_str().unwrap()).unwrap();
         assert_eq!(location.query(), None);
         assert_eq!(
             location.fragment(),
@@ -460,8 +468,8 @@ mod tests {
             resources: Vec::new(),
             response_type: ResponseType::CodeIdToken,
             response_mode: None,
-            client_id: uuid::Uuid::nil(),
-            redirect_uri: url::Url::parse("https://client.example.com/callback").unwrap(),
+            client_id: Uuid::nil(),
+            redirect_uri: Url::parse("https://client.example.com/callback").unwrap(),
             redirect_uri_raw: "https://client.example.com/callback".to_owned(),
             redirect_uri_was_supplied: true,
             scope: ScopeSet::parse("openid").unwrap(),
@@ -490,7 +498,7 @@ mod tests {
 
         assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
         let location = response.headers().get(header::LOCATION).unwrap();
-        let location = url::Url::parse(location.to_str().unwrap()).unwrap();
+        let location = Url::parse(location.to_str().unwrap()).unwrap();
         assert_eq!(location.query(), None);
         assert_eq!(
             location.fragment(),

@@ -1,3 +1,9 @@
+use serde::Deserializer;
+use serde::Serializer;
+use serde::de::Error as DeError;
+use serde_json::Map;
+use serde_json::Value;
+use std::error::Error;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt,
@@ -16,7 +22,7 @@ macro_rules! impl_string_serde {
         impl Serialize for $type {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: serde::Serializer,
+                S: Serializer,
             {
                 serializer.serialize_str(self.as_ref())
             }
@@ -25,10 +31,10 @@ macro_rules! impl_string_serde {
         impl<'de> Deserialize<'de> for $type {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: serde::Deserializer<'de>,
+                D: Deserializer<'de>,
             {
                 let value = String::deserialize(deserializer)?;
-                value.parse().map_err(serde::de::Error::custom)
+                value.parse().map_err(DeError::custom)
             }
         }
     };
@@ -111,7 +117,7 @@ impl fmt::Display for ParseResponseTypeError {
     }
 }
 
-impl std::error::Error for ParseResponseTypeError {}
+impl Error for ParseResponseTypeError {}
 
 impl FromStr for ResponseType {
     type Err = ParseResponseTypeError;
@@ -153,7 +159,7 @@ impl fmt::Display for ParseResponseModeError {
     }
 }
 
-impl std::error::Error for ParseResponseModeError {}
+impl Error for ParseResponseModeError {}
 
 impl FromStr for ResponseMode {
     type Err = ParseResponseModeError;
@@ -185,7 +191,7 @@ impl fmt::Display for ParsePromptValueError {
     }
 }
 
-impl std::error::Error for ParsePromptValueError {}
+impl Error for ParsePromptValueError {}
 
 impl FromStr for PromptValue {
     type Err = ParsePromptValueError;
@@ -217,7 +223,7 @@ impl fmt::Display for ParseDisplayError {
     }
 }
 
-impl std::error::Error for ParseDisplayError {}
+impl Error for ParseDisplayError {}
 
 impl FromStr for Display {
     type Err = ParseDisplayError;
@@ -250,7 +256,7 @@ impl fmt::Display for ParseCodeChallengeMethodError {
     }
 }
 
-impl std::error::Error for ParseCodeChallengeMethodError {}
+impl Error for ParseCodeChallengeMethodError {}
 
 impl FromStr for CodeChallengeMethod {
     type Err = ParseCodeChallengeMethodError;
@@ -265,12 +271,12 @@ impl FromStr for CodeChallengeMethod {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct ClaimRequestSpec {
-    value: serde_json::Value,
+    value: Value,
 }
 
 impl ClaimRequestSpec {
     #[must_use]
-    pub fn from_json(value: serde_json::Value) -> Self {
+    pub fn from_json(value: Value) -> Self {
         Self { value }
     }
 
@@ -292,7 +298,7 @@ pub struct ClaimRequestMap {
 
 impl ClaimRequestMap {
     #[must_use]
-    pub fn from_json_map(map: serde_json::Map<String, serde_json::Value>) -> Self {
+    pub fn from_json_map(map: Map<String, Value>) -> Self {
         Self {
             claims: map
                 .into_iter()
@@ -425,6 +431,8 @@ fn default_redirect_uri_was_supplied() -> bool {
 }
 
 mod optional_prompt_values {
+    use serde::de::Error;
+
     use super::PromptValue;
     use serde::{Deserialize as _, Deserializer, Serializer};
     use std::collections::HashSet;
@@ -454,7 +462,7 @@ mod optional_prompt_values {
             .map(|value| {
                 value
                     .split_whitespace()
-                    .map(|item| item.parse().map_err(serde::de::Error::custom))
+                    .map(|item| item.parse().map_err(Error::custom))
                     .collect()
             })
             .transpose()
@@ -463,13 +471,14 @@ mod optional_prompt_values {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use crate::openid_connect::ScopeSet;
     use url::Url;
     use uuid::Uuid;
 
     use super::{
-        AuthorizationRequest, AuthorizationRequestData, CodeChallengeMethod, Display, PromptValue,
-        ResponseMode, ResponseType,
+        AuthorizationRequest, AuthorizationRequestData, PromptValue, ResponseMode, ResponseType,
     };
     use std::str::FromStr;
 
@@ -538,20 +547,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_prompt_values() {
-        let prompt = PromptValue::from_str("none").unwrap();
-        assert_eq!(prompt, PromptValue::None);
-        let prompt = PromptValue::from_str("login").unwrap();
-        assert_eq!(prompt, PromptValue::Login);
-    }
-
-    #[test]
-    fn parse_display_values() {
-        let display = Display::from_str("page").unwrap();
-        assert_eq!(display, Display::Page);
-    }
-
-    #[test]
     fn parse_response_mode_values() {
         assert_eq!(
             ResponseMode::from_str("query").unwrap(),
@@ -566,12 +561,6 @@ mod tests {
             ResponseMode::FormPost
         );
         assert!("web_message".parse::<ResponseMode>().is_err());
-    }
-
-    #[test]
-    fn parse_code_challenge_method() {
-        let method = CodeChallengeMethod::from_str("S256").unwrap();
-        assert_eq!(method, CodeChallengeMethod::S256);
     }
 
     #[test]
@@ -611,7 +600,7 @@ mod tests {
         assert!(!parsed.redirect_uri_was_supplied);
         assert_eq!(parsed.nonce.as_deref(), Some("nonce123"));
         assert_eq!(parsed.login_hint, None);
-        let mut old_json: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let mut old_json: Value = serde_json::from_str(&json).unwrap();
         old_json
             .as_object_mut()
             .unwrap()

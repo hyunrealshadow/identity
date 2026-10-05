@@ -1,7 +1,12 @@
+use super::exchange::issuance_result;
 use super::signing::SignAccessTokenInput;
 use super::*;
 use crate::domain::openid_connect::TokenEndpointAuthMethod;
 use crate::observability::{BusinessEvent, EventValue};
+use chrono::Duration;
+use chrono::Utc;
+use identity_domain::client_authorization::ClientAuthenticationMode;
+use identity_domain::openid_connect::API_RESOURCE;
 
 impl TokenService {
     #[tracing::instrument(skip_all, name = "token.client_credentials")]
@@ -16,7 +21,7 @@ impl TokenService {
         event = match &result {
             Ok(_) => event.outcome("success"),
             Err(error) => {
-                let (outcome, reason) = super::exchange::issuance_result(error);
+                let (outcome, reason) = issuance_result(error);
                 event
                     .outcome(outcome)
                     .reason(reason)
@@ -118,12 +123,12 @@ impl TokenService {
                     authorization_code_oid: None,
                     refresh_token_oid: None,
                     device_authorization_oid: None,
-                    client_authentication_mode: Some(identity_domain::client_authorization::ClientAuthenticationMode::Confidential),
+                    client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
                 }),
-                chrono::Utc::now() + chrono::Duration::hours(1),
+                Utc::now() + Duration::hours(1),
             )
             .await
-            .map_err(|error| AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error))?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         event
             .attributes
             .push(("access_token_oid", EventValue::Text(record.oid.to_string())));
@@ -135,7 +140,7 @@ impl TokenService {
                 private_key_pem: &private_key_pem,
                 alg,
                 issuer: &issuer,
-                audience: identity_domain::openid_connect::API_RESOURCE,
+                audience: API_RESOURCE,
                 client_id: &client_id,
                 user_oid: &client_oid,
                 client: &client,

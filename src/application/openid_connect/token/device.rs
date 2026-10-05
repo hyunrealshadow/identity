@@ -8,6 +8,17 @@
 //! second poll of an already redeemed code cannot produce a second token set
 //! (ADR 0005).
 
+use crate::openid_connect::resource::ResourceSelection;
+use chrono::DateTime;
+use chrono::Duration;
+use chrono::Utc;
+use identity_domain::client_authorization::ClientAuthenticationMode;
+use identity_domain::client_authorization::ClientAuthorization;
+use identity_domain::openid_connect::API_RESOURCE;
+use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use tracing::Span;
+use tracing::field::display;
+
 use super::exchange::{issuance_result, resolve_client_id};
 use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
@@ -46,10 +57,9 @@ impl TokenService {
         params: DeviceCodeGrantParams,
         event: &mut BusinessEvent,
     ) -> Result<TokenResponse, AppError> {
-        let client_authentication_mode =
-            identity_domain::client_authorization::ClientAuthenticationMode::from_credentials(
-                params.client_secret.is_some() || params.client_assertion.is_some(),
-            );
+        let client_authentication_mode = ClientAuthenticationMode::from_credentials(
+            params.client_secret.is_some() || params.client_assertion.is_some(),
+        );
         let client_id = resolve_client_id(
             params.client_id,
             params.client_assertion_type,
@@ -73,9 +83,7 @@ impl TokenService {
             .client_repo
             .find_by_oid(authenticated_client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         // Re-check the grant at redemption: a client whose registration
@@ -85,19 +93,16 @@ impl TokenService {
                 .with_param("grant_type", GrantType::DeviceCode.as_str()));
         }
 
-        tracing::Span::current().record(
-            "client_oid",
-            tracing::field::display(authenticated_client_oid),
-        );
+        Span::current().record("client_oid", display(authenticated_client_oid));
 
         let digest = device_code_digest(&params.device_code);
         let record = self
             .device_repo
             .find_device_request_by_device_code_digest(&digest)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::DeviceRequestLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                TokenErrorCode::DeviceRequestLookupFailed,
+            ))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceCodeNotFound))?;
 
         if record.client_oid != authenticated_client_oid {
@@ -115,11 +120,11 @@ impl TokenService {
         };
         let issued_mode = data.client_authentication_mode.unwrap_or_else(|| {
             if client.metadata().effective_token_endpoint_auth_methods()
-                == [identity_domain::openid_connect::TokenEndpointAuthMethod::None]
+                == [TokenEndpointAuthMethod::None]
             {
-                identity_domain::client_authorization::ClientAuthenticationMode::Public
+                ClientAuthenticationMode::Public
             } else {
-                identity_domain::client_authorization::ClientAuthenticationMode::Confidential
+                ClientAuthenticationMode::Confidential
             }
         });
         if issued_mode != client_authentication_mode {
@@ -127,7 +132,7 @@ impl TokenService {
                 TokenErrorCode::DeviceCodeClientMismatch,
             ));
         }
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         if record.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::DeviceCodeExpired));
         }
@@ -163,17 +168,17 @@ impl TokenService {
             .device_repo
             .find_device_authorization_by_oid(device_authorization_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::DeviceRelationLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(
+                TokenErrorCode::DeviceRelationLookupFailed,
+            ))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceCodeRevoked))?;
         if relation.revoked_at.is_some() || relation.expires_at <= now {
             return Err(AppError::from_code(TokenErrorCode::DeviceCodeRevoked));
         }
 
-        let scope = ScopeSet::parse(&approval.approved_scope).map_err(|error| {
-            AppError::from_code(TokenErrorCode::DeviceRequestStateInvalid).with_source(error)
-        })?;
+        let scope = ScopeSet::parse(&approval.approved_scope).map_err(AppError::map_source(
+            TokenErrorCode::DeviceRequestStateInvalid,
+        ))?;
         let selection = self
             .provider_service
             .select_resources(&params.resources, &data.resources, &scope.to_scope_string())
@@ -183,16 +188,14 @@ impl TokenService {
         } else {
             &data.resources
         };
-        let user_oid = Uuid::parse_str(&approval.user_oid).map_err(|error| {
-            AppError::from_code(TokenErrorCode::DeviceRequestStateInvalid).with_source(error)
-        })?;
+        let user_oid = Uuid::parse_str(&approval.user_oid).map_err(AppError::map_source(
+            TokenErrorCode::DeviceRequestStateInvalid,
+        ))?;
         let user = self
             .user_repo
             .find_by_oid(UserOid(user_oid))
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::UserLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceCodeUserNotFound))?;
         if !user.enabled || user.locked {
             return Err(AppError::from_code(TokenErrorCode::DeviceCodeUserNotFound));
@@ -217,16 +220,16 @@ impl TokenService {
     /// Applies the persisted polling schedule to a still pending request.
     async fn poll_schedule(
         &self,
-        record: &identity_domain::client_authorization::ClientAuthorization,
-        now: chrono::DateTime<chrono::Utc>,
+        record: &ClientAuthorization,
+        now: DateTime<Utc>,
     ) -> Result<PollDecision, AppError> {
         match self
             .device_repo
             .record_device_poll(record.oid, now)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::DeviceRequestLookupFailed).with_source(error)
-            })? {
+            .map_err(AppError::map_source(
+                TokenErrorCode::DeviceRequestLookupFailed,
+            ))? {
             DevicePollOutcome::Accepted => Ok(PollDecision::Pending),
             DevicePollOutcome::TooFrequent => Ok(PollDecision::SlowDown),
             DevicePollOutcome::NotPollable => {
@@ -236,10 +239,9 @@ impl TokenService {
                     .device_repo
                     .find_device_request_by_oid(record.oid)
                     .await
-                    .map_err(|error| {
-                        AppError::from_code(TokenErrorCode::DeviceRequestLookupFailed)
-                            .with_source(error)
-                    })?;
+                    .map_err(AppError::map_source(
+                        TokenErrorCode::DeviceRequestLookupFailed,
+                    ))?;
                 let Some(current) = current else {
                     return Ok(PollDecision::Terminal(AppError::from_code(
                         TokenErrorCode::DeviceCodeNotFound,
@@ -281,13 +283,13 @@ impl TokenService {
         client_id: &str,
         approval: &DeviceAuthorizationApproval,
         scope: &ScopeSet,
-        selection: &crate::openid_connect::resource::ResourceSelection,
+        selection: &ResourceSelection,
         refresh_resources: &[String],
         user: &User,
         request_oid: Uuid,
         device_authorization_oid: Uuid,
-        now: chrono::DateTime<chrono::Utc>,
-        client_authentication_mode: identity_domain::client_authorization::ClientAuthenticationMode,
+        now: DateTime<Utc>,
+        client_authentication_mode: ClientAuthenticationMode,
     ) -> Result<TokenResponse, AppError> {
         let issuer = self.provider_service.issuer()?;
         let scope_string = selection.scope.clone();
@@ -298,7 +300,7 @@ impl TokenService {
             .load_access_token_signing_key(&configured_signing_key)
             .await?;
         let access_token_audience = if scope.has_api_scopes() {
-            identity_domain::openid_connect::API_RESOURCE
+            API_RESOURCE
         } else {
             client_id
         };
@@ -362,10 +364,7 @@ impl TokenService {
                     self.data_protector
                         .protect("refresh-token", refresh_token_oid.as_bytes())
                         .await
-                        .map_err(|error| {
-                            AppError::from_code(TokenErrorCode::SignRefreshTokenFailed)
-                                .with_source(error)
-                        })?,
+                        .map_err(AppError::map_source(TokenErrorCode::SignRefreshTokenFailed))?,
                 )
             } else {
                 None
@@ -383,7 +382,7 @@ impl TokenService {
                 device_authorization_oid: Some(device_authorization_oid.to_string()),
                 client_authentication_mode: Some(client_authentication_mode),
             }),
-            expires_at: now + chrono::Duration::hours(1),
+            expires_at: now + Duration::hours(1),
         }];
         if refresh_token.is_some() {
             records.push(PreparedAuthorizationRecord {
@@ -402,17 +401,15 @@ impl TokenService {
                     device_authorization_oid: Some(device_authorization_oid.to_string()),
                     client_authentication_mode: Some(client_authentication_mode),
                 }),
-                expires_at: now + chrono::Duration::days(30),
+                expires_at: now + Duration::days(30),
             });
         }
 
         let outcome = self
             .device_repo
-            .consume_device_request_with_tokens(request_oid, records, chrono::Utc::now())
+            .consume_device_request_with_tokens(request_oid, records, Utc::now())
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::DeviceRedemptionFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::DeviceRedemptionFailed))?;
         match outcome {
             DeviceConsumeOutcome::Consumed => {}
             DeviceConsumeOutcome::NotRedeemable => {

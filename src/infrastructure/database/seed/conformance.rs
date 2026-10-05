@@ -7,6 +7,19 @@
 //! are not already present, so re-starting a container with an existing volume
 //! is safe.
 
+use crate::auth::password::PasswordHasherImpl;
+use crate::database::seed::scope::OPENID_CONNECT_PROTOCOL;
+use identity_application::auth::password::HashOptions;
+use identity_application::auth::password::PasswordHasher;
+use identity_application::user::password::Argon2Options;
+use identity_application::user::password::Argon2Variant;
+use identity_application::user::password::Argon2Version;
+
+use chrono::DateTime;
+use sea_orm::ConnectionTrait;
+use serde_json::Value;
+use std::env;
+
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
@@ -20,7 +33,6 @@ use identity_domain::openid_connect::{GrantType, ResponseType, TokenEndpointAuth
 
 use crate::{
     application::error::AppError,
-    application::error::codes::common::CommonErrorCode,
     infrastructure::database::entity::{
         client, client_openid_connect, client_openid_connect_credential,
         client_openid_connect_platform, client_scope, scope, user, user_credential,
@@ -96,23 +108,20 @@ struct ConformanceClientSpec {
 }
 
 struct ConformanceOidcMetadataValues {
-    grant_types: serde_json::Value,
-    response_types: serde_json::Value,
-    token_endpoint_auth_methods: Option<serde_json::Value>,
-    post_logout_redirect_uris: Option<serde_json::Value>,
+    grant_types: Value,
+    response_types: Value,
+    token_endpoint_auth_methods: Option<Value>,
+    post_logout_redirect_uris: Option<Value>,
     frontchannel_logout_uri: Option<String>,
     frontchannel_logout_session_required: Option<bool>,
     backchannel_logout_uri: Option<String>,
     backchannel_logout_session_required: Option<bool>,
-    settings: serde_json::Value,
+    settings: Value,
 }
 
 /// Run the conformance seed.  Safe to call multiple times.
 pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
-    let txn = db
-        .begin()
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+    let txn = db.begin().await.map_err(AppError::internal)?;
 
     let user_oid: Uuid = USER_OID.parse().expect("USER_OID literal is valid");
     let user_cred_oid: Uuid = USER_CRED_OID
@@ -129,7 +138,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .filter(user::Column::Oid.eq(user_oid))
         .one(&txn)
         .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+        .map_err(AppError::internal)?;
 
     let user_id = if let Some(u) = existing_user {
         tracing::debug!("conformance seed: user already exists, skipping");
@@ -174,7 +183,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         }
         .insert(&txn)
         .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+        .map_err(AppError::internal)?;
 
         let _ = user_credential::ActiveModel {
             oid: Set(user_cred_oid),
@@ -187,7 +196,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         }
         .insert(&txn)
         .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+        .map_err(AppError::internal)?;
 
         tracing::info!("conformance seed: created test user");
         created_user.id
@@ -202,9 +211,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         assign_all_built_in_oidc_scopes(&txn, client_id).await?;
     }
 
-    txn.commit()
-        .await
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))?;
+    txn.commit().await.map_err(AppError::internal)?;
 
     Ok(())
 }
@@ -296,9 +303,9 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
 }
 
 async fn ensure_conformance_client(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl ConnectionTrait,
     spec: &ConformanceClientSpec,
-    now: chrono::DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<i64, AppError> {
     let client_oid: Uuid = spec.oid.parse().expect("client OID literal is valid");
     let credential_oid: Uuid = spec
@@ -310,16 +317,14 @@ async fn ensure_conformance_client(
         .filter(client::Column::Oid.eq(client_oid))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
     let client_id = if let Some(row) = existing_client {
         let client_id = row.id;
         if !row.built_in {
             let mut active: client::ActiveModel = row.into();
             active.built_in = Set(true);
-            active.update(db).await.map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            active.update(db).await.map_err(AppError::internal)?;
         }
         client_id
     } else {
@@ -336,7 +341,7 @@ async fn ensure_conformance_client(
         }
         .insert(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .map_err(AppError::internal)?
         .id
     };
 
@@ -347,10 +352,10 @@ async fn ensure_conformance_client(
 }
 
 async fn ensure_conformance_oidc_metadata(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl ConnectionTrait,
     client_id: i64,
     spec: &ConformanceClientSpec,
-    now: chrono::DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<(), AppError> {
     let values = conformance_oidc_metadata_values(spec);
 
@@ -358,7 +363,7 @@ async fn ensure_conformance_oidc_metadata(
         .filter(client_openid_connect::Column::ClientId.eq(client_id))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .map_err(AppError::internal)?
         .is_some();
 
     if exists {
@@ -382,7 +387,7 @@ async fn ensure_conformance_oidc_metadata(
     }
     .insert(db)
     .await
-    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    .map_err(AppError::internal)?;
 
     Ok(())
 }
@@ -409,24 +414,24 @@ fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> Conformance
 }
 
 async fn ensure_conformance_client_secret(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl ConnectionTrait,
     client_id: i64,
     credential_oid: Uuid,
     secret: &str,
-    now: chrono::DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<(), AppError> {
     let serialized_credential =
         serialize_credential_data(OpenIdConnectCredentialData::ClientSecret {
             secret: secret.to_owned(),
         });
-    let expires_at = chrono::DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
+    let expires_at = DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
         .expect("non-expiring timestamp literal is valid");
 
     let exists = client_openid_connect_credential::Entity::find()
         .filter(client_openid_connect_credential::Column::Oid.eq(credential_oid))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .map_err(AppError::internal)?
         .is_some();
 
     if exists {
@@ -447,15 +452,15 @@ async fn ensure_conformance_client_secret(
     }
     .insert(db)
     .await
-    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    .map_err(AppError::internal)?;
 
     Ok(())
 }
 
 fn conformance_suite_uri(default_uri: &str) -> String {
-    let suite_url = std::env::var("CONFORMANCE_SUITE_URL")
+    let suite_url = env::var("CONFORMANCE_SUITE_URL")
         .unwrap_or_else(|_| "https://localhost.emobix.co.uk:8443".to_owned());
-    let alias = std::env::var("CONFORMANCE_ALIAS").ok();
+    let alias = env::var("CONFORMANCE_ALIAS").ok();
     map_conformance_suite_uri(default_uri, &suite_url, alias.as_deref())
 }
 
@@ -474,7 +479,7 @@ fn map_conformance_suite_uri(default_uri: &str, suite_url: &str, alias: Option<&
     }
 }
 
-fn conformance_redirect_uris() -> serde_json::Value {
+fn conformance_redirect_uris() -> Value {
     serde_json::json!([
         conformance_suite_uri("https://localhost.emobix.co.uk:8443/test/a/identity/callback"),
         conformance_suite_uri(
@@ -504,7 +509,7 @@ fn conformance_redirect_uris() -> serde_json::Value {
     ])
 }
 
-fn conformance_post_logout_redirect_uris() -> serde_json::Value {
+fn conformance_post_logout_redirect_uris() -> Value {
     serde_json::json!([
         conformance_suite_uri(
             "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
@@ -530,7 +535,7 @@ fn conformance_backchannel_logout_uri() -> String {
     )
 }
 
-fn conformance_client_settings() -> serde_json::Value {
+fn conformance_client_settings() -> Value {
     serde_json::json!({
         "skip_consent": true,
         "include_scoped_claims_in_id_token": false,
@@ -539,7 +544,7 @@ fn conformance_client_settings() -> serde_json::Value {
 }
 
 async fn ensure_web_platform_redirect_uri(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl ConnectionTrait,
     client_id: i64,
 ) -> Result<(), AppError> {
     let exists = client_openid_connect_platform::Entity::find()
@@ -547,7 +552,7 @@ async fn ensure_web_platform_redirect_uri(
         .filter(client_openid_connect_platform::Column::Platform.eq("web"))
         .one(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?
+        .map_err(AppError::internal)?
         .is_some();
 
     if exists {
@@ -564,71 +569,39 @@ async fn ensure_web_platform_redirect_uri(
     }
     .insert(db)
     .await
-    .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    .map_err(AppError::internal)?;
 
     Ok(())
 }
 
 /// Hash `CONFORMANCE_PASSWORD` with the same Argon2id defaults the app uses,
 /// and return the serialised `Password` JSON value ready for the DB.
-fn hash_conformance_password() -> Result<serde_json::Value, AppError> {
-    use crate::application::user::password::{
-        Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password,
-    };
-    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
-    use rand_core::OsRng;
+fn hash_conformance_password() -> Result<Value, AppError> {
+    let password = PasswordHasherImpl::new()
+        .hash(
+            CONFORMANCE_PASSWORD,
+            &HashOptions::Argon2(Argon2Options {
+                variant: Argon2Variant::Argon2id,
+                version: Argon2Version::Argon2013,
+                time_cost: 1,
+                memory_cost: 4_096,
+                parallelism: 1,
+            }),
+        )
+        .map_err(AppError::internal)?;
 
-    let salt = SaltString::generate(&mut OsRng);
-    let params = argon2::Params::new(4_096, 1, 1, None).map_err(|e| {
-        AppError::from_code(CommonErrorCode::InternalError)
-            .with_source(std::io::Error::other(e.to_string()))
-    })?;
-    let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
-    let hash = argon2
-        .hash_password(CONFORMANCE_PASSWORD.as_bytes(), &salt)
-        .map_err(|e| {
-            AppError::from_code(CommonErrorCode::InternalError)
-                .with_source(std::io::Error::other(e.to_string()))
-        })?;
-
-    // Extract just the hash bytes (not the full PHC string) to match the
-    // format produced by the normal hash() function in the infrastructure layer.
-    let hash_bytes = hash
-        .hash
-        .ok_or_else(|| {
-            AppError::from_code(CommonErrorCode::InternalError)
-                .with_source(std::io::Error::other("missing hash output"))
-        })?
-        .to_string();
-    let salt_b64 = salt.as_str().to_owned();
-
-    let password = Password::Argon2(Argon2Password {
-        hash: hash_bytes,
-        salt: salt_b64,
-        options: Argon2Options {
-            variant: Argon2Variant::Argon2id,
-            version: Argon2Version::Argon2013,
-            time_cost: 1,
-            memory_cost: 4_096,
-            parallelism: 1,
-        },
-    });
-
-    serde_json::to_value(&password)
-        .map_err(|e| AppError::from_code(CommonErrorCode::InternalError).with_source(e))
+    serde_json::to_value(&password).map_err(AppError::internal)
 }
 
 async fn assign_all_built_in_oidc_scopes(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl ConnectionTrait,
     client_id: i64,
 ) -> Result<(), AppError> {
-    use crate::database::seed::scope::OPENID_CONNECT_PROTOCOL;
-
     let scopes = scope::Entity::find()
         .filter(scope::Column::Protocol.eq(OPENID_CONNECT_PROTOCOL))
         .all(db)
         .await
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+        .map_err(AppError::internal)?;
 
     for scope in scopes {
         let existing = client_scope::Entity::find()
@@ -636,9 +609,7 @@ async fn assign_all_built_in_oidc_scopes(
             .filter(client_scope::Column::ScopeId.eq(scope.id))
             .one(db)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
 
         if existing.is_none() {
             client_scope::ActiveModel {
@@ -648,9 +619,7 @@ async fn assign_all_built_in_oidc_scopes(
             }
             .insert(db)
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?;
+            .map_err(AppError::internal)?;
         }
     }
 
@@ -659,6 +628,13 @@ async fn assign_all_built_in_oidc_scopes(
 
 #[cfg(test)]
 mod tests {
+    use super::map_conformance_suite_uri;
+
+    use super::conformance_client_specs;
+    use super::conformance_oidc_metadata_values;
+    use super::conformance_post_logout_redirect_uris;
+    use super::conformance_redirect_uris;
+
     #[test]
     fn hosted_callbacks_use_the_official_origin_and_unique_alias() {
         for endpoint in ["callback", "post_logout_redirect", "backchannel_logout"] {
@@ -666,7 +642,7 @@ mod tests {
                 "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/{endpoint}"
             );
             assert_eq!(
-                super::map_conformance_suite_uri(
+                map_conformance_suite_uri(
                     &original,
                     "https://www.certification.openid.net/",
                     Some("identity-123-backchannel"),
@@ -680,7 +656,7 @@ mod tests {
 
     #[test]
     fn conformance_redirect_uris_include_active_plan_aliases() {
-        let redirect_uris = super::conformance_redirect_uris();
+        let redirect_uris = conformance_redirect_uris();
         let redirect_uris = redirect_uris.as_array().unwrap();
         let redirect_uris = redirect_uris
             .iter()
@@ -722,7 +698,7 @@ mod tests {
 
     #[test]
     fn conformance_post_logout_redirect_uris_include_rp_init_logout_alias() {
-        let uris = super::conformance_post_logout_redirect_uris();
+        let uris = conformance_post_logout_redirect_uris();
         let uris = uris.as_array().unwrap();
         let uris = uris
             .iter()
@@ -736,7 +712,7 @@ mod tests {
 
     #[test]
     fn conformance_post_logout_redirect_uris_include_session_alias() {
-        let uris = super::conformance_post_logout_redirect_uris();
+        let uris = conformance_post_logout_redirect_uris();
         let uris = uris.as_array().unwrap();
         let uris = uris
             .iter()
@@ -750,7 +726,7 @@ mod tests {
 
     #[test]
     fn conformance_post_logout_redirect_uris_include_backchannel_alias() {
-        let uris = super::conformance_post_logout_redirect_uris();
+        let uris = conformance_post_logout_redirect_uris();
         let uris = uris.as_array().unwrap();
         let uris = uris
             .iter()
@@ -764,17 +740,17 @@ mod tests {
 
     #[test]
     fn conformance_oidc_metadata_values_include_post_logout_redirect_uris() {
-        let values = super::conformance_oidc_metadata_values(&super::conformance_client_specs()[0]);
+        let values = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
 
         assert_eq!(
             values.post_logout_redirect_uris,
-            Some(super::conformance_post_logout_redirect_uris())
+            Some(conformance_post_logout_redirect_uris())
         );
     }
 
     #[test]
     fn conformance_oidc_metadata_values_include_frontchannel_logout_metadata() {
-        let values = super::conformance_oidc_metadata_values(&super::conformance_client_specs()[0]);
+        let values = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
 
         assert_eq!(
             values.frontchannel_logout_uri.as_deref(),
@@ -787,7 +763,7 @@ mod tests {
 
     #[test]
     fn conformance_oidc_metadata_values_include_backchannel_logout_metadata() {
-        let values = super::conformance_oidc_metadata_values(&super::conformance_client_specs()[0]);
+        let values = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
 
         assert_eq!(
             values.backchannel_logout_uri.as_deref(),

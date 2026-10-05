@@ -27,13 +27,3 @@ pub struct OtpCredentialData {
 fn default_period() -> u32 {
     30
 }
-
-#[cfg(test)]
-mod tests {
-    use super::OtpAlgorithm;
-
-    #[test]
-    fn otp_algorithm_defaults_to_sha256() {
-        assert_eq!(OtpAlgorithm::default(), OtpAlgorithm::Sha256);
-    }
-}

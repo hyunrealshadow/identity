@@ -12,12 +12,14 @@ use openssl::{
         extension::{BasicConstraints, KeyUsage, SubjectAlternativeName, SubjectKeyIdentifier},
     },
 };
+use std::error::Error;
+use url::Url;
 
 use identity_domain::key::{generator::KeyMaterialError, model::AsymmetricKeyAlgorithm};
 
 fn internal<E>(error: E) -> KeyMaterialError
 where
-    E: std::error::Error + Send + Sync + 'static,
+    E: Error + Send + Sync + 'static,
 {
     KeyMaterialError::Internal(Box::new(error))
 }
@@ -110,9 +112,9 @@ pub fn generate_self_signed_certificate(
 fn certificate_dns_name(domain: &str) -> Option<String> {
     let domain = domain.trim();
     let url = if domain.contains("://") {
-        url::Url::parse(domain).ok()?
+        Url::parse(domain).ok()?
     } else {
-        url::Url::parse(&format!("https://{domain}")).ok()?
+        Url::parse(&format!("https://{domain}")).ok()?
     };
     let host = url.host_str()?.trim_end_matches('.');
     (!host.is_empty()).then(|| host.to_owned())

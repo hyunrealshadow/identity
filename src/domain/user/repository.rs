@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use std::error::Error as StdError;
 use thiserror::Error;
 
 use crate::user::{User, UserOid, UserTheme};
@@ -7,7 +8,7 @@ use crate::user::{User, UserOid, UserTheme};
 #[derive(Debug, Error)]
 pub enum UserRepositoryError {
     #[error("failed to query user")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("user not found")]
     UserNotFound,
@@ -22,10 +23,10 @@ pub enum UserRepositoryError {
     InvalidStoredTheme,
 
     #[error("failed to update failed attempts")]
-    UpdateFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
+    UpdateFailedAttempts(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to reset failed attempts")]
-    ResetFailedAttempts(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ResetFailedAttempts(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 // ─── UserRepository ──────────────────────────────────────────────────────────

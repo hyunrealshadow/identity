@@ -1,4 +1,10 @@
+use crate::key::runtime::RuntimeKeyRingProvider;
+use crate::observability::EventSink;
+use crate::observability::NoopEventSink;
+use crate::openid_connect::client_authentication::ClientAuthenticator;
+use crate::openid_connect::client_authentication::ClientAuthenticatorDependencies;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use identity_domain::openid_connect::ClientAssertionType;
 use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -40,7 +46,7 @@ pub struct AuthorizationCodeGrantParams {
     pub code_verifier: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
-    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion_type: Option<ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
@@ -51,7 +57,7 @@ pub struct DeviceCodeGrantParams {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
-    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion_type: Option<ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
@@ -64,7 +70,7 @@ pub struct RefreshTokenGrantParams {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
-    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion_type: Option<ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
@@ -75,7 +81,7 @@ pub struct ClientCredentialsGrantParams {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
-    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion_type: Option<ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
@@ -85,7 +91,7 @@ pub struct TokenRevocationParams {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub client_secret_basic: bool,
-    pub client_assertion_type: Option<identity_domain::openid_connect::ClientAssertionType>,
+    pub client_assertion_type: Option<ClientAssertionType>,
     pub client_assertion: Option<String>,
 }
 
@@ -111,7 +117,7 @@ pub enum TokenType {
 }
 
 pub struct TokenService {
-    client_authentication: Arc<crate::openid_connect::client_authentication::ClientAuthenticator>,
+    client_authentication: Arc<ClientAuthenticator>,
     device_repo: Arc<dyn DeviceAuthorizationRepository>,
     client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
     key_repo: Arc<dyn KeyRepository>,
@@ -122,9 +128,9 @@ pub struct TokenService {
     provider_service: Arc<OpenIdProviderService>,
     signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     data_protector: Arc<dyn DataProtector>,
-    runtime_key_ring: Option<Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>>,
+    runtime_key_ring: Option<Arc<dyn RuntimeKeyRingProvider>>,
     session_repo: Option<Arc<dyn SessionRepository>>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 pub struct TokenServiceDependencies {
@@ -142,15 +148,12 @@ pub struct TokenServiceDependencies {
 
 impl TokenService {
     pub fn new(deps: TokenServiceDependencies) -> Self {
-        let client_authentication = Arc::new(
-            crate::openid_connect::client_authentication::ClientAuthenticator::new(
-                crate::openid_connect::client_authentication::ClientAuthenticatorDependencies {
-                    client_repo: Arc::clone(&deps.client_repo),
-                    credential_repo: Arc::clone(&deps.credential_repo),
-                    provider_service: Arc::clone(&deps.provider_service),
-                },
-            ),
-        );
+        let client_authentication =
+            Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {
+                client_repo: Arc::clone(&deps.client_repo),
+                credential_repo: Arc::clone(&deps.credential_repo),
+                provider_service: Arc::clone(&deps.provider_service),
+            }));
 
         Self {
             client_authentication,
@@ -166,7 +169,7 @@ impl TokenService {
             data_protector: deps.data_protector,
             runtime_key_ring: None,
             session_repo: None,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
@@ -174,7 +177,7 @@ impl TokenService {
     /// events are dropped silently, which keeps tests and tools independent
     /// from the observability pipeline.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
@@ -182,7 +185,7 @@ impl TokenService {
     #[must_use]
     pub fn with_runtime_key_ring(
         mut self,
-        runtime_key_ring: Arc<dyn crate::key::runtime::RuntimeKeyRingProvider>,
+        runtime_key_ring: Arc<dyn RuntimeKeyRingProvider>,
     ) -> Self {
         self.runtime_key_ring = Some(runtime_key_ring);
         self

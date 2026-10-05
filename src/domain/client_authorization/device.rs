@@ -6,6 +6,8 @@
 //! [`DeviceAuthorizationData`] relation that outlives both the request and the
 //! browser session used to approve it (ADR 0004).
 
+use super::model::ClientAuthenticationMode;
+
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -128,7 +130,7 @@ pub struct DeviceAuthorizationRequestData {
     pub device_authorization_oid: Option<Uuid>,
     /// The mode established when the device request was created.
     #[serde(default)]
-    pub client_authentication_mode: Option<super::model::ClientAuthenticationMode>,
+    pub client_authentication_mode: Option<ClientAuthenticationMode>,
 }
 
 /// Long-lived grant established by approving a device request.

@@ -1,3 +1,9 @@
+use identity_application::setting::InstallationSettings;
+use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
+use identity_infrastructure::auth::workload::build_login_workload_authenticator;
+use identity_infrastructure::database::repository::setting::read_section;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -172,10 +178,8 @@ impl AppBuilder {
             .expect("runtime settings must be loaded first");
 
         let workload_authenticator =
-            identity_infrastructure::auth::workload::build_login_workload_authenticator(
-                &self.config.internal.workloads.login,
-            )
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+            build_login_workload_authenticator(&self.config.internal.workloads.login)
+                .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
 
         self.services = Some(Arc::new(AppServices::from_db_with_workload_auth(
             db,
@@ -207,10 +211,7 @@ impl AppBuilder {
     }
 }
 
-async fn is_installed(db: &sea_orm::DatabaseConnection) -> AppResult<bool> {
-    use identity_application::setting::InstallationSettings;
-    use identity_infrastructure::database::repository::setting::read_section;
-
+async fn is_installed(db: &DatabaseConnection) -> AppResult<bool> {
     Ok(read_section::<InstallationSettings, _>(db)
         .await?
         .initialized)
@@ -224,7 +225,7 @@ fn build_install_service(settings: &AppRuntimeSettings, db: DatabaseConnection) 
         certificate_generator: Arc::new(CertificateGeneratorImpl),
         repository: Arc::new(InstallRepositoryImpl::new(db)),
         runtime_key_ring: settings.key_ring(),
-        client_secret_lifetime: identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME,
+        client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
     }
 }
 

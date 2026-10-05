@@ -1,5 +1,7 @@
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
+use chrono::Utc;
+use identity_domain::openid_connect::ClaimsRequestSection;
 
 #[test]
 fn validate_request_object_claims_rejects_future_issued_at() {
@@ -11,7 +13,7 @@ fn validate_request_object_claims_rejects_future_issued_at() {
         "redirect_uri": "https://client.example.com/callback",
         "scope": "openid profile",
         "state": "state-123",
-        "iat": chrono::Utc::now().timestamp() + 60,
+        "iat": Utc::now().timestamp() + 60,
     });
 
     let result = AuthorizeService::validate_request_object_claims(
@@ -209,7 +211,7 @@ fn validate_request_object_claims_rejects_expired_request_object() {
         code_challenge_method: None,
     };
     let payload = serde_json::json!({
-        "exp": chrono::Utc::now().timestamp() - 60
+        "exp": Utc::now().timestamp() - 60
     });
 
     let result = AuthorizeService::validate_request_object_claims(
@@ -247,7 +249,7 @@ fn validate_request_object_claims_rejects_future_not_before() {
         code_challenge_method: None,
     };
     let payload = serde_json::json!({
-        "nbf": chrono::Utc::now().timestamp() + 60
+        "nbf": Utc::now().timestamp() + 60
     });
 
     let result = AuthorizeService::validate_request_object_claims(
@@ -265,7 +267,6 @@ fn parse_claims_request_accepts_round_trip_serialization() {
     // stores `claims` by serializing a `ClaimsRequest`. A serialized
     // `ClaimsRequest` may carry `"id_token": null` (or omit it); re-parsing
     // such a document must not fail with ClaimsFieldNotObject.
-    use identity_domain::openid_connect::ClaimsRequestSection;
 
     let parsed =
         AuthorizeService::parse_claims_request(r#"{"userinfo":{"name":{"essential":true}}}"#)

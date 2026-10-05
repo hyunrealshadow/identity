@@ -1,3 +1,4 @@
+use sea_orm::DbErr as SeaOrmDbErr;
 use std::time::Duration;
 
 use migration::{DbErr, Migrator, MigratorTrait};
@@ -10,7 +11,7 @@ pub mod query;
 pub mod repository;
 pub mod seed;
 
-pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, sea_orm::DbErr> {
+pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, SeaOrmDbErr> {
     let mut options = ConnectOptions::new(config.uri.clone());
     options.sqlx_logging(config.enable_logging);
     options.connect_timeout(Duration::from_millis(config.connect_timeout));

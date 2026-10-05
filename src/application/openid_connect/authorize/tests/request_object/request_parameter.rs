@@ -1,11 +1,12 @@
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
+use identity_domain::openid_connect::API_RESOURCE;
 
 #[tokio::test]
 async fn signed_request_object_preserves_resource_through_parsing_and_merge() {
     let (private_key, public_key) = signing_keypair();
     let service = authorize_service_with_public_key(public_key);
-    let resource = identity_domain::openid_connect::API_RESOURCE;
+    let resource = API_RESOURCE;
     let raw = signed_request_object(&private_key, [("resource", json!(resource))]);
     let client = service
         .client_repo

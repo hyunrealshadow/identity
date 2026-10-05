@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+use uuid::Uuid;
 
 use std::{fmt, str::FromStr};
 
@@ -71,7 +73,7 @@ impl FromStr for JwkAlgorithm {
     derive_more::From,
     derive_more::Into,
 )]
-pub struct KeyJwkOid(pub uuid::Uuid);
+pub struct KeyJwkOid(pub Uuid);
 
 #[derive(Debug, Clone)]
 pub struct KeyJwk {
@@ -165,16 +167,16 @@ impl PublicJwk {
 #[derive(Debug, thiserror::Error)]
 pub enum KeyJwkRepositoryError {
     #[error("failed to create jwk bindings")]
-    CreateBatchFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    CreateBatchFailed(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("failed to list jwk bindings by key")]
-    ListByKeyFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ListByKeyFailed(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("failed to list active jwk bindings")]
-    ListActiveFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ListActiveFailed(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("failed to delete jwk bindings")]
-    DeleteByKeyFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    DeleteByKeyFailed(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("invalid public jwk: {0}")]
     InvalidPublicJwk(String),

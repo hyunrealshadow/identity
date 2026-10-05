@@ -1,5 +1,8 @@
 //! Current SeaORM persistence entity.
 
+use super::client::Entity as ClientEntity;
+use super::scope::Entity as ScopeEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -36,13 +39,13 @@ pub enum Relation {
     Scope,
 }
 
-impl Related<super::client::Entity> for Entity {
+impl Related<ClientEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Client.def()
     }
 }
 
-impl Related<super::scope::Entity> for Entity {
+impl Related<ScopeEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Scope.def()
     }

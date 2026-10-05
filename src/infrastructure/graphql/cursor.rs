@@ -1,3 +1,8 @@
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::marker::PhantomData;
 
 use async_graphql::connection::CursorType;
@@ -61,8 +66,8 @@ impl<T> Clone for ProtectedCursor<T> {
     }
 }
 
-impl<T> std::fmt::Debug for ProtectedCursor<T> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T> Debug for ProtectedCursor<T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter
             .debug_tuple("ProtectedCursor")
             .field(&"[redacted]")
@@ -118,13 +123,13 @@ pub async fn unprotect<T: CursorPayload>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidCursor;
 
-impl std::fmt::Display for InvalidCursor {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for InvalidCursor {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("invalid cursor")
     }
 }
 
-impl std::error::Error for InvalidCursor {}
+impl Error for InvalidCursor {}
 
 #[cfg(test)]
 mod tests {

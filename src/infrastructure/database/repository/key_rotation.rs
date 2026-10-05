@@ -1,10 +1,12 @@
 use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
+use chrono::Duration;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     Set, TransactionTrait, sea_query::Expr,
 };
+use std::error::Error;
 use uuid::Uuid;
 
 use identity_application::{
@@ -26,7 +28,7 @@ impl KeyRotationRepositoryImpl {
     }
 }
 
-fn internal(error: impl std::error::Error + Send + Sync + 'static) -> AppError {
+fn internal(error: impl Error + Send + Sync + 'static) -> AppError {
     AppError::from_code(CommonErrorCode::InternalError).with_source(error)
 }
 
@@ -114,9 +116,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
 
         // Asymmetric predecessors remain available for signature verification.
         // Symmetric predecessors remain loaded for decryption even after expiry.
-        let retiring_expiry = previous
-            .expires_at
-            .min((now + chrono::Duration::days(30)).into());
+        let retiring_expiry = previous.expires_at.min((now + Duration::days(30)).into());
         key::Entity::update_many()
             .col_expr(
                 key::Column::RotatedAt,

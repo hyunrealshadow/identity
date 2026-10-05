@@ -1,5 +1,7 @@
 //! Device consent is addressed by the login bound when the user code is claimed.
 
+use salvo::Response;
+
 use http::{HeaderMap, StatusCode};
 use salvo::Depot;
 
@@ -30,7 +32,7 @@ pub(super) async fn device_consent_api(
     _headers: &HeaderMap,
     depot: &Depot,
     user_code: &str,
-) -> Result<salvo::Response, AppError> {
+) -> Result<Response, AppError> {
     let description = ctx
         .services()
         .oidc_device_authorization()
@@ -52,7 +54,7 @@ pub(super) async fn device_login_consent_api(
     depot: &Depot,
     login_id: &str,
     login: &Login,
-) -> Result<salvo::Response, AppError> {
+) -> Result<Response, AppError> {
     let description = ctx
         .services()
         .oidc_device_authorization()
@@ -98,7 +100,7 @@ pub(super) async fn device_consent_submit(
     headers: &HeaderMap,
     login: &Login,
     decision: ConsentDecision,
-) -> Result<salvo::Response, AppError> {
+) -> Result<Response, AppError> {
     let actor = verification_actor(ctx, headers, login).await?;
     let decision = match decision {
         ConsentDecision::Approve => DeviceVerificationDecision::Approve,

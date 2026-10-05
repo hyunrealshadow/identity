@@ -1,5 +1,7 @@
 //! Current SeaORM persistence entity.
 
+use super::key_jwk::Entity as KeyJwkEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -27,7 +29,7 @@ pub enum Relation {
     KeyJwk,
 }
 
-impl Related<super::key_jwk::Entity> for Entity {
+impl Related<KeyJwkEntity> for Entity {
     fn to() -> RelationDef {
         Relation::KeyJwk.def()
     }

@@ -1,4 +1,5 @@
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use identity_application::{
     error::{AppError, codes::common::CommonErrorCode},
     key::{
@@ -15,7 +16,10 @@ use josekit::{
     jws::{PS256, PS384, PS512},
     util::HashAlgorithm,
 };
+use openssl::nid::Nid;
+use openssl::x509::X509;
 use rand::RngExt;
+use uuid::Uuid;
 
 use super::{
     certificate::generate_self_signed_certificate,
@@ -34,15 +38,12 @@ impl KeyRotationMaterialGenerator for KeyRotationMaterialGeneratorImpl {
                     let domain = certificate_domain(certificate)?;
                     next.certificate = Some(
                         generate_self_signed_certificate(&next.private_key, &domain, &algorithm)
-                            .map_err(|error| {
-                                AppError::from_code(CommonErrorCode::InternalError)
-                                    .with_source(error)
-                            })?,
+                            .map_err(AppError::internal)?,
                     );
                 }
                 let jwks = KeyJwkGeneratorImpl.generate(
                     &next.private_key,
-                    &uuid::Uuid::new_v4().to_string(),
+                    &Uuid::new_v4().to_string(),
                     next.certificate.as_deref(),
                 )?;
                 Ok(RotationMaterial {
@@ -55,7 +56,7 @@ impl KeyRotationMaterialGenerator for KeyRotationMaterialGeneratorImpl {
                 rand::rng().fill(&mut key_bytes);
                 Ok(RotationMaterial {
                     data: KeyData::Symmetric(SymmetricKeyData {
-                        key: base64::engine::general_purpose::STANDARD.encode(key_bytes),
+                        key: STANDARD.encode(key_bytes),
                         algorithm: previous_data.algorithm.clone(),
                     }),
                     jwks: Vec::new(),
@@ -102,19 +103,22 @@ fn generate_same_algorithm(
 }
 
 fn certificate_domain(certificate: &str) -> Result<String, AppError> {
-    use openssl::{nid::Nid, x509::X509};
-    let cert = X509::from_pem(certificate.as_bytes())
-        .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))?;
+    let cert = X509::from_pem(certificate.as_bytes()).map_err(AppError::internal)?;
     cert.subject_name()
         .entries_by_nid(Nid::COMMONNAME)
         .next()
-        .and_then(|entry| entry.data().as_utf8().ok())
-        .map(|value| value.to_string())
+        .and_then(|entry| entry.data().to_string().ok())
         .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::key::generate_all_jwks_for_key;
+    use chrono::Utc;
+    use identity_domain::key::AsymmetricKeyData;
+    use openssl::x509::X509;
+    use uuid::Uuid;
+
     use super::{KeyRotationMaterialGeneratorImpl, generate_same_algorithm};
     use crate::crypto::{
         certificate::generate_self_signed_certificate, key::AsymmetricKeyGeneratorImpl,
@@ -148,12 +152,12 @@ mod tests {
         );
         let previous_public = previous.public_key.clone();
         let key = Key {
-            oid: KeyOid(uuid::Uuid::new_v4()),
+            oid: KeyOid(Uuid::new_v4()),
             r#type: KeyType::Asymmetric,
             data: KeyData::Asymmetric(previous),
             expires_at: None,
             revoked_at: None,
-            created_at: chrono::Utc::now(),
+            created_at: Utc::now(),
             updated_at: None,
         };
 
@@ -163,8 +167,7 @@ mod tests {
         };
         assert_ne!(next.public_key, previous_public);
         assert_eq!(material.jwks[0].algorithm.as_str(), "ES256");
-        let certificate =
-            openssl::x509::X509::from_pem(next.certificate.unwrap().as_bytes()).unwrap();
+        let certificate = X509::from_pem(next.certificate.unwrap().as_bytes()).unwrap();
         assert_eq!(
             certificate
                 .subject_alt_names()
@@ -187,9 +190,7 @@ mod tests {
             let private = String::from_utf8(previous.to_pem_private_key()).unwrap();
             let (algorithm, next) = generate_same_algorithm(&private).unwrap();
             assert_eq!(algorithm, AsymmetricKeyAlgorithm::Rsa { bits: 2048 });
-            let jwks =
-                crate::crypto::key::generate_all_jwks_for_key(&next.private_key, "next", None)
-                    .unwrap();
+            let jwks = generate_all_jwks_for_key(&next.private_key, "next", None).unwrap();
             assert_eq!(jwks[0].0, expected);
         }
     }
@@ -206,16 +207,16 @@ mod tests {
             )
             .unwrap();
             let key = Key {
-                oid: KeyOid(uuid::Uuid::new_v4()),
+                oid: KeyOid(Uuid::new_v4()),
                 r#type: KeyType::Asymmetric,
-                data: KeyData::Asymmetric(identity_domain::key::AsymmetricKeyData {
+                data: KeyData::Asymmetric(AsymmetricKeyData {
                     private_key,
                     public_key: String::from_utf8(previous.to_pem_public_key()).unwrap(),
                     certificate: Some(certificate),
                 }),
                 expires_at: None,
                 revoked_at: None,
-                created_at: chrono::Utc::now(),
+                created_at: Utc::now(),
                 updated_at: None,
             };
             let rotated = KeyRotationMaterialGeneratorImpl.generate(&key).unwrap();
@@ -233,12 +234,12 @@ mod tests {
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         };
         let key = Key {
-            oid: KeyOid(uuid::Uuid::new_v4()),
+            oid: KeyOid(Uuid::new_v4()),
             r#type: KeyType::Symmetric,
             data: KeyData::Symmetric(previous_data.clone()),
             expires_at: None,
             revoked_at: None,
-            created_at: chrono::Utc::now(),
+            created_at: Utc::now(),
             updated_at: None,
         };
 

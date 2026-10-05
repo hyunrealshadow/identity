@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use serde_json::Error as SerdeJsonError;
+use std::error::Error as StdError;
 use thiserror::Error;
 
 use crate::key::{Key, KeyData, KeyOid};
@@ -7,16 +9,16 @@ use crate::key::{Key, KeyData, KeyOid};
 #[derive(Debug, Error)]
 pub enum KeyRepositoryError {
     #[error("failed to query key")]
-    QueryFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to list available keys")]
-    ListAvailableFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    ListAvailableFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to serialize key data")]
-    Serialize(#[source] serde_json::Error),
+    Serialize(#[source] SerdeJsonError),
 
     #[error("failed to deserialize key data")]
-    Deserialize(#[source] serde_json::Error),
+    Deserialize(#[source] SerdeJsonError),
 
     #[error("invalid key type: {0}")]
     InvalidKeyType(String),
@@ -25,10 +27,10 @@ pub enum KeyRepositoryError {
     CertificateRequiresAsymmetricKey,
 
     #[error("failed to create key")]
-    CreateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    CreateFailed(#[source] Box<dyn StdError + Send + Sync>),
 
     #[error("failed to update key")]
-    UpdateFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
+    UpdateFailed(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 #[async_trait]

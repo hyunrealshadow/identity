@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -7,7 +8,7 @@ use uuid::Uuid;
 use identity_domain::openid_connect::{LoginRotationPolicy, LoginRuntimeRepository};
 
 use crate::{
-    error::{AppError, codes::common::CommonErrorCode},
+    error::AppError,
     setting::{LoginClientIdSetting, SettingsSource},
 };
 
@@ -23,7 +24,7 @@ pub struct OAuthClientRuntimeConfiguration {
     pub client_id: Uuid,
     pub client_secret: String,
     pub generation: i64,
-    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub expires_at: DateTime<Utc>,
 }
 
 pub struct LoginRuntimeService {
@@ -53,9 +54,7 @@ impl LoginRuntimeService {
             .repository
             .login_runtime_config(client_oid, Utc::now())
             .await
-            .map_err(|error| {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            })?
+            .map_err(AppError::internal)?
         else {
             return Ok(None);
         };
@@ -75,7 +74,7 @@ impl LoginRuntimeService {
         self.repository
             .rotate_builtin_if_due(Utc::now(), &self.policy)
             .await
-            .map_err(|error| AppError::from_code(CommonErrorCode::InternalError).with_source(error))
+            .map_err(AppError::internal)
     }
 }
 

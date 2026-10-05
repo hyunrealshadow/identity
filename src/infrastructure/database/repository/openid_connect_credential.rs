@@ -219,6 +219,11 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
+    use chrono::Utc;
+    use identity_domain::openid_connect::OpenIdConnectCredentialData;
+    use uuid::Uuid;
+
     use super::{OpenIdConnectCredentialRepositoryImpl, deserialize_data, serialize_data};
     use crate::database::entity::client_openid_connect_credential;
     use identity_domain::openid_connect::{
@@ -236,40 +241,36 @@ mod tests {
         .unwrap();
 
         assert!(
-            matches!(data, identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret { secret } if secret == "s3cr3t")
+            matches!(data, OpenIdConnectCredentialData::ClientSecret { secret } if secret == "s3cr3t")
         );
     }
 
     #[test]
     fn serializes_client_secret_with_a_masked_hint() {
-        let serialized = serialize_data(
-            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret {
-                secret: "long-secret-value".to_owned(),
-            },
-        );
+        let serialized = serialize_data(OpenIdConnectCredentialData::ClientSecret {
+            secret: "long-secret-value".to_owned(),
+        });
 
         assert_eq!(serialized.hint, "••••alue");
         assert_eq!(serialized.data, json!({"secret": "long-secret-value"}));
 
-        let short = serialize_data(
-            identity_domain::openid_connect::OpenIdConnectCredentialData::ClientSecret {
-                secret: "tiny".to_owned(),
-            },
-        );
+        let short = serialize_data(OpenIdConnectCredentialData::ClientSecret {
+            secret: "tiny".to_owned(),
+        });
         assert_eq!(short.hint, "••••");
     }
 
     #[tokio::test]
     async fn active_lookup_filters_lifecycle_and_prefers_newest_credentials() {
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         let model = client_openid_connect_credential::Model {
             id: 1,
-            oid: uuid::Uuid::new_v4(),
+            oid: Uuid::new_v4(),
             client_id: 1,
             r#type: "client_secret".to_owned(),
             data: json!({"secret": "secret"}),
             hint: "••••cret".to_owned(),
-            expires_at: (now + chrono::Duration::days(1)).into(),
+            expires_at: (now + Duration::days(1)).into(),
             revoked_at: None,
             created_at: now.into(),
             updated_at: None,
@@ -281,7 +282,7 @@ mod tests {
 
         let credentials = repo
             .find_active_by_client_oid_and_type(
-                uuid::Uuid::nil(),
+                Uuid::nil(),
                 OpenIdConnectCredentialType::ClientSecret,
             )
             .await

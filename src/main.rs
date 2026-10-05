@@ -4,6 +4,7 @@ use identity::{
     infrastructure::observability,
     web,
 };
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
@@ -40,6 +41,6 @@ async fn main() -> AppResult<()> {
     let result = server::start_servers(&state, &config, app, internal).await;
 
     event_sink().emit(BusinessEvent::business("service.stopped").outcome("success"));
-    observability::shutdown(std::time::Duration::from_secs(5));
+    observability::shutdown(Duration::from_secs(5));
     result
 }

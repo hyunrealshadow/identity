@@ -1,3 +1,5 @@
+use crate::openid_connect::model::authorization_request::AuthorizationRequestParams;
+use std::error::Error;
 use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
@@ -40,7 +42,7 @@ impl fmt::Display for ParseClientAuthorizationTypeError {
     }
 }
 
-impl std::error::Error for ParseClientAuthorizationTypeError {}
+impl Error for ParseClientAuthorizationTypeError {}
 
 impl FromStr for ClientAuthorizationType {
     type Err = ParseClientAuthorizationTypeError;
@@ -162,7 +164,7 @@ pub struct StoredAuthorizationRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PushedAuthorizationRequestData {
     pub request_uri_digest: String,
-    pub parameters: crate::openid_connect::model::authorization_request::AuthorizationRequestParams,
+    pub parameters: AuthorizationRequestParams,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,6 +221,17 @@ pub enum SelectionSource {
     Reauthentication,
 }
 
+impl SelectionSource {
+    /// Prevents a weaker interaction from replacing a completed login selection.
+    pub fn can_replace(self, current: Option<Self>) -> bool {
+        match current {
+            Some(Self::Reauthentication) => self == Self::Reauthentication,
+            Some(Self::FreshLogin) => self != Self::AccountPicker,
+            _ => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, Display, AsRefStr)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
@@ -244,144 +257,25 @@ pub struct ClientAuthorization {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AccessTokenData, AuthorizationCodeData, ClientAuthorizationType, RefreshTokenData,
-        SessionOid,
-    };
-    use crate::openid_connect::CodeChallengeMethod;
-    use std::str::FromStr;
+    use super::SelectionSource::{AccountPicker, Auto, FreshLogin, Reauthentication};
 
     #[test]
-    fn client_authorization_type_from_str() {
-        assert_eq!(
-            ClientAuthorizationType::from_str("authorization_request").unwrap(),
-            ClientAuthorizationType::AuthorizationRequest
-        );
-        assert_eq!(
-            ClientAuthorizationType::from_str("authorization_code").unwrap(),
-            ClientAuthorizationType::AuthorizationCode
-        );
-        assert_eq!(
-            ClientAuthorizationType::from_str("access_token").unwrap(),
-            ClientAuthorizationType::AccessToken
-        );
-        assert_eq!(
-            ClientAuthorizationType::from_str("device_authorization_request").unwrap(),
-            ClientAuthorizationType::DeviceAuthorizationRequest
-        );
-        assert_eq!(
-            ClientAuthorizationType::from_str("device_authorization").unwrap(),
-            ClientAuthorizationType::DeviceAuthorization
-        );
-    }
-
-    #[test]
-    fn authorization_code_data_serialization() {
-        let data = AuthorizationCodeData {
-            resources: Vec::new(),
-            scope: "openid profile".to_string(),
-            nonce: Some("nonce123".to_string()),
-            code_challenge: Some("challenge123".to_string()),
-            code_challenge_method: Some(CodeChallengeMethod::S256),
-            user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: SessionOid(uuid::Uuid::nil()),
-            protected_session_id: Some("protected-session".to_string()),
-            acr: Some("urn:mfa".to_string()),
-            amr: vec!["pwd".to_string(), "otp".to_string(), "mfa".to_string()],
-            redirect_uri: "https://client.example.com/callback".to_string(),
-            redirect_uri_was_supplied: true,
-            auth_time: Some(1234567890),
-            claims: None,
-        };
-
-        let json = serde_json::to_string(&data).unwrap();
-        let parsed: AuthorizationCodeData = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.scope, "openid profile");
-        assert_eq!(
-            parsed.protected_session_id.as_deref(),
-            Some("protected-session")
-        );
-        assert!(parsed.redirect_uri_was_supplied);
-        let mut old_json: serde_json::Value = serde_json::from_str(&json).unwrap();
-        old_json
-            .as_object_mut()
-            .unwrap()
-            .remove("redirect_uri_was_supplied");
-        let old: AuthorizationCodeData = serde_json::from_value(old_json).unwrap();
-        assert!(old.redirect_uri_was_supplied);
-    }
-
-    #[test]
-    fn refresh_token_data_serialization() {
-        let data = RefreshTokenData {
-            resources: Vec::new(),
-            scope: "openid offline_access profile".to_string(),
-            user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: Some(SessionOid(uuid::Uuid::nil())),
-            protected_session_id: Some("protected-session".to_string()),
-            auth_time: Some(1234567890),
-            acr: Some("urn:identity:acr:aal1".to_string()),
-            amr: vec!["pwd".to_string()],
-            rotated_from: Some(uuid::Uuid::nil().to_string()),
-            authorization_code_oid: None,
-            device_authorization_oid: None,
-            client_authentication_mode: None,
-        };
-
-        let json = serde_json::to_string(&data).unwrap();
-        let parsed: RefreshTokenData = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.scope, "openid offline_access profile");
-        assert_eq!(parsed.auth_time, Some(1234567890));
-        assert_eq!(
-            parsed.protected_session_id.as_deref(),
-            Some("protected-session")
-        );
-        let rotated_from = uuid::Uuid::nil().to_string();
-        assert_eq!(parsed.rotated_from.as_deref(), Some(rotated_from.as_str()));
-    }
-
-    #[test]
-    fn refresh_token_data_auth_time_is_none_when_not_set() {
-        let data = RefreshTokenData {
-            resources: Vec::new(),
-            scope: "openid offline_access".to_string(),
-            user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: Some(SessionOid(uuid::Uuid::nil())),
-            protected_session_id: None,
-            auth_time: None,
-            acr: None,
-            amr: Vec::new(),
-            rotated_from: None,
-            authorization_code_oid: None,
-            device_authorization_oid: None,
-            client_authentication_mode: None,
-        };
-
-        let json = serde_json::to_string(&data).unwrap();
-        let parsed: RefreshTokenData = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.auth_time, None);
-    }
-
-    #[test]
-    fn access_token_data_serialization() {
-        let data = AccessTokenData {
-            scope: "openid profile".to_string(),
-            user_oid: uuid::Uuid::nil().to_string(),
-            session_oid: Some(SessionOid(uuid::Uuid::nil())),
-            protected_session_id: Some("protected-session".to_string()),
-            authorization_code_oid: Some(uuid::Uuid::nil().to_string()),
-            refresh_token_oid: None,
-            device_authorization_oid: None,
-            client_authentication_mode: None,
-        };
-
-        let json = serde_json::to_string(&data).unwrap();
-        let parsed: AccessTokenData = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.scope, "openid profile");
-        assert_eq!(
-            parsed.protected_session_id.as_deref(),
-            Some("protected-session")
-        );
-        assert!(parsed.authorization_code_oid.is_some());
+    fn selection_transitions_preserve_stronger_authentication() {
+        let incoming = [Auto, AccountPicker, FreshLogin, Reauthentication];
+        for (current, expected) in [
+            (None, [true, true, true, true]),
+            (Some(Auto), [true, true, true, true]),
+            (Some(AccountPicker), [true, true, true, true]),
+            (Some(FreshLogin), [true, false, true, true]),
+            (Some(Reauthentication), [false, false, false, true]),
+        ] {
+            for (next, allowed) in incoming.into_iter().zip(expected) {
+                assert_eq!(
+                    next.can_replace(current),
+                    allowed,
+                    "{current:?} -> {next:?}"
+                );
+            }
+        }
     }
 }

@@ -1,4 +1,11 @@
+use crate::domain::client_authorization::ConsentState;
+use crate::domain::openid_connect::OAuthErrorCode;
+use crate::domain::openid_connect::PromptValue;
+use chrono::Utc;
 use http::HeaderMap;
+use identity_application::openid_connect::authorize::AuthorizationApproval;
+use identity_infrastructure::AppState;
+use salvo::Response;
 
 use crate::{
     application::{
@@ -17,7 +24,7 @@ use super::response::{
 use crate::controllers::oauth2::finish_authorize_redirect;
 
 pub(super) async fn handle_continue(
-    ctx: &identity_infrastructure::AppState,
+    ctx: &AppState,
     headers: &HeaderMap,
     login_id: &str,
 ) -> Result<AppResponse, AppError> {
@@ -26,8 +33,7 @@ pub(super) async fn handle_continue(
         .oidc_authorize()
         .load_continue_context_by_login(login_id)
         .await?;
-    if continue_context.expires_at <= chrono::Utc::now() || continue_context.completed_at.is_some()
-    {
+    if continue_context.expires_at <= Utc::now() || continue_context.completed_at.is_some() {
         return Err(AppError::from_code(
             AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
         ));
@@ -50,12 +56,13 @@ pub(super) async fn handle_continue(
     let selected_session = selected_sessions.first();
 
     let client_skips_consent = ctx.services().oidc_authorize().should_skip_consent(&client);
-    let should_check_user_consent = stored.interaction.consent_state
-        == crate::domain::client_authorization::ConsentState::Pending
+    let should_check_user_consent = stored.interaction.consent_state == ConsentState::Pending
         && !client_skips_consent
-        && !stored.request.prompt.as_ref().is_some_and(|prompt| {
-            prompt.contains(&crate::domain::openid_connect::PromptValue::Consent)
-        });
+        && !stored
+            .request
+            .prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.contains(&PromptValue::Consent));
     let has_user_consent = match (selected_session, should_check_user_consent) {
         (Some(session), true) => {
             ctx.services()
@@ -85,7 +92,7 @@ pub(super) async fn handle_continue(
         _ => None,
     };
 
-    let mut response: salvo::Response = match determine_continue_action(
+    let mut response: Response = match determine_continue_action(
         &stored,
         &login,
         selected_session,
@@ -102,12 +109,7 @@ pub(super) async fn handle_continue(
                 .oidc_authorize()
                 .deny_authorization_request(authorization_request_id)
                 .await?;
-            continue_oauth_error_response(
-                ctx,
-                headers,
-                &request,
-                crate::domain::openid_connect::OAuthErrorCode::AccessDenied,
-            )?
+            continue_oauth_error_response(ctx, headers, &request, OAuthErrorCode::AccessDenied)?
         }
         ContinueAction::Approve {
             session_oid,
@@ -120,7 +122,7 @@ pub(super) async fn handle_continue(
             .oidc_authorize()
             .approve_authorization_request_with_protected_session_id(
                 authorization_request_id,
-                identity_application::openid_connect::authorize::AuthorizationApproval {
+                AuthorizationApproval {
                     session_oid,
                     user_oid,
                     protected_session_id: selected_protected_session_id,

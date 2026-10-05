@@ -1,3 +1,7 @@
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use serde_json::Value;
+use std::sync::Mutex;
 mod authorization_code;
 mod client_credentials;
 mod device_code;
@@ -9,15 +13,14 @@ mod resources;
 
 use crate::observability::{BusinessEvent, EventSink, EventValue};
 
-fn decode_unverified_payload(token: &str) -> serde_json::Value {
-    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+fn decode_unverified_payload(token: &str) -> Value {
     let payload = token.split('.').nth(1).unwrap();
     serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload).unwrap()).unwrap()
 }
 
 #[derive(Default)]
 struct RecordingSink {
-    events: std::sync::Mutex<Vec<BusinessEvent>>,
+    events: Mutex<Vec<BusinessEvent>>,
 }
 
 impl RecordingSink {

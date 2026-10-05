@@ -1,4 +1,7 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use josekit::jwe::deserialize_compact;
+use josekit::jwe::serialize_compact;
+use josekit::jwk::Jwk;
 use josekit::{
     JoseError,
     jwe::{
@@ -201,10 +204,10 @@ pub fn decode_with_verifier(
     Ok(payload)
 }
 
-pub fn public_jwk_to_jose(jwk: &PublicJwk) -> Result<josekit::jwk::Jwk, JoseError> {
+pub fn public_jwk_to_jose(jwk: &PublicJwk) -> Result<Jwk, JoseError> {
     let jwk_json =
         serde_json::to_vec(jwk).map_err(|error| JoseError::InvalidJwkFormat(error.into()))?;
-    josekit::jwk::Jwk::from_bytes(&jwk_json)
+    Jwk::from_bytes(&jwk_json)
 }
 
 pub fn encrypt_compact_with_public_jwk(
@@ -238,7 +241,7 @@ pub fn encrypt_compact_with_public_jwk_with_content_type(
         header.set_content_type(content_type);
     }
 
-    josekit::jwe::serialize_compact(plaintext, &header, &*encrypter)
+    serialize_compact(plaintext, &header, &*encrypter)
 }
 
 pub fn decrypt_compact_with_private_pem(
@@ -247,7 +250,7 @@ pub fn decrypt_compact_with_private_pem(
     encryption_alg: &str,
 ) -> Result<(Vec<u8>, JweHeader), JoseError> {
     let decrypter = jwe_decrypter_from_private_pem(encryption_alg, private_key_pem)?;
-    josekit::jwe::deserialize_compact(compact, &*decrypter)
+    deserialize_compact(compact, &*decrypter)
 }
 
 pub fn front_channel_hash(value: &str, alg: &str) -> Result<String, JoseError> {
@@ -271,10 +274,7 @@ pub fn front_channel_hash(value: &str, alg: &str) -> Result<String, JoseError> {
     })
 }
 
-fn jwe_encrypter_from_public_jwk(
-    alg: &str,
-    jwk: &josekit::jwk::Jwk,
-) -> Result<Box<dyn JweEncrypter>, JoseError> {
+fn jwe_encrypter_from_public_jwk(alg: &str, jwk: &Jwk) -> Result<Box<dyn JweEncrypter>, JoseError> {
     match alg {
         "RSA-OAEP" => RSA_OAEP
             .encrypter_from_jwk(jwk)

@@ -1,5 +1,14 @@
 //! Current SeaORM persistence entity.
 
+use super::client_authorization::Entity as ClientAuthorizationEntity;
+use super::client_openid_connect::Entity as ClientOpenidConnectEntity;
+use super::client_openid_connect_cors_origin::Entity as ClientOpenidConnectCorsOriginEntity;
+use super::client_openid_connect_credential::Entity as ClientOpenidConnectCredentialEntity;
+use super::client_openid_connect_platform::Entity as ClientOpenidConnectPlatformEntity;
+use super::client_scope::Entity as ClientScopeEntity;
+use super::login::Entity as LoginEntity;
+use super::user_client_consent::Entity as UserClientConsentEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -43,49 +52,49 @@ pub enum Relation {
     UserClientConsent,
 }
 
-impl Related<super::client_authorization::Entity> for Entity {
+impl Related<ClientAuthorizationEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientAuthorization.def()
     }
 }
 
-impl Related<super::client_openid_connect::Entity> for Entity {
+impl Related<ClientOpenidConnectEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnect.def()
     }
 }
 
-impl Related<super::client_openid_connect_cors_origin::Entity> for Entity {
+impl Related<ClientOpenidConnectCorsOriginEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnectCorsOrigin.def()
     }
 }
 
-impl Related<super::client_openid_connect_credential::Entity> for Entity {
+impl Related<ClientOpenidConnectCredentialEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnectCredential.def()
     }
 }
 
-impl Related<super::client_openid_connect_platform::Entity> for Entity {
+impl Related<ClientOpenidConnectPlatformEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientOpenIdConnectPlatform.def()
     }
 }
 
-impl Related<super::client_scope::Entity> for Entity {
+impl Related<ClientScopeEntity> for Entity {
     fn to() -> RelationDef {
         Relation::ClientScope.def()
     }
 }
 
-impl Related<super::login::Entity> for Entity {
+impl Related<LoginEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Login.def()
     }
 }
 
-impl Related<super::user_client_consent::Entity> for Entity {
+impl Related<UserClientConsentEntity> for Entity {
     fn to() -> RelationDef {
         Relation::UserClientConsent.def()
     }

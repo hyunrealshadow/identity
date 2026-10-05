@@ -1,8 +1,22 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use fluent_templates::FluentBundle;
+use fluent_templates::fluent_bundle::FluentArgs;
+use fluent_templates::fluent_bundle::FluentValue;
+use icu_list::ListFormatter;
+use icu_list::options::ListFormatterOptions;
+use icu_list::options::ListLength;
+use icu_locale_core::LanguageIdentifier as IcuLocaleCoreLanguageIdentifier;
+use icu_provider::DataError;
+use serde::Serialize;
+use serde_json::Value as SerdeJsonValue;
+use std::error::Error as StdError;
+use std::io::Error as IoError;
+use std::{path::PathBuf, sync::Arc};
+use tera::Error;
+use writeable::Writeable;
 
 use fluent_templates::{ArcLoader, Loader};
 use http::HeaderMap;
-use tera::{Context, Function, Tera, Value};
+use tera::{Context, Function, Kwargs, State, Tera, TeraResult, Value};
 use unic_langid::{LanguageIdentifier, langid};
 
 use crate::state::AppState;
@@ -12,29 +26,30 @@ use crate::{
 };
 
 struct LocaleAwareFluentLoader {
-    loader: Arc<ArcLoader>,
+    loader: Option<Arc<ArcLoader>>,
     default_locale: LanguageIdentifier,
 }
 
-impl Function for LocaleAwareFluentLoader {
-    fn call(&self, args: &HashMap<String, Value>) -> tera::Result<Value> {
-        let key = args
-            .get("key")
-            .and_then(Value::as_str)
-            .ok_or_else(|| tera::Error::msg("t(): missing required argument `key`"))?;
+impl Function<TeraResult<Value>> for LocaleAwareFluentLoader {
+    fn call(&self, args: Kwargs, _: &State) -> TeraResult<Value> {
+        let key = args.must_get::<String>("key")?;
 
-        let locale = match args.get("lang").and_then(Value::as_str) {
+        let locale = match args.get::<String>("lang")? {
             Some(lang) => lang
                 .parse()
-                .map_err(|e| tera::Error::msg(format!("t(): invalid `lang` value: {e}")))?,
+                .map_err(|e| Error::message(format!("t(): invalid `lang` value: {e}")))?,
             None => self.default_locale.clone(),
         };
 
-        Ok(Value::String(self.loader.lookup(&locale, key).to_string()))
+        let loader = self
+            .loader
+            .as_ref()
+            .ok_or_else(|| Error::message("t(): localization is disabled"))?;
+        Ok(Value::from(loader.lookup(&locale, &key).to_string()))
     }
 }
 
-pub fn build_i18n() -> Result<I18n, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn build_i18n() -> Result<I18n, Box<dyn StdError + Send + Sync + 'static>> {
     let path = workspace_path("assets/i18n");
     if !path.exists() {
         return Ok(I18n::disabled());
@@ -46,7 +61,7 @@ pub fn build_i18n() -> Result<I18n, Box<dyn std::error::Error + Send + Sync + 's
             register_list_function(bundle);
         })
         .build()
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+        .map_err(|e| IoError::other(e.to_string()))?;
 
     Ok(I18n::enabled(Arc::new(loader)))
 }
@@ -58,16 +73,9 @@ pub fn build_i18n() -> Result<I18n, Box<dyn std::error::Error + Send + Sync + 's
 ///   `{ LIST($fields) }`                  - conjunction (default), e.g. "A and B"
 ///   `{ LIST($fields, listType: "or") }`  - disjunction, e.g. "A or B"
 ///   `{ LIST($fields, listType: "unit") }` - unit list, e.g. "A B"
-fn register_list_function<R>(bundle: &mut fluent_templates::FluentBundle<R>) {
-    use fluent_templates::fluent_bundle::{FluentArgs, FluentValue};
-    use icu_list::{
-        ListFormatter,
-        options::{ListFormatterOptions, ListLength},
-    };
-    use writeable::Writeable;
-
+fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
     let langid = bundle.locales.first().cloned().unwrap_or(langid!("en-US"));
-    let locale: icu_locale_core::LanguageIdentifier = langid
+    let locale: IcuLocaleCoreLanguageIdentifier = langid
         .to_string()
         .parse()
         .unwrap_or_else(|_| "en-US".parse().unwrap());
@@ -80,7 +88,7 @@ fn register_list_function<R>(bundle: &mut fluent_templates::FluentBundle<R>) {
         unit: ListFormatter,
     }
 
-    let Ok(formatters) = (|| -> Result<ListFormatters, icu_provider::DataError> {
+    let Ok(formatters) = (|| -> Result<ListFormatters, DataError> {
         Ok(ListFormatters {
             and: ListFormatter::try_new_and(prefs, opts)?,
             or: ListFormatter::try_new_or(prefs, opts)?,
@@ -122,20 +130,17 @@ fn register_list_function<R>(bundle: &mut fluent_templates::FluentBundle<R>) {
 
 pub fn build_tera(
     loader: Option<Arc<ArcLoader>>,
-) -> Result<Arc<Tera>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> Result<Arc<Tera>, Box<dyn StdError + Send + Sync + 'static>> {
     let template_glob = workspace_path("assets/views/**/*");
-    let mut tera = Tera::new(template_glob.to_string_lossy().as_ref())?;
-
-    if let Some(loader) = loader {
-        tera.register_function(
-            "t",
-            LocaleAwareFluentLoader {
-                loader,
-                default_locale: langid!("en-US"),
-            },
-        );
-    }
-
+    let mut tera = Tera::new();
+    tera.register_function(
+        "t",
+        LocaleAwareFluentLoader {
+            loader,
+            default_locale: langid!("en-US"),
+        },
+    );
+    tera.load_from_glob(template_glob.to_string_lossy().as_ref())?;
     Ok(Arc::new(tera))
 }
 
@@ -167,14 +172,14 @@ fn render_with_locale(
     locale: LanguageIdentifier,
     template: &str,
     context: &Context,
-) -> tera::Result<String> {
+) -> TeraResult<String> {
     let mut tera = tera.clone();
 
     if let Some(loader) = loader {
         tera.register_function(
             "t",
             LocaleAwareFluentLoader {
-                loader,
+                loader: Some(loader),
                 default_locale: locale,
             },
         );
@@ -183,7 +188,7 @@ fn render_with_locale(
     tera.render(template, context)
 }
 
-pub fn render_view<T: serde::Serialize>(
+pub fn render_view<T: Serialize>(
     state: &AppState,
     headers: &HeaderMap,
     template: &str,
@@ -199,10 +204,10 @@ pub fn render_view<T: serde::Serialize>(
             if let Some(object) = data.as_object_mut() {
                 object
                     .entry("lang")
-                    .or_insert_with(|| Value::String(locale));
+                    .or_insert_with(|| SerdeJsonValue::String(locale));
             }
 
-            match Context::from_value(data) {
+            match Context::from_serialize(&data) {
                 Err(e) => {
                     tracing::error!(error = %e, "render_view: context build failed");
                     Err(AppError::from_code(CommonErrorCode::InternalError))

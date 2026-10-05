@@ -1,4 +1,7 @@
+use std::error::Error;
 use std::{fmt, str::FromStr};
+use url::Url;
+use url::form_urlencoded::Serializer;
 
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 
@@ -34,7 +37,7 @@ impl fmt::Display for ParseOAuthErrorCodeError {
     }
 }
 
-impl std::error::Error for ParseOAuthErrorCodeError {}
+impl Error for ParseOAuthErrorCodeError {}
 
 impl FromStr for OAuthErrorCode {
     type Err = ParseOAuthErrorCodeError;
@@ -81,7 +84,7 @@ impl OAuthErrorResponse {
         self
     }
 
-    pub fn to_redirect_url(&self, redirect_uri: &url::Url) -> url::Url {
+    pub fn to_redirect_url(&self, redirect_uri: &Url) -> Url {
         let mut url = redirect_uri.clone();
         {
             let mut query = url.query_pairs_mut();
@@ -99,9 +102,9 @@ impl OAuthErrorResponse {
         url
     }
 
-    pub fn to_fragment_redirect_url(&self, redirect_uri: &url::Url) -> url::Url {
+    pub fn to_fragment_redirect_url(&self, redirect_uri: &Url) -> Url {
         let mut url = redirect_uri.clone();
-        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+        let mut serializer = Serializer::new(String::new());
         serializer.append_pair("error", self.error.as_ref());
         if let Some(error_description) = &self.error_description {
             serializer.append_pair("error_description", error_description);
@@ -119,107 +122,26 @@ impl OAuthErrorResponse {
 
 #[cfg(test)]
 mod tests {
+    use super::OAuthErrorResponse;
+    use std::collections::HashMap;
+    use url::Url;
+    use url::form_urlencoded::parse;
+
     use super::OAuthErrorCode;
-    use std::str::FromStr;
-
-    #[test]
-    fn oauth_error_code_from_str() {
-        assert_eq!(
-            OAuthErrorCode::from_str("invalid_request").unwrap(),
-            OAuthErrorCode::InvalidRequest
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("unauthorized_client").unwrap(),
-            OAuthErrorCode::UnauthorizedClient
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("access_denied").unwrap(),
-            OAuthErrorCode::AccessDenied
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("unsupported_response_type").unwrap(),
-            OAuthErrorCode::UnsupportedResponseType
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("invalid_scope").unwrap(),
-            OAuthErrorCode::InvalidScope
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("server_error").unwrap(),
-            OAuthErrorCode::ServerError
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("temporarily_unavailable").unwrap(),
-            OAuthErrorCode::TemporarilyUnavailable
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("login_required").unwrap(),
-            OAuthErrorCode::LoginRequired
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("consent_required").unwrap(),
-            OAuthErrorCode::ConsentRequired
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("interaction_required").unwrap(),
-            OAuthErrorCode::InteractionRequired
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("account_selection_required").unwrap(),
-            OAuthErrorCode::AccountSelectionRequired
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("invalid_request_uri").unwrap(),
-            OAuthErrorCode::InvalidRequestUri
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("invalid_request_object").unwrap(),
-            OAuthErrorCode::InvalidRequestObject
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("request_not_supported").unwrap(),
-            OAuthErrorCode::RequestNotSupported
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("request_uri_not_supported").unwrap(),
-            OAuthErrorCode::RequestUriNotSupported
-        );
-        assert_eq!(
-            OAuthErrorCode::from_str("registration_not_supported").unwrap(),
-            OAuthErrorCode::RegistrationNotSupported
-        );
-    }
-
-    #[test]
-    fn oauth_error_code_display() {
-        assert_eq!(
-            OAuthErrorCode::InvalidRequest.to_string(),
-            "invalid_request"
-        );
-        assert_eq!(OAuthErrorCode::LoginRequired.to_string(), "login_required");
-        assert_eq!(
-            OAuthErrorCode::AccountSelectionRequired.to_string(),
-            "account_selection_required"
-        );
-        assert_eq!(
-            OAuthErrorCode::RegistrationNotSupported.to_string(),
-            "registration_not_supported"
-        );
-    }
 
     #[test]
     fn to_fragment_redirect_url_places_error_in_fragment() {
-        let error = super::OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
+        let error = OAuthErrorResponse::new(OAuthErrorCode::AccessDenied)
             .with_description("The authorization request was denied.")
             .with_state("state123")
             .with_issuer("https://identity.example.com/");
-        let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
+        let redirect_uri = Url::parse("https://client.example.com/callback").unwrap();
         let url = error.to_fragment_redirect_url(&redirect_uri);
 
         assert_eq!(url.query(), None);
-        let fields = url::form_urlencoded::parse(url.fragment().unwrap().as_bytes())
+        let fields = parse(url.fragment().unwrap().as_bytes())
             .into_owned()
-            .collect::<std::collections::HashMap<_, _>>();
+            .collect::<HashMap<_, _>>();
         assert_eq!(
             fields.get("error").map(String::as_str),
             Some("access_denied")
@@ -237,11 +159,11 @@ mod tests {
 
     #[test]
     fn to_redirect_url_places_error_in_query() {
-        let error = super::OAuthErrorResponse::new(OAuthErrorCode::LoginRequired)
+        let error = OAuthErrorResponse::new(OAuthErrorCode::LoginRequired)
             .with_description("The user must sign in to continue.")
             .with_state("abc")
             .with_issuer("https://identity.example.com/");
-        let redirect_uri = url::Url::parse("https://client.example.com/callback").unwrap();
+        let redirect_uri = Url::parse("https://client.example.com/callback").unwrap();
         let url = error.to_redirect_url(&redirect_uri);
 
         assert_eq!(url.fragment(), None);

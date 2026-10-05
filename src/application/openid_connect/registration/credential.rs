@@ -1,4 +1,5 @@
 use chrono::{Duration, Utc};
+use std::time::Duration as TimeDuration;
 use url::Url;
 
 use crate::{
@@ -72,26 +73,26 @@ fn reject_none_jwk_alg(jwks: &DynamicClientJwks) -> Result<(), AppError> {
 async fn fetch_jwks(jwks_uri: &Url) -> Result<DynamicClientJwks, AppError> {
     let client = remote_http_client(RemoteFetchPolicy::new(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        std::time::Duration::from_secs(5),
+        TimeDuration::from_secs(5),
         conformance_allows_invalid_certs(),
     ))
-    .map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
-    })?;
+    .map_err(AppError::map_source(
+        RegistrationErrorCode::ClientCreateFailed,
+    ))?;
 
     let body = fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
         .await
-        .map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
-        })?;
+        .map_err(AppError::map_source(
+            RegistrationErrorCode::ClientCreateFailed,
+        ))?;
 
-    serde_json::from_slice::<DynamicClientJwks>(&body).map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
-    })
+    serde_json::from_slice::<DynamicClientJwks>(&body).map_err(AppError::map_source(
+        RegistrationErrorCode::ClientCreateFailed,
+    ))
 }
 
 fn public_jwk_to_pem(jwk: &PublicJwk) -> Result<String, AppError> {
-    serde_json::to_string(jwk).map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
-    })
+    serde_json::to_string(jwk).map_err(AppError::map_source(
+        RegistrationErrorCode::ClientCreateFailed,
+    ))
 }

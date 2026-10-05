@@ -1,3 +1,5 @@
+use super::ACR_AAL1;
+use super::ACR_AAL2;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -66,12 +68,12 @@ pub struct ActiveSession {
 impl Session {
     #[must_use]
     pub fn effective_acr(&self, now: DateTime<Utc>) -> Option<&str> {
-        if self.acr.as_deref() == Some(super::ACR_AAL2)
+        if self.acr.as_deref() == Some(ACR_AAL2)
             && self
                 .acr_expires_at
                 .is_some_and(|expires_at| expires_at <= now)
         {
-            Some(super::ACR_AAL1)
+            Some(ACR_AAL1)
         } else {
             self.acr.as_deref()
         }

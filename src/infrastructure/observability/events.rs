@@ -5,6 +5,9 @@
 //! for the events provider. The queue never blocks a request: when it is full
 //! the record is dropped and reflected in [`super::metrics`].
 
+use opentelemetry::Context;
+use std::sync::mpsc::RecvTimeoutError;
+
 use std::{
     sync::{
         Arc, OnceLock,
@@ -93,12 +96,12 @@ impl EventPipeline {
                                 break;
                             }
                         }
-                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        Err(RecvTimeoutError::Timeout) => {
                             if worker_closed.load(Ordering::Acquire) && queue_is_empty() {
                                 break;
                             }
                         }
-                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                        Err(RecvTimeoutError::Disconnected) => break,
                     }
                 }
             })
@@ -229,7 +232,7 @@ fn render(event: BusinessEvent) -> RenderedEvent {
 }
 
 fn current_trace_context() -> Option<(TraceId, SpanId, TraceFlags)> {
-    opentelemetry::Context::map_current(|context| {
+    Context::map_current(|context| {
         let span = context.span();
         let span_context = span.span_context();
         span_context.is_valid().then(|| {
@@ -307,6 +310,12 @@ const fn severity_text(severity: EventSeverity) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use super::RenderedValue;
+    use opentelemetry_sdk::logs::LogExporter;
+    use std::sync::Mutex;
+    use std::thread;
+    use std::time::Instant;
+
     use std::{sync::Arc, time::Duration};
 
     use identity_application::observability::{
@@ -323,10 +332,10 @@ mod tests {
 
     #[derive(Clone, Debug, Default)]
     struct CollectingExporter {
-        records: Arc<std::sync::Mutex<Vec<String>>>,
+        records: Arc<Mutex<Vec<String>>>,
     }
 
-    impl opentelemetry_sdk::logs::LogExporter for CollectingExporter {
+    impl LogExporter for CollectingExporter {
         async fn export(&self, batch: LogBatch<'_>) -> OTelSdkResult {
             let mut records = self.records.lock().unwrap();
             for (record, _) in batch.iter() {
@@ -362,7 +371,7 @@ mod tests {
             .attributes
             .iter()
             .map(|(key, value)| match value {
-                super::RenderedValue::Text(value) => format!("{key}={value}"),
+                RenderedValue::Text(value) => format!("{key}={value}"),
                 _ => key.to_string(),
             })
             .collect();
@@ -399,9 +408,9 @@ mod tests {
             );
         }
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
-        while records.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while records.lock().unwrap().is_empty() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
         }
 
         // At least one record is eventually exported; later emits were dropped.

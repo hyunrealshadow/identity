@@ -163,6 +163,10 @@ pub async fn introspect(
 }
 #[cfg(test)]
 mod tests {
+    use crate::controllers::oauth2::routes;
+    use salvo::affix_state::inject;
+    use serde_json::Value;
+
     use http::{StatusCode, header};
     use salvo::{
         Service,
@@ -171,9 +175,7 @@ mod tests {
     #[tokio::test]
     async fn introspection_route_requires_authentication_and_token() {
         let state = identity_infrastructure::test_app_state_with_cors_origin(None).await;
-        let service = Service::new(
-            crate::controllers::oauth2::routes().hoop(salvo::affix_state::inject(state)),
-        );
+        let service = Service::new(routes().hoop(inject(state)));
         let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/introspect")
             .add_header(
                 header::CONTENT_TYPE,
@@ -188,8 +190,7 @@ mod tests {
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-store"
         );
-        let json: serde_json::Value =
-            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        let json: Value = serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
         assert_eq!(json["error"], "invalid_client");
         let response = TestClient::post("http://127.0.0.1:5800/oauth2/introspect")
             .add_header(

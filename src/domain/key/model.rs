@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use thiserror::Error;
+use uuid::Uuid;
 
 pub use super::algorithm::AsymmetricKeyAlgorithm;
 pub use super::material::{AsymmetricKeyData, KeyData, SymmetricKeyData};
@@ -19,7 +20,7 @@ pub use super::material::{AsymmetricKeyData, KeyData, SymmetricKeyData};
     derive_more::From,
     derive_more::Into,
 )]
-pub struct KeyOid(pub uuid::Uuid);
+pub struct KeyOid(pub Uuid);
 
 #[derive(Debug, Error)]
 #[error("unknown key type: {value}")]

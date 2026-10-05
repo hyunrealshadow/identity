@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::{fs, io, path::Path};
 
 use crate::config::TlsConfig;
@@ -10,7 +11,7 @@ use super::certificate::generate_self_signed_certificate;
 
 fn internal<E>(error: E) -> KeyMaterialError
 where
-    E: std::error::Error + Send + Sync + 'static,
+    E: StdError + Send + Sync + 'static,
 {
     KeyMaterialError::Internal(Box::new(error))
 }
@@ -150,6 +151,9 @@ fn write_file(path: &Path, contents: &str) -> Result<(), TlsPrepareError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::TlsTermination;
+    use std::env;
+
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -222,7 +226,7 @@ mod tests {
 
     fn config(cert_path: &Path, key_path: &Path, auto_generate: bool) -> TlsConfig {
         TlsConfig {
-            termination: crate::config::TlsTermination::Direct,
+            termination: TlsTermination::Direct,
             auto_generate,
             cert_path: cert_path.to_string_lossy().into_owned(),
             key_path: key_path.to_string_lossy().into_owned(),
@@ -237,7 +241,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("identity-tls-{label}-{unique}"));
+        let dir = env::temp_dir().join(format!("identity-tls-{label}-{unique}"));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

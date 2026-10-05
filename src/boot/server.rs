@@ -1,4 +1,14 @@
+use identity_infrastructure::observability::context::TraceTrustPolicy;
+use identity_web::middleware::RequireUpstreamHttps;
+use identity_web::middleware::TraceContextMiddleware;
+use rustls::crypto::CryptoProvider;
+use rustls::crypto::aws_lc_rs;
+use salvo::affix_state::inject;
+use salvo::conn::rustls::RustlsAcceptor;
+use salvo::conn::tcp::TcpAcceptor;
+use std::io::Error;
 use std::sync::Arc;
+use tokio::task::JoinSet;
 
 use salvo::{
     Listener, Router, Server,
@@ -41,7 +51,7 @@ pub async fn start_servers(
     let needs_separate_health = config.health.enable && !shared_health;
     let needs_separate_graphql = !shared_graphql;
     let shutdown = Arc::new(state.lifecycle().clone());
-    let mut servers = tokio::task::JoinSet::new();
+    let mut servers = JoinSet::new();
 
     match listener_mode(config) {
         ListenerMode::UpstreamTls => {
@@ -62,12 +72,10 @@ pub async fn start_servers(
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
                 let health_app = health::router(&config.health)
-                    .hoop(salvo::affix_state::inject(state.clone()))
-                    .hoop(identity_web::middleware::TraceContextMiddleware::new(
-                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
-                            config.observability.trace_context.clone(),
-                        ),
-                    ));
+                    .hoop(inject(state.clone()))
+                    .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+                        config.observability.trace_context.clone(),
+                    )));
 
                 tracing::info!(
                     environment,
@@ -85,15 +93,13 @@ pub async fn start_servers(
                 let graphql_address = graphql::bind_address(&config.graphql, &config.server);
                 let graphql_listener = build_upstream_tls_listener(&graphql_address).await?;
                 let graphql_app = graphql::router(state.clone(), &config.graphql)
-                    .hoop(identity_web::middleware::RequireUpstreamHttps::new(
+                    .hoop(RequireUpstreamHttps::new(
                         &config.server.tls.trusted_proxies,
                         &config.server.tls.direct_http_clients,
                     ))
-                    .hoop(identity_web::middleware::TraceContextMiddleware::new(
-                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
-                            config.observability.trace_context.clone(),
-                        ),
-                    ));
+                    .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+                        config.observability.trace_context.clone(),
+                    )));
                 tracing::info!(
                     environment,
                     address = graphql_address.as_str(),
@@ -125,12 +131,10 @@ pub async fn start_servers(
                 let health_address = health::bind_address(&config.health, &config.server);
                 let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
                 let health_app = health::router(&config.health)
-                    .hoop(salvo::affix_state::inject(state.clone()))
-                    .hoop(identity_web::middleware::TraceContextMiddleware::new(
-                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
-                            config.observability.trace_context.clone(),
-                        ),
-                    ));
+                    .hoop(inject(state.clone()))
+                    .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+                        config.observability.trace_context.clone(),
+                    )));
 
                 tracing::info!(
                     environment,
@@ -148,11 +152,9 @@ pub async fn start_servers(
                 let graphql_address = graphql::bind_address(&config.graphql, &config.server);
                 let graphql_listener = build_https_listener(config, &graphql_address).await?;
                 let graphql_app = graphql::router(state.clone(), &config.graphql).hoop(
-                    identity_web::middleware::TraceContextMiddleware::new(
-                        identity_infrastructure::observability::context::TraceTrustPolicy::new(
-                            config.observability.trace_context.clone(),
-                        ),
-                    ),
+                    TraceContextMiddleware::new(TraceTrustPolicy::new(
+                        config.observability.trace_context.clone(),
+                    )),
                 );
                 tracing::info!(
                     environment,
@@ -172,7 +174,7 @@ pub async fn start_servers(
     while let Some(result) = servers.join_next().await {
         result??;
         if !state.lifecycle().shutdown_requested() {
-            return Err(std::io::Error::other("HTTP listener stopped unexpectedly").into());
+            return Err(Error::other("HTTP listener stopped unexpectedly").into());
         }
     }
 
@@ -183,7 +185,7 @@ async fn serve_with_shutdown<A>(
     acceptor: A,
     app: Router,
     lifecycle: Arc<AppLifecycle>,
-) -> Result<(), std::io::Error>
+) -> Result<(), Error>
 where
     A: Acceptor + Send,
 {
@@ -212,7 +214,7 @@ fn listener_mode(config: &AppConfig) -> ListenerMode {
     }
 }
 
-async fn build_upstream_tls_listener(address: &str) -> AppResult<salvo::conn::tcp::TcpAcceptor> {
+async fn build_upstream_tls_listener(address: &str) -> AppResult<TcpAcceptor> {
     tracing::info!(
         address,
         mode = "upstream-tls",
@@ -224,7 +226,7 @@ async fn build_upstream_tls_listener(address: &str) -> AppResult<salvo::conn::tc
 async fn build_https_listener(
     config: &AppConfig,
     address: &str,
-) -> AppResult<salvo::conn::rustls::RustlsAcceptor<salvo::conn::tcp::TcpAcceptor>> {
+) -> AppResult<RustlsAcceptor<TcpAcceptor>> {
     let material = prepare_tls_material(&config.server.tls)?;
     log_tls_startup(address, config, material.mode);
     ensure_rustls_crypto_provider();
@@ -242,8 +244,6 @@ async fn build_https_listener(
 }
 
 fn ensure_rustls_crypto_provider() {
-    use rustls::crypto::{CryptoProvider, aws_lc_rs};
-
     if CryptoProvider::get_default().is_none() {
         let _ = aws_lc_rs::default_provider().install_default();
     }
@@ -270,6 +270,8 @@ fn log_tls_startup(address: &str, config: &AppConfig, mode: TlsMode) {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use std::{
         fs,
         path::PathBuf,
@@ -338,7 +340,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("identity-boot-{label}-{unique}"));
+        let dir = env::temp_dir().join(format!("identity-boot-{label}-{unique}"));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

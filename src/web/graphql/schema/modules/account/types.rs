@@ -1,4 +1,7 @@
 use async_graphql::{Error, ID, InputObject, MaybeUndefined, Object, Result};
+use chrono::DateTime;
+use chrono::Utc;
+use identity_domain::user::UserTheme;
 use identity_domain::user::{User, repository::UserProfilePatch};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
@@ -78,16 +81,14 @@ impl UserNode {
     }
 
     async fn theme(&self) -> Option<&str> {
-        self.user
-            .theme
-            .map(identity_domain::user::UserTheme::as_str)
+        self.user.theme.map(UserTheme::as_str)
     }
 
-    async fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+    async fn created_at(&self) -> DateTime<Utc> {
         self.user.created_at
     }
 
-    async fn updated_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+    async fn updated_at(&self) -> Option<DateTime<Utc>> {
         self.user.updated_at
     }
 }

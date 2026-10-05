@@ -1,5 +1,7 @@
 //! Current SeaORM persistence entity.
 
+use super::key::Entity as KeyEntity;
+
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::compact_model]
@@ -30,7 +32,7 @@ pub enum Relation {
     Key,
 }
 
-impl Related<super::key::Entity> for Entity {
+impl Related<KeyEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Key.def()
     }

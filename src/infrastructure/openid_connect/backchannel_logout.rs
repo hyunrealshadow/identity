@@ -1,3 +1,8 @@
+use http::HeaderMap;
+use identity_application::observability::outbound_trace;
+use reqwest::Client;
+use reqwest::Error;
+use reqwest::redirect::Policy;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -7,13 +12,13 @@ use identity_application::openid_connect::logout::{
 use tracing::Instrument as _;
 
 pub struct HttpBackChannelLogoutSender {
-    client: reqwest::Client,
+    client: Client,
 }
 
 impl HttpBackChannelLogoutSender {
-    pub fn new(allow_invalid_certs: bool) -> Result<Self, reqwest::Error> {
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+    pub fn new(allow_invalid_certs: bool) -> Result<Self, Error> {
+        let client = Client::builder()
+            .redirect(Policy::none())
             .timeout(Duration::from_secs(5))
             .danger_accept_invalid_certs(allow_invalid_certs)
             .build()?;
@@ -27,8 +32,8 @@ impl BackChannelLogoutSender for HttpBackChannelLogoutSender {
         &self,
         notification: &BackChannelLogoutNotification,
     ) -> BackChannelLogoutDelivery {
-        let trace = identity_application::observability::outbound_trace();
-        let mut headers = http::HeaderMap::new();
+        let trace = outbound_trace();
+        let mut headers = HeaderMap::new();
         trace.inject(&notification.logout_uri, &mut headers);
         let span = trace.client_span("POST", &notification.logout_uri);
         let result = self
@@ -68,6 +73,8 @@ impl BackChannelLogoutSender for HttpBackChannelLogoutSender {
 
 #[cfg(test)]
 mod tests {
+    use tokio::net::TcpListener;
+
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use url::Url;
@@ -75,7 +82,7 @@ mod tests {
 
     #[tokio::test]
     async fn posts_logout_token_as_form_and_reports_response_status() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();

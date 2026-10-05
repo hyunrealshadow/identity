@@ -1,4 +1,21 @@
+use super::implicit_flow::AuthenticationContext;
 use super::*;
+use crate::observability::BusinessEvent;
+use crate::observability::EventValue;
+use crate::observability::error_outcome;
+use crate::openid_connect::session::calculate_session_state;
+use chrono::DateTime;
+use chrono::Duration;
+use chrono::Utc;
+use identity_domain::auth::ACR_AAL2;
+use identity_domain::auth::AMR_MFA;
+use identity_domain::auth::AMR_OTP;
+use identity_domain::auth::AMR_PASSWORD;
+use identity_domain::auth::model::Login;
+use identity_domain::client::model::ClientOid;
+use identity_domain::client_authorization::AuthorizationCodeData;
+use identity_domain::client_authorization::ClientAuthorization;
+use identity_domain::openid_connect::ScopeSet;
 
 use identity_domain::auth::{LoginStatus, SessionOid};
 use identity_domain::client_authorization::{
@@ -7,16 +24,16 @@ use identity_domain::client_authorization::{
 
 #[derive(Debug)]
 pub struct TerminalReservation {
-    pub completed_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: DateTime<Utc>,
 }
 
 #[derive(Debug)]
 pub struct ContinueContext {
-    pub login: identity_domain::auth::model::Login,
+    pub login: Login,
     pub stored: StoredAuthorizationRequest,
     pub client: OpenIdConnectClient,
-    pub expires_at: chrono::DateTime<chrono::Utc>,
-    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]
@@ -35,7 +52,7 @@ pub(super) struct AuthorizationCodeContext<'a> {
     pub user_oid: Uuid,
     pub session_oid: SessionOid,
     pub protected_session_id: &'a str,
-    pub authentication: super::implicit_flow::AuthenticationContext<'a>,
+    pub authentication: AuthenticationContext<'a>,
 }
 
 impl AuthorizeService {
@@ -46,14 +63,12 @@ impl AuthorizeService {
     async fn load_authorization_request_record(
         &self,
         authorization_request_id: Uuid,
-    ) -> Result<identity_domain::client_authorization::ClientAuthorization, AppError> {
+    ) -> Result<ClientAuthorization, AppError> {
         let record = self
             .client_authorization_repo
             .find_by_oid(authorization_request_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::AuthzRequestNotFound))?;
 
         if record.type_ != ClientAuthorizationType::AuthorizationRequest {
@@ -88,25 +103,19 @@ impl AuthorizeService {
 
         let record = self
             .client_authorization_repo
-            .create(
-                request.client_id,
-                data,
-                chrono::Utc::now() + chrono::Duration::minutes(10),
-            )
+            .create(request.client_id, data, Utc::now() + Duration::minutes(10))
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
         self.events.emit(
-            crate::observability::BusinessEvent::business("authorization.request.created")
+            BusinessEvent::business("authorization.request.created")
                 .outcome("success")
                 .attribute(
                     "authorization_request_id",
-                    crate::observability::EventValue::Text(record.oid.to_string()),
+                    EventValue::Text(record.oid.to_string()),
                 )
                 .attribute(
                     "client_oid",
-                    crate::observability::EventValue::Text(request.client_id.to_string()),
+                    EventValue::Text(request.client_id.to_string()),
                 ),
         );
 
@@ -123,9 +132,7 @@ impl AuthorizeService {
             .login_repo
             .create_pending(client_oid, authorization_request_id, requested_acr)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
 
         self.encrypt_login_id(login.oid).await
     }
@@ -139,7 +146,7 @@ impl AuthorizeService {
         let context = self
             .load_continue_context_by_login(protected_login_oid)
             .await?;
-        if context.expires_at <= chrono::Utc::now() || context.completed_at.is_some() {
+        if context.expires_at <= Utc::now() || context.completed_at.is_some() {
             return Err(AppError::from_code(
                 AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
             ));
@@ -156,9 +163,7 @@ impl AuthorizeService {
         self.login_repo
             .reset_identity(context.login.oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
         Ok(protected_login_oid.to_owned())
     }
 
@@ -172,12 +177,12 @@ impl AuthorizeService {
         let context = self
             .load_continue_context_by_login(protected_login_oid)
             .await?;
-        if context.expires_at <= chrono::Utc::now() || context.completed_at.is_some() {
+        if context.expires_at <= Utc::now() || context.completed_at.is_some() {
             return Err(AppError::from_code(
                 AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
             ));
         }
-        if context.login.status != identity_domain::auth::LoginStatus::EXPIRED {
+        if context.login.status != LoginStatus::EXPIRED {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
 
@@ -218,23 +223,17 @@ impl AuthorizeService {
                 context.login.requested_acr.as_deref(),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
 
         if let Some((user_oid, session_oid)) = reauthentication {
             self.login_repo
                 .bind_user(login.oid, user_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
             self.login_repo
                 .bind_session(login.oid, session_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
         }
         self.encrypt_login_id(login.oid).await
     }
@@ -267,16 +266,14 @@ impl AuthorizeService {
         let request = self
             .load_authorization_request(authorization_request_id)
             .await?;
-        let client_id = Uuid::parse_str(&request.client_id).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
-        })?;
+        let client_id = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredClientIdInvalid,
+        ))?;
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
         Ok((request, client))
@@ -285,14 +282,7 @@ impl AuthorizeService {
     pub async fn load_consent_context_by_login(
         &self,
         protected_login_oid: &str,
-    ) -> Result<
-        (
-            identity_domain::auth::model::Login,
-            AuthorizationRequestData,
-            OpenIdConnectClient,
-        ),
-        AppError,
-    > {
+    ) -> Result<(Login, AuthorizationRequestData, OpenIdConnectClient), AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
         let (request, client) = self
             .load_consent_context(login.client_authorization_oid)
@@ -311,16 +301,14 @@ impl AuthorizeService {
         let expires_at = record.expires_at;
         let completed_at = record.completed_at;
         let stored = Self::stored_authorization_request(record.data)?;
-        let client_id = Uuid::parse_str(&stored.request.client_id).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid).with_source(error)
-        })?;
+        let client_id = Uuid::parse_str(&stored.request.client_id).map_err(
+            AppError::map_source(AuthorizeErrorCode::StoredClientIdInvalid),
+        )?;
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
 
         Ok(ContinueContext {
@@ -371,22 +359,17 @@ impl AuthorizeService {
         // challenge page can authenticate it.  Controllers record the selected
         // session again after a successful challenge; do not downgrade that
         // completed login back to `identifier_verified` on the second write.
-        if source == SelectionSource::Reauthentication
-            && login.status != identity_domain::auth::LoginStatus::AUTHENTICATED
+        if source == SelectionSource::Reauthentication && login.status != LoginStatus::AUTHENTICATED
         {
             self.login_repo
                 .bind_user(login.oid, user_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
         }
         self.login_repo
             .bind_session(login.oid, session_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreLoginFailed).with_source(error)
-            })
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))
     }
 
     pub async fn record_consent_by_login(
@@ -402,32 +385,27 @@ impl AuthorizeService {
     pub async fn user_consented_scope_names(
         &self,
         user_oid: Uuid,
-        client_oid: identity_domain::client::model::ClientOid,
+        client_oid: ClientOid,
     ) -> Result<Vec<String>, AppError> {
         self.client_authorization_repo
             .user_consented_scope_names(user_oid, client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))
     }
 
     pub async fn has_user_consent(
         &self,
         user_oid: Uuid,
-        client_oid: identity_domain::client::model::ClientOid,
+        client_oid: ClientOid,
         requested_scope: &str,
     ) -> Result<bool, AppError> {
-        let requested_scope = identity_domain::openid_connect::ScopeSet::parse(requested_scope)
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::DeserializeRequestFailed).with_source(error)
-            })?;
+        let requested_scope = ScopeSet::parse(requested_scope).map_err(AppError::map_source(
+            AuthorizeErrorCode::DeserializeRequestFailed,
+        ))?;
         self.client_authorization_repo
             .has_user_consent(user_oid, client_oid, &requested_scope)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadRequestFailed).with_source(error)
-            })
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))
     }
 
     pub async fn record_authorization_selection(
@@ -448,9 +426,7 @@ impl AuthorizeService {
                 source,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
 
         if !updated {
             return Err(Self::interaction_conflict());
@@ -475,23 +451,21 @@ impl AuthorizeService {
             .record_authorization_request_consent(
                 authorization_request_id,
                 consent_state,
-                chrono::Utc::now(),
+                Utc::now(),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
 
         if !updated {
             return Err(Self::interaction_conflict());
         }
 
         self.events.emit(
-            crate::observability::BusinessEvent::business("consent.decision")
+            BusinessEvent::business("consent.decision")
                 .outcome(decision)
                 .attribute(
                     "authorization_request_id",
-                    crate::observability::EventValue::Text(authorization_request_id.to_string()),
+                    EventValue::Text(authorization_request_id.to_string()),
                 ),
         );
 
@@ -504,11 +478,9 @@ impl AuthorizeService {
     ) -> Result<(), AppError> {
         let updated = self
             .client_authorization_repo
-            .mark_authorization_request_completed(authorization_request_id, chrono::Utc::now())
+            .mark_authorization_request_completed(authorization_request_id, Utc::now())
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
 
         if !updated {
             return Err(Self::interaction_conflict());
@@ -521,14 +493,12 @@ impl AuthorizeService {
         &self,
         authorization_request_id: Uuid,
     ) -> Result<TerminalReservation, AppError> {
-        let completed_at = chrono::Utc::now();
+        let completed_at = Utc::now();
         let updated = self
             .client_authorization_repo
             .mark_authorization_request_completed(authorization_request_id, completed_at)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreRequestFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
 
         if !updated {
             return Err(Self::interaction_conflict());
@@ -540,15 +510,13 @@ impl AuthorizeService {
     pub async fn load_login_by_protected_id(
         &self,
         protected_login_id: &str,
-    ) -> Result<identity_domain::auth::model::Login, AppError> {
+    ) -> Result<Login, AppError> {
         let login_oid = self.decrypt_login_id(protected_login_id).await?;
 
         self.login_repo
             .find_by_oid(login_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoadLoginFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoadLoginFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::LoginNotFound))
     }
 
@@ -588,52 +556,45 @@ impl AuthorizeService {
             .await;
         match &result {
             Ok(_) => self.events.emit(
-                crate::observability::BusinessEvent::business("authorization.flow.result")
+                BusinessEvent::business("authorization.flow.result")
                     .outcome("granted")
                     .attribute(
                         "authorization_request_id",
-                        crate::observability::EventValue::Text(
-                            authorization_request_id.to_string(),
-                        ),
+                        EventValue::Text(authorization_request_id.to_string()),
                     )
                     .attribute(
                         "user_oid",
-                        crate::observability::EventValue::Pseudonymized {
+                        EventValue::Pseudonymized {
                             purpose: "user_oid",
                             value: user_oid.to_string(),
                         },
                     )
                     .attribute(
                         "session_oid",
-                        crate::observability::EventValue::Pseudonymized {
+                        EventValue::Pseudonymized {
                             purpose: "session_oid",
                             value: session_oid.0.to_string(),
                         },
                     ),
             ),
             Err(error) => {
-                let (outcome, reason) = crate::observability::error_outcome(error);
+                let (outcome, reason) = error_outcome(error);
                 self.events.emit(
-                    crate::observability::BusinessEvent::business("authorization.flow.result")
+                    BusinessEvent::business("authorization.flow.result")
                         .outcome(outcome)
                         .reason(reason)
                         .attribute(
                             "authorization_request_id",
-                            crate::observability::EventValue::Text(
-                                authorization_request_id.to_string(),
-                            ),
+                            EventValue::Text(authorization_request_id.to_string()),
                         )
                         .attribute(
                             "session_oid",
-                            crate::observability::EventValue::Pseudonymized {
+                            EventValue::Pseudonymized {
                                 purpose: "session_oid",
                                 value: session_oid.0.to_string(),
                             },
                         )
-                        .attribute(
-                            "error_code",
-                            crate::observability::EventValue::Integer(i64::from(error.code())),
-                        ),
+                        .attribute("error_code", EventValue::Integer(i64::from(error.code()))),
                 );
             }
         }
@@ -671,7 +632,7 @@ impl AuthorizeService {
                 &protected_session_id,
                 user_oid,
                 response_type,
-                super::implicit_flow::AuthenticationContext {
+                AuthenticationContext {
                     auth_time,
                     acr: acr.as_deref(),
                     amr: &amr,
@@ -686,7 +647,7 @@ impl AuthorizeService {
                 &protected_session_id,
                 user_oid,
                 response_type,
-                super::implicit_flow::AuthenticationContext {
+                AuthenticationContext {
                     auth_time,
                     acr: acr.as_deref(),
                     amr: &amr,
@@ -701,7 +662,7 @@ impl AuthorizeService {
                     user_oid,
                     session_oid,
                     protected_session_id: &protected_session_id,
-                    authentication: super::implicit_flow::AuthenticationContext {
+                    authentication: AuthenticationContext {
                         auth_time,
                         acr: acr.as_deref(),
                         amr: &amr,
@@ -722,9 +683,9 @@ impl AuthorizeService {
         request: &AuthorizationRequestData,
         context: AuthorizationCodeContext<'_>,
     ) -> Result<Url, AppError> {
-        let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
-        })?;
+        let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredRedirectUriInvalid,
+        ))?;
 
         let (protected_code, _) = self.create_authorization_code(request, context).await?;
 
@@ -757,72 +718,65 @@ impl AuthorizeService {
         let record = self
             .client_authorization_repo
             .create(
-                Uuid::parse_str(&request.client_id).map_err(|error| {
-                    AppError::from_code(AuthorizeErrorCode::StoredClientIdInvalid)
-                        .with_source(error)
-                })?,
-                ClientAuthorizationData::AuthorizationCode(
-                    identity_domain::client_authorization::AuthorizationCodeData {
-                        scope: request.scope.clone(),
-                        resources: request.resources.clone(),
-                        nonce: request.nonce.clone(),
-                        code_challenge: request.code_challenge.clone(),
-                        code_challenge_method: request.code_challenge_method,
-                        user_oid: user_oid.to_string(),
-                        session_oid,
-                        protected_session_id: Some(protected_session_id.to_string()),
-                        acr: authentication.acr.map(str::to_owned),
-                        amr: authentication.amr.to_vec(),
-                        redirect_uri: request.redirect_uri.clone(),
-                        redirect_uri_was_supplied: request.redirect_uri_was_supplied,
-                        auth_time: authentication.auth_time,
-                        claims: request
-                            .claims
-                            .as_deref()
-                            .map(Self::parse_claims_request)
-                            .transpose()?,
-                    },
-                ),
-                chrono::Utc::now() + chrono::Duration::minutes(10),
+                Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+                    AuthorizeErrorCode::StoredClientIdInvalid,
+                ))?,
+                ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                    scope: request.scope.clone(),
+                    resources: request.resources.clone(),
+                    nonce: request.nonce.clone(),
+                    code_challenge: request.code_challenge.clone(),
+                    code_challenge_method: request.code_challenge_method,
+                    user_oid: user_oid.to_string(),
+                    session_oid,
+                    protected_session_id: Some(protected_session_id.to_string()),
+                    acr: authentication.acr.map(str::to_owned),
+                    amr: authentication.amr.to_vec(),
+                    redirect_uri: request.redirect_uri.clone(),
+                    redirect_uri_was_supplied: request.redirect_uri_was_supplied,
+                    auth_time: authentication.auth_time,
+                    claims: request
+                        .claims
+                        .as_deref()
+                        .map(Self::parse_claims_request)
+                        .transpose()?,
+                }),
+                Utc::now() + Duration::minutes(10),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreCodeFailed))?;
 
         let protected_code = self
             .data_protector
             .protect("authorization-code", record.oid.as_bytes())
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::StoreCodeFailed))?;
 
         self.events.emit(
-            crate::observability::BusinessEvent::business("authorization_code.created")
+            BusinessEvent::business("authorization_code.created")
                 .outcome("success")
                 .attribute(
                     "authorization_request_id",
-                    crate::observability::EventValue::Text(authorization_request_id.to_string()),
+                    EventValue::Text(authorization_request_id.to_string()),
                 )
                 .attribute(
                     "authorization_code_id",
-                    crate::observability::EventValue::Text(record.oid.to_string()),
+                    EventValue::Text(record.oid.to_string()),
                 )
                 .attribute(
                     "client_oid",
-                    crate::observability::EventValue::Text(record.client_oid.to_string()),
+                    EventValue::Text(record.client_oid.to_string()),
                 )
                 .attribute(
                     "user_oid",
-                    crate::observability::EventValue::Pseudonymized {
+                    EventValue::Pseudonymized {
                         purpose: "user_oid",
                         value: user_oid.to_string(),
                     },
                 )
                 .attribute(
                     "session_oid",
-                    crate::observability::EventValue::Pseudonymized {
+                    EventValue::Pseudonymized {
                         purpose: "session_oid",
                         value: session_oid.0.to_string(),
                     },
@@ -840,21 +794,21 @@ impl AuthorizeService {
         let request = self
             .load_authorization_request(authorization_request_id)
             .await?;
-        Url::parse(&request.redirect_uri).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
-        })?;
+        Url::parse(&request.redirect_uri).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredRedirectUriInvalid,
+        ))?;
         self.provider_service.issuer()?;
 
         self.mark_authorization_request_completed(authorization_request_id)
             .await?;
 
         self.events.emit(
-            crate::observability::BusinessEvent::business("authorization.flow.result")
+            BusinessEvent::business("authorization.flow.result")
                 .outcome("denied")
                 .reason("access_denied")
                 .attribute(
                     "authorization_request_id",
-                    crate::observability::EventValue::Text(authorization_request_id.to_string()),
+                    EventValue::Text(authorization_request_id.to_string()),
                 ),
         );
 
@@ -896,10 +850,10 @@ impl AuthorizeService {
 }
 
 fn default_amr_for_acr(acr: Option<&str>) -> Vec<String> {
-    let mut methods = vec![identity_domain::auth::AMR_PASSWORD.to_owned()];
-    if acr == Some(identity_domain::auth::ACR_AAL2) {
-        methods.push(identity_domain::auth::AMR_OTP.to_owned());
-        methods.push(identity_domain::auth::AMR_MFA.to_owned());
+    let mut methods = vec![AMR_PASSWORD.to_owned()];
+    if acr == Some(ACR_AAL2) {
+        methods.push(AMR_OTP.to_owned());
+        methods.push(AMR_MFA.to_owned());
     }
     methods
 }
@@ -908,11 +862,11 @@ pub(super) fn session_state_for_authorize_response(
     request: &AuthorizationRequestData,
     protected_session_id: &str,
 ) -> Result<String, AppError> {
-    let redirect_uri = Url::parse(&request.redirect_uri).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::StoredRedirectUriInvalid).with_source(error)
-    })?;
+    let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
+        AuthorizeErrorCode::StoredRedirectUriInvalid,
+    ))?;
     let origin = redirect_uri.origin().ascii_serialization();
-    Ok(crate::openid_connect::session::calculate_session_state(
+    Ok(calculate_session_state(
         &request.client_id,
         &origin,
         protected_session_id,

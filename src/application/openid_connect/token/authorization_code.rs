@@ -1,8 +1,16 @@
 use super::signing::{SignAccessTokenInput, SignIdTokenInput};
 use super::*;
+use crate::domain::auth::SessionStatus;
 use crate::observability::{BusinessEvent, EventValue};
+use chrono::Duration;
+use chrono::Utc;
 use identity_domain::client_authorization::ClientAuthenticationMode;
+use identity_domain::openid_connect::API_RESOURCE;
+use identity_domain::openid_connect::CodeChallengeMethod;
 use identity_domain::openid_connect::OAuthProtocolVersion;
+use identity_domain::openid_connect::ScopeSet;
+use tracing::Span;
+use tracing::field::display;
 
 use super::exchange::{issuance_result, resolve_client_id};
 
@@ -65,9 +73,7 @@ impl TokenService {
             .client_repo
             .find_by_oid(authenticated_client_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::ClientLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
 
         let oauth_version = self.provider_service.oauth_version(&authenticated_client);
@@ -81,29 +87,21 @@ impl TokenService {
             .data_protector
             .unprotect("authorization-code", &params.code)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::AuthCodeNotFound).with_source(error)
-            })?;
-        let code_oid = Uuid::from_slice(&code_oid_bytes).map_err(|error| {
-            AppError::from_code(TokenErrorCode::AuthCodeNotFound).with_source(error)
-        })?;
+            .map_err(AppError::map_source(TokenErrorCode::AuthCodeNotFound))?;
+        let code_oid = Uuid::from_slice(&code_oid_bytes)
+            .map_err(AppError::map_source(TokenErrorCode::AuthCodeNotFound))?;
         event.attributes.push((
             "authorization_code_id",
             EventValue::Text(code_oid.to_string()),
         ));
-        tracing::Span::current().record("authorization_code_id", tracing::field::display(code_oid));
-        tracing::Span::current().record(
-            "client_oid",
-            tracing::field::display(authenticated_client_oid),
-        );
+        Span::current().record("authorization_code_id", display(code_oid));
+        Span::current().record("client_oid", display(authenticated_client_oid));
 
         let record = self
             .client_authorization_repo
             .find_by_oid(code_oid)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::CodeLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::CodeLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeNotFound))?;
 
         if record.type_ != ClientAuthorizationType::AuthorizationCode {
@@ -114,7 +112,7 @@ impl TokenService {
             return Err(AppError::from_code(TokenErrorCode::CodeClientMismatch));
         }
 
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         tracing::debug!(
             revoked_at = ?record.revoked_at,
             expires_at = %record.expires_at,
@@ -124,9 +122,7 @@ impl TokenService {
             self.client_authorization_repo
                 .revoke_access_tokens_for_authorization_code(record.oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::RevokeCodeFailed))?;
             return Err(AppError::from_code(TokenErrorCode::AuthCodeRevoked));
         }
 
@@ -138,17 +134,15 @@ impl TokenService {
             ClientAuthorizationData::AuthorizationCode(data) => data,
             _ => return Err(AppError::from_code(TokenErrorCode::DeserializeCodeFailed)),
         };
-        let code_scope = ScopeSet::parse(&data.scope).map_err(|error| {
-            AppError::from_code(TokenErrorCode::DeserializeCodeFailed).with_source(error)
-        })?;
+        let code_scope = ScopeSet::parse(&data.scope)
+            .map_err(AppError::map_source(TokenErrorCode::DeserializeCodeFailed))?;
         let (session_acr, session_amr) = if let Some(session_repo) = &self.session_repo {
             let session = session_repo
                 .find_by_oid(data.session_oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::AuthCodeSessionLookupFailed)
-                        .with_source(error)
-                })?
+                .map_err(AppError::map_source(
+                    TokenErrorCode::AuthCodeSessionLookupFailed,
+                ))?
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeSessionNotFound))?;
             if session.revoked_at.is_some() {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeSessionRevoked));
@@ -159,7 +153,7 @@ impl TokenService {
             {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeSessionExpired));
             }
-            if session.status != crate::domain::auth::SessionStatus::ACTIVE {
+            if session.status != SessionStatus::ACTIVE {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeSessionInactive));
             }
             if session.user_oid.to_string() != data.user_oid {
@@ -211,8 +205,7 @@ impl TokenService {
         if params.client_secret.is_none()
             && params.client_assertion.is_none()
             && (data.code_challenge.as_deref().is_none_or(str::is_empty)
-                || data.code_challenge_method
-                    != Some(identity_domain::openid_connect::CodeChallengeMethod::S256))
+                || data.code_challenge_method != Some(CodeChallengeMethod::S256))
         {
             return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
                 .with_param("code_challenge_method", "S256 required for public client"));
@@ -255,16 +248,12 @@ impl TokenService {
             .client_authorization_repo
             .revoke_if_active(record.oid, ClientAuthorizationType::AuthorizationCode, now)
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::RevokeCodeFailed))?;
         if !claimed {
             self.client_authorization_repo
                 .revoke_access_tokens_for_authorization_code(record.oid)
                 .await
-                .map_err(|error| {
-                    AppError::from_code(TokenErrorCode::RevokeCodeFailed).with_source(error)
-                })?;
+                .map_err(AppError::map_source(TokenErrorCode::RevokeCodeFailed))?;
             return Err(AppError::from_code(TokenErrorCode::AuthCodeClaimFailed));
         }
         self.events.emit(
@@ -281,16 +270,13 @@ impl TokenService {
         );
         tracing::debug!("authorization code consumed; issuing tokens");
 
-        let user_oid = Uuid::parse_str(&data.user_oid).map_err(|error| {
-            AppError::from_code(TokenErrorCode::StoredUserOidInvalid).with_source(error)
-        })?;
+        let user_oid = Uuid::parse_str(&data.user_oid)
+            .map_err(AppError::map_source(TokenErrorCode::StoredUserOidInvalid))?;
         let user = self
             .user_repo
             .find_by_oid(UserOid(user_oid))
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::UserLookupFailed).with_source(error)
-            })?
+            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
             .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeUserNotFound))?;
 
         let issuer = self.provider_service.issuer()?;
@@ -298,11 +284,11 @@ impl TokenService {
             .load_access_token_signing_key(&configured_signing_key)
             .await?;
         let audience = client_id.clone();
-        let access_token_audience = if identity_domain::openid_connect::ScopeSet::parse(&data.scope)
+        let access_token_audience = if ScopeSet::parse(&data.scope)
             .map(|scope| scope.has_api_scopes())
             .unwrap_or(false)
         {
-            identity_domain::openid_connect::API_RESOURCE
+            API_RESOURCE
         } else {
             audience.as_str()
         };
@@ -321,12 +307,10 @@ impl TokenService {
                     device_authorization_oid: None,
                     client_authentication_mode: Some(client_authentication_mode),
                 }),
-                chrono::Utc::now() + chrono::Duration::hours(1),
+                Utc::now() + Duration::hours(1),
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(TokenErrorCode::SignAccessTokenFailed).with_source(error)
-            })?;
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         event.attributes.push((
             "access_token_oid",
             EventValue::Text(access_token_record.oid.to_string()),

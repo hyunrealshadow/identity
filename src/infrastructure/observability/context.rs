@@ -6,6 +6,10 @@
 //! settings. Untrusted but valid contexts become span links, invalid contexts
 //! are ignored (and their `tracestate` is dropped).
 
+use http::header::HeaderName;
+use http::header::HeaderValue;
+use tracing::Span;
+
 use std::net::IpAddr;
 
 use http::HeaderMap;
@@ -222,8 +226,8 @@ struct HeaderInjector<'a>(&'a mut HeaderMap);
 
 impl Injector for HeaderInjector<'_> {
     fn set(&mut self, key: &str, value: String) {
-        if let Ok(name) = http::header::HeaderName::from_bytes(key.as_bytes())
-            && let Ok(value) = http::header::HeaderValue::from_str(&value)
+        if let Ok(name) = HeaderName::from_bytes(key.as_bytes())
+            && let Ok(value) = HeaderValue::from_str(&value)
         {
             self.0.insert(name, value);
         }
@@ -245,7 +249,7 @@ pub fn inject_context(context: &Context, headers: &mut HeaderMap) {
 
 /// Inject the currently active span (if any) into outbound headers.
 pub fn inject_current_span(headers: &mut HeaderMap) {
-    let context = tracing::Span::current().context();
+    let context = Span::current().context();
     if context.has_active_span() {
         inject_context(&context, headers);
     }
@@ -254,7 +258,7 @@ pub fn inject_current_span(headers: &mut HeaderMap) {
 /// Trace context of the currently active span, for event correlation.
 #[must_use]
 pub fn current_span_context() -> Option<SpanContext> {
-    let context = tracing::Span::current().context();
+    let context = Span::current().context();
     context
         .has_active_span()
         .then(|| context.span().span_context().clone())

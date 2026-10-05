@@ -8,7 +8,7 @@
     "build:login": "pnpm --filter login build"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "4.3.2",
-    "tailwindcss": "4.3.2"
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
   }
 }

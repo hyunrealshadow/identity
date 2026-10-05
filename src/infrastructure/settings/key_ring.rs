@@ -1,4 +1,8 @@
+use identity_application::observability::BusinessEvent;
+use identity_application::observability::EventValue;
+use identity_application::observability::event_sink;
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 use async_trait::async_trait;
 use sea_orm::DatabaseConnection;
@@ -65,7 +69,7 @@ impl CachedRuntimeKeyRingProvider {
             };
 
             signing_key = Some(RuntimeSigningKey {
-                key_id: uuid::Uuid::from(binding.oid).to_string(),
+                key_id: Uuid::from(binding.oid).to_string(),
                 private_key_pem: data.private_key.clone(),
                 algorithm,
             });
@@ -86,12 +90,11 @@ impl CachedRuntimeKeyRingProvider {
             .write()
             .unwrap_or_else(|error| error.into_inner()) = value;
         if previous_signing_key != next_signing_key {
-            use identity_application::observability::{BusinessEvent, EventValue};
             let mut event = BusinessEvent::business("key.ring.changed").outcome("applied");
             if let Some(key_id) = next_signing_key {
                 event = event.attribute("key_id", EventValue::Text(key_id));
             }
-            identity_application::observability::event_sink().emit(event);
+            event_sink().emit(event);
         }
         Ok(())
     }

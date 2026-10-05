@@ -1,4 +1,13 @@
+use apalis_sql::Config;
+use apalis_sql::sqlx::Error;
+use apalis_sql::sqlx::PgPool;
+use identity_application::observability::BusinessEvent;
+use identity_application::observability::EventValue;
+use identity_application::observability::event_sink;
 use std::str::FromStr;
+use std::time::Duration;
+use ulid::Ulid;
+use uuid::Uuid;
 
 use apalis::prelude::{
     BoxDynError, Data, Request, Storage, TaskId, WorkerBuilder, WorkerFactoryFn,
@@ -23,7 +32,7 @@ fn rotation_task_id(timestamp: DateTime<Utc>) -> TaskId {
     let hour_start_millis = timestamp.timestamp_millis().div_euclid(3_600_000) * 3_600_000;
     let hour_start_millis =
         u64::try_from(hour_start_millis).expect("rotation schedule must be after Unix epoch");
-    ulid::Ulid::from_parts(hour_start_millis, ROTATION_JOB_ID_SUFFIX)
+    Ulid::from_parts(hour_start_millis, ROTATION_JOB_ID_SUFFIX)
         .to_string()
         .parse()
         .expect("generated ULID must be a valid task ID")
@@ -32,12 +41,12 @@ fn rotation_task_id(timestamp: DateTime<Utc>) -> TaskId {
 async fn enqueue_rotation(
     storage: &mut PostgresStorage<RotationJob>,
     timestamp: DateTime<Utc>,
-) -> Result<(), apalis_sql::sqlx::Error> {
+) -> Result<(), Error> {
     let mut request = Request::new(RotationJob);
     request.parts.task_id = rotation_task_id(timestamp);
     match storage.push_request(request).await {
         Ok(_) => Ok(()),
-        Err(apalis_sql::sqlx::Error::Database(error))
+        Err(Error::Database(error))
             if error.code().as_deref() == Some("23505")
                 && error.constraint() == Some("unique_job_id") =>
         {
@@ -48,7 +57,6 @@ async fn enqueue_rotation(
 }
 
 async fn maintain_rotation(state: &AppState) -> Result<(), BoxDynError> {
-    use identity_application::observability::{BusinessEvent, EventValue, event_sink};
     let mut first_error: Option<BoxDynError> = None;
     match state.services().key_rotation().maintain().await {
         Ok(rotated) if rotated > 0 => {
@@ -109,14 +117,10 @@ async fn handle_rotation_job(_: RotationJob, data: Data<AppState>) -> Result<(),
     maintain_rotation(&data).await
 }
 
-pub(super) async fn spawn_rotation_workers(
-    state: AppState,
-    pool: apalis_sql::sqlx::PgPool,
-) -> Result<(), apalis_sql::sqlx::Error> {
+pub(super) async fn spawn_rotation_workers(state: AppState, pool: PgPool) -> Result<(), Error> {
     let storage = PostgresStorage::<RotationJob>::new_with_config(
         pool,
-        apalis_sql::Config::new(ROTATION_JOB_NAMESPACE)
-            .set_poll_interval(std::time::Duration::from_secs(30)),
+        Config::new(ROTATION_JOB_NAMESPACE).set_poll_interval(Duration::from_secs(30)),
     );
     enqueue_rotation(&mut storage.clone(), Utc::now()).await?;
 
@@ -124,7 +128,7 @@ pub(super) async fn spawn_rotation_workers(
     let job_storage = storage.clone();
     tokio::spawn(async move {
         let mut shutdown = job_state.lifecycle().subscribe_shutdown();
-        let worker = WorkerBuilder::new(format!("credential-rotation-{}", uuid::Uuid::new_v4()))
+        let worker = WorkerBuilder::new(format!("credential-rotation-{}", Uuid::new_v4()))
             .data(job_state)
             .backend(job_storage)
             .build_fn(handle_rotation_job);

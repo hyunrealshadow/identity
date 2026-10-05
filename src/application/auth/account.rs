@@ -5,6 +5,15 @@
 //! rules. Patches and identifiers are domain types; the repository port keeps
 //! persistence details out of this layer.
 
+use crate::observability::BusinessEvent;
+use crate::observability::EventValue;
+
+use crate::observability::EventSink;
+use crate::observability::NoopEventSink;
+use identity_domain::user::normalization::normalize_email;
+use identity_domain::user::normalization::validate_username as normalization_validate_username;
+use uuid::Uuid;
+
 use std::sync::Arc;
 
 use identity_domain::user::{
@@ -20,7 +29,7 @@ use crate::error::{
 
 pub struct AccountService {
     user_repo: Arc<dyn UserRepository>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 impl AccountService {
@@ -28,13 +37,13 @@ impl AccountService {
     pub fn new(user_repo: Arc<dyn UserRepository>) -> Self {
         Self {
             user_repo,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
@@ -94,7 +103,6 @@ impl AccountService {
         user_oid: UserOid,
         outcome: &'static str,
     ) {
-        use crate::observability::{BusinessEvent, EventValue};
         self.events.emit(
             BusinessEvent::audit("account.changed")
                 .outcome(outcome)
@@ -103,7 +111,7 @@ impl AccountService {
                     "user_oid",
                     EventValue::Pseudonymized {
                         purpose: "user_oid",
-                        value: uuid::Uuid::from(user_oid).to_string(),
+                        value: Uuid::from(user_oid).to_string(),
                     },
                 ),
         );
@@ -118,7 +126,7 @@ impl AccountService {
 }
 
 fn validate_username(username: &str) -> Result<UserIdentifierUpdate, AppError> {
-    match identity_domain::user::normalization::validate_username(username) {
+    match normalization_validate_username(username) {
         Ok(normalized) => Ok(UserIdentifierUpdate::Username {
             value: username.trim().to_owned(),
             normalized,
@@ -140,7 +148,7 @@ fn validate_username(username: &str) -> Result<UserIdentifierUpdate, AppError> {
 }
 
 fn validate_email(email: &str) -> Result<UserIdentifierUpdate, AppError> {
-    match identity_domain::user::normalization::normalize_email(email) {
+    match normalize_email(email) {
         Ok(normalized) => Ok(UserIdentifierUpdate::Email {
             value: email.trim().to_owned(),
             normalized,

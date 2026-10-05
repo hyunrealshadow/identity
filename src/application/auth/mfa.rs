@@ -1,4 +1,11 @@
+use crate::observability::BusinessEvent;
+use crate::observability::EventSink;
+use crate::observability::EventValue;
+use crate::observability::NoopEventSink;
+use crate::user::OtpAlgorithm;
+use chrono::DateTime;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
@@ -73,7 +80,7 @@ pub struct RegenerateRecoveryCodes {
 #[derive(Serialize, Deserialize)]
 struct PendingTotpEnrollment {
     user_oid: UserOid,
-    expires_at: chrono::DateTime<Utc>,
+    expires_at: DateTime<Utc>,
     credential: OtpCredentialData,
     recovery_codes: Vec<String>,
     recovery_credentials: Vec<RecoveryCodeCredentialData>,
@@ -84,7 +91,7 @@ pub struct MfaService {
     verifier: Arc<dyn TotpVerifier>,
     generator: Arc<dyn TotpEnrollmentGenerator>,
     data_protector: Arc<dyn DataProtector>,
-    events: Arc<dyn crate::observability::EventSink>,
+    events: Arc<dyn EventSink>,
 }
 
 impl MfaService {
@@ -100,13 +107,13 @@ impl MfaService {
             verifier,
             generator,
             data_protector,
-            events: Arc::new(crate::observability::NoopEventSink),
+            events: Arc::new(NoopEventSink),
         }
     }
 
     /// Attach the key event and audit sink.
     #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn crate::observability::EventSink>) -> Self {
+    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
     }
@@ -114,13 +121,12 @@ impl MfaService {
     /// Record a security-relevant MFA state change. Secrets, OTP codes and
     /// recovery codes are never included.
     fn record_mfa_change(&self, event: &'static str, user_oid: UserOid, outcome: &'static str) {
-        use crate::observability::{BusinessEvent, EventValue};
         self.events
             .emit(BusinessEvent::audit(event).outcome(outcome).attribute(
                 "user_oid",
                 EventValue::Pseudonymized {
                     purpose: "user_oid",
-                    value: uuid::Uuid::from(user_oid).to_string(),
+                    value: Uuid::from(user_oid).to_string(),
                 },
             ));
     }
@@ -161,10 +167,7 @@ impl MfaService {
             recovery_codes: recovery_codes.clone(),
             recovery_credentials,
         };
-        let plaintext = serde_json::to_vec(&pending).map_err(|error| {
-            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
-                .with_source(error)
-        })?;
+        let plaintext = serde_json::to_vec(&pending).map_err(AppError::internal)?;
         let enrollment_token = self
             .data_protector
             .protect(ENROLLMENT_PURPOSE, &plaintext)
@@ -222,7 +225,7 @@ impl MfaService {
         enrollment_token: &str,
         issuer: &str,
         account_name: &str,
-        algorithm: crate::user::OtpAlgorithm,
+        algorithm: OtpAlgorithm,
     ) -> Result<BeginTotpEnrollment, AppError> {
         if self.status(user_oid).await?.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
@@ -243,10 +246,7 @@ impl MfaService {
         let otp_auth_uri =
             self.generator
                 .otp_auth_uri(issuer, account_name, &pending.credential)?;
-        let plaintext = serde_json::to_vec(&pending).map_err(|error| {
-            AppError::from_code(crate::error::codes::common::CommonErrorCode::InternalError)
-                .with_source(error)
-        })?;
+        let plaintext = serde_json::to_vec(&pending).map_err(AppError::internal)?;
         let enrollment_token = self
             .data_protector
             .protect(ENROLLMENT_PURPOSE, &plaintext)

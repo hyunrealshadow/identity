@@ -1,7 +1,18 @@
+use crate::observability::outbound_trace;
+use http::HeaderMap;
+use reqwest::Client;
+use reqwest::Error;
+use reqwest::StatusCode;
+use reqwest::redirect::Policy;
+use std::env;
+use std::io::Error as IoError;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     time::Duration,
 };
+use tokio::net::lookup_host;
+use tracing::Instrument as _;
+use url::Host;
 
 use url::Url;
 
@@ -18,15 +29,15 @@ pub enum RemoteFetchError {
     #[error("remote URL points to an unsafe host")]
     UnsafeHost,
     #[error("failed to fetch remote document")]
-    FetchFailed(#[source] reqwest::Error),
+    FetchFailed(#[source] Error),
     #[error("failed to resolve remote host")]
-    ResolveFailed(#[source] std::io::Error),
+    ResolveFailed(#[source] IoError),
     #[error("remote document did not return 200 OK")]
     NotOk,
     #[error("remote document is too large")]
     TooLarge,
     #[error("failed to read remote document")]
-    ReadFailed(#[source] reqwest::Error),
+    ReadFailed(#[source] Error),
 }
 
 #[derive(Clone, Copy)]
@@ -53,7 +64,7 @@ pub const DEFAULT_REMOTE_DOCUMENT_MAX_BYTES: usize = 1024 * 1024;
 pub fn conformance_mode_active() -> bool {
     conformance_mode_active_for(
         cfg!(feature = "oidc-conformance"),
-        std::env::var("APP_ENV").ok().as_deref(),
+        env::var("APP_ENV").ok().as_deref(),
     )
 }
 
@@ -80,9 +91,9 @@ pub fn validate_https_public_url(url: &Url) -> Result<(), RemoteUrlError> {
 
 fn is_unsafe_host(url: &Url) -> bool {
     match url.host() {
-        Some(url::Host::Ipv4(address)) => is_unsafe_ipv4(address),
-        Some(url::Host::Ipv6(address)) => is_unsafe_ipv6(address),
-        Some(url::Host::Domain(domain)) => {
+        Some(Host::Ipv4(address)) => is_unsafe_ipv4(address),
+        Some(Host::Ipv6(address)) => is_unsafe_ipv6(address),
+        Some(Host::Domain(domain)) => {
             let domain = domain.trim_end_matches('.');
             domain.eq_ignore_ascii_case("localhost")
                 || domain
@@ -124,7 +135,7 @@ fn is_unsafe_ipv6(address: Ipv6Addr) -> bool {
 }
 
 pub async fn fetch_https_public_document(
-    client: &reqwest::Client,
+    client: &Client,
     url: &Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, RemoteFetchError> {
@@ -139,14 +150,14 @@ pub async fn validate_resolved_https_public_url(url: &Url) -> Result<(), RemoteF
         RemoteUrlError::UnsafeHost => RemoteFetchError::UnsafeHost,
     })?;
 
-    let Some(url::Host::Domain(host)) = url.host() else {
+    let Some(Host::Domain(host)) = url.host() else {
         return Ok(());
     };
 
     let port = url
         .port_or_known_default()
         .ok_or(RemoteFetchError::UnsafeHost)?;
-    let mut addresses = tokio::net::lookup_host((host, port))
+    let mut addresses = lookup_host((host, port))
         .await
         .map_err(RemoteFetchError::ResolveFailed)?;
     let mut has_address = false;
@@ -170,17 +181,15 @@ fn resolved_address_is_allowed(address: IpAddr, allow_unsafe: bool) -> bool {
 }
 
 pub async fn fetch_document_after_url_validation(
-    client: &reqwest::Client,
+    client: &Client,
     url: &Url,
     max_bytes: usize,
 ) -> Result<Vec<u8>, RemoteFetchError> {
-    use tracing::Instrument as _;
-
     let fetch_url = fetchable_url(url);
-    let trace = crate::observability::outbound_trace();
+    let trace = outbound_trace();
     // JWKS and request_uri targets never receive internal trace context unless
     // the deployment explicitly allow-lists their origin.
-    let mut headers = http::HeaderMap::new();
+    let mut headers = HeaderMap::new();
     trace.inject(&fetch_url, &mut headers);
     let span = trace.client_span("GET", &fetch_url);
     let mut response = client
@@ -192,7 +201,7 @@ pub async fn fetch_document_after_url_validation(
         .map_err(RemoteFetchError::FetchFailed)?;
     span.record("http.response.status_code", response.status().as_u16());
 
-    if response.status() != reqwest::StatusCode::OK {
+    if response.status() != StatusCode::OK {
         return Err(RemoteFetchError::NotOk);
     }
 
@@ -219,16 +228,16 @@ pub async fn fetch_document_after_url_validation(
     Ok(body)
 }
 
-pub fn remote_http_client(policy: RemoteFetchPolicy) -> Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+pub fn remote_http_client(policy: RemoteFetchPolicy) -> Result<Client, Error> {
+    Client::builder()
+        .redirect(Policy::none())
         .timeout(policy.timeout)
         .danger_accept_invalid_certs(policy.allow_invalid_certs)
         .build()
 }
 
 /// HTTP client for `request_uri` and other remote OIDC document fetches.
-pub fn request_uri_http_client() -> Result<reqwest::Client, reqwest::Error> {
+pub fn request_uri_http_client() -> Result<Client, Error> {
     remote_http_client(RemoteFetchPolicy::new(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
         Duration::from_secs(5),
@@ -239,7 +248,7 @@ pub fn request_uri_http_client() -> Result<reqwest::Client, reqwest::Error> {
 /// Builds the shared HTTP client used by OIDC unit tests.
 #[cfg(test)]
 #[must_use]
-pub fn test_http_client() -> reqwest::Client {
+pub fn test_http_client() -> Client {
     request_uri_http_client().expect("test HTTP client should build")
 }
 

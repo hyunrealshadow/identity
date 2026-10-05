@@ -6,9 +6,7 @@ impl AuthorizeService {
         self.data_protector
             .protect("login-id", login_oid.as_bytes())
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoginIdInvalid).with_source(error)
-            })
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoginIdInvalid))
     }
 
     pub async fn decrypt_login_id(&self, protected_login_id: &str) -> Result<Uuid, AppError> {
@@ -16,22 +14,18 @@ impl AuthorizeService {
             .data_protector
             .unprotect("login-id", protected_login_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::LoginIdInvalid).with_source(error)
-            })?;
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoginIdInvalid))?;
 
-        Uuid::from_slice(&bytes).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::LoginIdInvalid).with_source(error)
-        })
+        Uuid::from_slice(&bytes).map_err(AppError::map_source(AuthorizeErrorCode::LoginIdInvalid))
     }
 
     pub async fn encrypt_session_id(&self, session_oid: SessionOid) -> Result<String, AppError> {
         self.data_protector
             .protect("session-id", Uuid::from(session_oid).as_bytes())
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoredSessionIdInvalid).with_source(error)
-            })
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::StoredSessionIdInvalid,
+            ))
     }
 
     pub async fn decrypt_session_id(
@@ -46,12 +40,14 @@ impl AuthorizeService {
             .data_protector
             .unprotect("session-id", protected_session_id)
             .await
-            .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::StoredSessionIdInvalid).with_source(error)
-            })?;
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::StoredSessionIdInvalid,
+            ))?;
 
-        Uuid::from_slice(&bytes).map(SessionOid).map_err(|error| {
-            AppError::from_code(AuthorizeErrorCode::StoredSessionIdInvalid).with_source(error)
-        })
+        Uuid::from_slice(&bytes)
+            .map(SessionOid)
+            .map_err(AppError::map_source(
+                AuthorizeErrorCode::StoredSessionIdInvalid,
+            ))
     }
 }
