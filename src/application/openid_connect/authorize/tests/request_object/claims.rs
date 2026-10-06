@@ -1,13 +1,15 @@
-use crate::openid_connect::authorize::tests::fixtures::*;
-use crate::openid_connect::authorize::tests::*;
 use chrono::Utc;
 use identity_domain::openid_connect::ClaimsRequestSection;
+use serde_json::{json, to_string};
+
+use crate::openid_connect::authorize::tests::fixtures::*;
+use crate::openid_connect::authorize::tests::*;
 
 #[test]
 fn validate_request_object_claims_rejects_future_issued_at() {
     let mut params = params("openid profile");
     params.state = "state-123".to_string();
-    let payload = serde_json::json!({
+    let payload = json!({
         "response_type": "code",
         "client_id": TEST_CLIENT_ID.to_string(),
         "redirect_uri": "https://client.example.com/callback",
@@ -51,7 +53,7 @@ fn validate_request_object_claims_rejects_client_id_mismatch() {
         code_challenge: None,
         code_challenge_method: None,
     };
-    let payload = serde_json::json!({
+    let payload = json!({
         "client_id": Uuid::new_v4().to_string(),
         "redirect_uri": "https://client.example.com/callback"
     });
@@ -93,7 +95,7 @@ fn validate_request_object_claims_allows_redirect_uri_mismatch() {
         code_challenge: None,
         code_challenge_method: None,
     };
-    let payload = serde_json::json!({
+    let payload = json!({
         "client_id": Uuid::nil().to_string(),
         "redirect_uri": "https://other.example.com/callback"
     });
@@ -132,7 +134,7 @@ fn validate_request_object_claims_rejects_issuer_mismatch() {
         code_challenge: None,
         code_challenge_method: None,
     };
-    let payload = serde_json::json!({
+    let payload = json!({
         "iss": Uuid::new_v4().to_string(),
         "aud": "https://identity.example.com/"
     });
@@ -171,7 +173,7 @@ fn validate_request_object_claims_rejects_audience_mismatch() {
         code_challenge: None,
         code_challenge_method: None,
     };
-    let payload = serde_json::json!({
+    let payload = json!({
         "iss": Uuid::nil().to_string(),
         "aud": "https://other.example.com/"
     });
@@ -210,7 +212,7 @@ fn validate_request_object_claims_rejects_expired_request_object() {
         code_challenge: None,
         code_challenge_method: None,
     };
-    let payload = serde_json::json!({
+    let payload = json!({
         "exp": Utc::now().timestamp() - 60
     });
 
@@ -248,7 +250,7 @@ fn validate_request_object_claims_rejects_future_not_before() {
         code_challenge: None,
         code_challenge_method: None,
     };
-    let payload = serde_json::json!({
+    let payload = json!({
         "nbf": Utc::now().timestamp() + 60
     });
 
@@ -277,7 +279,7 @@ fn parse_claims_request_accepts_round_trip_serialization() {
     );
 
     // The serialized form (the value persisted to storage) must round-trip.
-    let serialized = serde_json::to_string(&parsed).unwrap();
+    let serialized = to_string(&parsed).unwrap();
     let reparsed = AuthorizeService::parse_claims_request(&serialized).unwrap();
     assert_eq!(parsed, reparsed);
 

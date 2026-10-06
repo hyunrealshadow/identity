@@ -4,62 +4,56 @@
 //! dedicated exporter threads) behind bounded batch processors. The request
 //! path only ever does a non-blocking enqueue.
 
-use crate::config::OtlpConfig;
-use chrono::DateTime;
-use chrono::Utc;
-use opentelemetry::Value;
-use opentelemetry::trace::Link;
-use opentelemetry::trace::SpanKind;
-use opentelemetry::trace::TraceId;
-use opentelemetry_otlp::LogExporter as OpentelemetryOtlpLogExporter;
-use opentelemetry_otlp::MetricExporter;
-use opentelemetry_otlp::SpanExporter as OpentelemetryOtlpSpanExporter;
-use opentelemetry_sdk::logs::SdkLogRecord;
-use opentelemetry_sdk::metrics::Temporality;
-use opentelemetry_sdk::metrics::data::ResourceMetrics;
-use opentelemetry_sdk::trace::BatchConfig;
-use opentelemetry_sdk::trace::Tracer;
-use serde_json::Map;
-use serde_json::Value as SerdeJsonValue;
-use std::env;
-use std::error::Error;
-use std::fmt::Debug;
-use tracing::Event;
-use tracing::Subscriber;
-use tracing::field::Field;
-use tracing::field::Visit;
-use tracing_subscriber::filter::filter_fn;
-use tracing_subscriber::layer::Context as LayerContext;
-use uuid::Uuid;
+use std::{env, error::Error, fmt::Debug, sync::Arc, time::Duration};
 
-use std::{sync::Arc, time::Duration};
-
+use chrono::{DateTime, Utc};
 use opentelemetry::{
-    Context, KeyValue,
+    Context, KeyValue, Value,
     logs::{AnyValue, Severity},
-    trace::{TraceContextExt, TraceState},
+    trace::{Link, SpanKind, TraceContextExt, TraceId, TraceState},
 };
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::{Compression, WithExportConfig, WithHttpConfig};
+use opentelemetry_otlp::{
+    Compression, LogExporter as OpentelemetryOtlpLogExporter, MetricExporter,
+    SpanExporter as OpentelemetryOtlpSpanExporter, WithExportConfig, WithHttpConfig,
+};
 use opentelemetry_sdk::{
     Resource,
     error::OTelSdkResult,
     logs::{
         BatchConfig as LogBatchConfig, BatchConfigBuilder as LogBatchConfigBuilder,
-        BatchLogProcessor, LogBatch, LogExporter, SdkLoggerProvider,
+        BatchLogProcessor, LogBatch, LogExporter, SdkLogRecord, SdkLoggerProvider,
     },
-    metrics::{PeriodicReader, SdkMeterProvider, exporter::PushMetricExporter},
+    metrics::{
+        PeriodicReader, SdkMeterProvider, Temporality, data::ResourceMetrics,
+        exporter::PushMetricExporter,
+    },
     trace::{
-        BatchConfigBuilder as SpanBatchConfigBuilder, BatchSpanProcessor, Sampler,
+        BatchConfig, BatchConfigBuilder as SpanBatchConfigBuilder, BatchSpanProcessor, Sampler,
         SamplingDecision, SamplingResult, SdkTracerProvider, ShouldSample, SpanData, SpanExporter,
+        Tracer,
     },
 };
-use tracing_subscriber::{EnvFilter, Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use serde_json::{Map, Value as SerdeJsonValue, json};
+use tracing::{
+    Event, Subscriber,
+    field::{Field, Visit},
+};
+use tracing_opentelemetry::layer;
+use tracing_subscriber::{
+    EnvFilter, Layer,
+    filter::filter_fn,
+    fmt,
+    layer::{Context as LayerContext, SubscriberExt},
+    registry,
+    util::SubscriberInitExt,
+};
+use uuid::Uuid;
 
 use super::metrics::{ExportPipeline, ExportSignal, global as metrics};
 use crate::config::{
     AppEnvironment, DiagnosticsPipelineConfig, LogFormat, LoggerConfig, ObservabilityConfig,
-    OtlpCompression,
+    OtlpCompression, OtlpConfig,
 };
 
 /// Providers that must be flushed and shut down on exit.
@@ -176,9 +170,9 @@ pub(crate) fn init_subscriber(
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(logger.level.clone()));
 
-    let subscriber = tracing_subscriber::registry()
+    let subscriber = registry()
         .with(filter)
-        .with(tracing_opentelemetry::layer().with_tracer(tracer))
+        .with(layer().with_tracer(tracer))
         .with(
             diagnostics_logs
                 .map(OpenTelemetryTracingBridge::new)
@@ -522,7 +516,7 @@ fn format_json_record(record: &SdkLogRecord) -> String {
     for (key, value) in record.attributes_iter() {
         fields.insert(key.as_str().to_owned(), any_value_to_json(value));
     }
-    let mut line = serde_json::json!({
+    let mut line = json!({
         "timestamp": timestamp,
         "level": level,
         "fields": fields,
@@ -538,9 +532,9 @@ fn format_json_record(record: &SdkLogRecord) -> String {
 fn any_value_to_json(value: &AnyValue) -> SerdeJsonValue {
     match value {
         AnyValue::String(value) => SerdeJsonValue::String(value.to_string()),
-        AnyValue::Boolean(value) => serde_json::json!(value),
-        AnyValue::Int(value) => serde_json::json!(value),
-        AnyValue::Double(value) => serde_json::json!(value),
+        AnyValue::Boolean(value) => json!(value),
+        AnyValue::Int(value) => json!(value),
+        AnyValue::Double(value) => json!(value),
         AnyValue::Bytes(value) => SerdeJsonValue::String(format!("{} bytes", value.len())),
         AnyValue::ListAny(values) => {
             SerdeJsonValue::Array(values.iter().map(any_value_to_json).collect())
@@ -634,23 +628,20 @@ impl Visit for InternalTelemetryVisitor {
 
 #[cfg(test)]
 mod tests {
-    use super::signal_endpoint;
-    use opentelemetry_sdk::trace::SamplingDecision;
-
-    use opentelemetry::trace::TraceId;
-    use opentelemetry_sdk::trace::Sampler;
-    use serde_json::Value;
     use std::sync::Arc;
 
-    use opentelemetry::trace::SpanKind;
     use opentelemetry::{
         KeyValue,
         logs::{LogRecord, Logger, LoggerProvider, Severity},
+        trace::{SpanKind, TraceId},
     };
-    use opentelemetry_sdk::logs::SdkLoggerProvider;
-    use opentelemetry_sdk::trace::ShouldSample;
+    use opentelemetry_sdk::{
+        logs::SdkLoggerProvider,
+        trace::{Sampler, SamplingDecision, ShouldSample},
+    };
+    use serde_json::{Value, from_str};
 
-    use super::{IdentitySampler, build_sampler, format_json_record};
+    use super::{IdentitySampler, build_sampler, format_json_record, signal_endpoint};
     use crate::config::{AppEnvironment, ObservabilityConfig};
 
     #[test]
@@ -662,7 +653,7 @@ mod tests {
         record.add_attribute("identity.event.category", "business");
         record.add_attribute("environment", "production");
 
-        let value: Value = serde_json::from_str(&format_json_record(&record)).unwrap();
+        let value: Value = from_str(&format_json_record(&record)).unwrap();
         assert_eq!(value["level"], "INFO");
         assert_eq!(value["fields"]["message"], "service.started");
         assert_eq!(value["fields"]["identity.event.category"], "business");
@@ -765,8 +756,6 @@ mod otlp_construction_tests {
 
 #[cfg(test)]
 mod otlp_export_tests {
-    use tokio::time::sleep;
-
     use std::{sync::Arc, time::Duration};
 
     use opentelemetry::{
@@ -776,7 +765,9 @@ mod otlp_export_tests {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
+        spawn,
         sync::Mutex,
+        time::sleep,
     };
 
     use super::{build_providers, shutdown};
@@ -793,13 +784,13 @@ mod otlp_export_tests {
             let address = listener.local_addr().unwrap();
             let collector = Self::default();
             let requests = Arc::clone(&collector.requests);
-            tokio::spawn(async move {
+            spawn(async move {
                 loop {
                     let Ok((mut socket, _)) = listener.accept().await else {
                         return;
                     };
                     let requests = Arc::clone(&requests);
-                    tokio::spawn(async move {
+                    spawn(async move {
                         let mut buffer = Vec::new();
                         let mut chunk = [0_u8; 8192];
                         loop {

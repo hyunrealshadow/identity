@@ -1,20 +1,18 @@
-use crate::key::runtime::RuntimeKeyRingProvider;
-use identity_domain::key::Key;
-use identity_domain::key::KeyData;
-use identity_domain::key::KeyOid;
-use std::io::Error;
-use std::sync::Arc;
-use uuid::Uuid;
+use std::{io::Error, sync::Arc};
 
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use hkdf::Hkdf;
+use identity_domain::{
+    data_protection::{DataProtectionError, ProtectedPayload, Purpose},
+    key::{Key, KeyData, KeyOid},
+};
 use sha2::Sha256;
 use tracing::warn;
+use uuid::Uuid;
 
-use identity_domain::data_protection::DataProtectionError;
-use identity_domain::data_protection::{ProtectedPayload, Purpose};
+use crate::key::runtime::RuntimeKeyRingProvider;
 
 pub const DATA_PROTECTION_KEY_SIZE: usize = 32;
 
@@ -200,26 +198,25 @@ pub fn derive_subkey(master_key: &[u8], info: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::data_protection::ProtectedPayload;
-
-    use crate::error::AppError;
-    use base64::engine::general_purpose::STANDARD;
-    use identity_domain::data_protection::KeyRing;
+    use std::sync::Arc;
 
     use async_trait::async_trait;
-    use base64::Engine;
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use chrono::{DateTime, Duration, Utc};
-    use std::sync::Arc;
+    use identity_domain::{
+        data_protection::{DataProtectionError, KeyRing, ProtectedPayload},
+        key::{
+            Key, KeyData, KeyOid, KeyType,
+            material::{SymmetricKeyAlgorithm, SymmetricKeyData},
+        },
+    };
     use uuid::Uuid;
 
-    use crate::key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider};
-    use identity_domain::data_protection::DataProtectionError;
-    use identity_domain::key::{
-        Key, KeyData, KeyOid, KeyType,
-        material::{SymmetricKeyAlgorithm, SymmetricKeyData},
-    };
-
     use super::{DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl};
+    use crate::{
+        error::AppError,
+        key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider},
+    };
 
     struct TestCipher;
 

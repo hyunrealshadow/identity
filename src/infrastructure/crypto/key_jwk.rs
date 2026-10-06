@@ -1,3 +1,5 @@
+use serde_json::{from_value, to_value};
+
 use crate::{
     application::{
         error::{AppError, codes::key::KeyErrorCode},
@@ -20,9 +22,9 @@ impl KeyJwkGenerator for KeyJwkGeneratorImpl {
             .map_err(AppError::map_source(KeyErrorCode::JwkGenerationFailed))?
             .into_iter()
             .map(|(algorithm, jwk)| {
-                let jwk_value = serde_json::to_value(jwk)
+                let jwk_value = to_value(jwk)
                     .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
-                let jwk = serde_json::from_value::<PublicJwk>(jwk_value)
+                let jwk = from_value::<PublicJwk>(jwk_value)
                     .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
                 let algorithm = algorithm
                     .parse()

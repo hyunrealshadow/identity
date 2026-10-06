@@ -1,10 +1,13 @@
-use identity_domain::client::model::ClientOid;
-use identity_domain::openid_connect::{
-    OpenIdConnectCredential, OpenIdConnectCredentialRepository,
-    OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
+use identity_domain::{
+    client::model::ClientOid,
+    openid_connect::{
+        OpenIdConnectCredential, OpenIdConnectCredentialRepository,
+        OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
+    },
 };
+use mockall::mock;
 
-mockall::mock! {
+mock! {
     pub OpenIdConnectCredentialRepository {}
 
     #[async_trait::async_trait]

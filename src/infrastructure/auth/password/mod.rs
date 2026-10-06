@@ -10,12 +10,13 @@
 //! Algorithm-specific modules are kept private to this crate;
 //! callers never need to import them.
 
-mod argon2;
-
+use argon2::{extract_opts, hash, verify};
 use identity_application::{
     auth::password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
     user::model::Password,
 };
+
+mod argon2;
 
 #[derive(Debug, Clone, Default)]
 pub struct PasswordHasherImpl;
@@ -29,7 +30,7 @@ impl PasswordHasherImpl {
 impl PasswordHasher for PasswordHasherImpl {
     fn hash(&self, password: &str, options: &HashOptions) -> Result<Password, PasswordHashError> {
         match options {
-            HashOptions::Argon2(opts) => argon2::hash(password, opts),
+            HashOptions::Argon2(opts) => hash(password, opts),
         }
     }
 
@@ -41,8 +42,8 @@ impl PasswordHasher for PasswordHasherImpl {
     ) -> Result<VerifyResult, PasswordHashError> {
         match stored {
             Password::Argon2(argon2_pw) => {
-                let current_opts = argon2::extract_opts(options)?;
-                argon2::verify(password, argon2_pw, current_opts)
+                let current_opts = extract_opts(options)?;
+                verify(password, argon2_pw, current_opts)
             }
         }
     }
@@ -50,11 +51,12 @@ impl PasswordHasher for PasswordHasherImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use identity_application::{
         auth::password::{HashOptions, VerifyResult},
         user::model::{Argon2Options, Argon2Variant, Argon2Version},
     };
+
+    use super::*;
 
     fn opts() -> HashOptions {
         HashOptions::Argon2(Argon2Options {

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use identity_application::setting::SettingRegistry;
 use sea_orm::DatabaseConnection;
 
 use super::Seed;
@@ -8,7 +9,6 @@ use crate::{
         database::repository::setting::insert_missing_settings, settings::setting_registry,
     },
 };
-use identity_application::setting::SettingRegistry;
 
 /// Stores the default of every built-in setting that has no row yet.
 pub struct SettingDefaultsSeed;

@@ -1,8 +1,8 @@
-use std::error::Error;
-use std::fmt::Display as FmtDisplay;
-use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::str::FromStr;
+use std::{
+    error::Error,
+    fmt::{Display as FmtDisplay, Formatter, Result as FmtResult},
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray};
@@ -268,11 +268,7 @@ impl FromStr for JwsAlgorithm {
 
 #[cfg(test)]
 mod tests {
-    use super::JwaSigningAlgorithm;
-
-    use super::ALL_ASYMMETRIC_KEY_ALGORITHMS;
-
-    use super::AsymmetricKeyAlgorithm;
+    use super::{ALL_ASYMMETRIC_KEY_ALGORITHMS, AsymmetricKeyAlgorithm, JwaSigningAlgorithm};
 
     #[test]
     fn names_round_trip_through_the_parser() {

@@ -1,9 +1,8 @@
 use crate::{
     auth::password::HashOptions,
+    setting::{SettingDefinition, SettingValidationError},
     user::model::{Argon2Options, Argon2Variant, Argon2Version},
 };
-
-use crate::setting::{SettingDefinition, SettingValidationError};
 
 pub struct PasswordHashSetting;
 
@@ -52,8 +51,10 @@ impl SettingDefinition for PasswordHashSetting {
 #[cfg(test)]
 mod tests {
     use super::{HashOptions, PasswordHashSetting};
-    use crate::setting::SettingDefinition;
-    use crate::user::model::{Argon2Options, Argon2Variant, Argon2Version};
+    use crate::{
+        setting::SettingDefinition,
+        user::model::{Argon2Options, Argon2Variant, Argon2Version},
+    };
 
     fn invalid_options(update: impl FnOnce(&mut Argon2Options)) -> HashOptions {
         let mut options = Argon2Options {

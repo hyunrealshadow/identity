@@ -1,18 +1,21 @@
-use apalis_sql::Config;
-use apalis_sql::sqlx::Error;
-use identity_application::error::ErrorDiagnostics;
-use std::str::FromStr;
-use std::time::Duration;
-use ulid::Ulid;
-use uuid::Uuid;
+use std::{str::FromStr, time::Duration};
 
 use apalis::prelude::{
     BoxDynError, Data, Request, Storage, TaskId, WorkerBuilder, WorkerFactoryFn,
 };
 use apalis_cron::{CronContext, CronStream, Schedule};
-use apalis_sql::{postgres::PostgresStorage, sqlx::PgPool};
+use apalis_sql::{
+    Config,
+    postgres::PostgresStorage,
+    sqlx::{Error, PgPool},
+};
 use chrono::{DateTime, Utc};
+use identity_application::error::ErrorDiagnostics;
 use serde::{Deserialize, Serialize};
+use tokio::{select, spawn};
+use tracing::{error, info};
+use ulid::Ulid;
+use uuid::Uuid;
 
 use crate::{
     database::repository::client_authorization::expire_due_authorizations_batch, state::AppState,
@@ -72,16 +75,15 @@ async fn handle_expiration_job(_: ExpirationJob, state: Data<AppState>) -> Resul
     loop {
         let updated = expire_due_authorizations_batch(state.resources().db())
             .await
-            .map_err(|error| {
-                let diagnostics = ErrorDiagnostics::from_error(&error);
-                tracing::error!(
+            .inspect_err(|error| {
+                let diagnostics = ErrorDiagnostics::from_error(error);
+                error!(
                     error_cause = %diagnostics.cause,
                     error_operation = diagnostics.operation,
                     stacktrace = diagnostics.backtrace.map(ToString::to_string),
                     completed_rows = total,
                     "authorization expiration batch failed"
                 );
-                error
             })?;
         total += updated;
         if updated < EXPIRATION_BATCH_SIZE {
@@ -89,7 +91,7 @@ async fn handle_expiration_job(_: ExpirationJob, state: Data<AppState>) -> Resul
         }
     }
     if total > 0 {
-        tracing::info!(total, "expired authorizations marked inactive");
+        info!(total, "expired authorizations marked inactive");
     }
     Ok(())
 }
@@ -103,21 +105,21 @@ pub(super) async fn spawn_expiration_workers(state: AppState, pool: PgPool) -> R
 
     let job_state = state.clone();
     let job_storage = storage.clone();
-    tokio::spawn(async move {
+    spawn(async move {
         let mut shutdown = job_state.lifecycle().subscribe_shutdown();
         let worker = WorkerBuilder::new(format!("authorization-expiration-{}", Uuid::new_v4()))
             .data(job_state)
             .backend(job_storage)
             .build_fn(handle_expiration_job);
-        tokio::select! {
-            () = worker.run() => tracing::error!("authorization expiration worker stopped"),
+        select! {
+            () = worker.run() => error!("authorization expiration worker stopped"),
             _ = async {
                 while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
             } => {}
         }
     });
 
-    tokio::spawn(async move {
+    spawn(async move {
         let mut shutdown = state.lifecycle().subscribe_shutdown();
         let schedule =
             Schedule::from_str("0 */5 * * * *").expect("valid five-minute expiration schedule");
@@ -125,8 +127,8 @@ pub(super) async fn spawn_expiration_workers(state: AppState, pool: PgPool) -> R
             .data(storage)
             .backend(CronStream::new(schedule))
             .build_fn(handle_expiration_tick);
-        tokio::select! {
-            () = worker.run() => tracing::error!("authorization expiration scheduler stopped"),
+        select! {
+            () = worker.run() => error!("authorization expiration scheduler stopped"),
             _ = async {
                 while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
             } => {}

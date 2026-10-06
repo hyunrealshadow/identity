@@ -1,9 +1,9 @@
-use crate::database::query::advisory_transaction_lock;
 use chrono::{DateTime, FixedOffset, Utc};
-use identity_domain::auth::SessionOid;
-use identity_domain::user::UserOid;
+use identity_domain::{auth::SessionOid, user::UserOid};
 use sea_orm::{ConnectionTrait, DbErr};
 use uuid::Uuid;
+
+use crate::database::query::advisory_transaction_lock;
 
 /// Sentinel value used to represent "no expiry" in the database,
 /// since nullable timestamp columns would require schema changes.
@@ -84,11 +84,10 @@ fn user_credential_lock_id(oid: UserOid) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::user::UserOid;
+    use identity_domain::{auth::SessionOid, user::UserOid};
+    use uuid::Uuid;
 
     use super::{session_lock_id, user_credential_lock_id};
-    use identity_domain::auth::SessionOid;
-    use uuid::Uuid;
 
     #[test]
     fn session_lock_id_is_stable_and_session_specific() {

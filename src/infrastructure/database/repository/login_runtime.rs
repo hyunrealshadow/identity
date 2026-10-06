@@ -1,25 +1,24 @@
-use crate::database::query::advisory_transaction_lock;
+use std::error::Error;
+
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::Duration;
-use chrono::{DateTime, Utc};
-use rand::RngExt;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseConnection,
-    EntityTrait, QueryFilter, QueryOrder, TransactionTrait,
-};
-use std::error::Error;
-use uuid::Uuid;
-
+use chrono::{DateTime, Duration, Utc};
 use identity_domain::openid_connect::{
     LoginRotationPolicy, LoginRuntimeConfig, LoginRuntimeRepository, LoginRuntimeRepositoryError,
     OpenIdConnectCredentialData, OpenIdConnectCredentialType,
 };
-
-use crate::database::entity::{client, client_openid_connect_credential};
+use rand::{RngExt, rng};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseConnection,
+    EntityTrait, QueryFilter, QueryOrder, TransactionTrait, sea_query::Expr,
+};
+use uuid::Uuid;
 
 use super::openid_connect_credential::serialize_data;
+use crate::database::{
+    entity::{client, client_openid_connect_credential},
+    query::advisory_transaction_lock,
+};
 
 pub struct LoginRuntimeRepositoryImpl {
     db: DatabaseConnection,
@@ -156,7 +155,7 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
             }
 
             let mut secret_bytes = [0_u8; 32];
-            rand::rng().fill(&mut secret_bytes);
+            rng().fill(&mut secret_bytes);
             let secret = URL_SAFE_NO_PAD.encode(secret_bytes);
             let serialized = serialize_data(OpenIdConnectCredentialData::ClientSecret { secret });
             client_openid_connect_credential::ActiveModel {
@@ -204,9 +203,9 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, TimeZone as _, Utc};
+    use identity_domain::openid_connect::LoginRotationPolicy;
 
     use super::{retirement_expiry, secret_is_due};
-    use identity_domain::openid_connect::LoginRotationPolicy;
 
     #[test]
     fn retirement_never_extends_or_resurrects_a_credential() {

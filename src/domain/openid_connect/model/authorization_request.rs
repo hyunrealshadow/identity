@@ -1,16 +1,12 @@
-use serde::Deserializer;
-use serde::Serializer;
-use serde::de::Error as DeError;
-use serde_json::Map;
-use serde_json::Value;
-use std::error::Error;
 use std::{
     collections::{BTreeMap, HashSet},
+    error::Error,
     fmt,
     str::FromStr,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
+use serde_json::{Map, Value, to_string};
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 use uuid::Uuid;
@@ -418,10 +414,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             code_challenge_method: value.code_challenge_method,
             acr_values: value.acr_values.clone(),
             ui_locales: value.ui_locales.clone(),
-            claims: value
-                .claims
-                .as_ref()
-                .and_then(|c| serde_json::to_string(c).ok()),
+            claims: value.claims.as_ref().and_then(|c| to_string(c).ok()),
         }
     }
 }
@@ -431,11 +424,11 @@ fn default_redirect_uri_was_supplied() -> bool {
 }
 
 mod optional_prompt_values {
-    use serde::de::Error;
+    use std::collections::HashSet;
+
+    use serde::{Deserialize as _, Deserializer, Serializer, de::Error};
 
     use super::PromptValue;
-    use serde::{Deserialize as _, Deserializer, Serializer};
-    use std::collections::HashSet;
 
     pub fn serialize<S>(
         value: &Option<HashSet<PromptValue>>,
@@ -471,16 +464,16 @@ mod optional_prompt_values {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
+    use std::str::FromStr;
 
-    use crate::openid_connect::ScopeSet;
+    use serde_json::{Value, from_str, from_value, to_string};
     use url::Url;
     use uuid::Uuid;
 
     use super::{
         AuthorizationRequest, AuthorizationRequestData, PromptValue, ResponseMode, ResponseType,
     };
-    use std::str::FromStr;
+    use crate::openid_connect::ScopeSet;
 
     #[test]
     fn parse_response_type_code() {
@@ -591,8 +584,8 @@ mod tests {
         };
 
         let data = AuthorizationRequestData::from(&request);
-        let json = serde_json::to_string(&data).unwrap();
-        let parsed: AuthorizationRequestData = serde_json::from_str(&json).unwrap();
+        let json = to_string(&data).unwrap();
+        let parsed: AuthorizationRequestData = from_str(&json).unwrap();
 
         assert_eq!(parsed.response_type, ResponseType::Code);
         assert_eq!(parsed.scope, "openid email");
@@ -600,12 +593,12 @@ mod tests {
         assert!(!parsed.redirect_uri_was_supplied);
         assert_eq!(parsed.nonce.as_deref(), Some("nonce123"));
         assert_eq!(parsed.login_hint, None);
-        let mut old_json: Value = serde_json::from_str(&json).unwrap();
+        let mut old_json: Value = from_str(&json).unwrap();
         old_json
             .as_object_mut()
             .unwrap()
             .remove("redirect_uri_was_supplied");
-        let old: AuthorizationRequestData = serde_json::from_value(old_json).unwrap();
+        let old: AuthorizationRequestData = from_value(old_json).unwrap();
         assert!(old.redirect_uri_was_supplied);
     }
 

@@ -1,6 +1,7 @@
+use std::error::Error as StdError;
+
 use async_trait::async_trait;
 use serde_json::Error as SerdeJsonError;
-use std::error::Error as StdError;
 use thiserror::Error;
 
 use crate::user::{

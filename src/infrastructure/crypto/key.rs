@@ -1,27 +1,31 @@
-use josekit::jwe::{ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, RSA_OAEP, RSA_OAEP_256};
-use josekit::jwk::alg::ec::EcKeyPair;
-use josekit::jwk::alg::ecx::EcxKeyPair;
-use josekit::jwk::alg::ed::EdKeyPair;
-use josekit::jwk::alg::rsa::RsaKeyPair;
-use josekit::jwk::alg::rsapss::RsaPssKeyPair;
-use josekit::jwk::{
-    Jwk, KeyPair,
-    alg::{ec::EcCurve, ecx::EcxCurve, ed::EdCurve},
+use std::error::Error;
+
+use identity_domain::key::{
+    JwaSigningAlgorithm,
+    generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
+    model::{AsymmetricKeyAlgorithm, AsymmetricKeyData},
 };
-use josekit::jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512};
+use josekit::{
+    jwe::{ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, RSA_OAEP, RSA_OAEP_256},
+    jwk::{
+        Jwk, KeyPair,
+        alg::{
+            ec::{EcCurve, EcKeyPair},
+            ecx::{EcxCurve, EcxKeyPair},
+            ed::{EdCurve, EdKeyPair},
+            rsa::RsaKeyPair,
+            rsapss::RsaPssKeyPair,
+        },
+    },
+    jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512},
+};
 use openssl::{
     base64::encode_block,
     hash::{MessageDigest, hash},
     pkey::PKey,
     x509::X509,
 };
-use std::error::Error;
-
-use identity_domain::key::JwaSigningAlgorithm;
-use identity_domain::key::{
-    generator::{AsymmetricKeyGenerator, AsymmetricKeySpec, KeyMaterialError},
-    model::{AsymmetricKeyAlgorithm, AsymmetricKeyData},
-};
+use serde_json::json;
 
 fn internal<E>(error: E) -> KeyMaterialError
 where
@@ -44,24 +48,18 @@ fn apply_certificate_params(jwk: &mut Jwk, cert_pem: &str) -> Result<(), KeyMate
 
     // x5c: base64-standard-encoded DER, wrapped in a JSON array (single cert)
     let x5c_value = encode_block(&der);
-    jwk.set_parameter("x5c", Some(serde_json::json!([x5c_value])))
+    jwk.set_parameter("x5c", Some(json!([x5c_value])))
         .map_err(internal)?;
 
     // x5t: SHA-1 thumbprint, base64url-encoded
     let sha1_digest = hash(MessageDigest::sha1(), &der).map_err(internal)?;
-    jwk.set_parameter(
-        "x5t",
-        Some(serde_json::json!(base64url_encode(&sha1_digest))),
-    )
-    .map_err(internal)?;
+    jwk.set_parameter("x5t", Some(json!(base64url_encode(&sha1_digest))))
+        .map_err(internal)?;
 
     // x5t#S256: SHA-256 thumbprint, base64url-encoded
     let sha256_digest = hash(MessageDigest::sha256(), &der).map_err(internal)?;
-    jwk.set_parameter(
-        "x5t#S256",
-        Some(serde_json::json!(base64url_encode(&sha256_digest))),
-    )
-    .map_err(internal)?;
+    jwk.set_parameter("x5t#S256", Some(json!(base64url_encode(&sha256_digest))))
+        .map_err(internal)?;
 
     Ok(())
 }

@@ -1,34 +1,35 @@
-use crate::database::query::json_text;
 use async_trait::async_trait;
-use chrono::Duration;
-use chrono::{DateTime, Utc};
-use identity_domain::auth::ACR_AAL1;
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::auth::SESSION_EXPIRY;
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::{
+    auth::{
+        ACR_AAL1, ACR_AAL2, SESSION_EXPIRY, SessionOid, SessionStatus,
+        model::{ActiveSession, Session},
+        repository::{
+            CreateSessionInput, SessionPage, SessionPageDirection, SessionPageItem,
+            SessionRepository, SessionRepositoryError, SessionSortKey,
+        },
+    },
+    client_authorization::ClientAuthorizationType,
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, SelectTwo, Set, TransactionTrait,
     sea_query::{Expr, ExprTrait, SimpleExpr},
 };
+use serde_json::{from_value, json};
 use uuid::Uuid;
 
 use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry, lock_session};
-use crate::database::entity::{
-    client_authorization, client_authorization::Entity as ClientAuthorizationEntity, session,
-    session::Entity as SessionEntity, user, user::Entity as UserEntity,
-};
-use identity_domain::auth::{
-    SessionOid, SessionStatus,
-    model::{ActiveSession, Session},
-    repository::{
-        CreateSessionInput, SessionPage, SessionPageDirection, SessionPageItem, SessionRepository,
-        SessionRepositoryError, SessionSortKey,
+use crate::database::{
+    entity::{
+        client_authorization, client_authorization::Entity as ClientAuthorizationEntity, session,
+        session::Entity as SessionEntity, user, user::Entity as UserEntity,
     },
+    query::json_text,
 };
-use identity_domain::client_authorization::ClientAuthorizationType;
 
 fn session_to_domain(m: session::Model, user_oid: Uuid) -> Result<Session, SessionRepositoryError> {
-    let amr = serde_json::from_value(m.amr.clone()).unwrap_or_default();
+    let amr = from_value(m.amr.clone()).unwrap_or_default();
     let status = m
         .status
         .parse()
@@ -293,7 +294,7 @@ impl SessionRepository for SessionRepositoryImpl {
                     } else {
                         s.acr
                     },
-                    amr: serde_json::from_value(s.amr).unwrap_or_default(),
+                    amr: from_value(s.amr).unwrap_or_default(),
                 })
             })
             .collect())
@@ -328,7 +329,7 @@ impl SessionRepository for SessionRepositoryImpl {
             updated_at: Set(None),
             acr: Set(input.acr),
             acr_expires_at: Set(input.acr_expires_at.map(Into::into)),
-            amr: Set(serde_json::json!(input.amr)),
+            amr: Set(json!(input.amr)),
             ..Default::default()
         };
         let model = active
@@ -407,7 +408,7 @@ impl SessionRepository for SessionRepositoryImpl {
         .into());
         active.acr = Set(Some(acr.to_owned()));
         active.acr_expires_at = Set(Some(acr_expires_at.into()));
-        active.amr = Set(serde_json::json!(amr));
+        active.amr = Set(json!(amr));
         active.updated_at = Set(Some(now.into()));
         let model = active
             .update(&transaction)
@@ -495,34 +496,25 @@ impl SessionRepository for SessionRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::auth::repository::SessionRepositoryError;
-
-    use super::SessionPageDirection;
-    use super::SessionRepositoryImpl;
-    use super::build_session_page;
-    use crate::database::entity::user::Model;
-    use chrono::Duration;
-    use identity_domain::auth::ACR_AAL1;
-    use identity_domain::auth::AMR_PASSWORD;
-    use identity_domain::auth::SESSION_EXPIRY;
-    use sea_orm::sea_query::Value;
-
+    use chrono::{DateTime, Duration, Utc};
+    use identity_domain::auth::{
+        ACR_AAL1, AMR_PASSWORD, SESSION_EXPIRY, SessionOid, SessionStatus,
+        model::Session,
+        repository::{SessionRepository as _, SessionRepositoryError},
+    };
     use sea_orm::{
         DatabaseBackend, DbBackend, EntityTrait as _, MockDatabase, MockExecResult,
-        QueryFilter as _, QueryTrait as _,
+        QueryFilter as _, QueryTrait as _, sea_query::Value,
     };
-
-    use super::{
-        CursorComparison, SessionPageItem, SessionSortKey, active_session_page_query,
-        session_cursor_condition, session_to_domain,
-    };
-    use chrono::{DateTime, Utc};
+    use serde_json::json;
     use uuid::Uuid;
 
-    use crate::database::entity::session;
-    use identity_domain::auth::{
-        SessionOid, SessionStatus, model::Session, repository::SessionRepository as _,
+    use super::{
+        CursorComparison, SessionPageDirection, SessionPageItem, SessionRepositoryImpl,
+        SessionSortKey, active_session_page_query, build_session_page, session_cursor_condition,
+        session_to_domain,
     };
+    use crate::database::entity::{session, user::Model};
 
     fn reauthentication_models() -> (session::Model, Model) {
         let now = Utc::now().fixed_offset();
@@ -533,7 +525,7 @@ mod tests {
             status: SessionStatus::ACTIVE.to_string(),
             acr: None,
             acr_expires_at: None,
-            amr: serde_json::json!([]),
+            amr: json!([]),
             device_name: None,
             device_type: None,
             os_name: None,
@@ -570,7 +562,7 @@ mod tests {
             birthdate: None,
             zone_info: None,
             locale: None,
-            preferences: serde_json::json!({}),
+            preferences: json!({}),
             phone_number: None,
             phone_number_verified: None,
             address_formatted: None,
@@ -750,7 +742,7 @@ mod tests {
             status: SessionStatus::ACTIVE.to_string(),
             acr: None,
             acr_expires_at: None,
-            amr: serde_json::json!([]),
+            amr: json!([]),
             device_name: None,
             device_type: None,
             os_name: None,

@@ -1,12 +1,16 @@
-use crate::domain::auth::SessionStatus;
-use crate::openid_connect::jwt_checks::validate_required_exp_and_optional_window;
 use chrono::Utc;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{TokenIntrospectionParams, TokenService, resolve_client_id};
-use crate::domain::client_authorization::{ClientAuthorizationData, ClientAuthorizationType};
-use crate::error::{AppError, codes::token::TokenErrorCode};
+use crate::{
+    domain::{
+        auth::SessionStatus,
+        client_authorization::{ClientAuthorizationData, ClientAuthorizationType},
+    },
+    error::{AppError, codes::token::TokenErrorCode},
+    openid_connect::jwt_checks::validate_required_exp_and_optional_window,
+};
 
 impl TokenService {
     /// RFC 7662. Disclosure is restricted to the authenticated issuing client.

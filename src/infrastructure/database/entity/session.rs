@@ -1,7 +1,6 @@
 //! Current SeaORM persistence entity.
 
-use super::login::Entity as LoginEntity;
-use super::user::Entity as UserEntity;
+use super::{login::Entity as LoginEntity, user::Entity as UserEntity};
 
 use sea_orm::entity::prelude::*;
 

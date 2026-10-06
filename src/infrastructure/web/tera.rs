@@ -1,28 +1,27 @@
-use fluent_templates::FluentBundle;
-use fluent_templates::fluent_bundle::FluentArgs;
-use fluent_templates::fluent_bundle::FluentValue;
-use icu_list::ListFormatter;
-use icu_list::options::ListFormatterOptions;
-use icu_list::options::ListLength;
+use std::{error::Error as StdError, io::Error as IoError, path::PathBuf, sync::Arc};
+
+use fluent_templates::{
+    ArcLoader, FluentBundle, Loader,
+    fluent_bundle::{FluentArgs, FluentValue},
+};
+use http::HeaderMap;
+use icu_list::{
+    ListFormatter,
+    options::{ListFormatterOptions, ListLength},
+};
 use icu_locale_core::LanguageIdentifier as IcuLocaleCoreLanguageIdentifier;
 use icu_provider::DataError;
 use serde::Serialize;
-use serde_json::Value as SerdeJsonValue;
-use std::error::Error as StdError;
-use std::io::Error as IoError;
-use std::{path::PathBuf, sync::Arc};
-use tera::Error;
+use serde_json::{Value as SerdeJsonValue, to_value};
+use tera::{Context, Error, Function, Kwargs, State, Tera, TeraResult, Value};
+use tracing::{error, warn};
+use unic_langid::{LanguageIdentifier, langid};
 use writeable::Writeable;
 
-use fluent_templates::{ArcLoader, Loader};
-use http::HeaderMap;
-use tera::{Context, Function, Kwargs, State, Tera, TeraResult, Value};
-use unic_langid::{LanguageIdentifier, langid};
-
-use crate::state::AppState;
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
     infrastructure::i18n::{I18n, resolve_locale_from_headers},
+    state::AppState,
 };
 
 struct LocaleAwareFluentLoader {
@@ -95,7 +94,7 @@ fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
             unit: ListFormatter::try_new_unit(prefs, opts)?,
         })
     })() else {
-        tracing::warn!("icu ListFormatter init failed; LIST() will pass through");
+        warn!("icu ListFormatter init failed; LIST() will pass through");
         return;
     };
 
@@ -194,9 +193,9 @@ pub fn render_view<T: Serialize>(
     template: &str,
     data: T,
 ) -> Result<String, AppError> {
-    match serde_json::to_value(data) {
+    match to_value(data) {
         Err(e) => {
-            tracing::error!(error = %e, "render_view: serialise failed");
+            error!(error = %e, "render_view: serialise failed");
             Err(AppError::from_code(CommonErrorCode::InternalError))
         }
         Ok(mut data) => {
@@ -209,7 +208,7 @@ pub fn render_view<T: Serialize>(
 
             match Context::from_serialize(&data) {
                 Err(e) => {
-                    tracing::error!(error = %e, "render_view: context build failed");
+                    error!(error = %e, "render_view: context build failed");
                     Err(AppError::from_code(CommonErrorCode::InternalError))
                 }
                 Ok(context) => match render_with_locale(
@@ -221,7 +220,7 @@ pub fn render_view<T: Serialize>(
                 ) {
                     Ok(body) => Ok(body),
                     Err(e) => {
-                        tracing::error!(error = %e, template, "render_view: template render failed");
+                        error!(error = %e, template, "render_view: template render failed");
                         Err(AppError::from_code(CommonErrorCode::InternalError))
                     }
                 },
@@ -232,10 +231,10 @@ pub fn render_view<T: Serialize>(
 
 #[cfg(test)]
 mod tests {
+    use identity_application::error::params::ErrorParams;
     use unic_langid::langid;
 
     use super::{build_i18n, build_tera};
-    use identity_application::error::params::ErrorParams;
 
     #[test]
     fn build_tera_loads_runtime_templates_from_assets_views() {

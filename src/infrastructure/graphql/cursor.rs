@@ -1,9 +1,8 @@
-use std::error::Error;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::marker::PhantomData;
+use std::{
+    error::Error,
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    marker::PhantomData,
+};
 
 use async_graphql::connection::CursorType;
 use identity_application::data_protection::DataProtector;

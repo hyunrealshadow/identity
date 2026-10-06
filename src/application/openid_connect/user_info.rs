@@ -1,14 +1,20 @@
-use super::client_encryption::select_client_encryption_jwk;
-use chrono::Utc;
-use identity_domain::key::JwaSigningAlgorithm;
-use identity_domain::key::JweContentEncryption;
-use identity_domain::key::JwkAlgorithm;
-use identity_domain::key::JwsAlgorithm;
-use identity_domain::key::Key;
-use std::sync::Arc;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
+use chrono::Utc;
+use identity_domain::key::{
+    JwaSigningAlgorithm, JweContentEncryption, JwkAlgorithm, JwsAlgorithm, Key,
+};
+use josekit::{
+    jws::{JwsHeader, JwsSigner},
+    jwt,
+};
+use serde_json::{from_value, to_string, to_value};
+use uuid::Uuid;
+
+use super::client_encryption::select_client_encryption_jwk;
 use crate::{
     application::{
         error::{
@@ -40,11 +46,6 @@ use crate::{
         user::{UserOid, repository::UserRepository},
     },
 };
-use josekit::{
-    jws::{JwsHeader, JwsSigner},
-    jwt,
-};
-use uuid::Uuid;
 
 pub struct UserInfoService {
     user_repo: Arc<dyn UserRepository>,
@@ -218,7 +219,7 @@ impl UserInfoService {
 
         let json_body = match signed_response {
             Some(signed) => signed.to_owned(),
-            None => serde_json::to_string(claims).map_err(AppError::internal)?,
+            None => to_string(claims).map_err(AppError::internal)?,
         };
         for algorithm in algorithms {
             let Some(public_jwk) = select_client_encryption_jwk(
@@ -397,7 +398,7 @@ impl UserInfoService {
         let claims = payload
             .claim("claims")
             .cloned()
-            .map(serde_json::from_value)
+            .map(from_value)
             .transpose()
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
@@ -411,7 +412,7 @@ impl UserInfoService {
         let amr = payload
             .claim(JwtClaimNames::AMR)
             .cloned()
-            .map(serde_json::from_value)
+            .map(from_value)
             .transpose()
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?
             .unwrap_or_default();
@@ -483,7 +484,7 @@ impl UserInfoService {
 }
 
 fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppError> {
-    let value = serde_json::to_value(claims).map_err(AppError::internal)?;
+    let value = to_value(claims).map_err(AppError::internal)?;
     let object = value
         .as_object()
         .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;

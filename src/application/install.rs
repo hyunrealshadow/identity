@@ -1,20 +1,15 @@
-use crate::auth::password::run_password_hashing;
-use crate::key::runtime::RuntimeKeyRingProvider;
-use crate::observability::BusinessEvent;
-use crate::observability::EventValue;
-use crate::observability::error_outcome;
-use crate::observability::event_sink;
-use chrono::Duration;
-use identity_domain::key::AsymmetricKeyData;
-use identity_domain::key::generator::AsymmetricKeySpec;
-use identity_domain::user::normalization::EmailNormalizationError;
-use identity_domain::user::normalization::normalize_email as normalization_normalize_email;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::Utc;
-use rand::RngExt;
+use chrono::{Duration, Utc};
+use identity_domain::{
+    key::{AsymmetricKeyData, generator::AsymmetricKeySpec},
+    user::normalization::{
+        EmailNormalizationError, normalize_email as normalization_normalize_email,
+    },
+};
+use rand::{RngExt, rng};
 use url::Url;
 use uuid::Uuid;
 
@@ -26,10 +21,12 @@ use crate::{
         },
         setting::{PasswordHashSetting, SettingsSource, runtime::RefreshableSetting},
     },
-    auth::password::PasswordHasher,
+    auth::password::{PasswordHasher, run_password_hashing},
     domain::key::{
         AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm, generator::AsymmetricKeyGenerator,
     },
+    key::runtime::RuntimeKeyRingProvider,
+    observability::{BusinessEvent, EventValue, error_outcome, event_sink},
     setting::{
         DomainSetting, InstallationSettings, LoginClientIdSetting, LoginDomainSetting,
         SettingChanges,
@@ -147,7 +144,7 @@ impl InstallService {
         key_data.certificate = Some(certificate);
         let client_id = Uuid::new_v4();
         let mut client_secret_bytes = [0_u8; 32];
-        rand::rng().fill(&mut client_secret_bytes);
+        rng().fill(&mut client_secret_bytes);
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
@@ -325,12 +322,11 @@ fn parse_install_key_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, Ap
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::key::ALL_ASYMMETRIC_KEY_ALGORITHMS;
-    use crate::domain::key::AsymmetricKeyAlgorithm;
-
     use super::{InstallInput, validate_install_input};
-    use crate::application::error::code::AppErrorCode;
-    use crate::application::error::codes::common::CommonErrorCode;
+    use crate::{
+        application::error::{code::AppErrorCode, codes::common::CommonErrorCode},
+        domain::key::{ALL_ASYMMETRIC_KEY_ALGORITHMS, AsymmetricKeyAlgorithm},
+    };
 
     #[test]
     fn install_validation_rejects_an_unknown_algorithm_name() {

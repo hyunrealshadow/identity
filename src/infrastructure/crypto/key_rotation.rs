@@ -1,5 +1,4 @@
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use identity_application::{
     error::{AppError, codes::common::CommonErrorCode},
     key::{
@@ -16,9 +15,8 @@ use josekit::{
     jws::{PS256, PS384, PS512},
     util::HashAlgorithm,
 };
-use openssl::nid::Nid;
-use openssl::x509::X509;
-use rand::RngExt;
+use openssl::{nid::Nid, x509::X509};
+use rand::{RngExt, rng};
 use uuid::Uuid;
 
 use super::{
@@ -53,11 +51,11 @@ impl KeyRotationMaterialGenerator for KeyRotationMaterialGeneratorImpl {
             }
             KeyData::Symmetric(previous_data) => {
                 let mut key_bytes = [0u8; 32];
-                rand::rng().fill(&mut key_bytes);
+                rng().fill(&mut key_bytes);
                 Ok(RotationMaterial {
                     data: KeyData::Symmetric(SymmetricKeyData {
                         key: STANDARD.encode(key_bytes),
-                        algorithm: previous_data.algorithm.clone(),
+                        algorithm: previous_data.algorithm,
                     }),
                     jwks: Vec::new(),
                 })
@@ -113,25 +111,24 @@ fn certificate_domain(certificate: &str) -> Result<String, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::key::generate_all_jwks_for_key;
     use chrono::Utc;
-    use identity_domain::key::AsymmetricKeyData;
-    use openssl::x509::X509;
-    use uuid::Uuid;
-
-    use super::{KeyRotationMaterialGeneratorImpl, generate_same_algorithm};
-    use crate::crypto::{
-        certificate::generate_self_signed_certificate, key::AsymmetricKeyGeneratorImpl,
-    };
     use identity_application::key::rotation::KeyRotationMaterialGenerator;
     use identity_domain::key::{
-        AsymmetricKeyAlgorithm, Key, KeyData, KeyOid, KeyType, SymmetricKeyAlgorithm,
-        SymmetricKeyData,
+        AsymmetricKeyAlgorithm, AsymmetricKeyData, Key, KeyData, KeyOid, KeyType,
+        SymmetricKeyAlgorithm, SymmetricKeyData,
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
     };
     use josekit::{
         jwk::{KeyPair, alg::rsapss::RsaPssKeyPair},
         util::HashAlgorithm,
+    };
+    use openssl::x509::X509;
+    use uuid::Uuid;
+
+    use super::{KeyRotationMaterialGeneratorImpl, generate_same_algorithm};
+    use crate::crypto::{
+        certificate::generate_self_signed_certificate,
+        key::{AsymmetricKeyGeneratorImpl, generate_all_jwks_for_key},
     };
 
     #[test]

@@ -1,13 +1,16 @@
 use chrono::{DateTime, Utc};
-use identity_domain::client::model::ClientOid;
-use identity_domain::client_authorization::{
-    ClientAuthorization, DeviceAuthorizationApproval, DeviceAuthorizationRepository,
-    DeviceAuthorizationRepositoryError, DeviceAuthorizationRequestData, DeviceConsumeOutcome,
-    DevicePollOutcome, PreparedAuthorizationRecord,
+use identity_domain::{
+    client::model::ClientOid,
+    client_authorization::{
+        ClientAuthorization, DeviceAuthorizationApproval, DeviceAuthorizationRepository,
+        DeviceAuthorizationRepositoryError, DeviceAuthorizationRequestData, DeviceConsumeOutcome,
+        DevicePollOutcome, PreparedAuthorizationRecord,
+    },
 };
+use mockall::mock;
 use uuid::Uuid;
 
-mockall::mock! {
+mock! {
     pub DeviceAuthorizationRepository {}
 
     #[async_trait::async_trait]

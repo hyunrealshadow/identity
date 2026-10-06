@@ -64,9 +64,9 @@ impl CursorPayload for SessionCursor {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone as _, Utc};
+    use identity_infrastructure::graphql::cursor::CursorPayload as _;
 
     use super::SessionCursor;
-    use identity_infrastructure::graphql::cursor::CursorPayload as _;
 
     #[test]
     fn payload_round_trips_the_database_sort_key() {

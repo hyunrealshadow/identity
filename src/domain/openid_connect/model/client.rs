@@ -1,23 +1,25 @@
-use crate::client::model::ClientProtocol;
-use std::error::Error;
-use std::fmt::Display as FmtDisplay;
-use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
-use std::{fmt, str::FromStr};
-use url::Host;
-use uuid::Uuid;
+use std::{
+    error::Error,
+    fmt,
+    fmt::{Display as FmtDisplay, Formatter, Result as FmtResult},
+    net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
+};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sha2::{Digest, Sha256};
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
-use url::Url;
+use url::{Host, Url};
+use uuid::Uuid;
 
-use crate::client::model::Client;
-use crate::key::{JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm};
-use crate::openid_connect::ResponseType;
-use crate::openid_connect::model::provider::{SubjectType, TokenEndpointAuthMethod};
+use crate::{
+    client::model::{Client, ClientProtocol},
+    key::{JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm},
+    openid_connect::{
+        ResponseType,
+        model::provider::{SubjectType, TokenEndpointAuthMethod},
+    },
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GrantType {
@@ -470,6 +472,8 @@ impl Error for InvalidOpenIdConnectClientError {}
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
+    use url::Url;
     use uuid::Uuid;
 
     use super::{
@@ -477,10 +481,10 @@ mod tests {
         OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
         pairwise_subject_identifier,
     };
-    use crate::client::model::{Client, ClientProtocol};
-    use crate::openid_connect::ResponseType;
-    use chrono::Utc;
-    use url::Url;
+    use crate::{
+        client::model::{Client, ClientProtocol},
+        openid_connect::ResponseType,
+    };
 
     #[test]
     fn pairwise_subject_identifier_uses_sector_identifier() {

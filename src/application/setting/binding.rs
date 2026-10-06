@@ -1,8 +1,8 @@
-use std::vec::IntoIter;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, vec::IntoIter};
 
 use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, to_value};
+use tracing::{error, warn};
 
 use super::{SettingDefinition, SettingError, SettingSection};
 
@@ -42,12 +42,12 @@ impl SettingsSnapshot {
             Ok(section) => match section.validate() {
                 Ok(()) => section,
                 Err(error) => {
-                    tracing::error!(section = T::PREFIX, error = %error, "failed to validate setting section");
+                    error!(section = T::PREFIX, error = %error, "failed to validate setting section");
                     T::default()
                 }
             },
             Err(error) => {
-                tracing::error!(section = T::PREFIX, error = %error, "failed to bind setting section");
+                error!(section = T::PREFIX, error = %error, "failed to bind setting section");
                 T::default()
             }
         }
@@ -55,7 +55,7 @@ impl SettingsSnapshot {
 
     #[must_use]
     pub fn with<S: SettingDefinition>(mut self, value: S::Value) -> Self {
-        if let Ok(value) = serde_json::to_value(value) {
+        if let Ok(value) = to_value(value) {
             self.values.insert(S::KEY.to_owned(), value);
         }
         self
@@ -65,7 +65,7 @@ impl SettingsSnapshot {
     /// present and inserting its declared fields when absent.
     #[must_use]
     pub fn with_section<T: SettingSection>(mut self, section: &T) -> Self {
-        let Ok(tree) = serde_json::to_value(section) else {
+        let Ok(tree) = to_value(section) else {
             return self;
         };
         for (key, value) in &mut self.values {
@@ -180,7 +180,7 @@ impl SettingChanges {
     /// Adds `value` for `S`, replacing an earlier value for the same key.
     pub fn set<S: SettingDefinition>(mut self, value: &S::Value) -> Result<Self, SettingError> {
         S::validate(value).map_err(|error| SettingError::Validation(error.message().to_owned()))?;
-        let value = serde_json::to_value(value).map_err(SettingError::Serialize)?;
+        let value = to_value(value).map_err(SettingError::Serialize)?;
         self.values.retain(|(key, _)| *key != S::KEY);
         self.values.push((S::KEY.to_owned(), value));
         Ok(self)
@@ -191,7 +191,7 @@ impl SettingChanges {
         section
             .validate()
             .map_err(|error| SettingError::Validation(error.message().to_owned()))?;
-        let value = serde_json::to_value(section).map_err(SettingError::Serialize)?;
+        let value = to_value(section).map_err(SettingError::Serialize)?;
         for (key, _, value) in section_leaves::<T>(&value) {
             self.values.retain(|(existing, _)| existing != &key);
             self.values.push((key, value));
@@ -208,7 +208,7 @@ impl SettingChanges {
         section
             .validate()
             .map_err(|error| SettingError::Validation(error.message().to_owned()))?;
-        let value = serde_json::to_value(section).map_err(SettingError::Serialize)?;
+        let value = to_value(section).map_err(SettingError::Serialize)?;
         let key = format!("{}.{}", T::PREFIX, path);
         let (_, _, value) = section_leaves::<T>(&value)
             .into_iter()
@@ -234,11 +234,13 @@ impl IntoIterator for SettingChanges {
     }
 }
 
+type SettingValidator = dyn Fn(&Value) -> Result<(), SettingError> + Send + Sync;
+
 /// The type-erased decoding rules of one [`SettingDefinition`].
 #[derive(Clone)]
 struct SettingDescriptor {
     key: String,
-    check: Arc<dyn Fn(&Value) -> Result<(), SettingError> + Send + Sync>,
+    check: Arc<SettingValidator>,
     default_json: Value,
 }
 
@@ -247,8 +249,7 @@ impl SettingDescriptor {
         Self {
             key: S::KEY.to_owned(),
             check: Arc::new(check::<S>),
-            default_json: serde_json::to_value(S::default_value())
-                .expect("setting default must serialize"),
+            default_json: to_value(S::default_value()).expect("setting default must serialize"),
         }
     }
 }
@@ -281,8 +282,7 @@ impl SettingRegistry {
     /// Registers every field of a section as its own dotted storage key.
     #[must_use]
     pub fn register_section<T: SettingSection>(mut self) -> Self {
-        let defaults =
-            serde_json::to_value(T::default()).expect("setting section default must serialize");
+        let defaults = to_value(T::default()).expect("setting section default must serialize");
         for (key, path, default_json) in section_leaves::<T>(&defaults) {
             assert!(
                 self.descriptors.iter().all(|entry| entry.key != key),
@@ -336,7 +336,7 @@ impl SettingRegistry {
                 ) {
                     (Ok(()), _) => stored.clone(),
                     (Err(error), Some(previous)) => {
-                        tracing::warn!(key = %entry.key, error = %error, "failed to refresh setting");
+                        warn!(key = %entry.key, error = %error, "failed to refresh setting");
                         previous.clone()
                     }
                     (Err(error), None) => return Err(error),
@@ -350,12 +350,10 @@ impl SettingRegistry {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
-
     use std::collections::HashMap;
 
     use serde::{Deserialize, Serialize};
-    use serde_json::json;
+    use serde_json::{Value, json, to_value};
 
     use super::{SettingChanges, SettingRegistry, SettingsSnapshot};
     use crate::setting::{
@@ -584,7 +582,7 @@ mod tests {
                 (TestDynamicSetting::KEY.to_owned(), json!(false)),
                 (
                     TestDeviceSetting::KEY.to_owned(),
-                    serde_json::to_value(TestDeviceSetting::default_value()).unwrap()
+                    to_value(TestDeviceSetting::default_value()).unwrap()
                 ),
             ]
         );

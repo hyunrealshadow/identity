@@ -8,6 +8,7 @@
 
 use std::{fmt, sync::OnceLock};
 
+use hex::encode;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
@@ -46,7 +47,7 @@ impl PiiPolicy {
         format!(
             "{HMAC_PREFIX}:{}:{purpose}:{}",
             self.key_version,
-            hex::encode(digest)
+            encode(digest)
         )
     }
 }

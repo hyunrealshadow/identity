@@ -6,13 +6,13 @@
 //! records to a bounded, non-blocking exporter. Implementing this trait must
 //! never block the caller and must never fail business operations.
 
-use crate::error::AppError;
-use crate::error::kind::ErrorKind;
+use std::sync::{Arc, OnceLock};
+
 use http::HeaderMap;
 use tracing::Span;
 use url::Url;
 
-use std::sync::{Arc, OnceLock};
+use crate::error::{AppError, kind::ErrorKind};
 
 /// Whether a record is a security audit fact or a business result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

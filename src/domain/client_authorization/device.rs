@@ -6,14 +6,14 @@
 //! [`DeviceAuthorizationData`] relation that outlives both the request and the
 //! browser session used to approve it (ADR 0004).
 
-use super::model::ClientAuthenticationMode;
-
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use strum::{AsRefStr, Display};
 use uuid::Uuid;
+
+use super::model::ClientAuthenticationMode;
 
 /// Characters used for user codes: upper-case consonants without vowels, so a
 /// generated code cannot spell a word and stays unambiguous when typed.
@@ -239,6 +239,8 @@ pub enum DevicePollOutcome {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::{from_value, json};
+
     use super::*;
 
     fn request_data() -> DeviceAuthorizationRequestData {
@@ -336,7 +338,7 @@ mod tests {
 
     #[test]
     fn stored_requests_survive_missing_optional_fields() {
-        let stored = serde_json::json!({
+        let stored = json!({
             "scope": "openid",
             "device_code_digest": "digest",
             "user_code": "WDJBMJHT",
@@ -345,7 +347,7 @@ mod tests {
             "status": "pending",
         });
 
-        let parsed: DeviceAuthorizationRequestData = serde_json::from_value(stored).unwrap();
+        let parsed: DeviceAuthorizationRequestData = from_value(stored).unwrap();
 
         assert_eq!(parsed.status, DeviceRequestStatus::Pending);
         assert_eq!(parsed.slow_down_seconds, 0);

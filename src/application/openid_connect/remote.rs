@@ -1,20 +1,17 @@
-use crate::observability::outbound_trace;
-use http::HeaderMap;
-use reqwest::Client;
-use reqwest::Error;
-use reqwest::StatusCode;
-use reqwest::redirect::Policy;
-use std::env;
-use std::io::Error as IoError;
 use std::{
+    env,
+    io::Error as IoError,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     time::Duration,
 };
+
+use http::HeaderMap;
+use reqwest::{Client, Error, StatusCode, redirect::Policy};
 use tokio::net::lookup_host;
 use tracing::Instrument as _;
-use url::Host;
+use url::{Host, Url};
 
-use url::Url;
+use crate::observability::outbound_trace;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteUrlError {
@@ -263,12 +260,13 @@ pub fn fetchable_url(url: &Url) -> Url {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+    use url::Url;
+
     use super::{
         RemoteUrlError, conformance_allows_invalid_certs, conformance_mode_active,
         conformance_mode_active_for, fetchable_url, is_unsafe_ip, resolved_address_is_allowed,
         validate_https_public_url,
     };
-    use url::Url;
 
     #[test]
     fn validate_https_public_url_rejects_non_https() {

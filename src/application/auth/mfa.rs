@@ -1,31 +1,22 @@
-use crate::observability::BusinessEvent;
-use crate::observability::EventSink;
-use crate::observability::EventValue;
-use crate::observability::NoopEventSink;
-use crate::user::OtpAlgorithm;
-use chrono::DateTime;
 use std::sync::Arc;
-use uuid::Uuid;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{Duration, Utc};
-use rand::RngExt;
+use chrono::{DateTime, Duration, Utc};
+use rand::{RngExt, rng};
 use serde::{Deserialize, Serialize};
+use serde_json::{from_slice, to_vec};
 use sha2::{Digest, Sha256};
-
-use crate::user::UserOid;
+use uuid::Uuid;
 
 use crate::{
     auth::totp::{TotpError, TotpVerifier},
-    user::{
-        CredentialType, OtpCredentialData, RecoveryCodeCredentialData,
-        repository::UserCredentialRepository,
-    },
-};
-
-use crate::{
     data_protection::DataProtector,
     error::{AppError, codes::auth::AuthErrorCode},
+    observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
+    user::{
+        CredentialType, OtpAlgorithm, OtpCredentialData, RecoveryCodeCredentialData, UserOid,
+        repository::UserCredentialRepository,
+    },
 };
 
 const ENROLLMENT_PURPOSE: &str = "identity.mfa.totp-enrollment.v1";
@@ -167,7 +158,7 @@ impl MfaService {
             recovery_codes: recovery_codes.clone(),
             recovery_credentials,
         };
-        let plaintext = serde_json::to_vec(&pending).map_err(AppError::internal)?;
+        let plaintext = to_vec(&pending).map_err(AppError::internal)?;
         let enrollment_token = self
             .data_protector
             .protect(ENROLLMENT_PURPOSE, &plaintext)
@@ -196,7 +187,7 @@ impl MfaService {
             .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
             .await
             .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        let pending: PendingTotpEnrollment = serde_json::from_slice(&plaintext)
+        let pending: PendingTotpEnrollment = from_slice(&plaintext)
             .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
         if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
             return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
@@ -235,7 +226,7 @@ impl MfaService {
             .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
             .await
             .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        let mut pending: PendingTotpEnrollment = serde_json::from_slice(&plaintext)
+        let mut pending: PendingTotpEnrollment = from_slice(&plaintext)
             .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
         if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
             return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
@@ -246,7 +237,7 @@ impl MfaService {
         let otp_auth_uri =
             self.generator
                 .otp_auth_uri(issuer, account_name, &pending.credential)?;
-        let plaintext = serde_json::to_vec(&pending).map_err(AppError::internal)?;
+        let plaintext = to_vec(&pending).map_err(AppError::internal)?;
         let enrollment_token = self
             .data_protector
             .protect(ENROLLMENT_PURPOSE, &plaintext)
@@ -310,7 +301,7 @@ fn generate_recovery_codes() -> (Vec<String>, Vec<RecoveryCodeCredentialData>) {
         .map(|_| {
             const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
             let mut bytes = [0u8; RECOVERY_CODE_LENGTH];
-            rand::rng().fill(&mut bytes);
+            rng().fill(&mut bytes);
             let encoded = bytes
                 .into_iter()
                 .map(|byte| ALPHABET[(byte & 31) as usize] as char)
@@ -331,14 +322,6 @@ fn generate_recovery_codes() -> (Vec<String>, Vec<RecoveryCodeCredentialData>) {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use crate::{
-        auth::totp::{TotpError, TotpVerifier},
-        user::{
-            CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData, Password,
-            RecoveryCodeCredentialData, UserCredential, UserCredentialOid, UserOid,
-            repository::{UserCredentialRepository, UserCredentialRepositoryError},
-        },
-    };
     use async_trait::async_trait;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use identity_domain::data_protection::DataProtectionError;
@@ -348,7 +331,15 @@ mod tests {
         GeneratedTotpEnrollment, MfaService, TotpEnrollmentGenerator, generate_recovery_codes,
         recovery_code_hash,
     };
-    use crate::data_protection::DataProtector;
+    use crate::{
+        auth::totp::{TotpError, TotpVerifier},
+        data_protection::DataProtector,
+        user::{
+            CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData, Password,
+            RecoveryCodeCredentialData, UserCredential, UserCredentialOid, UserOid,
+            repository::{UserCredentialRepository, UserCredentialRepositoryError},
+        },
+    };
 
     #[test]
     fn recovery_code_hash_ignores_case_and_separators() {

@@ -1,12 +1,12 @@
+use async_graphql::{EmptySubscription, Schema};
+use modules::{MutationRoot, QueryRoot};
+
 mod authorization;
 mod context;
 mod error;
 mod modules;
 
-use async_graphql::{EmptySubscription, Schema};
-
 pub use context::RequestContext;
-use modules::{MutationRoot, QueryRoot};
 
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 

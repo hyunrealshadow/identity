@@ -283,12 +283,12 @@ Chinese.
 ### Prerequisites
 
 - A Rust toolchain that supports edition 2024 and the locked dependencies.
-  The deployment build currently uses Rust 1.96.
+  The deployment build currently uses Rust 1.99.
 - PostgreSQL and a database/user with permission to run migrations.
 - OpenSSL development libraries and the platform's native build tools;
   the Linux build installs `pkg-config` and `libssl-dev`.
 - Node.js and pnpm for the Login application and error-page CSS.
-  The deployment build uses Node.js 22 and pnpm 11.24.0.
+  The deployment build uses Node.js 22 and pnpm 12.9.1.
 
 Run from the repository root so configuration, templates, and translations can
 be found. The following examples use a POSIX shell; in PowerShell, set

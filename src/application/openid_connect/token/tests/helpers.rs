@@ -1,5 +1,6 @@
-use super::*;
 use identity_domain::openid_connect::OAuthProtocolVersion;
+
+use super::*;
 
 #[test]
 fn verify_pkce_accepts_matching_s256_verifier() {

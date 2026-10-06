@@ -1,10 +1,11 @@
+use std::time::Duration;
+
 use identity::{
     application::observability::{BusinessEvent, EventValue, event_sink},
     boot::{AppBuilder, AppResult, server},
     infrastructure::observability,
     web,
 };
-use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {

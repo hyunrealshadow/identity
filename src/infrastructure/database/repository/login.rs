@@ -1,9 +1,10 @@
 use async_trait::async_trait;
-use chrono::DateTime;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::auth::LoginFailureReason;
-use identity_domain::auth::SessionStatus;
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::auth::{
+    LOGIN_EXPIRY, LoginFailureReason, LoginStatus, SessionOid, SessionStatus,
+    model::Login,
+    repository::{LoginRepository, LoginRepositoryError},
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
     sea_query::Expr,
@@ -14,11 +15,6 @@ use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
     client_authorization::Entity as ClientAuthorizationEntity, login, login::Entity as LoginEntity,
     session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
-};
-use identity_domain::auth::{
-    LOGIN_EXPIRY, LoginStatus, SessionOid,
-    model::Login,
-    repository::{LoginRepository, LoginRepositoryError},
 };
 
 fn to_domain(

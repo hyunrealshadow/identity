@@ -1,11 +1,14 @@
-use crate::openid_connect::authorize::request_object::fetchable_request_uri;
+use reqwest::{Client, redirect::Policy};
+
+use crate::openid_connect::{
+    authorize::request_object::fetchable_request_uri,
+    remote::{
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, fetch_document_after_url_validation,
+    },
+};
+
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
-use crate::openid_connect::remote::{
-    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, fetch_document_after_url_validation,
-};
-use reqwest::Client;
-use reqwest::redirect::Policy;
 
 #[test]
 fn fetchable_request_uri_strips_fragment_before_http_fetch() {

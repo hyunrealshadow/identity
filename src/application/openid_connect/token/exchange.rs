@@ -1,7 +1,8 @@
-use super::*;
+use identity_domain::{auth::SessionOid, openid_connect::ClientAssertionType};
+
 use crate::error::kind::ErrorKind;
-use identity_domain::auth::SessionOid;
-use identity_domain::openid_connect::ClientAssertionType;
+
+use super::*;
 
 impl TokenService {
     pub(super) async fn protected_session_id(
@@ -57,7 +58,7 @@ pub(super) fn issuance_result(error: &AppError) -> (&'static str, &'static str) 
 #[cfg(test)]
 mod tests {
     use identity_domain::openid_connect::ClientAssertionType;
-    use serde_json::Value;
+    use serde_json::{Value, json};
 
     use super::*;
 
@@ -69,7 +70,7 @@ mod tests {
 
     #[test]
     fn resolve_client_id_uses_request_client_id_first() {
-        let assertion = unsigned_assertion(serde_json::json!({"sub": "assertion-client"}));
+        let assertion = unsigned_assertion(json!({"sub": "assertion-client"}));
 
         let client_id = resolve_client_id(
             Some("request-client".to_owned()),
@@ -83,7 +84,7 @@ mod tests {
 
     #[test]
     fn resolve_client_id_extracts_jwt_bearer_assertion_subject() {
-        let assertion = unsigned_assertion(serde_json::json!({
+        let assertion = unsigned_assertion(json!({
             "iss": "assertion-client",
             "sub": "assertion-client"
         }));

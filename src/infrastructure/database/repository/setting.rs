@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
 use chrono::Utc;
+use identity_application::{
+    error::AppError,
+    setting::{SettingChanges, SettingDefinition, SettingRegistry, SettingSection},
+};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set,
     sea_query::{Expr, OnConflict},
@@ -9,10 +13,6 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::database::entity::setting;
-use identity_application::{
-    error::AppError,
-    setting::{SettingChanges, SettingDefinition, SettingRegistry, SettingSection},
-};
 
 /// The stored value of `S`, or its declared default when it has no row.
 ///
@@ -128,7 +128,6 @@ where
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-
     use identity_application::setting::{
         DynamicRegistrationSettings, InstallationSettings, LoginDomainSetting,
         OpenIdConnectSettings, SettingChanges,

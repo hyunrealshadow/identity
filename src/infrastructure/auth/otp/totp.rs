@@ -1,13 +1,14 @@
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-use subtle::ConstantTimeEq as _;
-use totp_rs::{Algorithm, Builder, Secret, Totp};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use identity_application::{
-    auth::mfa::{GeneratedTotpEnrollment, TotpEnrollmentGenerator},
-    auth::totp::{TotpError, TotpVerifier},
+    auth::{
+        mfa::{GeneratedTotpEnrollment, TotpEnrollmentGenerator},
+        totp::{TotpError, TotpVerifier},
+    },
     user::model::{OtpAlgorithm, OtpCredentialData},
 };
+use subtle::ConstantTimeEq as _;
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 
 const TOTP_ALLOWED_SKEW_STEPS: u8 = 1;
 
@@ -136,12 +137,13 @@ fn totp_builder(
 
 #[cfg(test)]
 mod tests {
-    use totp_rs::Secret;
+    use identity_application::{
+        auth::mfa::TotpEnrollmentGenerator,
+        user::{OtpAlgorithm, OtpCredentialData},
+    };
+    use totp_rs::{Algorithm, Secret};
 
     use super::{TotpVerifierImpl, build_totp, verify_at};
-    use identity_application::auth::mfa::TotpEnrollmentGenerator;
-    use identity_application::user::{OtpAlgorithm, OtpCredentialData};
-    use totp_rs::Algorithm;
 
     #[test]
     fn verifier_accepts_previous_and_next_time_steps() {

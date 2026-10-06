@@ -1,6 +1,6 @@
 #![allow(elided_lifetimes_in_paths)]
-use sea_orm_migration::async_trait;
-use sea_orm_migration::prelude::MigrationTrait;
+use sea_orm_migration::{async_trait, prelude::MigrationTrait};
+
 pub use sea_orm_migration::prelude::{DbErr, MigratorTrait};
 mod m20260305_071904_create_user;
 mod m20260306_022501_create_user_credential;

@@ -1,8 +1,8 @@
 //! Persisted user approval for one scope requested by one client.
 
-use super::client::Entity as ClientEntity;
-use super::scope::Entity as ScopeEntity;
-use super::user::Entity as UserEntity;
+use super::{
+    client::Entity as ClientEntity, scope::Entity as ScopeEntity, user::Entity as UserEntity,
+};
 
 use sea_orm::entity::prelude::*;
 

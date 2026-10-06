@@ -1,18 +1,20 @@
-use super::signing::{SignAccessTokenInput, SignIdTokenInput};
-use super::*;
-use crate::domain::auth::SessionStatus;
-use crate::observability::{BusinessEvent, EventValue};
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client_authorization::ClientAuthenticationMode;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::CodeChallengeMethod;
-use identity_domain::openid_connect::OAuthProtocolVersion;
-use identity_domain::openid_connect::ScopeSet;
-use tracing::Span;
-use tracing::field::display;
+use chrono::{Duration, Utc};
+use identity_domain::{
+    client_authorization::ClientAuthenticationMode,
+    openid_connect::{API_RESOURCE, CodeChallengeMethod, OAuthProtocolVersion, ScopeSet},
+};
+use tracing::{Span, debug, field::display};
 
-use super::exchange::{issuance_result, resolve_client_id};
+use super::{
+    exchange::{issuance_result, resolve_client_id},
+    signing::{SignAccessTokenInput, SignIdTokenInput, validate_id_token_auth_time},
+};
+use crate::{
+    domain::auth::SessionStatus,
+    observability::{BusinessEvent, EventValue},
+};
+
+use super::*;
 
 impl TokenService {
     #[tracing::instrument(
@@ -113,7 +115,7 @@ impl TokenService {
         }
 
         let now = Utc::now();
-        tracing::debug!(
+        debug!(
             revoked_at = ?record.revoked_at,
             expires_at = %record.expires_at,
             "authorization code state loaded"
@@ -229,11 +231,7 @@ impl TokenService {
         };
         let issue_id_token = code_scope.contains_openid();
         if issue_id_token {
-            if authenticated_client.metadata().require_auth_time == Some(true)
-                && data.auth_time.is_none()
-            {
-                return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
-            }
+            validate_id_token_auth_time(&authenticated_client, data.auth_time)?;
         }
         let configured_signing_key = self
             .load_configured_signing_key(
@@ -268,7 +266,7 @@ impl TokenService {
                     EventValue::Text(record.client_oid.to_string()),
                 ),
         );
-        tracing::debug!("authorization code consumed; issuing tokens");
+        debug!("authorization code consumed; issuing tokens");
 
         let user_oid = Uuid::parse_str(&data.user_oid)
             .map_err(AppError::map_source(TokenErrorCode::StoredUserOidInvalid))?;
@@ -340,8 +338,8 @@ impl TokenService {
             let (id_key_id, id_key_pem, id_token_alg) = &configured_signing_key;
             let signed = self
                 .sign_id_token(SignIdTokenInput {
-                    key_id: &id_key_id,
-                    private_key_pem: &id_key_pem,
+                    key_id: id_key_id,
+                    private_key_pem: id_key_pem,
                     alg: *id_token_alg,
                     issuer: &issuer,
                     audience: &audience,

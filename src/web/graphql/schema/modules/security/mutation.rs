@@ -1,6 +1,5 @@
 use async_graphql::{Context, Error, Object, Result};
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::openid_connect::ApiScope;
+use identity_domain::{auth::ACR_AAL2, openid_connect::ApiScope};
 
 use super::types::{
     BeginTotpEnrollmentPayload, ChangePasswordInput, ChangePasswordPayload,

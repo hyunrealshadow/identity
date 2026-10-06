@@ -1,20 +1,17 @@
-use crate::database::query::advisory_transaction_lock;
 use async_trait::async_trait;
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
-use identity_domain::user::normalization::normalize_email;
-use identity_domain::user::normalization::normalize_username;
-use rand::RngExt;
+use identity_domain::user::normalization::{normalize_email, normalize_username};
+use rand::{RngExt, rng};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     Set, TransactionTrait,
 };
+use serde_json::{json, to_value};
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    application::user::CredentialType,
     application::{
         error::{
             AppError,
@@ -23,7 +20,9 @@ use crate::{
         install::{InstallRepository, InstallationData},
         key::rotation::KEY_LIFETIME,
         setting::InstallationSettings,
+        user::CredentialType,
     },
+    database::query::advisory_transaction_lock,
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
         openid_connect::{
@@ -73,9 +72,9 @@ impl InstallRepository for InstallRepositoryImpl {
             .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
         let normalized_email = normalize_email(&data.email)
             .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
-        let password_json = serde_json::to_value(&data.password).map_err(AppError::internal)?;
-        let key_json = serde_json::to_value(KeyData::Asymmetric(data.key_data.clone()))
-            .map_err(AppError::internal)?;
+        let password_json = to_value(&data.password).map_err(AppError::internal)?;
+        let key_json =
+            to_value(KeyData::Asymmetric(data.key_data.clone())).map_err(AppError::internal)?;
 
         let txn = self.db.begin().await.map_err(AppError::internal)?;
 
@@ -157,17 +156,17 @@ impl InstallRepository for InstallRepositoryImpl {
         let logout_url = built_in_logout_url(&data.application_url)?;
         client_openid_connect::ActiveModel {
             client_id: Set(created_client.id),
-            post_logout_redirect_uris: Set(Some(serde_json::json!([logout_url.as_str()]))),
-            response_types: Set(Some(serde_json::json!([ResponseType::Code]))),
-            grant_types: Set(Some(serde_json::json!([
+            post_logout_redirect_uris: Set(Some(json!([logout_url.as_str()]))),
+            response_types: Set(Some(json!([ResponseType::Code]))),
+            grant_types: Set(Some(json!([
                 GrantType::AuthorizationCode.as_str(),
                 GrantType::RefreshToken.as_str()
             ]))),
             subject_type: Set(Some(SubjectType::Public.to_string())),
-            token_endpoint_auth_methods: Set(Some(serde_json::json!([
+            token_endpoint_auth_methods: Set(Some(json!([
                 TokenEndpointAuthMethod::ClientSecretBasic.to_string()
             ]))),
-            settings: Set(serde_json::json!({
+            settings: Set(json!({
                 "skip_consent": true,
                 "include_scoped_claims_in_id_token": false,
                 "include_scoped_claims_in_access_token": false
@@ -182,7 +181,7 @@ impl InstallRepository for InstallRepositoryImpl {
         client_openid_connect_platform::ActiveModel {
             client_id: Set(created_client.id),
             platform: Set("web".to_owned()),
-            redirect_uris: Set(Some(serde_json::json!([callback_url.as_str()]))),
+            redirect_uris: Set(Some(json!([callback_url.as_str()]))),
             created_at: Set(now.into()),
             ..Default::default()
         }
@@ -263,7 +262,7 @@ impl InstallRepository for InstallRepositoryImpl {
         let jwk_models = jwks
             .into_iter()
             .map(|(algorithm, jwk)| {
-                serde_json::to_value(jwk).map(|jwk| key_jwk::ActiveModel {
+                to_value(jwk).map(|jwk| key_jwk::ActiveModel {
                     oid: Set(Uuid::new_v4()),
                     key_oid: Set(key_oid),
                     algorithm: Set(algorithm),
@@ -280,9 +279,9 @@ impl InstallRepository for InstallRepositoryImpl {
             .map_err(AppError::internal)?;
 
         let mut sym_key_bytes = [0u8; 32];
-        rand::rng().fill(&mut sym_key_bytes[..]);
+        rng().fill(&mut sym_key_bytes[..]);
         let sym_key_b64 = STANDARD.encode(sym_key_bytes);
-        let sym_key_json = serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
+        let sym_key_json = to_value(KeyData::Symmetric(SymmetricKeyData {
             key: sym_key_b64,
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
@@ -328,15 +327,14 @@ fn built_in_logout_url(application_url: &Url) -> Result<Url, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use url::Url;
-
-    use crate::database::query::advisory_transaction_lock;
     use sea_orm::{DbBackend, MockDatabase, MockExecResult, Transaction};
+    use url::Url;
 
     use super::{
         INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock, built_in_callback_url,
         built_in_logout_url,
     };
+    use crate::database::query::advisory_transaction_lock;
 
     #[test]
     fn built_in_client_uses_top_level_callback_route() {

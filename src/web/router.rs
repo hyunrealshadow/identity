@@ -1,15 +1,12 @@
-use salvo::affix_state::inject;
 use std::sync::Arc;
 
-use salvo::{Router, serve_static::StaticDir};
-
-use crate::controllers::response::handle_404;
-use crate::graphql;
-use crate::health;
 use identity_domain::openid_connect::WorkloadAuthenticator;
-use identity_infrastructure::AppState;
-use identity_infrastructure::config::{AppConfig, TlsTermination};
-use identity_infrastructure::observability::context::TraceTrustPolicy;
+use identity_infrastructure::{
+    AppState,
+    config::{AppConfig, TlsTermination},
+    observability::context::TraceTrustPolicy,
+};
+use salvo::{Router, affix_state::inject, serve_static::StaticDir};
 
 use super::{
     controllers,
@@ -18,6 +15,7 @@ use super::{
         security_headers_middleware,
     },
 };
+use crate::{controllers::response::handle_404, graphql, health};
 
 pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);

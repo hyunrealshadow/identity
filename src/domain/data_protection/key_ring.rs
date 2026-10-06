@@ -1,5 +1,6 @@
-use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
+
+use chrono::{DateTime, Utc};
 
 use crate::key::{Key, KeyOid, KeyType};
 
@@ -34,12 +35,12 @@ impl KeyRing {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
     use uuid::Uuid;
 
+    use crate::key::{KeyData, SymmetricKeyAlgorithm, material::SymmetricKeyData};
+
     use super::*;
-    use crate::key::material::SymmetricKeyData;
-    use crate::key::{KeyData, SymmetricKeyAlgorithm};
-    use chrono::Duration;
 
     fn make_key(
         created: DateTime<Utc>,

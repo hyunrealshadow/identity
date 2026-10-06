@@ -1,16 +1,10 @@
-use crate::observability::BusinessEvent;
-use crate::observability::EventSeverity;
-use crate::observability::EventSink;
-use crate::observability::EventValue;
-use crate::observability::NoopEventSink;
-use identity_domain::auth::repository::SessionPage;
-use identity_domain::auth::repository::SessionPageDirection;
-use identity_domain::auth::repository::SessionSortKey;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
-use identity_domain::auth::SessionOid;
+use identity_domain::auth::{
+    SessionOid,
+    repository::{SessionPage, SessionPageDirection, SessionSortKey},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -20,6 +14,7 @@ use crate::{
         model::{ActiveSession, Session},
         repository::SessionRepository,
     },
+    observability::{BusinessEvent, EventSeverity, EventSink, EventValue, NoopEventSink},
 };
 
 /// Outcome of revoking every session except one. Failures are reported per
@@ -292,11 +287,10 @@ pub(crate) async fn revoke_other_sessions_with(
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
     use std::io::Error;
 
     use async_trait::async_trait;
-    use chrono::Utc;
+    use chrono::{DateTime, Utc};
     use identity_domain::auth::{
         SessionOid, SessionStatus,
         model::{ActiveSession, Session},

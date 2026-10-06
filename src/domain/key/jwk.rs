@@ -1,9 +1,8 @@
+use std::{error::Error, fmt, str::FromStr};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use uuid::Uuid;
-
-use std::{fmt, str::FromStr};
 
 use super::{JwaEncryptionAlgorithm, JwaSigningAlgorithm, KeyOid};
 
@@ -212,11 +211,13 @@ pub trait KeyJwkRepository: Send + Sync {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::{from_value, json, to_value};
+
     use super::PublicJwk;
 
     #[test]
     fn okp_public_jwk_preserves_certificate_parameters() {
-        let value = serde_json::json!({
+        let value = json!({
             "kty": "OKP",
             "use": "sig",
             "alg": "EdDSA",
@@ -228,14 +229,11 @@ mod tests {
             "x5t#S256": "sha256-thumbprint"
         });
 
-        let jwk: PublicJwk = serde_json::from_value(value).unwrap();
-        let serialized = serde_json::to_value(jwk).unwrap();
+        let jwk: PublicJwk = from_value(value).unwrap();
+        let serialized = to_value(jwk).unwrap();
 
-        assert_eq!(serialized["x5c"], serde_json::json!(["certificate"]));
-        assert_eq!(serialized["x5t"], serde_json::json!("sha1-thumbprint"));
-        assert_eq!(
-            serialized["x5t#S256"],
-            serde_json::json!("sha256-thumbprint")
-        );
+        assert_eq!(serialized["x5c"], json!(["certificate"]));
+        assert_eq!(serialized["x5t"], json!("sha1-thumbprint"));
+        assert_eq!(serialized["x5t#S256"], json!("sha256-thumbprint"));
     }
 }

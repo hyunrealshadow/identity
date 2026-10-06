@@ -1,14 +1,15 @@
-use crate::{
-    m20260305_071904_create_user::User, m20260306_031058_create_client::Client,
-    m20260426_000001_create_scope::Scope,
-};
-use sea_orm_migration::sea_orm;
 use sea_orm_migration::{
     prelude::{
         DbErr, DeriveIden, DeriveMigrationName, Expr, ForeignKey, ForeignKeyAction, Index,
         MigrationTrait, SchemaManager, Table,
     },
     schema::{big_integer, pk_auto, timestamp_with_time_zone},
+    sea_orm,
+};
+
+use crate::{
+    m20260305_071904_create_user::User, m20260306_031058_create_client::Client,
+    m20260426_000001_create_scope::Scope,
 };
 
 #[derive(DeriveMigrationName)]

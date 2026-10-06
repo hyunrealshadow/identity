@@ -1,12 +1,15 @@
-use super::Seed;
-use super::scope::BUILT_IN_OPENID_CONNECT_SCOPES;
-use crate::application::error::{AppError, codes::common::CommonErrorCode};
-use crate::database::entity::resource;
 use async_trait::async_trait;
 use chrono::Utc;
 use identity_domain::openid_connect::API_RESOURCE;
 use sea_orm::{DatabaseConnection, EntityTrait, Set, sea_query::OnConflict};
+use serde_json::json;
 use uuid::Uuid;
+
+use super::{Seed, scope::BUILT_IN_OPENID_CONNECT_SCOPES};
+use crate::{
+    application::error::{AppError, codes::common::CommonErrorCode},
+    database::entity::resource,
+};
 
 pub struct OAuthResourceDefaultsSeed;
 #[async_trait]
@@ -19,7 +22,7 @@ impl Seed for OAuthResourceDefaultsSeed {
             oid: Set(Uuid::new_v4()),
             uri: Set(API_RESOURCE.to_owned()),
             name: Set("Identity GraphQL API".to_owned()),
-            scopes: Set(serde_json::json!(
+            scopes: Set(json!(
                 BUILT_IN_OPENID_CONNECT_SCOPES
                     .iter()
                     .map(|scope| scope.name)
@@ -44,8 +47,9 @@ impl Seed for OAuthResourceDefaultsSeed {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+
+    use super::*;
 
     #[tokio::test]
     async fn initialization_never_overwrites_existing_resource_policy() {

@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
-
-use crate::{
-    application::error::AppError, domain::openid_connect::ApiScope,
-    domain::openid_connect::model::claim::StandardScopes, infrastructure::database::entity::scope,
-};
+use serde_json::json;
 
 use super::Seed;
+use crate::{
+    application::error::AppError,
+    domain::openid_connect::{ApiScope, model::claim::StandardScopes},
+    infrastructure::database::entity::scope,
+};
 
 pub const OPENID_CONNECT_PROTOCOL: &str = "openid_connect";
 
@@ -138,7 +139,7 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
             let mut active: scope::ActiveModel = existing.into();
             active.display_name = Set(definition.display_name.to_string());
             active.description = Set(definition.description.to_string());
-            active.descriptions = Set(serde_json::json!({
+            active.descriptions = Set(json!({
                 "en-US": definition.description,
                 "zh-CN": definition.description_zh_cn,
             }));
@@ -150,7 +151,7 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
                 name: Set(definition.name.to_string()),
                 display_name: Set(definition.display_name.to_string()),
                 description: Set(definition.description.to_string()),
-                descriptions: Set(serde_json::json!({
+                descriptions: Set(json!({
                     "en-US": definition.description,
                     "zh-CN": definition.description_zh_cn,
                 })),

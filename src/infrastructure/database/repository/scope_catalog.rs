@@ -1,8 +1,10 @@
-use crate::database::entity::scope;
 use identity_domain::openid_connect::scope_catalog::{
     ScopeCatalogError, ScopeCatalogRepository, ScopeDescription,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use serde_json::from_value;
+
+use crate::database::entity::scope;
 
 pub struct ScopeCatalogRepositoryImpl {
     db: DatabaseConnection,
@@ -47,7 +49,7 @@ impl ScopeCatalogRepository for ScopeCatalogRepositoryImpl {
                     name: row.name,
                     display_name: row.display_name,
                     description: row.description,
-                    descriptions: serde_json::from_value(row.descriptions)
+                    descriptions: from_value(row.descriptions)
                         .map_err(|error| ScopeCatalogError(error.to_string()))?,
                 })
             })

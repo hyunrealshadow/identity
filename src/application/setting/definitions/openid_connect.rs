@@ -79,10 +79,13 @@ impl SettingSection for OpenIdConnectSettings {
 
 #[cfg(test)]
 mod tests {
-    use super::PushedAuthorizationSettings;
     use identity_domain::openid_connect::OAuthProtocolVersion;
+    use serde_json::json;
 
-    use super::{DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings};
+    use super::{
+        DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings,
+        PushedAuthorizationSettings,
+    };
     use crate::setting::{SettingChanges, SettingSection, SettingsSnapshot};
 
     #[test]
@@ -110,16 +113,15 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(changes.len(), 4);
         assert!(changes.iter().any(|(key, value)| {
-            key == "openid_connect.oauth_version" && value == &serde_json::json!("2.1")
+            key == "openid_connect.oauth_version" && value == &json!("2.1")
         }));
         assert!(changes.iter().any(|(key, value)| {
-            key == "openid_connect.dynamic_registration.enabled"
-                && value == &serde_json::json!(true)
+            key == "openid_connect.dynamic_registration.enabled" && value == &json!(true)
         }));
         assert!(changes.iter().any(|(key, value)| {
             key == "openid_connect.device_authorization"
                 && value
-                    == &serde_json::json!({
+                    == &json!({
                         "request_ttl_seconds": 30,
                         "polling_interval_seconds": 2
                     })
@@ -133,7 +135,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(
                 "openid_connect.dynamic_registration.enabled".to_owned(),
-                serde_json::json!(true)
+                json!(true)
             )]
         );
     }

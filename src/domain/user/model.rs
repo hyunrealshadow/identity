@@ -1,5 +1,6 @@
-use chrono::{DateTime, Utc};
 use std::{fmt, str::FromStr};
+
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(

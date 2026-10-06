@@ -1,6 +1,5 @@
 use async_graphql::{ID, Object};
-use chrono::DateTime;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use identity_domain::auth::{SessionOid, model::Session};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;

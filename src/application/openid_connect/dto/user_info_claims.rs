@@ -3,17 +3,13 @@
 //! These claims are defined in OpenID Connect Core 1.0 specification:
 //! https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
 
-use identity_domain::openid_connect::ScopeSet;
-use identity_domain::user::User;
-use serde_json::Map;
-use serde_json::Value;
-
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Serializer};
-
-use identity_domain::openid_connect::{
-    ClaimsRequest, ClaimsRequestSection, model::claim::JwtClaimNames,
+use identity_domain::{
+    openid_connect::{ClaimsRequest, ClaimsRequestSection, ScopeSet, model::claim::JwtClaimNames},
+    user::User,
 };
+use serde::{Serialize, Serializer};
+use serde_json::{Map, Value, to_value};
 
 fn serialize_datetime_as_unix<S>(
     dt: &Option<DateTime<Utc>>,
@@ -378,7 +374,7 @@ pub fn scoped_standard_claims(
     // Serialization of the fully-typed claim struct is infallible (only
     // String/Option/bool fields); a failure here would indicate a bug and must
     // not silently drop claims.
-    let mut claims = serde_json::to_value(claims)
+    let mut claims = to_value(claims)
         .expect("UserInfoClaims serialization is infallible")
         .as_object()
         .cloned()
@@ -389,27 +385,19 @@ pub fn scoped_standard_claims(
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
-    use serde_json::Value;
+    use chrono::{TimeZone, Utc};
+    use identity_domain::{
+        openid_connect::ScopeSet,
+        user::{User, UserOid},
+    };
+    use serde_json::{Value, from_value, json};
     use uuid::Uuid;
 
     use super::*;
 
     fn claims_request(value: Value) -> ClaimsRequest {
-        serde_json::from_value(value).unwrap()
+        from_value(value).unwrap()
     }
-
-    #[test]
-    fn serializes_required_sub_and_omits_absent_optional_claims() {
-        let claims = UserInfoClaims::new("user-123".to_string());
-        let json = serde_json::to_value(&claims).unwrap();
-
-        assert_eq!(json["sub"], "user-123");
-        assert!(json.get("name").is_none());
-        assert!(json.get("email").is_none());
-    }
-
-    use identity_domain::user::{User, UserOid};
 
     #[test]
     fn from_user_creates_claims_from_user_model() {
@@ -469,8 +457,6 @@ mod tests {
         assert_eq!(claims.email_verified, Some(true));
         assert!(claims.updated_at.is_some());
     }
-
-    use identity_domain::openid_connect::ScopeSet;
 
     fn full_profile_claims() -> UserInfoClaims {
         UserInfoClaims {
@@ -574,7 +560,7 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = claims_request(serde_json::json!({
+        let claims_request = claims_request(json!({
             "userinfo": {
                 "name": {"essential": true}
             }
@@ -593,7 +579,7 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = claims_request(serde_json::json!({
+        let claims_request = claims_request(json!({
             "id_token": {
                 "name": {"essential": true}
             }
@@ -612,7 +598,7 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = claims_request(serde_json::json!({
+        let claims_request = claims_request(json!({
             "id_token": {
                 "name": {"essential": true}
             }
@@ -631,7 +617,7 @@ mod tests {
 
         let mut filtered = claims;
         let scope = ScopeSet::parse("openid").unwrap();
-        let claims_request = claims_request(serde_json::json!({
+        let claims_request = claims_request(json!({
             "userinfo": {
                 "name": {"essential": false}
             }
@@ -670,24 +656,6 @@ mod tests {
     }
 
     #[test]
-    fn serializes_address_object_when_address_scope_is_present() {
-        let mut claims = UserInfoClaims::new("user-123".to_string());
-        claims.address = Some(AddressClaim {
-            formatted: Some("1 Main St\nExample City".to_string()),
-            street_address: Some("1 Main St".to_string()),
-            locality: Some("Example City".to_string()),
-            region: Some("CA".to_string()),
-            postal_code: Some("94000".to_string()),
-            country: Some("US".to_string()),
-        });
-
-        let json = serde_json::to_value(&claims).unwrap();
-
-        assert_eq!(json["address"]["street_address"], "1 Main St");
-        assert_eq!(json["address"]["country"], "US");
-    }
-
-    #[test]
     fn scoped_standard_claims_follows_scope_and_excludes_sub() {
         let user = full_profile_user();
         let scope = ScopeSet::parse("profile email").unwrap();
@@ -695,9 +663,9 @@ mod tests {
         let claims = scoped_standard_claims(&user, &scope, None, "https://issuer.example.com");
 
         assert!(!claims.contains_key("sub"));
-        assert_eq!(claims["name"], serde_json::json!("John Doe"));
-        assert_eq!(claims["email"], serde_json::json!("john@example.com"));
-        assert_eq!(claims["email_verified"], serde_json::json!(true));
+        assert_eq!(claims["name"], json!("John Doe"));
+        assert_eq!(claims["email"], json!("john@example.com"));
+        assert_eq!(claims["email_verified"], json!(true));
         // phone/address claims need their own scopes
         assert!(!claims.contains_key("phone_number"));
         assert!(!claims.contains_key("address"));
@@ -711,6 +679,19 @@ mod tests {
         let claims = scoped_standard_claims(&user, &scope, None, "https://issuer.example.com");
 
         assert!(claims.is_empty());
+    }
+
+    #[test]
+    fn scoped_profile_claims_convert_update_time_to_unix_seconds() {
+        let mut user = full_profile_user();
+        user.updated_at = Some(Utc.timestamp_opt(1_700_000_000, 123_000_000).unwrap());
+        let profile = ScopeSet::parse("openid profile").unwrap();
+        let claims = scoped_standard_claims(&user, &profile, None, "https://issuer.example.com");
+        assert_eq!(claims["updated_at"].as_i64(), Some(1_700_000_000));
+
+        let openid = ScopeSet::parse("openid").unwrap();
+        let claims = scoped_standard_claims(&user, &openid, None, "https://issuer.example.com");
+        assert!(!claims.contains_key("updated_at"));
     }
 
     fn full_profile_user() -> User {

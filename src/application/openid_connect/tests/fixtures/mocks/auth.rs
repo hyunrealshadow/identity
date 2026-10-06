@@ -1,22 +1,28 @@
-// Re-export ClientAuthorizationRepository trait types
-use identity_domain::client_authorization::PushedAuthorizationRequestData;
-
-use std::collections::HashSet;
-use uuid::Uuid;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 
 use chrono::{DateTime, Utc};
-use identity_domain::auth::SessionOid;
-use identity_domain::client::model::ClientOid;
+use identity_domain::{
+    auth::SessionOid,
+    client::model::ClientOid,
+    client_authorization::{
+        ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
+        PushedAuthorizationRequestData, SelectionSource,
+    },
+    openid_connect::ScopeSet,
+};
+use mockall::mock;
+use uuid::Uuid;
+
+// Re-export ClientAuthorizationRepository trait types
+
 pub use identity_domain::client_authorization::repository::{
     ClientAuthorizationRepository, ClientAuthorizationRepositoryError,
 };
-use identity_domain::client_authorization::{
-    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
-    SelectionSource,
-};
-use identity_domain::openid_connect::ScopeSet;
 
-mockall::mock! {
+mock! {
     pub ClientAuthorizationRepository {}
 
     #[async_trait::async_trait]
@@ -98,9 +104,6 @@ mockall::mock! {
         ) -> Result<(), ClientAuthorizationRepositoryError>;
     }
 }
-
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 /// Creates a MockClientAuthorizationRepository backed by internal state,
 /// matching the previous InMemoryClientAuthorizationRepository from token tests.
@@ -214,15 +217,14 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
             loop {
                 let old_len = family.len();
                 for (oid, record) in records.iter() {
-                    if let ClientAuthorizationData::RefreshToken(data) = &record.data {
-                        if data
+                    if let ClientAuthorizationData::RefreshToken(data) = &record.data
+                        && data
                             .rotated_from
                             .as_deref()
                             .and_then(|parent| parent.parse().ok())
                             .is_some_and(|parent| family.contains(&parent))
-                        {
-                            family.insert(*oid);
-                        }
+                    {
+                        family.insert(*oid);
                     }
                 }
                 if family.len() == old_len {

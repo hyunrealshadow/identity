@@ -1,11 +1,13 @@
-use super::*;
+use identity_domain::{
+    key::{JwaSigningAlgorithm, JwsAlgorithm},
+    openid_connect::{GrantType, TokenEndpointAuthMethod},
+};
+
 use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
-use identity_domain::key::JwaSigningAlgorithm;
-use identity_domain::key::JwsAlgorithm;
-use identity_domain::openid_connect::GrantType;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
+
+use super::*;
 
 pub(in crate::openid_connect) struct InMemoryClientRepository;
 pub(in crate::openid_connect) struct IdTokenAlgorithmClientRepository {

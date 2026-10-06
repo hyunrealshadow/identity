@@ -79,27 +79,28 @@ fn numeric_date(value: &Value) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-    use std::time::SystemTime;
+    use std::time::{Duration, SystemTime};
+
+    use josekit::jwt::JwtPayload;
+    use serde_json::json;
 
     use super::{
         JwtTimeValidationError, audience_value_matches, validate_required_exp_and_optional_window,
     };
     use crate::domain::openid_connect::model::claim::JwtClaimNames;
-    use josekit::jwt::JwtPayload;
 
     #[test]
     fn audience_value_matches_string_or_array() {
         assert!(audience_value_matches(
-            &serde_json::json!("https://identity.example.com"),
+            &json!("https://identity.example.com"),
             &["https://identity.example.com"]
         ));
         assert!(audience_value_matches(
-            &serde_json::json!(["other", "https://identity.example.com"]),
+            &json!(["other", "https://identity.example.com"]),
             &["https://identity.example.com"]
         ));
         assert!(!audience_value_matches(
-            &serde_json::json!(["other"]),
+            &json!(["other"]),
             &["https://identity.example.com"]
         ));
     }
@@ -113,7 +114,7 @@ mod tests {
         );
 
         payload
-            .set_claim(JwtClaimNames::EXP, Some(serde_json::json!(100)))
+            .set_claim(JwtClaimNames::EXP, Some(json!(100)))
             .unwrap();
         assert_eq!(
             validate_required_exp_and_optional_window(&payload, 100),
@@ -125,7 +126,7 @@ mod tests {
     fn required_exp_accepts_future_exp_with_valid_window() {
         let mut payload = JwtPayload::new();
         payload
-            .set_claim(JwtClaimNames::EXP, Some(serde_json::json!(101)))
+            .set_claim(JwtClaimNames::EXP, Some(json!(101)))
             .unwrap();
 
         assert_eq!(

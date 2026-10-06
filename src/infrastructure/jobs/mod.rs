@@ -1,10 +1,11 @@
 use std::time::Duration;
-pub mod authorization_expiration;
-pub mod rotation;
 
 use apalis_sql::{postgres::PostgresStorage, sqlx};
 
 use crate::{config::AppConfig, state::AppState};
+
+pub mod authorization_expiration;
+pub mod rotation;
 
 pub async fn spawn_background_workers(
     state: AppState,

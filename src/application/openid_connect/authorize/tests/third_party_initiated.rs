@@ -1,10 +1,10 @@
-use super::*;
-use fixtures::*;
-
 use crate::{
     error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode},
     openid_connect::authorize::ThirdPartyInitiatedLoginRequest,
 };
+
+use super::*;
+use fixtures::*;
 
 #[tokio::test]
 async fn third_party_initiated_login_redirects_to_registered_initiate_login_uri() {

@@ -1,8 +1,9 @@
-use crate::client::model::ClientOid;
-use chrono::Duration;
-use chrono::{DateTime, Utc};
 use std::error::Error as StdError;
+
+use chrono::{DateTime, Duration, Utc};
 use thiserror::Error;
+
+use crate::client::model::ClientOid;
 
 /// Workloads that Identity recognizes on its internal management API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

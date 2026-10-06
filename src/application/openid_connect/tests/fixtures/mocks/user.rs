@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
-use identity_domain::user::repository::UserIdentifierUpdate;
-use identity_domain::user::repository::UserProfilePatch;
-use identity_domain::user::repository::{UserRepository, UserRepositoryError};
-use identity_domain::user::{User, UserOid};
+use identity_domain::user::{
+    User, UserOid,
+    repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
+};
+use mockall::mock;
 
-mockall::mock! {
+mock! {
     pub UserRepository {}
 
     #[async_trait::async_trait]

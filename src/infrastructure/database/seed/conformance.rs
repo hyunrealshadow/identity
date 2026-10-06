@@ -7,46 +7,42 @@
 //! are not already present, so re-starting a container with an existing volume
 //! is safe.
 
-use crate::auth::password::PasswordHasherImpl;
-use crate::database::seed::scope::OPENID_CONNECT_PROTOCOL;
-use identity_application::auth::password::HashOptions;
-use identity_application::auth::password::PasswordHasher;
-use identity_application::user::password::Argon2Options;
-use identity_application::user::password::Argon2Variant;
-use identity_application::user::password::Argon2Version;
-
-use chrono::DateTime;
-use sea_orm::ConnectionTrait;
-use serde_json::Value;
 use std::env;
 
 use async_trait::async_trait;
-use chrono::Utc;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-    TransactionTrait,
+use chrono::{DateTime, Utc};
+use identity_application::{
+    auth::password::{HashOptions, PasswordHasher},
+    setting::{DynamicRegistrationSettings, OpenIdConnectSettings, SettingChanges},
+    user::password::{Argon2Options, Argon2Variant, Argon2Version},
 };
+use identity_domain::openid_connect::{
+    GrantType, OpenIdConnectCredentialData, ResponseType, TokenEndpointAuthMethod,
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    Set, TransactionTrait,
+};
+use serde_json::{Value, json, to_value};
+use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::application::user::CredentialType;
-use identity_domain::openid_connect::{GrantType, ResponseType, TokenEndpointAuthMethod};
-
+use super::Seed;
 use crate::{
-    application::error::AppError,
-    infrastructure::database::entity::{
-        client, client_openid_connect, client_openid_connect_credential,
-        client_openid_connect_platform, client_scope, scope, user, user_credential,
+    application::{error::AppError, user::CredentialType},
+    auth::password::PasswordHasherImpl,
+    database::seed::scope::OPENID_CONNECT_PROTOCOL,
+    infrastructure::database::{
+        entity::{
+            client, client_openid_connect, client_openid_connect_credential,
+            client_openid_connect_platform, client_scope, scope, user, user_credential,
+        },
+        repository::{
+            openid_connect_credential::serialize_data as serialize_credential_data,
+            setting::write_settings,
+        },
     },
 };
-use identity_application::setting::{
-    DynamicRegistrationSettings, OpenIdConnectSettings, SettingChanges,
-};
-use identity_domain::openid_connect::OpenIdConnectCredentialData;
-
-use crate::infrastructure::database::repository::openid_connect_credential::serialize_data as serialize_credential_data;
-use crate::infrastructure::database::repository::setting::write_settings;
-
-use super::Seed;
 
 /// Seed that creates the fixed conformance test user and OIDC clients.
 pub struct ConformanceSeed;
@@ -141,7 +137,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .map_err(AppError::internal)?;
 
     let user_id = if let Some(u) = existing_user {
-        tracing::debug!("conformance seed: user already exists, skipping");
+        debug!("conformance seed: user already exists, skipping");
         u.id
     } else {
         // Hash the password using the same Argon2id defaults as the rest of the app.
@@ -198,7 +194,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         .await
         .map_err(AppError::internal)?;
 
-        tracing::info!("conformance seed: created test user");
+        info!("conformance seed: created test user");
         created_user.id
     };
     let _ = user_id; // used only for logging; client rows don't need it
@@ -394,16 +390,14 @@ async fn ensure_conformance_oidc_metadata(
 
 fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> ConformanceOidcMetadataValues {
     ConformanceOidcMetadataValues {
-        grant_types: serde_json::json!(
+        grant_types: json!(
             spec.grant_types
                 .iter()
                 .map(|value| value.as_str())
                 .collect::<Vec<_>>()
         ),
-        response_types: serde_json::json!(spec.response_types),
-        token_endpoint_auth_methods: Some(serde_json::json!([spec
-            .token_endpoint_auth_method
-            .to_string()])),
+        response_types: json!(spec.response_types),
+        token_endpoint_auth_methods: Some(json!([spec.token_endpoint_auth_method.to_string()])),
         post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
         frontchannel_logout_uri: Some(conformance_frontchannel_logout_uri()),
         frontchannel_logout_session_required: Some(true),
@@ -480,7 +474,7 @@ fn map_conformance_suite_uri(default_uri: &str, suite_url: &str, alias: Option<&
 }
 
 fn conformance_redirect_uris() -> Value {
-    serde_json::json!([
+    json!([
         conformance_suite_uri("https://localhost.emobix.co.uk:8443/test/a/identity/callback"),
         conformance_suite_uri(
             "https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback"
@@ -510,7 +504,7 @@ fn conformance_redirect_uris() -> Value {
 }
 
 fn conformance_post_logout_redirect_uris() -> Value {
-    serde_json::json!([
+    json!([
         conformance_suite_uri(
             "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
         ),
@@ -536,7 +530,7 @@ fn conformance_backchannel_logout_uri() -> String {
 }
 
 fn conformance_client_settings() -> Value {
-    serde_json::json!({
+    json!({
         "skip_consent": true,
         "include_scoped_claims_in_id_token": false,
         "include_scoped_claims_in_access_token": false
@@ -590,7 +584,7 @@ fn hash_conformance_password() -> Result<Value, AppError> {
         )
         .map_err(AppError::internal)?;
 
-    serde_json::to_value(&password).map_err(AppError::internal)
+    to_value(&password).map_err(AppError::internal)
 }
 
 async fn assign_all_built_in_oidc_scopes(
@@ -628,12 +622,11 @@ async fn assign_all_built_in_oidc_scopes(
 
 #[cfg(test)]
 mod tests {
-    use super::map_conformance_suite_uri;
-
-    use super::conformance_client_specs;
-    use super::conformance_oidc_metadata_values;
-    use super::conformance_post_logout_redirect_uris;
-    use super::conformance_redirect_uris;
+    use super::{
+        conformance_client_specs, conformance_oidc_metadata_values,
+        conformance_post_logout_redirect_uris, conformance_redirect_uris,
+        map_conformance_suite_uri,
+    };
 
     #[test]
     fn hosted_callbacks_use_the_official_origin_and_unique_alias() {

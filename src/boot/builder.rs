@@ -1,34 +1,35 @@
-use identity_application::setting::InstallationSettings;
+use std::{
+    io::{Error, ErrorKind},
+    sync::Arc,
+    time::Duration,
+};
+
+use identity_application::{
+    install::{InstallInput, InstallService},
+    setting::InstallationSettings,
+};
 use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
-use identity_infrastructure::auth::workload::build_login_workload_authenticator;
-use identity_infrastructure::database::repository::setting::read_section;
-use std::io::Error;
-use std::io::ErrorKind;
-use std::sync::Arc;
-use std::time::Duration;
-
-use sea_orm::DatabaseConnection;
-use tera::Tera;
-
-use identity_application::install::{InstallInput, InstallService};
-use identity_infrastructure::auth::password::PasswordHasherImpl;
-use identity_infrastructure::crypto::certificate_generator::CertificateGeneratorImpl;
-use identity_infrastructure::crypto::key::AsymmetricKeyGeneratorImpl;
-use identity_infrastructure::database::repository::install::InstallRepositoryImpl;
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
+    auth::{password::PasswordHasherImpl, workload::build_login_workload_authenticator},
     config::{AppConfig, AppEnvironment, InstallConfig},
+    crypto::{certificate_generator::CertificateGeneratorImpl, key::AsymmetricKeyGeneratorImpl},
     database,
-    database::seed,
+    database::{
+        repository::{install::InstallRepositoryImpl, setting::read_section},
+        seed,
+    },
     i18n::{I18n, init_error_i18n},
     observability,
     services::AppServices,
     settings::AppRuntimeSettings,
     web,
 };
+use sea_orm::DatabaseConnection;
+use tera::Tera;
+use tracing::info;
 
-use super::AppResult;
-use super::install_guard::ensure_install_startup_guard;
+use super::{AppResult, install_guard::ensure_install_startup_guard};
 
 /// Application builder that orchestrates the startup pipeline.
 ///
@@ -133,10 +134,10 @@ impl AppBuilder {
             return Ok(self);
         }
 
-        tracing::info!("auto install: running from config");
+        info!("auto install: running from config");
 
         let cfg = &self.config.install;
-        tracing::info!(
+        info!(
             domain = %cfg.domain.as_deref().unwrap_or("<none>"),
             username = %cfg.username.as_deref().unwrap_or("<none>"),
             "auto install: config values"
@@ -165,7 +166,7 @@ impl AppBuilder {
         })
         .await?;
 
-        tracing::info!("auto install: complete");
+        info!("auto install: complete");
         Ok(self)
     }
 

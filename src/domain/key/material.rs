@@ -1,5 +1,6 @@
-use super::model::KeyType;
 use serde::{Deserialize, Serialize};
+
+use super::model::KeyType;
 
 fn default_symmetric_algorithm() -> SymmetricKeyAlgorithm {
     SymmetricKeyAlgorithm::XChaCha20Poly1305

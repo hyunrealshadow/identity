@@ -2,15 +2,14 @@ use http::StatusCode;
 use identity_domain::openid_connect::OpenIdProviderMetadata;
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::Serialize;
-use serde_json::Value;
-
-use crate::{
-    application::error::AppError, application::openid_connect::provider::OpenIdProviderService,
-    domain::key::PublicJwk,
-};
+use serde_json::{Value, json};
 
 use super::response::{JsonWebResult, app_state, render_json};
-use crate::cors::{ClientCors, preflight};
+use crate::{
+    application::{error::AppError, openid_connect::provider::OpenIdProviderService},
+    cors::{ClientCors, preflight},
+    domain::key::PublicJwk,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonWebKeySetResponse {
@@ -79,7 +78,7 @@ async fn authorization_server_metadata(
 }
 
 fn authorization_server_document(oidc: OpenIdProviderMetadata) -> Value {
-    let metadata = serde_json::json!({
+    let metadata = json!({
         "issuer": oidc.issuer,
         "authorization_endpoint": oidc.authorization_endpoint,
         "token_endpoint": oidc.token_endpoint,
@@ -127,25 +126,27 @@ async fn keys_handler(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()
 
 #[cfg(test)]
 mod authorization_metadata_tests {
-    use super::routes;
-    use salvo::affix_state::inject;
-    use serde_json::Value;
-
     use http::StatusCode;
+    use identity_infrastructure::test_app_state_with_cors_origin;
     use salvo::{
         Service,
+        affix_state::inject,
         test::{ResponseExt, TestClient},
     };
+    use serde_json::{Value, from_str, json as json_json};
+
+    use super::routes;
+
     #[tokio::test]
     async fn metadata_route_publishes_oauth_endpoints_and_omits_unset_fields() {
-        let state = identity_infrastructure::test_app_state_with_cors_origin(None).await;
+        let state = test_app_state_with_cors_origin(None).await;
         let service = Service::new(routes().hoop(inject(state)));
         let mut response =
             TestClient::get("http://127.0.0.1:5800/.well-known/oauth-authorization-server")
                 .send(&service)
                 .await;
         assert_eq!(response.status_code, Some(StatusCode::OK));
-        let json: Value = serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        let json: Value = from_str(&response.take_string().await.unwrap()).unwrap();
         assert!(
             json["introspection_endpoint"]
                 .as_str()
@@ -160,13 +161,13 @@ mod authorization_metadata_tests {
         );
         assert_eq!(
             json["code_challenge_methods_supported"],
-            serde_json::json!(["S256"])
+            json_json!(["S256"])
         );
         assert!(
             !json["introspection_endpoint_auth_methods_supported"]
                 .as_array()
                 .unwrap()
-                .contains(&serde_json::json!("none"))
+                .contains(&json_json!("none"))
         );
         assert!(json.get("registration_endpoint").is_none());
         assert!(json.get("id_token_signing_alg_values_supported").is_none());

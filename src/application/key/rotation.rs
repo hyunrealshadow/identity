@@ -1,13 +1,13 @@
 use std::sync::Arc;
-use uuid::Uuid;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-
-use crate::{error::AppError, key::runtime::RuntimeKeyRingProvider};
 use identity_domain::key::{Key, KeyData, KeyOid};
+use tracing::{error, info};
+use uuid::Uuid;
 
 use super::asymmetric::GeneratedKeyJwk;
+use crate::{error::AppError, key::runtime::RuntimeKeyRingProvider};
 
 pub const KEY_LIFETIME: Duration = Duration::days(90);
 pub const KEY_ROTATION_AGE: Duration = Duration::days(60);
@@ -71,11 +71,11 @@ impl KeyRotationService {
                 Ok(changed) => {
                     rotated += u64::from(changed);
                     if changed {
-                        tracing::info!(key_oid = %Uuid::from(previous.oid), "key rotated");
+                        info!(key_oid = %Uuid::from(previous.oid), "key rotated");
                     }
                 }
                 Err(error) => {
-                    tracing::error!(key_oid = %Uuid::from(previous.oid), error = %error, "key rotation failed");
+                    error!(key_oid = %Uuid::from(previous.oid), error = %error, "key rotation failed");
                     first_error.get_or_insert(error);
                 }
             }

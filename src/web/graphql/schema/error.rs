@@ -1,14 +1,12 @@
-use crate::controllers::response::error_message;
-use crate::controllers::response::log_app_error;
-use async_graphql::Value;
-use async_graphql::{Context, Error, ErrorExtensions};
-use identity_application::error::ErrorDiagnostics;
-use identity_application::error::{AppError, kind::ErrorKind};
-use serde_json::Value as SerdeJsonValue;
-use std::backtrace::Backtrace;
-use std::error::Error as StdError;
+use std::{backtrace::Backtrace, error::Error as StdError};
+
+use async_graphql::{Context, Error, ErrorExtensions, Value};
+use identity_application::error::{AppError, ErrorDiagnostics, kind::ErrorKind};
+use serde_json::{Value as SerdeJsonValue, json};
+use tracing::error;
 
 use super::authorization::request_context;
+use crate::controllers::response::{error_message, log_app_error};
 
 pub(super) fn internal_error(error: impl StdError + 'static) -> Error {
     let diagnostics = ErrorDiagnostics::from_error(&error);
@@ -17,7 +15,7 @@ pub(super) fn internal_error(error: impl StdError + 'static) -> Error {
         .is_none()
         .then(Backtrace::force_capture);
     let backtrace = diagnostics.backtrace.or(fallback.as_ref());
-    tracing::error!(
+    error!(
         error = %error,
         has_source = error.source().is_some(),
         error_cause = %diagnostics.cause,
@@ -61,7 +59,7 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
                         .unwrap_or_else(|| {
                             i18n.t_code_with_params(&request.locale, field.code(), field.params())
                         });
-                    serde_json::json!({
+                    json!({
                         "field": field.field(),
                         "code": field.code(),
                         "message": field_message,

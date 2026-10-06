@@ -1,19 +1,20 @@
+use anyhow::anyhow;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use josekit::jwe::deserialize_compact;
-use josekit::jwe::serialize_compact;
-use josekit::jwk::Jwk;
 use josekit::{
     JoseError,
     jwe::{
         ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweDecrypter, JweEncrypter, JweHeader, RSA_OAEP,
-        RSA_OAEP_256,
+        RSA_OAEP_256, deserialize_compact, serialize_compact,
     },
+    jwk::Jwk,
     jws::{
         ES256, ES256K, ES384, ES512, EdDSA, HS256, HS384, HS512, JwsSigner, JwsVerifier, PS256,
         PS384, PS512, RS256, RS384, RS512,
     },
-    jwt::{self, JwtPayload},
+    jwt,
+    jwt::JwtPayload,
 };
+use serde_json::to_vec;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
 use crate::domain::key::{JwaSigningAlgorithm, PublicJwk};
@@ -49,7 +50,7 @@ pub fn asymmetric_verifier_from_pem(
 ) -> Result<Box<dyn JwsVerifier>, JoseError> {
     let jwa: JwaSigningAlgorithm = alg
         .parse()
-        .map_err(|_| JoseError::InvalidJwsFormat(anyhow::anyhow!("unsupported JWS alg: {alg}")))?;
+        .map_err(|_| JoseError::InvalidJwsFormat(anyhow!("unsupported JWS alg: {alg}")))?;
     match jwa {
         JwaSigningAlgorithm::Rs256 => RS256
             .verifier_from_pem(public_key_pem)
@@ -126,7 +127,7 @@ pub fn asymmetric_verifier_from_public_jwk(
         "EdDSA" => EdDSA
             .verifier_from_jwk(&jwk)
             .map(|value| Box::new(value) as Box<dyn JwsVerifier>),
-        _ => Err(JoseError::InvalidJwsFormat(anyhow::anyhow!(
+        _ => Err(JoseError::InvalidJwsFormat(anyhow!(
             "unsupported JWS alg: {alg}"
         ))),
     }
@@ -146,7 +147,7 @@ pub fn hmac_verifier_from_bytes(
         "HS512" => HS512
             .verifier_from_bytes(secret)
             .map(|value| Box::new(value) as Box<dyn JwsVerifier>),
-        _ => Err(JoseError::InvalidJwsFormat(anyhow::anyhow!(
+        _ => Err(JoseError::InvalidJwsFormat(anyhow!(
             "unsupported JWS alg: {alg}"
         ))),
     }
@@ -158,7 +159,7 @@ pub fn asymmetric_signer_from_pem(
 ) -> Result<Box<dyn JwsSigner>, JoseError> {
     let jwa: JwaSigningAlgorithm = alg
         .parse()
-        .map_err(|_| JoseError::InvalidJwsFormat(anyhow::anyhow!("unsupported JWS alg: {alg}")))?;
+        .map_err(|_| JoseError::InvalidJwsFormat(anyhow!("unsupported JWS alg: {alg}")))?;
     match jwa {
         JwaSigningAlgorithm::Rs256 => RS256
             .signer_from_pem(private_key_pem)
@@ -205,8 +206,7 @@ pub fn decode_with_verifier(
 }
 
 pub fn public_jwk_to_jose(jwk: &PublicJwk) -> Result<Jwk, JoseError> {
-    let jwk_json =
-        serde_json::to_vec(jwk).map_err(|error| JoseError::InvalidJwkFormat(error.into()))?;
+    let jwk_json = to_vec(jwk).map_err(|error| JoseError::InvalidJwkFormat(error.into()))?;
     Jwk::from_bytes(&jwk_json)
 }
 
@@ -256,7 +256,7 @@ pub fn decrypt_compact_with_private_pem(
 pub fn front_channel_hash(value: &str, alg: &str) -> Result<String, JoseError> {
     let jwa: JwaSigningAlgorithm = alg
         .parse()
-        .map_err(|_| JoseError::InvalidJwsFormat(anyhow::anyhow!("unsupported JWS alg: {alg}")))?;
+        .map_err(|_| JoseError::InvalidJwsFormat(anyhow!("unsupported JWS alg: {alg}")))?;
 
     Ok(match jwa.at_hash_bits() {
         384 => {
@@ -291,7 +291,7 @@ fn jwe_encrypter_from_public_jwk(alg: &str, jwk: &Jwk) -> Result<Box<dyn JweEncr
         "ECDH-ES+A256KW" => ECDH_ES_A256KW
             .encrypter_from_jwk(jwk)
             .map(|value| Box::new(value) as Box<dyn JweEncrypter>),
-        _ => Err(JoseError::InvalidJweFormat(anyhow::anyhow!(
+        _ => Err(JoseError::InvalidJweFormat(anyhow!(
             "unsupported JWE alg: {alg}"
         ))),
     }
@@ -317,7 +317,7 @@ fn jwe_decrypter_from_private_pem(
         "ECDH-ES+A256KW" => ECDH_ES_A256KW
             .decrypter_from_pem(private_key_pem)
             .map(|value| Box::new(value) as Box<dyn JweDecrypter>),
-        _ => Err(JoseError::InvalidJweFormat(anyhow::anyhow!(
+        _ => Err(JoseError::InvalidJweFormat(anyhow!(
             "unsupported JWE alg: {alg}"
         ))),
     }

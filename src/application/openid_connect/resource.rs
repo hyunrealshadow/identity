@@ -1,7 +1,12 @@
-use crate::error::{AppError, codes::common::CommonErrorCode};
-use crate::openid_connect::provider::OpenIdProviderService;
-use identity_domain::openid_connect::resource::{OAuthResource, valid_resource_uri};
-use identity_domain::openid_connect::{API_RESOURCE, ResourceScopeCoverage, ScopeSet};
+use identity_domain::openid_connect::{
+    API_RESOURCE, ResourceScopeCoverage, ScopeSet,
+    resource::{OAuthResource, valid_resource_uri},
+};
+
+use crate::{
+    error::{AppError, codes::common::CommonErrorCode},
+    openid_connect::provider::OpenIdProviderService,
+};
 
 pub struct ResourceSelection {
     pub resources: Vec<String>,

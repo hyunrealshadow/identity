@@ -1,25 +1,24 @@
-use identity_application::observability::BusinessEvent;
-use identity_application::observability::EventValue;
-use identity_application::observability::event_sink;
 use std::sync::{Arc, RwLock};
-use uuid::Uuid;
 
 use async_trait::async_trait;
-use sea_orm::DatabaseConnection;
-
-use crate::{
-    crypto::signing_algorithm::SigningAlgorithmDetectorImpl,
-    database::repository::{key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl},
-};
 use identity_application::{
     error::AppError,
     key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider, RuntimeSigningKey},
+    observability::{BusinessEvent, EventValue, event_sink},
     openid_connect::provider::SigningAlgorithmDetector,
     setting::runtime::RefreshableSetting,
 };
 use identity_domain::{
     data_protection::KeyRing,
     key::{KeyData, KeyJwkRepository, repository::KeyRepository},
+};
+use sea_orm::DatabaseConnection;
+use tracing::info_span;
+use uuid::Uuid;
+
+use crate::{
+    crypto::signing_algorithm::SigningAlgorithmDetectorImpl,
+    database::repository::{key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl},
 };
 
 pub struct CachedRuntimeKeyRingProvider {
@@ -42,7 +41,7 @@ impl CachedRuntimeKeyRingProvider {
     }
 
     async fn refresh(&self) -> Result<(), AppError> {
-        let span = tracing::info_span!("key.ring.refresh");
+        let span = info_span!("key.ring.refresh");
         let _entered = span.enter();
         let symmetric_keys = self.key_repo.list_decryptable_symmetric().await?;
         let asymmetric_keys = self.key_repo.list_active_asymmetric().await?;

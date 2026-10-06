@@ -1,38 +1,5 @@
-use crate::crypto::key_rotation::KeyRotationMaterialGeneratorImpl;
-use crate::database::repository::oauth_resource::OAuthResourceRepositoryImpl;
-use crate::database::repository::scope_catalog::ScopeCatalogRepositoryImpl;
-use crate::observability::events::sink;
-use identity_application::openid_connect::par::PushedAuthorizationService;
-use reqwest::Error;
 use std::sync::Arc;
 
-use sea_orm::DatabaseConnection;
-
-use crate::config::LoginWorkloadConfig;
-use crate::{
-    auth::{
-        otp::TotpVerifierImpl, password::PasswordHasherImpl,
-        workload::build_login_workload_authenticator,
-    },
-    crypto::{
-        certificate_generator::CertificateGeneratorImpl,
-        data_protection::XChaCha20DataProtectionCipher, key::AsymmetricKeyGeneratorImpl,
-        key_jwk::KeyJwkGeneratorImpl, signing_algorithm::SigningAlgorithmDetectorImpl,
-    },
-    database::repository::{
-        client_authorization::ClientAuthorizationRepositoryImpl,
-        device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallRepositoryImpl,
-        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl,
-        key_rotation::KeyRotationRepositoryImpl, login::LoginRepositoryImpl,
-        login_runtime::LoginRuntimeRepositoryImpl,
-        openid_connect::OpenIdConnectClientRepositoryImpl,
-        openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
-        session::SessionRepositoryImpl, user::UserRepositoryImpl,
-        user_credential::UserCredentialRepositoryImpl,
-    },
-    openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
-};
-use identity_application::observability::EventSink;
 use identity_application::{
     auth::{
         account::AccountService, login::LoginService, mfa::MfaService, session::SessionService,
@@ -40,12 +7,14 @@ use identity_application::{
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
     key::{asymmetric::AsymmetricKeyService, rotation::KeyRotationService},
+    observability::EventSink,
     openid_connect::{
         authorize::{AuthorizeService, AuthorizeServiceDependencies},
         client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
         device::{DeviceAuthorizationService, DeviceAuthorizationServiceDependencies},
         login_runtime::LoginRuntimeService,
         logout::{LogoutService, LogoutServiceDependencies},
+        par::PushedAuthorizationService,
         provider::OpenIdProviderService,
         registration::DynamicClientRegistrationService,
         remote::{conformance_allows_invalid_certs, request_uri_http_client},
@@ -57,8 +26,36 @@ use identity_domain::openid_connect::{
     BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
     OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, WorkloadAuthenticator,
 };
+use reqwest::Error;
+use sea_orm::DatabaseConnection;
 
 use super::settings::AppRuntimeSettings;
+use crate::{
+    auth::{
+        otp::TotpVerifierImpl, password::PasswordHasherImpl,
+        workload::build_login_workload_authenticator,
+    },
+    config::LoginWorkloadConfig,
+    crypto::{
+        certificate_generator::CertificateGeneratorImpl,
+        data_protection::XChaCha20DataProtectionCipher, key::AsymmetricKeyGeneratorImpl,
+        key_jwk::KeyJwkGeneratorImpl, key_rotation::KeyRotationMaterialGeneratorImpl,
+        signing_algorithm::SigningAlgorithmDetectorImpl,
+    },
+    database::repository::{
+        client_authorization::ClientAuthorizationRepositoryImpl,
+        device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallRepositoryImpl,
+        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl,
+        key_rotation::KeyRotationRepositoryImpl, login::LoginRepositoryImpl,
+        login_runtime::LoginRuntimeRepositoryImpl, oauth_resource::OAuthResourceRepositoryImpl,
+        openid_connect::OpenIdConnectClientRepositoryImpl,
+        openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
+        scope_catalog::ScopeCatalogRepositoryImpl, session::SessionRepositoryImpl,
+        user::UserRepositoryImpl, user_credential::UserCredentialRepositoryImpl,
+    },
+    observability::events::sink,
+    openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
+};
 
 pub type AppLoginService = LoginService;
 

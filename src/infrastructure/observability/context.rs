@@ -6,18 +6,18 @@
 //! settings. Untrusted but valid contexts become span links, invalid contexts
 //! are ignored (and their `tracestate` is dropped).
 
-use http::header::HeaderName;
-use http::header::HeaderValue;
-use tracing::Span;
-
 use std::net::IpAddr;
 
-use http::HeaderMap;
+use http::{
+    HeaderMap,
+    header::{HeaderName, HeaderValue},
+};
 use opentelemetry::{
     Context, global,
     propagation::Injector,
     trace::{SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState},
 };
+use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 

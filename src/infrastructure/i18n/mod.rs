@@ -7,9 +7,8 @@ use std::{
 
 use fluent_templates::{ArcLoader, Loader, fluent_bundle::FluentValue};
 use http::{HeaderMap, header::ACCEPT_LANGUAGE};
-use unic_langid::{LanguageIdentifier, langid};
-
 use identity_application::error::params::ErrorParams;
+use unic_langid::{LanguageIdentifier, langid};
 
 // Global I18n instance used by `AppError` response rendering to translate error
 // codes without access to `AppState`. Initialised once during startup.

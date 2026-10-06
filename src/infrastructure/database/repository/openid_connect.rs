@@ -1,21 +1,35 @@
-use async_trait::async_trait;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client::model::ClientOid;
-use identity_domain::openid_connect::OpenIdConnectCredentialData;
-use sea_orm::DbErr;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, Set,
-    TransactionTrait,
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
 };
-use serde_json::Value;
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::str::FromStr;
+
+use async_trait::async_trait;
+use chrono::{Duration, Utc};
+use identity_domain::{
+    auth::SessionOid,
+    client::model::{Client, ClientOid},
+    client_authorization::ClientAuthorizationType,
+    openid_connect::{
+        OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+        OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
+        OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
+        OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
+        OpenIdConnectCredentialData,
+    },
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
+    QuerySelect, Set, TransactionTrait,
+};
+use serde_json::{Value, from_value, json, to_value};
 use subtle::ConstantTimeEq;
 use url::Url;
 use uuid::Uuid;
 
+use super::{
+    openid_connect_credential::serialize_data as serialize_credential_data,
+    shared::non_expiring_timestamp,
+};
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
     client_authorization::Entity as ClientAuthorizationEntity, client_openid_connect,
@@ -25,26 +39,12 @@ use crate::database::entity::{
     client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
     scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
 };
-use identity_domain::auth::SessionOid;
-use identity_domain::client::model::Client;
-use identity_domain::client_authorization::ClientAuthorizationType;
-use identity_domain::openid_connect::{
-    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-    OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
-    OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
-    OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
-};
-
-use super::{
-    openid_connect_credential::serialize_data as serialize_credential_data,
-    shared::non_expiring_timestamp,
-};
 
 fn deserialize_optional_string_vec(
     raw: Option<&Value>,
 ) -> Result<Option<Vec<String>>, OpenIdConnectClientRepositoryError> {
     raw.cloned()
-        .map(serde_json::from_value::<Vec<String>>)
+        .map(from_value::<Vec<String>>)
         .transpose()
         .map_err(OpenIdConnectClientRepositoryError::DeserializeMetadata)
 }
@@ -100,7 +100,7 @@ fn to_client(model: client::Model) -> Result<Client, OpenIdConnectClientReposito
 fn to_metadata(
     model: client_openid_connect::Model,
 ) -> Result<OpenIdConnectClientMetadata, OpenIdConnectClientRepositoryError> {
-    let settings = serde_json::from_value::<OpenIdConnectClientSettings>(model.settings)
+    let settings = from_value::<OpenIdConnectClientSettings>(model.settings)
         .map_err(OpenIdConnectClientRepositoryError::DeserializeMetadata)?;
 
     Ok(OpenIdConnectClientMetadata {
@@ -388,7 +388,6 @@ impl OpenIdConnectClientRepositoryImpl {
                         built_in: Set(registration.client.built_in),
                         created_at: Set(registration.client.created_at.into()),
                         updated_at: Set(registration.client.updated_at.map(Into::into)),
-                        ..Default::default()
                     };
                     let client_model = if existing.is_some() {
                         client_model.update(txn).await?
@@ -397,7 +396,7 @@ impl OpenIdConnectClientRepositoryImpl {
                     };
 
                     let metadata = registration.metadata;
-                    let settings = serde_json::to_value(metadata.settings)
+                    let settings = to_value(metadata.settings)
                         .map_err(|error| DbErr::Custom(error.to_string()))?;
                     client_openid_connect::ActiveModel {
                         client_id: Set(client_model.id),
@@ -577,7 +576,7 @@ impl OpenIdConnectClientRepositoryImpl {
                             r#type: Set(
                                 ClientAuthorizationType::RegistrationAccessToken.to_string()
                             ),
-                            data: Set(serde_json::json!({ "token": registration_access_token })),
+                            data: Set(json!({ "token": registration_access_token })),
                             expires_at: Set((now + Duration::days(365)).into()),
                             completed_at: Set(None),
                             revoked_at: Set(None),
@@ -894,7 +893,9 @@ impl OpenIdConnectClientRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use identity_domain::openid_connect::OpenIdConnectClientRepositoryError;
+    use serde_json::json;
 
     use super::{
         cors_origins_for_client, deserialize_optional_string_vec, parse_optional_url,
@@ -907,8 +908,6 @@ mod tests {
         },
         infrastructure::database::entity::{client_openid_connect, client_openid_connect_platform},
     };
-    use chrono::Utc;
-    use serde_json::json;
 
     #[test]
     fn materialized_cors_origins_follow_client_settings_and_redirects() {
@@ -1068,12 +1067,11 @@ mod tests {
 }
 #[cfg(test)]
 mod registration_update_tests {
+    use identity_domain::client::model::ClientProtocol;
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
     use serde_json::json;
 
-    use identity_domain::client::model::ClientProtocol;
-
     use super::*;
-    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
 
     fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
         OpenIdConnectClientRegistration {
@@ -1155,7 +1153,7 @@ mod registration_update_tests {
             oid: Uuid::new_v4(),
             client_id: 1,
             r#type: "registration_access_token".into(),
-            data: serde_json::json!({"token":"rat"}),
+            data: json!({"token":"rat"}),
             expires_at: (Utc::now() + Duration::days(1)).into(),
             completed_at: None,
             revoked_at: None,

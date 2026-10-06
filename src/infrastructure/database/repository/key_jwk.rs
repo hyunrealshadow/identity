@@ -1,17 +1,19 @@
-use crate::database::entity::key;
-use crate::database::query::json_text;
 use async_trait::async_trait;
 use chrono::Utc;
+use identity_domain::key::{
+    CreateKeyJwkInput, JwaSigningAlgorithm, JwkAlgorithm, KeyJwk, KeyJwkOid, KeyJwkRepository,
+    KeyJwkRepositoryError, KeyOid, PublicJwk,
+};
 use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
     sea_query::{Expr, ExprTrait},
 };
+use serde_json::{from_value, to_value};
 use uuid::Uuid;
 
-use crate::database::entity::{key_jwk, key_jwk::Entity as KeyJwkEntity};
-use identity_domain::key::{
-    CreateKeyJwkInput, JwaSigningAlgorithm, JwkAlgorithm, KeyJwk, KeyJwkOid, KeyJwkRepository,
-    KeyJwkRepositoryError, KeyOid, PublicJwk,
+use crate::database::{
+    entity::{key, key_jwk, key_jwk::Entity as KeyJwkEntity},
+    query::json_text,
 };
 
 pub struct KeyJwkRepositoryImpl {
@@ -45,7 +47,7 @@ fn validate_jwk_algorithm(
 
 fn to_domain(model: key_jwk::Model) -> Result<KeyJwk, KeyJwkRepositoryError> {
     let created_at = model.created_at.with_timezone(&Utc);
-    let jwk = serde_json::from_value::<PublicJwk>(model.jwk)
+    let jwk = from_value::<PublicJwk>(model.jwk)
         .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
     let algorithm = model
         .algorithm
@@ -79,7 +81,7 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
                 let oid = Uuid::new_v4();
                 validate_jwk_algorithm(&input.jwk, input.algorithm)?;
                 let jwk = normalize_jwk_kid(input.jwk, oid);
-                let jwk = serde_json::to_value(jwk)
+                let jwk = to_value(jwk)
                     .map_err(|error| KeyJwkRepositoryError::InvalidPublicJwk(error.to_string()))?;
 
                 Ok(key_jwk::ActiveModel {
@@ -161,15 +163,14 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::to_domain;
-
-    use super::{KeyJwkRepositoryImpl, normalize_jwk_kid};
-    use crate::database::entity::key_jwk;
     use chrono::Utc;
     use identity_domain::key::{JwaSigningAlgorithm, KeyJwkRepository, KeyOid, PublicJwk};
     use sea_orm::{DatabaseBackend, IntoMockRow, MockDatabase};
     use serde_json::json;
     use uuid::Uuid;
+
+    use super::{KeyJwkRepositoryImpl, normalize_jwk_kid, to_domain};
+    use crate::database::entity::key_jwk;
 
     fn rsa_public_jwk(alg: &str, kid: impl Into<String>) -> PublicJwk {
         PublicJwk::Rsa {

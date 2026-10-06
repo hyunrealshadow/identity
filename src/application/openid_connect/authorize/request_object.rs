@@ -1,21 +1,26 @@
-use super::*;
-use crate::error::codes::common::CommonErrorCode;
-use crate::openid_connect::jose::{
-    REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
-    asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
-    decrypt_compact_with_private_pem,
-};
-#[cfg(test)]
-use crate::openid_connect::remote::fetchable_url;
-use crate::openid_connect::remote::{
-    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
-    fetch_https_public_document, validate_https_public_url,
-};
 use chrono::Utc;
 use identity_domain::key::PublicJwk;
 use josekit::jwe::JweHeader;
-use serde_json::Map;
-use serde_json::Value;
+use serde_json::{Map, Value, from_slice, from_str};
+
+use crate::{
+    error::codes::common::CommonErrorCode,
+    openid_connect::{
+        jose::{
+            REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
+            asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk,
+            decode_with_verifier, decrypt_compact_with_private_pem,
+        },
+        remote::{
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
+            fetch_https_public_document, validate_https_public_url,
+        },
+    },
+};
+
+use super::*;
+#[cfg(test)]
+use crate::openid_connect::remote::fetchable_url;
 
 impl AuthorizeService {
     pub(super) async fn resolve_request_object(
@@ -634,7 +639,7 @@ impl AuthorizeService {
         outer: Option<&str>,
     ) -> Result<(), AppError> {
         if let (Some(inner), Some(outer)) = (payload.get(field), outer) {
-            let outer = serde_json::from_str::<Value>(outer).map_err(AppError::map_source(
+            let outer = from_str::<Value>(outer).map_err(AppError::map_source(
                 AuthorizeErrorCode::RequestObjectJsonInvalid,
             ))?;
 
@@ -650,7 +655,7 @@ impl AuthorizeService {
     }
 
     pub(super) fn parse_claims_request(raw: &str) -> Result<ClaimsRequest, AppError> {
-        let value = serde_json::from_str::<Value>(raw)
+        let value = from_str::<Value>(raw)
             .map_err(AppError::map_source(AuthorizeErrorCode::ClaimsParamInvalid))?;
         let object = value
             .as_object()
@@ -701,7 +706,7 @@ impl AuthorizeService {
                 AuthorizeErrorCode::RequestObjectBase64Invalid,
             ))?;
 
-        serde_json::from_slice::<Value>(&payload).map_err(AppError::map_source(
+        from_slice::<Value>(&payload).map_err(AppError::map_source(
             AuthorizeErrorCode::RequestObjectPayloadInvalid,
         ))
     }

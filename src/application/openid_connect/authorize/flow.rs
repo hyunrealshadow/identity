@@ -1,26 +1,21 @@
-use super::implicit_flow::AuthenticationContext;
-use super::*;
-use crate::observability::BusinessEvent;
-use crate::observability::EventValue;
-use crate::observability::error_outcome;
-use crate::openid_connect::session::calculate_session_state;
-use chrono::DateTime;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::auth::AMR_MFA;
-use identity_domain::auth::AMR_OTP;
-use identity_domain::auth::AMR_PASSWORD;
-use identity_domain::auth::model::Login;
-use identity_domain::client::model::ClientOid;
-use identity_domain::client_authorization::AuthorizationCodeData;
-use identity_domain::client_authorization::ClientAuthorization;
-use identity_domain::openid_connect::ScopeSet;
-
-use identity_domain::auth::{LoginStatus, SessionOid};
-use identity_domain::client_authorization::{
-    ClientAuthorizationData, ConsentState, SelectionSource, StoredAuthorizationRequest,
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::{
+    auth::{ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginStatus, SessionOid, model::Login},
+    client::model::ClientOid,
+    client_authorization::{
+        AuthorizationCodeData, ClientAuthorization, ClientAuthorizationData, ConsentState,
+        SelectionSource, StoredAuthorizationRequest,
+    },
+    openid_connect::ScopeSet,
 };
+
+use super::implicit_flow::AuthenticationContext;
+use crate::{
+    observability::{BusinessEvent, EventValue, error_outcome},
+    openid_connect::session::calculate_session_state,
+};
+
+use super::*;
 
 #[derive(Debug)]
 pub struct TerminalReservation {

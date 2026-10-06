@@ -1,29 +1,23 @@
-use identity_application::openid_connect::jose::asymmetric_verifier_from_public_jwk;
-use reqwest::Certificate;
-use reqwest::Client;
-use reqwest::RequestBuilder;
-use reqwest::Url;
-use serde_json::Value;
-use std::env;
-use std::time::SystemTime;
 use std::{
-    fs,
+    env, fs,
     path::PathBuf,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
-use tokio::sync::Mutex;
 
 use async_trait::async_trait;
-use josekit::jwt::{self, JwtPayload};
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
-
+use identity_application::openid_connect::jose::asymmetric_verifier_from_public_jwk;
 use identity_domain::{
     key::PublicJwk,
     openid_connect::{AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator},
 };
+use josekit::{jwt, jwt::JwtPayload};
+use reqwest::{Certificate, Client, RequestBuilder, Url};
+use serde::Deserialize;
+use serde_json::{Value, from_value, to_value};
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
+use tokio::sync::Mutex;
 
 use crate::config::{KubernetesServiceAccountConfig, LoginWorkloadConfig};
 
@@ -249,9 +243,7 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
         let keys = jwks
             .keys
             .into_iter()
-            .filter_map(|key| {
-                serde_json::from_value::<PublicJwk>(serde_json::to_value(key).ok()?).ok()
-            })
+            .filter_map(|key| from_value::<PublicJwk>(to_value(key).ok()?).ok())
             .collect::<Vec<_>>();
         if keys.is_empty() {
             return Err("cluster JWKS contained no usable keys".to_owned());
@@ -348,24 +340,24 @@ struct Jwks {
 
 #[cfg(test)]
 mod tests {
-    use std::process;
-
-    use super::kubernetes_http_client;
-    use reqwest::Client;
-    use std::env;
-    use std::time::SystemTime;
-
-    use std::{fs, path::PathBuf, time::Duration};
+    use std::{
+        env, fs,
+        path::PathBuf,
+        process,
+        time::{Duration, SystemTime},
+    };
 
     use identity_domain::openid_connect::{
         AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator as _,
     };
-
     use josekit::jwt::JwtPayload;
+    use reqwest::Client;
 
+    use super::{
+        KubernetesServiceAccountWorkloadAuthenticator, StaticTokenWorkloadAuthenticator,
+        kubernetes_http_client,
+    };
     use crate::config::KubernetesServiceAccountConfig;
-
-    use super::{KubernetesServiceAccountWorkloadAuthenticator, StaticTokenWorkloadAuthenticator};
 
     #[tokio::test]
     async fn static_token_accepts_configured_tokens() {

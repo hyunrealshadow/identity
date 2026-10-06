@@ -2,12 +2,11 @@ use serde::Serialize;
 use url::Url;
 use uuid::Uuid;
 
+use super::request::DynamicClientJwks;
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
     domain::openid_connect::OpenIdConnectClient,
 };
-
-use super::request::DynamicClientJwks;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DynamicClientRegistrationResponse {

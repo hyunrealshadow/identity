@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+
 #[derive(Debug, Clone)]
 pub struct ScopeDescription {
     pub name: String,

@@ -1,6 +1,5 @@
-use super::m20260319_121151_create_key::Key;
-use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
+    async_trait,
     prelude::{
         DbErr, DeriveIden, DeriveMigrationName, ForeignKey, ForeignKeyAction, MigrationTrait,
         SchemaManager, Table,
@@ -9,7 +8,10 @@ use sea_orm_migration::{
         json_binary, pk_auto, string, timestamp_with_time_zone, timestamp_with_time_zone_null,
         uuid, uuid_uniq,
     },
+    sea_orm,
 };
+
+use super::m20260319_121151_create_key::Key;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

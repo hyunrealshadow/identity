@@ -5,13 +5,11 @@
 //! here from the configured origin allow-list; being "internal", using a
 //! backchannel URL or having an authenticated user never grants propagation.
 
-use tracing::field::Empty;
-
 use std::sync::Arc;
 
 use http::HeaderMap;
 use identity_application::observability::OutboundTrace;
-use tracing::Span;
+use tracing::{Span, field::Empty, info_span};
 use url::Url;
 
 use super::context::{TraceTrustPolicy, inject_current_span};
@@ -37,7 +35,7 @@ impl OutboundTrace for OutboundTraceImpl {
         // Only scheme and host are recorded: query strings may contain request
         // URIs or credentials that must not be normalized into telemetry.
         let host = url.host_str().unwrap_or_default();
-        tracing::info_span!(
+        info_span!(
             "http.client",
             otel.kind = "client",
             http.request.method = %method,
@@ -56,19 +54,19 @@ impl OutboundTrace for OutboundTraceImpl {
 
 #[cfg(test)]
 mod tests {
-    use opentelemetry::trace::SpanId;
-    use opentelemetry::trace::TraceId;
-    use tracing::Span;
-
     use std::sync::Arc;
 
     use http::HeaderMap;
     use identity_application::observability::OutboundTrace;
+    use opentelemetry::trace::{SpanId, TraceId};
+    use tracing::Span;
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
 
     use super::OutboundTraceImpl;
-    use crate::config::TraceContextConfig;
-    use crate::observability::context::{TraceTrustPolicy, format_traceparent};
-    use tracing_opentelemetry::OpenTelemetrySpanExt;
+    use crate::{
+        config::TraceContextConfig,
+        observability::context::{TraceTrustPolicy, format_traceparent},
+    };
 
     fn policy(origins: Vec<String>) -> Arc<dyn OutboundTrace> {
         OutboundTraceImpl::shared(TraceTrustPolicy::new(TraceContextConfig {

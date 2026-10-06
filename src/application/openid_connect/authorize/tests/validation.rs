@@ -1,13 +1,16 @@
+use identity_domain::openid_connect::{
+    API_RESOURCE, GrantType, OAuthProtocolVersion, OpenIdConnectClientSettings,
+    TokenEndpointAuthMethod,
+};
+use serde_json::json;
+
+use crate::{
+    openid_connect::tests::fixtures::client::ConfiguredClientRepository,
+    setting::{OpenIdConnectSettings, SettingsSnapshot},
+};
+
 use super::fixtures::*;
 use super::*;
-use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-use crate::setting::OpenIdConnectSettings;
-use crate::setting::SettingsSnapshot;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::GrantType;
-use identity_domain::openid_connect::OAuthProtocolVersion;
-use identity_domain::openid_connect::OpenIdConnectClientSettings;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
 
 #[tokio::test]
 async fn public_client_requires_pkce_s256() {
@@ -380,9 +383,7 @@ fn unsigned_id_token_hint(issuer: &str) -> String {
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
-    payload
-        .set_claim("iss", Some(serde_json::json!(issuer)))
-        .unwrap();
+    payload.set_claim("iss", Some(json!(issuer))).unwrap();
     jwt::encode_unsecured(&payload, &header).unwrap()
 }
 

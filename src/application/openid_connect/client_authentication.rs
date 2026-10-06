@@ -7,38 +7,44 @@
 //! `none` authenticate with a `client_id` only. Keeping one implementation
 //! means a flow cannot accidentally accept a weaker method than the registration allows.
 
-use crate::openid_connect::remote::RemoteFetchError;
+use std::{sync::Arc, time::Duration};
+
 use chrono::Utc;
-use identity_domain::key::PublicJwk;
-use identity_domain::openid_connect::ClientAssertionType;
-use identity_domain::openid_connect::OpenIdConnectClient as OpenidConnectOpenIdConnectClient;
+use identity_domain::{
+    key::PublicJwk,
+    openid_connect::{
+        ClientAssertionType, OpenIdConnectClient as OpenidConnectOpenIdConnectClient,
+    },
+};
+use josekit::{jwt, jwt::JwtPayload};
+use serde_json::from_slice;
 use subtle::ConstantTimeEq;
 use url::Url;
-
-use std::sync::Arc;
-use std::time::Duration;
-
-use josekit::jwt;
-use josekit::jwt::JwtPayload;
 use uuid::Uuid;
 
-use crate::application::error::{AppError, codes::token::TokenErrorCode};
-use crate::domain::key::JwsAlgorithm;
-use crate::domain::openid_connect::model::claim::JwtClaimNames;
-use crate::domain::openid_connect::{
-    OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectCredentialData,
-    OpenIdConnectCredentialRepository, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
-};
-use crate::openid_connect::jwt_checks::{
-    JwtTimeValidationError, audience_matches, validate_required_exp_and_optional_window,
-};
-use crate::openid_connect::provider::OpenIdProviderService;
-use crate::openid_connect::remote::{
-    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
-    fetch_https_public_document, remote_http_client,
-};
-use crate::openid_connect::token::helpers::{
-    decode_assertion_with_alg, decode_assertion_with_hmac_alg, decode_assertion_with_jwk,
+use crate::{
+    application::error::{AppError, codes::token::TokenErrorCode},
+    domain::{
+        key::JwsAlgorithm,
+        openid_connect::{
+            OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectCredentialData,
+            OpenIdConnectCredentialRepository, OpenIdConnectCredentialType,
+            TokenEndpointAuthMethod, model::claim::JwtClaimNames,
+        },
+    },
+    openid_connect::{
+        jwt_checks::{
+            JwtTimeValidationError, audience_matches, validate_required_exp_and_optional_window,
+        },
+        provider::OpenIdProviderService,
+        remote::{
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteFetchPolicy,
+            conformance_allows_invalid_certs, fetch_https_public_document, remote_http_client,
+        },
+        token::helpers::{
+            decode_assertion_with_alg, decode_assertion_with_hmac_alg, decode_assertion_with_jwk,
+        },
+    },
 };
 
 #[derive(Clone)]
@@ -561,7 +567,7 @@ async fn fetch_and_verify_jwks_uri(
             }
         };
 
-    let jwks = serde_json::from_slice::<RemoteJwks>(&body)
+    let jwks = from_slice::<RemoteJwks>(&body)
         .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
     if !cfg!(feature = "allow-none-alg")
         && jwks.keys.iter().any(|jwk| jwk.algorithm() == Some("none"))

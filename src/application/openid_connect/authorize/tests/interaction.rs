@@ -1,11 +1,7 @@
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::auth::ACR_AAL1;
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::auth::AMR_PASSWORD;
+use chrono::{Duration, Utc};
 use identity_domain::{
     auth::{
-        LoginStatus, SessionOid,
+        ACR_AAL1, ACR_AAL2, AMR_PASSWORD, LoginStatus, SessionOid,
         model::{ActiveSession, Login},
     },
     client_authorization::{

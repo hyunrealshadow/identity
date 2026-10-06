@@ -1,9 +1,7 @@
-use super::ACR_AAL1;
-use super::ACR_AAL2;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::{LoginStatus, SessionStatus};
+use super::{ACR_AAL1, ACR_AAL2, LoginStatus, SessionStatus};
 
 #[derive(
     Debug,

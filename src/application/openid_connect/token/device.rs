@@ -8,25 +8,30 @@
 //! second poll of an already redeemed code cannot produce a second token set
 //! (ADR 0005).
 
-use crate::openid_connect::resource::ResourceSelection;
-use chrono::DateTime;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client_authorization::ClientAuthenticationMode;
-use identity_domain::client_authorization::ClientAuthorization;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
-use tracing::Span;
-use tracing::field::display;
-
-use super::exchange::{issuance_result, resolve_client_id};
-use super::signing::{SignAccessTokenInput, SignIdTokenInput};
-use super::*;
-use crate::domain::client_authorization::{
-    ClientAuthorizationData, DeviceAuthorizationApproval, DeviceConsumeOutcome, RefreshTokenData,
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::{
+    client_authorization::{ClientAuthenticationMode, ClientAuthorization},
+    openid_connect::{API_RESOURCE, TokenEndpointAuthMethod},
 };
-use crate::domain::openid_connect::GrantType;
-use crate::observability::{BusinessEvent, EventValue};
+use tracing::{Span, field::display};
+
+use super::{
+    exchange::{issuance_result, resolve_client_id},
+    signing::{SignAccessTokenInput, SignIdTokenInput},
+};
+use crate::{
+    domain::{
+        client_authorization::{
+            ClientAuthorizationData, DeviceAuthorizationApproval, DeviceConsumeOutcome,
+            RefreshTokenData,
+        },
+        openid_connect::GrantType,
+    },
+    observability::{BusinessEvent, EventValue},
+    openid_connect::resource::ResourceSelection,
+};
+
+use super::*;
 
 impl TokenService {
     #[tracing::instrument(

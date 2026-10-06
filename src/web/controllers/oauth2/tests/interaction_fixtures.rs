@@ -1,24 +1,18 @@
-use crate::infrastructure::database::entity::session::Model;
-use crate::infrastructure::database::entity::user::Model as UserModel;
-use base64::engine::general_purpose::STANDARD;
-use identity_domain::auth::SessionStatus;
-use identity_domain::key::KeyType;
 use std::{collections::BTreeMap, sync::Arc};
-use uuid::Uuid;
 
-use base64::Engine;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{Duration, Utc};
 use identity_application::setting::{
     DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
     SettingDefinition,
 };
 use identity_domain::{
-    auth::LoginStatus,
+    auth::{LoginStatus, SessionStatus},
     client_authorization::{
         AuthorizationInteractionState, ClientAuthorizationType, StoredAuthorizationRequest,
     },
     key::{
-        KeyData,
+        KeyData, KeyType,
         material::{SymmetricKeyAlgorithm, SymmetricKeyData},
     },
     openid_connect::{AuthorizationRequestData, OpenIdConnectClientSettings},
@@ -31,10 +25,12 @@ use identity_infrastructure::{
     web::tera::{build_i18n, build_tera},
 };
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
+use serde_json::{json, to_value};
+use uuid::Uuid;
 
 use crate::infrastructure::database::entity::{
     client, client_authorization, client_openid_connect, client_openid_connect_platform, key,
-    login, setting,
+    login, session::Model, setting, user::Model as UserModel,
 };
 
 pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
@@ -50,7 +46,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 1,
         oid: Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
-        value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
+        value: to_value(PasswordHashSetting::default_value()).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -58,7 +54,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 2,
         oid: Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
-        value: serde_json::to_value(true).unwrap(),
+        value: to_value(true).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -66,7 +62,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 3,
         oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
-        value: serde_json::to_value("identity.example.com").unwrap(),
+        value: to_value("identity.example.com").unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -74,7 +70,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 6,
         oid: Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
-        value: serde_json::to_value(now).unwrap(),
+        value: to_value(now).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -82,7 +78,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 7,
         oid: Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
-        value: serde_json::to_value(false).unwrap(),
+        value: to_value(false).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -90,7 +86,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 12,
         oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
-        value: serde_json::to_value(Some("https://ui.example.com".to_owned())).unwrap(),
+        value: to_value(Some("https://ui.example.com".to_owned())).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -98,7 +94,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 10,
         oid: Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
-        value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
+        value: to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -118,7 +114,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         oid: authorization_oid,
         client_id: client_model.id,
         r#type: ClientAuthorizationType::AuthorizationRequest.to_string(),
-        data: serde_json::to_value(StoredAuthorizationRequest {
+        data: to_value(StoredAuthorizationRequest {
             request: AuthorizationRequestData {
                 resources: Vec::new(),
                 response_type: "code".parse().unwrap(),
@@ -197,7 +193,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         default_acr_values: None,
         initiate_login_uri: None,
         request_uris: None,
-        settings: serde_json::to_value(OpenIdConnectClientSettings::default()).unwrap(),
+        settings: to_value(OpenIdConnectClientSettings::default()).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -205,7 +201,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 37,
         client_id: client_model.id,
         platform: "web".to_owned(),
-        redirect_uris: Some(serde_json::json!(["https://client.example.com/callback"])),
+        redirect_uris: Some(json!(["https://client.example.com/callback"])),
         created_at: now.into(),
         updated_at: None,
     };
@@ -213,7 +209,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         id: 41,
         oid: symmetric_key_oid,
         r#type: KeyType::Symmetric.to_string(),
-        data: serde_json::to_value(KeyData::Symmetric(SymmetricKeyData {
+        data: to_value(KeyData::Symmetric(SymmetricKeyData {
             key: STANDARD.encode([0x42u8; 32]),
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
@@ -232,7 +228,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         status: SessionStatus::ACTIVE.to_string(),
         acr: None,
         acr_expires_at: None,
-        amr: serde_json::json!([]),
+        amr: json!([]),
         device_name: None,
         device_type: None,
         os_name: None,
@@ -271,7 +267,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         birthdate: None,
         zone_info: None,
         locale: None,
-        preferences: serde_json::json!({}),
+        preferences: json!({}),
         address_formatted: None,
         address_street_address: None,
         address_locality: None,

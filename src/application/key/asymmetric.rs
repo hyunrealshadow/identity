@@ -1,11 +1,10 @@
-use super::rotation::KEY_LIFETIME;
-use crate::key::runtime::RuntimeKeyRingProvider;
-use identity_domain::key::KeyJwk;
 use std::sync::Arc;
 
 use chrono::Utc;
+use identity_domain::key::KeyJwk;
 use uuid::Uuid;
 
+use super::rotation::KEY_LIFETIME;
 use crate::{
     application::error::{AppError, codes::key::KeyErrorCode},
     domain::key::{
@@ -14,6 +13,7 @@ use crate::{
         model::{AsymmetricKeyAlgorithm, Key, KeyData},
         repository::KeyRepository,
     },
+    key::runtime::RuntimeKeyRingProvider,
 };
 
 #[derive(Debug, Clone)]
@@ -203,43 +203,6 @@ fn prioritize_current_signing_key(jwks: &mut [KeyJwk], key_id: &str) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::prioritize_current_signing_key;
-    use crate::domain::key::{KeyJwk, KeyJwkOid, KeyOid, PublicJwk};
-    use chrono::Utc;
-    use uuid::Uuid;
-
-    #[test]
-    fn published_jwks_start_with_the_runtime_signing_key() {
-        let binding = |kid: Uuid| KeyJwk {
-            oid: KeyJwkOid(kid),
-            key_oid: KeyOid(Uuid::new_v4()),
-            algorithm: "RS256".parse().unwrap(),
-            jwk: PublicJwk::Rsa {
-                key_use: Some("sig".to_owned()),
-                alg: Some("RS256".to_owned()),
-                kid: Some(kid.to_string()),
-                n: "modulus".to_owned(),
-                e: "AQAB".to_owned(),
-                x5c: None,
-                x5t: None,
-                x5t_s256: None,
-            },
-            created_at: Utc::now(),
-        };
-        let previous = Uuid::new_v4();
-        let current = Uuid::new_v4();
-        let another = Uuid::new_v4();
-        let mut jwks = vec![binding(previous), binding(another), binding(current)];
-
-        prioritize_current_signing_key(&mut jwks, &current.to_string());
-
-        let published: Vec<_> = jwks.iter().map(|binding| binding.oid.0).collect();
-        assert_eq!(published, vec![current, previous, another]);
-    }
-}
-
 fn build_jwk_inputs(
     key: &Key,
     jwk_generator: &dyn KeyJwkGenerator,
@@ -271,4 +234,42 @@ fn validate_certificate_pem(certificate_pem: &str) -> Result<(), AppError> {
     }
 
     Err(AppError::from_code(KeyErrorCode::InvalidCertificatePem))
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    use super::prioritize_current_signing_key;
+    use crate::domain::key::{KeyJwk, KeyJwkOid, KeyOid, PublicJwk};
+
+    #[test]
+    fn published_jwks_start_with_the_runtime_signing_key() {
+        let binding = |kid: Uuid| KeyJwk {
+            oid: KeyJwkOid(kid),
+            key_oid: KeyOid(Uuid::new_v4()),
+            algorithm: "RS256".parse().unwrap(),
+            jwk: PublicJwk::Rsa {
+                key_use: Some("sig".to_owned()),
+                alg: Some("RS256".to_owned()),
+                kid: Some(kid.to_string()),
+                n: "modulus".to_owned(),
+                e: "AQAB".to_owned(),
+                x5c: None,
+                x5t: None,
+                x5t_s256: None,
+            },
+            created_at: Utc::now(),
+        };
+        let previous = Uuid::new_v4();
+        let current = Uuid::new_v4();
+        let another = Uuid::new_v4();
+        let mut jwks = vec![binding(previous), binding(another), binding(current)];
+
+        prioritize_current_signing_key(&mut jwks, &current.to_string());
+
+        let published: Vec<_> = jwks.iter().map(|binding| binding.oid.0).collect();
+        assert_eq!(published, vec![current, previous, another]);
+    }
 }

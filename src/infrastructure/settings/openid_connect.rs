@@ -1,10 +1,13 @@
-use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashSet,
+    sync::{Arc, RwLock},
+};
 
-use crate::database::entity::client_openid_connect_cors_origin;
 use async_trait::async_trait;
 use identity_application::{error::AppError, setting::runtime::RefreshableSetting};
 use sea_orm::{DatabaseConnection, EntityTrait, QuerySelect};
+
+use crate::database::entity::client_openid_connect_cors_origin;
 
 /// A global, read-only setting derived from per-client CORS origin rows.
 pub struct CachedCorsOrigins {

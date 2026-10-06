@@ -1,15 +1,16 @@
 use chrono::{DateTime, Utc};
-use identity_domain::auth::SessionOid;
-use identity_domain::auth::model::{ActiveSession, Session};
-use identity_domain::auth::repository::SessionPage;
-use identity_domain::auth::repository::SessionPageDirection;
-use identity_domain::auth::repository::SessionSortKey;
-use identity_domain::auth::repository::{
-    CreateSessionInput, SessionRepository, SessionRepositoryError,
+use identity_domain::auth::{
+    SessionOid,
+    model::{ActiveSession, Session},
+    repository::{
+        CreateSessionInput, SessionPage, SessionPageDirection, SessionRepository,
+        SessionRepositoryError, SessionSortKey,
+    },
 };
+use mockall::mock;
 use uuid::Uuid;
 
-mockall::mock! {
+mock! {
     pub SessionRepository {}
 
     #[async_trait::async_trait]

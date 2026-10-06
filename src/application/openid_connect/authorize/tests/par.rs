@@ -1,28 +1,33 @@
-use super::{fixtures::*, *};
-use crate::error::code::AppErrorCode;
-use crate::error::codes::token::TokenErrorCode;
-use crate::openid_connect::tests::fixtures::client::test_client;
-use crate::openid_connect::tests::fixtures::client::test_metadata;
-use crate::openid_connect::tests::fixtures::client::test_platforms;
-use crate::openid_connect::tests::fixtures::client::test_scopes;
-use crate::openid_connect::tests::fixtures::mocks::MockClientAuthorizationRepository;
-use crate::openid_connect::{
-    client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
-    par::{PushedAuthorizationParams, PushedAuthorizationService, request_uri_digest},
-};
-use chrono::DateTime;
-use chrono::Duration;
-use identity_domain::client_authorization::{
-    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
-    PushedAuthorizationRequestData,
-};
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::ClientAssertionType;
-use identity_domain::openid_connect::par::PAR_REQUEST_URI_PREFIX;
 use std::sync::Mutex;
 
+use chrono::{DateTime, Duration};
+use identity_domain::{
+    client_authorization::{
+        ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
+        PushedAuthorizationRequestData,
+    },
+    openid_connect::{API_RESOURCE, ClientAssertionType, par::PAR_REQUEST_URI_PREFIX},
+};
+use tokio::join;
+
+use crate::{
+    error::{code::AppErrorCode, codes::token::TokenErrorCode},
+    openid_connect::{
+        client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
+        par::{PushedAuthorizationParams, PushedAuthorizationService, request_uri_digest},
+        tests::fixtures::{
+            client::{test_client, test_metadata, test_platforms, test_scopes},
+            mocks::MockClientAuthorizationRepository,
+        },
+    },
+};
+
+use super::{fixtures::*, *};
+
+type ParRecords = HashMap<String, (Uuid, AuthorizationRequestParams, DateTime<Utc>)>;
+
 #[derive(Default)]
-struct MemoryPar(Mutex<HashMap<String, (Uuid, AuthorizationRequestParams, DateTime<Utc>)>>);
+struct MemoryPar(Mutex<ParRecords>);
 struct ClientRepo(OpenIdConnectClient);
 #[async_trait]
 impl OpenIdConnectClientRepository for ClientRepo {
@@ -160,7 +165,7 @@ async fn pushed_requests_preserve_resources_and_are_client_bound_expiring_and_si
             .code(),
         10000
     );
-    let (first, second) = tokio::join!(
+    let (first, second) = join!(
         authorize.validate_request(front(&response.request_uri)),
         authorize.validate_request(front(&response.request_uri))
     );

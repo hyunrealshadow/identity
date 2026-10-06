@@ -1,17 +1,20 @@
+use std::time::{Duration as TimeDuration, SystemTime};
+
+use chrono::Duration;
+use identity_domain::openid_connect::{
+    ClientAssertionType, OpenIdConnectClientSettings, TokenEndpointAuthMethod,
+};
+
+use crate::{
+    error::{code::AppErrorCode, codes::token::TokenErrorCode},
+    openid_connect::{
+        client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
+        tests::fixtures::client::ConfiguredClientRepository,
+    },
+};
+
 use super::fixtures::*;
 use super::*;
-use crate::error::code::AppErrorCode;
-use crate::error::codes::token::TokenErrorCode;
-use crate::openid_connect::client_authentication::{
-    ClientAuthenticator, ClientAuthenticatorDependencies,
-};
-use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-use chrono::Duration;
-use identity_domain::openid_connect::ClientAssertionType;
-use identity_domain::openid_connect::OpenIdConnectClientSettings;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
-use std::time::Duration as TimeDuration;
-use std::time::SystemTime;
 
 /// Builds the authenticator under test with an explicit credential set.
 fn authenticator(

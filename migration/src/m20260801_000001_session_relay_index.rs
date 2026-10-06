@@ -1,8 +1,9 @@
-use crate::m20260306_090746_create_session::Session;
-use sea_orm_migration::async_trait;
-use sea_orm_migration::prelude::{
-    DbErr, DeriveMigrationName, Index, MigrationTrait, SchemaManager,
+use sea_orm_migration::{
+    async_trait,
+    prelude::{DbErr, DeriveMigrationName, Index, MigrationTrait, SchemaManager},
 };
+
+use crate::m20260306_090746_create_session::Session;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

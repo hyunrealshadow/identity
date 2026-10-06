@@ -1,13 +1,11 @@
-use std::error::Error as StdError;
-use std::{fs, io, path::Path};
+use std::{error::Error as StdError, fs, io, path::Path};
 
-use crate::config::TlsConfig;
 use identity_domain::key::{generator::KeyMaterialError, model::AsymmetricKeyAlgorithm};
+use openssl::{pkey::PKey, rsa::Rsa};
 use thiserror::Error;
 
-use openssl::{pkey::PKey, rsa::Rsa};
-
 use super::certificate::generate_self_signed_certificate;
+use crate::config::TlsConfig;
 
 fn internal<E>(error: E) -> KeyMaterialError
 where
@@ -151,18 +149,14 @@ fn write_file(path: &Path, contents: &str) -> Result<(), TlsPrepareError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::TlsTermination;
-    use std::env;
-
     use std::{
-        fs,
+        env, fs,
         path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use crate::config::TlsConfig;
-
     use super::{TlsMode, prepare_tls_material};
+    use crate::config::{TlsConfig, TlsTermination};
 
     const CERT_PEM: &str = "-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----\n";
     const KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\ninvalid\n-----END PRIVATE KEY-----\n";

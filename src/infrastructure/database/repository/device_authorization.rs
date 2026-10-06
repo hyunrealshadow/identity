@@ -5,32 +5,12 @@
 //! concurrency guarantees come from row locks and partial unique indexes, not
 //! from process-local state.
 
-use crate::database::entity::login;
-use crate::database::entity::session;
+use std::{error::Error, fmt::Display};
 
-use chrono::Duration;
-use identity_domain::auth::SessionOid;
-use serde_json::Value;
-use std::error::Error;
-use std::fmt::Display;
-
-use crate::database::query::json_text;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr,
-    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
-    sea_query::{Expr, ExprTrait, SimpleExpr},
-};
-use uuid::Uuid;
-
-use super::client_authorization::{serialize_data, to_domain};
-use super::shared::non_expiring_timestamp;
-use crate::database::entity::{
-    client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity,
-};
+use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
+    auth::SessionOid,
     client::model::ClientOid,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
@@ -40,6 +20,25 @@ use identity_domain::{
         PreparedAuthorizationRecord, SLOW_DOWN_INCREMENT_SECONDS,
     },
     openid_connect::ScopeSet,
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr,
+    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
+    sea_query::{Expr, ExprTrait, SimpleExpr},
+};
+use serde_json::{Value, from_value, to_value};
+use uuid::Uuid;
+
+use super::{
+    client_authorization::{serialize_data, to_domain},
+    shared::non_expiring_timestamp,
+};
+use crate::database::{
+    entity::{
+        client, client::Entity as ClientEntity, client_authorization,
+        client_authorization::Entity as ClientAuthorizationEntity, login, session,
+    },
+    query::json_text,
 };
 
 /// Partial unique index guarding user codes of active device requests; the
@@ -89,7 +88,7 @@ fn json_field_is_null(field: &str) -> SimpleExpr {
 fn parse_device_request(
     data: Value,
 ) -> Result<DeviceAuthorizationRequestData, DeviceAuthorizationRepositoryError> {
-    serde_json::from_value(data).map_err(query_failed)
+    from_value(data).map_err(query_failed)
 }
 
 /// Rebuilds the domain row or maps the storage error back to the device error.
@@ -273,7 +272,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::Data,
-                Expr::value(serde_json::to_value(data).map_err(query_failed)?),
+                Expr::value(to_value(data).map_err(query_failed)?),
             )
             .col_expr(client_authorization::Column::UpdatedAt, Expr::value(now))
             .filter(client_authorization::Column::Id.eq(request.id))
@@ -331,7 +330,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             oid: Set(Uuid::new_v4()),
             client_id: Set(client_model.id),
             r#type: Set(device_request_type()),
-            data: Set(serde_json::to_value(&data).map_err(query_failed)?),
+            data: Set(to_value(&data).map_err(query_failed)?),
             expires_at: Set(expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
@@ -521,7 +520,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             oid: Set(relation_oid),
             client_id: Set(model.client_id),
             r#type: Set(device_authorization_type()),
-            data: Set(serde_json::to_value(&relation).map_err(query_failed)?),
+            data: Set(to_value(&relation).map_err(query_failed)?),
             expires_at: Set(non_expiring_timestamp()),
             completed_at: Set(None),
             revoked_at: Set(None),

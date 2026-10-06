@@ -1,8 +1,7 @@
-use sea_orm::DbErr as SeaOrmDbErr;
 use std::time::Duration;
 
 use migration::{DbErr, Migrator, MigratorTrait};
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbErr as SeaOrmDbErr};
 
 use crate::config::DatabaseConfig;
 

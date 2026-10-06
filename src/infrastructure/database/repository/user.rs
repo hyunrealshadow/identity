@@ -1,20 +1,18 @@
 use async_trait::async_trait;
-use chrono::FixedOffset;
-use chrono::{DateTime, Utc};
-use identity_domain::user::normalization::normalize_identifier;
-use sea_orm::Condition;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
-    TransactionTrait, sea_query::Expr,
+use chrono::{DateTime, FixedOffset, Utc};
+use identity_domain::user::{
+    User, UserOid, UserTheme,
+    normalization::normalize_identifier,
+    repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
-use serde_json::Value;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, ExprTrait,
+    QueryFilter, Set, TransactionTrait, sea_query::Expr,
+};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::database::entity::{user, user::Entity as UserEntity};
-use identity_domain::user::{
-    User, UserOid, UserTheme,
-    repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
-};
 
 fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
     let theme = m
@@ -62,7 +60,7 @@ fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
 
 fn update_theme_preference(preferences: &mut Value, theme: Option<UserTheme>) {
     if !preferences.is_object() {
-        *preferences = serde_json::json!({});
+        *preferences = json!({});
     }
     let object = preferences
         .as_object_mut()
@@ -354,13 +352,13 @@ impl UserRepository for UserRepositoryImpl {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use uuid::Uuid;
-
+    use identity_domain::user::{UserTheme, repository::UserIdentifierUpdate};
     use sea_orm::{DatabaseBackend, MockDatabase};
+    use serde_json::json;
+    use uuid::Uuid;
 
     use super::{UserRepositoryImpl, to_domain, update_theme_preference};
     use crate::database::entity::user;
-    use identity_domain::user::{UserTheme, repository::UserIdentifierUpdate};
 
     #[test]
     fn maps_oidc_phone_and_address_claim_fields() {
@@ -384,7 +382,7 @@ mod tests {
 
     #[test]
     fn updating_theme_preserves_other_json_preferences() {
-        let mut preferences = serde_json::json!({
+        let mut preferences = json!({
             "theme": "light",
             "compact_navigation": true,
         });
@@ -450,7 +448,7 @@ mod tests {
             birthdate: None,
             zone_info: None,
             locale: None,
-            preferences: serde_json::json!({ "theme": "dark" }),
+            preferences: json!({ "theme": "dark" }),
             email_verified: true,
             phone_number: Some("+12025550123".to_string()),
             phone_number_verified: Some(true),

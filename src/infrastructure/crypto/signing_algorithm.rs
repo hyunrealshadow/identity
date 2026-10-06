@@ -1,9 +1,8 @@
+use super::key::{infer_algorithm_from_private_key_pem, jwa_algorithm_can_sign};
 use crate::{
     application::openid_connect::provider::SigningAlgorithmDetector,
     domain::key::{JwaSigningAlgorithm, Key, KeyData},
 };
-
-use super::key::{infer_algorithm_from_private_key_pem, jwa_algorithm_can_sign};
 
 pub struct SigningAlgorithmDetectorImpl;
 

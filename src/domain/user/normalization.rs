@@ -1,3 +1,5 @@
+use idna::domain_to_ascii;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmailNormalizationError {
     Empty,
@@ -52,7 +54,7 @@ pub fn normalize_email(email: &str) -> Result<String, EmailNormalizationError> {
         return Err(EmailNormalizationError::InvalidFormat);
     }
 
-    let ascii_domain = idna::domain_to_ascii(domain)
+    let ascii_domain = domain_to_ascii(domain)
         .map_err(|_| EmailNormalizationError::InvalidDomain)?
         .to_lowercase();
     if ascii_domain.is_empty() || !ascii_domain.contains('.') {

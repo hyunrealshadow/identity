@@ -1,9 +1,22 @@
-use crate::setting::{AppSettings, InstallationSettings};
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use base64::Engine;
 use chrono::Utc;
+use identity_domain::{
+    auth::{SessionOid, repository::LoginRepository},
+    client_authorization::{ClientAuthorization, ClientAuthorizationType},
+    key::{
+        JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid, KeyType, PublicJwk,
+        material::{AsymmetricKeyData, SymmetricKeyAlgorithm, SymmetricKeyData},
+    },
+    openid_connect::{
+        OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
+        OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
+        OpenIdConnectCredentialType,
+    },
+    user::{User, UserOid},
+};
 use josekit::{
     jwe::{ECDH_ES, JweHeader, RSA_OAEP, serialize_compact},
     jwk::{
@@ -11,7 +24,8 @@ use josekit::{
         alg::ec::{EcCurve, EcKeyPair},
     },
     jws::{JwsHeader, RS256},
-    jwt::{self, JwtPayload},
+    jwt,
+    jwt::JwtPayload,
 };
 use openssl::rsa::Rsa;
 use serde_json::json;
@@ -29,20 +43,7 @@ use crate::{
         DATA_PROTECTION_KEY_SIZE, DataProtectionCipher, DataProtector, DataProtectorImpl,
     },
     openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
-};
-use identity_domain::{
-    auth::{SessionOid, repository::LoginRepository},
-    client_authorization::{ClientAuthorization, ClientAuthorizationType},
-    key::{
-        JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkOid, KeyOid, KeyType, PublicJwk,
-        material::{AsymmetricKeyData, SymmetricKeyAlgorithm, SymmetricKeyData},
-    },
-    openid_connect::{
-        OpenIdConnectClient, OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
-        OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
-        OpenIdConnectCredentialType,
-    },
-    user::{User, UserOid},
+    setting::{AppSettings, InstallationSettings},
 };
 
 mod fixtures;

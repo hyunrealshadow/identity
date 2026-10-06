@@ -1,28 +1,33 @@
-use crate::key::asymmetric::AsymmetricKeyService;
-use crate::observability::EventValue;
-use crate::openid_connect::tests::fixtures::client::ConfiguredClientRepository;
-use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
-use crate::openid_connect::token::TokenType;
-use crate::openid_connect::token::signing::{SignAccessTokenInput, SignIdTokenInput};
+use std::iter;
+
+use chrono::{Duration, Utc};
+use identity_domain::{
+    auth::{ACR_AAL1, SessionOid},
+    client_authorization::{AccessTokenData, ClientAuthenticationMode},
+    key::{KeyJwk, KeyJwkOid, PublicJwk},
+    openid_connect::{OAuthProtocolVersion, OpenIdConnectClientSettings, TokenEndpointAuthMethod},
+};
+use serde_json::{Value, from_slice, json};
+
+use super::RecordingSink;
+use crate::{
+    key::asymmetric::AsymmetricKeyService,
+    observability::EventValue,
+    openid_connect::{
+        tests::fixtures::{
+            client::ConfiguredClientRepository, mocks::MockDeviceAuthorizationRepository,
+        },
+        token::{
+            TokenType,
+            signing::{SignAccessTokenInput, SignIdTokenInput},
+        },
+        user_info::UserInfoService,
+    },
+    setting::{AppSettings, InstallationSettings, OpenIdConnectSettings, SettingsSnapshot},
+};
+
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use crate::openid_connect::user_info::UserInfoService;
-use crate::setting::AppSettings;
-use crate::setting::InstallationSettings;
-use crate::setting::OpenIdConnectSettings;
-use crate::setting::SettingsSnapshot;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::auth::ACR_AAL1;
-use identity_domain::auth::SessionOid;
-use identity_domain::client_authorization::AccessTokenData;
-use identity_domain::client_authorization::ClientAuthenticationMode;
-use identity_domain::key::{KeyJwk, KeyJwkOid, PublicJwk};
-use identity_domain::openid_connect::OAuthProtocolVersion;
-use identity_domain::openid_connect::OpenIdConnectClientSettings;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
-use serde_json::Value;
-use std::iter;
 
 fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
@@ -248,19 +253,19 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
     assert_eq!(
         id_payload.claim(JwtClaimNames::NONCE).unwrap(),
-        &serde_json::json!("nonce-123")
+        &json!("nonce-123")
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
-        &serde_json::json!(expected_at_hash(&result.access_token))
+        &json!(expected_at_hash(&result.access_token))
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::AZP).unwrap(),
-        &serde_json::json!(Uuid::nil().to_string())
+        &json!(Uuid::nil().to_string())
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::AMR).unwrap(),
-        &serde_json::json!(["pwd"])
+        &json!(["pwd"])
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::SID),
@@ -268,7 +273,7 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     );
     assert_ne!(
         id_payload.claim(JwtClaimNames::SID).unwrap(),
-        &serde_json::json!(session_oid.to_string())
+        &json!(session_oid.to_string())
     );
     assert!(
         repo.find_by_oid(record.oid)
@@ -442,19 +447,19 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
     assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
     assert_eq!(
         id_payload.claim(JwtClaimNames::NAME).unwrap(),
-        &serde_json::json!("Alg User")
+        &json!("Alg User")
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::EMAIL).unwrap(),
-        &serde_json::json!("alg@example.com")
+        &json!("alg@example.com")
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::EMAIL_VERIFIED).unwrap(),
-        &serde_json::json!(true)
+        &json!(true)
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::PREFERRED_USERNAME).unwrap(),
-        &serde_json::json!("Alg User")
+        &json!("Alg User")
     );
 }
 
@@ -804,7 +809,7 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
         assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
         assert_eq!(
             id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
-            &serde_json::json!(expected_at_hash_for_alg(&result.access_token, alg))
+            &json!(expected_at_hash_for_alg(&result.access_token, alg))
         );
 
         user_info_service_with_key(repo.clone(), key, user_oid)
@@ -1094,7 +1099,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             .unwrap();
 
         for tokens in [&issued, &refreshed] {
-            let access_claims = serde_json::from_slice::<Value>(
+            let access_claims = from_slice::<Value>(
                 &URL_SAFE_NO_PAD
                     .decode(tokens.access_token.split('.').nth(1).unwrap())
                     .unwrap(),
@@ -1111,7 +1116,7 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
             }
             assert_eq!(tokens.id_token.is_some(), has_openid);
             if let Some(id_token) = &tokens.id_token {
-                let id_claims = serde_json::from_slice::<Value>(
+                let id_claims = from_slice::<Value>(
                     &URL_SAFE_NO_PAD
                         .decode(id_token.split('.').nth(1).unwrap())
                         .unwrap(),
@@ -1212,15 +1217,15 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
         assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
         assert_eq!(
             access_payload.claim(JwtClaimNames::AMR).unwrap(),
-            &serde_json::json!(["pwd"])
+            &json!(["pwd"])
         );
         assert_eq!(
             id_payload.claim(JwtClaimNames::AMR).unwrap(),
-            &serde_json::json!(["pwd"])
+            &json!(["pwd"])
         );
         assert_eq!(
             id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
-            &serde_json::json!(expected_at_hash_for_alg(&access_token, alg))
+            &json!(expected_at_hash_for_alg(&access_token, alg))
         );
 
         user_info_service_with_key(repo.clone(), key, user_oid)
@@ -1229,8 +1234,6 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
             .unwrap();
     }
 }
-
-use super::RecordingSink;
 
 #[tokio::test]
 async fn successful_exchange_emits_consumption_and_issuance_events() {

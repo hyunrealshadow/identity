@@ -3,17 +3,15 @@
 //! This is an internal module; external code uses [`super::PasswordHasherImpl`]
 //! through the application-layer [`PasswordHasher`] trait.
 
-use subtle::ConstantTimeEq;
-
 use argon2::{
     Algorithm, Argon2, Params, Version,
     password_hash::{PasswordHasher as _, phc::Salt},
 };
-
 use identity_application::{
     auth::password::{HashOptions, PasswordHashError, VerifyResult},
     user::model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
 };
+use subtle::ConstantTimeEq;
 
 pub(super) fn extract_opts(options: &HashOptions) -> Result<&Argon2Options, PasswordHashError> {
     match options {
@@ -97,13 +95,12 @@ pub(super) fn verify(
 
 #[cfg(test)]
 mod tests {
-    use identity_application::auth::password::PasswordHashError;
-
-    use super::{build_argon2, hash, verify};
     use identity_application::{
-        auth::password::VerifyResult,
+        auth::password::{PasswordHashError, VerifyResult},
         user::model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
     };
+
+    use super::{build_argon2, hash, verify};
 
     fn opts() -> Argon2Options {
         Argon2Options {

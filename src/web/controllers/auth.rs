@@ -6,11 +6,11 @@
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/challenge`  – verify credential, create session
 
-use identity_domain::auth::LoginStatus;
-use url::form_urlencoded::Serializer;
-
 use http::{HeaderMap, StatusCode};
+use identity_domain::auth::LoginStatus;
 use salvo::{Depot, Request, Response, Router, handler};
+use url::form_urlencoded::Serializer;
+use urlencoding::encode;
 
 use super::{
     response::{JsonWebResult, app_state, parse_json, parse_param, render_json},
@@ -19,12 +19,6 @@ use super::{
         load_active_session_entries, parse_session_header, protocol_continue_uri,
         unprotect_session_id,
     },
-};
-use crate::views::auth::{
-    AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse, IdentifierRequest,
-    IdentifierResponse, LoginStatusResponse, RestartLoginRequest, RestartLoginResponse,
-    SelectAccountRequest, SelectAccountResponse, SessionInfo, SwitchLoginRequest,
-    SwitchLoginResponse, UserDisplayInfo,
 };
 use crate::{
     application::{
@@ -37,6 +31,12 @@ use crate::{
         client_authorization::SelectionSource, openid_connect::PromptValue, user::model::UserOid,
     },
     middleware::resolved_client_ip,
+    views::auth::{
+        AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse,
+        IdentifierRequest, IdentifierResponse, LoginStatusResponse, RestartLoginRequest,
+        RestartLoginResponse, SelectAccountRequest, SelectAccountResponse, SessionInfo,
+        SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
+    },
 };
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ async fn login_status(
         .is_some();
     let continue_uri = if login.status == LoginStatus::AUTHENTICATED {
         Some(if is_device {
-            format!("/device?login_id={}", urlencoding::encode(&id))
+            format!("/device?login_id={}", encode(&id))
         } else {
             protocol_continue_uri(&ctx, &id)?
         })
@@ -290,7 +290,7 @@ async fn select_account(
         },
         sessions: selected.protected_session_ids,
         continue_uri: if is_device {
-            format!("/device?login_id={}", urlencoding::encode(&body.login_id))
+            format!("/device?login_id={}", encode(&body.login_id))
         } else {
             protocol_continue_uri(&ctx, &body.login_id)?
         },
@@ -449,7 +449,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
             }
             let acr = session.acr.clone();
             let continue_uri = Some(if is_device {
-                format!("/device?login_id={}", urlencoding::encode(&body.id))
+                format!("/device?login_id={}", encode(&body.id))
             } else {
                 protocol_continue_uri(&ctx, &body.id)?
             });

@@ -1,22 +1,31 @@
-use super::*;
-use crate::openid_connect::client_encryption::select_client_encryption_jwk;
-use crate::openid_connect::dto::scoped_standard_claims;
-use identity_domain::user::User;
-use josekit::jws::JwsSigner;
-use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+use identity_domain::{
+    key::{JwaSigningAlgorithm, JwsAlgorithm},
+    openid_connect::{
+        ClaimsRequest,
+        model::claim::{JwtTokenType, TokenUse},
+    },
+    user::User,
+};
+use josekit::{
+    jws::{JwsHeader, JwsSigner},
+    jwt,
+    jwt::JwtPayload,
+};
+use serde_json::{json, to_value};
 use uuid::Uuid;
 
-use crate::openid_connect::jose::{
-    asymmetric_signer_from_pem, encrypt_compact_with_public_jwk_with_content_type,
-    front_channel_hash,
+use crate::openid_connect::{
+    client_encryption::select_client_encryption_jwk,
+    dto::scoped_standard_claims,
+    jose::{
+        asymmetric_signer_from_pem, encrypt_compact_with_public_jwk_with_content_type,
+        front_channel_hash,
+    },
 };
-use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
-use identity_domain::openid_connect::{
-    ClaimsRequest,
-    model::claim::{JwtTokenType, TokenUse},
-};
+
+use super::*;
 
 pub(super) struct SignImplicitIdTokenInput<'a> {
     pub key_id: &'a str,
@@ -184,33 +193,30 @@ impl AuthorizeService {
         payload.set_issued_at(&now);
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload
-            .set_claim(JwtClaimNames::AZP, Some(serde_json::json!(input.audience)))
+            .set_claim(JwtClaimNames::AZP, Some(json!(input.audience)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
+            .set_claim(JwtClaimNames::AMR, Some(json!(input.amr)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
 
         payload
-            .set_claim(JwtClaimNames::NONCE, Some(serde_json::json!(input.nonce)))
+            .set_claim(JwtClaimNames::NONCE, Some(json!(input.nonce)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(
-                JwtClaimNames::AUTH_TIME,
-                Some(serde_json::json!(input.auth_time)),
-            )
+            .set_claim(JwtClaimNames::AUTH_TIME, Some(json!(input.auth_time)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
 
         if let Some(acr) = input.acr {
             payload
-                .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
+                .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;
@@ -220,7 +226,7 @@ impl AuthorizeService {
                 AppError::map_source(AuthorizeErrorCode::SerializeCodeFailed),
             )?;
             payload
-                .set_claim(JwtClaimNames::AT_HASH, Some(serde_json::json!(at_hash)))
+                .set_claim(JwtClaimNames::AT_HASH, Some(json!(at_hash)))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;
@@ -230,17 +236,14 @@ impl AuthorizeService {
                 AppError::map_source(AuthorizeErrorCode::SerializeCodeFailed),
             )?;
             payload
-                .set_claim(JwtClaimNames::C_HASH, Some(serde_json::json!(c_hash)))
+                .set_claim(JwtClaimNames::C_HASH, Some(json!(c_hash)))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;
         }
         if let Some(protected_session_id) = input.protected_session_id {
             payload
-                .set_claim(
-                    JwtClaimNames::SID,
-                    Some(serde_json::json!(protected_session_id)),
-                )
+                .set_claim(JwtClaimNames::SID, Some(json!(protected_session_id)))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;
@@ -313,51 +316,39 @@ impl AuthorizeService {
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload.set_jwt_id(input.token_id);
         payload
-            .set_claim(
-                JwtClaimNames::CLIENT_ID,
-                Some(serde_json::json!(input.client_id)),
-            )
+            .set_claim(JwtClaimNames::CLIENT_ID, Some(json!(input.client_id)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(JwtClaimNames::SCOPE, Some(serde_json::json!(input.scope)))
+            .set_claim(JwtClaimNames::SCOPE, Some(json!(input.scope)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(
-                JwtClaimNames::SID,
-                Some(serde_json::json!(input.protected_session_id)),
-            )
+            .set_claim(JwtClaimNames::SID, Some(json!(input.protected_session_id)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(
-                JwtClaimNames::TOKEN_USE,
-                Some(serde_json::json!(TokenUse::AccessToken)),
-            )
+            .set_claim(JwtClaimNames::TOKEN_USE, Some(json!(TokenUse::AccessToken)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(
-                JwtClaimNames::AUTH_TIME,
-                Some(serde_json::json!(input.auth_time)),
-            )
+            .set_claim(JwtClaimNames::AUTH_TIME, Some(json!(input.auth_time)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         if let Some(acr) = input.acr {
             payload
-                .set_claim(JwtClaimNames::ACR, Some(serde_json::json!(acr)))
+                .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;
         }
         payload
-            .set_claim(JwtClaimNames::AMR, Some(serde_json::json!(input.amr)))
+            .set_claim(JwtClaimNames::AMR, Some(json!(input.amr)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
@@ -365,11 +356,9 @@ impl AuthorizeService {
             payload
                 .set_claim(
                     "claims",
-                    Some(
-                        serde_json::to_value(claims_value).map_err(AppError::map_source(
-                            AuthorizeErrorCode::SerializeCodeFailed,
-                        ))?,
-                    ),
+                    Some(to_value(claims_value).map_err(AppError::map_source(
+                        AuthorizeErrorCode::SerializeCodeFailed,
+                    ))?),
                 )
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,

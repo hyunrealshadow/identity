@@ -1,10 +1,12 @@
-use super::*;
-use crate::error::code::AppErrorCode;
-use crate::error::codes::token::TokenErrorCode;
-use crate::openid_connect::token::{TokenRevocationParams, signing::SignAccessTokenInput};
 use chrono::Duration;
-use identity_domain::client_authorization::AccessTokenData;
-use identity_domain::client_authorization::ClientAuthenticationMode;
+use identity_domain::client_authorization::{AccessTokenData, ClientAuthenticationMode};
+
+use crate::{
+    error::{code::AppErrorCode, codes::token::TokenErrorCode},
+    openid_connect::token::{TokenRevocationParams, signing::SignAccessTokenInput},
+};
+
+use super::*;
 
 fn request(token: String) -> TokenRevocationParams {
     TokenRevocationParams {

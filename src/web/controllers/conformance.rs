@@ -10,29 +10,38 @@
 //!                                    redirect chain
 //!   GET/POST /conformance/auto-consent – automatically approve test consent
 
-use identity_application::user::CredentialType;
-use identity_domain::auth::model::Session;
-use identity_domain::client_authorization::ConsentState;
 use std::future::Future;
-use uuid::Uuid;
 
 use http::{HeaderMap, StatusCode, header};
+use identity_application::{
+    error::{
+        AppError,
+        code::AppErrorCode,
+        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+    },
+    key::asymmetric::GenerateAsymmetricKeyInput,
+    user::CredentialType,
+};
+use identity_domain::{
+    auth::model::Session, client_authorization::ConsentState, key::model::AsymmetricKeyAlgorithm,
+};
 use salvo::{Depot, Request, Response, Router, handler};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
+use urlencoding::encode;
+use uuid::Uuid;
 
-use identity_application::error::{
-    AppError,
-    code::AppErrorCode,
-    codes::{auth::AuthErrorCode, common::CommonErrorCode},
+use super::{
+    response::{
+        JsonWebResult, WebResult, app_state, parse_query, redirect_to_response, render_app_error,
+        render_html, render_json,
+    },
+    shared::inline_script_csp_header_value,
 };
-use identity_application::key::asymmetric::GenerateAsymmetricKeyInput;
-use identity_domain::key::model::AsymmetricKeyAlgorithm;
-
 use crate::{
     application::auth::login::ChallengeOutcome,
     boot::AppState,
-    domain::auth::SessionOid,
-    domain::client_authorization::SelectionSource,
+    domain::{auth::SessionOid, client_authorization::SelectionSource},
     infrastructure::{
         database::seed::conformance::{CONFORMANCE_PASSWORD, CONFORMANCE_USERNAME},
         web,
@@ -40,14 +49,6 @@ use crate::{
     middleware::resolved_client_ip,
     views::oauth2::{FormPostField, FormPostPageData},
     web::controllers::shared::{build_session_context, generate_csp_nonce},
-};
-
-use super::{
-    oauth2::inline_script_csp_header_value,
-    response::{
-        JsonWebResult, WebResult, app_state, parse_query, redirect_to_response, render_app_error,
-        render_html, render_json,
-    },
 };
 
 pub fn routes() -> Router {
@@ -165,10 +166,7 @@ fn auto_login_page_response(ctx: &AppState, headers: &HeaderMap, login_id: &str)
 }
 
 fn auto_login_continue_url(login_id: &str) -> String {
-    format!(
-        "/oauth2/continue?login_id={}",
-        urlencoding::encode(login_id)
-    )
+    format!("/oauth2/continue?login_id={}", encode(login_id))
 }
 
 fn auto_login_success_response(login_id: &str) -> Response {
@@ -223,7 +221,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     {
         Ok(oid) => oid,
         Err(e) => {
-            tracing::warn!(error = %e, "auto_login: decrypt_login_id failed");
+            warn!(error = %e, "auto_login: decrypt_login_id failed");
             render_json(
                 res,
                 StatusCode::BAD_REQUEST,
@@ -249,7 +247,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         // challenge to prove fresh authentication.
         Err(e) if e.code() == AuthErrorCode::InvalidLoginState.code() => {}
         Err(e) => {
-            tracing::warn!(error = %e, "auto_login: identify failed");
+            warn!(error = %e, "auto_login: identify failed");
             render_json(
                 res,
                 StatusCode::BAD_REQUEST,
@@ -286,7 +284,7 @@ async fn auto_login(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
             return Ok(());
         }
         Err(e) => {
-            tracing::warn!(error = %e, "auto_login: challenge failed");
+            warn!(error = %e, "auto_login: challenge failed");
             render_json(
                 res,
                 StatusCode::UNAUTHORIZED,
@@ -354,33 +352,27 @@ async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()>
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::auth::AMR_PASSWORD;
-
-    use super::auto_login_success_response;
-    use super::record_auto_login_selection;
-    use super::routes;
-    use identity_domain::auth::SessionStatus;
-    use salvo::affix_state::inject;
-    use uuid::Uuid;
-
     use std::sync::{Arc, Mutex};
 
     use chrono::Utc;
     use http::{StatusCode, header};
     use identity_domain::{
-        auth::{SessionOid, model::Session},
+        auth::{AMR_PASSWORD, SessionOid, SessionStatus, model::Session},
         client_authorization::SelectionSource,
     };
+    use identity_infrastructure::test_app_state_with_mock_settings;
     use salvo::{
         Service,
+        affix_state::inject,
         test::{ResponseExt, TestClient},
     };
+    use uuid::Uuid;
+
+    use super::{auto_login_success_response, record_auto_login_selection, routes};
 
     #[tokio::test]
     async fn auto_consent_page_posts_to_the_op_with_a_nonce() {
-        let app = routes().hoop(inject(
-            identity_infrastructure::test_app_state_with_mock_settings().await,
-        ));
+        let app = routes().hoop(inject(test_app_state_with_mock_settings().await));
         let mut response =
             TestClient::get("http://127.0.0.1:5800/conformance/auto-consent?login_id=login-123")
                 .send(&Service::new(app))
@@ -401,9 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_login_page_renders_auto_submit_form() {
-        let app = routes().hoop(inject(
-            identity_infrastructure::test_app_state_with_mock_settings().await,
-        ));
+        let app = routes().hoop(inject(test_app_state_with_mock_settings().await));
         let service = Service::new(app);
 
         let mut response =
@@ -511,9 +501,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_login_returns_bad_request_for_invalid_login_id() {
-        let app = routes().hoop(inject(
-            identity_infrastructure::test_app_state_with_mock_settings().await,
-        ));
+        let app = routes().hoop(inject(test_app_state_with_mock_settings().await));
         let service = Service::new(app);
 
         let response = TestClient::post("http://127.0.0.1:5800/conformance/auto-login")

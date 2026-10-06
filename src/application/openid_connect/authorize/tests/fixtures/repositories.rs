@@ -1,18 +1,18 @@
-use super::*;
-use chrono::DateTime;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client_authorization::{
-    ClientAuthorizationData, ConsentState, StoredAuthorizationRequest,
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
-use identity_domain::openid_connect::AuthorizationRequest;
-use identity_domain::openid_connect::AuthorizationRequestData;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::Mutex;
+
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::{
+    client_authorization::{ClientAuthorizationData, ConsentState, StoredAuthorizationRequest},
+    openid_connect::{AuthorizationRequest, AuthorizationRequestData},
+};
 use uuid::Uuid;
 
 use crate::openid_connect::tests::fixtures::mocks::MockClientAuthorizationRepository;
+
+use super::*;
 
 /// State held by the mockall-based ClientAuthorizationRepository mock.
 ///

@@ -58,6 +58,7 @@ pub fn valid_resource_uri(uri: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::valid_resource_uri;
+
     #[test]
     fn resource_identifiers_require_absolute_fragment_free_rfc3986_uris() {
         for uri in [

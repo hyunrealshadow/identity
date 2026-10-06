@@ -1,5 +1,6 @@
-use super::*;
 use identity_domain::auth::SessionOid;
+
+use super::*;
 
 impl AuthorizeService {
     pub async fn encrypt_login_id(&self, login_oid: Uuid) -> Result<String, AppError> {

@@ -1,9 +1,16 @@
-use super::*;
-use crate::error::{code::AppErrorCode, codes::token::TokenErrorCode};
-use crate::openid_connect::jose::asymmetric_signer_from_pem;
-use crate::openid_connect::token::{TokenRevocationParams, signing::SignAccessTokenInput};
 use chrono::Duration;
 use identity_domain::client_authorization::AccessTokenData;
+use serde_json::json;
+
+use crate::{
+    error::{code::AppErrorCode, codes::token::TokenErrorCode},
+    openid_connect::{
+        jose::asymmetric_signer_from_pem,
+        token::{TokenRevocationParams, signing::SignAccessTokenInput},
+    },
+};
+
+use super::*;
 
 fn request(token: String) -> TokenRevocationParams {
     TokenRevocationParams {
@@ -75,7 +82,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             .introspect_token(request(format!("{token}x")))
             .await
             .unwrap(),
-        serde_json::json!({"active": false})
+        json!({"active": false})
     );
     let result = service
         .introspect_token(request(token.clone()))
@@ -83,7 +90,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
         .unwrap();
     assert_eq!(result["active"], true);
     assert_eq!(result["sub"], user_oid.to_string());
-    assert_eq!(result["aud"], serde_json::json!(client_id));
+    assert_eq!(result["aud"], json!(client_id));
     let payload = service
         .verified_access_token_payload(&token)
         .await
@@ -94,24 +101,18 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
     header.set_token_type("at+jwt");
     header.set_key_id(&key_id);
     for (claim, value) in [
-        ("exp", Some(serde_json::json!(Utc::now().timestamp() - 60))),
+        ("exp", Some(json!(Utc::now().timestamp() - 60))),
         ("exp", None),
-        (
-            "nbf",
-            Some(serde_json::json!(Utc::now().timestamp() + 3600)),
-        ),
-        (
-            "iat",
-            Some(serde_json::json!(Utc::now().timestamp() + 3600)),
-        ),
-        ("iss", Some(serde_json::json!("https://other.example.com"))),
+        ("nbf", Some(json!(Utc::now().timestamp() + 3600))),
+        ("iat", Some(json!(Utc::now().timestamp() + 3600))),
+        ("iss", Some(json!("https://other.example.com"))),
     ] {
         let mut invalid = payload.clone();
         invalid.set_claim(claim, value).unwrap();
         let invalid = jwt::encode_with_signer(&invalid, &header, signer.as_ref()).unwrap();
         assert_eq!(
             service.introspect_token(request(invalid)).await.unwrap(),
-            serde_json::json!({"active": false})
+            json!({"active": false})
         );
     }
     repo.revoke_if_active(record.oid, ClientAuthorizationType::AccessToken, Utc::now())
@@ -119,7 +120,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
         .unwrap();
     assert_eq!(
         service.introspect_token(request(token)).await.unwrap(),
-        serde_json::json!({"active": false})
+        json!({"active": false})
     );
 }
 
@@ -170,10 +171,10 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
             .unwrap();
             assert_eq!(
                 service.introspect_token(request(token)).await.unwrap(),
-                serde_json::json!({"active": false})
+                json!({"active": false})
             );
         } else {
-            assert_eq!(result, serde_json::json!({"active": false}));
+            assert_eq!(result, json!({"active": false}));
         }
     }
     assert_eq!(
@@ -181,7 +182,7 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
             .introspect_token(request("unknown".into()))
             .await
             .unwrap(),
-        serde_json::json!({"active": false})
+        json!({"active": false})
     );
 }
 

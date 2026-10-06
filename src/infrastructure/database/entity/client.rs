@@ -1,13 +1,14 @@
 //! Current SeaORM persistence entity.
 
-use super::client_authorization::Entity as ClientAuthorizationEntity;
-use super::client_openid_connect::Entity as ClientOpenidConnectEntity;
-use super::client_openid_connect_cors_origin::Entity as ClientOpenidConnectCorsOriginEntity;
-use super::client_openid_connect_credential::Entity as ClientOpenidConnectCredentialEntity;
-use super::client_openid_connect_platform::Entity as ClientOpenidConnectPlatformEntity;
-use super::client_scope::Entity as ClientScopeEntity;
-use super::login::Entity as LoginEntity;
-use super::user_client_consent::Entity as UserClientConsentEntity;
+use super::{
+    client_authorization::Entity as ClientAuthorizationEntity,
+    client_openid_connect::Entity as ClientOpenidConnectEntity,
+    client_openid_connect_cors_origin::Entity as ClientOpenidConnectCorsOriginEntity,
+    client_openid_connect_credential::Entity as ClientOpenidConnectCredentialEntity,
+    client_openid_connect_platform::Entity as ClientOpenidConnectPlatformEntity,
+    client_scope::Entity as ClientScopeEntity, login::Entity as LoginEntity,
+    user_client_consent::Entity as UserClientConsentEntity,
+};
 
 use sea_orm::entity::prelude::*;
 

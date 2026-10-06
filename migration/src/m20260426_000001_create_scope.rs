@@ -1,5 +1,5 @@
-use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
+    async_trait,
     prelude::{
         DbErr, DeriveIden, DeriveMigrationName, Expr, Index, MigrationTrait, SchemaManager, Table,
     },
@@ -7,6 +7,7 @@ use sea_orm_migration::{
         boolean, json_binary, pk_auto, string, timestamp_with_time_zone,
         timestamp_with_time_zone_null, uuid_uniq,
     },
+    sea_orm,
 };
 
 #[derive(DeriveMigrationName)]

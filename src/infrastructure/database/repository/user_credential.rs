@@ -1,8 +1,3 @@
-use crate::database::entity::{
-    user, user::Entity as UserEntity, user_credential,
-    user_credential::Entity as UserCredentialEntity,
-};
-use crate::database::query::{json_text, jsonb_set};
 use async_trait::async_trait;
 use chrono::Utc;
 use identity_application::user::{
@@ -10,13 +5,21 @@ use identity_application::user::{
     UserCredential, UserCredentialOid, UserOid,
     repository::{UserCredentialRepository, UserCredentialRepositoryError},
 };
-use uuid::Uuid;
-
-use super::shared::lock_user_credentials;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
     QuerySelect, Set, TransactionTrait,
     sea_query::{Expr, ExprTrait, Func},
+};
+use serde_json::{from_value, to_value};
+use uuid::Uuid;
+
+use super::shared::lock_user_credentials;
+use crate::database::{
+    entity::{
+        user, user::Entity as UserEntity, user_credential,
+        user_credential::Entity as UserCredentialEntity,
+    },
+    query::{json_text, jsonb_set},
 };
 
 pub struct UserCredentialRepositoryImpl {
@@ -65,12 +68,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .into_iter()
             .map(|m| {
                 let data = match &credential_type {
-                    CredentialType::Password => {
-                        serde_json::from_value(m.data).map(CredentialData::Password)
-                    }
-                    CredentialType::Otp => serde_json::from_value(m.data).map(CredentialData::Otp),
+                    CredentialType::Password => from_value(m.data).map(CredentialData::Password),
+                    CredentialType::Otp => from_value(m.data).map(CredentialData::Otp),
                     CredentialType::RecoveryCode => {
-                        serde_json::from_value(m.data).map(CredentialData::RecoveryCode)
+                        from_value(m.data).map(CredentialData::RecoveryCode)
                     }
                 };
                 Ok(UserCredential {
@@ -90,8 +91,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         credential_oid: UserCredentialOid,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError> {
-        let new_data =
-            serde_json::to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
+        let new_data = to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
 
         let result = UserCredentialEntity::update_many()
             .col_expr(user_credential::Column::Data, Expr::value(new_data))
@@ -180,9 +180,9 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 let serialized = data
                     .into_iter()
                     .map(|data| match data {
-                        CredentialData::Password(value) => serde_json::to_value(value),
-                        CredentialData::Otp(value) => serde_json::to_value(value),
-                        CredentialData::RecoveryCode(value) => serde_json::to_value(value),
+                        CredentialData::Password(value) => to_value(value),
+                        CredentialData::Otp(value) => to_value(value),
+                        CredentialData::RecoveryCode(value) => to_value(value),
                     })
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(UserCredentialRepositoryError::Serialization)?;
@@ -238,11 +238,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         otp: OtpCredentialData,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<bool, UserCredentialRepositoryError> {
-        let otp =
-            serde_json::to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
+        let otp = to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
         let recovery_codes = recovery_codes
             .into_iter()
-            .map(serde_json::to_value)
+            .map(to_value)
             .collect::<Result<Vec<_>, _>>()
             .map_err(UserCredentialRepositoryError::Serialization)?;
         let txn = self
@@ -327,7 +326,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
     ) -> Result<bool, UserCredentialRepositoryError> {
         let serialized = recovery_codes
             .into_iter()
-            .map(serde_json::to_value)
+            .map(to_value)
             .collect::<Result<Vec<_>, _>>()
             .map_err(UserCredentialRepositoryError::Serialization)?;
         let txn = self
@@ -410,18 +409,18 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use identity_application::user::OtpAlgorithm;
-
-    use crate::database::entity::user_credential;
     use chrono::Utc;
     use identity_application::user::{
-        CredentialData, CredentialType, OtpCredentialData, UserCredentialOid, UserOid,
+        CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData, UserCredentialOid,
+        UserOid,
         repository::{UserCredentialRepository as _, UserCredentialRepositoryError},
     };
     use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+    use serde_json::json;
     use uuid::Uuid;
 
     use super::UserCredentialRepositoryImpl;
+    use crate::database::entity::user_credential;
 
     #[tokio::test]
     async fn consume_totp_counter_uses_an_atomic_jsonb_condition() {
@@ -498,7 +497,7 @@ mod tests {
                 oid: Uuid::new_v4(),
                 user_id: 1,
                 r#type: "password".to_owned(),
-                data: serde_json::json!({"unexpected": true}),
+                data: json!({"unexpected": true}),
                 expires_at: None,
                 created_at: Utc::now().into(),
                 updated_at: None,

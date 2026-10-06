@@ -1,13 +1,12 @@
-use std::error::Error;
-use std::io;
+use std::{error::Error, io};
 
+use identity_application::setting::{InstallationSettings, SettingsSource};
+use identity_infrastructure::settings::AppRuntimeSettings;
 use sea_orm::{
     ConnectionTrait, DatabaseConnection,
     sea_query::{Alias, Func, Query},
 };
-
-use identity_application::setting::{InstallationSettings, SettingsSource};
-use identity_infrastructure::settings::AppRuntimeSettings;
+use tracing::info;
 
 use super::AppResult;
 
@@ -27,7 +26,7 @@ pub async fn ensure_install_startup_guard(
     }
 
     if try_acquire_install_lock(db).await? {
-        tracing::info!("installation lock acquired for this instance");
+        info!("installation lock acquired for this instance");
         return Ok(());
     }
 

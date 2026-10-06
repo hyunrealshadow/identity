@@ -1,6 +1,5 @@
-use salvo::{Response, handler, writing::Text};
-
 use identity_infrastructure::observability::metrics;
+use salvo::{Response, handler, writing::Text};
 
 /// Independent self-metrics endpoint. Deliberately served from the internal,
 /// workload-authenticated listener so it stays reachable when the collector or
