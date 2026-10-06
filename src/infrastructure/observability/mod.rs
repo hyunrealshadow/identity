@@ -4,12 +4,18 @@
 //! See `docs/observability-design.md` and `docs/observability-coverage.md` for
 //! the confirmed design this module implements.
 
-use crate::config::PiiConfig;
-use identity_application::observability::install_event_sink;
-use identity_application::observability::install_outbound_trace;
-use opentelemetry::global::set_text_map_propagator;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::fmt::layer;
+use std::{error::Error, sync::OnceLock, time::Duration};
+
+use identity_application::observability::{install_event_sink, install_outbound_trace};
+use opentelemetry::{global::set_text_map_propagator, trace::TracerProvider};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use tracing::warn;
+use tracing_subscriber::{
+    EnvFilter, fmt::layer, layer::SubscriberExt, registry, util::SubscriberInitExt,
+};
+
+use self::{pii::PiiPolicy, pipeline::Providers};
+use crate::config::{AppConfig, AppEnvironment, LogFormat, LoggerConfig, PiiConfig};
 
 pub mod context;
 pub mod events;
@@ -17,18 +23,6 @@ pub mod metrics;
 pub mod outbound;
 pub mod pii;
 mod pipeline;
-
-use std::{error::Error, sync::OnceLock, time::Duration};
-
-use opentelemetry::trace::TracerProvider;
-use opentelemetry_sdk::propagation::TraceContextPropagator;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-
-use crate::config::{AppConfig, AppEnvironment, LogFormat, LoggerConfig};
-
-use self::pii::PiiPolicy;
-use self::pipeline::Providers;
 
 pub type ObservabilityResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
@@ -87,7 +81,7 @@ pub fn init(config: &AppConfig, environment: &AppEnvironment) -> ObservabilityRe
     let _ = PROVIDERS.set(providers);
 
     if let Some(warning) = policy_warning {
-        tracing::warn!(target: "identity.observability", "{warning}");
+        warn!(target: "identity.observability", "{warning}");
     }
 
     Ok(())
@@ -156,7 +150,7 @@ fn normalize_route(route: &str) -> String {
 fn init_console_only(logger: &LoggerConfig) {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(logger.level.clone()));
-    let subscriber = tracing_subscriber::registry().with(filter);
+    let subscriber = registry().with(filter);
     match logger.format {
         LogFormat::Json => subscriber.with(layer().json()).init(),
         LogFormat::Pretty => subscriber.with(layer().pretty()).init(),

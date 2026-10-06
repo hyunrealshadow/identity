@@ -1,7 +1,6 @@
 use http::StatusCode;
-use salvo::{Depot, Router, handler};
-
 use identity_domain::openid_connect::BuiltInWorkload;
+use salvo::{Depot, Router, handler};
 
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},

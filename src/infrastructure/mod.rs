@@ -1,26 +1,28 @@
-use crate::config::HealthChecksConfig;
-use crate::database::entity::setting;
-use crate::services::AppServices;
-use crate::settings::AppRuntimeSettings;
-use crate::web::tera::build_i18n;
-use crate::web::tera::build_tera;
+use std::{collections::BTreeMap, sync::Arc};
+
 use chrono::Utc;
-use identity_application::setting::DeviceAuthorizationSettings;
-use identity_application::setting::DomainSetting;
-use identity_application::setting::LoginDomainSetting;
-use identity_application::setting::PasswordHashSetting;
-use identity_application::setting::SettingDefinition;
-use sea_orm::DatabaseBackend;
-use sea_orm::MockDatabase;
-use sea_orm::Value;
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use identity_application::setting::{
+    DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
+    SettingDefinition,
+};
+use sea_orm::{DatabaseBackend, MockDatabase, Value};
+use uuid::Uuid;
+
+use crate::{
+    config::HealthChecksConfig,
+    database::entity::setting,
+    infrastructure::database::entity::{key::Model, key_jwk::Model as KeyJwkModel},
+    services::AppServices,
+    settings::AppRuntimeSettings,
+    web::tera::{build_i18n, build_tera},
+};
+
+#[cfg(any(test, feature = "test-support"))]
+use serde_json::to_value;
+
 extern crate identity_application as application;
 extern crate identity_domain as domain;
 extern crate self as infrastructure;
-use crate::infrastructure::database::entity::key::Model;
-use crate::infrastructure::database::entity::key_jwk::Model as KeyJwkModel;
-use uuid::Uuid;
 
 pub mod auth;
 pub mod config;
@@ -68,7 +70,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 1,
         oid: Uuid::new_v4(),
         key: PasswordHashSetting::KEY.to_string(),
-        value: serde_json::to_value(PasswordHashSetting::default_value()).unwrap(),
+        value: to_value(PasswordHashSetting::default_value()).unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };
@@ -76,7 +78,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 2,
         oid: Uuid::new_v4(),
         key: "app.installation.initialized".to_owned(),
-        value: serde_json::to_value(true).unwrap(),
+        value: to_value(true).unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };
@@ -84,7 +86,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 3,
         oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
-        value: serde_json::to_value("identity.example.com").unwrap(),
+        value: to_value("identity.example.com").unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };
@@ -92,7 +94,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 6,
         oid: Uuid::new_v4(),
         key: "app.installation.initialized_at".to_owned(),
-        value: serde_json::to_value(Utc::now()).unwrap(),
+        value: to_value(Utc::now()).unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };
@@ -100,7 +102,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 7,
         oid: Uuid::new_v4(),
         key: "openid_connect.dynamic_registration.enabled".to_owned(),
-        value: serde_json::to_value(false).unwrap(),
+        value: to_value(false).unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };
@@ -108,7 +110,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 10,
         oid: Uuid::new_v4(),
         key: "openid_connect.device_authorization".to_owned(),
-        value: serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
+        value: to_value(DeviceAuthorizationSettings::default()).unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };
@@ -116,7 +118,7 @@ async fn test_app_state_with_environment_and_cors_origin(
         id: 12,
         oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
-        value: serde_json::to_value(LoginDomainSetting::default_value()).unwrap(),
+        value: to_value(LoginDomainSetting::default_value()).unwrap(),
         created_at: Utc::now().into(),
         updated_at: None,
     };

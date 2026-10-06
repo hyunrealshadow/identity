@@ -1,9 +1,9 @@
 //! Current SeaORM persistence entity.
 
-use super::client::Entity as ClientEntity;
-use super::client_authorization::Entity as ClientAuthorizationEntity;
-use super::session::Entity as SessionEntity;
-use super::user::Entity as UserEntity;
+use super::{
+    client::Entity as ClientEntity, client_authorization::Entity as ClientAuthorizationEntity,
+    session::Entity as SessionEntity, user::Entity as UserEntity,
+};
 
 use sea_orm::entity::prelude::*;
 

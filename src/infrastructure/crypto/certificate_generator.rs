@@ -1,9 +1,8 @@
+use super::certificate::generate_self_signed_certificate;
 use crate::{
     application::{error::AppError, install::CertificateGenerator},
     domain::key::AsymmetricKeyAlgorithm,
 };
-
-use super::certificate::generate_self_signed_certificate;
 
 pub struct CertificateGeneratorImpl;
 

@@ -1,12 +1,12 @@
-use chrono::{DateTime, Utc};
 use std::str::FromStr;
+
+use chrono::{DateTime, Utc};
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use url::Url;
 use uuid::Uuid;
 
-use crate::client::model::ClientOid;
-use crate::key::PublicJwk;
+use crate::{client::model::ClientOid, key::PublicJwk};
 
 pub type OpenIdConnectCredentialOid = Uuid;
 

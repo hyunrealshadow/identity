@@ -1,7 +1,8 @@
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::{backtrace::Backtrace, error::Error};
+use std::{
+    backtrace::Backtrace,
+    error::Error,
+    fmt::{Display, Formatter, Result as FmtResult},
+};
 
 use super::AppError;
 
@@ -68,13 +69,11 @@ impl<'a> ErrorDiagnostics<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::ptr;
+    use std::{backtrace::BacktraceStatus, io::Error, ptr};
 
-    use std::io::Error;
+    use crate::error::codes::common::CommonErrorCode;
 
     use super::*;
-    use crate::error::codes::common::CommonErrorCode;
-    use std::backtrace::BacktraceStatus;
 
     #[test]
     fn application_wrapping_preserves_the_original_stack() {

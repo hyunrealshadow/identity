@@ -1,8 +1,3 @@
-pub(super) mod account;
-mod node;
-mod security;
-mod session;
-
 use async_graphql::{MergedObject, Object};
 
 use self::{
@@ -11,6 +6,11 @@ use self::{
     security::{SecurityMutation, SecurityViewer},
     session::{SessionMutation, SessionViewer},
 };
+
+pub(super) mod account;
+mod node;
+mod security;
+mod session;
 
 #[derive(MergedObject, Default)]
 pub(crate) struct QueryRoot(ViewerQuery, NodeQuery);

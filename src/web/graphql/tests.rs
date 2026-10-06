@@ -1,12 +1,10 @@
-use chrono::DateTime;
-use http::header::WWW_AUTHENTICATE;
-use salvo::Response;
-use std::sync::Arc;
-use std::time::Duration as TimeDuration;
-use std::time::SystemTime;
+use std::{
+    sync::Arc,
+    time::{Duration as TimeDuration, SystemTime},
+};
 
-use chrono::{Duration, Utc};
-use http::StatusCode;
+use chrono::{DateTime, Duration, Utc};
+use http::{StatusCode, header::WWW_AUTHENTICATE};
 use identity_application::setting::{
     DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
     SettingDefinition,
@@ -33,14 +31,15 @@ use identity_infrastructure::{
 };
 use josekit::{
     jws::{JwsHeader, RS256},
-    jwt::{self, JwtPayload},
+    jwt,
+    jwt::JwtPayload,
 };
 use salvo::{
-    Service,
+    Response, Service,
     test::{ResponseExt, TestClient},
 };
 use sea_orm::{DatabaseBackend, MockDatabase};
-use serde_json::{Value, json};
+use serde_json::{Value, json, to_value};
 use uuid::Uuid;
 
 use super::{RESOURCE_AUDIENCE, router};
@@ -220,7 +219,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         id: 1,
         oid: key_oid,
         r#type: KeyType::Asymmetric.to_string(),
-        data: serde_json::to_value(KeyData::Asymmetric(key_data.clone())).unwrap(),
+        data: to_value(KeyData::Asymmetric(key_data.clone())).unwrap(),
         expires_at: (now + Duration::days(1)).into(),
         revoked_at: None,
         rotated_from_oid: None,
@@ -244,7 +243,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         oid: token_oid,
         client_id: client_model.id,
         r#type: ClientAuthorizationType::AccessToken.to_string(),
-        data: serde_json::to_value(AccessTokenData {
+        data: to_value(AccessTokenData {
             scope: options.scope.to_owned(),
             user_oid: user_oid.to_string(),
             session_oid: Some(SessionOid(session_oid)),
@@ -389,7 +388,7 @@ where
         id,
         oid: Uuid::new_v4(),
         key: S::KEY.to_owned(),
-        value: serde_json::to_value(value).unwrap(),
+        value: to_value(value).unwrap(),
         created_at: now.into(),
         updated_at: None,
     }
@@ -417,7 +416,7 @@ fn test_user(oid: Uuid, now: DateTime<Utc>) -> user::Model {
         birthdate: None,
         zone_info: None,
         locale: None,
-        preferences: serde_json::json!({}),
+        preferences: json!({}),
         address_formatted: None,
         address_street_address: None,
         address_locality: None,

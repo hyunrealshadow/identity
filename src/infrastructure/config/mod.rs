@@ -1,15 +1,15 @@
-use serde::Deserializer;
-use serde::de::Error as DeError;
-use std::error::Error;
-use std::io::Error as IoError;
-use std::io::ErrorKind;
-use std::{env, fmt, fs};
-use tera::Context;
+use std::{
+    env,
+    error::Error,
+    fmt, fs,
+    io::{Error as IoError, ErrorKind},
+};
 
 use identity_domain::key::AsymmetricKeyAlgorithm;
 use ipnet::IpNet;
-use serde::Deserialize;
-use tera::{Error as TeraError, Kwargs, State, Tera, TeraResult, Value};
+use serde::{Deserialize, Deserializer, de::Error as DeError};
+use serde_yml::from_str;
+use tera::{Context, Error as TeraError, Kwargs, State, Tera, TeraResult, Value};
 use url::Url;
 
 pub type ConfigResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
@@ -171,7 +171,7 @@ impl AppConfig {
         let path = format!("config/{}.yaml", environment.as_str());
         let raw = fs::read_to_string(&path)?;
         let rendered = render_config_template(&raw)?;
-        let config: Self = serde_yml::from_str(&rendered)?;
+        let config: Self = from_str(&rendered)?;
         let config = config.normalized();
         config.validate_https_contract()?;
         config.observability.validate()?;
@@ -786,8 +786,10 @@ fn default_graphql_timeout_secs() -> u64 {
 mod tests {
     use std::env;
 
-    use super::{AppConfig, AppEnvironment, StaticTokenConfig, render_config_template};
+    use serde_yml::from_str;
     use serial_test::serial;
+
+    use super::{AppConfig, AppEnvironment, StaticTokenConfig, render_config_template};
 
     fn set_env(key: &str, value: &str) {
         unsafe { env::set_var(key, value) };
@@ -875,7 +877,7 @@ mod tests {
 
         let rendered =
             render_config_template(r#"token: {{ get_env(name="TEST_WORKLOAD_TOKEN") }}"#).unwrap();
-        let config = serde_yml::from_str::<StaticTokenConfig>(&rendered).unwrap();
+        let config = from_str::<StaticTokenConfig>(&rendered).unwrap();
 
         remove_env("TEST_WORKLOAD_TOKEN");
 
@@ -886,7 +888,7 @@ mod tests {
 
     #[test]
     fn legacy_fixed_registration_token_config_is_rejected() {
-        let result = serde_yml::from_str::<AppConfig>(
+        let result = from_str::<AppConfig>(
             r#"
 openid_connect:
   dynamic_registration:
@@ -900,7 +902,7 @@ openid_connect:
     #[test]
     #[cfg(feature = "oidc-conformance")]
     fn conformance_registration_token_config_is_explicit() {
-        let config = serde_yml::from_str::<AppConfig>(
+        let config = from_str::<AppConfig>(
             r#"
 openid_connect:
   dynamic_registration:
@@ -921,7 +923,7 @@ openid_connect:
     #[test]
     #[cfg(not(feature = "oidc-conformance"))]
     fn conformance_registration_token_config_requires_feature() {
-        let result = serde_yml::from_str::<AppConfig>(
+        let result = from_str::<AppConfig>(
             r#"
 openid_connect:
   dynamic_registration:
@@ -934,7 +936,7 @@ openid_connect:
 
     #[test]
     fn tls_domain_prefers_explicit_value() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://example.com
@@ -956,7 +958,7 @@ database:
 
     #[test]
     fn tls_domain_falls_back_to_server_host() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com:8443/base
@@ -978,7 +980,7 @@ database:
 
     #[test]
     fn graphql_cors_always_allows_the_configured_public_origin() {
-        let config = serde_yml::from_str::<AppConfig>(
+        let config = from_str::<AppConfig>(
             r#"
 server:
   host: https://identity.example.com:8443/base
@@ -999,7 +1001,7 @@ database:
 
     #[test]
     fn tls_domain_falls_back_to_localhost_when_host_is_missing() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   tls:
@@ -1017,7 +1019,7 @@ database:
 
     #[test]
     fn https_contract_rejects_plain_http_host() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: http://identity.example.com
@@ -1036,7 +1038,7 @@ database:
 
     #[test]
     fn https_contract_accepts_upstream_tls_termination() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com
@@ -1060,7 +1062,7 @@ database:
 
     #[test]
     fn https_contract_accepts_an_explicit_direct_http_client() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com
@@ -1084,7 +1086,7 @@ database:
 
     #[test]
     fn internal_login_workload_requires_an_authentication_method() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com
@@ -1105,7 +1107,7 @@ database:
 
     #[test]
     fn kubernetes_service_account_authentication_is_accepted() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com
@@ -1132,7 +1134,7 @@ database:
 
     #[test]
     fn kubernetes_service_account_identity_must_be_fully_scoped() {
-        let mut config: AppConfig = serde_yml::from_str(
+        let mut config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com
@@ -1160,7 +1162,7 @@ database:
 
     #[test]
     fn https_contract_rejects_upstream_tls_without_an_allowed_source() {
-        let config: AppConfig = serde_yml::from_str(
+        let config: AppConfig = from_str(
             r#"
 server:
   host: https://identity.example.com

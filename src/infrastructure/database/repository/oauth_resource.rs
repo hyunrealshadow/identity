@@ -1,10 +1,13 @@
-use crate::database::entity::resource;
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use identity_domain::openid_connect::resource::{
     OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-use std::sync::Arc;
+use serde_json::from_value;
+
+use crate::database::entity::resource;
 
 pub struct OAuthResourceRepositoryImpl {
     db: Arc<DatabaseConnection>,
@@ -12,39 +15,6 @@ pub struct OAuthResourceRepositoryImpl {
 impl OAuthResourceRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db: Arc::new(db) }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use chrono::Utc;
-    use uuid::Uuid;
-
-    use super::*;
-    use sea_orm::{DatabaseBackend, MockDatabase};
-
-    #[tokio::test]
-    async fn lookup_preserves_exact_identifiers_scopes_and_disabled_state() {
-        let uri = "https://API.example.com/resource?tenant=1";
-        let model = resource::Model {
-            oid: Uuid::new_v4(),
-            uri: uri.to_owned(),
-            name: "Resource".to_owned(),
-            scopes: serde_json::json!(["account.read"]),
-            enabled: false,
-            created_at: Utc::now().into(),
-            updated_at: None,
-        };
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([vec![model]])
-            .into_connection();
-        let repo = OAuthResourceRepositoryImpl::new(db.clone());
-        let resource = repo.find_by_uri(uri).await.unwrap().unwrap();
-        assert_eq!(resource.uri, uri);
-        assert_eq!(resource.scopes, ["account.read"]);
-        assert!(!resource.enabled);
-        let log = db.into_transaction_log();
-        assert!(format!("{log:?}").contains(uri));
     }
 }
 #[async_trait]
@@ -61,11 +31,45 @@ impl OAuthResourceRepository for OAuthResourceRepositoryImpl {
         row.map(|row| {
             Ok(OAuthResource {
                 uri: row.uri,
-                scopes: serde_json::from_value(row.scopes)
+                scopes: from_value(row.scopes)
                     .map_err(|error| OAuthResourceRepositoryError(error.to_string()))?,
                 enabled: row.enabled,
             })
         })
         .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use sea_orm::{DatabaseBackend, MockDatabase};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn lookup_preserves_exact_identifiers_scopes_and_disabled_state() {
+        let uri = "https://API.example.com/resource?tenant=1";
+        let model = resource::Model {
+            oid: Uuid::new_v4(),
+            uri: uri.to_owned(),
+            name: "Resource".to_owned(),
+            scopes: json!(["account.read"]),
+            enabled: false,
+            created_at: Utc::now().into(),
+            updated_at: None,
+        };
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([vec![model]])
+            .into_connection();
+        let repo = OAuthResourceRepositoryImpl::new(db.clone());
+        let resource = repo.find_by_uri(uri).await.unwrap().unwrap();
+        assert_eq!(resource.uri, uri);
+        assert_eq!(resource.scopes, ["account.read"]);
+        assert!(!resource.enabled);
+        let log = db.into_transaction_log();
+        assert!(format!("{log:?}").contains(uri));
     }
 }

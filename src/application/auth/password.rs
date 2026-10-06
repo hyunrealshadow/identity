@@ -1,10 +1,10 @@
 use std::sync::{Arc, OnceLock};
-use tokio::task::spawn_blocking;
 
-use tokio::sync::Semaphore;
+use tokio::{sync::Semaphore, task::spawn_blocking};
+
+use crate::error::AppError;
 
 pub use super::hash::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult};
-use crate::error::AppError;
 
 const MAX_CONCURRENT_PASSWORD_HASHES: usize = 4;
 

@@ -1,13 +1,13 @@
-use josekit::JoseError;
-use josekit::jwe::deserialize_compact;
-use josekit::jwe::serialize_compact;
-use josekit::jwe::{
-    ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweDecrypter, JweEncrypter, JweHeader, RSA_OAEP,
-    RSA_OAEP_256,
-};
-use josekit::jwk::Jwk;
-
 use identity_domain::key::PublicJwk;
+use josekit::{
+    JoseError,
+    jwe::{
+        ECDH_ES, ECDH_ES_A128KW, ECDH_ES_A256KW, JweDecrypter, JweEncrypter, JweHeader, RSA_OAEP,
+        RSA_OAEP_256, deserialize_compact, serialize_compact,
+    },
+    jwk::Jwk,
+};
+use serde_json::to_value;
 
 #[derive(Debug, thiserror::Error)]
 pub enum JweError {
@@ -22,7 +22,7 @@ pub enum JweError {
 }
 
 fn public_jwk_to_josekit(jwk: &PublicJwk) -> Result<Jwk, JweError> {
-    let value = serde_json::to_value(jwk).map_err(|e| JweError::InvalidJwk(e.to_string()))?;
+    let value = to_value(jwk).map_err(|e| JweError::InvalidJwk(e.to_string()))?;
     let json = value.to_string();
     Jwk::from_bytes(json.as_bytes()).map_err(|e| JweError::InvalidJwk(e.to_string()))
 }

@@ -1,15 +1,18 @@
-use crate::openid_connect::model::authorization_request::AuthorizationRequestParams;
-use std::error::Error;
-use std::{fmt, str::FromStr};
+use std::{error::Error, fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use uuid::Uuid;
 
-use crate::auth::model::SessionOid;
-use crate::client::model::ClientOid;
-use crate::openid_connect::{AuthorizationRequestData, ClaimsRequest, CodeChallengeMethod};
+use crate::{
+    auth::model::SessionOid,
+    client::model::ClientOid,
+    openid_connect::{
+        AuthorizationRequestData, ClaimsRequest, CodeChallengeMethod,
+        model::authorization_request::AuthorizationRequestParams,
+    },
+};
 
 pub use super::device::{
     DeviceAuthorizationApproval, DeviceAuthorizationData, DeviceAuthorizationRequestData,

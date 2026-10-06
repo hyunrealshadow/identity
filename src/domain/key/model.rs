@@ -1,6 +1,7 @@
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use uuid::Uuid;

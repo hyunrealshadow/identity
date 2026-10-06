@@ -1,15 +1,18 @@
-use super::*;
-use crate::openid_connect::authorize::tests::fixtures::repositories::{
-    ClientAuthorizationState, mock_client_auth_repo_with_state,
-};
-use crate::openid_connect::remote::test_http_client;
-use crate::openid_connect::tests::fixtures::mocks::MockKeyRepository;
-use crate::openid_connect::tests::fixtures::mocks::{
-    MockKeyJwkRepository, MockOpenIdConnectCredentialRepository,
-};
 use chrono::Utc;
 use serde_json::Value;
-use tokio::time::sleep;
+use tokio::{spawn, time::sleep};
+
+use crate::openid_connect::{
+    authorize::tests::fixtures::repositories::{
+        ClientAuthorizationState, mock_client_auth_repo_with_state,
+    },
+    remote::test_http_client,
+    tests::fixtures::mocks::{
+        MockKeyJwkRepository, MockKeyRepository, MockOpenIdConnectCredentialRepository,
+    },
+};
+
+use super::*;
 
 pub(in crate::openid_connect) fn signing_keypair() -> (Vec<u8>, Vec<u8>) {
     let rsa = Rsa::generate(2048).unwrap();
@@ -195,7 +198,7 @@ pub(in crate::openid_connect) async fn spawn_chunked_response_server(
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
 
-    tokio::spawn(async move {
+    spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
         stream
                 .write_all(
@@ -224,7 +227,7 @@ pub(in crate::openid_connect) async fn spawn_redirect_response_server(_location:
     let address = listener.local_addr().unwrap();
     let location = format!("http://{address}/final.jwt");
 
-    tokio::spawn(async move {
+    spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
         let response = format!(
             "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n"

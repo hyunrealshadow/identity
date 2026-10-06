@@ -1,16 +1,19 @@
-use super::signing::{SignAccessTokenInput, SignIdTokenInput};
-use super::*;
-use crate::domain::auth::SessionStatus;
-use crate::observability::{BusinessEvent, EventValue};
-use chrono::DateTime;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client_authorization::ClientAuthenticationMode;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::ScopeSet;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::{
+    client_authorization::ClientAuthenticationMode,
+    openid_connect::{API_RESOURCE, ScopeSet, TokenEndpointAuthMethod},
+};
 
-use super::exchange::{issuance_result, resolve_client_id};
+use super::{
+    exchange::{issuance_result, resolve_client_id},
+    signing::{SignAccessTokenInput, SignIdTokenInput, validate_id_token_auth_time},
+};
+use crate::{
+    domain::auth::SessionStatus,
+    observability::{BusinessEvent, EventValue},
+};
+
+use super::*;
 
 impl TokenService {
     #[tracing::instrument(skip_all, name = "token.refresh")]
@@ -205,11 +208,7 @@ impl TokenService {
         let scope = selection.scope.clone();
         let issue_id_token = requested_scope.contains_openid();
         if issue_id_token {
-            if authenticated_client.metadata().require_auth_time == Some(true)
-                && refresh_data.auth_time.is_none()
-            {
-                return Err(AppError::from_code(TokenErrorCode::SignIdTokenFailed));
-            }
+            validate_id_token_auth_time(&authenticated_client, refresh_data.auth_time)?;
         }
         let configured_signing_key = self
             .load_configured_signing_key(

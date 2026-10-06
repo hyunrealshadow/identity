@@ -1,22 +1,25 @@
-use super::*;
-use crate::error::AppError;
-use crate::key::runtime::RuntimeKeyRing;
-use crate::key::runtime::RuntimeKeyRingProvider;
-use crate::openid_connect::authorize::tests::fixtures::repositories::{
-    ClientAuthorizationState, mock_client_auth_repo_with_state,
-};
-use crate::openid_connect::remote::test_http_client;
-use crate::openid_connect::tests::fixtures::mocks::{
-    MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
-    MockOpenIdConnectCredentialRepository, MockUserRepository,
-};
-use crate::setting::{SettingsSnapshot, SettingsSource};
-use crate::user::repository::UserRepositoryError;
 use base64::engine::general_purpose::STANDARD;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::data_protection::DataProtectionError;
-use identity_domain::data_protection::KeyRing;
+use chrono::{Duration, Utc};
+use identity_domain::data_protection::{DataProtectionError, KeyRing};
+
+use crate::{
+    error::AppError,
+    key::runtime::{RuntimeKeyRing, RuntimeKeyRingProvider},
+    openid_connect::{
+        authorize::tests::fixtures::repositories::{
+            ClientAuthorizationState, mock_client_auth_repo_with_state,
+        },
+        remote::test_http_client,
+        tests::fixtures::mocks::{
+            MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
+            MockOpenIdConnectCredentialRepository, MockUserRepository,
+        },
+    },
+    setting::{SettingsSnapshot, SettingsSource},
+    user::repository::UserRepositoryError,
+};
+
+use super::*;
 
 pub(in crate::openid_connect) struct StaticInstallationProvider {
     pub(in crate::openid_connect) value: Arc<SettingsSnapshot>,

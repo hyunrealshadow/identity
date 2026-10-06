@@ -1,16 +1,19 @@
-use super::flow::{AuthorizationCodeContext, session_state_for_authorize_response};
-use super::signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput};
-use super::*;
-use crate::error::codes::common::CommonErrorCode;
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::auth::SessionOid;
-use identity_domain::client_authorization::ClientAuthenticationMode;
-use identity_domain::client_authorization::{AccessTokenData, ClientAuthorizationData};
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
+use chrono::{Duration, Utc};
+use identity_domain::{
+    auth::SessionOid,
+    client_authorization::{AccessTokenData, ClientAuthenticationMode, ClientAuthorizationData},
+    openid_connect::{API_RESOURCE, TokenEndpointAuthMethod},
+};
 use url::form_urlencoded::Serializer;
 use uuid::Uuid;
+
+use super::{
+    flow::{AuthorizationCodeContext, session_state_for_authorize_response},
+    signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput},
+};
+use crate::error::codes::common::CommonErrorCode;
+
+use super::*;
 
 fn front_channel_token_mode(client: &OpenIdConnectClient) -> ClientAuthenticationMode {
     if client

@@ -1,8 +1,7 @@
-use serde::Deserializer;
-use serde::de::Error;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize, de::Error};
+use serde_json::Value;
 use url::Url;
 
 use crate::domain::key::PublicJwk;
@@ -67,14 +66,16 @@ pub struct DynamicClientJwks {
 
 #[cfg(test)]
 mod redirect_uri_tests {
+    use serde_json::{from_value, json};
+
     use super::DynamicClientRegistrationRequest;
 
     #[test]
     fn registration_preserves_redirect_uri_spelling() {
-        let raw = serde_json::json!({
+        let raw = json!({
             "redirect_uris": ["http://localhost:53000", "https://RP.example.com:443/callback"]
         });
-        let request = serde_json::from_value::<DynamicClientRegistrationRequest>(raw).unwrap();
+        let request = from_value::<DynamicClientRegistrationRequest>(raw).unwrap();
         assert_eq!(request.redirect_uris[0], "http://localhost:53000");
         assert_eq!(
             request.redirect_uris[1],

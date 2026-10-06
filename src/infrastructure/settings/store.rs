@@ -1,20 +1,18 @@
-use identity_application::observability::BusinessEvent;
-use identity_application::observability::EventValue;
-use identity_application::observability::event_sink;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
-use tokio::sync::Mutex;
 
 use async_trait::async_trait;
-use sea_orm::{DatabaseConnection, EntityTrait};
-
-use crate::database::entity::setting;
 use identity_application::{
     error::AppError,
+    observability::{BusinessEvent, EventValue, event_sink},
     setting::{SettingRegistry, SettingsSnapshot, SettingsSource, runtime::RefreshableSetting},
 };
+use sea_orm::{DatabaseConnection, EntityTrait};
+use tokio::sync::Mutex;
+
+use crate::database::entity::setting;
 
 /// The registered settings of the `setting` table, decoded into one snapshot
 /// shared by all consumers.
@@ -99,15 +97,13 @@ impl SettingsSource for SettingsStore {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
-
     use chrono::Utc;
     use identity_application::setting::{
         DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, OpenIdConnectSettings,
         SettingDefinition,
     };
     use sea_orm::{DatabaseBackend, MockDatabase};
-    use serde_json::json;
+    use serde_json::{Value, json, to_value};
     use uuid::Uuid;
 
     use super::*;
@@ -144,7 +140,7 @@ mod tests {
             row_at(
                 4,
                 "openid_connect.device_authorization",
-                serde_json::to_value(DeviceAuthorizationSettings::default()).unwrap(),
+                to_value(DeviceAuthorizationSettings::default()).unwrap(),
             ),
         ];
         let mut updated = initial.clone();

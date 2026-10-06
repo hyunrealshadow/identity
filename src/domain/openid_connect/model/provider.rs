@@ -1,5 +1,4 @@
-use std::error::Error;
-use std::{fmt, str::FromStr};
+use std::{error::Error, fmt, str::FromStr};
 
 use serde::Serialize;
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
@@ -175,6 +174,7 @@ pub struct OpenIdProviderMetadata {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::to_value;
     use url::Url;
 
     use super::OpenIdProviderMetadata;
@@ -237,7 +237,7 @@ mod tests {
             backchannel_logout_session_supported: None,
         };
 
-        let value = serde_json::to_value(&metadata).unwrap();
+        let value = to_value(&metadata).unwrap();
 
         assert!(value.get("scopes_supported").is_none());
         assert!(value.get("token_endpoint_auth_methods_supported").is_none());

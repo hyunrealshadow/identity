@@ -1,21 +1,7 @@
-use crate::controllers::response::accepts_html;
-use crate::controllers::response::app_state;
-use crate::controllers::response::insert_no_store_headers;
-use crate::infrastructure::i18n::resolve_locale_from_headers;
-use crate::middleware::security_headers_middleware;
-use async_graphql::Response as AsyncGraphqlResponse;
-use async_graphql::Value;
-use salvo::affix_state::inject;
-use salvo::prelude::Json;
 use std::time::Duration;
-use tokio::time::timeout;
-use url::form_urlencoded::parse;
-mod schema;
-#[cfg(test)]
-mod tests;
 
 use async_graphql::{
-    Request as GraphqlRequest,
+    Request as GraphqlRequest, Response as AsyncGraphqlResponse, Value,
     http::{GraphiQLSource, parse_query_string},
     parser::{parse_query, types::OperationType},
 };
@@ -24,10 +10,24 @@ use identity_infrastructure::{
     AppState,
     config::{GraphqlConfig, ServerConfig},
 };
-use salvo::{Depot, Request, Response, Router, handler, writing::Text};
-use tracing::Instrument;
+use salvo::{
+    Depot, Request, Response, Router, affix_state::inject, handler, prelude::Json, writing::Text,
+};
+use serde_json::{from_slice, json};
+use tokio::time::timeout;
+use tracing::{Instrument, error, info_span};
+use url::form_urlencoded::parse;
 
 use self::schema::{ApiSchema, RESOURCE_AUDIENCE, RequestContext, build_schema};
+use crate::{
+    controllers::response::{accepts_html, app_state, insert_no_store_headers},
+    infrastructure::i18n::resolve_locale_from_headers,
+    middleware::security_headers_middleware,
+};
+
+mod schema;
+#[cfg(test)]
+mod tests;
 
 const MAX_BODY_BYTES: usize = 256 * 1024;
 const MAX_URI_BYTES: usize = 16 * 1024;
@@ -153,7 +153,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             return;
         }
         Err(error) => {
-            tracing::error!(target: "identity.graphql", error = %error, "access token user lookup failed");
+            error!(target: "identity.graphql", error = %error, "access token user lookup failed");
             write_protocol_error(
                 res,
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -185,7 +185,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             locale: resolve_locale_from_headers(req.headers()),
         })
         .data(config.max_page_size);
-    let operation_span = tracing::info_span!(
+    let operation_span = info_span!(
         "graphql.operation",
         graphql.operation.type = %operation_type,
         graphql.operation.name = %operation_name,
@@ -263,8 +263,7 @@ async fn parse_graphql_request(
                 .payload_with_max_size(MAX_BODY_BYTES)
                 .await
                 .map_err(|_| (StatusCode::PAYLOAD_TOO_LARGE, "request body is too large"))?;
-            serde_json::from_slice(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid GraphQL request"))
+            from_slice(payload).map_err(|_| (StatusCode::BAD_REQUEST, "invalid GraphQL request"))
         }
         _ => Err((StatusCode::METHOD_NOT_ALLOWED, "method not allowed")),
     }
@@ -331,7 +330,7 @@ fn write_unauthorized(res: &mut Response, message: &'static str) {
 
 fn write_protocol_error(res: &mut Response, status: StatusCode, message: &'static str) {
     res.status_code(status);
-    res.render(Json(serde_json::json!({
+    res.render(Json(json!({
         "errors": [{ "message": message }]
     })));
 }

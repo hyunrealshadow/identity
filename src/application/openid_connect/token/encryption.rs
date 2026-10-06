@@ -1,7 +1,11 @@
-use super::*;
-use crate::openid_connect::client_encryption::select_client_encryption_jwk;
-use crate::openid_connect::jose::encrypt_compact_with_public_jwk_with_content_type;
 use identity_domain::openid_connect::OpenIdConnectClient;
+
+use crate::openid_connect::{
+    client_encryption::select_client_encryption_jwk,
+    jose::encrypt_compact_with_public_jwk_with_content_type,
+};
+
+use super::*;
 
 impl TokenService {
     pub(super) async fn encrypt_token_for_client(

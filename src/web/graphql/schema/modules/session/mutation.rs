@@ -1,6 +1,7 @@
 use async_graphql::{Context, Error, ID, Object, Result};
 use identity_domain::{auth::SessionOid, openid_connect::ApiScope};
 use identity_infrastructure::graphql::id::GlobalId;
+use tracing::warn;
 use uuid::Uuid;
 
 use super::{
@@ -61,7 +62,7 @@ impl SessionMutation {
             .await
             .map_err(internal_error)?;
         if outcome.has_failures() {
-            tracing::warn!(
+            warn!(
                 target: "identity.graphql",
                 failed = outcome.failure_count(),
                 "session revocation batch partially failed"

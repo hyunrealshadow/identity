@@ -1,10 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
 use identity_application::setting::runtime::RefreshableSetting;
-use tokio::{
-    task::JoinHandle,
-    time::{self, MissedTickBehavior},
-};
+use tokio::{spawn, task::JoinHandle, time, time::MissedTickBehavior};
+use tracing::{info, info_span, warn};
 
 pub struct SettingsRefresher {
     interval: Duration,
@@ -29,12 +27,12 @@ impl SettingsRefresher {
 
     #[must_use]
     pub fn spawn(self) -> JoinHandle<()> {
-        tokio::spawn(async move {
+        spawn(async move {
             if self.settings.is_empty() {
                 return;
             }
 
-            tracing::info!(
+            info!(
                 refresh_interval_secs = self.interval.as_secs_f64(),
                 setting_count = self.settings.len(),
                 "starting settings refresh task"
@@ -47,14 +45,14 @@ impl SettingsRefresher {
             loop {
                 ticker.tick().await;
 
-                let round = tracing::info_span!(
+                let round = info_span!(
                     "settings.refresh.round",
                     setting_count = self.settings.len(),
                 );
                 for setting in &self.settings {
                     let _entered = round.enter();
                     if let Err(error) = setting.refresh_value().await {
-                        tracing::warn!(
+                        warn!(
                             key = setting.key(),
                             error = %error,
                             "failed to refresh setting"
@@ -72,9 +70,6 @@ impl SettingsRefresher {
 
 #[cfg(test)]
 mod tests {
-    use tokio::time::sleep;
-    use tokio::time::timeout;
-
     use std::{
         sync::{
             Arc,
@@ -85,6 +80,7 @@ mod tests {
 
     use async_trait::async_trait;
     use identity_application::{error::AppError, setting::runtime::RefreshableSetting};
+    use tokio::time::{sleep, timeout};
 
     use super::SettingsRefresher;
 

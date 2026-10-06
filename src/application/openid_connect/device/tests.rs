@@ -1,54 +1,58 @@
-use crate::application::error::kind::ErrorKind;
-use crate::domain::client_authorization::DeviceRequestStatus;
-use crate::domain::client_authorization::format_user_code;
-use chrono::Duration;
-use josekit::jws::JwsHeader;
-use josekit::jws::RS256;
-use josekit::jwt;
-use josekit::jwt::JwtPayload;
-use openssl::rsa::Rsa;
-use std::io::Error;
-use std::sync::Arc;
-use std::time::Duration as TimeDuration;
-use std::time::SystemTime;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio::sync::mpsc::unbounded_channel;
-use url::Url;
+use std::{
+    io::Error,
+    sync::Arc,
+    time::{Duration as TimeDuration, SystemTime},
+};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
+use josekit::{
+    jws::{JwsHeader, RS256},
+    jwt,
+    jwt::JwtPayload,
+};
+use openssl::rsa::Rsa;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+use url::Url;
 use uuid::Uuid;
 
-use crate::application::error::{
-    code::AppErrorCode, codes::device::DeviceAuthorizationErrorCode, codes::token::TokenErrorCode,
+use crate::{
+    application::error::{
+        code::AppErrorCode,
+        codes::{device::DeviceAuthorizationErrorCode, token::TokenErrorCode},
+        kind::ErrorKind,
+    },
+    domain::{
+        client::model::ClientOid,
+        client_authorization::{
+            ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
+            ClientAuthorizationType, DeviceAuthorizationRepositoryError,
+            DeviceAuthorizationRequestData, DeviceRequestStatus, device_code_digest,
+            format_user_code,
+        },
+        openid_connect::{
+            ClientAssertionType, GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
+            OpenIdConnectClientRepositoryError, OpenIdConnectCredential,
+            OpenIdConnectCredentialData, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+        },
+    },
+    openid_connect::{
+        client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
+        device::{
+            DEVICE_VERIFICATION_PATH, DeviceAuthorizationParams, DeviceAuthorizationService,
+            DeviceAuthorizationServiceDependencies, DeviceVerificationDecision,
+            DeviceVerificationStatus, DeviceVerificationUser,
+        },
+        provider::OpenIdProviderService,
+        tests::fixtures::{
+            client::{test_client, test_metadata, test_platforms, test_scopes},
+            mocks::{MockDeviceAuthorizationRepository, MockOpenIdConnectCredentialRepository},
+        },
+    },
+    setting::{
+        AppSettings, DeviceAuthorizationSettings, InstallationSettings, LoginDomainSetting,
+        OpenIdConnectSettings, SettingsSnapshot, SettingsSource,
+    },
 };
-use crate::domain::client::model::ClientOid;
-use crate::domain::client_authorization::{
-    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
-    ClientAuthorizationType, DeviceAuthorizationRepositoryError, DeviceAuthorizationRequestData,
-    device_code_digest,
-};
-use crate::domain::openid_connect::{
-    ClientAssertionType, GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
-    OpenIdConnectClientRepositoryError, OpenIdConnectCredential, OpenIdConnectCredentialData,
-    OpenIdConnectCredentialType, TokenEndpointAuthMethod,
-};
-use crate::openid_connect::device::{
-    DEVICE_VERIFICATION_PATH, DeviceAuthorizationParams, DeviceAuthorizationService,
-    DeviceAuthorizationServiceDependencies, DeviceVerificationDecision, DeviceVerificationStatus,
-    DeviceVerificationUser,
-};
-use crate::openid_connect::tests::fixtures::client::{
-    test_client, test_metadata, test_platforms, test_scopes,
-};
-use crate::openid_connect::tests::fixtures::mocks::{
-    MockDeviceAuthorizationRepository, MockOpenIdConnectCredentialRepository,
-};
-use crate::openid_connect::{
-    client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
-    provider::OpenIdProviderService,
-};
-use crate::setting::{AppSettings, InstallationSettings, LoginDomainSetting, SettingsSnapshot};
-use crate::setting::{DeviceAuthorizationSettings, OpenIdConnectSettings, SettingsSource};
 
 const CLIENT_ID: Uuid = Uuid::nil();
 

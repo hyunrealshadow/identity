@@ -1,6 +1,6 @@
-use sea_orm_migration::{async_trait, prelude::*};
-
 use crate::m20260319_121151_create_key::Key;
+
+use sea_orm_migration::{async_trait, prelude::*};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

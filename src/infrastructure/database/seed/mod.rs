@@ -2,6 +2,7 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use sea_orm::DatabaseConnection;
+use tracing::info;
 
 use crate::{
     application::error::AppError,
@@ -34,7 +35,7 @@ pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
 
     for seed in seeds {
         seed.run(db).await?;
-        tracing::info!(seed = seed.name(), "seed ensured");
+        info!(seed = seed.name(), "seed ensured");
     }
 
     Ok(())

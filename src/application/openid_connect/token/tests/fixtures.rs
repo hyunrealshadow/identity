@@ -1,25 +1,25 @@
+use std::time::{Duration, SystemTime};
+
+use base64::{Engine, engine::general_purpose::STANDARD};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use identity_domain::data_protection::DataProtectionError;
+use openssl::pkey::PKey;
+
+use crate::{
+    data_protection::DataProtector,
+    openid_connect::tests::fixtures::mocks::{
+        MockDeviceAuthorizationRepository, MockKeyJwkRepository, MockKeyRepository,
+        MockOpenIdConnectCredentialRepository,
+    },
+    setting::{SettingsSnapshot, SettingsSource},
+    user::repository::{UserIdentifierUpdate, UserProfilePatch},
+};
+
 use super::*;
-use crate::data_protection::DataProtector;
-use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
+
 pub(super) use crate::openid_connect::tests::fixtures::mocks::{
     MockClientAuthorizationRepository, mock_client_auth_repo,
 };
-use crate::openid_connect::tests::fixtures::mocks::{
-    MockKeyJwkRepository, MockKeyRepository, MockOpenIdConnectCredentialRepository,
-};
-use crate::setting::SettingsSnapshot;
-use crate::setting::SettingsSource;
-use crate::user::repository::UserIdentifierUpdate;
-use crate::user::repository::UserProfilePatch;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
-use chrono::DateTime;
-use chrono::Duration as ChronoDuration;
-use chrono::Utc;
-use identity_domain::data_protection::DataProtectionError;
-use openssl::pkey::PKey;
-use std::time::Duration;
-use std::time::SystemTime;
 
 mod clients;
 

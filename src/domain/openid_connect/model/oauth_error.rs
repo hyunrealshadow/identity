@@ -1,9 +1,7 @@
-use std::error::Error;
-use std::{fmt, str::FromStr};
-use url::Url;
-use url::form_urlencoded::Serializer;
+use std::{error::Error, fmt, str::FromStr};
 
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
+use url::{Url, form_urlencoded::Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
@@ -122,12 +120,11 @@ impl OAuthErrorResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::OAuthErrorResponse;
     use std::collections::HashMap;
-    use url::Url;
-    use url::form_urlencoded::parse;
 
-    use super::OAuthErrorCode;
+    use url::{Url, form_urlencoded::parse};
+
+    use super::{OAuthErrorCode, OAuthErrorResponse};
 
     #[test]
     fn to_fragment_redirect_url_places_error_in_fragment() {

@@ -1,9 +1,10 @@
 //! Current SeaORM persistence entity.
 
-use super::login::Entity as LoginEntity;
-use super::session::Entity as SessionEntity;
-use super::user_client_consent::Entity as UserClientConsentEntity;
-use super::user_credential::Entity as UserCredentialEntity;
+use super::{
+    login::Entity as LoginEntity, session::Entity as SessionEntity,
+    user_client_consent::Entity as UserClientConsentEntity,
+    user_credential::Entity as UserCredentialEntity,
+};
 
 use sea_orm::entity::prelude::*;
 

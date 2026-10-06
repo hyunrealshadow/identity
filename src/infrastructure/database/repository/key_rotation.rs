@@ -1,22 +1,24 @@
-use crate::database::query::advisory_transaction_lock;
-use async_trait::async_trait;
-use chrono::Duration;
-use chrono::{DateTime, Utc};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    Set, TransactionTrait, sea_query::Expr,
-};
 use std::error::Error;
-use uuid::Uuid;
 
+use async_trait::async_trait;
+use chrono::{DateTime, Duration, Utc};
 use identity_application::{
     error::{AppError, codes::common::CommonErrorCode},
     key::rotation::{KEY_LIFETIME, KEY_ROTATION_AGE, KeyRotationRepository, RotationMaterial},
 };
 use identity_domain::key::{Key, KeyOid, KeyType};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    Set, TransactionTrait, sea_query::Expr,
+};
+use serde_json::to_value;
+use uuid::Uuid;
 
 use super::key::to_domain;
-use crate::database::entity::{key, key_jwk};
+use crate::database::{
+    entity::{key, key_jwk},
+    query::advisory_transaction_lock,
+};
 
 pub struct KeyRotationRepositoryImpl {
     db: DatabaseConnection,
@@ -85,7 +87,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
         let next = key::ActiveModel {
             oid: Set(next_oid),
             r#type: Set(previous.r#type.clone()),
-            data: Set(serde_json::to_value(material.data).map_err(internal)?),
+            data: Set(to_value(material.data).map_err(internal)?),
             expires_at: Set((now + KEY_LIFETIME).into()),
             revoked_at: Set(None),
             rotated_from_oid: Set(Some(Uuid::from(previous_oid))),
@@ -104,7 +106,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
                 oid: Set(binding_oid),
                 key_oid: Set(next_oid),
                 algorithm: Set(generated.algorithm.as_str().to_owned()),
-                jwk: Set(serde_json::to_value(jwk).map_err(internal)?),
+                jwk: Set(to_value(jwk).map_err(internal)?),
                 created_at: Set(now.into()),
                 updated_at: Set(None),
                 ..Default::default()

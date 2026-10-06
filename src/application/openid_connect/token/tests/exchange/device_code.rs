@@ -1,28 +1,31 @@
-use super::RecordingSink;
-use crate::domain::openid_connect::OpenIdConnectClientRepository;
-use crate::domain::openid_connect::OpenIdConnectClientRepositoryError;
-use crate::observability::EventValue;
-use crate::openid_connect::tests::fixtures::client::{
-    test_client, test_metadata, test_platforms, test_scopes,
+use std::iter;
+
+use chrono::{DateTime, Duration};
+use identity_domain::{
+    client::model::ClientOid,
+    client_authorization::{
+        ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType,
+        DeviceAuthorizationApproval, DeviceAuthorizationData, DeviceAuthorizationRequestData,
+        DeviceConsumeOutcome, DevicePollOutcome, DeviceRequestStatus, PreparedAuthorizationRecord,
+        device_code_digest,
+    },
+    key::JwsAlgorithm,
+    openid_connect::{API_RESOURCE, GrantType},
 };
-use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+
+use super::{RecordingSink, decode_unverified_payload};
+use crate::{
+    domain::openid_connect::{OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError},
+    observability::EventValue,
+    openid_connect::tests::fixtures::{
+        client::{test_client, test_metadata, test_platforms, test_scopes},
+        mocks::MockDeviceAuthorizationRepository,
+    },
+};
+
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use chrono::DateTime;
-use chrono::Duration;
-use identity_domain::client::model::ClientOid;
-use identity_domain::client_authorization::device_code_digest;
-use identity_domain::client_authorization::{
-    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType,
-    DeviceAuthorizationApproval, DeviceAuthorizationData, DeviceAuthorizationRequestData,
-    DeviceConsumeOutcome, DevicePollOutcome, DeviceRequestStatus, PreparedAuthorizationRecord,
-};
-use identity_domain::key::JwsAlgorithm;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::GrantType;
-use std::iter;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio::sync::mpsc::unbounded_channel;
 
 const DEVICE_CODE: &str = "device-code-for-tests";
 
@@ -301,8 +304,6 @@ impl OpenIdConnectClientRepository for DeviceClientRepository {
         Ok(Some(self.client.clone()))
     }
 }
-
-use super::decode_unverified_payload;
 
 #[tokio::test]
 async fn unknown_device_code_is_invalid_grant() {

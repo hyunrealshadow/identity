@@ -1,13 +1,13 @@
-use super::codes::common::CommonErrorCode;
-use std::backtrace::Backtrace;
-use std::error::Error as StdError;
-use std::fmt::Display;
-use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::mem;
+use std::{
+    backtrace::Backtrace,
+    error::Error as StdError,
+    fmt::{Display, Formatter, Result as FmtResult},
+    mem,
+};
 
 use super::{
-    code::AppErrorCode, kind::ErrorKind, params::ErrorParams, validation::ValidationError,
+    code::AppErrorCode, codes::common::CommonErrorCode, kind::ErrorKind, params::ErrorParams,
+    validation::ValidationError,
 };
 
 #[derive(Debug)]

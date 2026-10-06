@@ -1,11 +1,9 @@
-use chrono::DateTime;
 use std::sync::Arc;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use identity_domain::openid_connect::{LoginRotationPolicy, LoginRuntimeRepository};
 use serde::Serialize;
 use uuid::Uuid;
-
-use identity_domain::openid_connect::{LoginRotationPolicy, LoginRuntimeRepository};
 
 use crate::{
     error::AppError,
@@ -83,12 +81,11 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use chrono::{DateTime, Duration, Utc};
-    use uuid::Uuid;
-
     use identity_domain::openid_connect::{
         LoginRotationPolicy, LoginRuntimeConfig, LoginRuntimeRepository,
         LoginRuntimeRepositoryError,
     };
+    use uuid::Uuid;
 
     use super::LoginRuntimeService;
     use crate::setting::{LoginClientIdSetting, SettingsSnapshot};

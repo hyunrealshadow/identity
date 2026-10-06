@@ -1,8 +1,26 @@
-use crate::openid_connect::jose::REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS;
-use crate::openid_connect::jose::REQUEST_OBJECT_ENCRYPTION_ALGORITHMS;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
+
+use serde_json::from_slice;
 use url::Url;
+
+use crate::{
+    application::error::{AppError, codes::registration::RegistrationErrorCode},
+    domain::{
+        key::JwaSigningAlgorithm,
+        openid_connect::{
+            GrantType, OpenIdConnectClientPlatformType, ResponseType, model::claim::StandardScopes,
+        },
+    },
+    openid_connect::{
+        jose::{
+            REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
+        },
+        remote::{
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
+            fetch_https_public_document, remote_http_client,
+        },
+    },
+};
 
 pub(super) fn parse_metadata_value<T: FromStr>(
     field: &'static str,
@@ -66,20 +84,6 @@ pub(super) fn validate_grant_response_type_consistency(
 
     Ok(())
 }
-
-use crate::{
-    application::error::{AppError, codes::registration::RegistrationErrorCode},
-    domain::{
-        key::JwaSigningAlgorithm,
-        openid_connect::{
-            GrantType, OpenIdConnectClientPlatformType, ResponseType, model::claim::StandardScopes,
-        },
-    },
-    openid_connect::remote::{
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
-        fetch_https_public_document, remote_http_client,
-    },
-};
 
 pub(super) fn parse_application_type(
     value: Option<&str>,
@@ -233,7 +237,7 @@ async fn fetch_sector_redirect_uris(sector_identifier_uri: &Url) -> Result<Vec<S
         RegistrationErrorCode::InvalidClientMetadata,
     ))?;
 
-    serde_json::from_slice::<Vec<String>>(&body).map_err(AppError::map_source(
+    from_slice::<Vec<String>>(&body).map_err(AppError::map_source(
         RegistrationErrorCode::InvalidClientMetadata,
     ))
 }

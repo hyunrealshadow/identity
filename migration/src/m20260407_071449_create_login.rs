@@ -1,9 +1,5 @@
-use crate::m20260305_071904_create_user::User;
-use crate::m20260306_031058_create_client::Client;
-use crate::m20260306_090746_create_session::Session;
-use crate::m20260407_060938_create_client_authorization::ClientAuthorization;
-use sea_orm_migration::{async_trait, sea_orm};
 use sea_orm_migration::{
+    async_trait,
     prelude::{
         DbErr, DeriveIden, DeriveMigrationName, Expr, ForeignKey, ForeignKeyAction, Index,
         MigrationTrait, SchemaManager, Table,
@@ -12,6 +8,13 @@ use sea_orm_migration::{
         big_integer, big_integer_null, integer, pk_auto, string, string_null,
         timestamp_with_time_zone, timestamp_with_time_zone_null, uuid_uniq,
     },
+    sea_orm,
+};
+
+use crate::{
+    m20260305_071904_create_user::User, m20260306_031058_create_client::Client,
+    m20260306_090746_create_session::Session,
+    m20260407_060938_create_client_authorization::ClientAuthorization,
 };
 
 #[derive(DeriveMigrationName)]

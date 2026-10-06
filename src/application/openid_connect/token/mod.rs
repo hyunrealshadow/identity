@@ -1,22 +1,17 @@
-use crate::key::runtime::RuntimeKeyRingProvider;
-use crate::observability::EventSink;
-use crate::observability::NoopEventSink;
-use crate::openid_connect::client_authentication::ClientAuthenticator;
-use crate::openid_connect::client_authentication::ClientAuthenticatorDependencies;
+use std::sync::Arc;
+
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use identity_domain::openid_connect::ClientAssertionType;
+use helpers::{client_id_from_assertion, verify_pkce};
 use josekit::{jws::JwsHeader, jwt, jwt::JwtPayload};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
 use uuid::Uuid;
-
-use crate::data_protection::DataProtector;
 
 use crate::{
     application::{
         error::{AppError, codes::token::TokenErrorCode},
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
+    data_protection::DataProtector,
     domain::{
         auth::repository::SessionRepository,
         client_authorization::{
@@ -35,168 +30,19 @@ use crate::{
         },
         user::{User, UserOid, repository::UserRepository},
     },
+    key::runtime::RuntimeKeyRingProvider,
+    observability::EventSink,
+    openid_connect::client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
 };
 
-#[derive(Debug, Clone)]
-pub struct AuthorizationCodeGrantParams {
-    pub resources: Vec<String>,
-    pub code: String,
-    pub redirect_uri: Option<String>,
-    pub client_id: Option<String>,
-    pub code_verifier: Option<String>,
-    pub client_secret: Option<String>,
-    pub client_secret_basic: bool,
-    pub client_assertion_type: Option<ClientAssertionType>,
-    pub client_assertion: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DeviceCodeGrantParams {
-    pub resources: Vec<String>,
-    pub device_code: String,
-    pub client_id: Option<String>,
-    pub client_secret: Option<String>,
-    pub client_secret_basic: bool,
-    pub client_assertion_type: Option<ClientAssertionType>,
-    pub client_assertion: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct RefreshTokenGrantParams {
-    pub resources: Vec<String>,
-    pub refresh_token: String,
-    /// Optional narrowing of the originally granted scope (RFC 6749 §6).
-    pub scope: Option<String>,
-    pub client_id: Option<String>,
-    pub client_secret: Option<String>,
-    pub client_secret_basic: bool,
-    pub client_assertion_type: Option<ClientAssertionType>,
-    pub client_assertion: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ClientCredentialsGrantParams {
-    pub resources: Vec<String>,
-    pub scope: Option<String>,
-    pub client_id: Option<String>,
-    pub client_secret: Option<String>,
-    pub client_secret_basic: bool,
-    pub client_assertion_type: Option<ClientAssertionType>,
-    pub client_assertion: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TokenRevocationParams {
-    pub token: String,
-    pub client_id: Option<String>,
-    pub client_secret: Option<String>,
-    pub client_secret_basic: bool,
-    pub client_assertion_type: Option<ClientAssertionType>,
-    pub client_assertion: Option<String>,
-}
-
-/// Introspection uses the same confidential client credentials as revocation.
-pub type TokenIntrospectionParams = TokenRevocationParams;
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TokenResponse {
-    pub access_token: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub refresh_token: Option<String>,
-    pub token_type: TokenType,
-    pub expires_in: i32,
-    pub scope: String,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize)]
-pub enum TokenType {
-    #[serde(rename = "Bearer")]
-    Bearer,
-}
-
-pub struct TokenService {
-    client_authentication: Arc<ClientAuthenticator>,
-    device_repo: Arc<dyn DeviceAuthorizationRepository>,
-    client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
-    key_repo: Arc<dyn KeyRepository>,
-    key_jwk_repo: Arc<dyn KeyJwkRepository>,
-    user_repo: Arc<dyn UserRepository>,
-    client_repo: Arc<dyn OpenIdConnectClientRepository>,
-    credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
-    provider_service: Arc<OpenIdProviderService>,
-    signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    data_protector: Arc<dyn DataProtector>,
-    runtime_key_ring: Option<Arc<dyn RuntimeKeyRingProvider>>,
-    session_repo: Option<Arc<dyn SessionRepository>>,
-    events: Arc<dyn EventSink>,
-}
-
-pub struct TokenServiceDependencies {
-    pub client_authorization_repo: Arc<dyn ClientAuthorizationRepository>,
-    pub device_repo: Arc<dyn DeviceAuthorizationRepository>,
-    pub key_repo: Arc<dyn KeyRepository>,
-    pub key_jwk_repo: Arc<dyn KeyJwkRepository>,
-    pub user_repo: Arc<dyn UserRepository>,
-    pub client_repo: Arc<dyn OpenIdConnectClientRepository>,
-    pub credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
-    pub provider_service: Arc<OpenIdProviderService>,
-    pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    pub data_protector: Arc<dyn DataProtector>,
-}
-
-impl TokenService {
-    pub fn new(deps: TokenServiceDependencies) -> Self {
-        let client_authentication =
-            Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {
-                client_repo: Arc::clone(&deps.client_repo),
-                credential_repo: Arc::clone(&deps.credential_repo),
-                provider_service: Arc::clone(&deps.provider_service),
-            }));
-
-        Self {
-            client_authentication,
-            device_repo: deps.device_repo,
-            client_authorization_repo: deps.client_authorization_repo,
-            key_repo: deps.key_repo,
-            key_jwk_repo: deps.key_jwk_repo,
-            user_repo: deps.user_repo,
-            client_repo: deps.client_repo,
-            credential_repo: deps.credential_repo,
-            provider_service: deps.provider_service,
-            signing_algorithm_detector: deps.signing_algorithm_detector,
-            data_protector: deps.data_protector,
-            runtime_key_ring: None,
-            session_repo: None,
-            events: Arc::new(NoopEventSink),
-        }
-    }
-
-    /// Attach the key event and audit sink. Without an attached sink, business
-    /// events are dropped silently, which keeps tests and tools independent
-    /// from the observability pipeline.
-    #[must_use]
-    pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
-        self.events = events;
-        self
-    }
-
-    #[must_use]
-    pub fn with_runtime_key_ring(
-        mut self,
-        runtime_key_ring: Arc<dyn RuntimeKeyRingProvider>,
-    ) -> Self {
-        self.runtime_key_ring = Some(runtime_key_ring);
-        self
-    }
-
-    #[must_use]
-    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
-        self.session_repo = Some(session_repo);
-        self
-    }
-}
+mod request;
+mod service;
+pub use request::{
+    AuthorizationCodeGrantParams, ClientCredentialsGrantParams, DeviceCodeGrantParams,
+    RefreshTokenGrantParams, TokenIntrospectionParams, TokenResponse, TokenRevocationParams,
+    TokenType,
+};
+pub use service::{TokenService, TokenServiceDependencies};
 
 mod authorization_code;
 mod client_credentials;
@@ -213,29 +59,5 @@ pub(crate) mod helpers;
 mod signing;
 mod signing_key;
 
-use helpers::{client_id_from_assertion, verify_pkce};
-
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod serialization_tests {
-    use super::*;
-
-    #[test]
-    fn token_response_omits_absent_optional_tokens() {
-        let response = TokenResponse {
-            access_token: "access".to_owned(),
-            id_token: None,
-            refresh_token: None,
-            token_type: TokenType::Bearer,
-            expires_in: 3600,
-            scope: "openid".to_owned(),
-        };
-
-        let value = serde_json::to_value(response).unwrap();
-
-        assert!(value.get("id_token").is_none());
-        assert!(value.get("refresh_token").is_none());
-    }
-}

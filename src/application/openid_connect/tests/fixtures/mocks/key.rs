@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
-use identity_domain::key::repository::{KeyRepository, KeyRepositoryError};
 use identity_domain::key::{
     CreateKeyJwkInput, JwaSigningAlgorithm, Key, KeyData, KeyJwk, KeyJwkRepository,
     KeyJwkRepositoryError, KeyOid,
+    repository::{KeyRepository, KeyRepositoryError},
 };
+use mockall::mock;
 
-mockall::mock! {
+mock! {
     pub KeyJwkRepository {}
 
     #[async_trait::async_trait]
@@ -20,7 +21,7 @@ mockall::mock! {
     }
 }
 
-mockall::mock! {
+mock! {
     pub KeyRepository {}
 
     #[async_trait::async_trait]

@@ -5,14 +5,11 @@
 //! for the events provider. The queue never blocks a request: when it is full
 //! the record is dropped and reflected in [`super::metrics`].
 
-use opentelemetry::Context;
-use std::sync::mpsc::RecvTimeoutError;
-
 use std::{
     sync::{
         Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
-        mpsc::{SyncSender, TrySendError, sync_channel},
+        mpsc::{RecvTimeoutError, SyncSender, TrySendError, sync_channel},
     },
     thread,
     time::{Duration, SystemTime},
@@ -22,10 +19,12 @@ use identity_application::observability::{
     BusinessEvent, EventCategory, EventSeverity, EventSink, EventValue,
 };
 use opentelemetry::{
+    Context,
     logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity},
     trace::{SpanId, TraceContextExt, TraceFlags, TraceId},
 };
 use opentelemetry_sdk::logs::SdkLoggerProvider;
+use tracing::warn;
 
 use super::{
     metrics::global as metrics,
@@ -122,7 +121,7 @@ impl EventPipeline {
         // One diagnostic notice per process makes the audit gap traceable
         // without flooding the diagnostic pipeline once the queue stays full.
         if !self.drop_notice.swap(true, Ordering::AcqRel) {
-            tracing::warn!(
+            warn!(
                 target: "identity.observability",
                 reason,
                 "key event dropped: event queue exceeded its configured bound"
@@ -310,13 +309,11 @@ const fn severity_text(severity: EventSeverity) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::RenderedValue;
-    use opentelemetry_sdk::logs::LogExporter;
-    use std::sync::Mutex;
-    use std::thread;
-    use std::time::Instant;
-
-    use std::{sync::Arc, time::Duration};
+    use std::{
+        sync::{Arc, Mutex},
+        thread,
+        time::{Duration, Instant},
+    };
 
     use identity_application::observability::{
         BusinessEvent, EventSeverity, EventSink, EventValue,
@@ -324,10 +321,10 @@ mod tests {
     use opentelemetry::logs::LoggerProvider;
     use opentelemetry_sdk::{
         error::OTelSdkResult,
-        logs::{LogBatch, SdkLoggerProvider},
+        logs::{LogBatch, LogExporter, SdkLoggerProvider},
     };
 
-    use super::{EventPipeline, render};
+    use super::{EventPipeline, RenderedValue, render};
     use crate::config::EventsPipelineConfig;
 
     #[derive(Clone, Debug, Default)]

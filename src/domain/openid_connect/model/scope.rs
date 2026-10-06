@@ -1,6 +1,6 @@
+use std::{collections::BTreeSet, error::Error, fmt, str::FromStr};
+
 use super::claim::StandardScopes;
-use std::error::Error;
-use std::{collections::BTreeSet, fmt, str::FromStr};
 
 pub const API_RESOURCE: &str = "urn:identity:graphql";
 

@@ -1,21 +1,21 @@
-use apalis_sql::Config;
-use apalis_sql::sqlx::Error;
-use apalis_sql::sqlx::PgPool;
-use identity_application::observability::BusinessEvent;
-use identity_application::observability::EventValue;
-use identity_application::observability::event_sink;
-use std::str::FromStr;
-use std::time::Duration;
-use ulid::Ulid;
-use uuid::Uuid;
+use std::{str::FromStr, time::Duration};
 
 use apalis::prelude::{
     BoxDynError, Data, Request, Storage, TaskId, WorkerBuilder, WorkerFactoryFn,
 };
 use apalis_cron::{CronContext, CronStream, Schedule};
-use apalis_sql::postgres::PostgresStorage;
+use apalis_sql::{
+    Config,
+    postgres::PostgresStorage,
+    sqlx::{Error, PgPool},
+};
 use chrono::{DateTime, Utc};
+use identity_application::observability::{BusinessEvent, EventValue, event_sink};
 use serde::{Deserialize, Serialize};
+use tokio::{select, spawn};
+use tracing::{error, info};
+use ulid::Ulid;
+use uuid::Uuid;
 
 use crate::state::AppState;
 
@@ -60,7 +60,7 @@ async fn maintain_rotation(state: &AppState) -> Result<(), BoxDynError> {
     let mut first_error: Option<BoxDynError> = None;
     match state.services().key_rotation().maintain().await {
         Ok(rotated) if rotated > 0 => {
-            tracing::info!(rotated, "keys rotated");
+            info!(rotated, "keys rotated");
             event_sink().emit(
                 BusinessEvent::audit("key.rotated")
                     .outcome("rotated")
@@ -72,13 +72,13 @@ async fn maintain_rotation(state: &AppState) -> Result<(), BoxDynError> {
         }
         Ok(_) => {}
         Err(error) => {
-            tracing::error!(error = %error, "key rotation maintenance failed");
+            error!(error = %error, "key rotation maintenance failed");
             first_error = Some(Box::new(error));
         }
     }
     match state.services().login_runtime().maintain().await {
         Ok(rotated) if rotated > 0 => {
-            tracing::info!(rotated, "built-in client secrets rotated");
+            info!(rotated, "built-in client secrets rotated");
             event_sink().emit(
                 BusinessEvent::audit("builtin_client.credential.rotated")
                     .outcome("rotated")
@@ -90,7 +90,7 @@ async fn maintain_rotation(state: &AppState) -> Result<(), BoxDynError> {
         }
         Ok(_) => {}
         Err(error) => {
-            tracing::error!(error = %error, "built-in client secret rotation failed");
+            error!(error = %error, "built-in client secret rotation failed");
             if first_error.is_none() {
                 first_error = Some(Box::new(error));
             }
@@ -108,7 +108,7 @@ async fn handle_rotation_tick(
     enqueue_rotation(&mut storage, *context.get_timestamp())
         .await
         .map_err(|error| {
-            tracing::error!(error = %error, "failed to enqueue rotation job");
+            error!(error = %error, "failed to enqueue rotation job");
             Box::new(error) as BoxDynError
         })
 }
@@ -126,29 +126,29 @@ pub(super) async fn spawn_rotation_workers(state: AppState, pool: PgPool) -> Res
 
     let job_state = state.clone();
     let job_storage = storage.clone();
-    tokio::spawn(async move {
+    spawn(async move {
         let mut shutdown = job_state.lifecycle().subscribe_shutdown();
         let worker = WorkerBuilder::new(format!("credential-rotation-{}", Uuid::new_v4()))
             .data(job_state)
             .backend(job_storage)
             .build_fn(handle_rotation_job);
-        tokio::select! {
-            () = worker.run() => tracing::error!("rotation job worker stopped"),
+        select! {
+            () = worker.run() => error!("rotation job worker stopped"),
             _ = async {
                 while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
             } => {}
         }
     });
 
-    tokio::spawn(async move {
+    spawn(async move {
         let mut shutdown = state.lifecycle().subscribe_shutdown();
         let schedule = Schedule::from_str("@hourly").expect("valid rotation schedule");
         let worker = WorkerBuilder::new("credential-rotation-scheduler")
             .data(storage)
             .backend(CronStream::new(schedule))
             .build_fn(handle_rotation_tick);
-        tokio::select! {
-            () = worker.run() => tracing::error!("rotation scheduler stopped"),
+        select! {
+            () = worker.run() => error!("rotation scheduler stopped"),
             _ = async {
                 while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
             } => {}

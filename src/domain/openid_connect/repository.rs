@@ -1,23 +1,25 @@
-use super::model::client::{
-    OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-};
-use super::model::credential::{
-    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialType,
-};
-use crate::auth::model::SessionOid;
-use crate::client::model::Client;
-use crate::client::model::ClientOid;
-use crate::client::model::ParseClientProtocolError;
-use crate::openid_connect::model::client::InvalidOpenIdConnectClientError;
-use crate::openid_connect::model::client::ParseOpenIdConnectClientPlatformKindError;
-use crate::openid_connect::model::credential::ParseOpenIdConnectCredentialTypeError;
-use crate::openid_connect::model::provider::ParseSubjectTypeError;
-use crate::openid_connect::model::provider::ParseTokenEndpointAuthMethodError;
+use std::error::Error as StdError;
+
 use chrono::ParseError as ChronoParseError;
 use serde_json::Error as SerdeJsonError;
-use std::error::Error as StdError;
 use thiserror::Error;
 use url::ParseError;
+
+use super::model::{
+    client::{OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform},
+    credential::{
+        OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialType,
+    },
+};
+use crate::{
+    auth::model::SessionOid,
+    client::model::{Client, ClientOid, ParseClientProtocolError},
+    openid_connect::model::{
+        client::{InvalidOpenIdConnectClientError, ParseOpenIdConnectClientPlatformKindError},
+        credential::ParseOpenIdConnectCredentialTypeError,
+        provider::{ParseSubjectTypeError, ParseTokenEndpointAuthMethodError},
+    },
+};
 
 #[derive(Debug, Error)]
 pub enum OpenIdConnectClientRepositoryError {

@@ -1,16 +1,10 @@
 //! Shared helpers for the authentication and OAuth protocol controllers.
 
-use rand::RngExt;
-
-use crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode;
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use url::Url;
-use woothee::parser::Parser;
-
 use std::convert::Infallible;
 
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use http::{HeaderMap, HeaderValue, header};
+use rand::{RngExt, rng};
 use salvo::{
     Depot, Request, Response, async_trait,
     csrf::{
@@ -18,18 +12,27 @@ use salvo::{
         FormFinder, HeaderFinder, bcrypt_cookie_csrf,
     },
 };
+use serde_json::{from_str, to_string};
+use url::Url;
+use urlencoding::encode;
 use uuid::Uuid;
+use woothee::parser::Parser;
 
 use crate::{
     application::{
         auth::login::SessionContext,
-        error::{AppError, codes::common::CommonErrorCode},
+        error::{
+            AppError,
+            codes::{authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode},
+        },
         setting::{AppSettings, SettingsSource},
     },
     boot::AppState,
     controllers::response::redirect_to_response,
-    domain::auth::SESSION_EXPIRY,
-    domain::auth::model::{ActiveSession, SessionOid},
+    domain::auth::{
+        SESSION_EXPIRY,
+        model::{ActiveSession, SessionOid},
+    },
 };
 
 pub const CSRF_HEADER_NAME: &str = "x-csrf-token";
@@ -84,13 +87,13 @@ pub fn protected_session_ids(headers: &HeaderMap) -> Vec<String> {
     headers
         .get(SESSION_HEADER_NAME)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+        .and_then(|value| from_str::<Vec<String>>(value).ok())
         .unwrap_or_default()
 }
 
 pub fn op_protected_session_ids(headers: &HeaderMap) -> Vec<String> {
     parse_cookie(headers, OP_SESSION_COOKIE_NAME)
-        .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
+        .and_then(|raw| from_str::<Vec<String>>(&raw).ok())
         .unwrap_or_default()
 }
 
@@ -174,7 +177,7 @@ pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<Se
 /// Build the `Set-Cookie` header value for the sessions cookie.
 ///
 pub fn build_session_cookie_from_protected_ids(protected_ids: &[String]) -> String {
-    let json = serde_json::to_string(protected_ids).unwrap_or_else(|_| "[]".to_owned());
+    let json = to_string(protected_ids).unwrap_or_else(|_| "[]".to_owned());
     let max_age = SESSION_EXPIRY.as_secs();
     format!(
         "{OP_SESSION_COOKIE_NAME}={json}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age={max_age}"
@@ -358,7 +361,7 @@ pub fn protocol_continue_uri(ctx: &AppState, login_id: &str) -> Result<String, A
     let base = issuer.as_str().trim_end_matches('/');
     Ok(format!(
         "{base}/oauth2/continue?login_id={}",
-        urlencoding::encode(login_id)
+        encode(login_id)
     ))
 }
 
@@ -433,9 +436,14 @@ pub fn csrf_token(depot: &Depot) -> String {
     )
 }
 
+pub fn inline_script_csp_header_value(nonce: &str) -> HeaderValue {
+    HeaderValue::from_str(&format!("default-src 'self'; script-src 'nonce-{nonce}'"))
+        .unwrap_or_else(|_| HeaderValue::from_static("default-src 'self'"))
+}
+
 pub fn generate_csp_nonce() -> String {
     let mut bytes = [0u8; 16];
-    rand::rng().fill(&mut bytes);
+    rng().fill(&mut bytes);
     Engine::encode(&URL_SAFE_NO_PAD, bytes)
 }
 
@@ -531,10 +539,7 @@ pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppE
 
 #[cfg(feature = "oidc-conformance")]
 fn conformance_interaction_url(route: &str, login_id: &str) -> String {
-    format!(
-        "/conformance/{route}?login_id={}",
-        urlencoding::encode(login_id)
-    )
+    format!("/conformance/{route}?login_id={}", encode(login_id))
 }
 
 fn interaction_redirect(
@@ -571,28 +576,29 @@ fn interaction_redirect(
 
 #[cfg(test)]
 mod tests {
-    use super::op_protected_session_ids;
-    use super::protected_session_ids;
+    use http::{HeaderMap, HeaderValue, header::COOKIE};
+    use uuid::Uuid;
+
+    use super::{
+        SESSION_HEADER_NAME, build_session_cookie_from_protected_ids, op_protected_session_ids,
+        protected_session_ids,
+    };
+
     #[cfg(feature = "oidc-conformance")]
     use super::{conformance_interaction_url, consent_redirect, login_redirect};
     #[cfg(feature = "oidc-conformance")]
     use http::header::LOCATION;
-
-    use super::SESSION_HEADER_NAME;
-    use super::build_session_cookie_from_protected_ids;
-    use http::header::COOKIE;
     #[cfg(feature = "oidc-conformance")]
     use identity_infrastructure::config::AppEnvironment;
-
-    use http::{HeaderMap, HeaderValue};
-    use uuid::Uuid;
+    #[cfg(feature = "oidc-conformance")]
+    use identity_infrastructure::test_app_state_with_environment;
+    #[cfg(feature = "oidc-conformance")]
+    use identity_infrastructure::test_app_state_with_mock_settings;
 
     #[cfg(feature = "oidc-conformance")]
     #[tokio::test]
     async fn conformance_redirects_do_not_require_a_login_application() {
-        let ctx =
-            identity_infrastructure::test_app_state_with_environment(AppEnvironment::Conformance)
-                .await;
+        let ctx = test_app_state_with_environment(AppEnvironment::Conformance).await;
         assert_eq!(
             login_redirect(&ctx, "a+b&c")
                 .unwrap()
@@ -609,7 +615,7 @@ mod tests {
                 .unwrap(),
             "/conformance/auto-consent?login_id=login-123"
         );
-        let ordinary = identity_infrastructure::test_app_state_with_mock_settings().await;
+        let ordinary = test_app_state_with_mock_settings().await;
         assert!(login_redirect(&ordinary, "login-123").is_err());
         assert!(consent_redirect(&ordinary, "login-123").is_err());
     }

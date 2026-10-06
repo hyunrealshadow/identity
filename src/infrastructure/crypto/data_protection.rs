@@ -1,9 +1,8 @@
+use super::xchacha20;
 use crate::{
     application::data_protection::{DATA_PROTECTION_KEY_SIZE, DataProtectionCipher},
     domain::data_protection::DataProtectionError,
 };
-
-use super::xchacha20;
 
 pub struct XChaCha20DataProtectionCipher;
 

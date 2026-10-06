@@ -1,8 +1,8 @@
+use chrono::Duration;
+use identity_domain::{auth::SessionOid, openid_connect::GrantType};
+
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use chrono::Duration;
-use identity_domain::auth::SessionOid;
-use identity_domain::openid_connect::GrantType;
 
 fn refresh_token_data(user_oid: Uuid) -> RefreshTokenData {
     RefreshTokenData {

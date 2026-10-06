@@ -3,10 +3,9 @@
 //! All external `id` fields are encrypted login.oid values.
 
 use chrono::{DateTime, Utc};
+use identity_application::user::CredentialType;
 use identity_domain::auth::LoginStatus;
 use serde::{Deserialize, Serialize};
-
-use identity_application::user::CredentialType;
 
 // ─── Common Error Response ───────────────────────────────────────────────────
 

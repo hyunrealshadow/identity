@@ -1,10 +1,10 @@
-use identity_application::openid_connect::device::DeviceVerificationStatus;
-use identity_domain::openid_connect::model::claim::StandardScopes;
-use identity_domain::openid_connect::scope_catalog::ScopeDescription;
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use identity_domain::openid_connect::ScopeSet;
+use identity_application::openid_connect::device::DeviceVerificationStatus;
+use identity_domain::openid_connect::{
+    ScopeSet, model::claim::StandardScopes, scope_catalog::ScopeDescription,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -152,8 +152,9 @@ pub fn build_scope_display(
 
 #[cfg(test)]
 mod tests {
-    use super::build_scope_display;
     use identity_domain::openid_connect::ScopeSet;
+
+    use super::build_scope_display;
 
     #[test]
     fn build_scope_display_marks_openid_as_essential() {

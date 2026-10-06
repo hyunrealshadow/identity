@@ -1,11 +1,12 @@
-use super::response::error_http_status;
-use http::StatusCode;
-use identity_application::error::AppError;
-use identity_application::error::ErrorDiagnostics;
-use salvo::{Depot, Request, Router, handler};
-use serde::{Deserialize, Serialize};
 use std::error::Error;
 
+use http::StatusCode;
+use identity_application::error::{AppError, ErrorDiagnostics};
+use salvo::{Depot, Request, Router, handler};
+use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
+
+use super::response::error_http_status;
 use crate::{
     application::install::InstallInput,
     web::controllers::response::{
@@ -66,7 +67,7 @@ fn log_install_failure(error: &AppError, request: &InstallRequest) {
 
     if should_log_install_failure_as_error(error) {
         let diagnostics = ErrorDiagnostics::from_error(error);
-        tracing::error!(
+        error!(
             error = %error,
             has_source = Error::source(error).is_some(),
             error_cause = %diagnostics.cause,
@@ -78,7 +79,7 @@ fn log_install_failure(error: &AppError, request: &InstallRequest) {
             "install submission failed"
         );
     } else {
-        tracing::warn!(
+        warn!(
             error = %error,
             code = error.code(),
             domain = %context.domain,

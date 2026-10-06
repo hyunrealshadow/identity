@@ -1,9 +1,11 @@
-use crate::m20260305_071904_create_user::User;
-use sea_orm_migration::prelude::{
-    DbErr, DeriveIden, DeriveMigrationName, Expr, MigrationTrait, SchemaManager, Table,
+use sea_orm_migration::{
+    async_trait,
+    prelude::{DbErr, DeriveIden, DeriveMigrationName, Expr, MigrationTrait, SchemaManager, Table},
+    schema::json_binary,
+    sea_orm,
 };
-use sea_orm_migration::schema::json_binary;
-use sea_orm_migration::{async_trait, sea_orm};
+
+use crate::m20260305_071904_create_user::User;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

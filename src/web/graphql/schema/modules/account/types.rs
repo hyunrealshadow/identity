@@ -1,8 +1,6 @@
 use async_graphql::{Error, ID, InputObject, MaybeUndefined, Object, Result};
-use chrono::DateTime;
-use chrono::Utc;
-use identity_domain::user::UserTheme;
-use identity_domain::user::{User, repository::UserProfilePatch};
+use chrono::{DateTime, Utc};
+use identity_domain::user::{User, UserTheme, repository::UserProfilePatch};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 

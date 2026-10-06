@@ -1,40 +1,38 @@
-#[cfg(not(feature = "oidc-conformance"))]
-use super::DynamicClientJwks;
-use super::validation::sector_redirect_uris_include_registered_redirects;
-use crate::openid_connect::registration::DynamicClientUpdateRequest;
-use crate::openid_connect::remote::conformance_mode_active;
-use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
-use crate::setting::DynamicRegistrationSettings;
-use crate::setting::OpenIdConnectSettings;
-use crate::setting::SettingsSnapshot;
-use crate::setting::SettingsSource;
-use identity_domain::openid_connect::GrantType;
-use identity_domain::openid_connect::OpenIdConnectCredentialData;
-use identity_domain::openid_connect::ResponseType;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
-use serde_json::Value;
-use std::sync::Arc;
-use std::sync::Mutex;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio::sync::mpsc::unbounded_channel;
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use identity_domain::{
     client::model::{Client, ClientOid, ClientProtocol},
     openid_connect::{
-        OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+        GrantType, OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
         OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
+        OpenIdConnectCredentialData, ResponseType, TokenEndpointAuthMethod,
     },
 };
+use serde_json::{Value, from_value, json, to_value};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use url::Url;
 use uuid::Uuid;
 
+use super::validation::sector_redirect_uris_include_registered_redirects;
 use crate::{
-    openid_connect::registration::{
-        DynamicClientRegistrationRequest, DynamicClientRegistrationService,
+    openid_connect::{
+        registration::{
+            DynamicClientRegistrationRequest, DynamicClientRegistrationService,
+            DynamicClientUpdateRequest,
+        },
+        remote::conformance_mode_active,
+        tests::fixtures::{
+            mocks::MockOpenIdConnectClientRegistrationRepository, scope_catalog::TestScopeCatalog,
+        },
     },
-    openid_connect::tests::fixtures::mocks::MockOpenIdConnectClientRegistrationRepository,
+    setting::{
+        DynamicRegistrationSettings, OpenIdConnectSettings, SettingsSnapshot, SettingsSource,
+    },
 };
+
+#[cfg(not(feature = "oidc-conformance"))]
+use super::DynamicClientJwks;
 
 struct TestRegistrationSetting(bool);
 
@@ -52,12 +50,15 @@ async fn registration_validates_catalog_and_preserves_custom_scope_assignments()
                 "orders.read".into(),
             ])));
     for scope in ["openid missing", "openid orders\tread"] {
-        let request = serde_json::from_value(serde_json::json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": scope})).unwrap();
+        let request = from_value(
+            json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": scope}),
+        )
+        .unwrap();
         let error = service.register(request, &issuer()).await.unwrap_err();
         assert_eq!(error.code(), 25009);
         assert!(captured.lock().unwrap().is_none());
     }
-    let request = serde_json::from_value(serde_json::json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": "openid orders.read orders.read"})).unwrap();
+    let request = from_value(json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": "openid orders.read orders.read"})).unwrap();
     let response = service.register(request, &issuer()).await.unwrap();
     assert_eq!(response.scope.as_deref(), Some("openid orders.read"));
     assert_eq!(
@@ -200,17 +201,16 @@ async fn dynamic_registration_does_not_expose_internal_oauth_version() {
         let service =
             DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
 
-        let mut registration_json = serde_json::json!({
+        let mut registration_json = json!({
             "redirect_uris": ["https://rp.example.com/callback"],
         });
         if request_includes_internal_field {
-            registration_json["oauth_version"] = serde_json::json!("2.1");
+            registration_json["oauth_version"] = json!("2.1");
         }
-        let request: DynamicClientRegistrationRequest =
-            serde_json::from_value(registration_json).unwrap();
+        let request: DynamicClientRegistrationRequest = from_value(registration_json).unwrap();
         let response = service.register(request, &issuer()).await.unwrap();
 
-        assert!(serde_json::to_value(&response).unwrap()["oauth_version"].is_null());
+        assert!(to_value(&response).unwrap()["oauth_version"].is_null());
         assert_eq!(
             captured
                 .lock()
@@ -796,7 +796,7 @@ async fn register_rejects_jwk_with_none_algorithm() {
     let repo = Arc::new(capturing_registration_repo(captured.clone(), deleted));
     let service =
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo);
-    let jwk = serde_json::from_value(serde_json::json!({
+    let jwk = from_value(json!({
         "kty": "RSA",
         "use": "sig",
         "alg": "none",
@@ -1071,7 +1071,7 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
         Arc::new(TestRegistrationSetting(true)),
         Arc::new(repo),
     );
-    let request = serde_json::from_value::<DynamicClientUpdateRequest>(serde_json::json!({
+    let request = from_value::<DynamicClientUpdateRequest>(json!({
         "client_id": client_oid.to_string(), "client_secret": "old-secret",
         "client_name": "Updated Client", "redirect_uris": ["https://rp.example.com/new"],
         "require_pushed_authorization_requests": true
@@ -1098,9 +1098,9 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
         "client_secret_expires_at",
         "client_id_issued_at",
     ] {
-        let mut body = serde_json::json!({"client_id": client_oid.to_string(), "redirect_uris": ["https://rp.example.com/new"]});
+        let mut body = json!({"client_id": client_oid.to_string(), "redirect_uris": ["https://rp.example.com/new"]});
         body[field] = Value::Null;
-        let request = serde_json::from_value(body).unwrap();
+        let request = from_value(body).unwrap();
         assert_eq!(
             service
                 .update(
@@ -1115,9 +1115,7 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
             25009
         );
     }
-    let request =
-        serde_json::from_value(serde_json::json!({"client_id": Uuid::new_v4().to_string()}))
-            .unwrap();
+    let request = from_value(json!({"client_id": Uuid::new_v4().to_string()})).unwrap();
     assert_eq!(
         service
             .update(

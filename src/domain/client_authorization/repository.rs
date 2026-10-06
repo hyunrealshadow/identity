@@ -1,20 +1,17 @@
-use super::model::PushedAuthorizationRequestData;
+use std::{error::Error, io::Error as IoError};
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use std::error::Error;
-use std::io::Error as IoError;
 use uuid::Uuid;
 
-use super::device::{
-    DeviceAuthorizationApproval, DeviceAuthorizationRequestData, DevicePollOutcome,
+use super::{
+    device::{DeviceAuthorizationApproval, DeviceAuthorizationRequestData, DevicePollOutcome},
+    model::{
+        ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
+        PushedAuthorizationRequestData, SelectionSource,
+    },
 };
-use super::model::{
-    ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, ConsentState,
-    SelectionSource,
-};
-use crate::auth::model::SessionOid;
-use crate::client::model::ClientOid;
-use crate::openid_connect::ScopeSet;
+use crate::{auth::model::SessionOid, client::model::ClientOid, openid_connect::ScopeSet};
 
 #[async_trait]
 pub trait ClientAuthorizationRepository: Send + Sync {

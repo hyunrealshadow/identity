@@ -1,7 +1,9 @@
 //! Current SeaORM persistence entity.
 
-use super::client_scope::Entity as ClientScopeEntity;
-use super::user_client_consent::Entity as UserClientConsentEntity;
+use super::{
+    client_scope::Entity as ClientScopeEntity,
+    user_client_consent::Entity as UserClientConsentEntity,
+};
 
 use sea_orm::entity::prelude::*;
 

@@ -1,19 +1,22 @@
-use crate::domain::openid_connect::OpenIdConnectClientMetadata;
 use chrono::Utc;
 use josekit::jwt;
 use uuid::Uuid;
 
 use super::{TokenRevocationParams, TokenService, resolve_client_id};
-use crate::application::error::{AppError, codes::token::TokenErrorCode};
-use crate::domain::client_authorization::{
-    ClientAuthenticationMode, ClientAuthorizationData, ClientAuthorizationType,
+use crate::{
+    application::error::{AppError, codes::token::TokenErrorCode},
+    domain::{
+        client_authorization::{
+            ClientAuthenticationMode, ClientAuthorizationData, ClientAuthorizationType,
+        },
+        key::{JwaSigningAlgorithm, JwkAlgorithm, KeyData},
+        openid_connect::{
+            OpenIdConnectClientMetadata, TokenEndpointAuthMethod,
+            model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
+        },
+    },
+    openid_connect::jose::asymmetric_verifier_from_pem,
 };
-use crate::domain::key::{JwaSigningAlgorithm, JwkAlgorithm, KeyData};
-use crate::domain::openid_connect::{
-    TokenEndpointAuthMethod,
-    model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
-};
-use crate::openid_connect::jose::asymmetric_verifier_from_pem;
 
 impl TokenService {
     /// RFC 7009: an unknown token is a successful no-op after client authentication.

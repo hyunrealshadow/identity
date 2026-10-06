@@ -29,6 +29,7 @@ impl SettingSection for InstallationSettings {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
+    use serde_json::json;
 
     use super::InstallationSettings;
     use crate::setting::{SettingChanges, SettingsSnapshot};
@@ -50,13 +51,10 @@ mod tests {
                 .into_iter()
                 .collect::<Vec<_>>(),
             vec![
-                (
-                    "app.installation.initialized".to_owned(),
-                    serde_json::json!(true)
-                ),
+                ("app.installation.initialized".to_owned(), json!(true)),
                 (
                     "app.installation.initialized_at".to_owned(),
-                    serde_json::json!(installation.initialized_at)
+                    json!(installation.initialized_at)
                 ),
             ]
         );

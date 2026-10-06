@@ -1,23 +1,20 @@
-use identity_application::observability::BusinessEvent;
-use identity_application::observability::EventSeverity;
-use identity_application::observability::EventValue;
-use identity_application::observability::event_sink;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use http::StatusCode;
+use identity_application::observability::{BusinessEvent, EventSeverity, EventValue, event_sink};
 use salvo::{Depot, Response, Router, handler};
 use sea_orm::{ConnectionTrait, sea_query::Query};
 use serde::Serialize;
-
-/// Whether the last probe result matched the current one. Only transitions are
-/// recorded as key events; successful probes stay out of traces and INFO logs.
-static DATABASE_HEALTHY: AtomicBool = AtomicBool::new(true);
 
 use crate::{
     boot::AppState,
     infrastructure::config::{HealthConfig, ServerConfig},
     web::controllers::response::{app_state, render_app_error_json, render_json},
 };
+
+/// Whether the last probe result matched the current one. Only transitions are
+/// recorded as key events; successful probes stay out of traces and INFO logs.
+static DATABASE_HEALTHY: AtomicBool = AtomicBool::new(true);
 
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
@@ -122,10 +119,11 @@ pub fn shares_listener(health: &HealthConfig, server: &ServerConfig) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{bind_address, shares_listener};
     use identity_infrastructure::config::{
         HealthChecksConfig, HealthConfig, HealthServerConfig, ServerConfig, TlsConfig,
     };
+
+    use super::{bind_address, shares_listener};
 
     fn server() -> ServerConfig {
         ServerConfig {

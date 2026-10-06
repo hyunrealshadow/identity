@@ -1,49 +1,45 @@
-use super::mfa::recovery_code_hash;
-use super::password::run_password_hashing;
-use super::session::revoke_other_sessions_with;
-use crate::error::code::AppErrorCode as _;
-use crate::error::codes::common::CommonErrorCode;
-use crate::observability::BusinessEvent;
-use crate::observability::EventSink;
-use crate::observability::EventValue;
-use crate::observability::NoopEventSink;
-use crate::observability::error_outcome;
-use crate::user::UserOid;
-use chrono::DateTime;
-use chrono::Duration;
-use identity_domain::auth::RECENT_AUTHENTICATION_TTL;
-use identity_domain::auth::SessionOid;
 use std::sync::Arc;
-use subtle::ConstantTimeEq;
 
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
+use identity_domain::{
+    auth::{
+        ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, AMR_RECOVERY_CODE,
+        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LoginFailureReason, LoginStatus,
+        MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, RECENT_AUTHENTICATION_TTL, SESSION_EXPIRY,
+        SessionOid,
+        model::{Login, Session},
+        repository::{CreateSessionInput, LoginRepository, SessionRepository},
+    },
+    client_authorization::DeviceAuthorizationRepository,
+    user::repository::UserRepository,
+};
+use subtle::ConstantTimeEq;
+use tracing::error;
 use uuid::Uuid;
 
+use super::{
+    mfa::recovery_code_hash, password::run_password_hashing, session::revoke_other_sessions_with,
+};
 use crate::{
     auth::{
         password::{HashOptions, PasswordHasher, VerifyResult},
         totp::TotpVerifier,
     },
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{
+        AppError,
+        code::AppErrorCode as _,
+        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+    },
+    observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     setting::{PasswordHashSetting, SettingsSource},
     user::{
+        UserOid,
         model::{
             CredentialData, CredentialType, OtpCredentialData, Password,
             RecoveryCodeCredentialData, User,
         },
         repository::UserCredentialRepository,
     },
-};
-use identity_domain::{
-    auth::{
-        ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, AMR_RECOVERY_CODE,
-        ELEVATED_AUTHENTICATION_TTL, LOCK_DURATION, LoginFailureReason, LoginStatus,
-        MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SESSION_EXPIRY,
-        model::{Login, Session},
-        repository::{CreateSessionInput, LoginRepository, SessionRepository},
-    },
-    client_authorization::DeviceAuthorizationRepository,
-    user::repository::UserRepository,
 };
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
@@ -541,7 +537,7 @@ impl LoginService {
                 .update_status(login.oid, LoginStatus::EXPIRED, None, None)
                 .await
             {
-                tracing::error!(error = %e, "failed to update login status on expiry");
+                error!(error = %e, "failed to update login status on expiry");
             }
             return Err(AppError::from_code(AuthErrorCode::LoginExpired));
         }
@@ -664,14 +660,14 @@ impl LoginService {
                                 .update_password_by_oid(password_cred.oid, &new_password)
                                 .await
                             {
-                                tracing::error!(
+                                error!(
                                     error = %error,
                                     "failed to persist rehashed password"
                                 );
                             }
                         }
                         Err(error) => {
-                            tracing::error!(error = %error, "failed to rehash password");
+                            error!(error = %error, "failed to rehash password");
                         }
                     }
                 }
@@ -706,7 +702,7 @@ impl LoginService {
                         )
                         .await
                     {
-                        tracing::error!(error = %e, "failed to update login status to authenticated");
+                        error!(error = %e, "failed to update login status to authenticated");
                     }
 
                     Ok(ChallengeOutcome::Authenticated {
@@ -720,10 +716,10 @@ impl LoginService {
                         .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
                         .await
                     {
-                        tracing::error!(error = %e, "failed to update login status to mfa_required");
+                        error!(error = %e, "failed to update login status to mfa_required");
                     }
                     if let Err(e) = self.login_repo.reset_failed_attempts(login.oid).await {
-                        tracing::error!(error = %e, "failed to reset login failed attempts for MFA");
+                        error!(error = %e, "failed to reset login failed attempts for MFA");
                     }
 
                     Ok(ChallengeOutcome::MfaRequired { login })
@@ -848,7 +844,7 @@ impl LoginService {
             )
             .await
         {
-            tracing::error!(error = %e, "failed to update login status to authenticated");
+            error!(error = %e, "failed to update login status to authenticated");
         }
 
         Ok(ChallengeOutcome::Authenticated {
@@ -946,7 +942,7 @@ impl LoginService {
             )
             .await
         {
-            tracing::error!(%error, "failed to authenticate recovery-code login");
+            error!(%error, "failed to authenticate recovery-code login");
         }
         Ok(ChallengeOutcome::Authenticated {
             login,
@@ -960,7 +956,7 @@ impl LoginService {
             .update_status(login_oid, LoginStatus::FAILED, None, None)
             .await
         {
-            tracing::error!(error = %e, "failed to update login status after too many OTP attempts");
+            error!(error = %e, "failed to update login status after too many OTP attempts");
         }
     }
 
@@ -1095,52 +1091,18 @@ fn failed_attempt_lock_until() -> DateTime<Utc> {
 
 #[cfg(test)]
 mod tests {
-    use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
-
-    use crate::user::OtpAlgorithm;
-
-    use super::ChallengeOutcome;
-    use crate::auth::password::PasswordHashError;
-    use crate::auth::password::PasswordHasher;
-    use crate::auth::totp::TotpError;
-    use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
-    use crate::user::RecoveryCodeCredentialData;
-    use crate::user::UserOid as UserUserOid;
-    use crate::user::repository::UserIdentifierUpdate;
-    use crate::user::repository::UserProfilePatch;
-    use chrono::DateTime;
-    use chrono::Duration;
-    use identity_domain::auth::SessionStatus;
-    use identity_domain::auth::model::ActiveSession;
-    use identity_domain::auth::repository::SessionPage;
-    use identity_domain::auth::repository::SessionPageDirection;
-    use identity_domain::auth::repository::SessionSortKey;
-    use tokio::sync::mpsc::unbounded_channel;
-
-    use crate::setting::{PasswordHashSetting, SettingsSnapshot};
-    use crate::{
-        auth::{
-            password::{HashOptions, VerifyResult},
-            totp::TotpVerifier,
-        },
-        user::{
-            CredentialData, CredentialType, OtpCredentialData, UserCredential, UserCredentialOid,
-            model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
-            repository::{UserCredentialRepository, UserCredentialRepositoryError},
-        },
-    };
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
-    use chrono::Utc;
+    use chrono::{DateTime, Duration, Utc};
     use identity_domain::{
         auth::{
             ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus,
-            MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
-            model::{Login, Session, SessionOid},
+            MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SessionStatus,
+            model::{ActiveSession, Login, Session, SessionOid},
             repository::{
-                CreateSessionInput, LoginRepository, LoginRepositoryError, SessionRepository,
-                SessionRepositoryError,
+                CreateSessionInput, LoginRepository, LoginRepositoryError, SessionPage,
+                SessionPageDirection, SessionRepository, SessionRepositoryError, SessionSortKey,
             },
         },
         user::{
@@ -1148,10 +1110,30 @@ mod tests {
             repository::{UserRepository, UserRepositoryError},
         },
     };
+    use tokio::sync::mpsc::unbounded_channel;
     use uuid::Uuid;
 
-    use super::{LoginService, SessionContext};
-    use crate::application::error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode};
+    use super::{ChallengeOutcome, LoginService, SessionContext};
+    use crate::{
+        application::error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
+        auth::{
+            password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
+            totp::{TotpError, TotpVerifier},
+        },
+        openid_connect::tests::fixtures::mocks::{
+            MockDeviceAuthorizationRepository, session::MockSessionRepository,
+        },
+        setting::{PasswordHashSetting, SettingsSnapshot},
+        user::{
+            CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData,
+            RecoveryCodeCredentialData, UserCredential, UserCredentialOid, UserOid as UserUserOid,
+            model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
+            repository::{
+                UserCredentialRepository, UserCredentialRepositoryError, UserIdentifierUpdate,
+                UserProfilePatch,
+            },
+        },
+    };
 
     fn fixed_hash_options(options: HashOptions) -> Arc<SettingsSnapshot> {
         Arc::new(SettingsSnapshot::default().with::<PasswordHashSetting>(options))

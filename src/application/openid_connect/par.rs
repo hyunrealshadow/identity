@@ -1,23 +1,28 @@
-use crate::error::{
-    AppError,
-    codes::{common::CommonErrorCode, token::TokenErrorCode},
-};
-use crate::openid_connect::token::resolve_client_id;
-use crate::openid_connect::{
-    authorize::{AuthorizationRequestParams, AuthorizeService},
-    client_authentication::ClientAuthenticator,
-    provider::OpenIdProviderService,
-};
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client_authorization::{
-    ClientAuthorizationData, ClientAuthorizationRepository, PushedAuthorizationRequestData,
-};
-use identity_domain::openid_connect::{ClientAssertionType, par::PAR_REQUEST_URI_PREFIX};
-use rand::RngExt;
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
+
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{Duration, Utc};
+use identity_domain::{
+    client_authorization::{
+        ClientAuthorizationData, ClientAuthorizationRepository, PushedAuthorizationRequestData,
+    },
+    openid_connect::{ClientAssertionType, par::PAR_REQUEST_URI_PREFIX},
+};
+use rand::{RngExt, rng};
+use sha2::{Digest, Sha256};
+
+use crate::{
+    error::{
+        AppError,
+        codes::{common::CommonErrorCode, token::TokenErrorCode},
+    },
+    openid_connect::{
+        authorize::{AuthorizationRequestParams, AuthorizeService},
+        client_authentication::ClientAuthenticator,
+        provider::OpenIdProviderService,
+        token::resolve_client_id,
+    },
+};
 
 pub fn request_uri_digest(uri: &str) -> String {
     Sha256::digest(uri.as_bytes())
@@ -110,7 +115,7 @@ impl PushedAuthorizationService {
             .provider
             .pushed_authorization_settings()
             .request_ttl_seconds;
-        let random: [u8; 32] = rand::rng().random();
+        let random: [u8; 32] = rng().random();
         let request_uri = format!("{PAR_REQUEST_URI_PREFIX}{}", URL_SAFE_NO_PAD.encode(random));
         self.repository
             .create(

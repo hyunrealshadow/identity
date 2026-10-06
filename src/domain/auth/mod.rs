@@ -1,9 +1,8 @@
+use std::{fmt, str::FromStr, time::Duration};
+
 pub mod model;
 pub use model::SessionOid;
 pub mod repository;
-
-use std::time::Duration;
-use std::{fmt, str::FromStr};
 
 // ─── Login Status ────────────────────────────────────────────────────────────
 

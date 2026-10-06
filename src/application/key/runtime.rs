@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use identity_domain::key::JwaSigningAlgorithm;
 
 use crate::{application::error::AppError, domain::data_protection::KeyRing};
-use identity_domain::key::JwaSigningAlgorithm;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeSigningKey {

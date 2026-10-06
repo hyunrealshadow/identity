@@ -1,6 +1,7 @@
+use identity_domain::openid_connect::API_RESOURCE;
+
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
-use identity_domain::openid_connect::API_RESOURCE;
 
 #[tokio::test]
 async fn signed_request_object_preserves_resource_through_parsing_and_merge() {

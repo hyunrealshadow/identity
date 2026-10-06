@@ -1,16 +1,16 @@
-use crate::domain::auth::acr_satisfies;
-use crate::domain::auth::authentication_is_fresh;
+use std::collections::HashSet;
+
+use chrono::Utc;
+use uuid::Uuid;
+
 use crate::domain::{
     auth::{
-        LoginStatus,
+        LoginStatus, acr_satisfies, authentication_is_fresh,
         model::{ActiveSession, Login, SessionOid},
     },
     client_authorization::{ConsentState, SelectionSource, StoredAuthorizationRequest},
     openid_connect::{AuthorizationRequestData, OAuthErrorCode, PromptValue},
 };
-use chrono::Utc;
-use std::collections::HashSet;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContinueAction {

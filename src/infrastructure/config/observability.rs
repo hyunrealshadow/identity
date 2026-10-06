@@ -1,5 +1,4 @@
-use std::env;
-use std::{fmt, fs};
+use std::{env, fmt, fs};
 
 use ipnet::IpNet;
 use serde::Deserialize;

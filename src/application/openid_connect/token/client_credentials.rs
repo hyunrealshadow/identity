@@ -1,12 +1,15 @@
-use super::exchange::issuance_result;
-use super::signing::SignAccessTokenInput;
+use chrono::{Duration, Utc};
+use identity_domain::{
+    client_authorization::ClientAuthenticationMode, openid_connect::API_RESOURCE,
+};
+
+use super::{exchange::issuance_result, signing::SignAccessTokenInput};
+use crate::{
+    domain::openid_connect::TokenEndpointAuthMethod,
+    observability::{BusinessEvent, EventValue},
+};
+
 use super::*;
-use crate::domain::openid_connect::TokenEndpointAuthMethod;
-use crate::observability::{BusinessEvent, EventValue};
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::client_authorization::ClientAuthenticationMode;
-use identity_domain::openid_connect::API_RESOURCE;
 
 impl TokenService {
     #[tracing::instrument(skip_all, name = "token.client_credentials")]

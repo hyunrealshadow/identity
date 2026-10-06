@@ -1,36 +1,38 @@
-use super::fixtures::*;
-use super::*;
-use crate::openid_connect::authorize::signing::SignImplicitIdTokenInput;
-use crate::openid_connect::authorize::tests::fixtures::repositories::{
-    ClientAuthorizationState, completed_at_for_test, insert_legacy_authorization_request_for_test,
-    mock_client_auth_repo_with_state, set_stored_request_redirect_uri_for_test,
-};
-use crate::openid_connect::remote::test_http_client;
-use crate::openid_connect::tests::fixtures::client::test_client;
-use crate::openid_connect::tests::fixtures::client::test_metadata;
-use crate::openid_connect::tests::fixtures::client::test_platforms;
-use crate::openid_connect::tests::fixtures::client::test_scopes;
-use crate::openid_connect::tests::fixtures::mocks::{
-    MockKeyJwkRepository, MockKeyRepository, user_repo_with,
-};
+use std::{collections::HashMap, str};
+
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Duration;
-use identity_domain::auth::ACR_AAL1;
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::auth::LoginStatus;
-use identity_domain::auth::model::Login;
-use identity_domain::client_authorization::{ConsentState, SelectionSource};
-use identity_domain::key::material::AsymmetricKeyData;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::ClaimsRequest;
-use identity_domain::openid_connect::PromptValue;
-use identity_domain::openid_connect::ScopeSet;
-use identity_domain::openid_connect::SubjectType;
-use identity_domain::openid_connect::model::claim::JwtClaimNames;
+use identity_domain::{
+    auth::{ACR_AAL1, ACR_AAL2, LoginStatus, model::Login},
+    client_authorization::{ConsentState, SelectionSource},
+    key::material::AsymmetricKeyData,
+    openid_connect::{
+        API_RESOURCE, ClaimsRequest, PromptValue, ScopeSet, SubjectType,
+        model::claim::JwtClaimNames,
+    },
+};
+use serde_json::{from_value, json};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-use std::str;
 use url::form_urlencoded::parse;
+
+use crate::openid_connect::{
+    authorize::{
+        signing::SignImplicitIdTokenInput,
+        tests::fixtures::repositories::{
+            ClientAuthorizationState, completed_at_for_test,
+            insert_legacy_authorization_request_for_test, mock_client_auth_repo_with_state,
+            set_stored_request_redirect_uri_for_test,
+        },
+    },
+    remote::test_http_client,
+    tests::fixtures::{
+        client::{test_client, test_metadata, test_platforms, test_scopes},
+        mocks::{MockKeyJwkRepository, MockKeyRepository, user_repo_with},
+    },
+};
+
+use super::fixtures::*;
+use super::*;
 
 type AuthorizeServiceWithRequestRepo = (AuthorizeService, Arc<ClientAuthorizationState>);
 
@@ -974,7 +976,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
     );
     assert_eq!(
         payload.claim(JwtClaimNames::C_HASH).unwrap(),
-        &serde_json::json!(expected_hash_for_rs256(code))
+        &json!(expected_hash_for_rs256(code))
     );
 }
 
@@ -1091,11 +1093,11 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
     );
     assert_eq!(
         payload.claim(JwtClaimNames::C_HASH).unwrap(),
-        &serde_json::json!(expected_hash_for_rs256(code))
+        &json!(expected_hash_for_rs256(code))
     );
     assert_eq!(
         payload.claim(JwtClaimNames::AT_HASH).unwrap(),
-        &serde_json::json!(expected_hash_for_rs256(access_token))
+        &json!(expected_hash_for_rs256(access_token))
     );
 }
 
@@ -1299,12 +1301,9 @@ fn sign_implicit_id_token_includes_scope_claims() {
     );
     assert_eq!(
         payload.claim(JwtClaimNames::AZP).unwrap(),
-        &serde_json::json!("client-1")
+        &json!("client-1")
     );
-    assert_eq!(
-        payload.claim(JwtClaimNames::AMR).unwrap(),
-        &serde_json::json!(["pwd"])
-    );
+    assert_eq!(payload.claim(JwtClaimNames::AMR).unwrap(), &json!(["pwd"]));
 }
 
 #[test]
@@ -1319,7 +1318,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     let user = id_token_user(user_oid);
     let issuer = Url::parse("https://identity.example.com").unwrap();
     let scope = ScopeSet::parse("openid").unwrap();
-    let claims_request: ClaimsRequest = serde_json::from_value(serde_json::json!({
+    let claims_request: ClaimsRequest = from_value(json!({
         "id_token": {
             "name": {"essential": true}
         }
@@ -1355,7 +1354,7 @@ fn sign_implicit_id_token_includes_id_token_essential_claims() {
     );
     assert_eq!(
         payload.claim(JwtClaimNames::SID).unwrap(),
-        &serde_json::json!("protected-session")
+        &json!("protected-session")
     );
     assert_eq!(payload.claim("email"), None);
 }

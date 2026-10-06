@@ -5,26 +5,24 @@
 //! rules. Patches and identifiers are domain types; the repository port keeps
 //! persistence details out of this layer.
 
-use crate::observability::BusinessEvent;
-use crate::observability::EventValue;
-
-use crate::observability::EventSink;
-use crate::observability::NoopEventSink;
-use identity_domain::user::normalization::normalize_email;
-use identity_domain::user::normalization::validate_username as normalization_validate_username;
-use uuid::Uuid;
-
 use std::sync::Arc;
 
 use identity_domain::user::{
     User, UserOid,
-    normalization::{EmailNormalizationError, UsernameValidationError},
+    normalization::{
+        EmailNormalizationError, UsernameValidationError, normalize_email,
+        validate_username as normalization_validate_username,
+    },
     repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
+use uuid::Uuid;
 
-use crate::error::{
-    AppError,
-    codes::{account::AccountErrorCode, common::CommonErrorCode},
+use crate::{
+    error::{
+        AppError,
+        codes::{account::AccountErrorCode, common::CommonErrorCode},
+    },
+    observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
 };
 
 pub struct AccountService {

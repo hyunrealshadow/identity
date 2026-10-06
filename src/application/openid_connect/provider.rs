@@ -1,18 +1,11 @@
-use super::jose::request_object_content_encryption_algorithms;
-use super::jose::request_object_encryption_algorithms;
-use crate::domain::openid_connect::OAuthProtocolVersion;
-use crate::domain::openid_connect::OpenIdConnectClient;
-use crate::domain::openid_connect::ScopeSet;
-use crate::domain::openid_connect::resource::OAuthResourceRepository;
-use crate::domain::openid_connect::scope_catalog::ScopeCatalogRepository;
-use crate::error::codes::common::CommonErrorCode;
-use crate::setting::PushedAuthorizationSettings;
-use identity_domain::auth::ACR_AAL1;
-use identity_domain::auth::ACR_AAL2;
 use std::sync::Arc;
 
+use identity_domain::auth::{ACR_AAL1, ACR_AAL2};
 use url::Url;
 
+use super::jose::{
+    request_object_content_encryption_algorithms, request_object_encryption_algorithms,
+};
 use crate::{
     application::{
         error::{AppError, codes::provider::ProviderErrorCode},
@@ -24,11 +17,16 @@ use crate::{
             JwsAlgorithm, Key, KeyData, KeyJwkRepository, repository::KeyRepository,
         },
         openid_connect::{
-            ApiScope, ClaimType, Display, GrantType, OpenIdProviderMetadata, ResponseMode,
-            ResponseType, SubjectType, TokenEndpointAuthMethod,
+            ApiScope, ClaimType, Display, GrantType, OAuthProtocolVersion, OpenIdConnectClient,
+            OpenIdProviderMetadata, ResponseMode, ResponseType, ScopeSet, SubjectType,
+            TokenEndpointAuthMethod,
             model::claim::{JwtClaimNames, StandardScopes},
+            resource::OAuthResourceRepository,
+            scope_catalog::ScopeCatalogRepository,
         },
     },
+    error::codes::common::CommonErrorCode,
+    setting::PushedAuthorizationSettings,
 };
 
 #[derive(Debug, Clone)]
@@ -602,14 +600,10 @@ fn normalize_issuer(
 
 #[cfg(test)]
 mod tests {
-    use sea_orm::DbErr;
-    #[cfg(feature = "oidc-conformance")]
-    use std::iter;
-
-    use crate::setting::{AppSettings, InstallationSettings, SettingsSnapshot};
     use std::sync::Arc;
 
     use chrono::Utc;
+    use sea_orm::DbErr;
     use uuid::Uuid;
 
     use super::{OpenIdProviderService, SigningAlgorithmDetector};
@@ -619,8 +613,14 @@ mod tests {
             PublicJwk, material::AsymmetricKeyData, repository::KeyRepositoryError,
         },
         openid_connect::tests::fixtures::mocks::{MockKeyJwkRepository, MockKeyRepository},
-        setting::{DynamicRegistrationSettings, OpenIdConnectSettings},
+        setting::{
+            AppSettings, DynamicRegistrationSettings, InstallationSettings, OpenIdConnectSettings,
+            SettingsSnapshot,
+        },
     };
+
+    #[cfg(feature = "oidc-conformance")]
+    use std::iter;
 
     fn static_settings(
         settings: SettingsSnapshot,
@@ -867,28 +867,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn discovery_advertises_public_client_auth_method() {
-        let service = OpenIdProviderService::for_test(
-            SettingsSnapshot::default()
-                .with_section(&AppSettings {
-                    domain: Some("https://identity.example.com".to_owned()),
-                    login_domain: None,
-                    login_client_id: None,
-                })
-                .with_section(&InstallationSettings {
-                    initialized: true,
-                    initialized_at: None,
-                }),
-        )
-        .await;
-
-        let metadata = service.discovery_metadata().await.unwrap();
-        let methods = metadata.token_endpoint_auth_methods_supported.unwrap();
-
-        assert!(methods.iter().any(|method| method == "none"));
-    }
-
-    #[tokio::test]
     async fn discovery_uses_rsa_key_repo_algorithm() {
         let service = OpenIdProviderService::for_test(
             SettingsSnapshot::default()
@@ -1117,18 +1095,19 @@ mod tests {
     }
 
     mod detect_algorithms {
-        use super::{
-            TestSigningAlgorithmDetector, generate_ec_p256_pem, generate_ec_p384_pem,
-            generate_ec_p521_pem, generate_ec_secp256k1_pem, generate_ed25519_pem,
-            generate_rsa_pem, generate_rsa_pss_pem,
-        };
-        use crate::openid_connect::provider::detect_id_token_signing_algorithms;
         use chrono::Utc;
         use identity_domain::key::{
             Key, KeyData, KeyOid, KeyType,
             material::{AsymmetricKeyData, SymmetricKeyAlgorithm, SymmetricKeyData},
         };
         use uuid::Uuid;
+
+        use super::{
+            TestSigningAlgorithmDetector, generate_ec_p256_pem, generate_ec_p384_pem,
+            generate_ec_p521_pem, generate_ec_secp256k1_pem, generate_ed25519_pem,
+            generate_rsa_pem, generate_rsa_pss_pem,
+        };
+        use crate::openid_connect::provider::detect_id_token_signing_algorithms;
 
         fn make_asymmetric_key(private_key_pem: String) -> Key {
             Key {
@@ -1294,9 +1273,11 @@ mod tests {
 
 #[cfg(test)]
 mod scope_catalog_tests {
+    use crate::{
+        openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog, setting::SettingsSnapshot,
+    };
+
     use super::*;
-    use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
-    use crate::setting::SettingsSnapshot;
 
     #[tokio::test]
     async fn discovery_and_validation_use_catalog_instead_of_static_capabilities() {

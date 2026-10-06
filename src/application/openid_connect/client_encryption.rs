@@ -63,15 +63,18 @@ fn supports_encryption(jwk: &PublicJwk, algorithm: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::openid_connect::tests::fixtures::mocks::MockOpenIdConnectCredentialRepository;
     use chrono::{Duration, Utc};
     use identity_domain::openid_connect::OpenIdConnectCredential;
+    use serde_json::{from_value, json};
     use uuid::Uuid;
+
+    use crate::openid_connect::tests::fixtures::mocks::MockOpenIdConnectCredentialRepository;
+
+    use super::*;
 
     #[tokio::test]
     async fn selects_matching_algorithm_from_a_client_jwks() {
-        let jwks = serde_json::from_value::<Vec<PublicJwk>>(serde_json::json!([
+        let jwks = from_value::<Vec<PublicJwk>>(json!([
             {"kty":"RSA","use":"enc","alg":"RSA-OAEP","kid":"rsa","n":"AQAB","e":"AQAB"},
             {"kty":"EC","use":"enc","alg":"ECDH-ES","kid":"ec","crv":"P-256","x":"AQAB","y":"AQAB"}
         ]))

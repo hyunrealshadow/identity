@@ -1,14 +1,17 @@
-use super::*;
+use identity_domain::{
+    key::PublicJwk,
+    openid_connect::{CodeChallengeMethod, OAuthProtocolVersion},
+};
+use josekit::JoseError;
+use serde_json::{Value, from_slice};
+use subtle::ConstantTimeEq;
+
 use crate::openid_connect::jose::{
     asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
     hmac_verifier_from_bytes,
 };
-use identity_domain::key::PublicJwk;
-use identity_domain::openid_connect::CodeChallengeMethod;
-use identity_domain::openid_connect::OAuthProtocolVersion;
-use josekit::JoseError;
-use serde_json::Value;
-use subtle::ConstantTimeEq;
+
+use super::*;
 
 pub(crate) fn decode_assertion_with_alg(
     alg: JwsAlgorithm,
@@ -53,7 +56,7 @@ pub(crate) fn client_id_from_assertion(assertion: &str) -> Result<String, AppErr
         .decode(payload_segment)
         .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
 
-    let payload: Value = serde_json::from_slice(&payload)
+    let payload: Value = from_slice(&payload)
         .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
 
     payload

@@ -1,17 +1,19 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use identity_domain::{
+    client::model::ClientOid,
+    key::PublicJwk,
+    openid_connect::{
+        OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
+        OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
+    },
+};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, from_value, json};
 use url::Url;
 
 use crate::database::entity::{client, client_openid_connect_credential};
-use identity_domain::client::model::ClientOid;
-use identity_domain::key::PublicJwk;
-use identity_domain::openid_connect::{
-    OpenIdConnectCredential, OpenIdConnectCredentialData, OpenIdConnectCredentialRepository,
-    OpenIdConnectCredentialRepositoryError, OpenIdConnectCredentialType,
-};
 
 #[derive(Debug, Deserialize)]
 struct RawClientSecretData {
@@ -46,7 +48,7 @@ pub(crate) fn serialize_data(credential: OpenIdConnectCredentialData) -> Seriali
         OpenIdConnectCredentialData::ClientSecret { secret } => SerializedCredentialData {
             type_: OpenIdConnectCredentialType::ClientSecret.to_string(),
             hint: masked_client_secret_hint(&secret),
-            data: serde_json::json!({ "secret": secret }),
+            data: json!({ "secret": secret }),
         },
         OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } => {
             let hint = jwk
@@ -58,7 +60,7 @@ pub(crate) fn serialize_data(credential: OpenIdConnectCredentialData) -> Seriali
             SerializedCredentialData {
                 type_: OpenIdConnectCredentialType::ClientPublicKey.to_string(),
                 hint,
-                data: serde_json::json!({
+                data: json!({
                     "public_key": public_key,
                     "jwk": jwk,
                 }),
@@ -73,7 +75,7 @@ pub(crate) fn serialize_data(credential: OpenIdConnectCredentialData) -> Seriali
         } => SerializedCredentialData {
             type_: OpenIdConnectCredentialType::ClientJsonWebKeySet.to_string(),
             hint: jwks_uri.to_string(),
-            data: serde_json::json!({
+            data: json!({
                 "jwks_uri": jwks_uri,
                 "last_updated": last_updated,
                 "expires_at": expires_at,
@@ -105,15 +107,13 @@ fn deserialize_data(
     raw: &Value,
 ) -> Result<OpenIdConnectCredentialData, OpenIdConnectCredentialRepositoryError> {
     match type_ {
-        OpenIdConnectCredentialType::ClientSecret => {
-            serde_json::from_value::<RawClientSecretData>(raw.clone())
-                .map(|data| OpenIdConnectCredentialData::ClientSecret {
-                    secret: data.secret,
-                })
-                .map_err(OpenIdConnectCredentialRepositoryError::DeserializeData)
-        }
+        OpenIdConnectCredentialType::ClientSecret => from_value::<RawClientSecretData>(raw.clone())
+            .map(|data| OpenIdConnectCredentialData::ClientSecret {
+                secret: data.secret,
+            })
+            .map_err(OpenIdConnectCredentialRepositoryError::DeserializeData),
         OpenIdConnectCredentialType::ClientPublicKey => {
-            serde_json::from_value::<RawClientPublicKeyData>(raw.clone())
+            from_value::<RawClientPublicKeyData>(raw.clone())
                 .map(|data| OpenIdConnectCredentialData::ClientPublicKey {
                     public_key: data.public_key,
                     jwk: data.jwk,
@@ -121,7 +121,7 @@ fn deserialize_data(
                 .map_err(OpenIdConnectCredentialRepositoryError::DeserializeData)
         }
         OpenIdConnectCredentialType::ClientJsonWebKeySet => {
-            serde_json::from_value::<RawClientJsonWebKeySetData>(raw.clone())
+            from_value::<RawClientJsonWebKeySetData>(raw.clone())
                 .map_err(OpenIdConnectCredentialRepositoryError::DeserializeData)
                 .and_then(|data| {
                     let jwks_uri = Url::parse(&data.jwks_uri)
@@ -219,18 +219,17 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
-    use chrono::Utc;
-    use identity_domain::openid_connect::OpenIdConnectCredentialData;
+    use chrono::{Duration, Utc};
+    use identity_domain::openid_connect::{
+        OpenIdConnectCredentialData, OpenIdConnectCredentialRepository as _,
+        OpenIdConnectCredentialType,
+    };
+    use sea_orm::{DatabaseBackend, MockDatabase};
+    use serde_json::json;
     use uuid::Uuid;
 
     use super::{OpenIdConnectCredentialRepositoryImpl, deserialize_data, serialize_data};
     use crate::database::entity::client_openid_connect_credential;
-    use identity_domain::openid_connect::{
-        OpenIdConnectCredentialRepository as _, OpenIdConnectCredentialType,
-    };
-    use sea_orm::{DatabaseBackend, MockDatabase};
-    use serde_json::json;
 
     #[test]
     fn deserializes_client_secret() {

@@ -1,11 +1,9 @@
 use std::sync::Arc;
 
-use super::services::AppServices;
-use super::settings::AppRuntimeSettings;
-
-use super::context::AppContext;
-use super::lifecycle::AppLifecycle;
-use super::resources::AppResources;
+use super::{
+    context::AppContext, lifecycle::AppLifecycle, resources::AppResources, services::AppServices,
+    settings::AppRuntimeSettings,
+};
 
 #[derive(Clone)]
 pub struct AppState {

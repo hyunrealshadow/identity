@@ -1,11 +1,13 @@
-use super::*;
+use identity_domain::{
+    auth::ACR_AAL2,
+    openid_connect::{GrantType, OAuthProtocolVersion, TokenEndpointAuthMethod},
+};
+
 use crate::openid_connect::tests::fixtures::client::{
     test_client, test_metadata, test_platforms, test_scopes,
 };
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::openid_connect::GrantType;
-use identity_domain::openid_connect::OAuthProtocolVersion;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
+
+use super::*;
 
 pub(in crate::openid_connect) struct MissingClientRepository;
 

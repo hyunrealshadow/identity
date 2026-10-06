@@ -1,18 +1,15 @@
-use http::StatusCode;
 use std::{net::IpAddr, sync::Arc};
-use tracing::field::Empty;
 
 use async_trait::async_trait;
-use http::{HeaderValue, header};
-use ipnet::IpNet;
-use salvo::{Depot, FlowCtrl, Handler, Request, Response, handler};
-
+use http::{HeaderValue, StatusCode, header};
 use identity_domain::openid_connect::{AuthenticatedWorkload, WorkloadAuthenticator};
 use identity_infrastructure::observability::context::{
     self as trace_context, ParentDecision, TraceTrustPolicy,
 };
+use ipnet::IpNet;
 use opentelemetry::trace::Status;
-use tracing::Instrument;
+use salvo::{Depot, FlowCtrl, Handler, Request, Response, handler};
+use tracing::{Instrument, field::Empty, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
@@ -114,7 +111,7 @@ impl Handler for TraceContextMiddleware {
         let method = req.method().as_str().to_owned();
         let path = req.uri().path().to_owned();
         let client_address = peer.map(|ip| ip.to_string()).unwrap_or_default();
-        let span = tracing::info_span!(
+        let span = info_span!(
             "http.server",
             otel.kind = "server",
             http.request.method = %method,
@@ -348,33 +345,32 @@ pub async fn security_headers_middleware(
 
 #[cfg(test)]
 mod tests {
-    use identity_infrastructure::config::TraceContextConfig;
-    use opentelemetry::trace::SpanId;
-    use opentelemetry::trace::TraceId;
-    use opentelemetry_sdk::error::OTelSdkResult;
-    use opentelemetry_sdk::trace::SdkTracerProvider;
-    use opentelemetry_sdk::trace::SpanData;
-    use opentelemetry_sdk::trace::SpanExporter;
-    use std::net::SocketAddr;
-    use std::sync::Mutex;
-    use tracing::subscriber::set_default;
-
-    use std::sync::Arc;
+    use std::{
+        net::SocketAddr,
+        sync::{Arc, Mutex},
+    };
 
     use async_trait::async_trait;
     use http::{StatusCode, header};
+    use identity_domain::openid_connect::{
+        AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
+    };
+    use identity_infrastructure::{
+        config::TraceContextConfig, observability::context::TraceTrustPolicy,
+    };
     use ipnet::IpNet;
+    use opentelemetry::trace::{SpanId, TraceId, TracerProvider};
+    use opentelemetry_sdk::{
+        error::OTelSdkResult,
+        trace::{SdkTracerProvider, SpanData, SpanExporter},
+    };
     use salvo::{
         Response, Router, Service, handler,
         test::{ResponseExt, TestClient},
     };
-
-    use identity_domain::openid_connect::{
-        AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
-    };
-    use identity_infrastructure::observability::context::TraceTrustPolicy;
-    use opentelemetry::trace::TracerProvider;
-    use tracing_subscriber::layer::SubscriberExt;
+    use tracing::subscriber::set_default;
+    use tracing_opentelemetry::layer;
+    use tracing_subscriber::{layer::SubscriberExt, registry};
 
     use super::{
         RequireUpstreamHttps, RequireWorkload, TraceContextMiddleware, resolve_client_ip,
@@ -619,8 +615,7 @@ mod tests {
         let provider = SdkTracerProvider::builder()
             .with_simple_exporter(exporter)
             .build();
-        let subscriber = tracing_subscriber::registry()
-            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("middleware-test")));
+        let subscriber = registry().with(layer().with_tracer(provider.tracer("middleware-test")));
         let _guard = set_default(subscriber);
 
         let service = Service::new(

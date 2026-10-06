@@ -1,18 +1,23 @@
-use crate::error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode};
-use crate::openid_connect::authorize::tests::fixtures::repositories::{
-    ClientAuthorizationState, mock_client_auth_repo_with_state,
-};
-use crate::openid_connect::authorize::tests::fixtures::*;
-use crate::openid_connect::authorize::tests::*;
-use crate::openid_connect::remote::test_http_client;
-use crate::openid_connect::tests::fixtures::client::{
-    test_client, test_metadata, test_platforms, test_scopes,
-};
-use crate::openid_connect::tests::fixtures::mocks::{
-    MockKeyJwkRepository, MockOpenIdConnectCredentialRepository,
-};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
+use serde_json::{json, to_vec};
+
+use crate::{
+    error::{code::AppErrorCode, codes::authorize::AuthorizeErrorCode},
+    openid_connect::{
+        authorize::tests::fixtures::repositories::{
+            ClientAuthorizationState, mock_client_auth_repo_with_state,
+        },
+        remote::test_http_client,
+        tests::fixtures::{
+            client::{test_client, test_metadata, test_platforms, test_scopes},
+            mocks::{MockKeyJwkRepository, MockOpenIdConnectCredentialRepository},
+        },
+    },
+};
+
+use crate::openid_connect::authorize::tests::fixtures::*;
+use crate::openid_connect::authorize::tests::*;
 
 #[tokio::test]
 async fn parse_request_object_payload_preserves_registered_claims() {
@@ -93,10 +98,10 @@ async fn parse_unsecured_request_object_is_accepted() {
 
     let mut payload = JwtPayload::new();
     payload
-        .set_claim("scope", Some(serde_json::json!("openid email")))
+        .set_claim("scope", Some(json!("openid email")))
         .unwrap();
     payload
-        .set_claim("state", Some(serde_json::json!("request-state")))
+        .set_claim("state", Some(json!("request-state")))
         .unwrap();
 
     let jwt = jwt::encode_unsecured(&payload, &header).unwrap();
@@ -119,9 +124,7 @@ async fn parse_unsecured_request_object_rejects_non_empty_signature() {
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
-    payload
-        .set_claim("scope", Some(serde_json::json!("openid")))
-        .unwrap();
+    payload.set_claim("scope", Some(json!("openid"))).unwrap();
     let mut token = jwt::encode_unsecured(&payload, &header).unwrap();
     token.push_str("forged-signature");
 
@@ -251,7 +254,7 @@ async fn parse_encrypted_request_object_enforces_registered_alg_and_enc() {
     )
     .unwrap();
     let protected = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&json!({
+        to_vec(&json!({
             "alg": "RSA-OAEP",
             "enc": "A128GCM"
         }))
@@ -354,7 +357,7 @@ async fn parse_rs256_request_object_extracts_payload() {
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
     payload
-        .set_claim("scope", Some(serde_json::json!("openid email")))
+        .set_claim("scope", Some(json!("openid email")))
         .unwrap();
     let signer = RS256.signer_from_pem(&private_key).unwrap();
     let jwt = jwt::encode_with_signer(&payload, &header, &signer).unwrap();
@@ -420,7 +423,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
     payload
-        .set_claim("scope", Some(serde_json::json!("openid email")))
+        .set_claim("scope", Some(json!("openid email")))
         .unwrap();
     let signer = RS256.signer_from_pem(&private_key).unwrap();
     let jwt = jwt::encode_with_signer(&payload, &header, &signer).unwrap();

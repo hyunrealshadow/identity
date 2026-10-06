@@ -1,15 +1,15 @@
-use http::HeaderMap;
-use identity_application::observability::outbound_trace;
-use reqwest::Client;
-use reqwest::Error;
-use reqwest::redirect::Policy;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use identity_application::openid_connect::logout::{
-    BackChannelLogoutDelivery, BackChannelLogoutNotification, BackChannelLogoutSender,
+use http::HeaderMap;
+use identity_application::{
+    observability::outbound_trace,
+    openid_connect::logout::{
+        BackChannelLogoutDelivery, BackChannelLogoutNotification, BackChannelLogoutSender,
+    },
 };
-use tracing::Instrument as _;
+use reqwest::{Client, Error, redirect::Policy};
+use tracing::{Instrument as _, warn};
 
 pub struct HttpBackChannelLogoutSender {
     client: Client,
@@ -51,7 +51,7 @@ impl BackChannelLogoutSender for HttpBackChannelLogoutSender {
                 if response.status().is_success() {
                     BackChannelLogoutDelivery::Delivered
                 } else {
-                    tracing::warn!(
+                    warn!(
                         client_id = %notification.client_id,
                         status = %response.status(),
                         "back-channel logout request returned non-success status"
@@ -60,7 +60,7 @@ impl BackChannelLogoutSender for HttpBackChannelLogoutSender {
                 }
             }
             Err(error) => {
-                tracing::warn!(
+                warn!(
                     client_id = %notification.client_id,
                     error = %error,
                     "back-channel logout request failed"
@@ -73,18 +73,21 @@ impl BackChannelLogoutSender for HttpBackChannelLogoutSender {
 
 #[cfg(test)]
 mod tests {
-    use tokio::net::TcpListener;
-
-    use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        spawn,
+    };
     use url::Url;
     use uuid::Uuid;
+
+    use super::*;
 
     #[tokio::test]
     async fn posts_logout_token_as_form_and_reports_response_status() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
+        let server = spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut request = Vec::new();
             loop {

@@ -1,15 +1,19 @@
-use super::RecordingSink;
-use super::decode_unverified_payload;
-use crate::observability::EventValue;
-use crate::openid_connect::tests::fixtures::mocks::MockDeviceAuthorizationRepository;
-use crate::openid_connect::token::TokenType;
+use chrono::Duration;
+use identity_domain::{
+    auth::SessionOid,
+    client_authorization::ClientAuthorization,
+    openid_connect::{ApiScope, ScopeSet},
+};
+use serde_json::{Value, from_slice, json};
+
+use super::{RecordingSink, decode_unverified_payload};
+use crate::{
+    observability::EventValue,
+    openid_connect::{tests::fixtures::mocks::MockDeviceAuthorizationRepository, token::TokenType},
+};
+
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use chrono::Duration;
-use identity_domain::auth::SessionOid;
-use identity_domain::client_authorization::ClientAuthorization;
-use identity_domain::openid_connect::{ApiScope, ScopeSet};
-use serde_json::Value;
 
 fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
@@ -88,11 +92,11 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
     assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
     assert_eq!(
         id_payload.claim(JwtClaimNames::NAME).unwrap(),
-        &serde_json::json!("Alg User")
+        &json!("Alg User")
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::EMAIL).unwrap(),
-        &serde_json::json!("alg@example.com")
+        &json!("alg@example.com")
     );
 }
 
@@ -181,7 +185,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
 
     let access_payload = refreshed.access_token.split('.').nth(1).unwrap();
     let access_payload: Value =
-        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(access_payload).unwrap()).unwrap();
+        from_slice(&URL_SAFE_NO_PAD.decode(access_payload).unwrap()).unwrap();
     let access_oid = Uuid::parse_str(access_payload["jti"].as_str().unwrap()).unwrap();
     let access = repo.find_by_oid(access_oid).await.unwrap().unwrap();
     assert!(access.revoked_at.is_none());
@@ -568,17 +572,17 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
     );
     assert_eq!(
         access_payload.claim(JwtClaimNames::AUTH_TIME),
-        Some(&serde_json::json!(original_auth_time))
+        Some(&json!(original_auth_time))
     );
     let (id_payload, _) =
         jwt::decode_with_verifier(refreshed.id_token.as_ref().unwrap(), &verifier).unwrap();
     assert_eq!(
         id_payload.claim(JwtClaimNames::AUTH_TIME).unwrap(),
-        &serde_json::json!(original_auth_time)
+        &json!(original_auth_time)
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
-        &serde_json::json!(expected_at_hash(&refreshed.access_token))
+        &json!(expected_at_hash(&refreshed.access_token))
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::SID),

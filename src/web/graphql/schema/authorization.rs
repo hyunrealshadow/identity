@@ -1,11 +1,12 @@
 use async_graphql::{Context, Error, ErrorExtensions, Result};
 use chrono::Utc;
-use identity_domain::auth::ACR_AAL2;
-use identity_domain::auth::ELEVATED_AUTHENTICATION_TTL;
-use identity_domain::auth::RECENT_AUTHENTICATION_TTL;
-use identity_domain::auth::acr_satisfies;
-use identity_domain::auth::authentication_is_fresh;
-use identity_domain::openid_connect::ApiScope;
+use identity_domain::{
+    auth::{
+        ACR_AAL2, ELEVATED_AUTHENTICATION_TTL, RECENT_AUTHENTICATION_TTL, acr_satisfies,
+        authentication_is_fresh,
+    },
+    openid_connect::ApiScope,
+};
 
 use super::context::RequestContext;
 

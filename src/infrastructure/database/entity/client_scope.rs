@@ -1,7 +1,6 @@
 //! Current SeaORM persistence entity.
 
-use super::client::Entity as ClientEntity;
-use super::scope::Entity as ScopeEntity;
+use super::{client::Entity as ClientEntity, scope::Entity as ScopeEntity};
 
 use sea_orm::entity::prelude::*;
 

@@ -1,9 +1,12 @@
 use chrono::{DateTime, Utc};
-use sea_orm::sea_query;
-use sea_orm::sea_query::{
-    CommonTableExpression, Cond, Expr, ExprTrait, Func, Iden, JoinType, LockBehavior, LockType,
-    Order, Query, SelectStatement, UnionType, UpdateStatement, WithClause,
+use sea_orm::{
+    sea_query,
+    sea_query::{
+        CommonTableExpression, Cond, Expr, ExprTrait, Func, Iden, JoinType, LockBehavior, LockType,
+        Order, Query, SelectStatement, UnionType, UpdateStatement, WithClause,
+    },
 };
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::database::{
@@ -185,7 +188,7 @@ pub(super) fn mark_refresh_flag(root_oid: Uuid, flag: &str, now: DateTime<Utc>) 
             jsonb_set(
                 client_authorization::Column::Data,
                 flag,
-                Expr::value(serde_json::json!(true)),
+                Expr::value(json!(true)),
             ),
         )
         .value(client_authorization::Column::UpdatedAt, now)

@@ -1,12 +1,14 @@
-use super::RecordingSink;
-use super::decode_unverified_payload;
-use crate::application::error::{code::AppErrorCode, codes::token::TokenErrorCode};
-use crate::observability::EventValue;
+use identity_domain::openid_connect::{API_RESOURCE, GrantType};
+use serde_json::{Value, from_slice};
+
+use super::{RecordingSink, decode_unverified_payload};
+use crate::{
+    application::error::{code::AppErrorCode, codes::token::TokenErrorCode},
+    observability::EventValue,
+};
+
 use crate::openid_connect::token::tests::fixtures::*;
 use crate::openid_connect::token::tests::*;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::GrantType;
-use serde_json::Value;
 
 fn request(scope: &str) -> ClientCredentialsGrantParams {
     ClientCredentialsGrantParams {
@@ -73,7 +75,7 @@ async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
         .await
         .unwrap();
     assert!(response.id_token.is_none());
-    let access_claims = serde_json::from_slice::<Value>(
+    let access_claims = from_slice::<Value>(
         &URL_SAFE_NO_PAD
             .decode(response.access_token.split('.').nth(1).unwrap())
             .unwrap(),

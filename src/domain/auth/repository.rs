@@ -1,6 +1,7 @@
+use std::error::Error as StdError;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use std::error::Error as StdError;
 use thiserror::Error;
 use uuid::Uuid;
 

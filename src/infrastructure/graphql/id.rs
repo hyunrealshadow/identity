@@ -1,5 +1,4 @@
-use std::marker::PhantomData;
-use std::str;
+use std::{marker::PhantomData, str};
 
 use async_graphql::ID;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -121,7 +120,6 @@ fn valid_type_name(type_name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use async_graphql::ID;
-
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     use uuid::Uuid;
 

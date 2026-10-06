@@ -1,6 +1,6 @@
+use std::{error::Error, fmt, str::FromStr};
+
 use chrono::{DateTime, Utc};
-use std::error::Error;
-use std::{fmt, str::FromStr};
 use uuid::Uuid;
 
 pub type ClientOid = Uuid;
@@ -60,8 +60,9 @@ pub struct Client {
 
 #[cfg(test)]
 mod tests {
-    use super::ClientProtocol;
     use std::str::FromStr;
+
+    use super::ClientProtocol;
 
     #[test]
     fn parses_openid_connect_protocol() {

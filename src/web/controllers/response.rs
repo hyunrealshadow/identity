@@ -1,11 +1,10 @@
-use identity_application::error::ErrorDiagnostics;
-use std::error::Error as StdError;
-use std::mem;
-use tracing::Level;
+use std::{error::Error as StdError, mem};
 
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
+use identity_application::error::ErrorDiagnostics;
 use salvo::{Depot, Request, Response, Writer, async_trait, handler, prelude::Json, writing::Text};
 use serde::{Serialize, de::DeserializeOwned};
+use tracing::{Level, error, event};
 use unic_langid::LanguageIdentifier;
 
 use crate::{
@@ -13,8 +12,10 @@ use crate::{
         AppError, codes::common::CommonErrorCode, kind::ErrorKind, params::ErrorParams,
     },
     boot::AppState,
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
-    infrastructure::web,
+    infrastructure::{
+        i18n::{I18n, error_i18n, resolve_locale_from_headers},
+        web,
+    },
     web::views::{
         auth::{BusinessErrorResponse, FieldErrorDetail},
         oauth2::ErrorPageData,
@@ -52,7 +53,7 @@ pub fn log_app_error(error: &AppError, message: &'static str) {
     let diagnostics = ErrorDiagnostics::from_error(error);
     macro_rules! log {
         ($level:expr) => {
-            tracing::event!(
+            event!(
                 $level,
                 error_code = error.code(),
                 error_kind = ?error.kind(),
@@ -348,7 +349,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
     match web::tera::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(res, status, body),
         Err(e) => {
-            tracing::error!(error = %e, "render_error_page: template render failed");
+            error!(error = %e, "render_error_page: template render failed");
             let body = BusinessErrorResponse::new(error.code(), error.to_string());
             render_json(res, StatusCode::INTERNAL_SERVER_ERROR, body);
         }
@@ -421,7 +422,7 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
                 render_html(res, status, body);
                 return;
             }
-            Err(e) => tracing::error!(error = %e, "handle_404: template render failed"),
+            Err(e) => error!(error = %e, "handle_404: template render failed"),
         }
     }
 
@@ -434,17 +435,31 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-    use std::sync::Arc;
-    use std::sync::Mutex;
+    use std::{
+        io::{Error, ErrorKind, Result as IoResult, Write},
+        sync::{Arc, Mutex},
+    };
 
-    use super::log_app_error;
+    use http::StatusCode;
     use identity_application::error::{ErrorContext, ErrorDiagnostics};
-    use std::io::Error;
-    use std::io::ErrorKind;
-    use std::io::Result as IoResult;
-    use tracing::Level;
-    use tracing::subscriber::with_default;
+    use salvo::{
+        Router, Service, handler,
+        test::{ResponseExt, TestClient},
+    };
+    use tracing::{Level, subscriber::with_default};
+    use tracing_subscriber::fmt;
+
+    use super::{JsonWebResult, WebResult, log_app_error};
+    use crate::{
+        application::error::{
+            AppError,
+            codes::{
+                authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode,
+                install::InstallErrorCode,
+            },
+        },
+        infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
+    };
 
     #[test]
     fn logs_distinguish_internal_failures_rejections_and_validation() {
@@ -461,7 +476,7 @@ mod tests {
         }
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let writer = Capture(bytes.clone());
-        let subscriber = tracing_subscriber::fmt()
+        let subscriber = fmt()
             .with_ansi(false)
             .without_time()
             .with_max_level(Level::TRACE)
@@ -506,25 +521,6 @@ mod tests {
             .unwrap();
         assert!(validation.contains("DEBUG"));
     }
-
-    use http::StatusCode;
-    use salvo::{
-        Router, Service, handler,
-        test::{ResponseExt, TestClient},
-    };
-
-    use super::{JsonWebResult, WebResult};
-
-    use crate::{
-        application::error::{
-            AppError,
-            codes::{
-                authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode,
-                install::InstallErrorCode,
-            },
-        },
-        infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
-    };
 
     #[handler]
     async fn direct_app_error() -> WebResult<()> {

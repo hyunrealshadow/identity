@@ -1,3 +1,6 @@
+use std::error::Error;
+
+use identity_domain::key::{generator::KeyMaterialError, model::AsymmetricKeyAlgorithm};
 use josekit::{
     jwk::alg::rsapss::RsaPssKeyPair,
     jws::{PS256, PS384, PS512},
@@ -12,10 +15,7 @@ use openssl::{
         extension::{BasicConstraints, KeyUsage, SubjectAlternativeName, SubjectKeyIdentifier},
     },
 };
-use std::error::Error;
 use url::Url;
-
-use identity_domain::key::{generator::KeyMaterialError, model::AsymmetricKeyAlgorithm};
 
 fn internal<E>(error: E) -> KeyMaterialError
 where

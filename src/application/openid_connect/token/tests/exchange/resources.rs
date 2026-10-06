@@ -1,11 +1,13 @@
-use crate::openid_connect::token::tests::{fixtures::*, *};
 use chrono::Duration;
-use identity_domain::auth::SessionOid;
-use identity_domain::openid_connect::API_RESOURCE;
-use identity_domain::openid_connect::ScopeSet;
-use identity_domain::openid_connect::resource::{
-    OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
+use identity_domain::{
+    auth::SessionOid,
+    openid_connect::{
+        API_RESOURCE, ScopeSet,
+        resource::{OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError},
+    },
 };
+
+use crate::openid_connect::token::tests::{fixtures::*, *};
 
 const PROFILE: &str = "https://api.example.com/profile";
 const EMAIL: &str = "https://api.example.com/email";

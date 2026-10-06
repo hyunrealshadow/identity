@@ -1,26 +1,33 @@
-use crate::crypto::certificate::generate_self_signed_certificate;
-use crate::crypto::key::{
-    base64url_encode, generate_all_jwks_for_key, generate_ed25519_key, generate_p256_key,
-    generate_rsa_key, public_jwk_from_private_key_pem,
+use identity_domain::key::{JwaSigningAlgorithm, model::AsymmetricKeyAlgorithm};
+use josekit::{
+    jwk::{
+        Jwk,
+        alg::{
+            ec::{EcCurve, EcKeyPair},
+            rsapss::RsaPssKeyPair,
+        },
+    },
+    jws::{
+        ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, JwsSigner, PS256, PS384, PS512, RS256,
+        RS384, RS512,
+    },
+    jwt,
+    util::{SHA_256, SHA_384, SHA_512},
 };
-use identity_domain::key::JwaSigningAlgorithm;
-use identity_domain::key::model::AsymmetricKeyAlgorithm;
-use josekit::jwk::Jwk;
-use josekit::jwk::alg::ec::EcCurve;
-use josekit::jwk::alg::ec::EcKeyPair;
-use josekit::jwk::alg::rsapss::RsaPssKeyPair;
-use josekit::jws::JwsSigner;
-use josekit::jws::{
-    ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, PS256, PS384, PS512, RS256, RS384, RS512,
+use openssl::{
+    base64::encode_block,
+    hash::{MessageDigest, hash},
+    x509::X509,
 };
-use josekit::jwt;
-use josekit::util::SHA_256;
-use josekit::util::SHA_384;
-use josekit::util::SHA_512;
-use openssl::base64::encode_block;
-use openssl::hash::MessageDigest;
-use openssl::hash::hash;
-use openssl::x509::X509;
+use serde_json::json;
+
+use crate::crypto::{
+    certificate::generate_self_signed_certificate,
+    key::{
+        base64url_encode, generate_all_jwks_for_key, generate_ed25519_key, generate_p256_key,
+        generate_rsa_key, public_jwk_from_private_key_pem,
+    },
+};
 
 /// Generates a minimal RSA 2048 key PEM and a self-signed cert PEM for testing.
 fn test_rsa_key_and_cert() -> (String, String) {
@@ -262,9 +269,7 @@ fn assert_roundtrip(private_key_pem: &str, public_key_pem: &str, alg_label: &str
     header.set_algorithm(alg_label);
     let mut payload = jwt::JwtPayload::new();
     payload.set_subject("test-user");
-    payload
-        .set_claim("alg", Some(serde_json::json!(alg_label)))
-        .unwrap();
+    payload.set_claim("alg", Some(json!(alg_label))).unwrap();
 
     let token = jwt::encode_with_signer(&payload, &header, &*signer).unwrap();
 

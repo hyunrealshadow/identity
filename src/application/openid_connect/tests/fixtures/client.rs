@@ -1,17 +1,13 @@
 use chrono::Utc;
-use identity_domain::openid_connect::OpenIdConnectClient;
-use identity_domain::openid_connect::OpenIdConnectClientRepository;
-use identity_domain::openid_connect::OpenIdConnectClientRepositoryError;
-use identity_domain::openid_connect::TokenEndpointAuthMethod;
-use url::Url;
-
 use identity_domain::{
     client::model::{Client, ClientOid, ClientProtocol},
     openid_connect::{
-        GrantType, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
-        OpenIdConnectClientPlatformType, OpenIdConnectClientSettings,
+        GrantType, OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
+        OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
+        OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings, TokenEndpointAuthMethod,
     },
 };
+use url::Url;
 
 pub(in crate::openid_connect) fn test_client(oid: ClientOid) -> Client {
     Client {

@@ -1,18 +1,18 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
-    sea_query::Expr,
-};
-use serde_json::Value;
-use uuid::Uuid;
-
-use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
-use crate::database::entity::{key, key::Entity as KeyEntity};
 use identity_domain::key::{
     Key, KeyData, KeyOid, KeyType, ParseKeyTypeError,
     repository::{KeyRepository, KeyRepositoryError},
 };
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+    sea_query::Expr,
+};
+use serde_json::{Value, from_value, to_value};
+use uuid::Uuid;
+
+use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
+use crate::database::entity::{key, key::Entity as KeyEntity};
 
 pub struct KeyRepositoryImpl {
     db: DatabaseConnection,
@@ -37,11 +37,11 @@ impl KeyRepositoryImpl {
 }
 
 fn deserialize_key_data(raw: &Value) -> Result<KeyData, KeyRepositoryError> {
-    serde_json::from_value(raw.clone()).map_err(KeyRepositoryError::Deserialize)
+    from_value(raw.clone()).map_err(KeyRepositoryError::Deserialize)
 }
 
 fn serialize_key_data(data: &KeyData) -> Result<Value, KeyRepositoryError> {
-    serde_json::to_value(data).map_err(KeyRepositoryError::Serialize)
+    to_value(data).map_err(KeyRepositoryError::Serialize)
 }
 
 pub fn to_domain(model: key::Model) -> Result<Key, KeyRepositoryError> {
@@ -211,13 +211,13 @@ impl KeyRepository for KeyRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use super::to_domain;
     use chrono::{DateTime, Utc};
+    use identity_domain::key::KeyData;
     use serde_json::json;
     use uuid::Uuid;
 
+    use super::to_domain;
     use crate::database::entity::key;
-    use identity_domain::key::KeyData;
 
     #[test]
     fn to_domain_wraps_required_expiry_in_some() {

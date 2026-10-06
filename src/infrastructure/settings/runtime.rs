@@ -1,8 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
-use sea_orm::DatabaseConnection;
-
 use identity_application::error::AppError;
+use sea_orm::DatabaseConnection;
 
 use super::{
     key_ring::CachedRuntimeKeyRingProvider, openid_connect::CachedCorsOrigins,

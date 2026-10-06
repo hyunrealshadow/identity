@@ -1,6 +1,8 @@
-use super::*;
-use crate::openid_connect::jose::asymmetric_signer_from_pem;
 use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
+
+use crate::openid_connect::jose::asymmetric_signer_from_pem;
+
+use super::*;
 
 impl TokenService {
     pub(super) async fn load_configured_signing_key(

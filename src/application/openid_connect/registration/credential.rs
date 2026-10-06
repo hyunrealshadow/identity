@@ -1,7 +1,10 @@
-use chrono::{Duration, Utc};
 use std::time::Duration as TimeDuration;
+
+use chrono::{Duration, Utc};
+use serde_json::{from_slice, to_string};
 use url::Url;
 
+use super::request::DynamicClientJwks;
 use crate::{
     application::error::{AppError, codes::registration::RegistrationErrorCode},
     domain::{key::PublicJwk, openid_connect::OpenIdConnectCredentialData},
@@ -10,8 +13,6 @@ use crate::{
         fetch_https_public_document, remote_http_client,
     },
 };
-
-use super::request::DynamicClientJwks;
 
 pub(super) fn client_credentials_from_jwks(
     jwks: Option<&DynamicClientJwks>,
@@ -86,13 +87,13 @@ async fn fetch_jwks(jwks_uri: &Url) -> Result<DynamicClientJwks, AppError> {
             RegistrationErrorCode::ClientCreateFailed,
         ))?;
 
-    serde_json::from_slice::<DynamicClientJwks>(&body).map_err(AppError::map_source(
+    from_slice::<DynamicClientJwks>(&body).map_err(AppError::map_source(
         RegistrationErrorCode::ClientCreateFailed,
     ))
 }
 
 fn public_jwk_to_pem(jwk: &PublicJwk) -> Result<String, AppError> {
-    serde_json::to_string(jwk).map_err(AppError::map_source(
+    to_string(jwk).map_err(AppError::map_source(
         RegistrationErrorCode::ClientCreateFailed,
     ))
 }

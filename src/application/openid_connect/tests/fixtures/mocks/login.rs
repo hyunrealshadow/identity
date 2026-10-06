@@ -1,11 +1,11 @@
-use chrono::Duration;
-use chrono::Utc;
-use identity_domain::auth::LoginFailureReason;
-use identity_domain::auth::LoginStatus;
-use identity_domain::auth::SessionOid;
-use identity_domain::auth::model::Login;
-use identity_domain::auth::repository::{LoginRepository, LoginRepositoryError};
 use std::sync::Mutex;
+
+use chrono::{Duration, Utc};
+use identity_domain::auth::{
+    LoginFailureReason, LoginStatus, SessionOid,
+    model::Login,
+    repository::{LoginRepository, LoginRepositoryError},
+};
 use uuid::Uuid;
 
 // ─── LoginRepository test double (mockall can't handle &str lifetime params) ───
