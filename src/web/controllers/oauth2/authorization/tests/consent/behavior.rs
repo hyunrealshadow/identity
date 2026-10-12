@@ -26,6 +26,9 @@ pub(super) async fn consent_get_is_a_json_api_without_content_negotiation() {
     assert!(body.contains("\"client_name\""), "{body}");
     assert!(!body.contains("\"logo_uri\""), "{body}");
     let payload: Value = from_str(&body).unwrap();
+    assert_eq!(payload["account"]["name"], "Ada Lovelace");
+    assert_eq!(payload["account"]["email"], "ada@example.com");
+    assert!(payload["account"].get("picture").is_none());
     assert_eq!(payload["scopes"][0]["name"], "openid");
     assert_eq!(payload["scopes"][0]["previously_granted"], true);
     assert_eq!(payload["scopes"][1]["name"], "profile");

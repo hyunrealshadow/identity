@@ -1,12 +1,12 @@
 import { Alert } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ExternalLink } from 'lucide-react'
 
-import { AccountAvatar } from '#/components/account-avatar'
+import { ConsentAccount } from '#/components/consent-account'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { ConsentPermissions } from '#/components/consent-permissions'
+import { ConsentRevokeNotice } from '#/components/consent-revoke-notice'
 import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
@@ -159,31 +159,9 @@ function ConsentPage() {
 
       {consent ? (
         <>
-          <div className="mb-6 rounded-xl border border-border bg-surface-secondary p-3">
-            <div className="flex items-center gap-3">
-              <AccountAvatar name={consent.client_name} picture={consent.logo_uri} />
-              <div className="min-w-0">
-                <p className="break-words text-sm font-semibold">{consent.client_name}</p>
-                {consent.client_uri ? (
-                  <a
-                    href={consent.client_uri}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 flex items-center gap-1 text-xs text-muted hover:underline"
-                  >
-                    <span className="truncate">{consent.client_uri}</span>
-                    <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          <ConsentAccount account={consent.account} locale={data.locale} />
 
           <ConsentPermissions scopes={consent.scopes} locale={data.locale} />
-
-          <p className="mt-4 text-xs leading-5 text-muted">
-            {t('revoke')}
-          </p>
 
           <ProgressiveForm
             action="/consent"
@@ -208,6 +186,8 @@ function ConsentPage() {
               {t('allow')}
             </SubmitButton>
           </ProgressiveForm>
+
+          <ConsentRevokeNotice locale={data.locale} />
         </>
       ) : null}
     </AuthShell>

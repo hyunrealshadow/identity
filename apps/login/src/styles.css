@@ -9,6 +9,20 @@
 }
 
 @layer components {
+  .consent-permissions-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+  }
+
+  .consent-permissions-list::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .consent-permissions-list::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: var(--scrollbar);
+  }
+
   .button {
     border-radius: var(--field-radius);
   }

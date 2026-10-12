@@ -26,7 +26,7 @@ use crate::{
         shared::{csrf_token, protocol_continue_uri},
     },
     views::oauth2::{
-        ConsentApiResponse, ConsentDecision, ConsentDecisionPayload, ConsentPageData,
+        ConsentAccount, ConsentApiResponse, ConsentDecision, ConsentDecisionPayload, ConsentPageData,
         build_scope_display,
     },
 };
@@ -123,6 +123,11 @@ async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
         StatusCode::OK,
         ConsentPageData {
             login_id,
+            account: ConsentAccount {
+                name: session.user_name.clone(),
+                email: session.user_email.clone(),
+                picture: session.user_picture.clone(),
+            },
             client_name: loaded.client.client().name.clone(),
             logo_uri: loaded
                 .client

@@ -4,10 +4,12 @@ import { createServerFn } from '@tanstack/react-start'
 import { Check, Clock, X } from 'lucide-react'
 import { useState } from 'react'
 
-import { AccountAvatar } from '#/components/account-avatar'
+import { ConsentAccount } from '#/components/consent-account'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { ConsentPermissions } from '#/components/consent-permissions'
+import { ConsentRevokeNotice } from '#/components/consent-revoke-notice'
+import { DeviceCodeConfirmation } from '#/components/device-code-confirmation'
 import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput } from '#/components/totp-input'
 import { errorMessage } from '#/lib/identity.server'
@@ -292,28 +294,9 @@ function DevicePage() {
         <DeviceError title={t('deviceLoadFailed')} message={visibleError} />
       ) : null}
 
-      <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface-secondary p-3" aria-label={t('deviceApprovingAs')}>
-        <AccountAvatar name={device.account.name} picture={device.account.picture} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{device.account.name}</p>
-          <p className="truncate text-xs text-muted">{device.account.email}</p>
-        </div>
-      </div>
+      <ConsentAccount account={device.account} locale={data.locale} />
 
-      <section className="mb-6" aria-labelledby="device-code-title">
-        <h2 id="device-code-title" className="text-sm font-medium">
-          {t('deviceConfirmCodeTitle')}
-        </h2>
-        <p className="mt-1 text-xs leading-5 text-muted">
-          {t('deviceConfirmCodeDescription')}
-        </p>
-        <p className="mt-3 rounded-field border border-border bg-surface-secondary px-2 py-3 text-center font-mono text-2xl font-semibold tracking-[0.12em] sm:text-3xl sm:tracking-[0.22em]">
-          {device.user_code}
-        </p>
-        <p className="mt-3 text-xs leading-5 text-muted">
-          {t('deviceVerifyHint')}
-        </p>
-      </section>
+      <DeviceCodeConfirmation code={device.user_code} locale={data.locale} />
 
       {device.consent_required ? (
         <ConsentPermissions scopes={device.scopes} locale={data.locale} />
@@ -341,6 +324,8 @@ function DevicePage() {
           {t('allow')}
         </SubmitButton>
       </ProgressiveForm>
+
+      {device.consent_required ? <ConsentRevokeNotice locale={data.locale} /> : null}
 
     </AuthShell>
   )

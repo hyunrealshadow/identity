@@ -26,6 +26,7 @@ pub struct ScopeDisplay {
 #[derive(Debug, Clone, Serialize)]
 pub struct ConsentPageData {
     pub login_id: String,
+    pub account: ConsentAccount,
     pub client_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logo_uri: Option<String>,
@@ -46,10 +47,9 @@ pub struct ConsentDecisionPayload {
     pub decision: ConsentDecision,
 }
 
-/// Account a device decision is attributed to, so the verification page can
-/// show who is approving instead of leaving it implicit.
+/// Account the consent decision is attributed to in either authorization flow.
 #[derive(Debug, Clone, Serialize)]
-pub struct DeviceConsentAccount {
+pub struct ConsentAccount {
     pub name: String,
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +71,7 @@ pub struct DeviceConsentPageData {
     pub csrf_token: String,
     /// Session behind the browser that is answering: the account the decision
     /// is recorded against.
-    pub account: DeviceConsentAccount,
+    pub account: ConsentAccount,
 }
 
 #[derive(Debug, Clone, Serialize)]

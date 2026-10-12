@@ -20,7 +20,7 @@ use crate::{
             shared::{csrf_token, load_active_session_entries},
         },
         views::oauth2::{
-            ConsentApiResponse, ConsentDecision, DeviceConsentAccount, DeviceConsentPageData,
+            ConsentAccount, ConsentApiResponse, ConsentDecision, DeviceConsentPageData,
             build_scope_display,
         },
     },
@@ -84,7 +84,7 @@ pub(in crate::controllers::oauth2) async fn device_login_consent_api(
                     .await?,
             ),
             csrf_token: csrf_token(depot),
-            account: DeviceConsentAccount {
+            account: ConsentAccount {
                 name: actor.user_name,
                 email: actor.user_email,
                 picture: actor.user_picture,

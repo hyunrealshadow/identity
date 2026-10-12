@@ -89,8 +89,15 @@ export interface ScopeDisplay {
   previously_granted?: boolean
 }
 
+export interface ConsentAccount {
+  name: string
+  email: string
+  picture?: string
+}
+
 export interface ConsentPageData {
   login_id: string
+  account: ConsentAccount
   client_name: string
   logo_uri?: string
   client_uri?: string
@@ -111,11 +118,7 @@ export interface DeviceVerificationPageData {
   csrf_token: string
   ui_locales?: Array<string>
   /** Session answering the request: the account the decision is recorded against. */
-  account: {
-    name: string
-    email: string
-    picture?: string
-  }
+  account: ConsentAccount
 }
 
 export interface ConsentApiResponse {
