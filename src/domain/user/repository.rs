@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::user::{User, UserOid, UserTheme};
+use crate::user::{MfaMethod, User, UserOid, UserTheme};
 
 #[derive(Debug, Error)]
 pub enum UserRepositoryError {
@@ -22,6 +22,9 @@ pub enum UserRepositoryError {
 
     #[error("database contains an invalid user theme")]
     InvalidStoredTheme,
+
+    #[error("database contains an invalid MFA preference")]
+    InvalidStoredMfaPreference,
 
     #[error("failed to update failed attempts")]
     UpdateFailedAttempts(#[source] Box<dyn StdError + Send + Sync>),
@@ -57,6 +60,7 @@ pub struct UserProfilePatch {
     pub zone_info: Option<Option<String>>,
     pub locale: Option<Option<String>>,
     pub theme: Option<Option<UserTheme>>,
+    pub preferred_mfa_method: Option<MfaMethod>,
     pub address_formatted: Option<Option<String>>,
     pub address_street_address: Option<Option<String>>,
     pub address_locality: Option<Option<String>>,

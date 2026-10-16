@@ -453,6 +453,7 @@ pub(super) fn test_user(user_oid: Uuid) -> User {
         zoneinfo: None,
         locale: None,
         theme: None,
+        preferred_mfa_method: Default::default(),
         email_verified: true,
         phone_number: None,
         phone_number_verified: None,

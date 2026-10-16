@@ -76,7 +76,7 @@ function RootError({ error }: ErrorComponentProps) {
       <div className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
         <h1 className="text-lg font-semibold">Unable to continue</h1>
         <p className="mt-2 text-sm text-muted">
-          {import.meta.env.DEV ? error.message : 'Please try again.'}
+          {import.meta.env.DEV && error instanceof Error ? error.message : 'Please try again.'}
         </p>
         <a className="mt-5 inline-flex rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href="/">
           {translate(locale, 'tryAgain')}

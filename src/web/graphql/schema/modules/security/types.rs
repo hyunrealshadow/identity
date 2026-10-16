@@ -3,20 +3,37 @@ use identity_application::user::OtpAlgorithm;
 
 pub(super) struct AccountSecurity {
     totp_enabled: bool,
+    passkey_enabled: bool,
     recovery_codes_remaining: i32,
+    preferred_mfa_method: identity_domain::user::MfaMethod,
 }
 
 impl AccountSecurity {
-    pub(super) fn new(totp_enabled: bool, recovery_codes_remaining: i32) -> Self {
+    pub(super) fn new(
+        totp_enabled: bool,
+        passkey_enabled: bool,
+        recovery_codes_remaining: i32,
+        preferred_mfa_method: identity_domain::user::MfaMethod,
+    ) -> Self {
         Self {
             totp_enabled,
+            passkey_enabled,
             recovery_codes_remaining,
+            preferred_mfa_method,
         }
     }
 }
 
 #[Object]
 impl AccountSecurity {
+    async fn mfa_enabled(&self) -> bool {
+        self.totp_enabled || self.passkey_enabled
+    }
+
+    async fn preferred_mfa_method(&self) -> &'static str {
+        self.preferred_mfa_method.as_str()
+    }
+
     async fn totp_enabled(&self) -> bool {
         self.totp_enabled
     }

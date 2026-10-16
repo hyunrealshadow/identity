@@ -78,6 +78,7 @@ fn hybrid_user(user_oid: Uuid) -> User {
         zoneinfo: None,
         locale: None,
         theme: None,
+        preferred_mfa_method: Default::default(),
         email_verified: true,
         phone_number: None,
         phone_number_verified: None,
@@ -115,6 +116,7 @@ fn id_token_user(user_oid: Uuid) -> User {
         zoneinfo: None,
         locale: None,
         theme: None,
+        preferred_mfa_method: Default::default(),
         email_verified: true,
         phone_number: None,
         phone_number_verified: None,
@@ -296,7 +298,7 @@ async fn restart_login_flow_creates_fresh_login_for_same_authorization() {
         created_at: Utc::now() - Duration::minutes(6),
         expires_at: Utc::now() - Duration::minutes(1),
         acr: None,
-        requested_acr: Some("urn:identity:aal2".to_owned()),
+        requested_acr: Some("aal2".to_owned()),
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -337,8 +339,8 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         failed_attempts: 2,
         created_at: Utc::now(),
         expires_at: original_expires_at,
-        acr: Some("urn:identity:aal1".to_owned()),
-        requested_acr: Some("urn:identity:aal2".to_owned()),
+        acr: Some("aal1".to_owned()),
+        requested_acr: Some("aal2".to_owned()),
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -365,7 +367,7 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
     assert_eq!(reset_login.expires_at, original_expires_at);
     assert_eq!(
         reset_login.requested_acr.as_deref(),
-        Some("urn:identity:aal2")
+        Some("aal2")
     );
     assert!(reset_login.user_oid.is_none());
     assert!(reset_login.session_oid.is_none());
@@ -470,7 +472,7 @@ async fn restart_login_flow_preserves_reauthentication_subject_and_session() {
         created_at: Utc::now() - Duration::minutes(6),
         expires_at: Utc::now() - Duration::minutes(1),
         acr: None,
-        requested_acr: Some("urn:identity:aal2".to_owned()),
+        requested_acr: Some("aal2".to_owned()),
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 

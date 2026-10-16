@@ -72,6 +72,7 @@ pub struct IdentifierResult {
     pub login: Login,
     pub user: User,
     pub credential_types: Vec<CredentialType>,
+    pub preferred_credential_type: Option<CredentialType>,
 }
 
 /// The outcome of a challenge step.
@@ -100,6 +101,7 @@ pub struct LoginService {
     /// authorizations to revoke.
     device_repo: Option<Arc<dyn DeviceAuthorizationRepository>>,
     events: Arc<dyn EventSink>,
+    passkeys: Option<Arc<super::passkey::PasskeyService>>,
 }
 
 impl LoginService {
@@ -122,6 +124,7 @@ impl LoginService {
             totp_verifier,
             settings,
             device_repo: None,
+            passkeys: None,
             events: Arc::new(NoopEventSink),
         }
     }
@@ -142,6 +145,35 @@ impl LoginService {
     pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
         self
+    }
+
+    #[must_use]
+    pub fn with_passkeys(mut self, passkeys: Arc<super::passkey::PasskeyService>) -> Self {
+        self.passkeys = Some(passkeys);
+        self
+    }
+
+    /// Account-bound challenges are unavailable until identifier verification.
+    pub async fn passkey_options(
+        &self,
+        login_oid: Uuid,
+    ) -> Result<super::passkey::PasskeyOptions, AppError> {
+        let login = self.get(login_oid).await?;
+        validate_passkey_login(&login)?;
+        let user = self
+            .get_user(
+                login
+                    .user_oid
+                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+                    .into(),
+            )
+            .await?;
+        self.ensure_user_can_authenticate(&user).await?;
+        self.passkeys
+            .as_ref()
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?
+            .begin_authentication(user.oid, login_oid)
+            .await
     }
 
     pub async fn get(&self, login_oid: Uuid) -> Result<Login, AppError> {
@@ -174,6 +206,11 @@ impl LoginService {
                 .is_empty()
             {
                 credential_types.push(credential_type);
+            }
+        }
+        if let Some(passkeys) = &self.passkeys {
+            if !passkeys.list(user_oid).await?.is_empty() {
+                credential_types.push(CredentialType::Passkey);
             }
         }
         Ok(credential_types)
@@ -376,6 +413,12 @@ impl LoginService {
             .await?;
 
         Ok(IdentifierResult {
+            preferred_credential_type: preferred_credential_type(
+                &login,
+                &credential_types,
+                user.preferred_mfa_method,
+                false,
+            ),
             login,
             user,
             credential_types,
@@ -427,6 +470,7 @@ impl LoginService {
             CredentialType::Password => "password",
             CredentialType::Otp => "otp",
             CredentialType::RecoveryCode => "recovery_code",
+            CredentialType::Passkey => "passkey",
         };
         match result {
             Ok(ChallengeOutcome::Authenticated { login, session }) => {
@@ -545,6 +589,7 @@ impl LoginService {
         let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
 
         match credential_type {
+            CredentialType::Passkey => self.challenge_passkey(login, credential, ctx).await,
             CredentialType::Password => {
                 self.challenge_password(login, credential, &hash_options, ctx)
                     .await
@@ -557,6 +602,63 @@ impl LoginService {
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
+
+    async fn challenge_passkey(
+        &self,
+        login: Login,
+        assertion: &str,
+        ctx: SessionContext,
+    ) -> Result<ChallengeOutcome, AppError> {
+        validate_passkey_login(&login)?;
+        let user = self
+            .get_user(
+                login
+                    .user_oid
+                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+                    .into(),
+            )
+            .await?;
+        self.ensure_user_can_authenticate(&user).await?;
+        let result = self
+            .passkeys
+            .as_ref()
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?
+            .authenticate(user.oid, login.oid, assertion)
+            .await;
+        if let Err(error) = result {
+            self.login_repo
+                .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidCredential))
+                .await?;
+            self.user_repo
+                .increment_failed_attempts(
+                    user.oid,
+                    MAX_FAILED_ATTEMPTS,
+                    failed_attempt_lock_until(),
+                )
+                .await?;
+            return Err(error);
+        }
+        self.user_repo.reset_failed_attempts(user.oid).await?;
+        let mut amr = vec!["passkey".to_owned(), AMR_MFA.to_owned()];
+        if login.status == LoginStatus::MFA_REQUIRED {
+            amr.push(AMR_PASSWORD.to_owned());
+        }
+        let session = self
+            .complete_session(&login, user.oid.into(), ctx, ACR_AAL2, &amr)
+            .await?;
+        self.login_repo
+            .update_status(
+                login.oid,
+                LoginStatus::AUTHENTICATED,
+                Some(session.oid),
+                Some(ACR_AAL2),
+            )
+            .await?;
+        Ok(ChallengeOutcome::Authenticated {
+            login,
+            session: Box::new(session),
+        })
+    }
 
     async fn challenge_password(
         &self,
@@ -678,7 +780,12 @@ impl LoginService {
                     .find_by_user_oid_and_type(user.oid, CredentialType::Otp)
                     .await?;
 
-                if otp_credentials.is_empty() {
+                let has_passkeys = if let Some(passkeys) = &self.passkeys {
+                    !passkeys.list(user.oid).await?.is_empty()
+                } else {
+                    false
+                };
+                if otp_credentials.is_empty() && !has_passkeys {
                     self.user_repo.reset_failed_attempts(user.oid).await?;
                     // Complete AAL1 authentication. A forced
                     // reauthentication upgrades the bound session in place.
@@ -1087,6 +1194,59 @@ fn can_challenge_second_factor(login: &Login) -> bool {
 
 fn failed_attempt_lock_until() -> DateTime<Utc> {
     Utc::now() + Duration::from_std(LOCK_DURATION).unwrap_or_else(|_| Duration::seconds(900))
+}
+
+/// The user's ordering preference selects a valid path; it never bypasses a factor.
+#[must_use]
+pub fn preferred_credential_type(
+    login: &Login,
+    credentials: &[CredentialType],
+    preference: identity_domain::user::MfaMethod,
+    reauthentication: bool,
+) -> Option<CredentialType> {
+    use identity_domain::user::MfaMethod;
+    let has = |kind| credentials.contains(&kind);
+    if login.user_oid.is_none() || login.expires_at <= Utc::now() {
+        return None;
+    }
+    if login.status == LoginStatus::MFA_REQUIRED {
+        return has(CredentialType::Otp)
+            .then_some(CredentialType::Otp)
+            .or_else(|| has(CredentialType::Passkey).then_some(CredentialType::Passkey))
+            .or_else(|| has(CredentialType::RecoveryCode).then_some(CredentialType::RecoveryCode));
+    }
+    if login.status != LoginStatus::IDENTIFIER_VERIFIED {
+        return None;
+    }
+    if has(CredentialType::Passkey)
+        && (preference == MfaMethod::Passkey || !has(CredentialType::Otp))
+    {
+        return Some(CredentialType::Passkey);
+    }
+    if reauthentication && login.session_oid.is_some() && has(CredentialType::Otp) {
+        return Some(CredentialType::Otp);
+    }
+    if has(CredentialType::Password) {
+        return Some(CredentialType::Password);
+    }
+    has(CredentialType::Passkey).then_some(CredentialType::Passkey)
+}
+
+fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
+    if login.expires_at <= Utc::now() {
+        return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+    }
+    if !matches!(
+        login.status,
+        LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+    ) || login.user_oid.is_none()
+    {
+        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+    }
+    if login.failed_attempts >= MAX_FAILED_ATTEMPTS {
+        return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1602,6 +1762,7 @@ mod tests {
             zoneinfo: None,
             locale: None,
             theme: None,
+            preferred_mfa_method: Default::default(),
             email_verified: true,
             phone_number: None,
             phone_number_verified: None,
@@ -1618,6 +1779,123 @@ mod tests {
             created_at: Utc::now(),
             updated_at: None,
         }
+    }
+
+    #[test]
+    fn mfa_priority_selects_a_complete_authentication_path() {
+        use super::preferred_credential_type;
+        use identity_domain::user::MfaMethod;
+        let mut login = test_login(Uuid::new_v4(), 0);
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
+        let credentials = [
+            CredentialType::Password,
+            CredentialType::Otp,
+            CredentialType::Passkey,
+        ];
+        assert_eq!(
+            preferred_credential_type(&login, &credentials, MfaMethod::Passkey, false),
+            Some(CredentialType::Passkey)
+        );
+        assert_eq!(
+            preferred_credential_type(&login, &credentials, MfaMethod::Otp, false),
+            Some(CredentialType::Password)
+        );
+        // An OTP preference never lets a fresh login skip its password.
+        assert_eq!(
+            preferred_credential_type(&login, &credentials, MfaMethod::Otp, true),
+            Some(CredentialType::Password)
+        );
+        login.session_oid = Some(SessionOid(Uuid::new_v4()));
+        assert_eq!(
+            preferred_credential_type(&login, &credentials, MfaMethod::Otp, true),
+            Some(CredentialType::Otp)
+        );
+        assert_eq!(
+            preferred_credential_type(&login, &credentials, MfaMethod::Passkey, true),
+            Some(CredentialType::Passkey)
+        );
+        login.status = LoginStatus::MFA_REQUIRED;
+        assert_eq!(
+            preferred_credential_type(&login, &credentials, MfaMethod::Passkey, false),
+            Some(CredentialType::Otp)
+        );
+    }
+
+    #[test]
+    fn mfa_priority_ignores_unavailable_methods_and_unidentified_logins() {
+        use super::preferred_credential_type;
+        use identity_domain::user::MfaMethod;
+        let mut login = test_login(Uuid::new_v4(), 0);
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
+        assert_eq!(
+            preferred_credential_type(
+                &login,
+                &[CredentialType::Password, CredentialType::Otp],
+                MfaMethod::Passkey,
+                false
+            ),
+            Some(CredentialType::Password)
+        );
+        assert_eq!(
+            preferred_credential_type(
+                &login,
+                &[CredentialType::Password, CredentialType::Passkey],
+                MfaMethod::Otp,
+                false
+            ),
+            Some(CredentialType::Passkey)
+        );
+        assert_eq!(
+            preferred_credential_type(&login, &[CredentialType::Otp], MfaMethod::Otp, false),
+            None
+        );
+        login.status = LoginStatus::CREATED;
+        assert_eq!(
+            preferred_credential_type(
+                &login,
+                &[CredentialType::Passkey],
+                MfaMethod::Passkey,
+                false
+            ),
+            None
+        );
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
+        login.user_oid = None;
+        assert_eq!(
+            preferred_credential_type(
+                &login,
+                &[CredentialType::Passkey],
+                MfaMethod::Passkey,
+                false
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn passkey_requires_identifier_verified_and_unexpired_login() {
+        let mut login = test_login(Uuid::new_v4(), 0);
+        for status in [
+            LoginStatus::CREATED,
+            LoginStatus::AUTHENTICATED,
+            LoginStatus::FAILED,
+            LoginStatus::EXPIRED,
+        ] {
+            login.status = status;
+            assert!(super::validate_passkey_login(&login).is_err());
+        }
+        login.status = LoginStatus::MFA_REQUIRED;
+        assert!(super::validate_passkey_login(&login).is_ok());
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
+        assert!(super::validate_passkey_login(&login).is_ok());
+        login.user_oid = None;
+        assert!(super::validate_passkey_login(&login).is_err());
+        login.user_oid = Some(Uuid::new_v4());
+        login.expires_at = Utc::now() - Duration::seconds(1);
+        assert!(super::validate_passkey_login(&login).is_err());
+        login.expires_at = Utc::now() + Duration::minutes(1);
+        login.failed_attempts = MAX_FAILED_ATTEMPTS;
+        assert!(super::validate_passkey_login(&login).is_err());
     }
 
     fn test_login(user_oid: Uuid, failed_attempts: i32) -> Login {
@@ -1985,6 +2263,55 @@ mod tests {
                 .unwrap();
             assert_eq!(session.user_oid, user_oid);
             assert!(!presented.contains(&session.oid));
+        }
+    }
+
+    #[tokio::test]
+    async fn passkey_completes_mfa_without_password_and_protects_password_fallback() {
+        for password_first in [false, true] {
+            let user = test_user();
+            let user_oid = user.oid;
+            let mut login = test_login(user.oid.into(), 0);
+            login.status = LoginStatus::IDENTIFIER_VERIFIED;
+            let login_oid = login.oid;
+            let (passkeys, sign) = crate::auth::passkey::tests::enrolled_passkey(user_oid).await;
+            let mut service = sign_in_service(user, vec![login], false).with_passkeys(passkeys);
+            if password_first {
+                // Password alone must not create or renew any session.
+                service.session_repo = Arc::new(MockSessionRepository::new());
+                assert!(matches!(
+                    service
+                        .challenge(
+                            login_oid,
+                            CredentialType::Password,
+                            "correct-password",
+                            SessionContext::default()
+                        )
+                        .await
+                        .unwrap(),
+                    ChallengeOutcome::MfaRequired { .. }
+                ));
+            }
+            service.session_repo = Arc::new(TestSessionRepo);
+            let options = service.passkey_options(login_oid).await.unwrap();
+            let result = service
+                .challenge(
+                    login_oid,
+                    CredentialType::Passkey,
+                    &sign(&options),
+                    SessionContext::default(),
+                )
+                .await
+                .unwrap();
+            let ChallengeOutcome::Authenticated { session, .. } = result else {
+                panic!("passkey must complete MFA");
+            };
+            assert_eq!(session.acr.as_deref(), Some(ACR_AAL2));
+            assert!(session.amr.contains(&"passkey".to_owned()));
+            assert_eq!(
+                session.amr.contains(&AMR_PASSWORD.to_owned()),
+                password_first
+            );
         }
     }
 

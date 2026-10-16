@@ -44,6 +44,7 @@ export interface LoginStatusResponse {
   id: string
   status: string
   user?: UserDisplayInfo
+  preferred_credential_type?: string
   credential_types: Array<string>
   prompt: string
   requires_reauthentication: boolean
@@ -64,6 +65,7 @@ export interface SwitchLoginResponse {
 export interface IdentifierResponse {
   id: string
   status: string
+  preferred_credential_type?: string
   credential_types: Array<string>
   user: UserDisplayInfo
 }
@@ -75,6 +77,7 @@ export interface SelectAccountResponse {
 }
 
 export interface ChallengeResponse {
+  preferred_credential_type?: string
   status: 'authenticated' | 'mfa_required'
   continue_uri?: string
   sessions?: Array<string>

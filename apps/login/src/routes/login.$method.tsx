@@ -6,11 +6,12 @@ import {
   Label,
   TextField,
 } from '@heroui/react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { ArrowLeft, ChevronDown, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 
+import { PasskeyLogin } from '#/components/passkey-login'
 import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
@@ -18,30 +19,23 @@ import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput, TotpInput } from '#/components/totp-input'
 import {
   errorMessage,
-  IdentityApiError,
   identityJson,
   isTerminalLoginError,
 } from '#/lib/identity.server'
 import type {
   ActiveAccountsResponse,
-  ChallengeResponse,
   LoginStatusResponse,
-  RestartLoginResponse,
-  SwitchLoginResponse,
 } from '#/lib/identity-types'
 import {
   consumeFormFlash,
-  formErrorResponse,
-  formValidationErrorResponse,
-  navigationResponse,
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
-import { formLocale, requestLocale } from '#/lib/i18n.server'
-import { loginChallengeDestination } from '#/lib/login-navigation'
+import { requestLocale } from '#/lib/i18n.server'
+import { submitLoginMethod } from '#/lib/login-method.server'
+import { loginChallengeDestination, loginCredentialType, loginMethodPath } from '#/lib/login-navigation'
 
 interface ChallengeSearch {
   login_id?: string
-  credential_type?: string
   error?: string
   restart?: string
   ui_locales?: string
@@ -55,12 +49,15 @@ const loadChallengePage = createServerFn({ method: 'GET' })
   .validator(
     (data: {
       loginId: string
+      method: string
       restart?: string
       uiLocales?: string
     }) => data,
   )
   .handler(async ({ data }) => {
-    const flash = consumeFormFlash('/login/challenge')
+    const credentialType = loginCredentialType(data.method)
+    if (!credentialType) throw notFound()
+    const flash = consumeFormFlash(loginMethodPath(credentialType))
     const loginId = data.loginId || flash?.values.login_id || ''
     const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
     const credentialError =
@@ -161,10 +158,9 @@ const loadChallengePage = createServerFn({ method: 'GET' })
     }
   })
 
-export const Route = createFileRoute('/login/challenge')({
+export const Route = createFileRoute('/login/$method')({
   validateSearch: (search): ChallengeSearch => ({
     login_id: optionalString(search.login_id),
-    credential_type: optionalString(search.credential_type),
     error: optionalString(search.error),
     restart: optionalString(search.restart),
     ui_locales: optionalString(search.ui_locales),
@@ -174,180 +170,13 @@ export const Route = createFileRoute('/login/challenge')({
     restart: search.restart,
     uiLocales: search.ui_locales,
   }),
-  loader: ({ deps }) => loadChallengePage({ data: deps }),
+  loader: ({ deps, params }) => {
+    if (!loginCredentialType(params.method)) throw notFound()
+    return loadChallengePage({ data: { ...deps, method: params.method } })
+  },
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        const form = await request.formData()
-        const intent = String(form.get('intent') ?? '')
-        const loginId = String(form.get('login_id') ?? '')
-        const credentialType = String(
-          form.get('credential_type') ?? 'password',
-        )
-        const credential = String(
-          form.get('credential') ?? form.get('totp') ?? form.get('otp') ?? '',
-        )
-        const csrfToken = String(form.get('csrf_token') ?? '')
-        const locale = formLocale(request, form.get('ui_locales'))
-        const uiLocales = optionalString(form.get('ui_locales'))
-
-        if (intent === 'restart') {
-          if (!loginId) {
-            return formErrorResponse(
-              request,
-              '/login/challenge',
-              translate(locale, 'missingLoginShort'),
-              {},
-            )
-          }
-          try {
-            const result = await identityJson<RestartLoginResponse>(
-              '/api/auth/login/restart',
-              {
-                method: 'POST',
-                csrfToken,
-                body: { id: loginId },
-              },
-            )
-            const search = new URLSearchParams({ login_id: result.id })
-            if (uiLocales) search.set('ui_locales', uiLocales)
-            return navigationResponse(request, `/login?${search}`)
-          } catch (error) {
-            const restartUnavailable =
-              error instanceof IdentityApiError && error.code === 22005
-            return formErrorResponse(
-              request,
-              '/login/challenge',
-              restartUnavailable
-                ? translate(locale, 'authorizationRestartUnavailable')
-                : errorMessage(error, locale),
-              { login_id: loginId, ui_locales: uiLocales },
-              undefined,
-              loginChallengeDestination(
-                loginId,
-                credentialType,
-                uiLocales,
-                restartUnavailable ? 'unavailable' : 'required',
-              ),
-            )
-          }
-        }
-
-        if (intent === 'switch') {
-          try {
-            const result = await identityJson<SwitchLoginResponse>(
-              '/api/auth/login/switch',
-              {
-                method: 'POST',
-                csrfToken,
-                body: { id: loginId },
-              },
-            )
-            const search = new URLSearchParams({
-              login_id: result.id,
-              no_accounts: '1',
-            })
-            if (uiLocales) search.set('ui_locales', uiLocales)
-            return navigationResponse(request, `/login?${search}`)
-          } catch (error) {
-            return formErrorResponse(
-              request,
-              '/login/challenge',
-              errorMessage(error, locale),
-              {
-                login_id: loginId,
-                credential_type: credentialType,
-                ui_locales: uiLocales,
-              },
-            )
-          }
-        }
-
-        if (!loginId || !credential) {
-          return formErrorResponse(
-            request,
-            '/login/challenge',
-            translate(locale, 'challengeRequired'),
-            { login_id: loginId, credential_type: credentialType, ui_locales: uiLocales },
-            loginId ? 'credential' : undefined,
-            loginChallengeDestination(loginId, credentialType, uiLocales),
-          )
-        }
-
-        try {
-          const result = await identityJson<ChallengeResponse>(
-            '/api/auth/login/challenge',
-            {
-              method: 'POST',
-              csrfToken,
-              body: {
-                id: loginId,
-                credential_type: credentialType,
-                credential,
-              },
-            },
-          )
-
-          if (result.status === 'mfa_required') {
-            return navigationResponse(
-              request,
-              loginChallengeDestination(loginId, 'otp', uiLocales),
-            )
-          }
-
-          if (!result.continue_uri) {
-            throw new Error(translate(locale, 'continuationMissing'))
-          }
-          return navigationResponse(request, result.continue_uri)
-        } catch (error) {
-          if (isTerminalLoginError(error)) {
-            const restart =
-              error instanceof IdentityApiError && error.code === 11004
-                ? 'required'
-                : undefined
-            return formErrorResponse(
-              request,
-              '/login/challenge',
-              translate(locale, 'challengeExpiredDescription'),
-              {
-                login_id: loginId,
-                credential_type: credentialType,
-                ui_locales: uiLocales,
-              },
-              undefined,
-              loginChallengeDestination(loginId, credentialType, uiLocales, restart),
-            )
-          }
-          const values = {
-            login_id: loginId,
-            credential_type: credentialType,
-            ui_locales: uiLocales,
-          }
-          if (error instanceof IdentityApiError && error.fields.length > 0) {
-            return formValidationErrorResponse(
-              request,
-              '/login/challenge',
-              error.message,
-              values,
-              Object.fromEntries(
-                error.fields.map((fieldError) => [
-                  fieldError.field,
-                  fieldError.message,
-                ]),
-              ),
-              loginChallengeDestination(loginId, credentialType, uiLocales),
-            )
-          }
-          return formErrorResponse(
-            request,
-            '/login/challenge',
-            errorMessage(error, locale),
-            values,
-            undefined,
-            loginChallengeDestination(loginId, credentialType, uiLocales),
-          )
-        }
-      },
+      POST: ({ request, params }) => submitLoginMethod(request, params.method),
     },
   },
   component: ChallengePage,
@@ -359,15 +188,13 @@ function ChallengePage() {
   const [showPassword, setShowPassword] = useState(false)
   const [credentialError, setCredentialError] = useState(data.fieldError)
   const loginId = data.loginId
-  const credentialType =
-    search.credential_type === 'otp' ||
-    search.credential_type === 'recovery_code'
-      ? search.credential_type
-      : 'password'
+  const credentialType = loginCredentialType(Route.useParams().method)!
+  const pathname = loginMethodPath(credentialType)
+  const isPasskey = credentialType === 'passkey'
   const isOtp = credentialType === 'otp'
   const isRecoveryCode = credentialType === 'recovery_code'
   const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
-  const alternativeMethods = credentialType === 'password'
+  const alternativeMethods = credentialType === 'password' || (isPasskey && data.status?.status !== 'mfa_required' && !data.status?.requires_reauthentication)
     ? []
     : [
         { credentialType: 'otp', label: t('useAuthenticatorCode') },
@@ -395,6 +222,8 @@ function ChallengePage() {
       title={
         restartRequired
           ? t('challengeExpiredTitle')
+          : isPasskey
+          ? t('usePasskey')
           : isRecoveryCode
           ? t('recoveryCodeTitle')
           : isOtp
@@ -406,6 +235,8 @@ function ChallengePage() {
           ? t('authorizationRestartUnavailable')
           : restartRequired
           ? t('challengeExpiredDescription')
+          : isPasskey
+          ? t('passkeySignInDescription')
           : isRecoveryCode
           ? t('recoveryCodeDescription')
           : isOtp
@@ -442,34 +273,24 @@ function ChallengePage() {
 
       {restartRequired && !restartUnavailable ? (
         <ProgressiveForm
-          action="/login/challenge"
+          action={pathname}
           className="progressive-form"
           enhancementErrorMessage={t('enhancedNavigationError')}
         >
           <input type="hidden" name="intent" value="restart" />
           <input type="hidden" name="login_id" value={loginId} />
-          <input
-            type="hidden"
-            name="credential_type"
-            value={credentialType}
-          />
           <input type="hidden" name="csrf_token" value={data.csrfToken} />
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
           <SubmitButton fullWidth>{t('restartSignIn')}</SubmitButton>
         </ProgressiveForm>
-      ) : !restartRequired ? (
+      ) : !restartRequired && !isPasskey ? (
         <ProgressiveForm
-          action="/login/challenge"
+          action={pathname}
           className="progressive-form space-y-6"
           enhancementErrorMessage={t('enhancedNavigationError')}
           noValidate
         >
         <input type="hidden" name="login_id" value={loginId} />
-        <input
-          type="hidden"
-          name="credential_type"
-          value={credentialType}
-        />
         <input
           type="hidden"
           name="csrf_token"
@@ -559,6 +380,17 @@ function ChallengePage() {
         </ProgressiveForm>
       ) : null}
 
+      {!restartRequired && (data.status?.status === 'identifier_verified' || data.status?.status === 'mfa_required') && data.status.credential_types.includes('passkey') ? (
+        isPasskey ? (
+          <PasskeyLogin loginId={loginId} csrfToken={data.csrfToken} locale={data.locale} primary />
+        ) : (
+          <a className="auth-link mt-5 flex min-h-11 items-center justify-center rounded-xl border border-border text-sm font-semibold" href={loginChallengeDestination(loginId, 'passkey', data.uiLocales)}>{t('usePasskey')}</a>
+        )
+      ) : null}
+      {isPasskey && data.status?.status === 'identifier_verified' && data.status.credential_types.includes('password') ? (
+        <a className="auth-link mt-4 block text-center text-sm" href={loginChallengeDestination(loginId, 'password', data.uiLocales)}>{t('usePassword')}</a>
+      ) : null}
+
       {!restartRequired && alternativeMethods.length ? (
         <details className="auth-methods group mt-6 border-t border-border">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between pt-4 text-xs font-medium text-muted transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
@@ -572,7 +404,7 @@ function ChallengePage() {
             {alternativeMethods.map((method) => (
               <a
                 key={method.credentialType}
-                href={`/login/challenge?login_id=${encodeURIComponent(loginId)}&credential_type=${method.credentialType}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
+                href={loginChallengeDestination(loginId, method.credentialType, data.uiLocales)}
                 className="flex min-h-9 items-center justify-between rounded-lg bg-surface-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-tertiary"
               >
                 {method.label}
@@ -584,16 +416,11 @@ function ChallengePage() {
 
       {!restartRequired && canSwitchAccount ? (
         <ProgressiveForm
-          action="/login/challenge"
+          action={pathname}
           className="mt-6"
           enhancementErrorMessage={t('enhancedNavigationError')}
         >
           <input type="hidden" name="login_id" value={loginId} />
-          <input
-            type="hidden"
-            name="credential_type"
-            value={credentialType}
-          />
           <input type="hidden" name="csrf_token" value={data.csrfToken} />
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
           <SubmitButton

@@ -1,5 +1,6 @@
 //! Entity aliases for the current persistence schema.
 
+pub use super::authentication_challenge::Entity as AuthenticationChallenge;
 pub use super::client::Entity as Client;
 pub use super::client_authorization::Entity as ClientAuthorization;
 pub use super::client_openid_connect::Entity as ClientOpenIdConnect;

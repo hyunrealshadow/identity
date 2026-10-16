@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 pub use super::otp::OtpCredentialData;
 pub use super::password::Password;
-pub use super::recovery_code::{RecoveryCodeCredentialData, WebAuthnPublicKeyCredentialData};
+pub use super::recovery_code::RecoveryCodeCredentialData;
 
 #[derive(
     Debug,
@@ -27,6 +27,7 @@ pub enum CredentialType {
     Password,
     Otp,
     RecoveryCode,
+    Passkey,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,7 @@ pub enum CredentialData {
     Password(Password),
     Otp(OtpCredentialData),
     RecoveryCode(RecoveryCodeCredentialData),
+    Passkey(PasskeyCredentialData),
 }
 
 impl CredentialData {
@@ -50,6 +52,24 @@ impl CredentialData {
             Self::Password(_) => CredentialType::Password,
             Self::Otp(_) => CredentialType::Otp,
             Self::RecoveryCode(_) => CredentialType::RecoveryCode,
+            Self::Passkey(_) => CredentialType::Passkey,
         }
     }
+}
+
+/// SDK-independent persisted data for one account's Passkey.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PasskeyCredentialData {
+    pub name: String,
+    /// Canonical base64url WebAuthn credential ID, unique across accounts.
+    pub credential_id: String,
+    /// Opaque verifier data; only the WebAuthn adapter interprets its contents.
+    pub key: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StoredPasskey {
+    pub id: Uuid,
+    #[serde(flatten)]
+    pub data: PasskeyCredentialData,
 }

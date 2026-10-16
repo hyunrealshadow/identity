@@ -2,12 +2,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::auth::{
     LOGIN_EXPIRY, LoginFailureReason, LoginStatus, SessionOid, SessionStatus,
+    challenge::ChallengeBinding,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
-    sea_query::Expr,
+    TransactionTrait, sea_query::Expr,
 };
 use uuid::Uuid;
 
@@ -252,6 +253,11 @@ impl LoginRepository for LoginRepositoryImpl {
             return Err(LoginRepositoryError::InvalidTransition);
         }
 
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let previous_status = model.status;
         let mut update = LoginEntity::update_many()
             .col_expr(login::Column::Status, Expr::value(status.as_str()))
@@ -268,12 +274,19 @@ impl LoginRepository for LoginRepositoryImpl {
             update = update.col_expr(login::Column::Acr, Expr::value(Some(a.to_owned())));
         }
         let result = update
-            .exec(&self.db)
+            .exec(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         if result.rows_affected != 1 {
             return Err(LoginRepositoryError::InvalidTransition);
         }
+        super::challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         Ok(())
     }
 
@@ -311,6 +324,11 @@ impl LoginRepository for LoginRepositoryImpl {
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_identity"))]
     async fn reset_identity(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let result = LoginEntity::update_many()
             .col_expr(
                 login::Column::Status,
@@ -333,13 +351,20 @@ impl LoginRepository for LoginRepositoryImpl {
                 LoginStatus::IDENTIFIER_VERIFIED.as_str(),
                 LoginStatus::MFA_REQUIRED.as_str(),
             ]))
-            .exec(&self.db)
+            .exec(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
 
         if result.rows_affected != 1 {
             return Err(LoginRepositoryError::InvalidTransition);
         }
+        super::challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         Ok(())
     }
 

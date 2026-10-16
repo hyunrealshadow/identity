@@ -43,6 +43,7 @@ use crate::{
         signing_algorithm::SigningAlgorithmDetectorImpl,
     },
     database::repository::{
+        challenge::ChallengeRepositoryImpl,
         client_authorization::ClientAuthorizationRepositoryImpl,
         device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallRepositoryImpl,
         key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl,
@@ -84,6 +85,7 @@ pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
 pub type AppDeviceAuthorizationService = DeviceAuthorizationService;
 pub struct AppServices {
     login: AppLoginService,
+    passkey: Arc<identity_application::auth::passkey::PasskeyService>,
     account: AppAccountService,
     session: AppSessionService,
     mfa: AppMfaService,
@@ -142,6 +144,16 @@ impl AppServices {
         let totp = Arc::new(TotpVerifierImpl);
 
         let events = sink();
+        let passkey = Arc::new(
+            identity_application::auth::passkey::PasskeyService::new(
+                user_credential_repo.clone(),
+                Arc::new(ChallengeRepositoryImpl::new(db.clone())),
+                Arc::new(crate::auth::passkey::WebAuthnAuthenticator::new(
+                    settings.store(),
+                )),
+            )
+            .with_events(Arc::clone(&events)),
+        );
 
         let client_authorization_repo =
             Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone()));
@@ -165,6 +177,7 @@ impl AppServices {
         .with_scope_catalog(Arc::new(ScopeCatalogRepositoryImpl::new(db.clone())))
         .with_events(Arc::clone(&events));
         Ok(Self {
+            passkey: passkey.clone(),
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
                 user_credential_repo.clone(),
@@ -174,6 +187,7 @@ impl AppServices {
                 totp.clone(),
                 settings.store(),
             )
+            .with_passkeys(passkey)
             .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
@@ -329,6 +343,11 @@ impl AppServices {
             data_protector,
             events,
         })
+    }
+
+    #[must_use]
+    pub fn passkey(&self) -> &identity_application::auth::passkey::PasskeyService {
+        &self.passkey
     }
 
     #[must_use]

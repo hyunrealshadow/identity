@@ -25,6 +25,8 @@ mod m20261001_000001_create_resource;
 
 mod m20261001_000002_index_pushed_authorization_request;
 
+mod m20261016_000001_create_authentication_challenge;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -52,6 +54,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260928_000001_add_key_rotation::Migration),
             Box::new(m20261001_000001_create_resource::Migration),
             Box::new(m20261001_000002_index_pushed_authorization_request::Migration),
+            Box::new(m20261016_000001_create_authentication_challenge::Migration),
         ]
     }
 }

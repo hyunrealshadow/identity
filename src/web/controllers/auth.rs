@@ -25,7 +25,6 @@ use crate::{
         auth::login::ChallengeOutcome,
         error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
-        user::CredentialType,
     },
     domain::{
         client_authorization::SelectionSource, openid_connect::PromptValue, user::model::UserOid,
@@ -49,6 +48,7 @@ pub fn routes() -> Router {
         .push(Router::with_path("api/auth/login/select").post(select_account))
         .push(Router::with_path("api/auth/login/identifier").post(identifier))
         .push(Router::with_path("api/auth/login/challenge").post(challenge))
+        .push(Router::with_path("api/auth/login/passkey/options").post(passkey_options))
         .push(Router::with_path("api/auth/login/restart").post(restart_login))
         .push(Router::with_path("api/auth/login/switch").post(switch_login))
 }
@@ -106,7 +106,7 @@ async fn login_status(
         .await?;
     let login = ctx.services().login().get(login_oid).await?;
 
-    let (user, credential_types) = match login.user_oid {
+    let (user, credential_types, mfa_preference) = match login.user_oid {
         Some(user_oid) => {
             let user_oid = UserOid::from(user_oid);
             let credential_types = ctx.services().login().credential_types(user_oid).await?;
@@ -118,9 +118,10 @@ async fn login_status(
                     picture: user.picture,
                 }),
                 credential_types,
+                user.preferred_mfa_method,
             )
         }
-        None => (None, Vec::new()),
+        None => (None, Vec::new(), Default::default()),
     };
 
     let (prompt, requires_reauthentication, login_hint, ui_locales) = match ctx
@@ -161,21 +162,18 @@ async fn login_status(
     } else {
         None
     };
+    let preferred_credential_type = crate::application::auth::login::preferred_credential_type(
+        &login,
+        &credential_types,
+        mfa_preference,
+        requires_reauthentication,
+    );
     let challenge_uri = if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
             || requires_reauthentication)
+        && preferred_credential_type.is_some()
     {
-        let credential_type =
-            if requires_reauthentication && credential_types.contains(&CredentialType::Otp) {
-                CredentialType::Otp
-            } else if credential_types.contains(&CredentialType::Password) {
-                CredentialType::Password
-            } else {
-                credential_types
-                    .first()
-                    .cloned()
-                    .unwrap_or(CredentialType::Password)
-            };
+        let credential_type = preferred_credential_type.unwrap();
         Some(login_challenge_uri(
             &id,
             credential_type.as_ref(),
@@ -193,6 +191,7 @@ async fn login_status(
             status: login.status,
             user,
             credential_types,
+            preferred_credential_type,
             prompt: {
                 let mut values = prompt.iter().map(AsRef::as_ref).collect::<Vec<_>>();
                 values.sort_unstable();
@@ -215,11 +214,14 @@ fn login_challenge_uri(
 ) -> String {
     let mut query = Serializer::new(String::new());
     query.append_pair("login_id", login_id);
-    query.append_pair("credential_type", credential_type);
     if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
         query.append_pair("ui_locales", &ui_locales.join(" "));
     }
-    format!("/login/challenge?{}", query.finish())
+    let method = match credential_type {
+        "recovery_code" => "recovery-code",
+        method => method,
+    };
+    format!("/login/{}?{}", encode(method), query.finish())
 }
 
 #[handler]
@@ -326,6 +328,7 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         id: protected_id,
         status: LoginStatus::IdentifierVerified,
         credential_types: result.credential_types,
+        preferred_credential_type: result.preferred_credential_type,
         user: UserDisplayInfo {
             email: result.user.email.clone(),
             name: result.user.name.clone(),
@@ -374,6 +377,28 @@ async fn switch_login(
 }
 
 #[handler]
+async fn passkey_options(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    #[derive(serde::Deserialize)]
+    struct Input {
+        id: String,
+    }
+    let ctx = app_state(depot)?;
+    let body: Input = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let options = ctx.services().login().passkey_options(login_oid).await?;
+    render_json(res, StatusCode::OK, options);
+    Ok(())
+}
+
+#[handler]
 async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
@@ -404,11 +429,31 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
         .map_err(challenge_form_error)?;
 
     match outcome {
-        ChallengeOutcome::MfaRequired { .. } => {
+        ChallengeOutcome::MfaRequired { login } => {
+            let mut pending = login;
+            pending.status = LoginStatus::MFA_REQUIRED;
+            let user = ctx
+                .services()
+                .login()
+                .get_user(
+                    pending
+                        .user_oid
+                        .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+                        .into(),
+                )
+                .await?;
+            let credentials = ctx.services().login().credential_types(user.oid).await?;
+            let next_method = crate::application::auth::login::preferred_credential_type(
+                &pending,
+                &credentials,
+                user.preferred_mfa_method,
+                false,
+            );
             render_json(
                 res,
                 StatusCode::OK,
                 ChallengeResponse {
+                    preferred_credential_type: next_method,
                     status: LoginStatus::MfaRequired,
                     session: None,
                     acr: None,
@@ -458,6 +503,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 res,
                 StatusCode::CREATED,
                 ChallengeResponse {
+                    preferred_credential_type: None,
                     status: LoginStatus::Authenticated,
                     session: Some(SessionInfo {
                         id: selected.protected_session_id.clone(),
@@ -495,12 +541,28 @@ fn challenge_form_error(error: AppError) -> AppError {
 
 #[cfg(test)]
 mod form_error_tests {
-    use super::{challenge_form_error, identifier_form_error};
+    use super::{challenge_form_error, identifier_form_error, login_challenge_uri};
     use crate::application::error::{
         AppError,
         codes::{auth::AuthErrorCode, common::CommonErrorCode},
         kind::ErrorKind,
     };
+
+    #[test]
+    fn challenge_destinations_use_method_paths_and_preserve_context() {
+        let locales = vec!["zh-CN".to_owned(), "en-US".to_owned()];
+        for (credential, method) in [
+            ("password", "password"),
+            ("passkey", "passkey"),
+            ("otp", "otp"),
+            ("recovery_code", "recovery-code"),
+        ] {
+            assert_eq!(
+                login_challenge_uri("rp+login/id", credential, Some(&locales)),
+                format!("/login/{method}?login_id=rp%2Blogin%2Fid&ui_locales=zh-CN+en-US"),
+            );
+        }
+    }
 
     #[test]
     fn identifier_errors_are_attached_to_identifier_field() {

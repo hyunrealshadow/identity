@@ -191,11 +191,7 @@ export const Route = createFileRoute('/login')({
               },
             },
           )
-          const credentialType = result.credential_types.includes('password')
-            ? 'password'
-            : result.credential_types.includes('otp')
-              ? 'otp'
-              : result.credential_types[0]
+          const credentialType = result.preferred_credential_type
 
           if (!credentialType) throw new Error(translate(locale, 'noCredential'))
 

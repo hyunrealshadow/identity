@@ -82,9 +82,56 @@ can stop routing traffic before a rotated generation expires.
 When using a custom local hostname, start Vite with `--host`, trust its
 self-signed certificate, and configure the same HTTPS origin in Identity.
 
-All state-changing interactions are native HTML form POSTs. Client JavaScript
+Password, OTP, recovery-code and consent interactions are native HTML form POSTs. Client JavaScript
 intercepts the same forms only to provide enhanced navigation; disabling
-JavaScript preserves the complete login and consent flow.
+JavaScript preserves those login and consent methods. Passkeys use the browser
+WebAuthn API and require JavaScript and a secure context.
+
+## Passkeys
+
+Add and remove passkeys under **Account → Security → Multi-factor authentication**.
+Users with passkeys can save an account-wide preference for passkeys or their
+authenticator app. Passkeys are preferred by default. An authenticator-app
+preference selects password followed by OTP for a fresh login; a bound
+reauthentication can use OTP directly. Unavailable methods are skipped, and
+changing this ordering never removes an authentication requirement. If a user
+with passkeys has no OTP credential, the password path still requires passkey
+verification rather than granting a password-only session. Registering or deleting
+an MFA credential requires recent authentication; accounts with an existing MFA
+method (a passkey or TOTP) require AAL2. Saving the ordering preference requires
+account-update permission and does not change the accepted authentication factors.
+Sign-in offers passkeys only after the username or email has been submitted and
+verified, and only for credentials registered to that account. It does not use
+conditional mediation or discoverable sign-in on the identifier page. A passkey
+with user verification completes AAL2 authentication and can also satisfy
+reauthentication; password and OTP remain available.
+Credential pages use `/login/password`, `/login/passkey`, `/login/otp` and
+`/login/recovery-code`; `login_id` and locale remain query parameters. The route
+selects the credential type for both rendering and native/enhanced form posts.
+The identifier and account-picker entry remains `/login`.
+The passkey challenge page starts authentication automatically once focused.
+Cancelling leaves the button available for an explicit retry; it does not reopen
+the prompt automatically. Switching methods or leaving the page cancels an
+outstanding browser request. The passkey button on the password page stays manual.
+
+Apply the `m20261016_000001_create_authentication_challenge` migration before
+serving the updated application. Passkeys use `user_credential` with
+`type = 'passkey'`; a partial unique index prevents duplicate credential IDs.
+Temporary verification state uses the shared `authentication_challenge` table,
+with separate method, purpose, account and login/session bindings. Its storage
+contract supports Passkey, SMS OTP and email OTP; SMS/email delivery and OTP
+verification are not implemented by this change. OTP state must contain a
+protected verifier rather than a plaintext code, and its attempt/retry policy
+belongs to the future OTP use case.
+Passkey challenges expire after five minutes (or when their owner expires),
+remain independent across operations, and are atomically deleted when consumed.
+Changing the login stage, resetting its identity or revoking the bound session
+invalidates its pending challenges. Writes prune up to 100 expired rows; idle
+expired records remain unusable and are removed by later writes or owner deletion.
+There are no Passkey-specific tables or challenge columns on login/session.
+The relying party ID is the host of the configured `app.login_domain`; the
+allowed origin is that exact login origin, including its port. Use a stable
+HTTPS login origin: changing its host makes existing passkeys unavailable.
 
 ## Observability
 

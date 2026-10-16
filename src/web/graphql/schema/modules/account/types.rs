@@ -137,6 +137,7 @@ impl UpdateProfileInput {
             zone_info: patch_value(self.zone_info),
             locale: patch_value(self.locale),
             theme,
+            preferred_mfa_method: None,
             address_formatted: patch_value(self.address_formatted),
             address_street_address: patch_value(self.address_street_address),
             address_locality: patch_value(self.address_locality),

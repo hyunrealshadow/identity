@@ -40,10 +40,10 @@ describe('parseStepUpChallenge', () => {
   it('reads RFC 9470 authentication requirements', () => {
     expect(
       parseStepUpChallenge(
-        'Bearer realm="graphql", error="insufficient_user_authentication", acr_values="urn:identity:acr:aal2", max_age="3600"',
+        'Bearer realm="graphql", error="insufficient_user_authentication", acr_values="aal2", max_age="3600"',
       ),
     ).toEqual({
-      acrValues: 'urn:identity:acr:aal2',
+      acrValues: 'aal2',
       maxAge: 3600,
     })
   })
@@ -105,7 +105,7 @@ describe('identityGraphql', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(
       { errors: [{ message: 'recent authentication is required' }] },
       401,
-      { 'www-authenticate': 'Bearer error="insufficient_user_authentication", acr_values="urn:identity:acr:aal2", max_age="3600"' },
+      { 'www-authenticate': 'Bearer error="insufficient_user_authentication", acr_values="aal2", max_age="3600"' },
     )))
 
     const error = await identityGraphql('mutation Sensitive { disableTotp { changed } }')
@@ -113,7 +113,7 @@ describe('identityGraphql', () => {
 
     expect(error).toBeInstanceOf(GraphqlRequestError)
     expect((error as GraphqlRequestError).challenge).toEqual({
-      acrValues: 'urn:identity:acr:aal2',
+      acrValues: 'aal2',
       maxAge: 3600,
     })
     expect(mocks.clearAuthorizationCookie).not.toHaveBeenCalled()

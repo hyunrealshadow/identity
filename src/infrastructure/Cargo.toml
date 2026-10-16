@@ -61,6 +61,8 @@ url = { workspace = true }
 uuid = { workspace = true }
 woothee = { workspace = true }
 
+webauthn-rs = { version = "0.5.4", features = ["danger-allow-state-serialisation"] }
+
 [features]
 oidc-conformance = []
 test-support = []

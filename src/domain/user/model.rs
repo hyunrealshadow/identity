@@ -17,6 +17,25 @@ use uuid::Uuid;
 )]
 pub struct UserOid(pub Uuid);
 
+/// Account-wide ordering preference. It never changes which factors are required.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MfaMethod {
+    #[default]
+    Passkey,
+    Otp,
+}
+
+impl MfaMethod {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Passkey => "passkey",
+            Self::Otp => "otp",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UserTheme {
     Light,
@@ -74,6 +93,7 @@ pub struct User {
     pub zoneinfo: Option<String>,
     pub locale: Option<String>,
     pub theme: Option<UserTheme>,
+    pub preferred_mfa_method: MfaMethod,
     pub email_verified: bool,
     pub phone_number: Option<String>,
     pub phone_number_verified: Option<bool>,

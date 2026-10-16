@@ -4,8 +4,3 @@ use serde::{Deserialize, Serialize};
 pub struct RecoveryCodeCredentialData {
     pub hash: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebAuthnPublicKeyCredentialData {
-    pub public_key: String,
-}

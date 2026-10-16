@@ -1,9 +1,13 @@
 use async_trait::async_trait;
 use chrono::Utc;
+use identity_application::error::AppError;
 use identity_application::user::{
     CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
     UserCredential, UserCredentialOid, UserOid,
-    repository::{UserCredentialRepository, UserCredentialRepositoryError},
+    credential::StoredPasskey,
+    repository::{
+        PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
+    },
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
@@ -58,6 +62,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 user_credential::Column::Data,
                 user_credential::Column::CreatedAt,
                 user_credential::Column::UpdatedAt,
+                user_credential::Column::ExpiresAt,
             ])
             .into_model::<user_credential::Model>()
             .all(&self.db)
@@ -68,6 +73,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .into_iter()
             .map(|m| {
                 let data = match &credential_type {
+                    CredentialType::Passkey => from_value(m.data).map(CredentialData::Passkey),
                     CredentialType::Password => from_value(m.data).map(CredentialData::Password),
                     CredentialType::Otp => from_value(m.data).map(CredentialData::Otp),
                     CredentialType::RecoveryCode => {
@@ -183,6 +189,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                         CredentialData::Password(value) => to_value(value),
                         CredentialData::Otp(value) => to_value(value),
                         CredentialData::RecoveryCode(value) => to_value(value),
+                        CredentialData::Passkey(value) => to_value(value),
                     })
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(UserCredentialRepositoryError::Serialization)?;
@@ -514,5 +521,76 @@ mod tests {
             error,
             UserCredentialRepositoryError::Deserialization(_)
         ));
+    }
+}
+
+#[async_trait]
+impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
+    async fn list(&self, user: UserOid) -> Result<Vec<StoredPasskey>, AppError> {
+        self.find_by_user_oid_and_type(user, CredentialType::Passkey)
+            .await?
+            .into_iter()
+            .map(|credential| match credential.data {
+                CredentialData::Passkey(data) => Ok(StoredPasskey {
+                    id: credential.oid.0,
+                    data,
+                }),
+                _ => Err(AppError::internal(
+                    UserCredentialRepositoryError::CredentialTypeMismatch(CredentialType::Passkey),
+                )),
+            })
+            .collect()
+    }
+
+    async fn insert(&self, user_oid: UserOid, key: StoredPasskey) -> Result<(), AppError> {
+        let txn = self.db.begin().await.map_err(AppError::internal)?;
+        lock_user_credentials(&txn, user_oid)
+            .await
+            .map_err(AppError::internal)?;
+        let user = UserEntity::find()
+            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .one(&txn)
+            .await
+            .map_err(AppError::internal)?
+            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        user_credential::ActiveModel {
+            oid: Set(key.id),
+            user_id: Set(user.id),
+            r#type: Set(CredentialType::Passkey.to_string()),
+            data: Set(to_value(key.data).map_err(AppError::internal)?),
+            expires_at: Set(None),
+            created_at: Set(Utc::now().into()),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(AppError::internal)?;
+        txn.commit().await.map_err(AppError::internal)
+    }
+
+    async fn update(
+        &self,
+        user: UserOid,
+        before: &StoredPasskey,
+        after: &StoredPasskey,
+    ) -> Result<bool, AppError> {
+        use sea_orm::{ConnectionTrait, DbBackend, Statement};
+        if before.id != after.id || before.data.credential_id != after.data.credential_id {
+            return Ok(false);
+        }
+        let result = self.db.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
+            "UPDATE user_credential SET data = $1, updated_at = now() WHERE oid = $2 AND user_id = (SELECT id FROM \"user\" WHERE oid = $3) AND type = 'passkey' AND data = $4 AND (expires_at IS NULL OR expires_at > now())",
+            [to_value(&after.data).map_err(AppError::internal)?.into(), before.id.into(), Uuid::from(user).into(), to_value(&before.data).map_err(AppError::internal)?.into()]
+        )).await.map_err(AppError::internal)?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    async fn delete(&self, user: UserOid, id: Uuid) -> Result<bool, AppError> {
+        use sea_orm::{ConnectionTrait, DbBackend, Statement};
+        let result = self.db.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
+            "DELETE FROM user_credential WHERE oid = $1 AND user_id = (SELECT id FROM \"user\" WHERE oid = $2) AND type = 'passkey'",
+            [id.into(), Uuid::from(user).into()]
+        )).await.map_err(AppError::internal)?;
+        Ok(result.rows_affected() == 1)
     }
 }

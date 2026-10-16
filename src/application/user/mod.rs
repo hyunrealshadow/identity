@@ -9,4 +9,4 @@ pub use credential::{CredentialData, CredentialType, UserCredential, UserCredent
 pub use identity_domain::user::{ParseUserThemeError, User, UserOid, UserTheme};
 pub use otp::{OtpAlgorithm, OtpCredentialData};
 pub use password::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password};
-pub use recovery_code::{RecoveryCodeCredentialData, WebAuthnPublicKeyCredentialData};
+pub use recovery_code::RecoveryCodeCredentialData;

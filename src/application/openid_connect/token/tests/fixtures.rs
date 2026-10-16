@@ -310,6 +310,7 @@ pub(super) fn build_token_service_with_device_repo(
                 zoneinfo: None,
                 locale: None,
                 theme: None,
+                preferred_mfa_method: Default::default(),
                 email_verified: true,
                 phone_number: None,
                 phone_number_verified: None,

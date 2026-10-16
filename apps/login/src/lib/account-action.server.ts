@@ -60,9 +60,9 @@ export async function executeAccountAction(
     }
     if (action === 'prepare-change-password' || action === 'prepare-disable-totp') {
       const requiredAcr = action === 'prepare-disable-totp'
-        ? 'urn:identity:acr:aal2'
+        ? 'aal2'
         : await passwordChangeRequiredAcr()
-      const requiresAal2 = requiredAcr === 'urn:identity:acr:aal2'
+      const requiresAal2 = requiredAcr === 'aal2'
       if (await hasFreshAuthentication(requiredAcr)) return { ok: true }
 
       const loginHint = values.login_hint?.trim()
@@ -76,7 +76,7 @@ export async function executeAccountAction(
         action === 'prepare-change-password' ? 'password' : 'mfa',
         {
           loginHint,
-          acrValues: requiredAcr ?? 'urn:identity:acr:aal1',
+          acrValues: requiredAcr ?? 'aal1',
           maxAge: requiresAal2 ? 60 * 60 : 5 * 60,
         },
       )
@@ -89,6 +89,14 @@ export async function executeAccountAction(
     } else if (action === 'revoke-others') {
       await requireGraphql(
         `mutation RevokeOthers { revokeOtherSessions { revokedCount } }`,
+      )
+    } else if (action === 'update-mfa-preference') {
+      const method = values.preferred_mfa_method
+      if (method !== 'passkey' && method !== 'otp') throw new AccountActionError(translate(locale, 'mfaInvalidPriority'))
+      await requireGraphql(
+        'mutation UpdateMfaPreference($method: PreferredMfaMethod!) { updatePreferredMfaMethod(method: $method) }',
+        { method: method.toUpperCase() },
+        { authorization: 'elevated' },
       )
     } else if (action === 'update-profile') {
       await requireGraphql(
@@ -213,7 +221,7 @@ export async function executeAccountAction(
           'account',
           {
             loginHint,
-            acrValues: 'urn:identity:acr:aal1',
+            acrValues: 'aal1',
             maxAge: 5 * 60,
           },
         )
@@ -247,7 +255,7 @@ export async function executeAccountAction(
       await completeTotpStateChange(false)
       await clearElevatedAuthorization()
     } else if (action === 'regenerate-recovery-codes') {
-      const requiredAcr = 'urn:identity:acr:aal2'
+      const requiredAcr = 'aal2'
       if (!(await hasFreshAuthentication(requiredAcr))) {
         const loginHint = values.login_hint?.trim() || await currentAccountLoginHint()
         if (!loginHint) {
@@ -337,7 +345,7 @@ async function currentAccountLoginHint() {
 async function passwordChangeRequiredAcr() {
   const knownState = await mfaUiState()
   if (typeof knownState.totpEnabled === 'boolean') {
-    return knownState.totpEnabled ? 'urn:identity:acr:aal2' : undefined
+    return knownState.totpEnabled ? 'aal2' : undefined
   }
   const data = await requireGraphql<{
     viewer: { security: { totpEnabled: boolean } }
@@ -348,7 +356,7 @@ async function passwordChangeRequiredAcr() {
   )
   await storeTotpEnabled(data.viewer.security.totpEnabled)
   return data.viewer.security.totpEnabled
-    ? 'urn:identity:acr:aal2'
+    ? 'aal2'
     : undefined
 }
 
@@ -400,6 +408,7 @@ function accountFlashFromError(
 
 function isMfaAction(action: string) {
   return [
+    'update-mfa-preference',
     'prepare-disable-totp',
     'begin-totp',
     'use-legacy-totp',

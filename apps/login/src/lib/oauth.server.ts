@@ -29,8 +29,8 @@ const REAUTHENTICATION_SCOPES = {
   account: 'openid account',
   mfa: 'openid account',
 } as const
-const ACR_AAL1 = 'urn:identity:acr:aal1'
-const ACR_AAL2 = 'urn:identity:acr:aal2'
+const ACR_AAL1 = 'aal1'
+const ACR_AAL2 = 'aal2'
 const RECENT_AUTHENTICATION_SECONDS = 5 * 60
 const ELEVATED_AUTHENTICATION_SECONDS = 60 * 60
 

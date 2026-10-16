@@ -1,5 +1,6 @@
 use std::{fmt, str::FromStr, time::Duration};
 
+pub mod challenge;
 pub mod model;
 pub use model::SessionOid;
 pub mod repository;
@@ -153,13 +154,13 @@ impl LoginFailureReason {
 ///
 /// The authentication methods used to satisfy this policy are reported
 /// separately through the OIDC `amr` claim.
-pub const ACR_AAL1: &str = "urn:identity:acr:aal1";
+pub const ACR_AAL1: &str = "aal1";
 
 /// Application AAL2 authentication assurance policy.
 ///
-/// OIDC leaves ACR values deployment-specific. This private URI is advertised
-/// through discovery. The methods currently satisfying it are password and TOTP.
-pub const ACR_AAL2: &str = "urn:identity:acr:aal2";
+/// This application-specific value is advertised through OIDC discovery.
+/// It can be satisfied by password plus OTP or a user-verified Passkey.
+pub const ACR_AAL2: &str = "aal2";
 
 /// Returns whether an established authentication context meets a requested
 /// assurance level. Higher assurance satisfies lower-assurance requirements;

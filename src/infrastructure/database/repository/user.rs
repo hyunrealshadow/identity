@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
 use identity_domain::user::{
-    User, UserOid, UserTheme,
+    MfaMethod, User, UserOid, UserTheme,
     normalization::normalize_identifier,
     repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, ExprTrait,
-    QueryFilter, Set, TransactionTrait, sea_query::Expr,
+    QueryFilter, QuerySelect, Set, TransactionTrait, sea_query::Expr,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -15,6 +15,14 @@ use uuid::Uuid;
 use crate::database::entity::{user, user::Entity as UserEntity};
 
 fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
+    let preferred_mfa_method = m
+        .preferences
+        .get("preferred_mfa_method")
+        .cloned()
+        .map(serde_json::from_value::<MfaMethod>)
+        .transpose()
+        .map_err(|_| UserRepositoryError::InvalidStoredMfaPreference)?
+        .unwrap_or_default();
     let theme = m
         .preferences
         .get("theme")
@@ -40,6 +48,7 @@ fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
         zoneinfo: m.zone_info,
         locale: m.locale,
         theme,
+        preferred_mfa_method,
         email_verified: m.email_verified,
         phone_number: m.phone_number,
         phone_number_verified: m.phone_number_verified,
@@ -100,9 +109,16 @@ impl UserRepositoryImpl {
         oid: UserOid,
         mut patch: UserProfilePatch,
     ) -> Result<Option<User>, UserRepositoryError> {
+        // Serialize preference patches with profile/theme changes to preserve all JSON keys.
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
         let Some(model) = UserEntity::find()
             .filter(user::Column::Oid.eq(Uuid::from(oid)))
-            .one(&self.db)
+            .lock_exclusive()
+            .one(&txn)
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
         else {
@@ -120,8 +136,17 @@ impl UserRepositoryImpl {
         );
         apply_patch!(active, patch, profile, picture, website, gender);
         apply_patch!(active, patch, birthdate, zone_info, locale);
+        let preferences_changed = patch.theme.is_some() || patch.preferred_mfa_method.is_some();
         if let Some(theme) = patch.theme.take() {
             update_theme_preference(&mut preferences, theme);
+        }
+        if let Some(method) = patch.preferred_mfa_method {
+            if !preferences.is_object() {
+                preferences = json!({});
+            }
+            preferences["preferred_mfa_method"] = json!(method);
+        }
+        if preferences_changed {
             active.preferences = Set(preferences);
         }
         apply_patch!(
@@ -136,10 +161,14 @@ impl UserRepositoryImpl {
         );
         active.updated_at = Set(Some(Utc::now().into()));
         let model = active
-            .update(&self.db)
+            .update(&txn)
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
-        to_domain(model).map(Some)
+        let user = to_domain(model)?;
+        txn.commit()
+            .await
+            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
+        Ok(Some(user))
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_identifier"))]
@@ -381,16 +410,67 @@ mod tests {
     }
 
     #[test]
+    fn mfa_preference_defaults_and_rejects_corrupt_values() {
+        let mut model = user_model();
+        assert_eq!(
+            to_domain(model.clone()).unwrap().preferred_mfa_method,
+            identity_domain::user::MfaMethod::Passkey
+        );
+        model.preferences["preferred_mfa_method"] = json!("otp");
+        assert_eq!(
+            to_domain(model.clone()).unwrap().preferred_mfa_method,
+            identity_domain::user::MfaMethod::Otp
+        );
+        model.preferences["preferred_mfa_method"] = json!("unsupported");
+        assert!(matches!(
+            to_domain(model),
+            Err(identity_domain::user::repository::UserRepositoryError::InvalidStoredMfaPreference)
+        ));
+    }
+
+    #[tokio::test]
+    async fn updating_mfa_preference_preserves_theme_under_a_row_lock() {
+        let current = user_model();
+        let mut updated = current.clone();
+        updated.preferences["preferred_mfa_method"] = json!("otp");
+        let db = MockDatabase::new(DatabaseBackend::Postgres)
+            .append_query_results([[current], [updated]])
+            .into_connection();
+        let repo = UserRepositoryImpl::new(db);
+        let user = repo
+            .update_profile(
+                Uuid::nil().into(),
+                identity_domain::user::repository::UserProfilePatch {
+                    preferred_mfa_method: Some(identity_domain::user::MfaMethod::Otp),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            user.preferred_mfa_method,
+            identity_domain::user::MfaMethod::Otp
+        );
+        assert_eq!(user.theme, Some(UserTheme::Dark));
+        let log = format!("{:?}", repo.db.into_transaction_log());
+        assert!(log.contains("FOR UPDATE"));
+        assert!(log.contains("preferred_mfa_method"));
+    }
+
+    #[test]
     fn updating_theme_preserves_other_json_preferences() {
         let mut preferences = json!({
             "theme": "light",
             "compact_navigation": true,
+            "preferred_mfa_method": "otp",
         });
 
         update_theme_preference(&mut preferences, Some(UserTheme::Dark));
 
         assert_eq!(preferences["theme"], "dark");
         assert_eq!(preferences["compact_navigation"], true);
+        assert_eq!(preferences["preferred_mfa_method"], "otp");
 
         update_theme_preference(&mut preferences, None);
 

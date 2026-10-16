@@ -10,6 +10,8 @@ import { TotpQrCode } from '#/components/totp-qr-code'
 import { TotpInput } from '#/components/totp-input'
 import { translate } from '#/lib/i18n'
 import { useAccount } from './route'
+import { PasskeySettings } from '#/components/passkey-settings'
+import { MfaPriority } from '#/components/mfa-priority'
 
 interface SecuritySearch {
   setup?: 'mfa'
@@ -45,7 +47,9 @@ function SecurityPage() {
         </SettingsCard>
         <SettingsCard title={t('accountMfaRowTitle')} description={t('accountMfaDescription')}>
           <div className="divide-y divide-separator">
-            <div className={security.totpEnabled ? 'pb-5' : undefined}>
+            {(data.viewer.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority key={security.preferredMfaMethod} locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} loginHint={loginHint} /></div> : null}
+            <div className={(data.viewer.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings locale={locale} keys={data.viewer.passkeys ?? []} /></div>
+            <div className={security.totpEnabled ? 'py-5' : 'pt-5'}>
               <SettingsRow
                 title={t('accountMfa')}
                 description={security.totpEnabled ? t('accountMfaEnabled') : t('accountMfaNotEnabled')}

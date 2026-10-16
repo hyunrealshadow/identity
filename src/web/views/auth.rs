@@ -120,6 +120,7 @@ pub struct IdentifierResponse {
     pub status: LoginStatus,
     /// Credential types available for this user, e.g. `["password"]`.
     pub credential_types: Vec<CredentialType>,
+    pub preferred_credential_type: Option<CredentialType>,
     /// User display info.
     pub user: UserDisplayInfo,
 }
@@ -134,6 +135,8 @@ pub struct LoginStatusResponse {
     /// Credential types available to the bound user. Empty before an account
     /// has been selected.
     pub credential_types: Vec<CredentialType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_credential_type: Option<CredentialType>,
     /// Prompt value from the original authorization request (`"login"`,
     /// `"consent"`, `"select_account"`, or `"none"`).  Clients use this to
     /// decide whether to offer the account picker (`prompt=login` forbids it).
@@ -219,6 +222,8 @@ pub struct ChallengeRequest {
 /// the `sessions` field contains the updated protected session ID list.
 #[derive(Debug, Serialize)]
 pub struct ChallengeResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_credential_type: Option<CredentialType>,
     /// `"authenticated"` or `"mfa_required"`.
     pub status: LoginStatus,
     /// Present only when `status == "authenticated"`.

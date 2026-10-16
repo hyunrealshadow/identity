@@ -1,3 +1,4 @@
+pub mod challenge;
 pub mod client_authorization;
 mod client_authorization_query;
 pub mod device_authorization;
@@ -16,3 +17,6 @@ pub mod setting;
 pub mod shared;
 pub mod user;
 pub mod user_credential;
+
+#[cfg(test)]
+mod passkey_storage_tests;

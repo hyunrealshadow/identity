@@ -11,6 +11,9 @@ import {
   type ThemePreference,
 } from '#/lib/appearance'
 import { translate, type Locale } from '#/lib/i18n'
+import { BROWSER_LOCALE_VALUE } from '#/lib/account-locale'
+
+type LanguagePreference = Locale | typeof BROWSER_LOCALE_VALUE
 
 export function AppearanceControls({ locale }: { locale: Locale }) {
   const pageTheme = useRouterState({
@@ -23,11 +26,25 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
     },
   })
   const currentHref = useRouterState({ select: (state) => state.location.href })
+  const uiLocales = useRouterState({
+    select: (state) => {
+      for (const match of [...state.matches].reverse()) {
+        const data = match.loaderData as { uiLocales?: string } | undefined
+        if (typeof data?.uiLocales === 'string') return data.uiLocales
+      }
+      return ''
+    },
+  })
   const [theme, setTheme] = useState<ThemePreference>(pageTheme)
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
+  const languagePreference = new URL(currentHref, 'https://identity.invalid')
+    .searchParams.get('ui_locales') ?? uiLocales
+  const followsBrowser = !languagePreference || languagePreference === BROWSER_LOCALE_VALUE
+  const languageLabel = followsBrowser ? t('accountLocaleBrowser') : locale === 'zh-CN' ? '简体中文' : 'English'
 
-  function hrefWithLocale(nextLocale: Locale) {
+  function hrefWithLocale(nextLocale: LanguagePreference) {
     const url = new URL(currentHref, 'https://identity.invalid')
+    // Keep an explicit browser choice instead of restoring the flow's ui_locales.
     url.searchParams.set('ui_locales', nextLocale)
     return `${url.pathname}${url.search}${url.hash}`
   }
@@ -45,10 +62,8 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
     return () => media.removeEventListener('change', followSystem)
   }, [])
 
-  function changeLocale(nextLocale: Locale) {
-    const url = new URL(window.location.href)
-    url.searchParams.set('ui_locales', nextLocale)
-    window.location.assign(url)
+  function changeLocale(nextLocale: LanguagePreference) {
+    window.location.assign(hrefWithLocale(nextLocale))
   }
 
   function changeTheme(next: ThemePreference) {
@@ -76,26 +91,30 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
         <Dropdown>
           <Button
             variant="ghost"
-            aria-label={`${t('language')}: ${locale === 'zh-CN' ? '简体中文' : 'English'}`}
+            aria-label={`${t('language')}: ${languageLabel}`}
             className="h-8 min-h-8 gap-1 px-2 text-xs font-medium"
           >
-            {locale === 'zh-CN' ? '简体中文' : 'English'}
+            {languageLabel}
             <ChevronDown className="size-3.5 text-muted" aria-hidden="true" />
           </Button>
           <Dropdown.Popover placement="bottom end" className="min-w-32">
             <Dropdown.Menu
               aria-label={t('language')}
               onAction={(key) => {
-                if (key === 'en-US' || key === 'zh-CN') changeLocale(key)
+                if (key === BROWSER_LOCALE_VALUE || key === 'en-US' || key === 'zh-CN') changeLocale(key)
               }}
             >
+              <Dropdown.Item id={BROWSER_LOCALE_VALUE} textValue={t('accountLocaleBrowser')}>
+                <Label>{t('accountLocaleBrowser')}</Label>
+                {followsBrowser ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+              </Dropdown.Item>
               <Dropdown.Item id="en-US" textValue="English">
                 <Label>English</Label>
-                {locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+                {!followsBrowser && locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
               </Dropdown.Item>
               <Dropdown.Item id="zh-CN" textValue="简体中文">
                 <Label>简体中文</Label>
-                {locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+                {!followsBrowser && locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
               </Dropdown.Item>
             </Dropdown.Menu>
           </Dropdown.Popover>
@@ -132,17 +151,21 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
       <div className="no-js-only absolute right-4 top-4 z-10 flex items-start gap-1 sm:right-6 sm:top-6">
         <details name="appearance-preference" className="relative rounded-field border border-border bg-surface/95 shadow-sm">
           <summary className="flex h-10 cursor-pointer list-none items-center gap-1 px-3 text-xs font-medium [&::-webkit-details-marker]:hidden">
-            {locale === 'zh-CN' ? '简体中文' : 'English'}
+            {languageLabel}
             <span aria-hidden="true">▾</span>
           </summary>
           <div className="absolute right-0 mt-1 grid min-w-32 gap-1 rounded-field border border-border bg-surface p-1 shadow-lg">
+            <a className="flex items-center gap-2 rounded-field px-3 py-2 text-xs hover:bg-surface-secondary" href={hrefWithLocale(BROWSER_LOCALE_VALUE)}>
+              <span>{t('accountLocaleBrowser')}</span>
+              {followsBrowser ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+            </a>
             <a className="flex items-center gap-2 rounded-field px-3 py-2 text-xs hover:bg-surface-secondary" href={hrefWithLocale('en-US')}>
               <span>English</span>
-              {locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+              {!followsBrowser && locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
             </a>
             <a className="flex items-center gap-2 rounded-field px-3 py-2 text-xs hover:bg-surface-secondary" href={hrefWithLocale('zh-CN')}>
               <span>简体中文</span>
-              {locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+              {!followsBrowser && locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
             </a>
           </div>
         </details>

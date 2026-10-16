@@ -46,8 +46,8 @@ describe('appearance preferences', () => {
 
   it('only redirects appearance forms back to the same origin', () => {
     const requestUrl = 'https://identity.example/appearance'
-    expect(safeAppearanceReturnTo(requestUrl, '/login/challenge?login_id=123')).toBe(
-      '/login/challenge?login_id=123',
+    expect(safeAppearanceReturnTo(requestUrl, '/login/password?login_id=123')).toBe(
+      '/login/password?login_id=123',
     )
     expect(safeAppearanceReturnTo(requestUrl, 'https://evil.example/phish')).toBe('/login')
     expect(safeAppearanceReturnTo(requestUrl, null)).toBe('/login')

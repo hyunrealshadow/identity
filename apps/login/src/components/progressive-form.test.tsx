@@ -27,7 +27,7 @@ describe('ProgressiveForm', () => {
   it('can defer field validation to the server', () => {
     render(
       <ProgressiveForm
-        action="/login/challenge"
+        action="/login/password"
         enhancementErrorMessage="Try again"
         noValidate
       >

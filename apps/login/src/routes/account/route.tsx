@@ -32,9 +32,10 @@ export interface AccountSession {
 
 export interface AccountData {
   viewer: {
+    passkeys: Array<{ id: string; name: string }>
     account: { id: string; username: string; email: string; emailVerified: boolean; givenName?: string; familyName?: string; nickname?: string; picture?: string; website?: string; birthdate?: string; locale?: string; theme?: string; createdAt: string }
     sessions: { edges: Array<{ node: AccountSession }> }
-    security: { totpEnabled: boolean; recoveryCodesRemaining: number }
+    security: { totpEnabled: boolean; recoveryCodesRemaining: number; preferredMfaMethod: 'passkey' | 'otp' }
   }
 }
 
@@ -42,7 +43,8 @@ const ACCOUNT_QUERY = `query AccountHome {
   viewer {
     account { id username email emailVerified givenName familyName nickname picture website birthdate locale theme createdAt }
     sessions(first: 50) { edges { node { id status current deviceName deviceType osName osVersion browserName browserVersion ipAddress lastActiveAt createdAt } } }
-    security { totpEnabled recoveryCodesRemaining }
+    security { totpEnabled recoveryCodesRemaining preferredMfaMethod }
+    passkeys { id name }
   }
 }`
 

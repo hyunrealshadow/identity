@@ -3,6 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
         ACR_AAL1, ACR_AAL2, SESSION_EXPIRY, SessionOid, SessionStatus,
+        challenge::ChallengeBinding,
         model::{ActiveSession, Session},
         repository::{
             CreateSessionInput, SessionPage, SessionPageDirection, SessionPageItem,
@@ -453,6 +454,9 @@ impl SessionRepository for SessionRepositoryImpl {
         active.updated_at = Set(Some(revoked_at.into()));
         let model = active
             .update(&transaction)
+            .await
+            .map_err(|e| SessionRepositoryError::RevokeFailed(Box::new(e)))?;
+        super::challenge::clear_for_binding(&transaction, ChallengeBinding::Session(oid.0))
             .await
             .map_err(|e| SessionRepositoryError::RevokeFailed(Box::new(e)))?;
         ClientAuthorizationEntity::update_many()

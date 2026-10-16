@@ -268,7 +268,7 @@ mod tests {
             user_oid: Uuid::nil().to_string(),
             approved_scope: "openid profile".to_owned(),
             auth_time: Some(1_700_000_000),
-            acr: Some("urn:identity:acr:aal1".to_owned()),
+            acr: Some("aal1".to_owned()),
             amr: vec!["pwd".to_owned()],
             device_authorization_oid: Uuid::new_v4(),
         }

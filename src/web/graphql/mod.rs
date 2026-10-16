@@ -360,7 +360,7 @@ mod unit_tests {
     fn formats_rfc9470_step_up_challenge_from_graphql_error() {
         let mut extensions = ErrorExtensionValues::default();
         extensions.set("code", "insufficient_user_authentication");
-        extensions.set("acr_values", "urn:identity:acr:aal2");
+        extensions.set("acr_values", "aal2");
         extensions.set("max_age", 3600_u64);
         let mut error = ServerError::new("recent authentication is required", None);
         error.extensions = Some(extensions);
@@ -369,7 +369,7 @@ mod unit_tests {
         let challenge = step_up_challenge(&response).expect("step-up challenge");
 
         assert!(challenge.contains("error=\"insufficient_user_authentication\""));
-        assert!(challenge.contains("acr_values=\"urn:identity:acr:aal2\""));
+        assert!(challenge.contains("acr_values=\"aal2\""));
         assert!(challenge.contains("max_age=\"3600\""));
     }
 

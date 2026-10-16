@@ -2,4 +2,4 @@ pub mod model;
 pub mod normalization;
 pub mod repository;
 
-pub use model::{ParseUserThemeError, User, UserOid, UserTheme};
+pub use model::{MfaMethod, ParseUserThemeError, User, UserOid, UserTheme};

@@ -42,12 +42,12 @@ describe('OAuth reauthentication request', () => {
     expect(
       reauthenticationRequestParameters('account', {
         loginHint: 'alice',
-        acrValues: 'urn:identity:acr:aal1',
+        acrValues: 'aal1',
         maxAge: 300,
       }),
     ).toEqual({
       loginHint: 'alice',
-      acrValues: 'urn:identity:acr:aal1',
+      acrValues: 'aal1',
       maxAge: 300,
     })
   })
@@ -57,7 +57,7 @@ describe('OAuth reauthentication request', () => {
       loginHint: 'alice',
     })).toEqual({
       loginHint: 'alice',
-      acrValues: 'urn:identity:acr:aal2',
+      acrValues: 'aal2',
       maxAge: 0,
     })
   })
@@ -68,15 +68,15 @@ describe('local authentication freshness', () => {
     `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`
 
   it('uses the same five-minute recent-authentication window as the API', () => {
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 700, acr: 'urn:identity:acr:aal1' }), undefined, 1_000)).toBe(true)
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 699, acr: 'urn:identity:acr:aal1' }), undefined, 1_000)).toBe(false)
+    expect(tokenAuthenticationIsFresh(token({ auth_time: 700, acr: 'aal1' }), undefined, 1_000)).toBe(true)
+    expect(tokenAuthenticationIsFresh(token({ auth_time: 699, acr: 'aal1' }), undefined, 1_000)).toBe(false)
   })
 
   it('requires AAL2 and uses its one-hour freshness window', () => {
-    const aal2 = 'urn:identity:acr:aal2'
+    const aal2 = 'aal2'
     expect(tokenAuthenticationIsFresh(token({ auth_time: 400, acr: aal2 }), aal2, 4_000)).toBe(true)
     expect(tokenAuthenticationIsFresh(token({ auth_time: 399, acr: aal2 }), aal2, 4_000)).toBe(false)
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 4_000, acr: 'urn:identity:acr:aal1' }), aal2, 4_000)).toBe(false)
+    expect(tokenAuthenticationIsFresh(token({ auth_time: 4_000, acr: 'aal1' }), aal2, 4_000)).toBe(false)
   })
 
 })

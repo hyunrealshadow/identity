@@ -12,10 +12,10 @@ describe('progressive form responses', () => {
       method: 'POST',
     })
 
-    const response = navigationResponse(request, '/login/challenge')
+    const response = navigationResponse(request, '/login/password')
 
     expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('/login/challenge')
+    expect(response.headers.get('location')).toBe('/login/password')
   })
 
   it('returns navigation JSON for enhanced form submissions', async () => {
@@ -24,11 +24,11 @@ describe('progressive form responses', () => {
       headers: { 'x-enhanced-form': '1' },
     })
 
-    const response = navigationResponse(request, '/login/challenge')
+    const response = navigationResponse(request, '/login/password')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
-      redirect: '/login/challenge',
+      redirect: '/login/password',
     })
   })
 
@@ -94,9 +94,9 @@ describe('progressive form responses', () => {
   })
 
   it('preserves an explicit challenge retry destination', () => {
-    const request = new Request('https://login.example.com/login/challenge', { method: 'POST' })
-    const destination = '/login/challenge?login_id=rp-login&credential_type=otp&restart=required'
-    const response = formErrorResponse(request, '/login/challenge', 'Retry',
+    const request = new Request('https://login.example.com/login/password', { method: 'POST' })
+    const destination = '/login/otp?login_id=rp-login&restart=required'
+    const response = formErrorResponse(request, '/login/password', 'Retry',
       { login_id: 'rp-login' }, undefined, destination)
     expect(response.headers.get('location')).toBe(destination)
   })

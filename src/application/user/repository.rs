@@ -1,8 +1,11 @@
 use std::error::Error as StdError;
 
+use crate::error::AppError;
+use crate::user::credential::StoredPasskey;
 use async_trait::async_trait;
 use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::user::{
     CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
@@ -108,4 +111,20 @@ pub trait UserCredentialRepository: Send + Sync {
         &self,
         credential_oid: UserCredentialOid,
     ) -> Result<bool, UserCredentialRepositoryError>;
+}
+
+/// Per-credential operations on the existing user credential aggregate.
+#[async_trait]
+pub trait PasskeyCredentialRepository: Send + Sync {
+    async fn list(&self, user: UserOid) -> Result<Vec<StoredPasskey>, AppError>;
+    /// Enforces globally unique credential IDs without replacing existing credentials.
+    async fn insert(&self, user: UserOid, key: StoredPasskey) -> Result<(), AppError>;
+    /// Compare-and-swap must reject revoked, expired, or concurrently changed credentials.
+    async fn update(
+        &self,
+        user: UserOid,
+        before: &StoredPasskey,
+        after: &StoredPasskey,
+    ) -> Result<bool, AppError>;
+    async fn delete(&self, user: UserOid, id: Uuid) -> Result<bool, AppError>;
 }

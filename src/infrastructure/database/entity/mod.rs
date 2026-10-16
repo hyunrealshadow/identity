@@ -3,6 +3,7 @@
 //! These definitions evolve with the current database schema; historical
 //! structure remains encoded by the ordered migration crate.
 
+pub mod authentication_challenge;
 pub mod prelude;
 pub mod resource;
 

@@ -211,7 +211,7 @@ describe('executeAccountAction', () => {
       'account',
       {
         loginHint: 'alice',
-        acrValues: 'urn:identity:acr:aal1',
+        acrValues: 'aal1',
         maxAge: 300,
       },
     )
@@ -242,7 +242,7 @@ describe('executeAccountAction', () => {
           message: 'recent authentication is required',
           extensions: { code: 'insufficient_user_authentication' },
         }],
-        { acrValues: 'urn:identity:acr:aal1', maxAge: 300 },
+        { acrValues: 'aal1', maxAge: 300 },
       ))
       .mockResolvedValueOnce({ viewer: { account: { username: 'alice' } } })
 
@@ -255,7 +255,7 @@ describe('executeAccountAction', () => {
       'account',
       {
         loginHint: 'alice',
-        acrValues: 'urn:identity:acr:aal1',
+        acrValues: 'aal1',
         maxAge: 300,
       },
     )
@@ -273,7 +273,7 @@ describe('executeAccountAction', () => {
     })).resolves.toEqual({ ok: true })
 
     expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
-      'urn:identity:acr:aal2',
+      'aal2',
     )
     expect(mocks.identityGraphql).not.toHaveBeenCalled()
     expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
@@ -309,7 +309,7 @@ describe('executeAccountAction', () => {
     })).resolves.toEqual({ ok: true })
 
     expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
-      'urn:identity:acr:aal2',
+      'aal2',
     )
   })
 
@@ -326,7 +326,7 @@ describe('executeAccountAction', () => {
       'https://identity.example.com/oauth2/authorize?state=new',
     )
     expect(mocks.hasFreshAuthentication).toHaveBeenCalledWith(
-      'urn:identity:acr:aal2',
+      'aal2',
     )
     expect(mocks.identityGraphql).not.toHaveBeenCalled()
   })
@@ -350,7 +350,7 @@ describe('executeAccountAction', () => {
       'password',
       {
         loginHint: 'alice',
-        acrValues: 'urn:identity:acr:aal2',
+        acrValues: 'aal2',
         maxAge: 3600,
       },
     )
@@ -388,7 +388,7 @@ describe('executeAccountAction', () => {
       'mfa',
       {
         loginHint: 'alice',
-        acrValues: 'urn:identity:acr:aal2',
+        acrValues: 'aal2',
         maxAge: 3600,
       },
     )
@@ -411,7 +411,7 @@ describe('executeAccountAction', () => {
       'mfa',
       {
         loginHint: 'alice',
-        acrValues: 'urn:identity:acr:aal2',
+        acrValues: 'aal2',
         maxAge: 3600,
       },
     )
@@ -475,6 +475,20 @@ describe('executeAccountAction', () => {
       .resolves.toEqual({ redirect: 'https://identity.example.com/oauth2/logout' })
 
     expect(mocks.finishLogout).toHaveBeenCalledWith('https://login.example.com')
+  })
+
+  it.each(['passkey', 'otp'])('saves %s priority without overwriting profile or theme', async (method) => {
+    await expect(executeAccountAction({ action: 'update-mfa-preference', values: { preferred_mfa_method: method } })).resolves.toEqual({ ok: true })
+    expect(mocks.identityGraphql).toHaveBeenCalledWith(
+      expect.stringContaining('mutation UpdateMfaPreference'),
+      { method: method.toUpperCase() },
+      { authorization: 'elevated' },
+    )
+  })
+
+  it('rejects an unsupported MFA preference without sending a mutation', async () => {
+    expect(await executeAccountAction({ action: 'update-mfa-preference', values: { preferred_mfa_method: 'password-only' } })).toEqual({ ok: false })
+    expect(mocks.identityGraphql).not.toHaveBeenCalled()
   })
 
 })
