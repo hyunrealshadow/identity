@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { renderToString } from 'react-dom/server'
 
 import { ProgressiveForm } from './progressive-form'
 
@@ -11,6 +12,19 @@ afterEach(() => {
 })
 
 describe('ProgressiveForm', () => {
+  it('signals enhancement only after hydration while preserving the native form', () => {
+    const form = (
+      <ProgressiveForm action="/login" enhancementErrorMessage="Try again">
+        <input name="identifier" />
+        <button type="submit">Continue</button>
+      </ProgressiveForm>
+    )
+    expect(renderToString(form)).toContain('data-enhanced="false"')
+    const view = render(form)
+    expect(view.container.querySelector('form')?.getAttribute('data-enhanced')).toBe('true')
+    expect(view.container.querySelector('form')?.getAttribute('method')).toBe('post')
+  })
+
   it('retains a native POST action when JavaScript is unavailable', () => {
     render(
       <ProgressiveForm action="/login" enhancementErrorMessage="Try again">

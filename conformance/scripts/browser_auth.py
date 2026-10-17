@@ -63,6 +63,12 @@ class BrowserAuthHandler:
             if path not in ("/login", "/login/password", "/consent"):
                 raise RuntimeError(f"Unsupported login interaction: {path}")
 
+            # SSR visibility and the load event do not imply hydration is done.
+            # Filling earlier can be erased when React attaches the field.
+            page.locator(f'form[action="{path}"][data-enhanced="true"]').first.wait_for(
+                state="visible", timeout=30_000
+            )
+
             username, email, password = TEST_ACCOUNTS[self.account_index]
             previous_url = page.url
             if path == "/login":

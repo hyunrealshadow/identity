@@ -1,5 +1,5 @@
 import { Alert } from '@heroui/react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { FormPendingContext } from '#/components/submit-button'
 
@@ -24,6 +24,11 @@ export function ProgressiveForm({
   // (null when the submitter carries no value attribute).
   const [pendingSubmitter, setPendingSubmitter] = useState<string | null>()
   const [enhancementError, setEnhancementError] = useState<string>()
+  const [enhanced, setEnhanced] = useState(false)
+
+  // The server-rendered fields can be visible before React has attached their
+  // handlers. Expose completion so browser clients can safely fill the form.
+  useEffect(() => setEnhanced(true), [])
 
   async function enhance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -59,6 +64,7 @@ export function ProgressiveForm({
       method="post"
       className={className}
       aria-busy={isPending}
+      data-enhanced={enhanced ? 'true' : 'false'}
       noValidate={noValidate}
       onSubmit={enhance}
     >
