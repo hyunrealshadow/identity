@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use identity_domain::openid_connect::scope_catalog::{ScopeCatalogRepository, ScopeDescription};
-use josekit::jwt;
 use reqwest::Client;
 use url::Url;
 use uuid::Uuid;
@@ -16,15 +15,11 @@ use crate::{
     domain::{
         auth::repository::LoginRepository,
         client_authorization::ClientAuthorizationRepository,
-        key::{
-            JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
-            repository::KeyRepository,
-        },
+        key::{JweContentEncryption, KeyData, KeyJwkRepository, repository::KeyRepository},
         openid_connect::{
-            AuthorizationRequest, AuthorizationRequestData, ClaimRequestMap, OpenIdConnectClient,
-            OpenIdConnectClientRepository, OpenIdConnectCredentialData,
-            OpenIdConnectCredentialRepository, OpenIdConnectCredentialType, ResponseType, ScopeSet,
-            model::{authorization_request::ClaimsRequest, claim::JwtClaimNames},
+            AuthorizationRequest, AuthorizationRequestData, OpenIdConnectClient,
+            OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, ResponseType,
+            ScopeSet, model::claim::JwtClaimNames,
         },
         user::{UserOid, repository::UserRepository},
     },
