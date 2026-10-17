@@ -6,8 +6,12 @@ use crate::{
             VerifiedPasskey,
         },
     },
-    error::{AppError, codes::auth::AuthErrorCode},
-    user::{UserOid, credential::PasskeyCredentialData, repository::PasskeyCredentialRepository},
+    error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
+    user::{
+        UserOid,
+        credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData},
+        repository::PasskeyCredentialRepository,
+    },
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -48,7 +52,11 @@ impl PasskeyCredentialRepository for MemoryRepo {
         {
             return Err(invalid());
         }
-        keys.entry(user).or_default().push(key);
+        let owned = keys.entry(user).or_default();
+        if owned.len() >= MAX_PASSKEYS_PER_USER {
+            return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached));
+        }
+        owned.push(key);
         Ok(())
     }
     async fn update(
@@ -223,4 +231,75 @@ async fn new_options_keep_each_login_challenge_independent() {
         .authenticate(user, login, &assertion(&latest))
         .await
         .unwrap();
+}
+
+fn registration_with_keys(count: usize) -> (PasskeyService, Arc<MemoryRepo>, UserOid) {
+    let user = UserOid(Uuid::new_v4());
+    let repo = Arc::new(MemoryRepo::default());
+    repo.keys.lock().unwrap().insert(
+        user,
+        (0..count)
+            .map(|index| StoredPasskey {
+                id: Uuid::new_v4(),
+                data: PasskeyCredentialData {
+                    name: format!("Key {index}"),
+                    credential_id: format!("existing-{index}"),
+                    key: json!({}),
+                },
+            })
+            .collect(),
+    );
+    (
+        PasskeyService::new(repo.clone(), repo.clone(), Arc::new(FakeAuthenticator)),
+        repo,
+        user,
+    )
+}
+
+#[tokio::test]
+async fn passkey_registration_stops_at_five_before_creating_a_challenge() {
+    let (service, repo, user) = registration_with_keys(MAX_PASSKEYS_PER_USER);
+    let error = service
+        .begin_registration(user, Uuid::new_v4(), "owner")
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(error.code(), AuthErrorCode::PasskeyLimitReached.code());
+    assert!(repo.challenges.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn passkey_registration_allows_a_fifth_and_reopens_after_deletion() {
+    let (service, repo, user) = registration_with_keys(MAX_PASSKEYS_PER_USER - 1);
+    let session = Uuid::new_v4();
+    let options = service
+        .begin_registration(user, session, "owner")
+        .await
+        .unwrap();
+    service
+        .finish_registration(user, session, options.challenge_id, "New key", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(repo.list(user).await.unwrap().len(), MAX_PASSKEYS_PER_USER);
+    assert!(
+        service
+            .begin_registration(user, session, "owner")
+            .await
+            .is_err()
+    );
+
+    let key = repo
+        .list(user)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|key| key.data.name == "New key")
+        .unwrap();
+    assert!(service.delete(user, key.id).await.unwrap());
+    assert!(
+        service
+            .begin_registration(user, session, "owner")
+            .await
+            .is_ok()
+    );
 }

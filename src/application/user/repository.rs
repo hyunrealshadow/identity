@@ -117,7 +117,8 @@ pub trait UserCredentialRepository: Send + Sync {
 #[async_trait]
 pub trait PasskeyCredentialRepository: Send + Sync {
     async fn list(&self, user: UserOid) -> Result<Vec<StoredPasskey>, AppError>;
-    /// Enforces globally unique credential IDs without replacing existing credentials.
+    /// Enforces globally unique credential IDs and the per-user active Passkey
+    /// limit atomically, without replacing existing credentials.
     async fn insert(&self, user: UserOid, key: StoredPasskey) -> Result<(), AppError>;
     /// Compare-and-swap must reject revoked, expired, or concurrently changed credentials.
     async fn update(

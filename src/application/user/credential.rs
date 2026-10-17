@@ -57,6 +57,9 @@ impl CredentialData {
     }
 }
 
+/// Maximum number of active Passkeys registered to one account.
+pub const MAX_PASSKEYS_PER_USER: usize = 5;
+
 /// SDK-independent persisted data for one account's Passkey.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PasskeyCredentialData {

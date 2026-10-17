@@ -23,6 +23,7 @@ pub enum AuthErrorCode {
     InvalidTotpEnrollment,
     /// Withdrawing device authorizations during an account level action failed.
     DeviceAuthorizationRevocationFailed,
+    PasskeyLimitReached,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -38,6 +39,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::LoginExpired => ErrorKind::Gone,
             AuthErrorCode::InvalidLoginState
             | AuthErrorCode::TotpAlreadyEnabled
+            | AuthErrorCode::PasskeyLimitReached
             | AuthErrorCode::TotpNotEnabled => ErrorKind::Conflict,
             AuthErrorCode::CredentialTypeUnsupported
             | AuthErrorCode::IdentifierRequired
@@ -72,6 +74,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::TotpNotEnabled => 11016,
             AuthErrorCode::InvalidTotpEnrollment => 11017,
             AuthErrorCode::DeviceAuthorizationRevocationFailed => 11018,
+            AuthErrorCode::PasskeyLimitReached => 11019,
         }
     }
 }

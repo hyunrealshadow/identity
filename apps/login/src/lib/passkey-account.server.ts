@@ -6,6 +6,7 @@ import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
 import { startReauthorization } from './oauth.server'
 import { loadApplicationUrl } from './runtime-config.server'
+import { MAX_PASSKEYS_PER_ACCOUNT } from './passkey'
 import type { PasskeyOptions } from './passkey'
 
 export async function passkeyAccountAction(input: {
@@ -42,6 +43,9 @@ export async function passkeyAccountAction(input: {
     }
     return { ok: true }
   } catch (error) {
+    if (error instanceof GraphqlRequestError && error.errors.some(({ extensions }) => Number(extensions?.code) === 11019)) {
+      return { error: translate(locale, 'passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT }) }
+    }
     if (error instanceof GraphqlRequestError && requiresAccountReauthentication(error)) {
       const account = await identityGraphql<{ viewer: { account: { username: string } } }>('query { viewer { account { username } } }')
       if (!account) return { error: translate(locale, 'accountAuthenticationRequired') }

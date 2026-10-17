@@ -1,3 +1,5 @@
+export const MAX_PASSKEYS_PER_ACCOUNT = 5
+
 export interface PasskeyOptions {
   challenge_id: string
   public_key: Record<string, unknown>
@@ -56,8 +58,8 @@ export function serializeCredential(credential: PublicKeyCredential) {
   return { ...base, response: { clientDataJSON: encode(response.clientDataJSON), authenticatorData: encode(assertion.authenticatorData), signature: encode(assertion.signature), userHandle: assertion.userHandle ? encode(assertion.userHandle) : null } }
 }
 
-export async function createPasskey(options: PasskeyOptions) {
-  const credential = await navigator.credentials.create({ publicKey: registrationOptions(options.public_key) })
+export async function createPasskey(options: PasskeyOptions, signal?: AbortSignal) {
+  const credential = await navigator.credentials.create({ publicKey: registrationOptions(options.public_key), signal })
   if (!credential) throw new DOMException('Cancelled', 'NotAllowedError')
   return serializeCredential(credential as PublicKeyCredential)
 }

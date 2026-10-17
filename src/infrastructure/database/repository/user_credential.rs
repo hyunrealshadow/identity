@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_application::error::AppError;
+use identity_application::error::{AppError, codes::auth::AuthErrorCode};
 use identity_application::user::{
     CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
     UserCredential, UserCredentialOid, UserOid,
-    credential::StoredPasskey,
+    credential::{MAX_PASSKEYS_PER_USER, StoredPasskey},
     repository::{
         PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
     },
@@ -547,15 +547,39 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         lock_user_credentials(&txn, user_oid)
             .await
             .map_err(AppError::internal)?;
-        let user = UserEntity::find()
+        let user_id = UserEntity::find()
+            .select_only()
+            .column(user::Column::Id)
             .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .into_tuple::<i64>()
             .one(&txn)
             .await
             .map_err(AppError::internal)?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        // The credential lock covers both the limit check and insertion, so
+        // registrations completed in parallel cannot exceed the account limit.
+        let existing = UserCredentialEntity::find()
+            .select_only()
+            .column(user_credential::Column::Id)
+            .filter(user_credential::Column::UserId.eq(user_id))
+            .filter(user_credential::Column::Type.eq(CredentialType::Passkey.as_ref()))
+            .filter(
+                Condition::any()
+                    .add(user_credential::Column::ExpiresAt.is_null())
+                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+            )
+            .limit(MAX_PASSKEYS_PER_USER as u64)
+            .into_tuple::<i64>()
+            .all(&txn)
+            .await
+            .map_err(AppError::internal)?;
+        if existing.len() >= MAX_PASSKEYS_PER_USER {
+            return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached)
+                .with_param("limit", MAX_PASSKEYS_PER_USER.to_string()));
+        }
         user_credential::ActiveModel {
             oid: Set(key.id),
-            user_id: Set(user.id),
+            user_id: Set(user_id),
             r#type: Set(CredentialType::Passkey.to_string()),
             data: Set(to_value(key.data).map_err(AppError::internal)?),
             expires_at: Set(None),
@@ -592,5 +616,81 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             [id.into(), Uuid::from(user).into()]
         )).await.map_err(AppError::internal)?;
         Ok(result.rows_affected() == 1)
+    }
+}
+
+#[cfg(test)]
+mod passkey_tests {
+    use super::*;
+    use identity_application::error::code::AppErrorCode as _;
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    #[tokio::test]
+    async fn passkey_insert_checks_the_active_limit_under_the_credential_lock() {
+        for count in [MAX_PASSKEYS_PER_USER - 1, MAX_PASSKEYS_PER_USER] {
+            let user = UserOid(Uuid::new_v4());
+            let key = StoredPasskey {
+                id: Uuid::new_v4(),
+                data: identity_application::user::credential::PasskeyCredentialData {
+                    name: "Laptop".to_owned(),
+                    credential_id: "new-key".to_owned(),
+                    key: json!({}),
+                },
+            };
+            let id_row = |id: i64| BTreeMap::from([("id".to_owned(), Value::BigInt(Some(id)))]);
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_exec_results([MockExecResult {
+                    rows_affected: 0,
+                    last_insert_id: 0,
+                }])
+                .append_query_results([
+                    vec![id_row(7)],
+                    (0..count).map(|id| id_row(id as i64)).collect(),
+                ])
+                .append_query_results([[user_credential::Model {
+                    id: 42,
+                    oid: key.id,
+                    user_id: 7,
+                    r#type: "passkey".to_owned(),
+                    data: to_value(&key.data).unwrap(),
+                    expires_at: None,
+                    created_at: Utc::now().into(),
+                    updated_at: None,
+                }]])
+                .into_connection();
+            let result = PasskeyCredentialRepository::insert(
+                &UserCredentialRepositoryImpl::new(db.clone()),
+                user,
+                key,
+            )
+            .await;
+            if count < MAX_PASSKEYS_PER_USER {
+                result.unwrap();
+            } else {
+                assert_eq!(
+                    result.unwrap_err().code(),
+                    AuthErrorCode::PasskeyLimitReached.code()
+                );
+            }
+            let sql = format!("{:?}", db.into_transaction_log());
+            assert!(
+                sql.find("pg_advisory_xact_lock").unwrap() < sql.find("user_credential").unwrap(),
+                "{sql}"
+            );
+            assert!(
+                sql.contains("expires_at")
+                    && sql.contains("IS NULL")
+                    && sql.contains("user_id")
+                    && sql.contains("passkey"),
+                "{sql}"
+            );
+            assert_eq!(
+                sql.contains("INSERT INTO"),
+                count < MAX_PASSKEYS_PER_USER,
+                "{sql}"
+            );
+        }
     }
 }

@@ -14,7 +14,11 @@ use crate::{
     auth::challenge::ChallengeRepository,
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
-    user::{UserOid, credential::PasskeyCredentialData, repository::PasskeyCredentialRepository},
+    user::{
+        UserOid,
+        credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData},
+        repository::PasskeyCredentialRepository,
+    },
 };
 
 pub struct PasskeyCeremony {
@@ -124,6 +128,10 @@ impl PasskeyService {
         username: &str,
     ) -> Result<PasskeyOptions, AppError> {
         let credentials = self.credentials.list(user).await?;
+        if credentials.len() >= MAX_PASSKEYS_PER_USER {
+            return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached)
+                .with_param("limit", MAX_PASSKEYS_PER_USER.to_string()));
+        }
         let ceremony = self
             .authenticator
             .start_registration(user, username, &credentials)?;
