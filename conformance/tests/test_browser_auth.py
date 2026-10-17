@@ -12,6 +12,17 @@ from scripts.browser_auth import BrowserAuthHandler
 
 
 class BrowserAuthHandlerTests(unittest.TestCase):
+    def test_missing_nonce_requirement_uses_only_the_observed_op_error_page(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        requirement = {"src": "ExpectRequestMissingNonceErrorPage"}
+        handler.login_prompt_screenshot = "login-prompt"
+        handler.last_screenshot = "callback"
+        self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+        handler.error_page_screenshot = "observed-nonce-error"
+        self.assertEqual(handler.screenshot_for_upload([], requirement=requirement), "observed-nonce-error")
+        handler.reset_session()
+        self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+
     def test_failure_diagnostics_are_saved_without_becoming_review_evidence(self):
         handler = BrowserAuthHandler("https://issuer.example.com")
         page = MagicMock()

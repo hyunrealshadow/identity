@@ -308,6 +308,6 @@ class BrowserAuthHandler:
         source = requirement.get("src")
         if source in {"ExpectLoginPage", "ExpectSecondLoginPage"}:
             return self.login_prompt_screenshot
-        if source == "ExpectRedirectUriErrorPage":
+        if source in {"ExpectRedirectUriErrorPage", "ExpectRequestMissingNonceErrorPage"}:
             return self.error_page_screenshot
         return None
