@@ -113,7 +113,14 @@ impl UserCredentialRepository for TestCredentialRepo {
         Ok(false)
     }
 
-    async fn replace_recovery_codes_if_totp_enabled(
+    async fn disable_totp(
+        &self,
+        _user_oid: UserOid,
+    ) -> Result<bool, UserCredentialRepositoryError> {
+        Ok(false)
+    }
+
+    async fn replace_recovery_codes_if_mfa_enabled(
         &self,
         _user_oid: UserOid,
         _recovery_codes: Vec<RecoveryCodeCredentialData>,

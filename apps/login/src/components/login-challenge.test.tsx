@@ -3,7 +3,7 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType, ReactNode } from 'react'
 
-const fixture = vi.hoisted(() => ({ method: 'passkey', preferred: 'passkey', status: 'identifier_verified' }))
+const fixture = vi.hoisted(() => ({ method: 'passkey', preferred: 'passkey', status: 'identifier_verified', reauthentication: false, credentials: ['password', 'otp', 'passkey', 'recovery_code'] }))
 vi.mock('@tanstack/react-router', async (original) => ({
   ...await original<typeof import('@tanstack/react-router')>(),
   createFileRoute: () => (options: unknown) => ({
@@ -12,7 +12,7 @@ vi.mock('@tanstack/react-router', async (original) => ({
     useParams: () => ({ method: fixture.method }),
     useLoaderData: () => ({
       loginId: 'login', csrfToken: 'csrf', locale: 'en-US', uiLocales: 'en-US',
-      status: { status: fixture.status, preferred_credential_type: fixture.preferred, credential_types: ['password', 'otp', 'passkey', 'recovery_code'], requires_reauthentication: false },
+      status: { status: fixture.status, preferred_credential_type: fixture.preferred, credential_types: fixture.credentials, requires_reauthentication: fixture.reauthentication },
     }),
   }),
 }))
@@ -29,14 +29,16 @@ async function renderChallenge() {
 }
 
 afterEach(cleanup)
-beforeEach(() => { fixture.method = 'passkey'; fixture.preferred = 'passkey'; fixture.status = 'identifier_verified' })
+beforeEach(() => { fixture.method = 'passkey'; fixture.preferred = 'passkey'; fixture.status = 'identifier_verified'; fixture.reauthentication = false; fixture.credentials = ['password', 'otp', 'passkey', 'recovery_code'] })
 
 it('opens the preferred passkey path without a password field or premature OTP links', async () => {
   const { container } = await renderChallenge()
   expect(screen.getByRole('button', { name: 'Passkey verification' }).getAttribute('data-primary')).toBe('true')
   expect(container.querySelector('input[name="credential"]')).toBeNull()
-  expect(screen.queryByRole('link', { name: 'Use authenticator code' })).toBeNull()
-  expect(screen.getByRole('link', { name: 'Use password' }).getAttribute('href')).toBe('/login/password?login_id=login&ui_locales=en-US')
+  expect(screen.queryByRole('link', { name: 'Use an authenticator app' })).toBeNull()
+  const password = screen.getByRole('link', { name: 'Use password' })
+  expect(password.getAttribute('href')).toBe('/login/password?login_id=login&ui_locales=en-US')
+  expect(password.closest('details')?.open).toBe(false)
 })
 
 it('uses the password path despite the saved passkey preference and links to the passkey path', async () => {
@@ -44,7 +46,9 @@ it('uses the password path despite the saved passkey preference and links to the
   const { container } = await renderChallenge()
   expect(container.querySelector('input[name="credential"][type="password"]')).not.toBeNull()
   expect(screen.queryByRole('button', { name: 'Passkey verification' })).toBeNull()
-  expect(screen.getByRole('link', { name: 'Sign in with a passkey' }).getAttribute('href')).toBe('/login/passkey?login_id=login&ui_locales=en-US')
+  const passkey = screen.getByRole('link', { name: 'Sign in with a passkey' })
+  expect(passkey.getAttribute('href')).toBe('/login/passkey?login_id=login&ui_locales=en-US')
+  expect(passkey.closest('details')?.open).toBe(false)
   expect(container.querySelector('form')?.getAttribute('action')).toBe('/login/password')
 })
 
@@ -64,5 +68,31 @@ it.each([
   const { container } = await renderChallenge()
   expect(screen.getByRole('heading', { name: title })).toBeTruthy()
   expect(container.querySelector('form')?.getAttribute('action')).toBe(`/login/${method}`)
-  expect(container.querySelector(`a[href="${alternative}"]`)).not.toBeNull()
+  const alternatives = container.querySelector('details')!
+  expect(alternatives.open).toBe(false)
+  expect(alternatives.querySelector(`a[href="${alternative}"]`)).not.toBeNull()
+  expect(alternatives.contains(screen.getByRole('link', { name: 'Sign in with a passkey' }))).toBe(true)
+  expect(screen.queryByRole('link', { name: 'Use password' })).toBeNull()
+})
+
+it('offers configured second factors in the same section during reauthentication', async () => {
+  fixture.reauthentication = true
+  fixture.credentials = ['passkey', 'otp']
+  const { container } = await renderChallenge()
+  const alternatives = container.querySelector('details')!
+  expect(alternatives.contains(screen.getByRole('link', { name: 'Use an authenticator app' }))).toBe(true)
+  expect(screen.queryByRole('link', { name: 'Use password' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Use a recovery code' })).toBeNull()
+})
+
+it('omits other methods when no alternative credential is configured', async () => {
+  fixture.credentials = ['passkey']
+  await renderChallenge()
+  expect(screen.queryByText('Other verification methods')).toBeNull()
+})
+
+it('does not offer alternatives once the login has expired', async () => {
+  fixture.status = 'expired'
+  await renderChallenge()
+  expect(screen.queryByText('Other verification methods')).toBeNull()
 })

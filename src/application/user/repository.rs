@@ -44,6 +44,9 @@ pub enum UserCredentialRepositoryError {
 
     #[error("failed to delete credential")]
     DeleteFailed(#[source] Box<dyn StdError + Send + Sync>),
+
+    #[error("recovery-code enrollment is missing or no longer matches the account")]
+    InvalidMfaEnrollment,
 }
 
 // ─── UserCredentialRepository ─────────────────────────────────────────────────
@@ -87,9 +90,8 @@ pub trait UserCredentialRepository: Send + Sync {
         replacements: Vec<(CredentialType, Vec<CredentialData>)>,
     ) -> Result<(), UserCredentialRepositoryError>;
 
-    /// Enables TOTP and installs its recovery codes only when the user has no
-    /// active OTP credential. The precondition and both replacements are one
-    /// atomic operation.
+    /// Enables TOTP only when disabled, preserving existing recovery codes or
+    /// installing the prepared batch if absent, within the same transaction.
     async fn enable_totp_if_disabled(
         &self,
         user_oid: UserOid,
@@ -97,10 +99,14 @@ pub trait UserCredentialRepository: Send + Sync {
         recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<bool, UserCredentialRepositoryError>;
 
-    /// Replaces recovery codes only while an OTP credential exists.
+    /// Removes TOTP and removes recovery codes only if no active MFA remains.
+    /// Serializes with other MFA additions, removals and recovery-code changes.
+    async fn disable_totp(&self, user_oid: UserOid) -> Result<bool, UserCredentialRepositoryError>;
+
+    /// Replaces recovery codes only while an OTP or Passkey credential exists.
     /// Implementations must evaluate the precondition and replacement
     /// atomically with other credential-group replacements for the user.
-    async fn replace_recovery_codes_if_totp_enabled(
+    async fn replace_recovery_codes_if_mfa_enabled(
         &self,
         user_oid: UserOid,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
@@ -118,8 +124,14 @@ pub trait UserCredentialRepository: Send + Sync {
 pub trait PasskeyCredentialRepository: Send + Sync {
     async fn list(&self, user: UserOid) -> Result<Vec<StoredPasskey>, AppError>;
     /// Enforces globally unique credential IDs and the per-user active Passkey
-    /// limit atomically, without replacing existing credentials.
-    async fn insert(&self, user: UserOid, key: StoredPasskey) -> Result<(), AppError>;
+    /// limit atomically, preserving existing recovery codes or installing a
+    /// prepared batch if absent. Missing or stale recovery enrollment fails.
+    async fn insert(
+        &self,
+        user: UserOid,
+        key: StoredPasskey,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<(), AppError>;
     /// Compare-and-swap must reject revoked, expired, or concurrently changed credentials.
     async fn update(
         &self,
@@ -127,5 +139,7 @@ pub trait PasskeyCredentialRepository: Send + Sync {
         before: &StoredPasskey,
         after: &StoredPasskey,
     ) -> Result<bool, AppError>;
+    /// Removes a Passkey and clears recovery codes only if no active MFA remains,
+    /// atomically with other MFA mutations for the account.
     async fn delete(&self, user: UserOid, id: Uuid) -> Result<bool, AppError>;
 }

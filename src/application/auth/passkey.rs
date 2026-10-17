@@ -15,7 +15,7 @@ use crate::{
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
     user::{
-        UserOid,
+        RecoveryCodeCredentialData, UserOid,
         credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData},
         repository::PasskeyCredentialRepository,
     },
@@ -75,6 +75,12 @@ struct AuthenticationState {
     credentials: Vec<StoredPasskey>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct RegistrationState {
+    ceremony: Value,
+    recovery_codes: Vec<RecoveryCodeCredentialData>,
+}
+
 pub struct PasskeyService {
     credentials: Arc<dyn PasskeyCredentialRepository>,
     challenges: Arc<dyn ChallengeRepository>,
@@ -126,6 +132,7 @@ impl PasskeyService {
         user: UserOid,
         session: Uuid,
         username: &str,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<PasskeyOptions, AppError> {
         let credentials = self.credentials.list(user).await?;
         if credentials.len() >= MAX_PASSKEYS_PER_USER {
@@ -135,7 +142,13 @@ impl PasskeyService {
         let ceremony = self
             .authenticator
             .start_registration(user, username, &credentials)?;
-        let challenge = new_challenge(ceremony.state);
+        let challenge = new_challenge(
+            serde_json::to_value(RegistrationState {
+                ceremony: ceremony.state,
+                recovery_codes,
+            })
+            .map_err(AppError::internal)?,
+        );
         let id = challenge.id;
         self.challenges
             .store(registration_context(user, session), challenge)
@@ -163,9 +176,11 @@ impl PasskeyService {
         if name.is_empty() || name.chars().count() > 100 {
             return Err(invalid());
         }
+        let state: RegistrationState =
+            serde_json::from_value(state.state).map_err(AppError::internal)?;
         let verified = self
             .authenticator
-            .finish_registration(state.state, credential)?;
+            .finish_registration(state.ceremony, credential)?;
         self.credentials
             .insert(
                 user,
@@ -177,6 +192,7 @@ impl PasskeyService {
                         key: verified.key,
                     },
                 },
+                state.recovery_codes,
             )
             .await?;
         self.record_change(user, "passkey_registered");

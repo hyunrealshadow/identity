@@ -1,6 +1,12 @@
 use async_graphql::{Enum, InputObject, Object};
 use identity_application::user::OtpAlgorithm;
 
+#[derive(async_graphql::SimpleObject)]
+pub(super) struct RecoveryCodeEnrollmentPayload {
+    pub recovery_codes: Vec<String>,
+    pub enrollment_token: Option<String>,
+}
+
 pub(super) struct AccountSecurity {
     totp_enabled: bool,
     passkey_enabled: bool,

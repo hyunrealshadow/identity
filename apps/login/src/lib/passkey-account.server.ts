@@ -10,11 +10,12 @@ import { MAX_PASSKEYS_PER_ACCOUNT } from './passkey'
 import type { PasskeyOptions } from './passkey'
 
 export async function passkeyAccountAction(input: {
-  action: 'begin' | 'finish' | 'delete'
+  action: 'prepare' | 'begin' | 'finish' | 'delete'
   id?: string
   name?: string
   credential?: string
-}): Promise<{ options?: PasskeyOptions; redirect?: string; error?: string; ok?: boolean }> {
+  recoveryEnrollmentToken?: string | null
+}): Promise<{ options?: PasskeyOptions; recoveryEnrollment?: { recoveryCodes: Array<string>; enrollmentToken?: string | null }; redirect?: string; error?: string; ok?: boolean }> {
   const locale = requestLocale()
   const origin = getRequestHeader('origin')
   if (origin && origin !== new URL(loadApplicationUrl()).origin) {
@@ -22,9 +23,17 @@ export async function passkeyAccountAction(input: {
   }
   const options = { authorization: 'elevated' as const }
   try {
+    if (input.action === 'prepare') {
+      const result = await identityGraphql<{ prepareMfaRecoveryCodes: { recoveryCodes: Array<string>; enrollmentToken?: string | null } }>(
+        'mutation PrepareMfaRecoveryCodes { prepareMfaRecoveryCodes { recoveryCodes enrollmentToken } }', undefined, options,
+      )
+      if (!result) throw new Error(translate(locale, 'accountAuthenticationRequired'))
+      return { recoveryEnrollment: result.prepareMfaRecoveryCodes }
+    }
     if (input.action === 'begin') {
       const result = await identityGraphql<{ beginPasskeyRegistration: PasskeyOptions }>(
-        'mutation { beginPasskeyRegistration }', undefined, options,
+        'mutation BeginPasskeyRegistration($recoveryEnrollmentToken: String) { beginPasskeyRegistration(recoveryEnrollmentToken: $recoveryEnrollmentToken) }',
+        { recoveryEnrollmentToken: input.recoveryEnrollmentToken }, options,
       )
       if (!result) throw new Error(translate(locale, 'accountAuthenticationRequired'))
       return { options: result.beginPasskeyRegistration }

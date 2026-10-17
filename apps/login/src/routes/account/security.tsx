@@ -12,6 +12,8 @@ import { translate } from '#/lib/i18n'
 import { useAccount } from './route'
 import { PasskeySettings } from '#/components/passkey-settings'
 import { MfaPriority } from '#/components/mfa-priority'
+import { MfaStepper, stepTitle } from '#/components/mfa-stepper'
+import { MfaRecoverySetup } from '#/components/mfa-recovery-setup'
 
 interface SecuritySearch {
   setup?: 'mfa'
@@ -48,17 +50,17 @@ function SecurityPage() {
         <SettingsCard title={t('accountMfaRowTitle')} description={t('accountMfaDescription')}>
           <div className="divide-y divide-separator">
             {(data.viewer.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority openRequested={search.confirm === 'mfa-priority'} locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} loginHint={loginHint} /></div> : null}
-            <div className={(data.viewer.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings loginHint={loginHint} openRequested={search.confirm === 'passkeys'} locale={locale} keys={data.viewer.passkeys ?? []} /></div>
+            <div className={(data.viewer.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings totpEnabled={security.totpEnabled} loginHint={loginHint} openRequested={search.confirm === 'passkeys'} locale={locale} keys={data.viewer.passkeys ?? []} /></div>
             <div className={security.totpEnabled ? 'py-5' : 'pt-5'}>
               <SettingsRow
                 title={t('accountMfa')}
                 description={security.totpEnabled ? t('accountMfaEnabled') : t('accountMfaNotEnabled')}
                 action={security.totpEnabled
-                  ? <DeleteMfaModal loginHint={loginHint} openConfirm={search.confirm === 'disable-mfa'} t={t} />
+                  ? <DeleteMfaModal lastMethod={(data.viewer.passkeys?.length ?? 0) === 0} loginHint={loginHint} openConfirm={search.confirm === 'disable-mfa'} t={t} />
                   : <MfaSetupAction flash={flash} mfa={mfa} loginHint={loginHint} openSetup={search.setup === 'mfa'} initialStep={search.step === 'verify' ? 3 : undefined} t={t} />}
               />
             </div>
-            {security.totpEnabled ? (
+            {security.totpEnabled || (data.viewer.passkeys?.length ?? 0) > 0 ? (
               <div className="pt-5">
                 <SettingsRow
                   title={t('accountRecoveryCodes')}
@@ -111,7 +113,7 @@ function MfaSetupAction({ flash, mfa, loginHint, openSetup, initialStep, t }: { 
         </AccountActionForm>
       ) : null}
       {hasModalContent ? <Modal state={modal}>
-        <Modal.Trigger><Button variant="secondary">{t('accountMfaEnable')}</Button></Modal.Trigger>
+        <Button variant="secondary">{t('accountMfaEnable')}</Button>
         <Modal.Backdrop isDismissable={false}>
           <Modal.Container size="lg" scroll="outside">
             <Modal.Dialog>
@@ -136,7 +138,7 @@ function MfaSetupAction({ flash, mfa, loginHint, openSetup, initialStep, t }: { 
   )
 }
 
-function DeleteMfaModal({ loginHint, openConfirm, t }: { loginHint: string; openConfirm: boolean; t: Translator }) {
+function DeleteMfaModal({ loginHint, openConfirm, t, lastMethod }: { lastMethod: boolean; loginHint: string; openConfirm: boolean; t: Translator }) {
   const modal = useOverlayState()
   const navigate = useNavigate()
 
@@ -168,6 +170,7 @@ function DeleteMfaModal({ loginHint, openConfirm, t }: { loginHint: string; open
                 </Modal.Header>
                 <Modal.Body>
                   <p className="text-sm text-muted">{t('accountMfaDeleteDescription')}</p>
+                  {lastMethod ? <p className="mt-3 text-sm text-danger">{t('mfaLastMethodRecoveryWarning')}</p> : null}
                   <div className="mt-5 flex justify-end gap-2">
                     <Button type="button" variant="secondary" onPress={close}>{t('cancel')}</Button>
                     <AccountActionForm action="disable-totp" requestFailedMessage={t('accountRequestFailed')} onSuccess={close}>
@@ -199,7 +202,7 @@ function RecoveryCodesModal({ mfa, remaining, loginHint, openManage, t }: { mfa:
 
   return (
     <Modal state={modal}>
-      <Modal.Trigger><Button variant="secondary">{t('accountRecoveryCodesManage')}</Button></Modal.Trigger>
+      <Button variant="secondary">{t('accountRecoveryCodesManage')}</Button>
       <Modal.Backdrop isDismissable={false}>
         <Modal.Container size="lg" scroll="outside">
           <Modal.Dialog>
@@ -242,7 +245,8 @@ function RecoveryCodesModal({ mfa, remaining, loginHint, openManage, t }: { mfa:
 }
 
 function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, validationRevision, close, t }: { enrollment: NonNullable<Mfa['enrollment']>; loginHint: string; initialStep?: 3; codeError?: string; validationRevision?: Flash['fields']; close: () => void; t: Translator }) {
-  const [step, setStep] = useState<1 | 2 | 3>(initialStep ?? (codeError ? 3 : 1))
+  const hasRecoveryStep = enrollment.recovery_codes.length > 0
+  const [step, setStep] = useState<1 | 2 | 3>(initialStep ?? (codeError ? 3 : hasRecoveryStep ? 1 : 2))
   const [method, setMethod] = useState<'qr' | 'manual'>('qr')
   const [code, setCode] = useState('')
   const [showCodeError, setShowCodeError] = useState(Boolean(codeError))
@@ -289,28 +293,18 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
   return (
     <div className="text-foreground">
       <MfaStepper
-        currentStep={step}
+        currentStep={hasRecoveryStep ? step : step === 2 ? 1 : 2}
         label={t('accountMfa')}
-        steps={[t('accountMfaRecoveryStep'), t('accountMfaStepScan'), t('accountMfaStepVerify')]}
+        steps={hasRecoveryStep ? [t('accountMfaRecoveryStep'), t('accountMfaStepScan'), t('accountMfaStepVerify')] : [t('accountMfaStepScan'), t('accountMfaStepVerify')]}
       />
 
       {step === 1 ? (
-        <div>
-          <h2 className="text-sm font-semibold">{t('accountMfaRecoveryStep')}</h2>
-          <p className="mt-1 text-sm leading-5">{t('accountMfaRecoveryStepDescription')}</p>
-          <div className="mt-4">
-            <RecoveryCodeList codes={enrollment.recovery_codes} copyLabel={t('accountRecoveryCodeCopy')} copiedLabel={t('accountRecoveryCodeCopied')} />
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <RecoveryCodeTools codes={enrollment.recovery_codes} copyLabel={t('accountRecoveryCodesCopy')} copiedLabel={t('accountRecoveryCodesCopied')} printLabel={t('accountRecoveryCodesPrint')} downloadLabel={t('accountRecoveryCodesDownload')} />
-            <Button type="button" className="ms-auto" onPress={() => setStep(2)}>{t('accountMfaContinue')}</Button>
-          </div>
-        </div>
+        <MfaRecoverySetup codes={enrollment.recovery_codes} t={t} onContinue={() => setStep(2)} />
       ) : null}
 
       {step === 2 ? (
         <div>
-          <h2 className="text-sm font-semibold">{t('accountMfaStepScan')}</h2>
+          <h2 className="text-sm font-semibold">{stepTitle(t('accountMfaStepScan'))}</h2>
           <p className="mt-1 text-sm leading-5">{t('accountMfaStepScanDescription')}</p>
           <div className="mt-4 flex gap-2">
             <Button type="button" size="sm" variant={method === 'qr' ? 'primary' : 'secondary'} onPress={() => setMethod('qr')}>{t('accountMfaUseQrCode')}</Button>
@@ -358,7 +352,7 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
             )}
           </div>
           <div className="mt-4 flex items-center justify-between gap-2">
-            <Button type="button" variant="ghost" onPress={() => setStep(1)}>{t('accountMfaBack')}</Button>
+            {hasRecoveryStep ? <Button type="button" variant="ghost" onPress={() => setStep(1)}>{t('accountMfaBack')}</Button> : <span />}
             <Button type="button" onPress={() => setStep(3)}>{t('accountMfaContinue')}</Button>
           </div>
         </div>
@@ -366,7 +360,7 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
 
       {step === 3 ? (
         <div>
-          <h2 className="text-sm font-semibold">{t('accountMfaStepVerify')}</h2>
+          <h2 className="text-sm font-semibold">{stepTitle(t('accountMfaStepVerify'))}</h2>
           <p className="mt-1 text-sm leading-5">{t('accountMfaStepVerifyDescription')}</p>
           <AccountActionForm action="confirm-totp" requestFailedMessage={t('accountRequestFailed')} onSuccess={close} className="mt-4 grid gap-3">
             <input type="hidden" name="login_hint" value={loginHint} />
@@ -411,45 +405,4 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
       ) : null}
     </div>
   )
-}
-
-function MfaStepper({ currentStep, label, steps }: { currentStep: 1 | 2 | 3; label: string; steps: Array<string> }) {
-  return (
-    <ol className="mb-8 flex w-full" aria-label={label}>
-      {steps.map((title, index) => {
-        const number = (index + 1) as 1 | 2 | 3
-        const status = number < currentStep ? 'complete' : number === currentStep ? 'active' : 'inactive'
-        return (
-          <li
-            key={title}
-            className="relative flex min-w-0 flex-1 flex-col items-center text-center"
-            data-status={status}
-            aria-current={status === 'active' ? 'step' : undefined}
-          >
-            {index < steps.length - 1 ? (
-              <span
-                className={`absolute left-1/2 top-3.5 h-0.5 w-full ${status === 'complete' ? 'bg-success' : 'bg-separator'}`}
-                aria-hidden="true"
-              />
-            ) : null}
-            <span
-              className={`relative z-10 flex size-7 items-center justify-center rounded-full border text-xs font-semibold ${status === 'complete' ? 'border-success bg-success text-white' : status === 'active' ? 'border-foreground bg-foreground text-background' : 'border-separator bg-background text-muted'}`}
-              aria-hidden="true"
-            >
-              {status === 'complete' ? <Check className="size-4" strokeWidth={2.5} /> : number}
-            </span>
-            <span className={`mt-2 max-w-32 text-xs leading-4 ${status === 'active' ? 'font-semibold text-foreground' : status === 'complete' ? 'font-medium text-success' : 'text-muted'}`}>
-              {stepTitle(title)}
-            </span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
-function stepTitle(value: string) {
-  return value
-    .replace(/^第\s*\d+\s*步\s*/, '')
-    .replace(/^Step\s+\d+\s+/i, '')
 }

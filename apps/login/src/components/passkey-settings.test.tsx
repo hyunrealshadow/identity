@@ -2,9 +2,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ action: vi.fn(), create: vi.fn(), supported: vi.fn(), invalidate: vi.fn(), prepare: vi.fn(), navigate: vi.fn() }))
+const mocks = vi.hoisted(() => ({ action: vi.fn(), recovery: vi.fn(), create: vi.fn(), supported: vi.fn(), invalidate: vi.fn(), prepare: vi.fn(), navigate: vi.fn() }))
 vi.mock('@tanstack/react-start', () => {
-  const builder = { handler: () => mocks.action, validator: () => builder }
+  const invoke = (input: { data: { action: string } }) => input.data.action === 'prepare' ? mocks.recovery(input) : mocks.action(input)
+  const builder = { handler: () => invoke, validator: () => builder }
   return { createServerFn: () => builder, useServerFn: () => mocks.prepare }
 })
 vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: mocks.invalidate }), useNavigate: () => mocks.navigate }))
@@ -24,6 +25,7 @@ beforeEach(() => {
   mocks.supported.mockReturnValue(true)
   mocks.create.mockReset().mockResolvedValue({ id: 'registered-key' })
   mocks.action.mockReset().mockResolvedValue({ ok: true })
+  mocks.recovery.mockReset().mockResolvedValue({ recoveryEnrollment: { recoveryCodes: [] } })
   mocks.invalidate.mockResolvedValue(undefined)
   mocks.prepare.mockReset().mockResolvedValue({ ok: true })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -36,11 +38,16 @@ async function openRegistration(keys = storedKeys.slice(0, 4)) {
   render(<PasskeySettings loginHint="person" locale="en-US" keys={keys} />)
   expect(screen.queryByRole('textbox', { name: /Passkey name/ })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Manage passkeys' }))
-  return await screen.findByRole('dialog', { name: 'Manage passkeys' })
+  const dialog = await screen.findByRole('dialog')
+  if (keys.length && keys.length < 5) fireEvent.click(within(dialog).getByRole('button', { name: 'Add passkey' }))
+  if (keys.length < 5) await waitFor(() => expect((within(dialog).getByRole('textbox', { name: /Passkey name/ }) as HTMLInputElement).disabled).toBe(false))
+  return dialog
 }
 
 it('uses an MFA-style dialog and waits for a nonblank name before starting registration', async () => {
-  const dialog = await openRegistration()
+  const dialog = await openRegistration([])
+  expect(within(dialog).queryByRole('list', { name: 'Add passkey' })).toBeNull()
+  expect(within(dialog).queryByRole('button', { name: 'Back' })).toBeNull()
   expect(mocks.action).not.toHaveBeenCalled()
   expect(mocks.create).not.toHaveBeenCalled()
   const submit = within(dialog).getByRole('button', { name: 'Add passkey' }) as HTMLButtonElement
@@ -63,7 +70,8 @@ it('allows a fifth passkey, trims its name, refreshes the account and keeps mana
     action: 'finish', id: 'challenge', name: 'Work laptop', credential: '{"id":"registered-key"}',
   } })
   expect(screen.getByRole('dialog')).toBeTruthy()
-  expect((within(dialog).getByRole('textbox') as HTMLInputElement).value).toBe('')
+  expect(within(dialog).queryByRole('textbox')).toBeNull()
+  expect(within(dialog).getByRole('heading', { name: 'Manage passkeys' })).toBeTruthy()
 })
 
 it('keeps cancellation in the dialog and allows an explicit retry', async () => {
@@ -92,6 +100,7 @@ it('keeps keys inside management and permits deletion at the five-key limit', as
   await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1))
   expect(mocks.action).toHaveBeenCalledWith({ data: { action: 'delete', id: '0' } })
   view.rerender(<PasskeySettings loginHint="person" locale="zh-CN" keys={storedKeys.slice(1)} />)
+  fireEvent.click(within(dialog).getByRole('button', { name: '添加通行密钥' }))
   const name = within(dialog).getByRole('textbox') as HTMLInputElement
   await waitFor(() => expect(name.disabled).toBe(false))
   fireEvent.change(name, { target: { value: 'Replacement' } })
@@ -142,4 +151,47 @@ it('blocks duplicate submissions and aborts a pending browser request on unmount
   expect(signal.aborted).toBe(true)
   await act(async () => { resolveCredential({ id: 'late-key' }) })
   expect(mocks.action).toHaveBeenCalledTimes(1)
+})
+
+it('requires saving missing recovery codes before naming or creating a passkey', async () => {
+  mocks.recovery.mockResolvedValue({ recoveryEnrollment: {
+    recoveryCodes: ['ABCD-EFGH', 'JKLM-NPQR'], enrollmentToken: 'protected-recovery-batch',
+  } })
+  mocks.action.mockResolvedValueOnce({ optionsJson: JSON.stringify(options) }).mockResolvedValueOnce({ ok: true })
+  render(<PasskeySettings loginHint="person" locale="en-US" keys={[]} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Manage passkeys' }))
+  const dialog = await screen.findByRole('dialog')
+  const saved = await within(dialog).findByRole('button', { name: 'Continue' })
+  expect(within(dialog).queryByText('No passkeys added')).toBeNull()
+  expect(within(dialog).queryByText('0/5 passkeys added')).toBeNull()
+  const steps = within(within(dialog).getByRole('list', { name: 'Add passkey' })).getAllByRole('listitem')
+  expect(steps).toHaveLength(2)
+  expect(steps[0].getAttribute('aria-current')).toBe('step')
+  expect(steps[1].getAttribute('aria-current')).toBeNull()
+  expect(within(dialog).queryByRole('textbox', { name: /Passkey name/ })).toBeNull()
+  expect(mocks.action).not.toHaveBeenCalled()
+  expect(mocks.create).not.toHaveBeenCalled()
+  fireEvent.click(saved)
+  expect(steps[0].getAttribute('data-status')).toBe('complete')
+  expect(steps[1].getAttribute('aria-current')).toBe('step')
+  fireEvent.change(within(dialog).getByRole('textbox', { name: /Passkey name/ }), { target: { value: 'Laptop' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }))
+  expect(steps[0].getAttribute('aria-current')).toBe('step')
+  expect(within(dialog).queryByRole('textbox', { name: /Passkey name/ })).toBeNull()
+  expect(mocks.create).not.toHaveBeenCalled()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
+  expect((within(dialog).getByRole('textbox', { name: /Passkey name/ }) as HTMLInputElement).value).toBe('Laptop')
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Add passkey' }))
+  await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1))
+  expect(mocks.action).toHaveBeenCalledWith({ data: { action: 'begin', recoveryEnrollmentToken: 'protected-recovery-batch' } })
+})
+
+it('does not enroll a key when recovery-code preparation fails', async () => {
+  mocks.recovery.mockResolvedValue({ error: 'Recovery setup failed' })
+  render(<PasskeySettings loginHint="person" locale="en-US" keys={[]} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Manage passkeys' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(await within(dialog).findByRole('alert')).toHaveProperty('textContent', 'Recovery setup failed')
+  expect((within(dialog).getByRole('textbox', { name: /Passkey name/ }) as HTMLInputElement).disabled).toBe(true)
+  expect(mocks.create).not.toHaveBeenCalled()
 })

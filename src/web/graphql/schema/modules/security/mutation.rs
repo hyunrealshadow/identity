@@ -3,8 +3,8 @@ use identity_domain::{auth::ACR_AAL2, openid_connect::ApiScope};
 
 use super::types::{
     BeginTotpEnrollmentPayload, ChangePasswordInput, ChangePasswordPayload,
-    ChangeTotpEnrollmentAlgorithmInput, ConfirmTotpEnrollmentInput, RecoveryCodesPayload,
-    TotpChangedPayload,
+    ChangeTotpEnrollmentAlgorithmInput, ConfirmTotpEnrollmentInput, RecoveryCodeEnrollmentPayload,
+    RecoveryCodesPayload, TotpChangedPayload,
 };
 use crate::graphql::schema::{
     authorization::{request_context, require_recent_authentication, require_scope},
@@ -23,6 +23,25 @@ impl SecurityMutation {
     async fn prepare_mfa_management(&self, ctx: &Context<'_>) -> Result<bool> {
         authorize_mfa_change(ctx).await?;
         Ok(true)
+    }
+
+    async fn prepare_mfa_recovery_codes(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Result<RecoveryCodeEnrollmentPayload> {
+        authorize_mfa_change(ctx).await?;
+        let request = request_context(ctx)?;
+        let enrollment = request
+            .state
+            .services()
+            .mfa()
+            .prepare_recovery_code_enrollment(request.claims.user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(RecoveryCodeEnrollmentPayload {
+            recovery_codes: enrollment.recovery_codes,
+            enrollment_token: enrollment.enrollment_token,
+        })
     }
 
     async fn update_preferred_mfa_method(
@@ -54,6 +73,7 @@ impl SecurityMutation {
     async fn begin_passkey_registration(
         &self,
         ctx: &Context<'_>,
+        recovery_enrollment_token: Option<String>,
     ) -> Result<async_graphql::Json<serde_json::Value>> {
         authorize_mfa_change(ctx).await?;
         let request = request_context(ctx)?;
@@ -61,11 +81,26 @@ impl SecurityMutation {
             .claims
             .session_oid
             .ok_or_else(|| Error::new("browser session required"))?;
+        let recovery_codes = request
+            .state
+            .services()
+            .mfa()
+            .registration_recovery_codes(
+                request.claims.user_oid,
+                recovery_enrollment_token.as_deref(),
+            )
+            .await
+            .map_err(|error| app_error(ctx, error))?;
         let options = request
             .state
             .services()
             .passkey()
-            .begin_registration(request.claims.user_oid, session.0, &request.user.email)
+            .begin_registration(
+                request.claims.user_oid,
+                session.0,
+                &request.user.email,
+                recovery_codes,
+            )
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(async_graphql::Json(

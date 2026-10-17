@@ -23,6 +23,9 @@ impl From<UserRepositoryError> for AppError {
 impl From<UserCredentialRepositoryError> for AppError {
     fn from(error: UserCredentialRepositoryError) -> Self {
         match error {
+            UserCredentialRepositoryError::InvalidMfaEnrollment => {
+                AppError::from_code(AuthErrorCode::InvalidMfaEnrollment)
+            }
             UserCredentialRepositoryError::CredentialNotFound => {
                 AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
                     .with_param("credential_type", "unknown")

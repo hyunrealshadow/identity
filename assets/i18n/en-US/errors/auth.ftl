@@ -24,3 +24,6 @@ E11015 = An authenticator app is already configured for this account.
 E11016 = No authenticator app is configured for this account.
 E11017 = The authenticator setup is invalid or has expired. Start setup again.
 E11019 = You can add up to { $limit } passkeys. Delete a passkey before adding another.
+
+E11020 = Recovery code setup is missing or has changed, start enrollment again
+E11021 = No multi-factor authentication method is enabled for this account

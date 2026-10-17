@@ -86,7 +86,10 @@ export function useAccount() {
 export const Route = createFileRoute('/account')({
   loader: async () => {
     const page = await loadAccount()
-    if (!page.data && !page.error) throw redirect({ href: await beginAuthorization() })
+    if (!page.data && !page.error) {
+      // Authorization must reach the provider rather than the client route tree
+      throw redirect({ href: await beginAuthorization(), reloadDocument: true })
+    }
     return page
   },
   component: AccountLayout,

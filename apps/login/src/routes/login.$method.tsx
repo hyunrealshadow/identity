@@ -8,9 +8,10 @@ import {
 } from '@heroui/react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, ChevronDown, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 
+import { LoginMethodAlternatives } from '#/components/login-method-alternatives'
 import { PasskeyLogin } from '#/components/passkey-login'
 import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
@@ -32,7 +33,7 @@ import {
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { submitLoginMethod } from '#/lib/login-method.server'
-import { loginChallengeDestination, loginCredentialType, loginMethodPath } from '#/lib/login-navigation'
+import { loginCredentialType, loginMethodPath } from '#/lib/login-navigation'
 
 interface ChallengeSearch {
   login_id?: string
@@ -194,16 +195,6 @@ function ChallengePage() {
   const isOtp = credentialType === 'otp'
   const isRecoveryCode = credentialType === 'recovery_code'
   const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
-  const alternativeMethods = credentialType === 'password' || (isPasskey && data.status?.status !== 'mfa_required' && !data.status?.requires_reauthentication)
-    ? []
-    : [
-        { credentialType: 'otp', label: t('useAuthenticatorCode') },
-        { credentialType: 'recovery_code', label: t('useRecoveryCode') },
-      ].filter(
-        (method) =>
-          method.credentialType !== credentialType &&
-          data.status?.credential_types.includes(method.credentialType),
-      )
   const canSwitchAccount = !data.status?.requires_reauthentication
   const visibleError = search.error ?? data.error
   const user = data.status?.user
@@ -380,39 +371,12 @@ function ChallengePage() {
         </ProgressiveForm>
       ) : null}
 
-      {!restartRequired && (data.status?.status === 'identifier_verified' || data.status?.status === 'mfa_required') && data.status.credential_types.includes('passkey') ? (
-        isPasskey ? (
-          <PasskeyLogin loginId={loginId} csrfToken={data.csrfToken} locale={data.locale} primary />
-        ) : (
-          <a className="auth-link mt-5 flex min-h-11 items-center justify-center rounded-xl border border-border text-sm font-semibold" href={loginChallengeDestination(loginId, 'passkey', data.uiLocales)}>{t('usePasskey')}</a>
-        )
-      ) : null}
-      {isPasskey && data.status?.status === 'identifier_verified' && data.status.credential_types.includes('password') ? (
-        <a className="auth-link mt-4 block text-center text-sm" href={loginChallengeDestination(loginId, 'password', data.uiLocales)}>{t('usePassword')}</a>
+      {!restartRequired && isPasskey && (data.status?.status === 'identifier_verified' || data.status?.status === 'mfa_required') && data.status.credential_types.includes('passkey') ? (
+        <PasskeyLogin loginId={loginId} csrfToken={data.csrfToken} locale={data.locale} primary />
       ) : null}
 
-      {!restartRequired && alternativeMethods.length ? (
-        <details className="auth-methods group mt-6 border-t border-border">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between pt-4 text-xs font-medium text-muted transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-            {t('otherVerificationMethods')}
-            <ChevronDown
-              className="size-4 transition-transform group-open:rotate-180"
-              aria-hidden="true"
-            />
-          </summary>
-          <div className="auth-method-options mt-1 grid gap-1 pb-1">
-            {alternativeMethods.map((method) => (
-              <a
-                key={method.credentialType}
-                href={loginChallengeDestination(loginId, method.credentialType, data.uiLocales)}
-                className="flex min-h-9 items-center justify-between rounded-lg bg-surface-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-tertiary"
-              >
-                {method.label}
-              </a>
-            ))}
-          </div>
-        </details>
-      ) : null}
+      {!restartRequired ? <LoginMethodAlternatives currentMethod={credentialType} status={data.status}
+        loginId={loginId} uiLocales={data.uiLocales} locale={data.locale} /> : null}
 
       {!restartRequired && canSwitchAccount ? (
         <ProgressiveForm

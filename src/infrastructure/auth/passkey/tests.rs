@@ -36,7 +36,12 @@ impl PasskeyCredentialRepository for MemoryRepo {
             .cloned()
             .unwrap_or_default())
     }
-    async fn insert(&self, user: UserOid, key: StoredPasskey) -> Result<(), AppError> {
+    async fn insert(
+        &self,
+        user: UserOid,
+        key: StoredPasskey,
+        _recovery_codes: Vec<identity_application::user::RecoveryCodeCredentialData>,
+    ) -> Result<(), AppError> {
         let mut keys = self.keys.lock().unwrap();
         if keys
             .values()
@@ -230,7 +235,7 @@ fn fixture() -> (
 async fn concurrent_ceremonies_cannot_accept_a_stale_counter_snapshot() {
     let (service, _, user, session, authenticator) = fixture();
     let registration = service
-        .begin_registration(user, session, "person@example.com")
+        .begin_registration(user, session, "person@example.com", Vec::new())
         .await
         .unwrap();
     service
@@ -277,7 +282,7 @@ async fn concurrent_ceremonies_cannot_accept_a_stale_counter_snapshot() {
 async fn passkeys_without_signature_counters_can_authenticate_repeatedly() {
     let (service, _, user, session, authenticator) = fixture();
     let registration = service
-        .begin_registration(user, session, "person@example.com")
+        .begin_registration(user, session, "person@example.com", Vec::new())
         .await
         .unwrap();
     service
@@ -308,7 +313,7 @@ async fn passkeys_without_signature_counters_can_authenticate_repeatedly() {
 async fn registration_and_signed_login_are_bound_and_single_use() {
     let (service, _, user, session, authenticator) = fixture();
     let registration = service
-        .begin_registration(user, session, "person@example.com")
+        .begin_registration(user, session, "person@example.com", Vec::new())
         .await
         .unwrap();
     let credential = authenticator.registration(&registration);
@@ -397,7 +402,7 @@ async fn registration_and_signed_login_are_bound_and_single_use() {
 async fn rejects_origin_uv_signature_counter_and_expired_challenges() {
     let (service, repo, user, session, authenticator) = fixture();
     let options = service
-        .begin_registration(user, session, "person@example.com")
+        .begin_registration(user, session, "person@example.com", Vec::new())
         .await
         .unwrap();
     service

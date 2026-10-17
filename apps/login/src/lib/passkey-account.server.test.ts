@@ -25,7 +25,7 @@ it('uses the authenticated account token to begin enrollment', async () => {
   const options = { challenge_id: 'challenge', public_key: { challenge: 'abc' } }
   mocks.graphql.mockResolvedValueOnce({ beginPasskeyRegistration: options })
   expect(await passkeyAccountAction({ action: 'begin' })).toEqual({ options })
-  expect(mocks.graphql).toHaveBeenCalledWith('mutation { beginPasskeyRegistration }', undefined, { authorization: 'elevated' })
+  expect(mocks.graphql).toHaveBeenCalledWith('mutation BeginPasskeyRegistration($recoveryEnrollmentToken: String) { beginPasskeyRegistration(recoveryEnrollmentToken: $recoveryEnrollmentToken) }', { recoveryEnrollmentToken: undefined }, { authorization: 'elevated' })
 })
 
 it('passes the credential JSON to the authenticated completion mutation', async () => {
@@ -48,4 +48,17 @@ it('returns an actionable passkey-limit message from either registration phase',
     expect(await passkeyAccountAction({ action })).toEqual({ error: 'Limit of 5 passkeys reached, delete one to add another' })
   }
   expect(mocks.reauthorize).not.toHaveBeenCalled()
+})
+
+it('prepares account-bound recovery codes before a passkey ceremony', async () => {
+  const enrollment = { recoveryCodes: ['ABCD-EFGH'], enrollmentToken: 'protected-batch' }
+  mocks.graphql.mockResolvedValueOnce({ prepareMfaRecoveryCodes: enrollment })
+  expect(await passkeyAccountAction({ action: 'prepare' })).toEqual({ recoveryEnrollment: enrollment })
+  expect(mocks.graphql).toHaveBeenCalledWith('mutation PrepareMfaRecoveryCodes { prepareMfaRecoveryCodes { recoveryCodes enrollmentToken } }', undefined, { authorization: 'elevated' })
+})
+
+it('forwards the protected recovery batch into passkey registration', async () => {
+  mocks.graphql.mockResolvedValueOnce({ beginPasskeyRegistration: {} })
+  await passkeyAccountAction({ action: 'begin', recoveryEnrollmentToken: 'protected-batch' })
+  expect(mocks.graphql.mock.calls[0][1]).toEqual({ recoveryEnrollmentToken: 'protected-batch' })
 })

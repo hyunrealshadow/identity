@@ -31,6 +31,7 @@ type Challenge = (ChallengeContext, Value, DateTime<Utc>);
 struct MemoryRepo {
     keys: Mutex<HashMap<UserOid, Vec<StoredPasskey>>>,
     challenges: Mutex<HashMap<Uuid, Challenge>>,
+    registration_recovery_codes: Mutex<Vec<crate::user::RecoveryCodeCredentialData>>,
 }
 #[async_trait]
 impl PasskeyCredentialRepository for MemoryRepo {
@@ -43,7 +44,12 @@ impl PasskeyCredentialRepository for MemoryRepo {
             .cloned()
             .unwrap_or_default())
     }
-    async fn insert(&self, user: UserOid, key: StoredPasskey) -> Result<(), AppError> {
+    async fn insert(
+        &self,
+        user: UserOid,
+        key: StoredPasskey,
+        recovery_codes: Vec<crate::user::RecoveryCodeCredentialData>,
+    ) -> Result<(), AppError> {
         let mut keys = self.keys.lock().unwrap();
         if keys
             .values()
@@ -57,6 +63,7 @@ impl PasskeyCredentialRepository for MemoryRepo {
             return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached));
         }
         owned.push(key);
+        *self.registration_recovery_codes.lock().unwrap() = recovery_codes;
         Ok(())
     }
     async fn update(
@@ -175,6 +182,7 @@ pub(in crate::auth) async fn enrolled_passkey(
                 key: json!({}),
             },
         },
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -260,7 +268,7 @@ fn registration_with_keys(count: usize) -> (PasskeyService, Arc<MemoryRepo>, Use
 async fn passkey_registration_stops_at_five_before_creating_a_challenge() {
     let (service, repo, user) = registration_with_keys(MAX_PASSKEYS_PER_USER);
     let error = service
-        .begin_registration(user, Uuid::new_v4(), "owner")
+        .begin_registration(user, Uuid::new_v4(), "owner", Vec::new())
         .await
         .err()
         .unwrap();
@@ -273,7 +281,7 @@ async fn passkey_registration_allows_a_fifth_and_reopens_after_deletion() {
     let (service, repo, user) = registration_with_keys(MAX_PASSKEYS_PER_USER - 1);
     let session = Uuid::new_v4();
     let options = service
-        .begin_registration(user, session, "owner")
+        .begin_registration(user, session, "owner", Vec::new())
         .await
         .unwrap();
     service
@@ -283,7 +291,7 @@ async fn passkey_registration_allows_a_fifth_and_reopens_after_deletion() {
     assert_eq!(repo.list(user).await.unwrap().len(), MAX_PASSKEYS_PER_USER);
     assert!(
         service
-            .begin_registration(user, session, "owner")
+            .begin_registration(user, session, "owner", Vec::new())
             .await
             .is_err()
     );
@@ -298,8 +306,40 @@ async fn passkey_registration_allows_a_fifth_and_reopens_after_deletion() {
     assert!(service.delete(user, key.id).await.unwrap());
     assert!(
         service
-            .begin_registration(user, session, "owner")
+            .begin_registration(user, session, "owner", Vec::new())
             .await
             .is_ok()
     );
+}
+
+#[tokio::test]
+async fn registration_binds_the_prepared_recovery_batch_to_its_one_time_ceremony() {
+    let (service, repo, user) = registration_with_keys(0);
+    let session = Uuid::new_v4();
+    let options = service
+        .begin_registration(
+            user,
+            session,
+            "owner",
+            vec![crate::user::RecoveryCodeCredentialData {
+                hash: "prepared-batch".to_owned(),
+            }],
+        )
+        .await
+        .unwrap();
+    service
+        .finish_registration(user, session, options.challenge_id, "Laptop", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        repo.registration_recovery_codes.lock().unwrap()[0].hash,
+        "prepared-batch"
+    );
+    assert!(
+        service
+            .finish_registration(user, session, options.challenge_id, "Replay", json!({}))
+            .await
+            .is_err()
+    );
+    assert_eq!(repo.list(user).await.unwrap().len(), 1);
 }

@@ -26,6 +26,8 @@ use crate::database::{
     query::{json_text, jsonb_set},
 };
 
+mod mfa;
+
 pub struct UserCredentialRepositoryImpl {
     db: DatabaseConnection,
 }
@@ -246,11 +248,6 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let otp = to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
-        let recovery_codes = recovery_codes
-            .into_iter()
-            .map(to_value)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(UserCredentialRepositoryError::Serialization)?;
         let txn = self
             .db
             .begin()
@@ -283,16 +280,13 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
             return Ok(false);
         }
+        mfa::install_recovery_codes(&txn, user.id, &recovery_codes).await?;
         UserCredentialEntity::delete_many()
             .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(
-                Condition::any()
-                    .add(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
-                    .add(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref())),
-            )
+            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
             .exec(&txn)
             .await
-            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+            .map_err(|error| UserCredentialRepositoryError::ReplaceFailed(Box::new(error)))?;
         user_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
             user_id: Set(user.id),
@@ -305,28 +299,18 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         .insert(&txn)
         .await
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
-        for value in recovery_codes {
-            user_credential::ActiveModel {
-                oid: Set(Uuid::new_v4()),
-                user_id: Set(user.id),
-                r#type: Set(CredentialType::RecoveryCode.to_string()),
-                data: Set(value),
-                expires_at: Set(None),
-                created_at: Set(Utc::now().into()),
-                ..Default::default()
-            }
-            .insert(&txn)
-            .await
-            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
-        }
         txn.commit()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         Ok(true)
     }
 
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "replace_recovery_codes_if_totp_enabled"))]
-    async fn replace_recovery_codes_if_totp_enabled(
+    async fn disable_totp(&self, user_oid: UserOid) -> Result<bool, UserCredentialRepositoryError> {
+        mfa::disable_totp(&self.db, user_oid).await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "replace_recovery_codes_if_mfa_enabled"))]
+    async fn replace_recovery_codes_if_mfa_enabled(
         &self,
         user_oid: UserOid,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
@@ -350,22 +334,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
-        let totp_exists = UserCredentialEntity::find()
-            .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
-            .filter(
-                Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
-            )
-            .one(&txn)
-            .await
-            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?
-            .is_some();
-        if !totp_exists {
+        if !mfa::has_active_mfa(&txn, user.id).await? {
             txn.commit()
                 .await
-                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+                .map_err(|error| UserCredentialRepositoryError::ReplaceFailed(Box::new(error)))?;
             return Ok(false);
         }
         UserCredentialEntity::delete_many()
@@ -399,18 +371,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         &self,
         credential_oid: UserCredentialOid,
     ) -> Result<bool, UserCredentialRepositoryError> {
-        let result = UserCredentialEntity::delete_many()
-            .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
-            .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
-            .filter(
-                Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
-            )
-            .exec(&self.db)
-            .await
-            .map_err(|e| UserCredentialRepositoryError::DeleteFailed(Box::new(e)))?;
-        Ok(result.rows_affected == 1)
+        mfa::consume_recovery_code(&self.db, credential_oid).await
     }
 }
 
@@ -542,7 +503,12 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             .collect()
     }
 
-    async fn insert(&self, user_oid: UserOid, key: StoredPasskey) -> Result<(), AppError> {
+    async fn insert(
+        &self,
+        user_oid: UserOid,
+        key: StoredPasskey,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<(), AppError> {
         let txn = self.db.begin().await.map_err(AppError::internal)?;
         lock_user_credentials(&txn, user_oid)
             .await
@@ -577,6 +543,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached)
                 .with_param("limit", MAX_PASSKEYS_PER_USER.to_string()));
         }
+        mfa::install_recovery_codes(&txn, user_id, &recovery_codes).await?;
         user_credential::ActiveModel {
             oid: Set(key.id),
             user_id: Set(user_id),
@@ -610,12 +577,33 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
     }
 
     async fn delete(&self, user: UserOid, id: Uuid) -> Result<bool, AppError> {
-        use sea_orm::{ConnectionTrait, DbBackend, Statement};
-        let result = self.db.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-            "DELETE FROM user_credential WHERE oid = $1 AND user_id = (SELECT id FROM \"user\" WHERE oid = $2) AND type = 'passkey'",
-            [id.into(), Uuid::from(user).into()]
-        )).await.map_err(AppError::internal)?;
-        Ok(result.rows_affected() == 1)
+        let txn = self.db.begin().await.map_err(AppError::internal)?;
+        lock_user_credentials(&txn, user)
+            .await
+            .map_err(AppError::internal)?;
+        let user_id = UserEntity::find()
+            .select_only()
+            .column(user::Column::Id)
+            .filter(user::Column::Oid.eq(Uuid::from(user)))
+            .into_tuple::<i64>()
+            .one(&txn)
+            .await
+            .map_err(AppError::internal)?
+            .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        let deleted = UserCredentialEntity::delete_many()
+            .filter(user_credential::Column::UserId.eq(user_id))
+            .filter(user_credential::Column::Oid.eq(id))
+            .filter(user_credential::Column::Type.eq(CredentialType::Passkey.as_ref()))
+            .exec(&txn)
+            .await
+            .map_err(AppError::internal)?
+            .rows_affected
+            > 0;
+        if deleted {
+            mfa::clear_recovery_codes_without_mfa(&txn, user_id).await?;
+        }
+        txn.commit().await.map_err(AppError::internal)?;
+        Ok(deleted)
     }
 }
 
@@ -649,6 +637,10 @@ mod passkey_tests {
                     vec![id_row(7)],
                     (0..count).map(|id| id_row(id as i64)).collect(),
                 ])
+                .append_query_results([[BTreeMap::from([(
+                    "data".to_owned(),
+                    Value::from(json!({"hash":"existing"})),
+                )])]])
                 .append_query_results([[user_credential::Model {
                     id: 42,
                     oid: key.id,
@@ -664,6 +656,7 @@ mod passkey_tests {
                 &UserCredentialRepositoryImpl::new(db.clone()),
                 user,
                 key,
+                Vec::new(),
             )
             .await;
             if count < MAX_PASSKEYS_PER_USER {

@@ -88,7 +88,7 @@ export function PasskeyLogin({ loginId, csrfToken, locale, primary = false }: { 
     }
   }, [primary, signIn])
 
-  return <div className="mt-5 space-y-2">
+  return <div className="space-y-2">
     <Button fullWidth variant={primary ? 'primary' : 'secondary'} isDisabled={!supported || busy} isPending={busy} onPress={() => void signIn()}>
       <Fingerprint className="size-4" aria-hidden="true" />{t('usePasskey')}
     </Button>

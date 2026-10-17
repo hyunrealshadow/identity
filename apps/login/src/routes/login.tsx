@@ -134,7 +134,8 @@ export const Route = createFileRoute('/login')({
   }),
   loader: async ({ deps, location }) => {
     if (!deps.loginId) {
-      throw redirect({ href: await beginAuthorization() })
+      // The provider endpoint belongs to the server even when it shares our origin
+      throw redirect({ href: await beginAuthorization(), reloadDocument: true })
     }
     const page = await loadLoginPage({ data: deps })
     if (location.pathname === '/login' && page.challengeUri) {

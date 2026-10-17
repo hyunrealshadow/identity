@@ -24,6 +24,9 @@ const ENROLLMENT_LIFETIME: Duration = Duration::minutes(10);
 const RECOVERY_CODE_COUNT: usize = 10;
 const RECOVERY_CODE_LENGTH: usize = 8;
 
+mod recovery;
+pub use recovery::RecoveryCodeEnrollment;
+
 pub struct GeneratedTotpEnrollment {
     pub credential: OtpCredentialData,
     pub otp_auth_uri: String,
@@ -146,11 +149,16 @@ impl MfaService {
         issuer: &str,
         account_name: &str,
     ) -> Result<BeginTotpEnrollment, AppError> {
-        if self.status(user_oid).await?.totp_enabled {
+        let status = self.status(user_oid).await?;
+        if status.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
         }
         let generated = self.generator.generate(issuer, account_name)?;
-        let (recovery_codes, recovery_credentials) = generate_recovery_codes();
+        let (recovery_codes, recovery_credentials) = if status.recovery_codes_remaining == 0 {
+            generate_recovery_codes()
+        } else {
+            (Vec::new(), Vec::new())
+        };
         let pending = PendingTotpEnrollment {
             user_oid,
             expires_at: Utc::now() + ENROLLMENT_LIFETIME,
@@ -253,18 +261,9 @@ impl MfaService {
 
     #[tracing::instrument(skip_all, name = "mfa.disable")]
     pub async fn disable_totp(&self, user_oid: UserOid) -> Result<(), AppError> {
-        if !self.status(user_oid).await?.totp_enabled {
+        if !self.credential_repo.disable_totp(user_oid).await? {
             return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
         }
-        self.credential_repo
-            .replace_by_user_oid(
-                user_oid,
-                vec![
-                    (CredentialType::Otp, Vec::new()),
-                    (CredentialType::RecoveryCode, Vec::new()),
-                ],
-            )
-            .await?;
         self.record_mfa_change("mfa.disabled", user_oid, "success");
         Ok(())
     }
@@ -277,10 +276,10 @@ impl MfaService {
         let (recovery_codes, recovery_credentials) = generate_recovery_codes();
         if !self
             .credential_repo
-            .replace_recovery_codes_if_totp_enabled(user_oid, recovery_credentials)
+            .replace_recovery_codes_if_mfa_enabled(user_oid, recovery_credentials)
             .await?
         {
-            return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
+            return Err(AppError::from_code(AuthErrorCode::MfaNotEnabled));
         }
         self.record_mfa_change("mfa.recovery_codes.regenerated", user_oid, "success");
         Ok(RegenerateRecoveryCodes { recovery_codes })
@@ -320,6 +319,7 @@ fn generate_recovery_codes() -> (Vec<String>, Vec<RecoveryCodeCredentialData>) {
 
 #[cfg(test)]
 mod tests {
+    mod recovery;
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
@@ -498,12 +498,18 @@ mod tests {
             {
                 return Ok(false);
             }
-            credentials.retain(|credential| {
-                !matches!(
-                    credential.r#type,
-                    CredentialType::Otp | CredentialType::RecoveryCode
-                )
-            });
+            let existing: Vec<_> = credentials
+                .iter()
+                .filter(|c| c.r#type == CredentialType::RecoveryCode)
+                .collect();
+            if existing.is_empty() && recovery_codes.is_empty() {
+                return Err(UserCredentialRepositoryError::InvalidMfaEnrollment);
+            }
+            let recovery_codes = if existing.is_empty() {
+                recovery_codes
+            } else {
+                Vec::new()
+            };
             credentials.push(UserCredential {
                 oid: UserCredentialOid(Uuid::new_v4()),
                 r#type: CredentialType::Otp,
@@ -517,16 +523,34 @@ mod tests {
             Ok(true)
         }
 
-        async fn replace_recovery_codes_if_totp_enabled(
+        async fn disable_totp(
+            &self,
+            _user_oid: UserOid,
+        ) -> Result<bool, UserCredentialRepositoryError> {
+            let mut credentials = self.credentials.lock().unwrap();
+            let removed = credentials.iter().any(|c| c.r#type == CredentialType::Otp);
+            credentials.retain(|c| c.r#type != CredentialType::Otp);
+            if !credentials
+                .iter()
+                .any(|c| matches!(c.r#type, CredentialType::Otp | CredentialType::Passkey))
+            {
+                credentials.retain(|c| c.r#type != CredentialType::RecoveryCode);
+            }
+            Ok(removed)
+        }
+
+        async fn replace_recovery_codes_if_mfa_enabled(
             &self,
             _user_oid: UserOid,
             recovery_codes: Vec<RecoveryCodeCredentialData>,
         ) -> Result<bool, UserCredentialRepositoryError> {
             let mut credentials = self.credentials.lock().unwrap();
-            if !credentials
-                .iter()
-                .any(|credential| credential.r#type == CredentialType::Otp)
-            {
+            if !credentials.iter().any(|credential| {
+                matches!(
+                    credential.r#type,
+                    CredentialType::Otp | CredentialType::Passkey
+                )
+            }) {
                 return Ok(false);
             }
             credentials.retain(|credential| credential.r#type != CredentialType::RecoveryCode);
