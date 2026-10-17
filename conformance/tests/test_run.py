@@ -149,6 +149,14 @@ class ProfileConfigurationTests(unittest.TestCase):
 
 
 class PlanFileTests(unittest.TestCase):
+    def test_second_client_is_distinct_from_the_post_authentication_client(self):
+        for profile, plan in PLANS.items():
+            if "client2" in plan:
+                with self.subTest(profile=profile):
+                    self.assertNotEqual(plan["client2"]["client_id"], plan["client"]["client_id"])
+                    self.assertNotEqual(plan["client2"]["client_id"], plan["client_secret_post"]["client_id"])
+
+
     def test_public_discovery_origin_does_not_change_default_plan(self):
         plan = get_plan("basic", "https://issuer.example.com/")
         self.assertEqual(

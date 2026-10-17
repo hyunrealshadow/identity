@@ -3,7 +3,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from .client import ConformanceClient
-from .browser_auth import BrowserAuthHandler as AutoLoginHandler
+from .browser_auth import BrowserAuthHandler
 
 
 @dataclass
@@ -43,12 +43,12 @@ class TestRunner:
     def __init__(
         self,
         client: ConformanceClient,
-        auto_login: AutoLoginHandler,
+        browser_auth: BrowserAuthHandler,
         timeout_per_test: int = 60,
         poll_interval: int = 2,
     ):
         self.client = client
-        self.auto_login = auto_login
+        self.browser_auth = browser_auth
         self.timeout_per_test = timeout_per_test
         self.poll_interval = poll_interval
         self.ui_review_required = False
@@ -58,7 +58,7 @@ class TestRunner:
         urllib3.disable_warnings()
         try:
             import requests
-            url = f"{self.auto_login.identity_url}/conformance/rotate-keys"
+            url = f"{self.browser_auth.identity_url}/conformance/rotate-keys"
             resp = requests.post(url, verify=False, timeout=30)
             if resp.status_code == 200:
                 print("    [rotate-keys] new key generated")
@@ -87,7 +87,7 @@ class TestRunner:
                 upload_id = entry.get("upload")
                 if not upload_id or entry.get("img"):
                     continue
-                screenshot = self.auto_login.screenshot_for_upload(urls, method)
+                screenshot = self.browser_auth.screenshot_for_upload(urls, method, entry)
                 if not screenshot:
                     self.ui_review_required = True
                     continue
@@ -118,7 +118,7 @@ class TestRunner:
                         )
                 break
 
-        self.auto_login.reset_session()
+        self.browser_auth.reset_session()
         self.ui_review_required = False
         if run_id is None:
             run_id = self.client.start_test(plan_id, test_name, variant)
@@ -172,7 +172,7 @@ class TestRunner:
                         continue
                     processed_urls.add(url)
                     has_new_urls = True
-                    success = self.auto_login.handle_auth_url(url, url_method)
+                    success = self.browser_auth.handle_auth_url(url, url_method)
                     print(f"    [debug] handle_auth_url returned {success} for {url[:60]}...")
                     time.sleep(self.poll_interval)
 
@@ -183,7 +183,7 @@ class TestRunner:
                 if not has_new_urls:
                     uploaded = self._upload_screenshots(run_id, urls, url_method)
                     if self.ui_review_required:
-                        print("    Genuine login UI evidence is required; automation cannot supply it")
+                        print("    Required browser evidence was not observed in this interaction")
                         return TestResult(test_name, "MANUAL_REVIEW_REQUIRED", None, run_id)
                     if uploaded:
                         time.sleep(self.poll_interval)

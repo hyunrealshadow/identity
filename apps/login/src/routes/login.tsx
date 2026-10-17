@@ -123,7 +123,9 @@ const loadLoginPage = createServerFn({ method: 'GET' })
 export const Route = createFileRoute('/login')({
   validateSearch: (search): LoginSearch => ({
     login_id: optionalString(search.login_id),
-    no_accounts: optionalString(search.no_accounts),
+    // The router's JSON search parser turns the link's `no_accounts=1` into
+    // a number. Preserve that flag so "Use another account" opens the form.
+    no_accounts: search.no_accounts === 1 || search.no_accounts === '1' ? '1' : undefined,
     identifier: optionalString(search.identifier),
     error: optionalString(search.error),
     ui_locales: optionalString(search.ui_locales),

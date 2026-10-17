@@ -13,7 +13,7 @@ server:
     auto_generate: true
     cert_path: config/tls/server.crt
     key_path: config/tls/server.key
-  domain: {{ get_env(name="HOST", default="https://identity:5150") }}
+    domain: identity
 
 internal:
   server:
@@ -21,7 +21,8 @@ internal:
     port: {{ get_env(name="INTERNAL_PORT", default="5151") }}
   workloads:
     login:
-      static_tokens: []
+      static_tokens:
+        - environment: IDENTITY_WORKLOAD_TOKEN
 
 database:
   uri: {{ get_env(name="DATABASE_URL", default="postgres://identity:identity@localhost:5432/identity_conformance") }}
@@ -57,5 +58,5 @@ install:
   username: "admin"
   password: "Orbit-canyon-violet-914!"
   email: "admin@conformance.local"
-  application_url: {{ get_env(name="HOST", default="https://identity:5150") }}
+  application_url: {{ get_env(name="LOGIN_URL", default="https://localhost:3000") }}
   key_algorithm: "rsa-2048"

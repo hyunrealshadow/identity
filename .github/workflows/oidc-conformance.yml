@@ -14,11 +14,32 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 60
+    env:
+      COMPOSE_FILE: conformance/docker-compose.hosted.yml
+      CONFORMANCE_IMAGE: identity-conformance:${{ github.run_id }}-${{ github.run_attempt }}
+      CONFORMANCE_LOGIN_IMAGE: identity-conformance-login:${{ github.run_id }}-${{ github.run_attempt }}
+      CONFORMANCE_ALIAS: build-only
+      SUITE_URL: https://www.certification.openid.net
     outputs:
       profiles: ${{ steps.profiles.outputs.profiles }}
+      image: ${{ env.CONFORMANCE_IMAGE }}
+      login-image: ${{ env.CONFORMANCE_LOGIN_IMAGE }}
+      image-artifact: conformance-image-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Validate official account token
+        env:
+          CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
+        run: |
+          if [ -z "$CONFORMANCE_API_TOKEN" ]; then
+            echo "::error::Add the official suite API token as the CONFORMANCE_API_TOKEN repository secret"
+            exit 1
+          fi
+          curl --fail --silent --show-error --output /dev/null \
+            --header "Authorization: Bearer $CONFORMANCE_API_TOKEN" \
+            "$SUITE_URL/api/currentuser"
 
       - name: Select every supported OP plan
         id: profiles
@@ -31,6 +52,18 @@ jobs:
               output.write('profiles=' + json.dumps(list(PLANS)) + '\n')
           PY
 
+      - name: Build shared conformance images
+        run: |
+          docker compose build identity login
+          docker image save "$CONFORMANCE_IMAGE" "$CONFORMANCE_LOGIN_IMAGE" | gzip > "$RUNNER_TEMP/identity-image.tar.gz"
+
+      - name: Upload shared conformance image
+        uses: actions/upload-artifact@v7
+        with:
+          name: conformance-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/identity-image.tar.gz
+          compression-level: 0
+          retention-days: 1
 
   conformance:
     name: OP plan (${{ matrix.profile }})
@@ -45,6 +78,8 @@ jobs:
     env:
       COMPOSE_FILE: conformance/docker-compose.hosted.yml
       COMPOSE_PROJECT_NAME: oidc-conformance
+      CONFORMANCE_IMAGE: ${{ needs.prepare.outputs.image }}
+      CONFORMANCE_LOGIN_IMAGE: ${{ needs.prepare.outputs.login-image }}
       PROFILE: ${{ matrix.profile }}
       SUITE_URL: https://www.certification.openid.net
       CONFORMANCE_ALIAS: identity-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.profile }}
@@ -52,18 +87,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate official account token
-        env:
-          CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
+      - name: Download shared conformance image
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.prepare.outputs.image-artifact }}
+          path: ${{ runner.temp }}/conformance-image
+
+      - name: Load shared conformance image
         run: |
+          gunzip -c "$RUNNER_TEMP/conformance-image/identity-image.tar.gz" | docker image load
+          docker image inspect "$CONFORMANCE_IMAGE" > /dev/null
+          docker image inspect "$CONFORMANCE_LOGIN_IMAGE" > /dev/null
           mkdir -p conformance/results
-          if [ -z "$CONFORMANCE_API_TOKEN" ]; then
-            echo "::error::Add the official suite API token as the CONFORMANCE_API_TOKEN repository secret"
-            exit 1
-          fi
-          curl --fail --silent --show-error --output /dev/null \
-            --header "Authorization: Bearer $CONFORMANCE_API_TOKEN" \
-            "$SUITE_URL/api/currentuser"
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -76,20 +111,21 @@ jobs:
           uv sync --locked
           uv run playwright install --with-deps chromium
 
-      - name: Build isolated environment
-        run: docker compose build identity
-
-      - name: Allocate temporary Cloudflare public hostname
+      - name: Allocate temporary identity and login public hostnames
         run: |
-          docker compose up -d --no-deps tunnel
+          docker compose up -d --no-deps tunnel login-tunnel
           public_url=$(python conformance/ci_tunnel.py)
+          login_url=$(python conformance/ci_tunnel.py --service login-tunnel)
           echo "IDENTITY_URL=$public_url" >> "$GITHUB_ENV"
+          echo "LOGIN_URL=$login_url" >> "$GITHUB_ENV"
           echo "$public_url" > conformance/results/tunnel-url.txt
+          echo "$login_url" > conformance/results/login-url.txt
           echo "Temporary public URL: $public_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Temporary login URL: $login_url" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Start identity with the public issuer
         run: |
-          docker compose up -d --wait --wait-timeout 240 db identity
+          docker compose up -d --no-build --wait --wait-timeout 240 db identity login
 
       - name: Check public endpoints through Cloudflare
         working-directory: conformance

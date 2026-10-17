@@ -89,7 +89,7 @@ class FakeClient:
         return run_id
 
 
-class FakeAutoLogin:
+class FakeBrowserAuth:
     def __init__(self):
         self.reset_calls = 0
         self.handled_urls = []
@@ -103,7 +103,7 @@ class FakeAutoLogin:
         self.events.append(("handle", auth_url, method))
         return True
 
-    def screenshot_for_upload(self, urls, method="GET"):
+    def screenshot_for_upload(self, urls, method="GET", requirement=None):
         self.events.append(("screenshot", tuple(urls), method))
         return "fresh-screenshot"
 
@@ -148,7 +148,7 @@ class TestRunnerResumeTests(unittest.TestCase):
             start_run_ids={"oidcc-retry": retry_run_id},
         )
         runner = TestRunner(
-            client, FakeAutoLogin(), timeout_per_test=5, poll_interval=1
+            client, FakeBrowserAuth(), timeout_per_test=5, poll_interval=1
         )
 
         results = runner.run_all_tests("plan-1")
@@ -175,8 +175,8 @@ class TestRunnerResumeTests(unittest.TestCase):
             },
             browser_urls={run_id: ["http://identity:5150/oauth2/authorize?claims_locales=se"]},
         )
-        auto_login = FakeAutoLogin()
-        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+        browser_auth = FakeBrowserAuth()
+        runner = TestRunner(client, browser_auth, timeout_per_test=5, poll_interval=1)
 
         result = runner.run_single_test("plan-1", "oidcc-claims-locales", {})
 
@@ -184,9 +184,9 @@ class TestRunnerResumeTests(unittest.TestCase):
         self.assertEqual(result.result, "PASSED")
         self.assertEqual(result.run_id, run_id)
         self.assertEqual(client.started_tests, [])
-        self.assertEqual(auto_login.reset_calls, 1)
+        self.assertEqual(browser_auth.reset_calls, 1)
         self.assertEqual(
-            auto_login.handled_urls,
+            browser_auth.handled_urls,
             [("http://identity:5150/oauth2/authorize?claims_locales=se", "GET")],
         )
 
@@ -217,8 +217,8 @@ class TestRunnerResumeTests(unittest.TestCase):
             },
             start_run_ids={"oidcc-next": fresh_run_id},
         )
-        auto_login = FakeAutoLogin()
-        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+        browser_auth = FakeBrowserAuth()
+        runner = TestRunner(client, browser_auth, timeout_per_test=5, poll_interval=1)
 
         results = runner.run_all_tests("plan-1")
 
@@ -226,9 +226,9 @@ class TestRunnerResumeTests(unittest.TestCase):
         self.assertEqual([result.result for result in results], ["PASSED", "PASSED"])
         self.assertEqual([result.run_id for result in results], [waiting_run_id, fresh_run_id])
         self.assertEqual(client.started_tests, [("plan-1", "oidcc-next", {"variant": "fresh"}, fresh_run_id)])
-        self.assertEqual(auto_login.reset_calls, 2)
+        self.assertEqual(browser_auth.reset_calls, 2)
         self.assertEqual(
-            auto_login.handled_urls,
+            browser_auth.handled_urls,
             [
                 ("http://identity:5150/oauth2/authorize?claims_locales=se", "GET"),
                 ("http://identity:5150/oauth2/authorize?client_id=fresh", "GET"),
@@ -253,8 +253,8 @@ class TestRunnerResumeTests(unittest.TestCase):
             },
             browser_urls={waiting_run_id: ["http://identity:5150/oauth2/authorize?claims_locales=se"]},
         )
-        auto_login = FakeAutoLogin()
-        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+        browser_auth = FakeBrowserAuth()
+        runner = TestRunner(client, browser_auth, timeout_per_test=5, poll_interval=1)
 
         result = runner.run_single_test("plan-1", "oidcc-claims-locales", {})
 
@@ -263,7 +263,7 @@ class TestRunnerResumeTests(unittest.TestCase):
         self.assertEqual(result.run_id, waiting_run_id)
         self.assertEqual(client.started_tests, [])
         self.assertEqual(
-            auto_login.handled_urls,
+            browser_auth.handled_urls,
             [("http://identity:5150/oauth2/authorize?claims_locales=se", "GET")],
         )
 
@@ -296,8 +296,8 @@ class TestRunnerResumeTests(unittest.TestCase):
             browser_urls={hybrid_run_id: ["http://identity:5150/oauth2/authorize?response_type=id_token+token"]},
             start_run_ids={"oidcc-server": hybrid_run_id},
         )
-        auto_login = FakeAutoLogin()
-        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+        browser_auth = FakeBrowserAuth()
+        runner = TestRunner(client, browser_auth, timeout_per_test=5, poll_interval=1)
 
         result = runner.run_single_test("plan-1", "oidcc-server", hybrid_variant)
 
@@ -306,7 +306,7 @@ class TestRunnerResumeTests(unittest.TestCase):
         self.assertEqual(result.run_id, hybrid_run_id)
         self.assertEqual(client.started_tests, [("plan-1", "oidcc-server", hybrid_variant, hybrid_run_id)])
         self.assertEqual(
-            auto_login.handled_urls,
+            browser_auth.handled_urls,
             [("http://identity:5150/oauth2/authorize?response_type=id_token+token", "GET")],
         )
 
@@ -327,14 +327,14 @@ class TestRunnerResumeTests(unittest.TestCase):
             browser_urls={run_id: [logout_url]},
         )
         client.pending_screenshots[run_id] = [{"upload": "shot-1"}]
-        auto_login = FakeAutoLogin()
-        runner = TestRunner(client, auto_login, timeout_per_test=5, poll_interval=1)
+        browser_auth = FakeBrowserAuth()
+        runner = TestRunner(client, browser_auth, timeout_per_test=5, poll_interval=1)
 
         result = runner.run_single_test("plan-1", "oidcc-review", {})
 
         self.assertEqual(result.status, "FINISHED")
         self.assertEqual(result.result, "REVIEW")
-        self.assertEqual(auto_login.handled_urls, [(logout_url, "GET")])
+        self.assertEqual(browser_auth.handled_urls, [(logout_url, "GET")])
         self.assertEqual(client.uploads, [(run_id, "shot-1", "fresh-screenshot")])
 
 

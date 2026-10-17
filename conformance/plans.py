@@ -15,8 +15,8 @@ PLANS = {
             "client_secret": "conformance-basic-secret-at-least-32-bytes",
         },
         "client2": {
-            "client_id": "00000002-0000-0000-0000-000000000001",
-            "client_secret": "conformance-secret-2",
+            "client_id": "00000007-0000-0000-0000-000000000001",
+            "client_secret": "conformance-basic-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000002-0000-0000-0000-000000000001",
@@ -32,8 +32,8 @@ PLANS = {
             "client_secret": "conformance-implicit-secret",
         },
         "client2": {
-            "client_id": "00000004-0000-0000-0000-000000000001",
-            "client_secret": "conformance-implicit-secret-2",
+            "client_id": "00000008-0000-0000-0000-000000000001",
+            "client_secret": "conformance-implicit-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000004-0000-0000-0000-000000000001",
@@ -49,8 +49,8 @@ PLANS = {
             "client_secret": "conformance-hybrid-secret",
         },
         "client2": {
-            "client_id": "00000006-0000-0000-0000-000000000001",
-            "client_secret": "conformance-hybrid-secret-2",
+            "client_id": "00000009-0000-0000-0000-000000000001",
+            "client_secret": "conformance-hybrid-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000006-0000-0000-0000-000000000001",
@@ -66,8 +66,8 @@ PLANS = {
             "client_secret": "conformance-basic-secret-at-least-32-bytes",
         },
         "client2": {
-            "client_id": "00000002-0000-0000-0000-000000000001",
-            "client_secret": "conformance-secret-2",
+            "client_id": "00000007-0000-0000-0000-000000000001",
+            "client_secret": "conformance-basic-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000002-0000-0000-0000-000000000001",
@@ -83,8 +83,8 @@ PLANS = {
             "client_secret": "conformance-basic-secret-at-least-32-bytes",
         },
         "client2": {
-            "client_id": "00000002-0000-0000-0000-000000000001",
-            "client_secret": "conformance-secret-2",
+            "client_id": "00000007-0000-0000-0000-000000000001",
+            "client_secret": "conformance-basic-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000002-0000-0000-0000-000000000001",
@@ -100,8 +100,8 @@ PLANS = {
             "client_secret": "conformance-implicit-secret",
         },
         "client2": {
-            "client_id": "00000004-0000-0000-0000-000000000001",
-            "client_secret": "conformance-implicit-secret-2",
+            "client_id": "00000008-0000-0000-0000-000000000001",
+            "client_secret": "conformance-implicit-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000004-0000-0000-0000-000000000001",
@@ -117,8 +117,8 @@ PLANS = {
             "client_secret": "conformance-hybrid-secret",
         },
         "client2": {
-            "client_id": "00000006-0000-0000-0000-000000000001",
-            "client_secret": "conformance-hybrid-secret-2",
+            "client_id": "00000009-0000-0000-0000-000000000001",
+            "client_secret": "conformance-hybrid-secondary-secret",
         },
         "client_secret_post": {
             "client_id": "00000006-0000-0000-0000-000000000001",

@@ -67,6 +67,7 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 | `CONFORMANCE_API_TOKEN` | Unset | Account API token for the hosted suite; supplied through GitHub Secrets |
 | `CONFORMANCE_ALIAS` | Profile default | Unique alias shared by the plan and seeded callbacks |
 | `CONFORMANCE_SUITE_URL` | Local suite origin | Seeded callback/logout origin inside identity |
+| `LOGIN_URL` | `https://localhost:3000` | Standard Login application origin; CI allocates a separate Quick Tunnel |
 | `IDENTITY_URL` | `https://localhost:5150` for browser, `https://identity:5150` for suite discovery | When set, supplies both origins; `--discovery-origin` overrides the suite origin independently |
 | `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `third-party-init`, `rp-init-logout`, `session`, or `backchannel`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
@@ -79,7 +80,7 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 
 The `OIDC conformance through Cloudflare Tunnel` workflow is manually triggered
 and connects to the **hosted** suite at https://www.certification.openid.net.
-It starts only PostgreSQL, identity and a Cloudflare Quick Tunnel on the runner;
+It starts PostgreSQL, identity, the standard Login application and two Quick Tunnels on the runner;
 the suite itself and its database run on the official platform.
 
 Before running it:
@@ -102,18 +103,24 @@ Every configured OP plan runs: Basic, Implicit, Hybrid, Config, three Form Post
 plans, Third Party Initiated Login, RP Initiated Logout, Session Management and
 Backchannel Logout (11 plans). Jobs run one at a time to limit load on the hosted
 service, and a failed plan does not cancel the remaining jobs. Each has its own
-runner, database, keys, browser sessions, tunnel and report. The final summary
+runner, database, keys, browser sessions, tunnels and report. A preparation job
+validates the API token and builds the identity and Login images once, then shares them as a
+short-lived workflow artifact. Each plan loads those same images without rebuilding.
+No container registry credentials are needed. The final summary
 includes every plan, including incomplete or missing reports. The hosted platform
 controls the suite version; the workflow no longer builds or pins its source.
 
-Cloudflare supplies a temporary `https://<random>.trycloudflare.com` hostname.
+Cloudflare supplies separate temporary `https://<random>.trycloudflare.com` hostnames for identity and Login.
 No personal domain, Cloudflare account or tunnel token is needed. The workflow
-allocates the hostname first, then starts identity with that origin as its issuer.
+allocates both hostnames first, then installs identity with its public issuer and the Login origin.
 The suite uses the public origin for discovery, authorization and token requests.
 The connector forwards to `https://identity:5150` on the Compose network and
 allows the generated origin certificate; the public HTTPS certificate is verified.
-The disposable conformance environment automatically signs in the seeded test
-user and approves consent without a separate login application.
+Python Playwright fills the standard identifier and password forms, selects
+accounts and approves consent through the Login application's regular routes.
+Login uses the standard authenticated internal API, session and CSRF transports.
+The generated identity TLS material is shared read-only with Login for this
+disposable environment; Login trusts that certificate for its private API calls.
 
 Job summaries and `plan-url.txt` artifacts link to the official plan. Plans remain
 on the official platform after the runner removes its environment. The temporary
@@ -133,13 +140,15 @@ summary and do not fail the job; `REVIEW` still requires human assessment before
 certification. Artifacts include the plan, per-module official logs, runner output,
 service logs, and the hosted plan URL. Cleanup runs even when tests fail.
 
-This automated environment has no real login UI. It does not upload screenshots
-of auto-submit forms or callbacks as proof of a user-facing login prompt. If the
-official suite requests such evidence, the harness records
-`MANUAL_REVIEW_REQUIRED`, leaves that official test incomplete, and stops the plan
-to avoid conflicts with its active callback alias. The CI job fails rather than
-reporting an incomplete plan as passed; complete UI evidence separately for
-certification. Other completed `REVIEW` results remain visible in the summary.
+Login evidence is captured from the actual visible identifier/password page,
+before submitting credentials in the same browser interaction. Callback pages
+and separately replayed requests are never uploaded as login prompt evidence.
+Redirect URI error evidence is captured only from an actual OP error response
+in that interaction. The suite's evidence source selects the screenshot type;
+login and error-page screenshots cannot substitute for each other.
+If the suite asks for UI evidence that was not observed, the harness records
+`MANUAL_REVIEW_REQUIRED` and stops the plan. Completed `REVIEW` results still
+require human assessment for certification.
 
 ### Local CI command
 
@@ -155,20 +164,37 @@ certification. Other completed `REVIEW` results remain visible in the summary.
 ## Seed Data
 
 Seed data is applied automatically via database migrations. The conformance
-environment uses `config/conformance.yaml` with pre-configured test users.
+environment uses `config/conformance.yaml` with two fixed test accounts:
+
+| Username | Email | Password |
+| --- | --- | --- |
+| `conformance-test` | `conformance-test@example.com` | `ConformanceTest1!` |
+| `conformance-test-2` | `conformance-test-2@example.com` | `ConformanceTest2!` |
+
+Each protocol profile also has two ordinary Basic-authenticated clients and a
+separate `client_secret_post` client. `client2` must not reuse the POST-only
+client: the refresh-token module authenticates its second client using Basic.
+
+Both accounts have stable, distinct user and credential OIDs. Initialization is
+idempotent and adds the second account to an existing single-account database.
+The browser honors recognized login hints and uses the other account when an
+account-selection prompt is requested. Sessions persist within a test module and
+are reset between modules. Seeded clients use the standard consent flow.
+`LOGIN_URL` must be set before first installation if using a custom Login origin.
 
 ## Security Notes
 
-- The auto-login and auto-consent routes are **only mounted when `APP_ENV=conformance`** with the `oidc-conformance` feature.
+- There are no auto-login or auto-consent endpoints; authentication and consent use the standard application.
 - Test credentials are scoped to the `identity_conformance` database only.
-- The route does not exist in development or production environments.
+- Only the key-rotation helper is mounted with `APP_ENV=conformance` and the `oidc-conformance` feature.
+- Compose workload and cookie-sealing defaults are disposable test credentials only.
 
 ## Architecture
 
 ```
 scripts/
   client.py      # Conformance Suite API client
-  browser_auth.py # Browser follows automatic login and consent redirects
+  browser_auth.py # Browser submits standard Login and consent forms
   runner.py      # Test execution engine
 run.py           # Main CI entry point
 ```

@@ -231,13 +231,17 @@ def main():
         ):
             stop_docker_stack(compose_file)
             return 1
+        login_url = os.environ.get("LOGIN_URL", "https://localhost:3000").rstrip("/")
+        if not wait_for_service(login_url + "/health/ready", timeout=120, name="Login"):
+            stop_docker_stack(compose_file)
+            return 1
         if not wait_for_service(args.suite_url, timeout=120, name="Conformance Suite"):
             stop_docker_stack(compose_file)
             return 1
 
     client = ConformanceClient(args.suite_url)
-    auto_login = BrowserAuthHandler(args.identity_url)
-    runner = TestRunner(client, auto_login, timeout_per_test=args.timeout)
+    browser_auth = BrowserAuthHandler(args.identity_url)
+    runner = TestRunner(client, browser_auth, timeout_per_test=args.timeout)
 
     if args.plan_id:
         plan_id = args.plan_id

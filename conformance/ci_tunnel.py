@@ -1,5 +1,6 @@
 """Read the public Quick Tunnel URL before starting identity with that issuer."""
 
+import argparse
 import re
 import subprocess
 import time
@@ -18,11 +19,11 @@ def public_url_from_logs(logs: str) -> str | None:
     return match.group(1) if match else None
 
 
-def wait_for_tunnel_url(timeout: int = 120) -> str:
+def wait_for_tunnel_url(timeout: int = 120, service: str = "tunnel") -> str:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         result = subprocess.run(
-            ["docker", "compose", "logs", "--no-color", "tunnel"],
+            ["docker", "compose", "logs", "--no-color", service],
             capture_output=True,
             text=True,
             check=True,
@@ -36,4 +37,7 @@ def wait_for_tunnel_url(timeout: int = 120) -> str:
 
 
 if __name__ == "__main__":
-    print(wait_for_tunnel_url())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--service", default="tunnel")
+    args = parser.parse_args()
+    print(wait_for_tunnel_url(service=args.service))

@@ -35,8 +35,8 @@ def main():
     args = parser.parse_args()
 
     client = ConformanceClient(args.suite_url)
-    auto_login = BrowserAuthHandler(args.identity_url)
-    runner = TestRunner(client, auto_login, timeout_per_test=args.timeout)
+    browser_auth = BrowserAuthHandler(args.identity_url)
+    runner = TestRunner(client, browser_auth, timeout_per_test=args.timeout)
 
     variant = json.loads(args.variant)
     result = runner.run_single_test(args.plan_id, args.test, variant)

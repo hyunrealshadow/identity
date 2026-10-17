@@ -1,6 +1,6 @@
 //! Conformance-environment seed.
 //!
-//! Creates the fixed test user and OIDC clients that the OpenID Conformance
+//! Creates two fixed test users and OIDC clients that the OpenID Conformance
 //! Test Suite expects.  This module is only called when `APP_ENV=conformance`.
 //!
 //! All operations are idempotent: rows are inserted only when the fixed OIDs
@@ -62,6 +62,8 @@ impl Seed for ConformanceSeed {
 /// conformance suite config references.
 const USER_OID: &str = "00000000-0000-0000-0000-000000000001";
 const USER_CRED_OID: &str = "00000000-0000-0000-0000-000000000002";
+const SECOND_USER_OID: &str = "00000000-0000-0000-0000-000000000003";
+const SECOND_USER_CRED_OID: &str = "00000000-0000-0000-0000-000000000004";
 const BASIC_CLIENT_OID: &str = "00000001-0000-0000-0000-000000000001";
 const BASIC_CLIENT_CRED_OID: &str = "00000001-0000-0000-0000-000000000002";
 const BASIC_CLIENT_POST_OID: &str = "00000002-0000-0000-0000-000000000001";
@@ -80,8 +82,11 @@ pub const CONFORMANCE_CLIENT_OID: &str = BASIC_CLIENT_OID;
 
 pub const CONFORMANCE_USERNAME: &str = "conformance-test";
 pub const CONFORMANCE_EMAIL: &str = "conformance-test@example.com";
-/// Plain-text password used by the auto-login endpoint.
+/// Password used by the Python browser driver through the standard login UI.
 pub const CONFORMANCE_PASSWORD: &str = "ConformanceTest1!";
+pub const CONFORMANCE_SECOND_USERNAME: &str = "conformance-test-2";
+pub const CONFORMANCE_SECOND_EMAIL: &str = "conformance-test-2@example.com";
+pub const CONFORMANCE_SECOND_PASSWORD: &str = "ConformanceTest2!";
 
 pub const CONFORMANCE_BASIC_CLIENT_NAME: &str = "OpenID Conformance Suite (Basic)";
 pub const CONFORMANCE_BASIC_CLIENT_SECRET: &str = "conformance-basic-secret-at-least-32-bytes";
@@ -119,85 +124,100 @@ struct ConformanceOidcMetadataValues {
 pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     let txn = db.begin().await.map_err(AppError::internal)?;
 
-    let user_oid: Uuid = USER_OID.parse().expect("USER_OID literal is valid");
-    let user_cred_oid: Uuid = USER_CRED_OID
-        .parse()
-        .expect("USER_CRED_OID literal is valid");
-
     let now = Utc::now();
 
     write_settings(&txn, conformance_settings()?).await?;
 
-    // ── Test user ──────────────────────────────────────────────────────────
+    // Seed each account independently so an existing single-account database
+    // gains the second account without replacing the first account's credentials.
+    for (oid, credential_oid, username, email, password) in [
+        (
+            USER_OID,
+            USER_CRED_OID,
+            CONFORMANCE_USERNAME,
+            CONFORMANCE_EMAIL,
+            CONFORMANCE_PASSWORD,
+        ),
+        (
+            SECOND_USER_OID,
+            SECOND_USER_CRED_OID,
+            CONFORMANCE_SECOND_USERNAME,
+            CONFORMANCE_SECOND_EMAIL,
+            CONFORMANCE_SECOND_PASSWORD,
+        ),
+    ] {
+        let user_oid: Uuid = oid.parse().expect("conformance user OID is valid");
+        let user_cred_oid: Uuid = credential_oid
+            .parse()
+            .expect("conformance credential OID is valid");
+        let existing_user = user::Entity::find()
+            .filter(user::Column::Oid.eq(user_oid))
+            .one(&txn)
+            .await
+            .map_err(AppError::internal)?;
 
-    let existing_user = user::Entity::find()
-        .filter(user::Column::Oid.eq(user_oid))
-        .one(&txn)
-        .await
-        .map_err(AppError::internal)?;
+        if let Some(_user) = existing_user {
+            debug!("conformance seed: user already exists, skipping");
+        } else {
+            // Hash the password using the same Argon2id defaults as the rest of the app.
+            let password_json = hash_conformance_password(password)?;
 
-    let user_id = if let Some(u) = existing_user {
-        debug!("conformance seed: user already exists, skipping");
-        u.id
-    } else {
-        // Hash the password using the same Argon2id defaults as the rest of the app.
-        let password_json = hash_conformance_password()?;
+            let created_user = user::ActiveModel {
+                oid: Set(user_oid),
+                email: Set(email.to_owned()),
+                email_normalized: Set(email.to_owned()),
+                name: Set(username.to_owned()),
+                name_normalized: Set(username.to_owned()),
+                given_name: Set(Some("Conformance".to_owned())),
+                family_name: Set(Some("Test".to_owned())),
+                middle_name: Set(Some("Conformance Test".to_owned())),
+                nickname: Set(Some(username.to_owned())),
+                profile: Set(Some(format!("users/{user_oid}"))),
+                picture: Set(Some(format!("users/{user_oid}/picture"))),
+                website: Set(Some(format!("users/{user_oid}"))),
+                gender: Set(Some("unspecified".to_owned())),
+                birthdate: Set(Some("1970-01-01".to_owned())),
+                zone_info: Set(Some("UTC".to_owned())),
+                locale: Set(Some("en-US".to_owned())),
+                email_verified: Set(true),
+                phone_number: Set(Some("+12025550123".to_owned())),
+                phone_number_verified: Set(Some(true)),
+                address_formatted: Set(Some(
+                    "1 Main St\nConformance City, CA 94000\nUS".to_owned(),
+                )),
+                address_street_address: Set(Some("1 Main St".to_owned())),
+                address_locality: Set(Some("Conformance City".to_owned())),
+                address_region: Set(Some("CA".to_owned())),
+                address_postal_code: Set(Some("94000".to_owned())),
+                address_country: Set(Some("US".to_owned())),
+                failed_attempts: Set(0),
+                enabled: Set(true),
+                locked: Set(false),
+                locked_until: Set(None),
+                created_at: Set(now.into()),
+                updated_at: Set(None),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await
+            .map_err(AppError::internal)?;
 
-        let created_user = user::ActiveModel {
-            oid: Set(user_oid),
-            email: Set(CONFORMANCE_EMAIL.to_owned()),
-            email_normalized: Set(CONFORMANCE_EMAIL.to_owned()),
-            name: Set(CONFORMANCE_USERNAME.to_owned()),
-            name_normalized: Set(CONFORMANCE_USERNAME.to_owned()),
-            given_name: Set(Some("Conformance".to_owned())),
-            family_name: Set(Some("Test".to_owned())),
-            middle_name: Set(Some("Conformance Test".to_owned())),
-            nickname: Set(Some(CONFORMANCE_USERNAME.to_owned())),
-            profile: Set(Some(format!("users/{USER_OID}"))),
-            picture: Set(Some(format!("users/{USER_OID}/picture"))),
-            website: Set(Some(format!("users/{USER_OID}"))),
-            gender: Set(Some("unspecified".to_owned())),
-            birthdate: Set(Some("1970-01-01".to_owned())),
-            zone_info: Set(Some("UTC".to_owned())),
-            locale: Set(Some("en-US".to_owned())),
-            email_verified: Set(true),
-            phone_number: Set(Some("+12025550123".to_owned())),
-            phone_number_verified: Set(Some(true)),
-            address_formatted: Set(Some("1 Main St\nConformance City, CA 94000\nUS".to_owned())),
-            address_street_address: Set(Some("1 Main St".to_owned())),
-            address_locality: Set(Some("Conformance City".to_owned())),
-            address_region: Set(Some("CA".to_owned())),
-            address_postal_code: Set(Some("94000".to_owned())),
-            address_country: Set(Some("US".to_owned())),
-            failed_attempts: Set(0),
-            enabled: Set(true),
-            locked: Set(false),
-            locked_until: Set(None),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(AppError::internal)?;
+            let _ = user_credential::ActiveModel {
+                oid: Set(user_cred_oid),
+                user_id: Set(created_user.id),
+                r#type: Set(CredentialType::Password.to_string()),
+                data: Set(password_json),
+                created_at: Set(now.into()),
+                updated_at: Set(None),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await
+            .map_err(AppError::internal)?;
 
-        let _ = user_credential::ActiveModel {
-            oid: Set(user_cred_oid),
-            user_id: Set(created_user.id),
-            r#type: Set(CredentialType::Password.to_string()),
-            data: Set(password_json),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(&txn)
-        .await
-        .map_err(AppError::internal)?;
-
-        info!("conformance seed: created test user");
-        created_user.id
-    };
-    let _ = user_id; // used only for logging; client rows don't need it
+            info!("conformance seed: created test user");
+        };
+    }
 
     // ── OIDC clients ───────────────────────────────────────────────────────
 
@@ -212,7 +232,7 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Enable dynamic registration; browser interactions use the OP's test routes.
+/// Enable dynamic registration; browser interactions use the installed login application.
 fn conformance_settings() -> Result<SettingChanges, AppError> {
     Ok(SettingChanges::default().set_section_field(
         &OpenIdConnectSettings {
@@ -230,6 +250,15 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             credential_oid: BASIC_CLIENT_CRED_OID,
             name: CONFORMANCE_BASIC_CLIENT_NAME,
             secret: CONFORMANCE_BASIC_CLIENT_SECRET,
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
+            response_types: &[ResponseType::Code],
+        },
+        ConformanceClientSpec {
+            oid: "00000007-0000-0000-0000-000000000001",
+            credential_oid: "00000007-0000-0000-0000-000000000002",
+            name: "OpenID Conformance Suite (Basic second client)",
+            secret: "conformance-basic-secondary-secret",
             token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
             grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
             response_types: &[ResponseType::Code],
@@ -253,6 +282,15 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             response_types: &[ResponseType::IdToken, ResponseType::TokenIdToken],
         },
         ConformanceClientSpec {
+            oid: "00000008-0000-0000-0000-000000000001",
+            credential_oid: "00000008-0000-0000-0000-000000000002",
+            name: "OpenID Conformance Suite (Implicit second client)",
+            secret: "conformance-implicit-secondary-secret",
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[GrantType::Implicit],
+            response_types: &[ResponseType::IdToken, ResponseType::TokenIdToken],
+        },
+        ConformanceClientSpec {
             oid: IMPLICIT_CLIENT_POST_OID,
             credential_oid: IMPLICIT_CLIENT_POST_CRED_OID,
             name: "OpenID Conformance Suite (Implicit client_secret_post)",
@@ -266,6 +304,23 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             credential_oid: HYBRID_CLIENT_CRED_OID,
             name: CONFORMANCE_HYBRID_CLIENT_NAME,
             secret: CONFORMANCE_HYBRID_CLIENT_SECRET,
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[
+                GrantType::AuthorizationCode,
+                GrantType::Implicit,
+                GrantType::RefreshToken,
+            ],
+            response_types: &[
+                ResponseType::CodeIdToken,
+                ResponseType::CodeToken,
+                ResponseType::CodeTokenIdToken,
+            ],
+        },
+        ConformanceClientSpec {
+            oid: "00000009-0000-0000-0000-000000000001",
+            credential_oid: "00000009-0000-0000-0000-000000000002",
+            name: "OpenID Conformance Suite (Hybrid second client)",
+            secret: "conformance-hybrid-secondary-secret",
             token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
             grant_types: &[
                 GrantType::AuthorizationCode,
@@ -531,7 +586,7 @@ fn conformance_backchannel_logout_uri() -> String {
 
 fn conformance_client_settings() -> Value {
     json!({
-        "skip_consent": true,
+        "skip_consent": false,
         "include_scoped_claims_in_id_token": false,
         "include_scoped_claims_in_access_token": false
     })
@@ -568,12 +623,12 @@ async fn ensure_web_platform_redirect_uri(
     Ok(())
 }
 
-/// Hash `CONFORMANCE_PASSWORD` with the same Argon2id defaults the app uses,
+/// Hash the test account password with the same Argon2id defaults the app uses,
 /// and return the serialised `Password` JSON value ready for the DB.
-fn hash_conformance_password() -> Result<Value, AppError> {
+fn hash_conformance_password(password: &str) -> Result<Value, AppError> {
     let password = PasswordHasherImpl::new()
         .hash(
-            CONFORMANCE_PASSWORD,
+            password,
             &HashOptions::Argon2(Argon2Options {
                 variant: Argon2Variant::Argon2id,
                 version: Argon2Version::Argon2013,

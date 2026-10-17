@@ -16,10 +16,14 @@ services:
       dockerfile: conformance/Dockerfile
     environment:
       APP_ENV: conformance
+      LOGIN_URL: ${LOGIN_URL:-https://localhost:3000}
+      IDENTITY_WORKLOAD_TOKEN: ${IDENTITY_WORKLOAD_TOKEN:-conformance-workload-token-disposable-only}
       DATABASE_URL: postgres://identity:identity@db:5432/identity_conformance
       HOST: https://identity:5150
       TLS_DOMAIN: identity
       PORT: "5150"
+    volumes:
+      - identity_tls:/app/config/tls
     ports:
       - "5150:5150"
     depends_on:
@@ -27,6 +31,38 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  login:
+    image: ${CONFORMANCE_LOGIN_IMAGE:-identity-conformance-login:local}
+    build:
+      context: ..
+      dockerfile: deploy/docker/login.Dockerfile
+    environment:
+      IDENTITY_API_URL: ${IDENTITY_URL:-https://identity:5150}
+      IDENTITY_BACKCHANNEL_API_URL: https://identity:5150
+      IDENTITY_BACKCHANNEL_GRAPHQL_URL: https://identity:5150/graphql
+      IDENTITY_INTERNAL_API_URL: https://identity:5151
+      IDENTITY_PUBLIC_APP_URL: ${LOGIN_URL:-https://localhost:3000}
+      IDENTITY_WORKLOAD_TOKEN: ${IDENTITY_WORKLOAD_TOKEN:-conformance-workload-token-disposable-only}
+      IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:-conformance-session-secret-disposable-only}
+      NODE_EXTRA_CA_CERTS: /run/identity-tls/server.crt
+      NITRO_SSL_CERT_FILE: /run/identity-tls/server.crt
+      NITRO_SSL_KEY_FILE: /run/identity-tls/server.key
+    volumes:
+      - identity_tls:/run/identity-tls:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      identity:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('https').get({host:'127.0.0.1',port:3000,path:'/health/ready',rejectUnauthorized:false},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
       interval: 5s
       timeout: 5s
       retries: 20
@@ -61,3 +97,6 @@ services:
     depends_on:
       server:
         condition: service_started
+
+volumes:
+  identity_tls:

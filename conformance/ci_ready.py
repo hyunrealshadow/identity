@@ -7,7 +7,7 @@ import requests
 from scripts.client import ConformanceClient
 
 
-def wait_until_ready(identity_url: str, suite_url: str, timeout=180):
+def wait_until_ready(identity_url: str, suite_url: str, timeout=180, login_url: str | None = None):
     client = ConformanceClient(suite_url)
     deadline = time.monotonic() + timeout
     last_error = None
@@ -20,6 +20,11 @@ def wait_until_ready(identity_url: str, suite_url: str, timeout=180):
             discovery.raise_for_status()
             if discovery.json().get("issuer") != identity_url:
                 raise ValueError("Discovery issuer does not match the public identity origin")
+            if login_url:
+                login = requests.get(login_url + "/health/ready", timeout=10)
+                login.raise_for_status()
+                if login.json().get("status") != "ready":
+                    raise ValueError("Login application is not ready")
             suite = client.session.get(suite_url + "/api/runner/available", timeout=10)
             suite.raise_for_status()
             if not isinstance(suite.json(), list):
@@ -39,4 +44,5 @@ if __name__ == "__main__":
     wait_until_ready(
         os.environ["IDENTITY_URL"],
         os.environ.get("SUITE_URL", "https://localhost.emobix.co.uk:8443"),
+        login_url=os.environ.get("LOGIN_URL"),
     )
