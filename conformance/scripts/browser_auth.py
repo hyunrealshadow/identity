@@ -1,6 +1,9 @@
 import base64
 import html
+import json
 import os
+from pathlib import Path
+from uuid import uuid4
 from urllib.parse import parse_qs, parse_qsl, urlparse
 
 
@@ -22,6 +25,7 @@ class BrowserAuthHandler:
         self.login_prompt_screenshot: str | None = None
         self.error_page_screenshot: str | None = None
         self.account_index = 0
+        self.artifacts_dir = os.environ.get("CONFORMANCE_BROWSER_ARTIFACTS_DIR")
 
     def reset_session(self):
         self.last_screenshot = None
@@ -138,6 +142,32 @@ class BrowserAuthHandler:
         if "Blocked request. This host" in content:
             raise RuntimeError(f"Vite rejected browser host for {page.url}")
 
+    def _save_browser_failure(self, page, context, error) -> None:
+        if not self.artifacts_dir:
+            return
+        try:
+            destination = Path(self.artifacts_dir) / f"failure-{uuid4().hex}"
+            destination.mkdir(parents=True, exist_ok=True)
+            # Diagnostic artifacts must never become certification UI evidence.
+            (destination / "failure.json").write_text(
+                json.dumps({"url": page.url, "error": str(error)}, indent=2),
+                encoding="utf-8",
+            )
+            for name, capture in (
+                ("page.txt", lambda: (destination / "page.txt").write_text(
+                    page.locator("body").inner_text(timeout=3000), encoding="utf-8"
+                )),
+                ("page.png", lambda: page.screenshot(path=str(destination / "page.png"), full_page=True, timeout=3000)),
+                ("trace.zip", lambda: context.tracing.stop(path=str(destination / "trace.zip"))),
+            ):
+                try:
+                    capture()
+                except Exception as capture_error:
+                    print(f"    [debug] could not save {name}: {capture_error}")
+            print(f"    [debug] browser failure artifacts: {destination}", flush=True)
+        except Exception as capture_error:
+            print(f"    [debug] could not save browser failure artifacts: {capture_error}")
+
     def _complete_in_browser(
         self,
         local_url: str,
@@ -161,7 +191,14 @@ class BrowserAuthHandler:
                 if self.browser_storage_state:
                     context_args["storage_state"] = self.browser_storage_state
                 context = browser.new_context(**context_args)
+                if self.artifacts_dir:
+                    context.tracing.start(screenshots=True, snapshots=True, sources=True)
                 page = context.new_page()
+                page.on("pageerror", lambda error: print(f"    [browser] page error: {error}", flush=True))
+                page.on("requestfailed", lambda request: print(
+                    f"    [browser] request failed: {request.method} {urlparse(request.url).path}: {request.failure}",
+                    flush=True,
+                ))
                 page.on("request", self._observe_authorization)
                 navigation_response = [None]
 
@@ -171,16 +208,20 @@ class BrowserAuthHandler:
 
                 page.on("response", observe_response)
 
-                if method == "POST":
-                    parsed = urlparse(local_url)
-                    post_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-                    self._submit_post_form(page, post_url, parsed.query)
-                    self._assert_page_loaded(page)
-                else:
-                    response = page.goto(local_url, wait_until="load", timeout=30_000)
-                    self._assert_page_loaded(page, response)
+                try:
+                    if method == "POST":
+                        parsed = urlparse(local_url)
+                        post_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                        self._submit_post_form(page, post_url, parsed.query)
+                        self._assert_page_loaded(page)
+                    else:
+                        response = page.goto(local_url, wait_until="load", timeout=30_000)
+                        self._assert_page_loaded(page, response)
 
-                self._drive_interactions(page)
+                    self._drive_interactions(page)
+                except Exception as error:
+                    self._save_browser_failure(page, context, error)
+                    raise
                 try:
                     page.wait_for_load_state("networkidle", timeout=10_000)
                 except PlaywrightTimeoutError:

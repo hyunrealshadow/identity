@@ -104,8 +104,15 @@ plans, Third Party Initiated Login, RP Initiated Logout, Session Management and
 Backchannel Logout (11 plans). Jobs run one at a time to limit load on the hosted
 service, and a failed plan does not cancel the remaining jobs. Each has its own
 runner, database, keys, browser sessions, tunnels and report. A preparation job
-validates the API token and builds the identity and Login images once, then shares them as a
-short-lived workflow artifact. Each plan loads those same images without rebuilding.
+validates the API token and builds the identity, Login and Python test runner images once,
+then shares them as a short-lived workflow artifact. The runner image includes the locked
+Python dependencies, Chromium and its system libraries; preparation checks its tests and
+launches a real browser before upload. Each plan loads those same images without rebuilding
+or installing uv, Python packages, browsers or OS packages. Readiness and the plan run in
+fresh runner containers, with reports mounted into the job's evidence directory.
+Browser interaction failures stop the plan with `BROWSER_INTERACTION_FAILED` and save
+the current URL, error, page text, screenshot and Playwright trace under `results/browser/`.
+These diagnostics are separate from the screenshots submitted for certification review.
 No container registry credentials are needed. The final summary
 includes every plan, including incomplete or missing reports. The hosted platform
 controls the suite version; the workflow no longer builds or pins its source.

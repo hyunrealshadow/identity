@@ -35,6 +35,7 @@ STOP_PLAN_STATUSES = {
     "TIMEOUT",
     "WAITING_AFTER_SCREENSHOT",
     "WAITING_NO_PROGRESS",
+    "BROWSER_INTERACTION_FAILED",
     "MANUAL_REVIEW_REQUIRED",
 }
 
@@ -174,6 +175,13 @@ class TestRunner:
                     has_new_urls = True
                     success = self.browser_auth.handle_auth_url(url, url_method)
                     print(f"    [debug] handle_auth_url returned {success} for {url[:60]}...")
+                    if not success:
+                        return TestResult(
+                            test_name=test_name,
+                            status="BROWSER_INTERACTION_FAILED",
+                            result=None,
+                            run_id=run_id,
+                        )
                     time.sleep(self.poll_interval)
 
                 if has_new_urls:

@@ -69,6 +69,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+  runner:
+    image: ${CONFORMANCE_RUNNER_IMAGE:-identity-conformance-runner:local}
+    build:
+      context: .
+      dockerfile: runner.Dockerfile
+    profiles: [test-runner]
+    init: true
+    shm_size: 1gb
+    environment:
+      IDENTITY_URL: ${IDENTITY_URL:-https://identity:5150}
+      LOGIN_URL: ${LOGIN_URL:-https://localhost:3000}
+      SUITE_URL: https://www.certification.openid.net
+      CONFORMANCE_API_TOKEN: ${CONFORMANCE_API_TOKEN:-}
+      CONFORMANCE_BROWSER_ARTIFACTS_DIR: /app/results/browser
+      CONFORMANCE_ALIAS: ${CONFORMANCE_ALIAS:?Unique hosted plan alias is required}
+    volumes:
+      - ./results:/app/results
   tunnel:
     image: cloudflare/cloudflared:latest
     command:

@@ -110,6 +110,23 @@ class FakeBrowserAuth:
 
 class TestRunnerResumeTests(unittest.TestCase):
     @patch("scripts.runner.time.sleep", return_value=None)
+    def test_browser_failure_stops_without_retrying_or_starting_the_next_module(self, _sleep):
+        client = FakeClient(
+            modules=[TestModule("first", {}, ["run-1"], ""), TestModule("next", {}, [], "")],
+            info_sequences={"run-1": [TestInfo("run-1", "WAITING", None)]},
+            browser_urls={"run-1": ["https://issuer.example.com/oauth2/authorize"]},
+        )
+        browser = FakeBrowserAuth()
+        with patch.object(browser, "handle_auth_url", return_value=False) as handle:
+            runner = TestRunner(client, browser, poll_interval=1)
+            results = runner.run_all_tests("plan-1")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].status, "BROWSER_INTERACTION_FAILED")
+        self.assertEqual(runner.summarize_results(results)["FAILED"], 1)
+        self.assertEqual(client.started_tests, [])
+        handle.assert_called_once()
+
+    @patch("scripts.runner.time.sleep", return_value=None)
     def test_missing_ui_evidence_stops_plan_without_uploading_a_callback(self, _sleep):
         from scripts.browser_auth import BrowserAuthHandler
 

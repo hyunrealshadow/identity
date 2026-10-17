@@ -19,12 +19,14 @@ jobs:
       COMPOSE_FILE: conformance/docker-compose.hosted.yml
       CONFORMANCE_IMAGE: identity-conformance:${{ github.run_id }}-${{ github.run_attempt }}
       CONFORMANCE_LOGIN_IMAGE: identity-conformance-login:${{ github.run_id }}-${{ github.run_attempt }}
+      CONFORMANCE_RUNNER_IMAGE: identity-conformance-runner:${{ github.run_id }}-${{ github.run_attempt }}
       CONFORMANCE_ALIAS: build-only
       SUITE_URL: https://www.certification.openid.net
     outputs:
       profiles: ${{ steps.profiles.outputs.profiles }}
       image: ${{ env.CONFORMANCE_IMAGE }}
       login-image: ${{ env.CONFORMANCE_LOGIN_IMAGE }}
+      runner-image: ${{ env.CONFORMANCE_RUNNER_IMAGE }}
       image-artifact: conformance-image-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7
@@ -54,8 +56,10 @@ jobs:
 
       - name: Build shared conformance images
         run: |
-          docker compose build identity login
-          docker image save "$CONFORMANCE_IMAGE" "$CONFORMANCE_LOGIN_IMAGE" | gzip > "$RUNNER_TEMP/identity-image.tar.gz"
+          docker compose build identity login runner
+          docker compose run --rm --no-deps -e CONFORMANCE_ALIAS= runner -m unittest discover -s tests
+          docker compose run --rm --no-deps runner -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(); page = b.new_page(); page.set_content('<title>conformance runner</title>'); assert page.title() == 'conformance runner'; b.close(); p.stop()"
+          docker image save "$CONFORMANCE_IMAGE" "$CONFORMANCE_LOGIN_IMAGE" "$CONFORMANCE_RUNNER_IMAGE" | gzip > "$RUNNER_TEMP/identity-image.tar.gz"
 
       - name: Upload shared conformance image
         uses: actions/upload-artifact@v7
@@ -80,6 +84,7 @@ jobs:
       COMPOSE_PROJECT_NAME: oidc-conformance
       CONFORMANCE_IMAGE: ${{ needs.prepare.outputs.image }}
       CONFORMANCE_LOGIN_IMAGE: ${{ needs.prepare.outputs.login-image }}
+      CONFORMANCE_RUNNER_IMAGE: ${{ needs.prepare.outputs.runner-image }}
       PROFILE: ${{ matrix.profile }}
       SUITE_URL: https://www.certification.openid.net
       CONFORMANCE_ALIAS: identity-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.profile }}
@@ -98,18 +103,8 @@ jobs:
           gunzip -c "$RUNNER_TEMP/conformance-image/identity-image.tar.gz" | docker image load
           docker image inspect "$CONFORMANCE_IMAGE" > /dev/null
           docker image inspect "$CONFORMANCE_LOGIN_IMAGE" > /dev/null
+          docker image inspect "$CONFORMANCE_RUNNER_IMAGE" > /dev/null
           mkdir -p conformance/results
-
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: conformance/uv.lock
-
-      - name: Install browser test dependencies
-        working-directory: conformance
-        run: |
-          uv sync --locked
-          uv run playwright install --with-deps chromium
 
       - name: Allocate temporary identity and login public hostnames
         run: |
@@ -128,23 +123,21 @@ jobs:
           docker compose up -d --no-build --wait --wait-timeout 240 db identity login
 
       - name: Check public endpoints through Cloudflare
-        working-directory: conformance
         env:
           CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
         run: |
           set -o pipefail
-          uv run python ci_ready.py 2>&1 | tee results/readiness.log
+          docker compose run --rm --no-deps --pull never runner ci_ready.py 2>&1 | tee conformance/results/readiness.log
 
       - name: Run official hosted OpenID Foundation test plan
         env:
           CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
-        working-directory: conformance
         run: |
           set -o pipefail
-          uv run python run.py --no-docker --profile "$PROFILE" \
+          docker compose run --rm --no-deps --pull never runner run.py --no-docker --profile "$PROFILE" \
             --identity-url "$IDENTITY_URL" --discovery-origin "$IDENTITY_URL" \
             --timeout 120 --exit-on-failure --results-dir results \
-            2>&1 | tee results/runner.log
+            2>&1 | tee conformance/results/runner.log
 
       - name: Collect service logs and summary
         if: always()

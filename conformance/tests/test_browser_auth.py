@@ -1,6 +1,10 @@
 import os
+import json
+from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -8,6 +12,22 @@ from scripts.browser_auth import BrowserAuthHandler
 
 
 class BrowserAuthHandlerTests(unittest.TestCase):
+    def test_failure_diagnostics_are_saved_without_becoming_review_evidence(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        page = MagicMock()
+        page.url = "https://login.example.com/login"
+        page.locator.return_value.inner_text.return_value = "Unable to continue"
+        context = MagicMock()
+        with tempfile.TemporaryDirectory() as directory:
+            handler.artifacts_dir = directory
+            handler._save_browser_failure(page, context, RuntimeError("navigation timed out"))
+            failure = next(Path(directory).iterdir())
+            self.assertEqual(json.loads((failure / "failure.json").read_text())["url"], page.url)
+            self.assertEqual((failure / "page.txt").read_text(), "Unable to continue")
+            context.tracing.stop.assert_called_once_with(path=str(failure / "trace.zip"))
+            page.screenshot.assert_called_once()
+        self.assertIsNone(handler.screenshot_for_upload([], requirement={"src": "ExpectLoginPage"}))
+
     def test_assert_page_loaded_accepts_protocol_error_page(self):
         page = FakePage(content="<h1>授权请求无效</h1>")
 
