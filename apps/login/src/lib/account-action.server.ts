@@ -58,7 +58,7 @@ export async function executeAccountAction(
       await clearMfaUiState()
       return { ok: true }
     }
-    if (action === 'prepare-manage-passkeys' || action === 'prepare-mfa-preference') {
+    if (action === 'prepare-manage-passkeys') {
       await requireGraphql(
         'mutation PrepareMfaManagement { prepareMfaManagement }',
         undefined,
@@ -104,7 +104,6 @@ export async function executeAccountAction(
       await requireGraphql(
         'mutation UpdateMfaPreference($method: PreferredMfaMethod!) { updatePreferredMfaMethod(method: $method) }',
         { method: method.toUpperCase() },
-        { authorization: 'elevated' },
       )
     } else if (action === 'update-profile') {
       await requireGraphql(
@@ -417,8 +416,6 @@ function accountFlashFromError(
 function isMfaAction(action: string) {
   return [
     'prepare-manage-passkeys',
-    'prepare-mfa-preference',
-    'update-mfa-preference',
     'prepare-disable-totp',
     'begin-totp',
     'use-legacy-totp',

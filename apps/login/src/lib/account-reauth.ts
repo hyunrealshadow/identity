@@ -6,7 +6,6 @@ export const MFA_DISABLE_CONTINUATION = '/account/security?confirm=disable-mfa'
 export const RECOVERY_CODES_CONTINUATION = '/account/security?confirm=recovery-codes'
 export const PASSWORD_CHANGE_CONTINUATION = '/account/security?confirm=change-password'
 export const PASSKEY_MANAGEMENT_CONTINUATION = '/account/security?confirm=passkeys'
-export const MFA_PREFERENCE_CONTINUATION = '/account/security?confirm=mfa-priority'
 
 export function requiresAccountReauthentication(error: GraphqlRequestError) {
   return error.errors.some(
@@ -20,7 +19,6 @@ export function requiresAccountReauthentication(error: GraphqlRequestError) {
 
 export function accountReauthenticationReturnTo(action: string) {
   if (action === 'prepare-manage-passkeys') return PASSKEY_MANAGEMENT_CONTINUATION
-  if (action === 'prepare-mfa-preference' || action === 'update-mfa-preference') return MFA_PREFERENCE_CONTINUATION
   if (action === 'begin-totp') return MFA_SETUP_CONTINUATION
   if (action === 'confirm-totp') return MFA_VERIFICATION_CONTINUATION
   if (action === 'prepare-disable-totp') return MFA_DISABLE_CONTINUATION

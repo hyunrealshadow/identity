@@ -8,7 +8,7 @@ import { translate, type Locale } from '#/lib/i18n'
 
 /** Open security settings only after the backend authorizes the current session */
 export function useSecurityModal({ action, locale, loginHint, openRequested = false }: {
-  action: 'prepare-manage-passkeys' | 'prepare-mfa-preference'
+  action: 'prepare-manage-passkeys'
   locale: Locale
   loginHint: string
   openRequested?: boolean

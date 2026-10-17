@@ -478,12 +478,15 @@ describe('executeAccountAction', () => {
   })
 
   it.each(['passkey', 'otp'])('saves %s priority without overwriting profile or theme', async (method) => {
+    mocks.hasFreshAuthentication.mockResolvedValue(false)
     await expect(executeAccountAction({ action: 'update-mfa-preference', values: { preferred_mfa_method: method } })).resolves.toEqual({ ok: true })
     expect(mocks.identityGraphql).toHaveBeenCalledWith(
       expect.stringContaining('mutation UpdateMfaPreference'),
       { method: method.toUpperCase() },
-      { authorization: 'elevated' },
+      undefined,
     )
+    expect(mocks.hasFreshAuthentication).not.toHaveBeenCalled()
+    expect(mocks.startReauthorization).not.toHaveBeenCalled()
   })
 
   it('rejects an unsupported MFA preference without sending a mutation', async () => {
@@ -493,7 +496,7 @@ describe('executeAccountAction', () => {
 
 })
 
-it.each(['prepare-manage-passkeys', 'prepare-mfa-preference'])('authorizes %s without creating a WebAuthn challenge or saving a preference', async (action) => {
+it.each(['prepare-manage-passkeys'])('authorizes %s without creating a WebAuthn challenge or saving a preference', async (action) => {
   mocks.identityGraphql.mockResolvedValue({ prepareMfaManagement: true })
   expect(await executeAccountAction({ action, values: { login_hint: 'person' } })).toEqual({ ok: true })
   expect(mocks.identityGraphql).toHaveBeenCalledExactlyOnceWith(
@@ -504,8 +507,6 @@ it.each(['prepare-manage-passkeys', 'prepare-mfa-preference'])('authorizes %s wi
 
 it.each([
   ['prepare-manage-passkeys', 'passkeys'],
-  ['prepare-mfa-preference', 'mfa-priority'],
-  ['update-mfa-preference', 'mfa-priority'],
 ])('redirects %s to AAL2 before opening or changing settings', async (action, continuation) => {
   mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
     { message: 'step up', extensions: { code: 'insufficient_user_authentication' } },

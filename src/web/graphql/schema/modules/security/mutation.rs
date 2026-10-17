@@ -49,7 +49,7 @@ impl SecurityMutation {
         ctx: &Context<'_>,
         method: PreferredMfaMethod,
     ) -> Result<bool> {
-        authorize_mfa_change(ctx).await?;
+        require_scope(ctx, ApiScope::AccountUpdate)?;
         let request = request_context(ctx)?;
         request
             .state

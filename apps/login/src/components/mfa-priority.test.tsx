@@ -18,32 +18,35 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-it('prepares the session before showing HeroUI radios and saves the selected priority', async () => {
-  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled loginHint="person" />)
+it('opens HeroUI radios without reauthentication and saves the selected priority', async () => {
+  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled />)
   expect(screen.queryByRole('radio')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   const dialog = await screen.findByRole('dialog')
-  expect(mocks.execute).toHaveBeenCalledWith({ data: { action: 'prepare-mfa-preference', values: { login_hint: 'person' } } })
+  expect(mocks.execute).not.toHaveBeenCalled()
   expect(within(dialog).queryByRole('combobox')).toBeNull()
   fireEvent.click(within(dialog).getByRole('radio', { name: 'Password and authenticator app first' }))
   fireEvent.click(within(dialog).getByRole('button', { name: 'Save preference' }))
   await waitFor(() => expect(mocks.execute).toHaveBeenLastCalledWith({ data: {
-    action: 'update-mfa-preference', values: { login_hint: 'person', preferred_mfa_method: 'otp' },
+    action: 'update-mfa-preference', values: { preferred_mfa_method: 'otp' },
   } }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 })
 
 it('disables authenticator preference until TOTP has been enabled', async () => {
-  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled={false} loginHint="person" />)
+  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled={false} />)
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   const dialog = await screen.findByRole('dialog')
   expect((within(dialog).getByRole('radio', { name: 'Password and authenticator app first' }) as HTMLInputElement).disabled).toBe(true)
 })
 
-it('keeps the preference dialog closed when the backend does not authorize management', async () => {
+it('keeps the preference dialog open when saving fails', async () => {
   mocks.execute.mockResolvedValue({ ok: false })
-  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled loginHint="person" />)
+  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled />)
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(mocks.execute).not.toHaveBeenCalled()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save preference' }))
   await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1))
-  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByRole('dialog')).toBeTruthy()
 })
