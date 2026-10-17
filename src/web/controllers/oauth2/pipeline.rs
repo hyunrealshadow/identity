@@ -86,6 +86,11 @@ impl<H: Handler> Handler for Action<H> {
                 action = self.name
             ))
             .await;
+        // Protocol responses can be terminal HTML with a successful status,
+        // notably form_post error responses. Salvo only stops on 3xx/4xx/5xx.
+        if !res.body.is_none() {
+            ctrl.skip_rest();
+        }
     }
 }
 
@@ -276,6 +281,33 @@ mod tests {
     #[derive(Deserialize)]
     struct InputValue {
         value: u32,
+    }
+
+    #[tokio::test]
+    async fn completed_html_response_stops_before_persistence_even_with_status_ok() {
+        #[handler]
+        async fn form_post_error(res: &mut Response) {
+            res.status_code(StatusCode::OK)
+                .body("<form><input name=\"error\" value=\"invalid_request\"></form>");
+        }
+
+        let trace: Trace = Arc::default();
+        let chain = Endpoint::new("authorization")
+            .action("parse", Record("parse"))
+            .action("validate", form_post_error)
+            .action("persist", Record("persist"))
+            .finish("respond", Record("respond"));
+        let service = Service::new(Router::new().hoop(inject(trace.clone())).get(chain));
+        let mut response = TestClient::get("http://localhost/").send(&service).await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        assert_eq!(*trace.lock().unwrap(), ["parse"]);
+        assert!(
+            response
+                .take_string()
+                .await
+                .unwrap()
+                .contains("invalid_request")
+        );
     }
 
     #[handler]
