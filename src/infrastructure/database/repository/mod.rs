@@ -17,6 +17,3 @@ pub mod setting;
 pub mod shared;
 pub mod user;
 pub mod user_credential;
-
-#[cfg(test)]
-mod passkey_storage_tests;

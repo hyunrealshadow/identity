@@ -8,7 +8,7 @@ use url::form_urlencoded::Serializer;
 use uuid::Uuid;
 
 use super::{
-    flow::{AuthorizationCodeContext, session_state_for_authorize_response},
+    code_flow::{AuthorizationCodeContext, session_state_for_authorize_response},
     signing::{SignImplicitAccessTokenInput, SignImplicitIdTokenInput},
 };
 use crate::error::codes::common::CommonErrorCode;

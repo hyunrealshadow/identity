@@ -10,18 +10,12 @@ use uuid::Uuid;
 use crate::{
     application::{
         data_protection::DataProtector,
-        error::{
-            AppError,
-            codes::{
-                auth::AuthErrorCode, authorize::AuthorizeErrorCode,
-                authorize_http::AuthorizeHttpErrorCode,
-            },
-        },
+        error::{AppError, codes::authorize::AuthorizeErrorCode},
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
     domain::{
         auth::repository::LoginRepository,
-        client_authorization::{ClientAuthorizationRepository, ClientAuthorizationType},
+        client_authorization::ClientAuthorizationRepository,
         key::{
             JweContentEncryption, JwsAlgorithm, KeyData, KeyJwkRepository,
             repository::KeyRepository,
@@ -43,7 +37,12 @@ mod service;
 pub use service::{AuthorizeService, AuthorizeServiceDependencies};
 
 mod flow;
-pub use flow::{AuthorizationApproval, ContinueContext};
+pub use flow::AuthorizationApproval;
+mod login;
+mod request;
+pub use login::ContinueContext;
+mod code_flow;
+mod consent;
 mod implicit_flow;
 mod interaction;
 mod protection;
