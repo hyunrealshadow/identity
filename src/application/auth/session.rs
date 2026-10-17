@@ -333,6 +333,15 @@ mod tests {
 
     #[async_trait]
     impl SessionRepository for StubSessionRepo {
+        async fn complete_authentication(
+            &self,
+            _login: Uuid,
+            _existing: Option<SessionOid>,
+            _input: CreateSessionInput,
+        ) -> Result<Session, SessionRepositoryError> {
+            Err(SessionRepositoryError::SessionNotFound)
+        }
+
         async fn find_by_oid(
             &self,
             oid: SessionOid,

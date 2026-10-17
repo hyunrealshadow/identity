@@ -144,7 +144,7 @@ impl AppBuilder {
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         let key_algorithm = cfg.key_algorithm.to_string();
-        let svc = build_install_service(&settings, db.clone());
+        let svc = build_install_service(&settings, db.clone())?;
 
         let domain = install_domain(cfg, &self.config);
 
@@ -218,8 +218,14 @@ async fn is_installed(db: &DatabaseConnection) -> AppResult<bool> {
         .initialized)
 }
 
-fn build_install_service(settings: &AppRuntimeSettings, db: DatabaseConnection) -> InstallService {
-    InstallService {
+fn build_install_service(
+    settings: &AppRuntimeSettings,
+    db: DatabaseConnection,
+) -> AppResult<InstallService> {
+    Ok(InstallService {
+        breach_checker: Arc::new(
+            identity_infrastructure::auth::breached_password::PwnedPasswordChecker::new()?,
+        ),
         password_hasher: Arc::new(PasswordHasherImpl::new()),
         settings: settings.store(),
         key_generator: Arc::new(AsymmetricKeyGeneratorImpl),
@@ -227,7 +233,7 @@ fn build_install_service(settings: &AppRuntimeSettings, db: DatabaseConnection) 
         repository: Arc::new(InstallRepositoryImpl::new(db)),
         runtime_key_ring: settings.key_ring(),
         client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
-    }
+    })
 }
 
 fn install_domain(cfg: &InstallConfig, config: &AppConfig) -> String {

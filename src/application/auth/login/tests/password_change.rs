@@ -1,8 +1,8 @@
 use super::*;
 
-#[tokio::test]
-async fn password_change_withdraws_every_device_authorization() {
-    let user_oid = Uuid::new_v4();
+fn password_change_service() -> (LoginService, UserUserOid) {
+    let user = test_user();
+    let user_oid = Uuid::from(user.oid);
     let login_repo = Arc::new(TestLoginRepo {
         state: Arc::new(Mutex::new(TestLoginRepoState {
             logins: vec![test_login(user_oid, 0)],
@@ -19,7 +19,7 @@ async fn password_change_withdraws_every_device_authorization() {
     let options = HashOptions::Argon2(argon2_options.clone());
     let service = LoginService::new(
         Arc::new(TestUserRepo {
-            user: Arc::new(Mutex::new(test_user())),
+            user: Arc::new(Mutex::new(user)),
         }),
         Arc::new(TestCredentialRepo {
             credentials: vec![UserCredential {
@@ -39,30 +39,59 @@ async fn password_change_withdraws_every_device_authorization() {
         fixed_hash_options(options),
     );
 
-    let mut device_repo = MockDeviceAuthorizationRepository::new();
-    let (sender, mut revoked_users) = unbounded_channel();
-    device_repo
-        .expect_revoke_device_authorizations_for_user()
-        .returning(move |user_oid, _| {
-            let _ = sender.send(user_oid);
+    (service, UserUserOid(user_oid))
+}
 
-            Ok(2)
-        });
-    let service = service.with_device_repository(Arc::new(device_repo));
+struct Breaches(bool);
+#[async_trait]
+impl crate::auth::password_policy::BreachedPasswordChecker for Breaches {
+    async fn is_breached(&self, _: &str) -> Result<bool, AppError> {
+        Ok(self.0)
+    }
+}
 
+#[tokio::test]
+async fn password_change_uses_the_atomic_repository_transition() {
+    let (service, user_oid) = password_change_service();
+    let service = service.with_breach_checker(Arc::new(Breaches(false)));
     let outcome = service
         .change_password_with_session_revocation(
-            UserUserOid(user_oid),
+            user_oid,
             "a-sufficiently-long-password",
             SessionOid(Uuid::new_v4()),
         )
         .await
         .unwrap();
-
     assert!(outcome.password_changed);
+    assert_eq!(outcome.revoked_other_sessions, 2);
+    assert_eq!(outcome.session_revocation_failures, 0);
+}
+
+#[tokio::test]
+async fn breached_password_or_failed_check_never_reaches_the_password_transition() {
+    let (service, user_oid) = password_change_service();
+    let unavailable = service
+        .change_password(user_oid, "a-sufficiently-long-password")
+        .await
+        .unwrap_err();
+    assert_eq!(unavailable.code(), 11026);
+    let service = service.with_breach_checker(Arc::new(Breaches(true)));
+    let breached = service
+        .change_password(user_oid, "a-sufficiently-long-password")
+        .await
+        .unwrap_err();
+    assert_eq!(breached.validation().unwrap().fields()[0].code(), 11025);
+    let short_unicode = service
+        .change_password(user_oid, "安全密码")
+        .await
+        .unwrap_err();
     assert_eq!(
-        revoked_users.try_recv().unwrap(),
-        user_oid,
-        "account level revocation reaches the device authorizations"
+        short_unicode.validation().unwrap().fields()[0].code(),
+        11013
     );
+    let similar = service
+        .change_password(user_oid, "user-example-19038!")
+        .await
+        .unwrap_err();
+    assert_eq!(similar.validation().unwrap().fields()[0].code(), 11024);
 }

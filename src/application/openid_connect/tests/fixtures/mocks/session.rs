@@ -15,6 +15,8 @@ mock! {
 
     #[async_trait::async_trait]
     impl SessionRepository for SessionRepository {
+        async fn complete_authentication(&self, login_oid: Uuid, existing: Option<SessionOid>, input: CreateSessionInput) -> Result<Session, SessionRepositoryError>;
+
         async fn find_by_oid(
             &self,
             oid: SessionOid,

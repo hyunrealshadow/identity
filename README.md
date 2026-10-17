@@ -439,6 +439,43 @@ See [observability coverage](docs/observability-coverage.md),
 [observability design](docs/observability-design.md), and the
 [deployment guide](deploy/README.md#observability).
 
+## Password and credential security
+
+New passwords (including the initial account) must contain 12–1024 Unicode
+characters and pass guessability, identifier-similarity, and Pwned Passwords
+checks. Passwords are not trimmed. Existing passwords are not rejected during
+sign-in. Only a five-character SHA-1 prefix is sent to the range API, with
+response padding; SHA-1 is never used for password storage. Network errors,
+invalid responses, timeouts, and saturated check concurrency reject the change.
+`IDENTITY_PWNED_PASSWORDS_URL` may point to a trusted HTTPS-compatible range
+service (default `https://api.pwnedpasswords.com/range/`; trailing `/` required).
+
+Password replacement, withdrawal of other sessions and their grants, device
+relations, and pending logins commit in one transaction. A stale rehash cannot
+overwrite a changed password. Session completion serializes on the same account
+lock, closing the race with a login that verified the old password.
+
+Migration `m20261017_000001_security_audit` adds an append-only PostgreSQL journal
+for credential, account, session, login, and authorization security changes.
+Records contain IDs, operation and status metadata, never passwords, hashes,
+TOTP secrets, or tokens. The row change and audit insert share a transaction:
+audit failure rolls back the change. OTLP events remain best-effort copies;
+use WAL/CDC or a transaction-aware exporter for reliable external delivery.
+A naive maximum-ID cursor is unsafe because transactions can commit out of ID
+order. Retention, backups,
+export permissions and monitoring are deployment responsibilities. The journal
+does not claim protection against the database owner disabling its triggers.
+Rolling back this migration removes capture triggers but preserves the journal.
+
+The real PostgreSQL security regression requires a disposable database:
+
+```sh
+IDENTITY_SECURITY_TEST_DATABASE_URL=postgres://.../disposable_db cargo test -p identity-infrastructure postgres_password_revocation_and_audit_are_atomic -- --ignored
+```
+
+It applies the actual migrations and checks rollback, audit persistence,
+concurrent password-change/login ordering, grant withdrawal, and stale rehash.
+
 ## Tests and conformance
 
 ```sh

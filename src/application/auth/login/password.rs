@@ -65,11 +65,15 @@ impl LoginService {
         let password_hasher = Arc::clone(&self.password_hasher);
         let credential = credential.to_owned();
         let verify_password = credential.clone();
-        let stored_password = stored_password.clone();
+        let verify_stored_password = stored_password.clone();
         let hash_options = hash_options.clone();
         let verify_hash_options = hash_options.clone();
         let verify_result = run_password_hashing(move || {
-            password_hasher.verify(&verify_password, &stored_password, &verify_hash_options)
+            password_hasher.verify(
+                &verify_password,
+                &verify_stored_password,
+                &verify_hash_options,
+            )
         })
         .await?;
 
@@ -110,7 +114,11 @@ impl LoginService {
                         Ok(new_password) => {
                             if let Err(error) = self
                                 .credential_repo
-                                .update_password_by_oid(password_cred.oid, &new_password)
+                                .update_password_by_oid(
+                                    password_cred.oid,
+                                    &stored_password,
+                                    &new_password,
+                                )
                                 .await
                             {
                                 error!(

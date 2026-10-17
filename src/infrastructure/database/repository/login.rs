@@ -156,9 +156,17 @@ impl LoginRepository for LoginRepositoryImpl {
         login_oid: Uuid,
         user_oid: Uuid,
     ) -> Result<Login, LoginRepositoryError> {
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        super::shared::lock_user_credentials(&txn, user_oid.into())
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let user = UserEntity::find()
             .filter(user::Column::Oid.eq(user_oid))
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
@@ -177,7 +185,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .filter(login::Column::Oid.eq(login_oid))
             .filter(login::Column::Status.eq(LoginStatus::CREATED.as_str()))
             .filter(login::Column::UserId.is_null())
-            .exec_with_returning(&self.db)
+            .exec_with_returning(&txn)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?
             .into_iter()
@@ -185,18 +193,21 @@ impl LoginRepository for LoginRepositoryImpl {
             .ok_or(LoginRepositoryError::LoginNotFound)?;
 
         let client_model = ClientEntity::find_by_id(model.client_id)
-            .one(&self.db)
+            .one(&txn)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let client_authorization_model =
             ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
-                .one(&self.db)
+                .one(&txn)
                 .await
                 .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::LoginNotFound)?;
 
+        txn.commit()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         to_domain(
             model,
             client_model.oid,

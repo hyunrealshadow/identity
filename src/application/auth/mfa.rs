@@ -455,6 +455,7 @@ mod tests {
         async fn update_password_by_oid(
             &self,
             _credential_oid: UserCredentialOid,
+            _expected: &Password,
             _password: &Password,
         ) -> Result<(), UserCredentialRepositoryError> {
             Ok(())

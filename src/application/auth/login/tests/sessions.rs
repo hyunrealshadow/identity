@@ -26,21 +26,21 @@ async fn repeated_fresh_logins_for_different_clients_reuse_the_browser_session()
             let existing = existing.clone();
             move |_| Ok(vec![existing.clone(), foreign.clone()])
         });
-    repo.expect_reauthenticate_by_oid()
+    repo.expect_complete_authentication()
         .withf({
             let oid = existing.session_oid;
-            move |session_oid, owner, acr, _, amr| {
-                *session_oid == oid
-                    && *owner == user_oid
-                    && acr == ACR_AAL1
-                    && amr == [AMR_PASSWORD.to_owned()]
+            move |_, session_oid, input| {
+                *session_oid == Some(oid)
+                    && input.user_oid == user_oid
+                    && input.acr.as_deref() == Some(ACR_AAL1)
+                    && input.amr == [AMR_PASSWORD.to_owned()]
             }
         })
         .times(2)
-        .returning(move |oid, owner, acr, acr_expires_at, amr| {
+        .returning(move |_, oid, input| {
             Ok(Session {
-                oid,
-                user_oid: owner,
+                oid: oid.unwrap(),
+                user_oid: input.user_oid,
                 status: SessionStatus::ACTIVE,
                 device_name: None,
                 device_type: None,
@@ -54,12 +54,12 @@ async fn repeated_fresh_logins_for_different_clients_reuse_the_browser_session()
                 expires_at: Some(Utc::now() + Duration::days(7)),
                 revoked_at: None,
                 created_at: existing.created_at,
-                acr: Some(acr.to_owned()),
-                acr_expires_at: Some(acr_expires_at),
-                amr: amr.to_vec(),
+                acr: input.acr,
+                acr_expires_at: input.acr_expires_at,
+                amr: input.amr,
             })
         });
-    // Any attempt to create a session is rejected by the mock.
+    // The completion contract must select the existing browser session.
     service.session_repo = Arc::new(repo);
     for login_oid in login_oids {
         let outcome = service
@@ -102,29 +102,32 @@ async fn fresh_login_creates_a_session_when_no_valid_same_user_session_is_presen
                     vec![expired, foreign]
                 })
             });
-        repo.expect_create().times(1).returning(|input| {
-            // Match the normal creation contract without a database.
-            Ok(Session {
-                oid: SessionOid(Uuid::new_v4()),
-                user_oid: input.user_oid,
-                status: SessionStatus::ACTIVE,
-                device_name: input.device_name,
-                device_type: input.device_type,
-                os_name: input.os_name,
-                os_version: input.os_version,
-                browser_name: input.browser_name,
-                browser_version: input.browser_version,
-                user_agent: input.user_agent,
-                ip_address: input.ip_address,
-                last_active_at: Some(Utc::now()),
-                expires_at: input.expires_at,
-                revoked_at: None,
-                created_at: Utc::now(),
-                acr: input.acr,
-                acr_expires_at: input.acr_expires_at,
-                amr: input.amr,
-            })
-        });
+        repo.expect_complete_authentication()
+            .times(1)
+            .returning(|_, existing, input| {
+                assert!(existing.is_none());
+                // Match the normal creation contract without a database.
+                Ok(Session {
+                    oid: SessionOid(Uuid::new_v4()),
+                    user_oid: input.user_oid,
+                    status: SessionStatus::ACTIVE,
+                    device_name: input.device_name,
+                    device_type: input.device_type,
+                    os_name: input.os_name,
+                    os_version: input.os_version,
+                    browser_name: input.browser_name,
+                    browser_version: input.browser_version,
+                    user_agent: input.user_agent,
+                    ip_address: input.ip_address,
+                    last_active_at: Some(Utc::now()),
+                    expires_at: input.expires_at,
+                    revoked_at: None,
+                    created_at: Utc::now(),
+                    acr: input.acr,
+                    acr_expires_at: input.acr_expires_at,
+                    amr: input.amr,
+                })
+            });
         service.session_repo = Arc::new(repo);
         let session = service
             .complete_session(

@@ -26,6 +26,7 @@ mod m20261001_000001_create_resource;
 mod m20261001_000002_index_pushed_authorization_request;
 
 mod m20261016_000001_create_authentication_challenge;
+mod m20261017_000001_security_audit;
 
 pub struct Migrator;
 
@@ -55,6 +56,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261001_000001_create_resource::Migration),
             Box::new(m20261001_000002_index_pushed_authorization_request::Migration),
             Box::new(m20261016_000001_create_authentication_challenge::Migration),
+            Box::new(m20261017_000001_security_audit::Migration),
         ]
     }
 }

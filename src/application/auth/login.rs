@@ -18,7 +18,6 @@ use identity_domain::{
         model::{Login, Session},
         repository::{LoginRepository, SessionRepository},
     },
-    client_authorization::DeviceAuthorizationRepository,
     user::repository::UserRepository,
 };
 use std::sync::Arc;
@@ -88,15 +87,20 @@ pub struct LoginService {
     password_hasher: Arc<dyn PasswordHasher>,
     totp_verifier: Arc<dyn TotpVerifier>,
     settings: Arc<dyn SettingsSource>,
-    /// Device authorizations, so account level security actions can withdraw
-    /// them. Optional: services built without it simply have no device
-    /// authorizations to revoke.
-    device_repo: Option<Arc<dyn DeviceAuthorizationRepository>>,
     events: Arc<dyn EventSink>,
     passkeys: Option<Arc<super::passkey::PasskeyService>>,
+    breach_checker: Arc<dyn super::password_policy::BreachedPasswordChecker>,
 }
 
 impl LoginService {
+    #[must_use]
+    pub fn with_breach_checker(
+        mut self,
+        checker: Arc<dyn super::password_policy::BreachedPasswordChecker>,
+    ) -> Self {
+        self.breach_checker = checker;
+        self
+    }
     #[must_use]
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
@@ -115,21 +119,10 @@ impl LoginService {
             password_hasher,
             totp_verifier,
             settings,
-            device_repo: None,
+            breach_checker: Arc::new(super::password_policy::UnavailableBreachChecker),
             passkeys: None,
             events: Arc::new(NoopEventSink),
         }
-    }
-
-    /// Attach the device authorization repository, so account level
-    /// revocation also withdraws device grants.
-    #[must_use]
-    pub fn with_device_repository(
-        mut self,
-        device_repo: Arc<dyn DeviceAuthorizationRepository>,
-    ) -> Self {
-        self.device_repo = Some(device_repo);
-        self
     }
 
     /// Attach the key event and audit sink.

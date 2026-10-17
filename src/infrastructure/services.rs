@@ -26,7 +26,7 @@ use identity_domain::openid_connect::{
     BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
     OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, WorkloadAuthenticator,
 };
-use reqwest::Error;
+type Error = Box<dyn std::error::Error + Send + Sync>;
 use sea_orm::DatabaseConnection;
 
 use super::settings::AppRuntimeSettings;
@@ -144,6 +144,7 @@ impl AppServices {
         let totp = Arc::new(TotpVerifierImpl);
 
         let events = sink();
+        let breach_checker = Arc::new(crate::auth::breached_password::PwnedPasswordChecker::new()?);
         let passkey = Arc::new(
             identity_application::auth::passkey::PasskeyService::new(
                 user_credential_repo.clone(),
@@ -187,8 +188,8 @@ impl AppServices {
                 totp.clone(),
                 settings.store(),
             )
+            .with_breach_checker(breach_checker.clone())
             .with_passkeys(passkey)
-            .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
@@ -214,6 +215,7 @@ impl AppServices {
                 settings.key_ring(),
             ),
             install: InstallService {
+                breach_checker: breach_checker.clone(),
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
                 settings: settings.store(),
                 key_generator: Arc::new(AsymmetricKeyGeneratorImpl),

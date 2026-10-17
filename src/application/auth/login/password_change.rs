@@ -1,9 +1,6 @@
 use super::{LoginService, PasswordChangeOutcome};
 use crate::{
-    auth::{
-        password::{VerifyResult, run_password_hashing},
-        session::revoke_other_sessions_with,
-    },
+    auth::password::{VerifyResult, run_password_hashing},
     error::{
         AppError,
         codes::{auth::AuthErrorCode, common::CommonErrorCode},
@@ -15,24 +12,34 @@ use crate::{
         model::{CredentialData, CredentialType},
     },
 };
-use chrono::Utc;
 use identity_domain::auth::SessionOid;
 use std::sync::Arc;
 use uuid::Uuid;
 
 impl LoginService {
-    pub async fn change_password(
+    async fn prepare_password_change(
         &self,
         user_oid: UserOid,
         new_password: &str,
-    ) -> Result<(), AppError> {
-        if new_password.len() < 12 {
-            return Err(
-                AppError::from_code(CommonErrorCode::ValidationFailed).with_field_error(
-                    "newPassword",
-                    AppError::from_code(AuthErrorCode::PasswordTooShort),
-                ),
-            );
+    ) -> Result<
+        (
+            crate::user::UserCredentialOid,
+            crate::user::Password,
+            crate::user::Password,
+        ),
+        AppError,
+    > {
+        let user = self.get_user(user_oid).await?;
+        super::super::password_policy::validate_password(
+            new_password,
+            &[&user.name, &user.email],
+            "newPassword",
+        )?;
+        if self.breach_checker.is_breached(new_password).await? {
+            return Err(super::super::password_policy::password_error(
+                AuthErrorCode::PasswordBreached,
+                "newPassword",
+            ));
         }
         let credential = self
             .credential_repo
@@ -53,8 +60,9 @@ impl LoginService {
         let hasher = Arc::clone(&self.password_hasher);
         let new_password_to_verify = new_password.to_owned();
         let verify_options = options.clone();
+        let verify_stored = stored_password.clone();
         let verified = run_password_hashing(move || {
-            hasher.verify(&new_password_to_verify, &stored_password, &verify_options)
+            hasher.verify(&new_password_to_verify, &verify_stored, &verify_options)
         })
         .await?;
         if verified != VerifyResult::Failure {
@@ -68,33 +76,27 @@ impl LoginService {
         let hasher = Arc::clone(&self.password_hasher);
         let new_password = new_password.to_owned();
         let password = run_password_hashing(move || hasher.hash(&new_password, &options)).await?;
+        Ok((credential.oid, stored_password, password))
+    }
+
+    /// Change a password without retaining any existing browser session.
+    pub async fn change_password(
+        &self,
+        user_oid: UserOid,
+        new_password: &str,
+    ) -> Result<(), AppError> {
+        let (credential, expected, password) =
+            self.prepare_password_change(user_oid, new_password).await?;
         self.credential_repo
-            .update_password_by_oid(credential.oid, &password)
+            .change_password_and_revoke(user_oid, credential, &expected, &password, None)
             .await?;
-        self.events.emit(
-            BusinessEvent::audit("account.credential.changed")
-                .outcome("success")
-                .attribute(
-                    "credential_oid",
-                    EventValue::Text(credential.oid.0.to_string()),
-                )
-                .attribute(
-                    "user_oid",
-                    EventValue::Pseudonymized {
-                        purpose: "user_oid",
-                        value: Uuid::from(user_oid).to_string(),
-                    },
-                )
-                .attribute("change_category", EventValue::Text("password".to_owned())),
-        );
         Ok(())
     }
 
     /// Change the password and revoke every other session of the account.
     ///
-    /// The outcome distinguishes the completed password change from partial
-    /// session revocation failures so callers never report that the password
-    /// was not changed when it was, and audit events can describe both steps.
+    /// Password, other sessions and dependent authorizations change atomically.
+    /// Any persistence or audit failure leaves the original credentials intact.
     #[tracing::instrument(skip_all, name = "account.password.change")]
     pub async fn change_password_with_session_revocation(
         &self,
@@ -102,26 +104,21 @@ impl LoginService {
         new_password: &str,
         current_session: SessionOid,
     ) -> Result<PasswordChangeOutcome, AppError> {
-        self.change_password(user_oid, new_password).await?;
-        let revocation = revoke_other_sessions_with(
-            self.session_repo.as_ref(),
-            Uuid::from(user_oid),
-            current_session,
-        )
-        .await?;
-        let revoked_device_authorizations = self
-            .revoke_device_authorizations(Uuid::from(user_oid))
+        let (credential, expected, password) =
+            self.prepare_password_change(user_oid, new_password).await?;
+        let revoked = self
+            .credential_repo
+            .change_password_and_revoke(
+                user_oid,
+                credential,
+                &expected,
+                &password,
+                Some(current_session),
+            )
             .await?;
-        let mut event = BusinessEvent::audit("account.sessions_revoked")
+        let event = BusinessEvent::audit("account.sessions_revoked")
             .outcome("success")
-            .attribute(
-                "revoked_sessions",
-                EventValue::Integer(i64::from(revocation.revoked)),
-            )
-            .attribute(
-                "revoked_device_authorizations",
-                EventValue::Integer(i64::from(revoked_device_authorizations)),
-            )
+            .attribute("revoked_sessions", EventValue::Integer(i64::from(revoked)))
             .attribute(
                 "user_oid",
                 EventValue::Pseudonymized {
@@ -129,33 +126,12 @@ impl LoginService {
                     value: Uuid::from(user_oid).to_string(),
                 },
             );
-        if revocation.failure_count() > 0 {
-            event = event.outcome("partial");
-        }
         self.events.emit(event);
 
         Ok(PasswordChangeOutcome {
             password_changed: true,
-            revoked_other_sessions: revocation.revoked,
-            session_revocation_failures: revocation.failure_count(),
+            revoked_other_sessions: revoked,
+            session_revocation_failures: 0,
         })
-    }
-
-    /// Withdraws every device authorization of an account. Browser logouts do
-    /// not call this: a device relation outlives the session that approved it
-    /// (ADR 0004); only account level security actions end it.
-    async fn revoke_device_authorizations(&self, user_oid: Uuid) -> Result<u32, AppError> {
-        let Some(device_repo) = &self.device_repo else {
-            return Ok(0);
-        };
-
-        let revoked = device_repo
-            .revoke_device_authorizations_for_user(user_oid, Utc::now())
-            .await
-            .map_err(AppError::map_source(
-                AuthErrorCode::DeviceAuthorizationRevocationFailed,
-            ))?;
-
-        Ok(u32::try_from(revoked).unwrap_or(u32::MAX))
     }
 }

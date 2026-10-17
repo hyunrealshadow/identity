@@ -55,7 +55,7 @@ openid_connect:
 install:
   domain: {{ get_env(name="DOMAIN", default="identity") }}
   username: "admin"
-  password: "ConformanceAdmin1!"
+  password: "Orbit-canyon-violet-914!"
   email: "admin@conformance.local"
   application_url: {{ get_env(name="HOST", default="https://identity:5150") }}
   key_algorithm: "rsa-2048"

@@ -122,6 +122,15 @@ pub struct CreateSessionInput {
 
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
+    /// Establish or renew a session only while the bound login is still active.
+    /// Persistent adapters serialize this with account credential changes.
+    async fn complete_authentication(
+        &self,
+        login_oid: Uuid,
+        existing: Option<SessionOid>,
+        input: CreateSessionInput,
+    ) -> Result<Session, SessionRepositoryError>;
+
     /// Find a session by its OID.
     async fn find_by_oid(&self, oid: SessionOid)
     -> Result<Option<Session>, SessionRepositoryError>;

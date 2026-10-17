@@ -50,6 +50,7 @@ pub trait InstallSettings: SettingsSource + RefreshableSetting {}
 impl<T> InstallSettings for T where T: SettingsSource + RefreshableSetting + ?Sized {}
 
 pub struct InstallService {
+    pub breach_checker: Arc<dyn crate::auth::password_policy::BreachedPasswordChecker>,
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub settings: Arc<dyn InstallSettings>,
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
@@ -127,6 +128,17 @@ impl InstallService {
         }
 
         let input = validate_install_input(input)?;
+        crate::auth::password_policy::validate_password(
+            &input.password,
+            &[&input.username, &input.email],
+            "password",
+        )?;
+        if self.breach_checker.is_breached(&input.password).await? {
+            return Err(crate::auth::password_policy::password_error(
+                crate::error::codes::auth::AuthErrorCode::PasswordBreached,
+                "password",
+            ));
+        }
 
         let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
         let password_hasher = Arc::clone(&self.password_hasher);
@@ -201,7 +213,11 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
     let password = collect_field(
         &mut validation,
         "password",
-        normalize_required(&input.password, "password"),
+        if input.password.is_empty() {
+            Err(AppError::from_code(InstallErrorCode::PasswordRequired))
+        } else {
+            Ok(input.password.clone())
+        },
     );
     let domain = collect_field(&mut validation, "domain", normalize_domain(&input.domain));
     let application_url = collect_field(

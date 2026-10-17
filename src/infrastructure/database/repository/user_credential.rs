@@ -27,6 +27,7 @@ use crate::database::{
 };
 
 mod mfa;
+mod password_change;
 
 pub struct UserCredentialRepositoryImpl {
     db: DatabaseConnection,
@@ -97,6 +98,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
     async fn update_password_by_oid(
         &self,
         credential_oid: UserCredentialOid,
+        expected: &Password,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError> {
         let new_data = to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
@@ -108,6 +110,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
+            .filter(
+                user_credential::Column::Data
+                    .eq(to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?),
+            )
             .filter(user_credential::Column::Type.eq(CredentialType::Password.as_ref()))
             .filter(
                 Condition::any()
@@ -121,6 +127,18 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             return Err(UserCredentialRepositoryError::CredentialNotFound);
         }
         Ok(())
+    }
+
+    async fn change_password_and_revoke(
+        &self,
+        user: UserOid,
+        credential: UserCredentialOid,
+        expected: &Password,
+        password: &Password,
+        keep: Option<identity_domain::auth::SessionOid>,
+    ) -> Result<u32, UserCredentialRepositoryError> {
+        self.change_password_transaction(user, credential, expected, password, keep)
+            .await
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "consume_totp_counter"))]

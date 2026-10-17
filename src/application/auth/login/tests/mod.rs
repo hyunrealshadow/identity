@@ -17,7 +17,6 @@ use identity_domain::{
         repository::{UserRepository, UserRepositoryError},
     },
 };
-use tokio::sync::mpsc::unbounded_channel;
 use uuid::Uuid;
 
 use super::{ChallengeOutcome, LoginService, SessionContext};
@@ -27,9 +26,7 @@ use crate::{
         password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
         totp::{TotpError, TotpVerifier},
     },
-    openid_connect::tests::fixtures::mocks::{
-        MockDeviceAuthorizationRepository, session::MockSessionRepository,
-    },
+    openid_connect::tests::fixtures::mocks::session::MockSessionRepository,
     setting::{PasswordHashSetting, SettingsSnapshot},
     user::{
         CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData,

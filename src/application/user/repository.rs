@@ -72,8 +72,27 @@ pub trait UserCredentialRepository: Send + Sync {
     async fn update_password_by_oid(
         &self,
         credential_oid: UserCredentialOid,
+        expected: &Password,
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError>;
+
+    /// Compare-and-swap the password and revoke sessions, their grants, device
+    /// relations and pending logins in one transaction. Failure changes nothing.
+    async fn change_password_and_revoke(
+        &self,
+        user: UserOid,
+        credential: UserCredentialOid,
+        expected: &Password,
+        password: &Password,
+        keep: Option<identity_domain::auth::SessionOid>,
+    ) -> Result<u32, UserCredentialRepositoryError> {
+        let _ = (user, credential, expected, password, keep);
+        Err(UserCredentialRepositoryError::UpdatePasswordFailed(
+            Box::new(std::io::Error::other(
+                "atomic password changes are not configured",
+            )),
+        ))
+    }
 
     /// Atomically stores `counter` in the OTP credential's JSONB data only if
     /// it is greater than the previously consumed counter.

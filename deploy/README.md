@@ -25,6 +25,12 @@ Rotating the workload credential changes who may call the internal API;
 Identity's scheduled rotation changes the OAuth credential returned by that
 API. The latter does not require a rollout.
 
+## Password security checks
+
+The range password check requires HTTPS egress to `api.pwnedpasswords.com` or a
+trusted compatible service configured through `IDENTITY_PWNED_PASSWORDS_URL`.
+Timeouts fail closed; no complete password or complete hash is transmitted.
+
 ## Docker Compose
 
 The Compose deployment runs PostgreSQL, Identity, and Login. Identity uses four

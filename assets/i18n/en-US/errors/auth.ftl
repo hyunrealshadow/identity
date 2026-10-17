@@ -27,3 +27,8 @@ E11019 = You can add up to { $limit } passkeys. Delete a passkey before adding a
 
 E11020 = Recovery code setup is missing or has changed, start enrollment again
 E11021 = No multi-factor authentication method is enabled for this account
+E11022 = The new password must contain at most 1024 characters.
+E11023 = This password is too easy to guess. Choose a different password.
+E11024 = The password is too similar to your username or email address.
+E11025 = This password has appeared in a data breach. Choose a different password.
+E11026 = Password security checks are temporarily unavailable. Please try again later.

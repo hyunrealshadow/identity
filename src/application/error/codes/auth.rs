@@ -26,6 +26,11 @@ pub enum AuthErrorCode {
     PasskeyLimitReached,
     InvalidMfaEnrollment,
     MfaNotEnabled,
+    PasswordTooLong,
+    PasswordTooWeak,
+    PasswordTooSimilar,
+    PasswordBreached,
+    PasswordCheckUnavailable,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -48,12 +53,17 @@ impl AppErrorCode for AuthErrorCode {
             | AuthErrorCode::IdentifierRequired
             | AuthErrorCode::PasswordTooShort
             | AuthErrorCode::PasswordUnchanged
+            | AuthErrorCode::PasswordTooLong
+            | AuthErrorCode::PasswordTooWeak
+            | AuthErrorCode::PasswordTooSimilar
+            | AuthErrorCode::PasswordBreached
             | AuthErrorCode::InvalidTotpEnrollment
             | AuthErrorCode::InvalidMfaEnrollment => ErrorKind::Validation,
 
             AuthErrorCode::TooManyAttempts => ErrorKind::RateLimit,
 
-            AuthErrorCode::DeviceAuthorizationRevocationFailed => ErrorKind::Internal,
+            AuthErrorCode::DeviceAuthorizationRevocationFailed
+            | AuthErrorCode::PasswordCheckUnavailable => ErrorKind::Internal,
         }
     }
 
@@ -81,6 +91,11 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::PasskeyLimitReached => 11019,
             AuthErrorCode::InvalidMfaEnrollment => 11020,
             AuthErrorCode::MfaNotEnabled => 11021,
+            AuthErrorCode::PasswordTooLong => 11022,
+            AuthErrorCode::PasswordTooWeak => 11023,
+            AuthErrorCode::PasswordTooSimilar => 11024,
+            AuthErrorCode::PasswordBreached => 11025,
+            AuthErrorCode::PasswordCheckUnavailable => 11026,
         }
     }
 }

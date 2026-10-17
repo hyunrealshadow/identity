@@ -6,5 +6,6 @@ pub mod login;
 pub mod mfa;
 pub mod passkey;
 pub mod password;
+pub mod password_policy;
 pub mod session;
 pub mod totp;

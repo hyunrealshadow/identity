@@ -69,3 +69,4 @@ test-support = []
 
 [dev-dependencies]
 serial_test = { workspace = true }
+migration = { workspace = true }

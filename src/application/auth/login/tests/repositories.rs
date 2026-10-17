@@ -83,9 +83,21 @@ impl UserCredentialRepository for TestCredentialRepo {
     async fn update_password_by_oid(
         &self,
         _oid: UserCredentialOid,
+        _expected: &Password,
         _password: &Password,
     ) -> Result<(), UserCredentialRepositoryError> {
         Ok(())
+    }
+
+    async fn change_password_and_revoke(
+        &self,
+        _user: UserOid,
+        _credential: UserCredentialOid,
+        _expected: &Password,
+        _password: &Password,
+        _keep: Option<SessionOid>,
+    ) -> Result<u32, UserCredentialRepositoryError> {
+        Ok(2)
     }
 
     async fn consume_totp_counter(
@@ -140,6 +152,27 @@ pub(super) struct TestSessionRepo;
 
 #[async_trait]
 impl SessionRepository for TestSessionRepo {
+    async fn complete_authentication(
+        &self,
+        _login: Uuid,
+        existing: Option<SessionOid>,
+        input: CreateSessionInput,
+    ) -> Result<Session, SessionRepositoryError> {
+        match existing {
+            Some(oid) => {
+                self.reauthenticate_by_oid(
+                    oid,
+                    input.user_oid,
+                    input.acr.as_deref().unwrap(),
+                    input.acr_expires_at.unwrap(),
+                    &input.amr,
+                )
+                .await
+            }
+            None => self.create(input).await,
+        }
+    }
+
     async fn find_by_oid(
         &self,
         _oid: SessionOid,

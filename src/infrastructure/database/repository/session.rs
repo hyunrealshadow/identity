@@ -29,7 +29,10 @@ use crate::database::{
     query::json_text,
 };
 
-fn session_to_domain(m: session::Model, user_oid: Uuid) -> Result<Session, SessionRepositoryError> {
+pub(super) fn session_to_domain(
+    m: session::Model,
+    user_oid: Uuid,
+) -> Result<Session, SessionRepositoryError> {
     let amr = from_value(m.amr.clone()).unwrap_or_default();
     let status = m
         .status
@@ -58,7 +61,7 @@ fn session_to_domain(m: session::Model, user_oid: Uuid) -> Result<Session, Sessi
 }
 
 pub struct SessionRepositoryImpl {
-    db: DatabaseConnection,
+    pub(super) db: DatabaseConnection,
 }
 
 impl SessionRepositoryImpl {
@@ -207,6 +210,14 @@ fn session_cursor_condition(cursor: SessionSortKey, comparison: CursorComparison
 
 #[async_trait]
 impl SessionRepository for SessionRepositoryImpl {
+    async fn complete_authentication(
+        &self,
+        login_oid: Uuid,
+        existing: Option<SessionOid>,
+        input: CreateSessionInput,
+    ) -> Result<Session, SessionRepositoryError> {
+        self.complete_login(login_oid, existing, input).await
+    }
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(
         &self,
@@ -883,3 +894,5 @@ mod tests {
         }
     }
 }
+
+pub(super) use super::session_security::lock_account_sessions;

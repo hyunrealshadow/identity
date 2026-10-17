@@ -12,7 +12,10 @@ pub mod oauth_resource;
 pub mod openid_connect;
 pub mod openid_connect_credential;
 pub mod scope_catalog;
+#[cfg(test)]
+mod security_tests;
 pub mod session;
+mod session_security;
 pub mod setting;
 pub mod shared;
 pub mod user;
