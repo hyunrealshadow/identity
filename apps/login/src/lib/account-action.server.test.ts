@@ -492,3 +492,27 @@ describe('executeAccountAction', () => {
   })
 
 })
+
+it.each(['prepare-manage-passkeys', 'prepare-mfa-preference'])('authorizes %s without creating a WebAuthn challenge or saving a preference', async (action) => {
+  mocks.identityGraphql.mockResolvedValue({ prepareMfaManagement: true })
+  expect(await executeAccountAction({ action, values: { login_hint: 'person' } })).toEqual({ ok: true })
+  expect(mocks.identityGraphql).toHaveBeenCalledExactlyOnceWith(
+    'mutation PrepareMfaManagement { prepareMfaManagement }', undefined, { authorization: 'elevated' },
+  )
+  expect(mocks.storeAccountFlash).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['prepare-manage-passkeys', 'passkeys'],
+  ['prepare-mfa-preference', 'mfa-priority'],
+  ['update-mfa-preference', 'mfa-priority'],
+])('redirects %s to AAL2 before opening or changing settings', async (action, continuation) => {
+  mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
+    { message: 'step up', extensions: { code: 'insufficient_user_authentication' } },
+  ], { acrValues: 'aal2', maxAge: 3600 }))
+  const result = await executeAccountAction({ action, values: { login_hint: 'person', preferred_mfa_method: 'passkey' } })
+  expect(result.redirect).toBeTruthy()
+  expect(mocks.startReauthorization).toHaveBeenCalledWith(
+    `/account/security?confirm=${continuation}`, 'account', { loginHint: 'person', acrValues: 'aal2', maxAge: 3600 },
+  )
+})

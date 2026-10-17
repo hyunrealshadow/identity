@@ -20,12 +20,17 @@ fn password_change_required_acr(mfa_enabled: bool) -> Option<&'static str> {
 
 #[Object]
 impl SecurityMutation {
+    async fn prepare_mfa_management(&self, ctx: &Context<'_>) -> Result<bool> {
+        authorize_mfa_change(ctx).await?;
+        Ok(true)
+    }
+
     async fn update_preferred_mfa_method(
         &self,
         ctx: &Context<'_>,
         method: PreferredMfaMethod,
     ) -> Result<bool> {
-        require_scope(ctx, ApiScope::AccountUpdate)?;
+        authorize_mfa_change(ctx).await?;
         let request = request_context(ctx)?;
         request
             .state

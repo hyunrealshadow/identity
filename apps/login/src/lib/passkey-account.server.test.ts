@@ -39,13 +39,13 @@ it('binds reauthentication to the current account and honors AAL2', async () => 
   mocks.graphql.mockResolvedValueOnce({ viewer: { account: { username: 'person' } } })
   mocks.reauthorize.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: '/reauth' } }))
   expect(await passkeyAccountAction({ action: 'delete', id: 'key' })).toEqual({ redirect: '/reauth' })
-  expect(mocks.reauthorize).toHaveBeenCalledWith('/account/security', 'account', { loginHint: 'person', acrValues: 'aal2', maxAge: 3600 })
+  expect(mocks.reauthorize).toHaveBeenCalledWith('/account/security?confirm=passkeys', 'account', { loginHint: 'person', acrValues: 'aal2', maxAge: 3600 })
 })
 
 it('returns an actionable passkey-limit message from either registration phase', async () => {
   for (const action of ['begin', 'finish'] as const) {
     mocks.graphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'limit reached', extensions: { code: 11019 } }]))
-    expect(await passkeyAccountAction({ action })).toEqual({ error: 'You can add up to 5 passkeys. Delete a passkey before adding another.' })
+    expect(await passkeyAccountAction({ action })).toEqual({ error: 'Limit of 5 passkeys reached, delete one to add another' })
   }
   expect(mocks.reauthorize).not.toHaveBeenCalled()
 })

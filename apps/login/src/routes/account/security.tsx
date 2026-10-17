@@ -16,7 +16,7 @@ import { MfaPriority } from '#/components/mfa-priority'
 interface SecuritySearch {
   setup?: 'mfa'
   step?: 'verify'
-  confirm?: 'disable-mfa' | 'change-password' | 'recovery-codes'
+  confirm?: 'disable-mfa' | 'change-password' | 'recovery-codes' | 'passkeys' | 'mfa-priority'
 }
 
 export const Route = createFileRoute('/account/security')({
@@ -24,7 +24,7 @@ export const Route = createFileRoute('/account/security')({
     setup: search.setup === 'mfa' ? 'mfa' : undefined,
     step: search.step === 'verify' ? 'verify' : undefined,
     confirm:
-      search.confirm === 'disable-mfa' || search.confirm === 'change-password' || search.confirm === 'recovery-codes'
+      search.confirm === 'disable-mfa' || search.confirm === 'change-password' || search.confirm === 'recovery-codes' || search.confirm === 'passkeys' || search.confirm === 'mfa-priority'
         ? search.confirm
         : undefined,
   }),
@@ -47,8 +47,8 @@ function SecurityPage() {
         </SettingsCard>
         <SettingsCard title={t('accountMfaRowTitle')} description={t('accountMfaDescription')}>
           <div className="divide-y divide-separator">
-            {(data.viewer.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority key={security.preferredMfaMethod} locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} loginHint={loginHint} /></div> : null}
-            <div className={(data.viewer.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings locale={locale} keys={data.viewer.passkeys ?? []} /></div>
+            {(data.viewer.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority openRequested={search.confirm === 'mfa-priority'} locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} loginHint={loginHint} /></div> : null}
+            <div className={(data.viewer.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings loginHint={loginHint} openRequested={search.confirm === 'passkeys'} locale={locale} keys={data.viewer.passkeys ?? []} /></div>
             <div className={security.totpEnabled ? 'py-5' : 'pt-5'}>
               <SettingsRow
                 title={t('accountMfa')}

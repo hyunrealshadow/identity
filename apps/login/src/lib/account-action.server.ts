@@ -58,6 +58,14 @@ export async function executeAccountAction(
       await clearMfaUiState()
       return { ok: true }
     }
+    if (action === 'prepare-manage-passkeys' || action === 'prepare-mfa-preference') {
+      await requireGraphql(
+        'mutation PrepareMfaManagement { prepareMfaManagement }',
+        undefined,
+        { authorization: 'elevated' },
+      )
+      return { ok: true }
+    }
     if (action === 'prepare-change-password' || action === 'prepare-disable-totp') {
       const requiredAcr = action === 'prepare-disable-totp'
         ? 'aal2'
@@ -408,6 +416,8 @@ function accountFlashFromError(
 
 function isMfaAction(action: string) {
   return [
+    'prepare-manage-passkeys',
+    'prepare-mfa-preference',
     'update-mfa-preference',
     'prepare-disable-totp',
     'begin-totp',

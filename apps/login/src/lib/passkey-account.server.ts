@@ -1,6 +1,6 @@
 import { getRequestHeader } from '@tanstack/react-start/server'
 
-import { requiresAccountReauthentication } from './account-reauth'
+import { PASSKEY_MANAGEMENT_CONTINUATION, requiresAccountReauthentication } from './account-reauth'
 import { GraphqlRequestError, identityGraphql } from './graphql.server'
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
@@ -49,7 +49,7 @@ export async function passkeyAccountAction(input: {
     if (error instanceof GraphqlRequestError && requiresAccountReauthentication(error)) {
       const account = await identityGraphql<{ viewer: { account: { username: string } } }>('query { viewer { account { username } } }')
       if (!account) return { error: translate(locale, 'accountAuthenticationRequired') }
-      const response = await startReauthorization('/account/security', 'account', {
+      const response = await startReauthorization(PASSKEY_MANAGEMENT_CONTINUATION, 'account', {
         loginHint: account.viewer.account.username,
         acrValues: error.challenge?.acrValues ?? 'aal1',
         maxAge: error.challenge?.maxAge,
