@@ -131,7 +131,9 @@ jobs:
         working-directory: conformance
         env:
           CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
-        run: uv run python ci_ready.py
+        run: |
+          set -o pipefail
+          uv run python ci_ready.py 2>&1 | tee results/readiness.log
 
       - name: Run official hosted OpenID Foundation test plan
         env:
