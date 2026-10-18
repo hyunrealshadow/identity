@@ -181,6 +181,10 @@ environment uses `config/conformance.yaml` with two fixed test accounts:
 Each protocol profile also has two ordinary Basic-authenticated clients and a
 separate `client_secret_post` client. `client2` must not reuse the POST-only
 client: the refresh-token module authenticates its second client using Basic.
+The Backchannel Logout plan uses a separate client (`00000010-0000-0000-0000-000000000001`)
+with only a backchannel notification URI. Ordinary clients used by RP-Initiated
+Logout and Session Management do not register notification endpoints those plans
+do not serve. Initialization also corrects these fields in existing test databases.
 
 Both accounts have stable, distinct user and credential OIDs. Initialization is
 idempotent and adds the second account to an existing single-account database.

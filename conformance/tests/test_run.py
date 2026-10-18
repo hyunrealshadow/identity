@@ -224,10 +224,10 @@ class PlanFileTests(unittest.TestCase):
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",
         )
-        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(plan["client"]["client_id"], "00000010-0000-0000-0000-000000000001")
         self.assertEqual(
             plan["client"]["client_secret"],
-            "conformance-basic-secret-at-least-32-bytes",
+            "conformance-backchannel-secret",
         )
 
     def test_third_party_init_plan_exists_with_expected_defaults(self):

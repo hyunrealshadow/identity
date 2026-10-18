@@ -157,8 +157,8 @@ PLANS = {
         "description": "Identity server Back-Channel Logout OP conformance",
         "server": {"discoveryUrl": DISCOVERY_URL},
         "client": {
-            "client_id": "00000001-0000-0000-0000-000000000001",
-            "client_secret": "conformance-basic-secret-at-least-32-bytes",
+            "client_id": "00000010-0000-0000-0000-000000000001",
+            "client_secret": "conformance-backchannel-secret",
         },
     },
 }

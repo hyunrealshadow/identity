@@ -24,6 +24,7 @@ class BrowserAuthHandler:
         self.browser_storage_state: dict | None = None
         self.login_prompt_screenshot: str | None = None
         self.error_page_screenshot: str | None = None
+        self.logout_page_screenshot: str | None = None
         self.account_index = 0
         self.artifacts_dir = os.environ.get("CONFORMANCE_BROWSER_ARTIFACTS_DIR")
 
@@ -32,6 +33,7 @@ class BrowserAuthHandler:
         self.browser_storage_state = None
         self.login_prompt_screenshot = None
         self.error_page_screenshot = None
+        self.logout_page_screenshot = None
         self.account_index = 0
 
     def _observe_authorization(self, request) -> None:
@@ -192,6 +194,7 @@ class BrowserAuthHandler:
                 # authorization that happened to display a password prompt.
                 self.login_prompt_screenshot = None
                 self.error_page_screenshot = None
+                self.logout_page_screenshot = None
                 browser = p.chromium.launch(headless=True, args=self._chromium_launch_args())
                 context_args = {"ignore_https_errors": True}
                 if self.browser_storage_state:
@@ -248,12 +251,24 @@ class BrowserAuthHandler:
                     }
                 ):
                     self.error_page_screenshot = self.last_screenshot
+                if (
+                    final_response is not None
+                    and final_response.status == 200
+                    and urlparse(local_url).path == "/oauth2/logout"
+                    and final_url.path == "/oauth2/logout"
+                    and (final_url.scheme, final_url.netloc) in {
+                        (identity_origin.scheme, identity_origin.netloc),
+                        ("https", "identity:5150"),
+                    }
+                ):
+                    self.logout_page_screenshot = self.last_screenshot
                 self.browser_storage_state = context.storage_state()
                 browser.close()
                 return True
         except Exception as exc:
             self.login_prompt_screenshot = None
             self.error_page_screenshot = None
+            self.logout_page_screenshot = None
             print(f"    [debug] browser auth failed: {exc}")
             return False
 
@@ -308,6 +323,14 @@ class BrowserAuthHandler:
         source = requirement.get("src")
         if source in {"ExpectLoginPage", "ExpectSecondLoginPage"}:
             return self.login_prompt_screenshot
-        if source in {"ExpectRedirectUriErrorPage", "ExpectRequestMissingNonceErrorPage"}:
+        if source == "ExpectSuccessfulLogoutPage":
+            return self.logout_page_screenshot
+        if source in {
+            "ExpectRedirectUriErrorPage",
+            "ExpectRequestMissingNonceErrorPage",
+            "ExpectPostLogoutRedirectUriNotRegisteredErrorPage",
+            "ExpectInvalidIdTokenHintErrorPage",
+            "ExpectIdTokenHintRequiredErrorPage",
+        }:
             return self.error_page_screenshot
         return None

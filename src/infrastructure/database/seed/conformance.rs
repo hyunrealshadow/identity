@@ -3,9 +3,9 @@
 //! Creates two fixed test users and OIDC clients that the OpenID Conformance
 //! Test Suite expects.  This module is only called when `APP_ENV=conformance`.
 //!
-//! All operations are idempotent: rows are inserted only when the fixed OIDs
-//! are not already present, so re-starting a container with an existing volume
-//! is safe.
+//! Fixed identities and credentials are inserted only when absent. Logout
+//! callback metadata is reconciled on restart so older test volumes receive
+//! corrected fixture settings too.
 
 use std::env;
 
@@ -76,6 +76,7 @@ const HYBRID_CLIENT_OID: &str = "00000005-0000-0000-0000-000000000001";
 const HYBRID_CLIENT_CRED_OID: &str = "00000005-0000-0000-0000-000000000002";
 const HYBRID_CLIENT_POST_OID: &str = "00000006-0000-0000-0000-000000000001";
 const HYBRID_CLIENT_POST_CRED_OID: &str = "00000006-0000-0000-0000-000000000002";
+const BACKCHANNEL_CLIENT_OID: &str = "00000010-0000-0000-0000-000000000001";
 
 /// Legacy public constant for the default Basic conformance client OID.
 pub const CONFORMANCE_CLIENT_OID: &str = BASIC_CLIENT_OID;
@@ -350,6 +351,15 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
                 ResponseType::CodeTokenIdToken,
             ],
         },
+        ConformanceClientSpec {
+            oid: BACKCHANNEL_CLIENT_OID,
+            credential_oid: "00000010-0000-0000-0000-000000000002",
+            name: "OpenID Conformance Suite (Backchannel logout)",
+            secret: "conformance-backchannel-secret",
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
+            response_types: &[ResponseType::Code],
+        },
     ]
 }
 
@@ -410,14 +420,34 @@ async fn ensure_conformance_oidc_metadata(
 ) -> Result<(), AppError> {
     let values = conformance_oidc_metadata_values(spec);
 
-    let exists = client_openid_connect::Entity::find()
+    let existing = client_openid_connect::Entity::find()
         .filter(client_openid_connect::Column::ClientId.eq(client_id))
         .one(db)
         .await
-        .map_err(AppError::internal)?
-        .is_some();
+        .map_err(AppError::internal)?;
 
-    if exists {
+    if let Some(existing) = existing {
+        // Repair older conformance volumes too, without replacing credentials
+        // or unrelated client settings.
+        if existing.post_logout_redirect_uris != values.post_logout_redirect_uris
+            || existing.frontchannel_logout_uri != values.frontchannel_logout_uri
+            || existing.frontchannel_logout_session_required
+                != values.frontchannel_logout_session_required
+            || existing.backchannel_logout_uri != values.backchannel_logout_uri
+            || existing.backchannel_logout_session_required
+                != values.backchannel_logout_session_required
+        {
+            let mut active: client_openid_connect::ActiveModel = existing.into();
+            active.post_logout_redirect_uris = Set(values.post_logout_redirect_uris);
+            active.frontchannel_logout_uri = Set(values.frontchannel_logout_uri);
+            active.frontchannel_logout_session_required =
+                Set(values.frontchannel_logout_session_required);
+            active.backchannel_logout_uri = Set(values.backchannel_logout_uri);
+            active.backchannel_logout_session_required =
+                Set(values.backchannel_logout_session_required);
+            active.updated_at = Set(Some(now.into()));
+            active.update(db).await.map_err(AppError::internal)?;
+        }
         return Ok(());
     }
 
@@ -454,10 +484,13 @@ fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> Conformance
         response_types: json!(spec.response_types),
         token_endpoint_auth_methods: Some(json!([spec.token_endpoint_auth_method.to_string()])),
         post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
-        frontchannel_logout_uri: Some(conformance_frontchannel_logout_uri()),
-        frontchannel_logout_session_required: Some(true),
-        backchannel_logout_uri: Some(conformance_backchannel_logout_uri()),
-        backchannel_logout_session_required: Some(true),
+        // These certification plans do not serve a frontchannel notification
+        // endpoint. Only the dedicated backchannel client registers a callback.
+        frontchannel_logout_uri: None,
+        frontchannel_logout_session_required: None,
+        backchannel_logout_uri: (spec.oid == BACKCHANNEL_CLIENT_OID)
+            .then(conformance_backchannel_logout_uri),
+        backchannel_logout_session_required: (spec.oid == BACKCHANNEL_CLIENT_OID).then_some(true),
         settings: conformance_client_settings(),
     }
 }
@@ -570,12 +603,6 @@ fn conformance_post_logout_redirect_uris() -> Value {
             "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/post_logout_redirect"
         )
     ])
-}
-
-fn conformance_frontchannel_logout_uri() -> String {
-    conformance_suite_uri(
-        "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout",
-    )
 }
 
 fn conformance_backchannel_logout_uri() -> String {
@@ -797,21 +824,25 @@ mod tests {
     }
 
     #[test]
-    fn conformance_oidc_metadata_values_include_frontchannel_logout_metadata() {
-        let values = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
-
-        assert_eq!(
-            values.frontchannel_logout_uri.as_deref(),
-            Some(
-                "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout"
-            )
-        );
-        assert_eq!(values.frontchannel_logout_session_required, Some(true));
+    fn only_backchannel_client_registers_logout_notifications() {
+        for spec in conformance_client_specs() {
+            let values = conformance_oidc_metadata_values(spec);
+            assert_eq!(values.frontchannel_logout_uri, None);
+            assert_eq!(values.frontchannel_logout_session_required, None);
+            if spec.oid != super::BACKCHANNEL_CLIENT_OID {
+                assert_eq!(values.backchannel_logout_uri, None);
+                assert_eq!(values.backchannel_logout_session_required, None);
+            }
+        }
     }
 
     #[test]
     fn conformance_oidc_metadata_values_include_backchannel_logout_metadata() {
-        let values = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
+        let spec = conformance_client_specs()
+            .iter()
+            .find(|spec| spec.oid == super::BACKCHANNEL_CLIENT_OID)
+            .unwrap();
+        let values = conformance_oidc_metadata_values(spec);
 
         assert_eq!(
             values.backchannel_logout_uri.as_deref(),

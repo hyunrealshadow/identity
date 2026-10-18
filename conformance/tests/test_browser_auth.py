@@ -12,6 +12,30 @@ from scripts.browser_auth import BrowserAuthHandler
 
 
 class BrowserAuthHandlerTests(unittest.TestCase):
+    def test_unregistered_post_logout_redirect_requires_the_actual_op_error(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        handler.last_screenshot = "logout-callback"
+        handler.login_prompt_screenshot = "login-form"
+        for source in ("ExpectPostLogoutRedirectUriNotRegisteredErrorPage", "ExpectInvalidIdTokenHintErrorPage", "ExpectIdTokenHintRequiredErrorPage"):
+            requirement = {"src": source}
+            self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+            handler.error_page_screenshot = "op-logout-error"
+            self.assertEqual(handler.screenshot_for_upload([], requirement=requirement), "op-logout-error")
+            handler.reset_session()
+            self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+
+    def test_successful_logout_evidence_cannot_use_a_login_error_or_callback(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        handler.last_screenshot = "rp-callback"
+        handler.login_prompt_screenshot = "password-prompt"
+        handler.error_page_screenshot = "op-error"
+        requirement = {"src": "ExpectSuccessfulLogoutPage"}
+        self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+        handler.logout_page_screenshot = "op-successful-logout"
+        self.assertEqual(handler.screenshot_for_upload([], requirement=requirement), "op-successful-logout")
+        handler.reset_session()
+        self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+
     def test_missing_nonce_requirement_uses_only_the_observed_op_error_page(self):
         handler = BrowserAuthHandler("https://issuer.example.com")
         requirement = {"src": "ExpectRequestMissingNonceErrorPage"}
