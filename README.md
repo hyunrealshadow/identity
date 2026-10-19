@@ -1,5 +1,7 @@
 # Identity
 
+[![OIDC conformance test](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fhyunrealshadow%2Fidentity%2Factions%2Fworkflows%2Foidc-conformance.yml%2Fruns%3Fbranch%3Dmain%26per_page%3D1&query=%24.workflow_runs%5B0%5D%5B%27status%27%2C%27conclusion%27%5D.%40string%28%29&label=OIDC%20conformance%20test&logo=github&color=blue)](https://github.com/hyunrealshadow/identity/actions/workflows/oidc-conformance.yml?query=branch%3Amain)
+
 Identity is an OAuth 2.0 authorization server and OpenID Connect Provider built
 with Rust, Salvo, and PostgreSQL. A separate React/TanStack Start application
 provides installation, sign-in, consent, device verification, and account
@@ -509,3 +511,9 @@ Runner outcomes include warnings, skips, and review results. Inspect the
 profile results before describing a deployment as conformant.
 See [conformance/README.md](conformance/README.md) for runner options and
 environment variables.
+
+## License
+
+Copyright 2026 UnrealShadow.
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
