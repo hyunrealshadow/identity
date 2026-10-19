@@ -1,4 +1,4 @@
-name: OIDC conformance through Cloudflare Tunnel
+name: OIDC conformance test
 
 on:
   workflow_dispatch:
@@ -139,6 +139,12 @@ jobs:
             --timeout 120 --exit-on-failure --results-dir results \
             2>&1 | tee conformance/results/runner.log
 
+      - name: Publish official plan results
+        if: always()
+        env:
+          CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
+        run: python conformance/ci_publish.py
+
       - name: Collect service logs and summary
         if: always()
         run: |
@@ -202,11 +208,13 @@ jobs:
               reports[report['profile']] = report
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
               output.write('All plan jobs: **' + os.environ['PLAN_JOBS_RESULT'] + '**\n\n')
-              output.write('| Plan | Status | Passed | Failed | UI review |\n|---|---|---:|---:|---:|\n')
+              output.write('| Plan | Status | Passed | Failed | UI review | Official results |\n|---|---|---:|---:|---:|---|\n')
               for profile in json.loads(os.environ['PROFILES']):
                   report = reports.get(profile)
                   if report is None:
-                      output.write(f'| {profile} | NO_REPORT | — | — | — |\n')
+                      plan_url = Path('reports') / f"oidc-conformance-{profile}-{os.environ['GITHUB_RUN_ID']}" / 'plan-url.txt'
+                      link = f'[Plan]({plan_url.read_text().strip()})' if plan_url.exists() else '—'
+                      output.write(f'| {profile} | NO_REPORT | — | — | — | {link} |\n')
                       continue
                   counts = report['summary']
                   results = report['results']
@@ -214,5 +222,5 @@ jobs:
                   incomplete = (not results or len(results) != expected
                                 or any(r['status'] != 'FINISHED' for r in results))
                   status = 'INCOMPLETE' if incomplete else ('FAILED' if counts['FAILED'] else 'COMPLETED')
-                  output.write(f"| {profile} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('MANUAL_REVIEW_REQUIRED', 0)} |\n")
+                  output.write(f"| {profile} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('MANUAL_REVIEW_REQUIRED', 0)} | [Plan]({report['plan_url']}) |\n")
           PY

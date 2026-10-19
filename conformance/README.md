@@ -129,7 +129,13 @@ Login uses the standard authenticated internal API, session and CSRF transports.
 The generated identity TLS material is shared read-only with Login for this
 disposable environment; Login trusts that certificate for its private API calls.
 
-Job summaries and `plan-url.txt` artifacts link to the official plan. Plans remain
+After each plan run, CI publishes everything through the official suite API,
+including failed or interrupted plans when a plan ID was saved. Publication errors
+fail the job; no plan is published if creation never completed. This makes test
+configuration, keys, secrets and logs public, so this workflow uses only disposable
+environments and dedicated test credentials. Publication does not request certification.
+Job summaries and `plan-url.txt` artifacts link to the public official plan after
+successful publication. Plans remain
 on the official platform after the runner removes its environment. The temporary
 issuer stops serving when cleanup closes the tunnel, so those plans cannot be
 rerun against that issuer after the job ends. Quick Tunnels have no uptime guarantee.
