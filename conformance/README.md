@@ -37,6 +37,8 @@ Use `--exit-on-failure` to exit 1 on any non-passing results.
 uv run python run.py                           # Start Docker, run all tests
 uv run python run.py --profile implicit        # Run the Implicit OP certification plan
 uv run python run.py --profile hybrid          # Run the Hybrid OP certification plan
+uv run python run.py --profile dynamic         # Run Dynamic OP with suite-registered clients
+uv run python run.py --profile frontchannel    # Run the Front-Channel Logout OP plan
 uv run python run.py --profile third-party-init # Run the 3rd Party-Init OP plan
 uv run python run.py --no-docker               # Services already running
 uv run python run.py --plan-id <ID>            # Run on existing plan
@@ -69,7 +71,7 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 | `CONFORMANCE_SUITE_URL` | Local suite origin | Seeded callback/logout origin inside identity |
 | `LOGIN_URL` | `https://localhost:3000` | Standard Login application origin; CI allocates a separate Quick Tunnel |
 | `IDENTITY_URL` | `https://localhost:5150` for browser, `https://identity:5150` for suite discovery | When set, supplies both origins; `--discovery-origin` overrides the suite origin independently |
-| `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `third-party-init`, `rp-init-logout`, `session`, or `backchannel`) |
+| `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `third-party-init`, `rp-init-logout`, `session`, `backchannel`, `dynamic`, or `frontchannel`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
 | `PLAN_NAME` | Derived from `PROFILE` | Conformance suite plan name |
 | `TIMEOUT` | `60` | Timeout per test (seconds) |
@@ -78,7 +80,7 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 
 ### GitHub Actions through Cloudflare Quick Tunnel
 
-The `OIDC conformance through Cloudflare Tunnel` workflow is manually triggered
+The `OIDC conformance test` workflow is manually triggered
 and connects to the **hosted** suite at https://www.certification.openid.net.
 It starts PostgreSQL, identity, the standard Login application and two Quick Tunnels on the runner;
 the suite itself and its database run on the official platform.
@@ -100,8 +102,9 @@ with other accounts, plans and runs. Seeded client callback and logout URLs use
 that alias and the official suite origin. Hosted API HTTPS certificates are verified.
 
 Every configured OP plan runs: Basic, Implicit, Hybrid, Config, three Form Post
-plans, Third Party Initiated Login, RP Initiated Logout, Session Management and
-Backchannel Logout (11 plans). Jobs run one at a time to limit load on the hosted
+plans, Third Party Initiated Login, RP Initiated Logout, Session Management,
+Backchannel Logout, Dynamic OP and Front-Channel Logout (13 plans, with the new
+Dynamic and Front-Channel plans using `response_type=code`). Jobs run one at a time to limit load on the hosted
 service, and a failed plan does not cancel the remaining jobs. Each has its own
 runner, database, keys, browser sessions, tunnels and report. A preparation job
 validates the API token and builds the identity, Login and Python test runner images once,
@@ -161,6 +164,8 @@ and separately replayed requests are never uploaded as login prompt evidence.
 Redirect URI error evidence is captured only from an actual OP error response
 in that interaction. The suite's evidence source selects the screenshot type;
 login and error-page screenshots cannot substitute for each other.
+Dynamic registration's Logo, privacy-policy and terms-of-service checks use the
+actual login page, which displays the requesting client's registered public metadata.
 If the suite asks for UI evidence that was not observed, the harness records
 `MANUAL_REVIEW_REQUIRED` and stops the plan. Completed `REVIEW` results still
 require human assessment for certification.
@@ -190,7 +195,10 @@ Each protocol profile also has two ordinary Basic-authenticated clients and a
 separate `client_secret_post` client. `client2` must not reuse the POST-only
 client: the refresh-token module authenticates its second client using Basic.
 The Backchannel Logout plan uses a separate client (`00000010-0000-0000-0000-000000000001`)
-with only a backchannel notification URI. Ordinary clients used by RP-Initiated
+with only a backchannel notification URI. Front-Channel Logout uses its own client
+(`00000011-0000-0000-0000-000000000001`) with only a frontchannel notification URI.
+Dynamic OP lets the suite register its own clients instead of using seed credentials.
+Ordinary clients used by RP-Initiated
 Logout and Session Management do not register notification endpoints those plans
 do not serve. Initialization also corrects these fields in existing test databases.
 

@@ -178,14 +178,9 @@ async fn oauth_code_with_one_registered_redirect_may_omit_authorization_redirect
 
     let mut oidc_request = params("openid profile");
     oidc_request.redirect_uri.clear();
-    assert_eq!(
-        service
-            .validate_request(oidc_request)
-            .await
-            .unwrap_err()
-            .code(),
-        23013
-    );
+    let error = service.validate_request(oidc_request).await.unwrap_err();
+    assert_eq!(error.code(), 23013);
+    assert_eq!(error.params().get("fields"), Some("redirect_uri"));
 }
 
 #[tokio::test]

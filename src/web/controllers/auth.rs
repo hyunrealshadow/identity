@@ -32,9 +32,9 @@ use crate::{
     middleware::resolved_client_ip,
     views::auth::{
         AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse,
-        IdentifierRequest, IdentifierResponse, LoginStatusResponse, RestartLoginRequest,
-        RestartLoginResponse, SelectAccountRequest, SelectAccountResponse, SessionInfo,
-        SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
+        IdentifierRequest, IdentifierResponse, LoginClientDisplay, LoginStatusResponse,
+        RestartLoginRequest, RestartLoginResponse, SelectAccountRequest, SelectAccountResponse,
+        SessionInfo, SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
     },
 };
 
@@ -124,7 +124,7 @@ async fn login_status(
         None => (None, Vec::new(), Default::default()),
     };
 
-    let (prompt, requires_reauthentication, login_hint, ui_locales) = match ctx
+    let (prompt, requires_reauthentication, login_hint, ui_locales, client) = match ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&id)
@@ -138,10 +138,32 @@ async fn login_status(
             c.stored.interaction.selection_source == Some(SelectionSource::Reauthentication),
             c.stored.request.login_hint,
             c.stored.request.ui_locales,
+            Some(LoginClientDisplay {
+                name: c.client.client().name.clone(),
+                logo_uri: c
+                    .client
+                    .metadata()
+                    .logo_uri
+                    .as_ref()
+                    .map(ToString::to_string),
+                policy_uri: c
+                    .client
+                    .metadata()
+                    .policy_uri
+                    .as_ref()
+                    .map(ToString::to_string),
+                tos_uri: c
+                    .client
+                    .metadata()
+                    .tos_uri
+                    .as_ref()
+                    .map(ToString::to_string),
+            }),
         ),
         Err(_) => (
             [PromptValue::SelectAccount].into_iter().collect(),
             false,
+            None,
             None,
             None,
         ),
@@ -187,6 +209,7 @@ async fn login_status(
         res,
         StatusCode::OK,
         LoginStatusResponse {
+            client,
             id,
             status: login.status,
             user,

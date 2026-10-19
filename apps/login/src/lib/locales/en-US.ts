@@ -1,4 +1,6 @@
 const enUS = {
+  clientPrivacyPolicy: 'Privacy policy',
+  clientTermsOfService: 'Terms of service',
   mfaLastMethodRecoveryWarning: 'Removing your last verification method also invalidates all recovery codes',
   mfaPriority: "Preferred verification method",
   mfaPriorityDescription: "Choose your preferred sign-in method",

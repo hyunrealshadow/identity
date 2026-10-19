@@ -126,7 +126,17 @@ pub struct IdentifierResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct LoginClientDisplay {
+    pub name: String,
+    pub logo_uri: Option<String>,
+    pub policy_uri: Option<String>,
+    pub tos_uri: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct LoginStatusResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<LoginClientDisplay>,
     /// Encrypted login.oid.
     pub id: String,
     pub status: LoginStatus,

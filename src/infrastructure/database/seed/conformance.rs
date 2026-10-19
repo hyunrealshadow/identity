@@ -77,6 +77,7 @@ const HYBRID_CLIENT_CRED_OID: &str = "00000005-0000-0000-0000-000000000002";
 const HYBRID_CLIENT_POST_OID: &str = "00000006-0000-0000-0000-000000000001";
 const HYBRID_CLIENT_POST_CRED_OID: &str = "00000006-0000-0000-0000-000000000002";
 const BACKCHANNEL_CLIENT_OID: &str = "00000010-0000-0000-0000-000000000001";
+const FRONTCHANNEL_CLIENT_OID: &str = "00000011-0000-0000-0000-000000000001";
 
 /// Legacy public constant for the default Basic conformance client OID.
 pub const CONFORMANCE_CLIENT_OID: &str = BASIC_CLIENT_OID;
@@ -360,6 +361,15 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
             response_types: &[ResponseType::Code],
         },
+        ConformanceClientSpec {
+            oid: FRONTCHANNEL_CLIENT_OID,
+            credential_oid: "00000011-0000-0000-0000-000000000002",
+            name: "OpenID Conformance Suite (Frontchannel logout)",
+            secret: "conformance-frontchannel-secret",
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
+            response_types: &[ResponseType::Code],
+        },
     ]
 }
 
@@ -484,10 +494,10 @@ fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> Conformance
         response_types: json!(spec.response_types),
         token_endpoint_auth_methods: Some(json!([spec.token_endpoint_auth_method.to_string()])),
         post_logout_redirect_uris: Some(conformance_post_logout_redirect_uris()),
-        // These certification plans do not serve a frontchannel notification
-        // endpoint. Only the dedicated backchannel client registers a callback.
-        frontchannel_logout_uri: None,
-        frontchannel_logout_session_required: None,
+        // Only the dedicated logout clients register notification endpoints.
+        frontchannel_logout_uri: (spec.oid == FRONTCHANNEL_CLIENT_OID)
+            .then(conformance_frontchannel_logout_uri),
+        frontchannel_logout_session_required: (spec.oid == FRONTCHANNEL_CLIENT_OID).then_some(true),
         backchannel_logout_uri: (spec.oid == BACKCHANNEL_CLIENT_OID)
             .then(conformance_backchannel_logout_uri),
         backchannel_logout_session_required: (spec.oid == BACKCHANNEL_CLIENT_OID).then_some(true),
@@ -594,6 +604,9 @@ fn conformance_redirect_uris() -> Value {
 fn conformance_post_logout_redirect_uris() -> Value {
     json!([
         conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/post_logout_redirect"
+        ),
+        conformance_suite_uri(
             "https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
         ),
         conformance_suite_uri(
@@ -603,6 +616,12 @@ fn conformance_post_logout_redirect_uris() -> Value {
             "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/post_logout_redirect"
         )
     ])
+}
+
+fn conformance_frontchannel_logout_uri() -> String {
+    conformance_suite_uri(
+        "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout",
+    )
 }
 
 fn conformance_backchannel_logout_uri() -> String {
@@ -824,11 +843,13 @@ mod tests {
     }
 
     #[test]
-    fn only_backchannel_client_registers_logout_notifications() {
+    fn only_dedicated_clients_register_logout_notifications() {
         for spec in conformance_client_specs() {
             let values = conformance_oidc_metadata_values(spec);
-            assert_eq!(values.frontchannel_logout_uri, None);
-            assert_eq!(values.frontchannel_logout_session_required, None);
+            if spec.oid != super::FRONTCHANNEL_CLIENT_OID {
+                assert_eq!(values.frontchannel_logout_uri, None);
+                assert_eq!(values.frontchannel_logout_session_required, None);
+            }
             if spec.oid != super::BACKCHANNEL_CLIENT_OID {
                 assert_eq!(values.backchannel_logout_uri, None);
                 assert_eq!(values.backchannel_logout_session_required, None);
@@ -851,5 +872,24 @@ mod tests {
             )
         );
         assert_eq!(values.backchannel_logout_session_required, Some(true));
+    }
+
+    #[test]
+    fn frontchannel_client_registers_its_own_notification_endpoint() {
+        let spec = conformance_client_specs()
+            .iter()
+            .find(|spec| spec.oid == super::FRONTCHANNEL_CLIENT_OID)
+            .unwrap();
+        let values = conformance_oidc_metadata_values(spec);
+        assert_eq!(
+            values.frontchannel_logout_uri.as_deref(),
+            Some(
+                "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout"
+            )
+        );
+        assert_eq!(values.frontchannel_logout_session_required, Some(true));
+        assert!(conformance_post_logout_redirect_uris().as_array().unwrap().contains(
+            &serde_json::json!("https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/post_logout_redirect")
+        ));
     }
 }

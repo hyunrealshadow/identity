@@ -1,6 +1,8 @@
 import type enUS from './en-US'
 
 const zhCN = {
+  clientPrivacyPolicy: '隐私政策',
+  clientTermsOfService: '服务条款',
   mfaLastMethodRecoveryWarning: '删除最后一种验证方式时，所有恢复码也会失效',
   mfaPriority: "优先验证方式",
   mfaPriorityDescription: "选择登录时优先使用的验证方式",

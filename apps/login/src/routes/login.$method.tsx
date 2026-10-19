@@ -15,6 +15,7 @@ import { LoginMethodAlternatives } from '#/components/login-method-alternatives'
 import { PasskeyLogin } from '#/components/passkey-login'
 import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
+import { LoginClient } from '#/components/login-client'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput, TotpInput } from '#/components/totp-input'
@@ -235,6 +236,7 @@ function ChallengePage() {
           : t('passwordDescription')
       }
     >
+      <LoginClient client={data.status?.client} locale={data.locale} />
       {user ? (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface-secondary p-3">
           <AccountAvatar name={user.name} picture={user.picture} />

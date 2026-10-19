@@ -40,7 +40,15 @@ export interface UserDisplayInfo {
   picture?: string
 }
 
+export interface LoginClientDisplay {
+  name: string
+  logo_uri?: string | null
+  policy_uri?: string | null
+  tos_uri?: string | null
+}
+
 export interface LoginStatusResponse {
+  client?: LoginClientDisplay
   id: string
   status: string
   user?: UserDisplayInfo

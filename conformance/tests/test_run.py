@@ -46,6 +46,32 @@ class PlanVariantTests(unittest.TestCase):
             {"response_type": "code"},
         )
 
+    def test_dynamic_profile_uses_official_dynamic_plan_and_no_static_credentials(self):
+        self.assertEqual(
+            run.default_plan_name_for_profile("dynamic"),
+            "oidcc-dynamic-certification-test-plan",
+        )
+        self.assertEqual(run.plan_variant_for_profile("dynamic"), {"response_type": "code"})
+        self.assertNotIn("client", get_plan("dynamic"))
+
+    def test_frontchannel_profile_uses_dedicated_client_and_logout_variant(self):
+        self.assertEqual(
+            run.default_plan_name_for_profile("frontchannel"),
+            "oidcc-frontchannel-rp-initiated-logout-certification-test-plan",
+        )
+        self.assertEqual(
+            run.plan_variant_for_profile("frontchannel"),
+            {"client_registration": "static_client", "response_type": "code"},
+        )
+        self.assertEqual(
+            get_plan("frontchannel")["client"]["client_id"],
+            "00000011-0000-0000-0000-000000000001",
+        )
+        self.assertNotEqual(
+            get_plan("frontchannel")["client"]["client_id"],
+            get_plan("backchannel")["client"]["client_id"],
+        )
+
     def test_formpost_implicit_profile_uses_default_variant(self):
         self.assertEqual(
             run.plan_variant_for_profile("formpost-implicit"),

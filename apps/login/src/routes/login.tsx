@@ -17,6 +17,7 @@ import { useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
+import { LoginClient } from '#/components/login-client'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
 import { beginAuthorization } from '#/lib/authorization-flow'
@@ -77,6 +78,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         formValues: flash?.values ?? {},
         loginHint: undefined,
         challengeUri: undefined,
+        client: undefined,
       }
     }
 
@@ -102,6 +104,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         formValues: flash?.values ?? {},
         loginHint: status.login_hint,
         challengeUri: status.challenge_uri,
+        client: status.client,
       }
     } catch (error) {
       const locale = requestLocale()
@@ -116,6 +119,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         formValues: flash?.values ?? {},
         loginHint: undefined,
         challengeUri: undefined,
+        client: undefined,
       }
     }
   })
@@ -261,6 +265,7 @@ function LoginPage() {
           : t('signInDescription')
       }
     >
+      <LoginClient client={data.client} locale={data.locale} />
       {visibleError ? <ErrorAlert message={visibleError} title={t('unableToContinue')} /> : null}
 
       {showAccounts ? (

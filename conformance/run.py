@@ -11,7 +11,7 @@ Usage:
 Environment variables:
     SUITE_URL        - Conformance suite URL (default: https://localhost.emobix.co.uk:8443)
     IDENTITY_URL     - Identity server URL (default: https://localhost:5150)
-    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, formpost-hybrid, third-party-init, rp-init-logout, session, or backchannel (default: basic)
+    PROFILE          - Profile to create: basic, implicit, hybrid, config, formpost-basic, formpost-implicit, formpost-hybrid, third-party-init, rp-init-logout, session, backchannel, dynamic, or frontchannel (default: basic)
     CONFIG_PATH      - Config file path (default: conformance/plans/<profile>.json)
     PLAN_NAME        - Conformance suite plan name (default derived from PROFILE)
     TIMEOUT          - Timeout per test in seconds (default: 60)
@@ -48,6 +48,7 @@ DYNAMIC_CERTIFICATION_PLAN_NAME = "oidcc-dynamic-certification-test-plan"
 THIRD_PARTY_INIT_PLAN_NAME = "oidcc-3rdparty-init-login-certification-test-plan"
 
 SUPPORTED_PROFILES = (
+    "dynamic",
     "basic",
     "implicit",
     "hybrid",
@@ -59,9 +60,11 @@ SUPPORTED_PROFILES = (
     "rp-init-logout",
     "session",
     "backchannel",
+    "frontchannel",
 )
 
 PLAN_NAMES = {
+    "dynamic": DYNAMIC_CERTIFICATION_PLAN_NAME,
     "basic": "oidcc-basic-certification-test-plan",
     "implicit": "oidcc-implicit-certification-test-plan",
     "hybrid": "oidcc-hybrid-certification-test-plan",
@@ -73,6 +76,7 @@ PLAN_NAMES = {
     "rp-init-logout": "oidcc-rp-initiated-logout-certification-test-plan",
     "session": "oidcc-session-management-certification-test-plan",
     "backchannel": "oidcc-backchannel-rp-initiated-logout-certification-test-plan",
+    "frontchannel": "oidcc-frontchannel-rp-initiated-logout-certification-test-plan",
 }
 
 
@@ -82,13 +86,13 @@ def default_plan_name_for_profile(profile: str):
 
 def plan_variant_for_profile(profile: str, plan_name: str | None = None):
     client_registration = os.environ.get("CLIENT_REGISTRATION", "static_client")
-    if plan_name == DYNAMIC_CERTIFICATION_PLAN_NAME:
+    if profile == "dynamic" or plan_name == DYNAMIC_CERTIFICATION_PLAN_NAME:
         return {"response_type": "code"}
     if profile == "third-party-init":
         return {"response_type": "code id_token"}
     if profile == "config":
         return None
-    if profile in ("rp-init-logout", "session", "backchannel"):
+    if profile in ("rp-init-logout", "session", "backchannel", "frontchannel"):
         return {
             "client_registration": client_registration,
             "response_type": "code",

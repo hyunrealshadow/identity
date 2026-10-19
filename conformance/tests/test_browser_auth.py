@@ -12,6 +12,31 @@ from scripts.browser_auth import BrowserAuthHandler
 
 
 class BrowserAuthHandlerTests(unittest.TestCase):
+    def test_registration_metadata_evidence_requires_this_interactions_login_page(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        handler.last_screenshot = "callback"
+        for source in ("ExpectLoginPageWithLogo", "ExpectLoginPageWithPolicyLink", "ExpectLoginPageWithTosLink"):
+            with self.subTest(source=source):
+                handler.reset_session()
+                self.assertIsNone(handler.screenshot_for_upload([], requirement={"src": source}))
+                handler.login_prompt_screenshot = "observed-login-with-metadata"
+                self.assertEqual(handler.screenshot_for_upload([], requirement={"src": source}),
+                                 "observed-login-with-metadata")
+
+    def test_missing_redirect_uri_requires_the_actual_op_error(self):
+        handler = BrowserAuthHandler("https://issuer.example.com")
+        requirement = {"src": "ExpectRedirectUriMissingErrorPage"}
+        handler.last_screenshot = "callback"
+        handler.login_prompt_screenshot = "password-form"
+        self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+        handler.error_page_screenshot = "missing-redirect-uri-error"
+        self.assertEqual(
+            handler.screenshot_for_upload([], requirement=requirement),
+            "missing-redirect-uri-error",
+        )
+        handler.reset_session()
+        self.assertIsNone(handler.screenshot_for_upload([], requirement=requirement))
+
     def test_unregistered_post_logout_redirect_requires_the_actual_op_error(self):
         handler = BrowserAuthHandler("https://issuer.example.com")
         handler.last_screenshot = "logout-callback"

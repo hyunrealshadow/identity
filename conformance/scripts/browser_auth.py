@@ -321,12 +321,16 @@ class BrowserAuthHandler:
         if requirement is None:
             return self.login_prompt_screenshot
         source = requirement.get("src")
-        if source in {"ExpectLoginPage", "ExpectSecondLoginPage"}:
+        if source in {
+            "ExpectLoginPage", "ExpectSecondLoginPage", "ExpectLoginPageWithLogo",
+            "ExpectLoginPageWithPolicyLink", "ExpectLoginPageWithTosLink",
+        }:
             return self.login_prompt_screenshot
         if source == "ExpectSuccessfulLogoutPage":
             return self.logout_page_screenshot
         if source in {
             "ExpectRedirectUriErrorPage",
+            "ExpectRedirectUriMissingErrorPage",
             "ExpectRequestMissingNonceErrorPage",
             "ExpectPostLogoutRedirectUriNotRegisteredErrorPage",
             "ExpectInvalidIdTokenHintErrorPage",

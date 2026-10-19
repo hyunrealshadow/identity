@@ -498,7 +498,7 @@ uv run python run.py --profile basic --exit-on-failure
 
 Available profiles: `basic`, `implicit`, `hybrid`, `config`,
 `formpost-basic`, `formpost-implicit`, `formpost-hybrid`,
-`third-party-init`, `rp-init-logout`, `session`, and `backchannel`.
+`third-party-init`, `rp-init-logout`, `session`, `backchannel`, `dynamic`, and `frontchannel`.
 
 The harness image enables `oidc-conformance` and `allow-none-alg`.
 For a manually started conformance server, set `APP_ENV=conformance` and

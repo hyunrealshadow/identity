@@ -151,7 +151,7 @@ impl AuthorizeService {
         if params.redirect_uri.trim().is_empty() {
             return Err(
                 AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                    .with_param("field", "redirect_uri"),
+                    .with_param("fields", "redirect_uri"),
             );
         }
 

@@ -6,6 +6,11 @@ import os
 DISCOVERY_URL = "https://identity:5150/.well-known/openid-configuration"
 
 PLANS = {
+    "dynamic": {
+        "alias": "identity-dynamic",
+        "description": "Identity server Dynamic OP conformance",
+        "server": {"discoveryUrl": DISCOVERY_URL},
+    },
     "basic": {
         "alias": "identity",
         "description": "Identity server Basic OP conformance",
@@ -159,6 +164,15 @@ PLANS = {
         "client": {
             "client_id": "00000010-0000-0000-0000-000000000001",
             "client_secret": "conformance-backchannel-secret",
+        },
+    },
+    "frontchannel": {
+        "alias": "identity-frontchannel",
+        "description": "Identity server Front-Channel Logout OP conformance",
+        "server": {"discoveryUrl": DISCOVERY_URL},
+        "client": {
+            "client_id": "00000011-0000-0000-0000-000000000001",
+            "client_secret": "conformance-frontchannel-secret",
         },
     },
 }
