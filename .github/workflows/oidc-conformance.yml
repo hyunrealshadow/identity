@@ -143,7 +143,12 @@ jobs:
         if: always()
         env:
           CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
-        run: python conformance/ci_publish.py
+        run: |
+          if [ -f conformance/results/plan-url.txt ]; then
+            docker compose run --rm --no-deps --pull never runner ci_publish.py --results-dir results
+          else
+            echo "No plan was created; skipping publication."
+          fi
 
       - name: Collect service logs and summary
         if: always()

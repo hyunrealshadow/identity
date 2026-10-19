@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -12,6 +13,14 @@ from ci_publish import publish_results
 
 
 class PublishResultsTests(unittest.TestCase):
+    def test_cli_accepts_container_results_directory(self):
+        script = Path(__file__).resolve().parents[1] / "ci_publish.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--results-dir", str(self.results / "missing")],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertIn("No plan was created", result.stdout)
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

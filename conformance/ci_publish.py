@@ -1,5 +1,6 @@
 """Publish a hosted CI plan, including failed or interrupted runs."""
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -42,4 +43,6 @@ def publish_results(results_dir=Path("conformance/results")):
 
 
 if __name__ == "__main__":
-    publish_results()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results-dir", type=Path, default=Path("conformance/results"))
+    publish_results(parser.parse_args().results_dir)

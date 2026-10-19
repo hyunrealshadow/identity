@@ -130,7 +130,9 @@ The generated identity TLS material is shared read-only with Login for this
 disposable environment; Login trusts that certificate for its private API calls.
 
 After each plan run, CI publishes everything through the official suite API,
-including failed or interrupted plans when a plan ID was saved. Publication errors
+including failed or interrupted plans when a plan ID was saved. The publication
+step uses the same runner image and mounted results directory as the test run so
+container-owned evidence files can be updated without host permission errors. Publication errors
 fail the job; no plan is published if creation never completed. This makes test
 configuration, keys, secrets and logs public, so this workflow uses only disposable
 environments and dedicated test credentials. Publication does not request certification.
