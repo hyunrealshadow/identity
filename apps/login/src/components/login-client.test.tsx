@@ -13,9 +13,10 @@ it('shows the registered logo and legal links to the person signing in', () => {
   expect(screen.getByRole('img').getAttribute('src')).toBe('https://rp.example/logo.png')
   expect(screen.getByRole('link', { name: 'Privacy policy' }).getAttribute('href')).toBe('https://rp.example/privacy')
   expect(screen.getByRole('link', { name: 'Terms of service' }).getAttribute('href')).toBe('https://rp.example/terms')
+  expect(screen.queryByText('Example app')).toBeNull()
 })
 
-it('rejects executable or malformed metadata URLs and escapes the client name', () => {
+it('omits the block when client metadata URLs are executable or malformed', () => {
   const { container } = render(<LoginClient locale="en-US" client={{
     name: '<script>bad()</script>', logo_uri: 'data:image/svg+xml,bad',
     policy_uri: 'javascript:bad()', tos_uri: 'not a URL',
@@ -23,10 +24,12 @@ it('rejects executable or malformed metadata URLs and escapes the client name', 
   expect(screen.queryByRole('img')).toBeNull()
   expect(screen.queryByRole('link')).toBeNull()
   expect(container.querySelector('script')).toBeNull()
-  expect(screen.getByText('<script>bad()</script>')).toBeTruthy()
+  expect(container.childElementCount).toBe(0)
 })
 
 it('leaves ordinary login pages without client metadata empty', () => {
-  const { container } = render(<LoginClient locale="zh-CN" />)
+  const { container, rerender } = render(<LoginClient locale="zh-CN" />)
+  expect(container.childElementCount).toBe(0)
+  rerender(<LoginClient locale="zh-CN" client={{ name: 'OpenID Conformance Suite (Implicit)' }} />)
   expect(container.childElementCount).toBe(0)
 })
