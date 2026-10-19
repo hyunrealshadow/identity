@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import run
-from plans import PLANS, get_plan
+from plans import PLANS, get_plan, ci_cases, RESPONSE_TYPES, conformance_case_id
 from scripts.runner import TestResult
 DEFAULT_VARIANT = {
     "server_metadata": "discovery",
@@ -119,6 +119,19 @@ class PlanVariantTests(unittest.TestCase):
 
 
 class ProfileConfigurationTests(unittest.TestCase):
+    def test_ci_expands_dynamic_and_frontchannel_without_overwriting_reports(self):
+        cases = ci_cases()
+        self.assertEqual(len(cases), 23)
+        self.assertEqual(len({case['id'] for case in cases}), 23)
+        for profile in ("dynamic", "frontchannel"):
+            selected = [case for case in cases if case['profile'] == profile]
+            self.assertEqual([case['response_type'] for case in selected], list(RESPONSE_TYPES))
+            for case in selected:
+                self.assertEqual(case['id'], conformance_case_id(profile, case['response_type']))
+                variant = run.plan_variant_for_profile(profile, response_type=case['response_type'])
+                self.assertEqual(variant['response_type'], case['response_type'])
+        self.assertEqual(len([case for case in cases if case['profile'] == 'basic']), 1)
+
     def test_every_ci_plan_has_a_supported_profile_and_official_plan_name(self):
         self.assertEqual(set(PLANS), set(run.SUPPORTED_PROFILES))
         self.assertEqual(set(PLANS), set(run.PLAN_NAMES))

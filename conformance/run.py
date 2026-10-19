@@ -38,7 +38,12 @@ except ImportError:
 from scripts.browser_auth import BrowserAuthHandler  # noqa: E402
 from scripts.client import ConformanceClient  # noqa: E402
 from scripts.runner import TestRunner  # noqa: E402
-from plans import get_plan  # noqa: E402
+from plans import (  # noqa: E402
+    RESPONSE_TYPES,
+    RESPONSE_TYPE_PROFILES,
+    conformance_case_id,
+    get_plan,
+)
 
 DEFAULT_PLAN_VARIANT = {
     "server_metadata": "discovery",
@@ -84,10 +89,12 @@ def default_plan_name_for_profile(profile: str):
     return PLAN_NAMES[profile]
 
 
-def plan_variant_for_profile(profile: str, plan_name: str | None = None):
+def plan_variant_for_profile(
+    profile: str, plan_name: str | None = None, response_type: str | None = None
+):
     client_registration = os.environ.get("CLIENT_REGISTRATION", "static_client")
     if profile == "dynamic" or plan_name == DYNAMIC_CERTIFICATION_PLAN_NAME:
-        return {"response_type": "code"}
+        return {"response_type": response_type or "code"}
     if profile == "third-party-init":
         return {"response_type": "code id_token"}
     if profile == "config":
@@ -95,7 +102,7 @@ def plan_variant_for_profile(profile: str, plan_name: str | None = None):
     if profile in ("rp-init-logout", "session", "backchannel", "frontchannel"):
         return {
             "client_registration": client_registration,
-            "response_type": "code",
+            "response_type": response_type or "code",
         }
     variant = DEFAULT_PLAN_VARIANT.copy()
     variant["client_registration"] = client_registration
@@ -169,6 +176,11 @@ def main():
         help="Conformance client registration variant",
     )
     parser.add_argument(
+        "--response-type",
+        choices=RESPONSE_TYPES,
+        help="Response type for Dynamic and Front-Channel OP plans (default: code)",
+    )
+    parser.add_argument(
         "--no-docker",
         action="store_true",
         help="Don't start/stop Docker (services already running)",
@@ -210,6 +222,8 @@ def main():
         parser.error(f"--profile must be one of: {', '.join(SUPPORTED_PROFILES)}")
     os.environ["CLIENT_REGISTRATION"] = args.client_registration
     plan_name = args.plan_name or default_plan_name_for_profile(args.profile)
+    if args.response_type and args.profile not in RESPONSE_TYPE_PROFILES:
+        parser.error("--response-type is supported for dynamic and frontchannel profiles")
 
     if args.check:
         client = ConformanceClient(args.suite_url)
@@ -255,7 +269,7 @@ def main():
         plan_id = client.create_plan_from_dict(
             plan_config,
             plan_name=plan_name,
-            variant=plan_variant_for_profile(args.profile, plan_name),
+            variant=plan_variant_for_profile(args.profile, plan_name, args.response_type),
         )
         print(f"Plan ID: {plan_id}")
 
@@ -277,6 +291,11 @@ def main():
             "plan_id": plan_id,
             "plan_url": plan_url,
             "profile": args.profile,
+            "case_id": conformance_case_id(args.profile, args.response_type),
+            "response_type": (
+                (args.response_type or "code")
+                if args.profile in RESPONSE_TYPE_PROFILES else None
+            ),
             "plan_name": plan_name,
             "identity_url": args.identity_url,
             "summary": runner.summarize_results(results),

@@ -367,8 +367,19 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             name: "OpenID Conformance Suite (Frontchannel logout)",
             secret: "conformance-frontchannel-secret",
             token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
-            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
-            response_types: &[ResponseType::Code],
+            grant_types: &[
+                GrantType::AuthorizationCode,
+                GrantType::Implicit,
+                GrantType::RefreshToken,
+            ],
+            response_types: &[
+                ResponseType::Code,
+                ResponseType::IdToken,
+                ResponseType::TokenIdToken,
+                ResponseType::CodeIdToken,
+                ResponseType::CodeToken,
+                ResponseType::CodeTokenIdToken,
+            ],
         },
     ]
 }
@@ -439,7 +450,9 @@ async fn ensure_conformance_oidc_metadata(
     if let Some(existing) = existing {
         // Repair older conformance volumes too, without replacing credentials
         // or unrelated client settings.
-        if existing.post_logout_redirect_uris != values.post_logout_redirect_uris
+        if existing.grant_types.as_ref() != Some(&values.grant_types)
+            || existing.response_types.as_ref() != Some(&values.response_types)
+            || existing.post_logout_redirect_uris != values.post_logout_redirect_uris
             || existing.frontchannel_logout_uri != values.frontchannel_logout_uri
             || existing.frontchannel_logout_session_required
                 != values.frontchannel_logout_session_required
@@ -448,6 +461,8 @@ async fn ensure_conformance_oidc_metadata(
                 != values.backchannel_logout_session_required
         {
             let mut active: client_openid_connect::ActiveModel = existing.into();
+            active.grant_types = Set(Some(values.grant_types));
+            active.response_types = Set(Some(values.response_types));
             active.post_logout_redirect_uris = Set(values.post_logout_redirect_uris);
             active.frontchannel_logout_uri = Set(values.frontchannel_logout_uri);
             active.frontchannel_logout_session_required =
@@ -886,6 +901,24 @@ mod tests {
             Some(
                 "https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/frontchannel_logout"
             )
+        );
+        assert_eq!(
+            values.response_types,
+            serde_json::json!([
+                "code",
+                "id_token",
+                "id_token token",
+                "code id_token",
+                "code token",
+                "code id_token token"
+            ])
+        );
+        assert!(
+            values
+                .grant_types
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("implicit"))
         );
         assert_eq!(values.frontchannel_logout_session_required, Some(true));
         assert!(conformance_post_logout_redirect_uris().as_array().unwrap().contains(

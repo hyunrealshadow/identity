@@ -24,6 +24,7 @@ jobs:
       SUITE_URL: https://www.certification.openid.net
     outputs:
       profiles: ${{ steps.profiles.outputs.profiles }}
+      matrix: ${{ steps.profiles.outputs.matrix }}
       image: ${{ env.CONFORMANCE_IMAGE }}
       login-image: ${{ env.CONFORMANCE_LOGIN_IMAGE }}
       runner-image: ${{ env.CONFORMANCE_RUNNER_IMAGE }}
@@ -49,9 +50,11 @@ jobs:
           python - <<'PY'
           import json, os, sys
           sys.path.insert(0, 'conformance')
-          from plans import PLANS
+          from plans import ci_cases
+          cases = ci_cases()
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('profiles=' + json.dumps(list(PLANS)) + '\n')
+              output.write('profiles=' + json.dumps([case['id'] for case in cases]) + '\n')
+              output.write('matrix=' + json.dumps({'include': cases}) + '\n')
           PY
 
       - name: Build shared conformance images
@@ -70,15 +73,14 @@ jobs:
           retention-days: 1
 
   conformance:
-    name: OP plan (${{ matrix.profile }})
+    name: OP plan (${{ matrix.id }})
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix:
-        profile: ${{ fromJSON(needs.prepare.outputs.profiles) }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       COMPOSE_FILE: conformance/docker-compose.hosted.yml
       COMPOSE_PROJECT_NAME: oidc-conformance
@@ -86,8 +88,9 @@ jobs:
       CONFORMANCE_LOGIN_IMAGE: ${{ needs.prepare.outputs.login-image }}
       CONFORMANCE_RUNNER_IMAGE: ${{ needs.prepare.outputs.runner-image }}
       PROFILE: ${{ matrix.profile }}
+      RESPONSE_TYPE: ${{ matrix.response_type }}
       SUITE_URL: https://www.certification.openid.net
-      CONFORMANCE_ALIAS: identity-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.profile }}
+      CONFORMANCE_ALIAS: identity-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v7
@@ -134,7 +137,12 @@ jobs:
           CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
         run: |
           set -o pipefail
+          response_args=()
+          if [ -n "$RESPONSE_TYPE" ]; then
+            response_args=(--response-type "$RESPONSE_TYPE")
+          fi
           docker compose run --rm --no-deps --pull never runner run.py --no-docker --profile "$PROFILE" \
+            "${response_args[@]}" \
             --identity-url "$IDENTITY_URL" --discovery-origin "$IDENTITY_URL" \
             --timeout 120 --exit-on-failure --results-dir results \
             2>&1 | tee conformance/results/runner.log
@@ -164,6 +172,8 @@ jobs:
               if report.exists():
                   result = json.loads(report.read_text())
                   summary.write('Official plan: ' + result['plan_url'] + '\n\n')
+                  if result.get('response_type'):
+                      summary.write('Response type: `' + result['response_type'] + '`\n\n')
                   for status, count in result['summary'].items():
                       summary.write(f'- {status}: {count}\n')
               else:
@@ -181,7 +191,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: oidc-conformance-${{ matrix.profile }}-${{ github.run_id }}
+          name: oidc-conformance-${{ matrix.id }}-${{ github.run_id }}
           path: conformance/results/
           retention-days: 14
 
@@ -210,16 +220,16 @@ jobs:
           reports = {}
           for path in Path('reports').rglob('results.json'):
               report = json.loads(path.read_text())
-              reports[report['profile']] = report
+              reports[report.get('case_id', report['profile'])] = report
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
               output.write('All plan jobs: **' + os.environ['PLAN_JOBS_RESULT'] + '**\n\n')
-              output.write('| Plan | Status | Passed | Failed | UI review | Official results |\n|---|---|---:|---:|---:|---|\n')
+              output.write('| Plan | Response type | Status | Passed | Failed | UI review | Official results |\n|---|---|---|---:|---:|---:|---|\n')
               for profile in json.loads(os.environ['PROFILES']):
                   report = reports.get(profile)
                   if report is None:
                       plan_url = Path('reports') / f"oidc-conformance-{profile}-{os.environ['GITHUB_RUN_ID']}" / 'plan-url.txt'
                       link = f'[Plan]({plan_url.read_text().strip()})' if plan_url.exists() else '—'
-                      output.write(f'| {profile} | NO_REPORT | — | — | — | {link} |\n')
+                      output.write(f'| {profile} | — | NO_REPORT | — | — | — | {link} |\n')
                       continue
                   counts = report['summary']
                   results = report['results']
@@ -227,5 +237,6 @@ jobs:
                   incomplete = (not results or len(results) != expected
                                 or any(r['status'] != 'FINISHED' for r in results))
                   status = 'INCOMPLETE' if incomplete else ('FAILED' if counts['FAILED'] else 'COMPLETED')
-                  output.write(f"| {profile} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('MANUAL_REVIEW_REQUIRED', 0)} | [Plan]({report['plan_url']}) |\n")
+                  response_type = report.get('response_type') or '—'
+                  output.write(f"| {profile} | {response_type} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('MANUAL_REVIEW_REQUIRED', 0)} | [Plan]({report['plan_url']}) |\n")
           PY

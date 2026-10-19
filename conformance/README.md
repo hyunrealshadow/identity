@@ -39,6 +39,8 @@ uv run python run.py --profile implicit        # Run the Implicit OP certificati
 uv run python run.py --profile hybrid          # Run the Hybrid OP certification plan
 uv run python run.py --profile dynamic         # Run Dynamic OP with suite-registered clients
 uv run python run.py --profile frontchannel    # Run the Front-Channel Logout OP plan
+uv run python run.py --profile dynamic --response-type "code id_token"
+uv run python run.py --profile frontchannel --response-type "id_token token"
 uv run python run.py --profile third-party-init # Run the 3rd Party-Init OP plan
 uv run python run.py --no-docker               # Services already running
 uv run python run.py --plan-id <ID>            # Run on existing plan
@@ -103,8 +105,9 @@ that alias and the official suite origin. Hosted API HTTPS certificates are veri
 
 Every configured OP plan runs: Basic, Implicit, Hybrid, Config, three Form Post
 plans, Third Party Initiated Login, RP Initiated Logout, Session Management,
-Backchannel Logout, Dynamic OP and Front-Channel Logout (13 plans, with the new
-Dynamic and Front-Channel plans using `response_type=code`). Jobs run one at a time to limit load on the hosted
+Backchannel Logout, Dynamic OP and Front-Channel Logout (13 profiles). Dynamic
+and Front-Channel expand across all six supported response types, for 23 plan runs.
+Jobs run one at a time to limit load on the hosted
 service, and a failed plan does not cancel the remaining jobs. Each has its own
 runner, database, keys, browser sessions, tunnels and report. A preparation job
 validates the API token and builds the identity, Login and Python test runner images once,
@@ -119,6 +122,12 @@ These diagnostics are separate from the screenshots submitted for certification 
 No container registry credentials are needed. The final summary
 includes every plan, including incomplete or missing reports. The hosted platform
 controls the suite version; the workflow no longer builds or pins its source.
+
+Dynamic OP and Front-Channel OP each run `code`, `id_token`, `id_token token`,
+`code id_token`, `code token`, and `code id_token token`. Job names, suite aliases,
+artifact names and summary rows identify both the profile and response type so
+their reports cannot overwrite one another. For local runs, select one with
+`--response-type`; omitting it defaults to `code`.
 
 Cloudflare supplies separate temporary `https://<random>.trycloudflare.com` hostnames for identity and Login.
 No personal domain, Cloudflare account or tunnel token is needed. The workflow

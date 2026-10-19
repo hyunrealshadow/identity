@@ -4,6 +4,22 @@ from copy import deepcopy
 import os
 
 DISCOVERY_URL = "https://identity:5150/.well-known/openid-configuration"
+RESPONSE_TYPES = (
+    "code",
+    "id_token",
+    "id_token token",
+    "code id_token",
+    "code token",
+    "code id_token token",
+)
+RESPONSE_TYPE_PROFILES = {"dynamic", "frontchannel"}
+
+
+def conformance_case_id(profile: str, response_type: str | None = None) -> str:
+    if profile in RESPONSE_TYPE_PROFILES:
+        return profile + "-" + (response_type or "code").replace("_", "-").replace(" ", "-")
+    return profile
+
 
 PLANS = {
     "dynamic": {
@@ -193,4 +209,19 @@ def get_plan(profile: str, identity_url: str | None = None) -> dict:
     return plan
 
 
-__all__ = ["PLANS", "get_plan", "DISCOVERY_URL"]
+def ci_cases() -> list[dict]:
+    return [
+        {
+            "id": conformance_case_id(profile, response_type),
+            "profile": profile,
+            "response_type": response_type,
+        }
+        for profile in PLANS
+        for response_type in (RESPONSE_TYPES if profile in RESPONSE_TYPE_PROFILES else ("",))
+    ]
+
+
+__all__ = [
+    "PLANS", "get_plan", "DISCOVERY_URL", "RESPONSE_TYPES", "RESPONSE_TYPE_PROFILES",
+    "ci_cases", "conformance_case_id",
+]
