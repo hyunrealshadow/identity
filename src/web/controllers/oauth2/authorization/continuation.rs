@@ -31,6 +31,7 @@ pub(super) async fn handle_continue(
     ctx: &AppState,
     headers: &HeaderMap,
     login_id: &str,
+    ui_locales: Option<&str>,
 ) -> Result<AppResponse, AppError> {
     let continue_context = load_active_interaction(ctx, login_id).await?;
 
@@ -85,11 +86,11 @@ pub(super) async fn handle_continue(
         selected_session,
         client_skips_consent || has_user_consent,
     ) {
-        ContinueAction::Login => login_redirect(ctx, login_id)?,
+        ContinueAction::Login => login_redirect(ctx, login_id, ui_locales)?,
         ContinueAction::OAuthError(error) => {
             continue_oauth_error_response(ctx, headers, &stored.request, error)?
         }
-        ContinueAction::Consent => consent_redirect(ctx, login_id)?,
+        ContinueAction::Consent => consent_redirect(ctx, login_id, ui_locales)?,
         ContinueAction::Deny => {
             let request = ctx
                 .services()
@@ -133,6 +134,7 @@ pub(super) async fn handle_continue(
 #[derive(Debug, Deserialize)]
 struct ContinueQuery {
     login_id: String,
+    ui_locales: Option<String>,
 }
 
 pub fn endpoint() -> HoopedHandler {
@@ -147,5 +149,5 @@ async fn continue_get(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let headers: HeaderMap = req.headers().clone();
     let query: ContinueQuery = take(depot)?;
-    Ok(handle_continue(&ctx, &headers, &query.login_id).await?)
+    Ok(handle_continue(&ctx, &headers, &query.login_id, query.ui_locales.as_deref()).await?)
 }

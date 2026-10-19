@@ -43,6 +43,7 @@ pub(super) struct ContinueFixture {
     pub(super) selection_source: Option<SelectionSource>,
     pub(super) prompt: Option<String>,
     pub(super) login_hint: Option<String>,
+    pub(super) ui_locales: Option<Vec<String>>,
     pub(super) max_age: Option<i32>,
     pub(super) consent_state: ConsentState,
     pub(super) login_status: &'static str,
@@ -63,6 +64,7 @@ impl Default for ContinueFixture {
             selection_source: None,
             prompt: None,
             login_hint: None,
+            ui_locales: None,
             max_age: None,
             consent_state: ConsentState::Pending,
             login_status: LoginStatus::CREATED.as_str(),
@@ -194,7 +196,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
             code_challenge_method: None,
             acr_values: None,
             claims: None,
-            ui_locales: None,
+            ui_locales: fixture.ui_locales.clone(),
         },
         interaction: match (selected_session_oid, selected_user_oid) {
             (Some(session_oid), Some(user_oid)) => AuthorizationInteractionState {

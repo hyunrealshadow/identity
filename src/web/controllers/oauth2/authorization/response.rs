@@ -345,11 +345,17 @@ pub(super) fn flow_response(
     flow: FlowDecision,
     ctx: &AppState,
     headers: &HeaderMap,
+    ui_locales: Option<&str>,
 ) -> Result<Response, AppError> {
     Ok(match flow {
-        FlowDecision::LoginRequired { login_id } => login_redirect(ctx, &login_id)?,
+        FlowDecision::LoginRequired { login_id } => login_redirect(ctx, &login_id, ui_locales)?,
         FlowDecision::Continue { login_id } => {
-            redirect_to_response(&format!("/oauth2/continue?login_id={login_id}"))
+            let mut destination = format!("/oauth2/continue?login_id={login_id}");
+            if let Some(ui_locales) = ui_locales.filter(|value| !value.is_empty()) {
+                destination.push_str("&ui_locales=");
+                destination.push_str(&urlencoding::encode(ui_locales));
+            }
+            redirect_to_response(&destination)
         }
         FlowDecision::OAuthError { request, error } => {
             redirect_oauth_error_response(ctx, headers, &request, error)

@@ -70,6 +70,7 @@ function formErrorDestination(
   // Login route loaders need the authorization context before reading flash cookies.
   const search = new URLSearchParams()
   if (values.login_id) search.set('login_id', values.login_id)
+  if (values.ui_locales && values.ui_locales !== 'browser') search.set('ui_locales', values.ui_locales)
   return search.size ? `${pathname}?${search}` : pathname
 }
 

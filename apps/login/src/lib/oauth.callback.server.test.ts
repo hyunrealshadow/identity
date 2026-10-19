@@ -68,7 +68,7 @@ describe('refresh failure recovery', () => {
     expect(location.pathname).toBe('/oauth2/authorize')
     expect(location.searchParams.get('state')).toBeTruthy()
     expect(location.searchParams.get('code_challenge')).toBeTruthy()
-    expect(location.searchParams.get('ui_locales')).toBe('en-US')
+    expect(location.searchParams.get('ui_locales')).toBeNull()
     expect(mocks.flow.update).toHaveBeenCalledWith(expect.objectContaining({
       mode: 'signin', return_to: '/account/security',
     }))

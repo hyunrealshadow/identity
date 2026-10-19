@@ -22,7 +22,7 @@ it('takes the credential type from the route instead of a conflicting form value
   expect(identityJson).toHaveBeenCalledWith('/api/auth/login/challenge', expect.objectContaining({
     body: { id: 'login', credential_type: 'otp', credential: '123456' },
   }))
-  expect(response.headers.get('location')).toBe('/oauth2/continue')
+  expect(response.headers.get('location')).toBe('/oauth2/continue?ui_locales=zh-CN')
 })
 
 it.each([false, true])('preserves the recovery-code path and locale after an invalid credential (enhanced=%s)', async (enhanced) => {

@@ -68,7 +68,7 @@ const loadDevicePage = createServerFn({ method: 'GET' })
     const flash = consumeFormFlash('/device')
     const loginId = data.loginId || flash?.values.login_id || ''
     const userCode = data.userCode || flash?.values.user_code || ''
-    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+    const uiLocales = data.uiLocales ?? ''
     const codeError =
       flash?.fields?.user_code ??
       (flash?.field === 'user_code' ? flash.message : undefined)
@@ -98,7 +98,7 @@ const loadDevicePage = createServerFn({ method: 'GET' })
         device: lookup.description,
         userCode: lookup.description.user_code,
         locale: requestLocale(
-          uiLocales ? uiLocales.split(' ') : lookup.description.ui_locales,
+          uiLocales.split(' '),
         ),
         uiLocales,
         error: pageError,

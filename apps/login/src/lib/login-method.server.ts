@@ -1,3 +1,4 @@
+import { withUiLocales } from './ui-locale'
 import { errorMessage, IdentityApiError, identityJson, isTerminalLoginError } from './identity.server'
 import type { ChallengeResponse, RestartLoginResponse, SwitchLoginResponse } from './identity-types'
 import { formErrorResponse, formValidationErrorResponse, navigationResponse } from './responses.server'
@@ -129,7 +130,7 @@ export async function submitLoginMethod(request: Request, method: string) {
     if (!result.continue_uri) {
       throw new Error(translate(locale, 'continuationMissing'))
     }
-    return navigationResponse(request, result.continue_uri)
+    return navigationResponse(request, withUiLocales(result.continue_uri, uiLocales))
   } catch (error) {
     if (isTerminalLoginError(error)) {
       const restart =

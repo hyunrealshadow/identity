@@ -12,6 +12,7 @@ import {
 } from '#/lib/appearance'
 import { translate, type Locale } from '#/lib/i18n'
 import { BROWSER_LOCALE_VALUE } from '#/lib/account-locale'
+import { withUiLocales } from '#/lib/ui-locale'
 
 type LanguagePreference = Locale | typeof BROWSER_LOCALE_VALUE
 
@@ -26,27 +27,15 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
     },
   })
   const currentHref = useRouterState({ select: (state) => state.location.href })
-  const uiLocales = useRouterState({
-    select: (state) => {
-      for (const match of [...state.matches].reverse()) {
-        const data = match.loaderData as { uiLocales?: string } | undefined
-        if (typeof data?.uiLocales === 'string') return data.uiLocales
-      }
-      return ''
-    },
-  })
   const [theme, setTheme] = useState<ThemePreference>(pageTheme)
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
   const languagePreference = new URL(currentHref, 'https://identity.invalid')
-    .searchParams.get('ui_locales') ?? uiLocales
+    .searchParams.get('ui_locales')
   const followsBrowser = !languagePreference || languagePreference === BROWSER_LOCALE_VALUE
   const languageLabel = followsBrowser ? t('accountLocaleBrowser') : locale === 'zh-CN' ? '简体中文' : 'English'
 
   function hrefWithLocale(nextLocale: LanguagePreference) {
-    const url = new URL(currentHref, 'https://identity.invalid')
-    // Keep an explicit browser choice instead of restoring the flow's ui_locales.
-    url.searchParams.set('ui_locales', nextLocale)
-    return `${url.pathname}${url.search}${url.hash}`
+    return withUiLocales(currentHref, nextLocale)
   }
 
   useEffect(() => {

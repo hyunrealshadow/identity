@@ -39,6 +39,7 @@ import {
   navigationResponse,
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
+import { withUiLocales } from '#/lib/ui-locale'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 import { loginChallengeDestination } from '#/lib/login-navigation'
 
@@ -59,7 +60,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const flash = consumeFormFlash('/login')
     const loginId = data.loginId || flash?.values.login_id || ''
-    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+    const uiLocales = data.uiLocales ?? ''
     const identifierError =
       flash?.fields?.identifier ??
       (flash?.field === 'identifier' ? flash.message : undefined)
@@ -97,8 +98,8 @@ const loadLoginPage = createServerFn({ method: 'GET' })
             : active.accounts,
         csrfToken: active.csrf_token,
         loginId,
-        locale: requestLocale(uiLocales ? uiLocales.split(' ') : status.ui_locales),
-        uiLocales: uiLocales || status.ui_locales?.join(' ') || '',
+        locale: requestLocale(uiLocales.split(' ')),
+        uiLocales,
         error: pageError,
         fieldError: identifierError,
         formValues: flash?.values ?? {},
@@ -141,11 +142,11 @@ export const Route = createFileRoute('/login')({
   loader: async ({ deps, location }) => {
     if (!deps.loginId) {
       // The provider endpoint belongs to the server even when it shares our origin
-      throw redirect({ href: await beginAuthorization(), reloadDocument: true })
+      throw redirect({ href: withUiLocales(await beginAuthorization(), deps.uiLocales), reloadDocument: true })
     }
     const page = await loadLoginPage({ data: deps })
     if (location.pathname === '/login' && page.challengeUri) {
-      throw redirect({ href: page.challengeUri })
+      throw redirect({ href: withUiLocales(page.challengeUri, deps.uiLocales) })
     }
     return page
   },
@@ -173,7 +174,7 @@ export const Route = createFileRoute('/login')({
                 login_id: loginId,
               },
             })
-            return navigationResponse(request, result.continue_uri)
+            return navigationResponse(request, withUiLocales(result.continue_uri, uiLocales))
           }
 
           const identifier = String(form.get('identifier') ?? '').trim()

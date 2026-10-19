@@ -70,6 +70,32 @@ pub(super) async fn continue_with_selected_session_and_pending_consent_redirects
 }
 
 #[tokio::test]
+async fn continuation_uses_current_url_language_instead_of_restoring_the_original_hint() {
+    for preference in [None, Some("en-US")] {
+        let (state, login_id, _) = continue_selected_session_with_fixture(ContinueFixture {
+            ui_locales: Some(vec!["zh-CN".to_owned()]),
+            ..Default::default()
+        })
+        .await;
+        let service = Service::new(routes().hoop(inject(state)));
+        let mut uri = format!(
+            "http://127.0.0.1:5800/oauth2/continue?login_id={}",
+            encode(&login_id)
+        );
+        if let Some(locale) = preference {
+            uri.push_str(&format!("&ui_locales={locale}"));
+        }
+        let response = TestClient::get(uri).send(&service).await;
+        assert_eq!(response.status_code, Some(StatusCode::SEE_OTHER));
+        assert_eq!(Url::parse(location(&response)).unwrap().path(), "/consent");
+        assert_eq!(
+            query_param(location(&response), "ui_locales").as_deref(),
+            preference
+        );
+    }
+}
+
+#[tokio::test]
 pub(super) async fn continue_with_silent_pending_consent_returns_consent_required() {
     let (state, protected_login_id, _) = continue_selected_session_with_prompt_state("none").await;
 

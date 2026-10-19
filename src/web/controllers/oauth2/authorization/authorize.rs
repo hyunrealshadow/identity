@@ -123,6 +123,7 @@ async fn select_interaction(depot: &mut Depot) -> Result<(), AuthorizationWebErr
         ctx.services().oidc_authorize(),
     )
     .await?;
+    depot.insert_typed(validated);
     depot.insert_typed(flow);
     Ok(())
 }
@@ -131,5 +132,16 @@ async fn select_interaction(depot: &mut Depot) -> Result<(), AuthorizationWebErr
 async fn respond(depot: &mut Depot, req: &mut Request) -> WebResult {
     let ctx = app_state(depot)?;
     let flow: FlowDecision = take(depot)?;
-    Ok(AppResponse(flow_response(flow, &ctx, req.headers())?))
+    let validated: ValidatedAuthorization = take(depot)?;
+    let ui_locales = validated
+        .request
+        .ui_locales
+        .as_ref()
+        .map(|values| values.join(" "));
+    Ok(AppResponse(flow_response(
+        flow,
+        &ctx,
+        req.headers(),
+        ui_locales.as_deref(),
+    )?))
 }

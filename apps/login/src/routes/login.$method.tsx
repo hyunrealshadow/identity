@@ -61,7 +61,7 @@ const loadChallengePage = createServerFn({ method: 'GET' })
     if (!credentialType) throw notFound()
     const flash = consumeFormFlash(loginMethodPath(credentialType))
     const loginId = data.loginId || flash?.values.login_id || ''
-    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+    const uiLocales = data.uiLocales ?? ''
     const credentialError =
       flash?.fields?.credential ??
       (flash?.field === 'credential' ? flash.message : undefined)
@@ -114,7 +114,7 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         `/api/auth/login/${encodeURIComponent(loginId)}`,
       )
       const locale = requestLocale(
-        uiLocales ? uiLocales.split(' ') : status.ui_locales,
+        uiLocales.split(' '),
       )
       const restartRequired = status.status === 'expired'
       return {
@@ -122,7 +122,7 @@ const loadChallengePage = createServerFn({ method: 'GET' })
         csrfToken,
         loginId,
         locale,
-        uiLocales: uiLocales || status.ui_locales?.join(' ') || '',
+        uiLocales,
         error: restartRequired
           ? translate(locale, 'challengeExpiredDescription')
           : pageError,
@@ -374,7 +374,7 @@ function ChallengePage() {
       ) : null}
 
       {!restartRequired && isPasskey && (data.status?.status === 'identifier_verified' || data.status?.status === 'mfa_required') && data.status.credential_types.includes('passkey') ? (
-        <PasskeyLogin loginId={loginId} csrfToken={data.csrfToken} locale={data.locale} primary />
+        <PasskeyLogin loginId={loginId} csrfToken={data.csrfToken} locale={data.locale} uiLocales={data.uiLocales} primary />
       ) : null}
 
       {!restartRequired ? <LoginMethodAlternatives currentMethod={credentialType} status={data.status}

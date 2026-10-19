@@ -514,19 +514,28 @@ const LOGIN_ROUTE: &str = "login";
 const CONSENT_ROUTE: &str = "consent";
 
 /// Redirect to the external login application with the protected interaction ID.
-pub fn login_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
-    interaction_redirect(ctx, LOGIN_ROUTE, login_id)
+pub fn login_redirect(
+    ctx: &AppState,
+    login_id: &str,
+    ui_locales: Option<&str>,
+) -> Result<Response, AppError> {
+    interaction_redirect(ctx, LOGIN_ROUTE, login_id, ui_locales)
 }
 
 /// Redirect to the external consent application with the protected interaction ID.
-pub fn consent_redirect(ctx: &AppState, login_id: &str) -> Result<Response, AppError> {
-    interaction_redirect(ctx, CONSENT_ROUTE, login_id)
+pub fn consent_redirect(
+    ctx: &AppState,
+    login_id: &str,
+    ui_locales: Option<&str>,
+) -> Result<Response, AppError> {
+    interaction_redirect(ctx, CONSENT_ROUTE, login_id, ui_locales)
 }
 
 fn interaction_redirect(
     ctx: &AppState,
     route: &'static str,
     login_id: &str,
+    ui_locales: Option<&str>,
 ) -> Result<Response, AppError> {
     let login_domain = ctx
         .settings()
@@ -551,6 +560,11 @@ fn interaction_redirect(
         })?;
     let mut target = target;
     target.query_pairs_mut().append_pair("login_id", login_id);
+    if let Some(ui_locales) = ui_locales.filter(|value| !value.is_empty() && *value != "browser") {
+        target
+            .query_pairs_mut()
+            .append_pair("ui_locales", ui_locales);
+    }
 
     Ok(redirect_to_response(target.as_str()))
 }
@@ -571,8 +585,8 @@ mod tests {
         use identity_infrastructure::{config::AppEnvironment, test_app_state_with_environment};
 
         let ctx = test_app_state_with_environment(AppEnvironment::Conformance).await;
-        assert!(super::login_redirect(&ctx, "login-123").is_err());
-        assert!(super::consent_redirect(&ctx, "login-123").is_err());
+        assert!(super::login_redirect(&ctx, "login-123", None).is_err());
+        assert!(super::consent_redirect(&ctx, "login-123", None).is_err());
     }
 
     #[test]

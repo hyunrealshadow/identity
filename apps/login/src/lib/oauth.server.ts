@@ -146,7 +146,6 @@ async function startAuthorizationFlow(
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
-    ui_locales: requestLocale(),
   }).toString()
   if (mode === 'reauth') {
     if (!requirements) {

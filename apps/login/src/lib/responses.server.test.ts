@@ -7,6 +7,17 @@ import {
 } from './responses.server'
 
 describe('progressive form responses', () => {
+  it.each([false, true])('preserves an explicit URL language after a form error (enhanced=%s)', async (enhanced) => {
+    const request = new Request('https://login.example.com/login', {
+      method: 'POST', headers: enhanced ? { 'x-enhanced-form': '1' } : {},
+    })
+    const response = formErrorResponse(request, '/login', 'Invalid account', {
+      login_id: 'login', ui_locales: 'zh-CN',
+    })
+    const destination = enhanced ? (await response.json()).redirect : response.headers.get('location')
+    expect(destination).toBe('/login?login_id=login&ui_locales=zh-CN')
+  })
+
   it('uses a 303 redirect for native form submissions', () => {
     const request = new Request('https://login.example.com/login', {
       method: 'POST',

@@ -22,6 +22,7 @@ import {
   navigationResponse,
 } from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
+import { withUiLocales } from '#/lib/ui-locale'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 
 interface ConsentSearch {
@@ -39,7 +40,7 @@ const loadConsentPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const flash = consumeFormFlash('/consent')
     const loginId = data.loginId || flash?.values.login_id || ''
-    const uiLocales = data.uiLocales || flash?.values.ui_locales || ''
+    const uiLocales = data.uiLocales ?? ''
 
     if (!loginId) {
       const locale = requestLocale(uiLocales.split(' '))
@@ -57,8 +58,8 @@ const loadConsentPage = createServerFn({ method: 'GET' })
       )
       return {
         consent,
-        locale: requestLocale(uiLocales ? uiLocales.split(' ') : consent.ui_locales),
-        uiLocales: uiLocales || consent.ui_locales?.join(' ') || '',
+        locale: requestLocale(uiLocales.split(' ')),
+        uiLocales,
         error: flash?.message,
       }
     } catch (error) {
@@ -111,7 +112,7 @@ export const Route = createFileRoute('/consent')({
           if (!result.continue_uri) {
             throw new Error(translate(locale, 'continuationMissing'))
           }
-          return navigationResponse(request, result.continue_uri)
+          return navigationResponse(request, withUiLocales(result.continue_uri, uiLocales))
         } catch (error) {
           return formErrorResponse(request, '/consent', errorMessage(error, locale), {
             login_id: loginId,

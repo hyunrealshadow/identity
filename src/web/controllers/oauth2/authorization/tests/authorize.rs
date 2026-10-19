@@ -125,7 +125,7 @@ async fn authorize_with_reusable_session_redirects_to_oauth2_continue() {
         .await
         .unwrap();
     let response = call_authorize_with_state(
-        "/oauth2/authorize?client_id=00000000-0000-0000-0000-000000000000&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state123&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256",
+        "/oauth2/authorize?client_id=00000000-0000-0000-0000-000000000000&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&state=state123&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&ui_locales=zh-CN%20en-US",
         state,
         Some(session_cookie),
     )
@@ -145,6 +145,15 @@ async fn authorize_with_reusable_session_redirects_to_oauth2_continue() {
     assert!(
         location.starts_with("/oauth2/continue?login_id="),
         "{location}"
+    );
+    let destination = Url::parse(&format!("https://identity.example.com{location}")).unwrap();
+    assert_eq!(
+        destination
+            .query_pairs()
+            .find(|(name, _)| name == "ui_locales")
+            .unwrap()
+            .1,
+        "zh-CN en-US"
     );
 }
 

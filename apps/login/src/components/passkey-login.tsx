@@ -1,3 +1,4 @@
+import { withUiLocales } from '#/lib/ui-locale'
 import { Button } from '@heroui/react'
 import { createServerFn } from '@tanstack/react-start'
 import { Fingerprint } from 'lucide-react'
@@ -28,7 +29,7 @@ const finish = createServerFn({ method: 'POST' })
     }
   })
 
-export function PasskeyLogin({ loginId, csrfToken, locale, primary = false }: { loginId: string; csrfToken: string; locale: Locale; primary?: boolean }) {
+export function PasskeyLogin({ loginId, csrfToken, locale, uiLocales, primary = false }: { loginId: string; csrfToken: string; locale: Locale; uiLocales?: string; primary?: boolean }) {
   const [supported, setSupported] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -48,7 +49,7 @@ export function PasskeyLogin({ loginId, csrfToken, locale, primary = false }: { 
       if (controller.signal.aborted) return
       const result = await finish({ data: { loginId, csrfToken, assertion: JSON.stringify(assertion), locale } })
       if (controller.signal.aborted) return
-      if (result.redirect) window.location.assign(result.redirect)
+      if (result.redirect) window.location.assign(withUiLocales(result.redirect, uiLocales))
       else setError(result.error ?? translate(locale, 'passkeyFailed'))
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -60,7 +61,7 @@ export function PasskeyLogin({ loginId, csrfToken, locale, primary = false }: { 
         setBusy(false)
       }
     }
-  }, [loginId, csrfToken, locale])
+  }, [loginId, csrfToken, locale, uiLocales])
 
   useEffect(() => {
     const canUsePasskeys = passkeysSupported()
