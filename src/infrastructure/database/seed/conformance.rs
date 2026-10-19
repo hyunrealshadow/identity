@@ -3,8 +3,8 @@
 //! Creates two fixed test users and OIDC clients that the OpenID Conformance
 //! Test Suite expects.  This module is only called when `APP_ENV=conformance`.
 //!
-//! Fixed identities and credentials are inserted only when absent. Logout
-//! callback metadata is reconciled on restart so older test volumes receive
+//! Fixed identities and credentials are inserted only when absent. Client
+//! response types, grants and logout metadata are reconciled on restart so older test volumes receive
 //! corrected fixture settings too.
 
 use std::env;
@@ -78,6 +78,20 @@ const HYBRID_CLIENT_POST_OID: &str = "00000006-0000-0000-0000-000000000001";
 const HYBRID_CLIENT_POST_CRED_OID: &str = "00000006-0000-0000-0000-000000000002";
 const BACKCHANNEL_CLIENT_OID: &str = "00000010-0000-0000-0000-000000000001";
 const FRONTCHANNEL_CLIENT_OID: &str = "00000011-0000-0000-0000-000000000001";
+const ALL_FLOWS_CLIENT_OID: &str = "00000012-0000-0000-0000-000000000001";
+const ALL_FLOWS_GRANT_TYPES: &[GrantType] = &[
+    GrantType::AuthorizationCode,
+    GrantType::Implicit,
+    GrantType::RefreshToken,
+];
+const ALL_FLOWS_RESPONSE_TYPES: &[ResponseType] = &[
+    ResponseType::Code,
+    ResponseType::IdToken,
+    ResponseType::TokenIdToken,
+    ResponseType::CodeIdToken,
+    ResponseType::CodeToken,
+    ResponseType::CodeTokenIdToken,
+];
 
 /// Legacy public constant for the default Basic conformance client OID.
 pub const CONFORMANCE_CLIENT_OID: &str = BASIC_CLIENT_OID;
@@ -358,8 +372,8 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             name: "OpenID Conformance Suite (Backchannel logout)",
             secret: "conformance-backchannel-secret",
             token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
-            grant_types: &[GrantType::AuthorizationCode, GrantType::RefreshToken],
-            response_types: &[ResponseType::Code],
+            grant_types: ALL_FLOWS_GRANT_TYPES,
+            response_types: ALL_FLOWS_RESPONSE_TYPES,
         },
         ConformanceClientSpec {
             oid: FRONTCHANNEL_CLIENT_OID,
@@ -367,19 +381,17 @@ fn conformance_client_specs() -> &'static [ConformanceClientSpec] {
             name: "OpenID Conformance Suite (Frontchannel logout)",
             secret: "conformance-frontchannel-secret",
             token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
-            grant_types: &[
-                GrantType::AuthorizationCode,
-                GrantType::Implicit,
-                GrantType::RefreshToken,
-            ],
-            response_types: &[
-                ResponseType::Code,
-                ResponseType::IdToken,
-                ResponseType::TokenIdToken,
-                ResponseType::CodeIdToken,
-                ResponseType::CodeToken,
-                ResponseType::CodeTokenIdToken,
-            ],
+            grant_types: ALL_FLOWS_GRANT_TYPES,
+            response_types: ALL_FLOWS_RESPONSE_TYPES,
+        },
+        ConformanceClientSpec {
+            oid: ALL_FLOWS_CLIENT_OID,
+            credential_oid: "00000012-0000-0000-0000-000000000002",
+            name: "OpenID Conformance Suite (All response types)",
+            secret: "conformance-all-flows-secret-at-least-32-bytes",
+            token_endpoint_auth_method: TokenEndpointAuthMethod::ClientSecretBasic,
+            grant_types: ALL_FLOWS_GRANT_TYPES,
+            response_types: ALL_FLOWS_RESPONSE_TYPES,
         },
     ]
 }
@@ -612,6 +624,9 @@ fn conformance_redirect_uris() -> Value {
         ),
         conformance_suite_uri(
             "https://localhost.emobix.co.uk:8443/test/a/identity-config/callback"
+        ),
+        conformance_suite_uri(
+            "https://localhost.emobix.co.uk:8443/test/a/identity-3rdparty-init-login/callback"
         )
     ])
 }
@@ -855,6 +870,46 @@ mod tests {
             values.post_logout_redirect_uris,
             Some(conformance_post_logout_redirect_uris())
         );
+    }
+
+    #[test]
+    fn all_flow_and_logout_clients_allow_every_supported_response_type() {
+        use serde_json::json;
+
+        for oid in [
+            super::ALL_FLOWS_CLIENT_OID,
+            super::BACKCHANNEL_CLIENT_OID,
+            super::FRONTCHANNEL_CLIENT_OID,
+        ] {
+            let spec = conformance_client_specs()
+                .iter()
+                .find(|s| s.oid == oid)
+                .unwrap();
+            let values = conformance_oidc_metadata_values(spec);
+            assert_eq!(
+                values.response_types,
+                json!([
+                    "code",
+                    "id_token",
+                    "id_token token",
+                    "code id_token",
+                    "code token",
+                    "code id_token token"
+                ])
+            );
+            assert_eq!(
+                values.grant_types,
+                json!(["authorization_code", "implicit", "refresh_token"])
+            );
+        }
+        let basic = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
+        assert_eq!(basic.response_types, json!(["code"]));
+        // The RP logout bad-id-token-hint test signs an HS256 JWT with this secret.
+        let logout_client = conformance_client_specs()
+            .iter()
+            .find(|s| s.oid == super::ALL_FLOWS_CLIENT_OID)
+            .unwrap();
+        assert!(logout_client.secret.len() >= 32);
     }
 
     #[test]

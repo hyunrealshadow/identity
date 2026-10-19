@@ -96,7 +96,7 @@ def plan_variant_for_profile(
     if profile == "dynamic" or plan_name == DYNAMIC_CERTIFICATION_PLAN_NAME:
         return {"response_type": response_type or "code"}
     if profile == "third-party-init":
-        return {"response_type": "code id_token"}
+        return {"response_type": response_type or "code"}
     if profile == "config":
         return None
     if profile in ("rp-init-logout", "session", "backchannel", "frontchannel"):
@@ -178,7 +178,7 @@ def main():
     parser.add_argument(
         "--response-type",
         choices=RESPONSE_TYPES,
-        help="Response type for Dynamic and Front-Channel OP plans (default: code)",
+        help="Response type for Dynamic, third-party login and logout/session plans (default: code)",
     )
     parser.add_argument(
         "--no-docker",
@@ -223,7 +223,7 @@ def main():
     os.environ["CLIENT_REGISTRATION"] = args.client_registration
     plan_name = args.plan_name or default_plan_name_for_profile(args.profile)
     if args.response_type and args.profile not in RESPONSE_TYPE_PROFILES:
-        parser.error("--response-type is supported for dynamic and frontchannel profiles")
+        parser.error("--response-type is supported for: " + ", ".join(sorted(RESPONSE_TYPE_PROFILES)))
 
     if args.check:
         client = ConformanceClient(args.suite_url)

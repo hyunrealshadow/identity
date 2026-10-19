@@ -114,16 +114,16 @@ class PlanVariantTests(unittest.TestCase):
     def test_third_party_init_profile_uses_response_type_variant(self):
         self.assertEqual(
             run.plan_variant_for_profile("third-party-init"),
-            {"response_type": "code id_token"},
+            {"response_type": "code"},
         )
 
 
 class ProfileConfigurationTests(unittest.TestCase):
-    def test_ci_expands_dynamic_and_frontchannel_without_overwriting_reports(self):
+    def test_ci_expands_all_response_type_profiles_without_overwriting_reports(self):
         cases = ci_cases()
-        self.assertEqual(len(cases), 23)
-        self.assertEqual(len({case['id'] for case in cases}), 23)
-        for profile in ("dynamic", "frontchannel"):
+        self.assertEqual(len(cases), 43)
+        self.assertEqual(len({case['id'] for case in cases}), 43)
+        for profile in ("dynamic", "third-party-init", "rp-init-logout", "session", "backchannel", "frontchannel"):
             selected = [case for case in cases if case['profile'] == profile]
             self.assertEqual([case['response_type'] for case in selected], list(RESPONSE_TYPES))
             for case in selected:
@@ -235,10 +235,10 @@ class PlanFileTests(unittest.TestCase):
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",
         )
-        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(plan["client"]["client_id"], "00000012-0000-0000-0000-000000000001")
         self.assertEqual(
             plan["client"]["client_secret"],
-            "conformance-basic-secret-at-least-32-bytes",
+            "conformance-all-flows-secret-at-least-32-bytes",
         )
 
     def test_session_plan_exists_with_expected_defaults(self):
@@ -249,10 +249,10 @@ class PlanFileTests(unittest.TestCase):
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",
         )
-        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(plan["client"]["client_id"], "00000012-0000-0000-0000-000000000001")
         self.assertEqual(
             plan["client"]["client_secret"],
-            "conformance-basic-secret-at-least-32-bytes",
+            "conformance-all-flows-secret-at-least-32-bytes",
         )
 
     def test_backchannel_plan_exists_with_expected_defaults(self):
@@ -277,10 +277,10 @@ class PlanFileTests(unittest.TestCase):
             plan["server"]["discoveryUrl"],
             "https://identity:5150/.well-known/openid-configuration",
         )
-        self.assertEqual(plan["client"]["client_id"], "00000001-0000-0000-0000-000000000001")
+        self.assertEqual(plan["client"]["client_id"], "00000012-0000-0000-0000-000000000001")
         self.assertEqual(
             plan["client"]["client_secret"],
-            "conformance-basic-secret-at-least-32-bytes",
+            "conformance-all-flows-secret-at-least-32-bytes",
         )
 
 

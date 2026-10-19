@@ -238,5 +238,5 @@ jobs:
                                 or any(r['status'] != 'FINISHED' for r in results))
                   status = 'INCOMPLETE' if incomplete else ('FAILED' if counts['FAILED'] else 'COMPLETED')
                   response_type = report.get('response_type') or '—'
-                  output.write(f"| {profile} | {response_type} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('MANUAL_REVIEW_REQUIRED', 0)} | [Plan]({report['plan_url']}) |\n")
+                  output.write(f"| {profile} | {response_type} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('REVIEW', 0) + counts.get('MANUAL_REVIEW_REQUIRED', 0)} | [Plan]({report['plan_url']}) |\n")
           PY

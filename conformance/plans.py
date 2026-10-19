@@ -12,7 +12,9 @@ RESPONSE_TYPES = (
     "code token",
     "code id_token token",
 )
-RESPONSE_TYPE_PROFILES = {"dynamic", "frontchannel"}
+RESPONSE_TYPE_PROFILES = {
+    "dynamic", "third-party-init", "rp-init-logout", "session", "backchannel", "frontchannel",
+}
 
 
 def conformance_case_id(profile: str, response_type: str | None = None) -> str:
@@ -151,8 +153,8 @@ PLANS = {
         "description": "Identity server 3rd Party-Init OP conformance",
         "server": {"discoveryUrl": DISCOVERY_URL},
         "client": {
-            "client_id": "00000001-0000-0000-0000-000000000001",
-            "client_secret": "conformance-basic-secret-at-least-32-bytes",
+            "client_id": "00000012-0000-0000-0000-000000000001",
+            "client_secret": "conformance-all-flows-secret-at-least-32-bytes",
         },
     },
     "rp-init-logout": {
@@ -160,8 +162,8 @@ PLANS = {
         "description": "Identity server RP-Initiated Logout OP conformance",
         "server": {"discoveryUrl": DISCOVERY_URL},
         "client": {
-            "client_id": "00000001-0000-0000-0000-000000000001",
-            "client_secret": "conformance-basic-secret-at-least-32-bytes",
+            "client_id": "00000012-0000-0000-0000-000000000001",
+            "client_secret": "conformance-all-flows-secret-at-least-32-bytes",
         },
     },
     "session": {
@@ -169,8 +171,8 @@ PLANS = {
         "description": "Identity server Session Management OP conformance",
         "server": {"discoveryUrl": DISCOVERY_URL},
         "client": {
-            "client_id": "00000001-0000-0000-0000-000000000001",
-            "client_secret": "conformance-basic-secret-at-least-32-bytes",
+            "client_id": "00000012-0000-0000-0000-000000000001",
+            "client_secret": "conformance-all-flows-secret-at-least-32-bytes",
         },
     },
     "backchannel": {

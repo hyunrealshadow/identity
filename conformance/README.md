@@ -105,8 +105,9 @@ that alias and the official suite origin. Hosted API HTTPS certificates are veri
 
 Every configured OP plan runs: Basic, Implicit, Hybrid, Config, three Form Post
 plans, Third Party Initiated Login, RP Initiated Logout, Session Management,
-Backchannel Logout, Dynamic OP and Front-Channel Logout (13 profiles). Dynamic
-and Front-Channel expand across all six supported response types, for 23 plan runs.
+Backchannel Logout, Dynamic OP and Front-Channel Logout (13 profiles). Dynamic,
+Third Party Initiated Login, RP Initiated Logout, Session Management, Backchannel
+and Front-Channel expand across all six supported response types, for 43 plan runs.
 Jobs run one at a time to limit load on the hosted
 service, and a failed plan does not cancel the remaining jobs. Each has its own
 runner, database, keys, browser sessions, tunnels and report. A preparation job
@@ -122,12 +123,20 @@ These diagnostics are separate from the screenshots submitted for certification 
 No container registry credentials are needed. The final summary
 includes every plan, including incomplete or missing reports. The hosted platform
 controls the suite version; the workflow no longer builds or pins its source.
+The UI review column counts official `REVIEW` results as well as missing browser evidence.
 
-Dynamic OP and Front-Channel OP each run `code`, `id_token`, `id_token token`,
+Dynamic OP, Third Party Initiated Login and all four logout/session profiles each
+run `code`, `id_token`, `id_token token`,
 `code id_token`, `code token`, and `code id_token token`. Job names, suite aliases,
 artifact names and summary rows identify both the profile and response type so
 their reports cannot overwrite one another. For local runs, select one with
-`--response-type`; omitting it defaults to `code`.
+`--response-type`; omitting it defaults to `code`. Basic, Implicit and Hybrid
+(and their Form Post plans) expand the applicable response types inside the
+official plan, so they do not need additional CI jobs. Config checks discovery
+metadata without a response-type variant. RP Initiated Logout and Session
+Management use a separate all-response-types test client; Third Party Initiated
+Login dynamically registers its own clients with `initiate_login_uri`.
+The Basic clients retain their code-only permissions.
 
 Cloudflare supplies separate temporary `https://<random>.trycloudflare.com` hostnames for identity and Login.
 No personal domain, Cloudflare account or tunnel token is needed. The workflow
