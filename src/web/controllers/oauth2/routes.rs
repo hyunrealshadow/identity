@@ -47,7 +47,7 @@ pub fn routes() -> Router {
                 .options(preflight),
         )
         .push(
-            Router::with_path("oauth2/register/{client_id}")
+            Router::with_path("oauth2/clients/{client_id}")
                 .hoop(ClientCors::new("GET, PUT, DELETE"))
                 .get(registration::read_endpoint())
                 .put(registration::update_endpoint())

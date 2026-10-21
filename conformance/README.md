@@ -28,6 +28,8 @@ Use `--exit-on-failure` to exit 1 on any non-passing results.
 | `run.py` | Main entry point - runs full test suite |
 | `check_status.py` | Check status of an existing plan |
 | `run_single.py` | Run a single test module |
+| `ci_summary.py` | Generate the standalone CI Markdown report from plan artifacts |
+| `ci_commit_summary.py` | Publish that report to the tested branch without changing other files |
 
 ## Usage
 
@@ -175,6 +177,29 @@ job. `WARNING`, `SKIPPED`, and completed `REVIEW` results are retained in the
 summary and do not fail the job; `REVIEW` still requires human assessment before
 certification. Artifacts include the plan, per-module official logs, runner output,
 service logs, and the hosted plan URL. Cleanup runs even when tests fail.
+
+### Standalone Markdown summary
+
+After all plan jobs finish, CI generates [SUMMARY.md](SUMMARY.md), displays the
+same report in the Actions run summary, and uploads it as
+`oidc-conformance-summary-<run_id>-<attempt>` (retained for 14 days). The report
+contains the tested commit, branch, exact CI run/attempt link, per-plan status and
+counts, and official plan links. Failed preparation and missing or incomplete
+reports remain visible.
+
+CI commits only `conformance/SUMMARY.md` to the branch on which the workflow was
+dispatched, preserving changes made to that branch while tests were running.
+The summary job has `contents: write`; repository rules must allow its bot commit.
+Publication never forces a push or bypasses branch protection. If it is rejected,
+the report remains available in the run summary and downloadable artifact.
+Tag runs produce the report and artifact without updating a branch.
+
+Each plan's evidence artifact includes the run ID and attempt number. Re-running
+failed jobs uses the newest available attempt for each plan while retaining
+evidence from successful jobs that were not rerun. Re-running an older workflow
+cannot replace a report published by a newer run.
+
+### Browser evidence
 
 Login evidence is captured from the actual visible identifier/password page,
 before submitting credentials in the same browser interaction. Callback pages

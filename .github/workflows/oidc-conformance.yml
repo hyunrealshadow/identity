@@ -32,6 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Check summary generation and repository publication
+        run: python -m unittest discover -s conformance/tests -p 'test_ci_*summary.py'
+
       - name: Validate official account token
         env:
           CONFORMANCE_API_TOKEN: ${{ secrets.CONFORMANCE_API_TOKEN }}
@@ -191,52 +194,42 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: oidc-conformance-${{ matrix.id }}-${{ github.run_id }}
+          name: oidc-conformance-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: conformance/results/
           retention-days: 14
 
   summary:
     name: Summarize all OP plans
     needs: [prepare, conformance]
-    if: ${{ always() && needs.prepare.result == 'success' }}
+    if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v7
+
       - name: Download all plan reports
         uses: actions/download-artifact@v7
         continue-on-error: true
         with:
-          pattern: oidc-conformance-*-${{ github.run_id }}
+          pattern: oidc-conformance-*-${{ github.run_id }}-*
           path: reports
 
       - name: Summarize results including failed and incomplete plans
         env:
           PROFILES: ${{ needs.prepare.outputs.profiles }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
           PLAN_JOBS_RESULT: ${{ needs.conformance.result }}
-        run: |
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          reports = {}
-          for path in Path('reports').rglob('results.json'):
-              report = json.loads(path.read_text())
-              reports[report.get('case_id', report['profile'])] = report
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
-              output.write('All plan jobs: **' + os.environ['PLAN_JOBS_RESULT'] + '**\n\n')
-              output.write('| Plan | Response type | Status | Passed | Failed | UI review | Official results |\n|---|---|---|---:|---:|---:|---|\n')
-              for profile in json.loads(os.environ['PROFILES']):
-                  report = reports.get(profile)
-                  if report is None:
-                      plan_url = Path('reports') / f"oidc-conformance-{profile}-{os.environ['GITHUB_RUN_ID']}" / 'plan-url.txt'
-                      link = f'[Plan]({plan_url.read_text().strip()})' if plan_url.exists() else '—'
-                      output.write(f'| {profile} | — | NO_REPORT | — | — | — | {link} |\n')
-                      continue
-                  counts = report['summary']
-                  results = report['results']
-                  expected = len(report['plan']['modules'])
-                  incomplete = (not results or len(results) != expected
-                                or any(r['status'] != 'FINISHED' for r in results))
-                  status = 'INCOMPLETE' if incomplete else ('FAILED' if counts['FAILED'] else 'COMPLETED')
-                  response_type = report.get('response_type') or '—'
-                  output.write(f"| {profile} | {response_type} | {status} | {counts['PASSED']} | {counts['FAILED']} | {counts.get('REVIEW', 0) + counts.get('MANUAL_REVIEW_REQUIRED', 0)} | [Plan]({report['plan_url']}) |\n")
-          PY
+        run: python conformance/ci_summary.py --output "$RUNNER_TEMP/oidc-conformance-summary.md"
+
+      - name: Upload standalone Markdown summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: oidc-conformance-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oidc-conformance-summary.md
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Update repository conformance summary
+        run: python conformance/ci_commit_summary.py --summary "$RUNNER_TEMP/oidc-conformance-summary.md"

@@ -330,7 +330,7 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
     assert!(response.registration_access_token.is_some());
     assert_eq!(
         response.registration_client_uri.unwrap().as_str(),
-        "https://identity.example.com/oauth2/register/11111111-1111-1111-1111-111111111111"
+        "https://identity.example.com/oauth2/clients/11111111-1111-1111-1111-111111111111"
     );
     assert_eq!(response.client_name.as_deref(), Some("Example RP"));
     assert_eq!(

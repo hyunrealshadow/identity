@@ -52,4 +52,6 @@ apps/login/.data/
 /deploy/secrets/
 
 CONTEXT.md
-docs
+docs/*
+!docs/protocol.md
+!docs/security.md
