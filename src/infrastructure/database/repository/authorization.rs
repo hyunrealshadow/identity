@@ -13,7 +13,6 @@ use std::collections::BTreeSet;
 use async_trait::async_trait;
 use identity_domain::{
     authorization::{
-        administrator::{OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort},
         audit::{
             AuditSubjectKind, AuthorizationAuditContext, AuthorizationAuditError,
             AuthorizationAuditJournal, AuthorizationAuditStorageError,
@@ -24,6 +23,7 @@ use identity_domain::{
         catalog::ManagementScope,
         ids::PolicyVersion,
         policy_fingerprint,
+        recovery::{OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort},
         repository::{ManagementAuthorityRepository, ManagementRepositoryError},
         snapshot::ManagementAuthorizationSnapshot,
     },

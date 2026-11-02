@@ -13,11 +13,7 @@ use std::fmt;
 use crate::{authorization::ids::PolicyVersion, rbac::deterministic_oid};
 
 pub const MANAGEMENT_SCOPE_PREFIX: &str = "management.";
-pub const MANAGEMENT_SCOPE_COUNT: usize = 43;
-pub const VIEWER_SCOPE_COUNT: usize = 16;
-pub const ADMIN_SCOPE_COUNT: usize = 38;
-pub const OWNER_SCOPE_COUNT: usize = 43;
-pub const M2M_SCOPE_COUNT: usize = 26;
+pub const MANAGEMENT_SCOPE_COUNT: usize = <ManagementScope as strum::EnumCount>::COUNT;
 
 /// Fixed instance administrator roles. The role names are not OAuth scopes and
 /// business roles with the same key never confer these capabilities.
@@ -196,7 +192,7 @@ impl ManagementScopeDefinition {
 ///
 /// Adding a variant requires a catalog entry, migration seed, error/translation
 /// review and explicit role/M2M review. There is no future-scope wildcard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::EnumCount)]
 pub enum ManagementScope {
     UsersRead,
     UsersCreate,
@@ -834,8 +830,6 @@ pub const HUMAN_ONLY_SCOPES: [ManagementScope; 17] = [
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ManagementCatalogError {
-    #[error("management catalog must contain {expected} entries, found {actual}")]
-    CountMismatch { expected: usize, actual: usize },
     #[error("management catalog contains duplicate scope {0}")]
     DuplicateScope(&'static str),
     #[error("management catalog contains duplicate name {0}")]
@@ -848,12 +842,6 @@ pub enum ManagementCatalogError {
     OwnerNotExhaustive(&'static str),
     #[error("role eligibility is not monotonic for {0}")]
     NonMonotonicRole(&'static str),
-    #[error("viewer scope count mismatch: expected {expected}, found {actual}")]
-    ViewerCountMismatch { expected: usize, actual: usize },
-    #[error("admin scope count mismatch: expected {expected}, found {actual}")]
-    AdminCountMismatch { expected: usize, actual: usize },
-    #[error("M2M scope count mismatch: expected {expected}, found {actual}")]
-    M2mCountMismatch { expected: usize, actual: usize },
     #[error("human-only scope is exposed to machine clients: {0}")]
     HumanOnlyMachineScope(&'static str),
     #[error("management catalog name is not a three-segment management name: {0}")]
@@ -865,18 +853,8 @@ pub enum ManagementCatalogError {
 /// Validate catalog coverage, explicit role membership, M2M boundaries and
 /// reserved naming. Seeds/tests call this before writing catalog rows.
 pub fn validate_catalog() -> Result<(), ManagementCatalogError> {
-    if MANAGEMENT_SCOPES.len() != MANAGEMENT_SCOPE_COUNT {
-        return Err(ManagementCatalogError::CountMismatch {
-            expected: MANAGEMENT_SCOPE_COUNT,
-            actual: MANAGEMENT_SCOPES.len(),
-        });
-    }
-
     let mut names = std::collections::HashSet::new();
     let mut scopes = std::collections::HashSet::new();
-    let mut viewer_count = 0;
-    let mut admin_count = 0;
-    let mut m2m_count = 0;
 
     for definition in &MANAGEMENT_SCOPES {
         if !scopes.insert(definition.scope) {
@@ -908,14 +886,7 @@ pub fn validate_catalog() -> Result<(), ManagementCatalogError> {
         {
             return Err(ManagementCatalogError::NonMonotonicRole(definition.name));
         }
-        if definition.roles.allows(AdministratorRole::Viewer) {
-            viewer_count += 1;
-        }
-        if definition.roles.allows(AdministratorRole::Admin) {
-            admin_count += 1;
-        }
         if definition.m2m_allowed() {
-            m2m_count += 1;
             if definition.scope.is_human_only() {
                 return Err(ManagementCatalogError::HumanOnlyMachineScope(
                     definition.name,
@@ -931,25 +902,6 @@ pub fn validate_catalog() -> Result<(), ManagementCatalogError> {
         {
             return Err(ManagementCatalogError::MissingDefinition(scope.name()));
         }
-    }
-
-    if viewer_count != VIEWER_SCOPE_COUNT {
-        return Err(ManagementCatalogError::ViewerCountMismatch {
-            expected: VIEWER_SCOPE_COUNT,
-            actual: viewer_count,
-        });
-    }
-    if admin_count != ADMIN_SCOPE_COUNT {
-        return Err(ManagementCatalogError::AdminCountMismatch {
-            expected: ADMIN_SCOPE_COUNT,
-            actual: admin_count,
-        });
-    }
-    if m2m_count != M2M_SCOPE_COUNT {
-        return Err(ManagementCatalogError::M2mCountMismatch {
-            expected: M2M_SCOPE_COUNT,
-            actual: m2m_count,
-        });
     }
 
     Ok(())

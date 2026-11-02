@@ -12,6 +12,7 @@ pub mod authority;
 pub mod catalog;
 pub mod ids;
 pub mod owner;
+pub mod recovery;
 pub mod repository;
 pub mod snapshot;
 
@@ -22,8 +23,7 @@ pub use actor::{
 pub use administrator::{
     AdministratorBinding, AdministratorMutationOutcome, AdministratorRole, AssignAdministrator,
     GrantLifecycleError, GrantMetadata, GrantReason, GrantReasonError, MAX_GRANT_REASON_LENGTH,
-    OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort, RevokeAdministrator,
-    UpdateAdministratorRole,
+    RevokeAdministrator, UpdateAdministratorRole,
 };
 pub use audit::{
     AuditSubject, AuditSubjectKind, AuthorizationAuditContext, AuthorizationAuditError,
@@ -34,18 +34,18 @@ pub use authority::{
     is_trusted_management_permission, trusted_built_in_permission_oid,
 };
 pub use catalog::{
-    ADMIN_SCOPE_COUNT, HUMAN_ONLY_SCOPES, HumanAuthenticationRequirement, M2M_SCOPE_COUNT,
-    MANAGEMENT_SCOPE_COUNT, MANAGEMENT_SCOPE_PREFIX, MANAGEMENT_SCOPES, ManagementCatalogError,
-    ManagementFlowAllowance, ManagementRoleEligibility, ManagementScope, ManagementScopeDefinition,
-    ManagementScopeError, OWNER_SCOPE_COUNT, VIEWER_SCOPE_COUNT, is_management_scope_name,
-    is_reserved_management_name, m2m_allowed_scopes, policy_fingerprint, scopes_for_role,
-    validate_catalog,
+    HUMAN_ONLY_SCOPES, HumanAuthenticationRequirement, MANAGEMENT_SCOPE_COUNT,
+    MANAGEMENT_SCOPE_PREFIX, MANAGEMENT_SCOPES, ManagementCatalogError, ManagementFlowAllowance,
+    ManagementRoleEligibility, ManagementScope, ManagementScopeDefinition, ManagementScopeError,
+    is_management_scope_name, is_reserved_management_name, m2m_allowed_scopes, policy_fingerprint,
+    scopes_for_role, validate_catalog,
 };
 pub use ids::{AdministratorBindingOid, AuthorizationVersion, PolicyVersion};
 pub use owner::{
     OwnerLifecycleContext, OwnerProtectionError, OwnerTargetContext, ensure_owner_target_allowed,
     ensure_usable_owner_survives, owner_target_context,
 };
+pub use recovery::{OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort};
 pub use repository::{
     AuthorizationVersionChange, ManagementAuthorityRepository, ManagementRepositoryError,
     snapshot_identity,

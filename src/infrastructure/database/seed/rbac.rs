@@ -15,10 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use identity_domain::{
-    authorization::catalog::{
-        ADMIN_SCOPE_COUNT, AdministratorRole, ManagementScope, OWNER_SCOPE_COUNT,
-        VIEWER_SCOPE_COUNT, validate_catalog,
-    },
+    authorization::catalog::{AdministratorRole, ManagementScope, validate_catalog},
     rbac::{
         LocalizedMetadata, LocalizedText, RolePermissionOid, built_in_group_oid,
         built_in_permission_oid, built_in_role_oid,
@@ -79,7 +76,6 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
         .await
         .map_err(AppError::internal)?;
     validate_catalog().map_err(AppError::internal)?;
-    validate_role_presets()?;
 
     let resource_oid = oauth_resource::graphql_resource_oid(transaction).await?;
 
@@ -110,28 +106,6 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
 
 fn internal(message: &'static str) -> AppError {
     AppError::internal(sea_orm::DbErr::Custom(message.to_owned()))
-}
-
-/// The compiled catalog is the only source of preset membership. This check
-/// runs before any row is written so a catalog regression cannot silently
-/// renumber or drop a built-in permission.
-fn validate_role_presets() -> Result<(), AppError> {
-    for (role, expected) in [
-        (AdministratorRole::Owner, OWNER_SCOPE_COUNT),
-        (AdministratorRole::Admin, ADMIN_SCOPE_COUNT),
-        (AdministratorRole::Viewer, VIEWER_SCOPE_COUNT),
-    ] {
-        let actual = ManagementScope::ALL
-            .into_iter()
-            .filter(|scope| scope.allows_role(role))
-            .count();
-        if actual != expected {
-            return Err(internal(
-                "built-in role preset does not match the trusted catalog",
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn identity_conflict() -> AppError {

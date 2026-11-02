@@ -6,10 +6,9 @@ use fluent_templates::{
 use identity_application::error::{
     code::AppErrorCode,
     codes::{
-        account::AccountErrorCode, administrator::ADMINISTRATOR_ERROR_INVENTORY,
-        auth::AuthErrorCode, authorization::AUTHORIZATION_ERROR_INVENTORY,
-        authorize::AuthorizeErrorCode, common::CommonErrorCode,
-        device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
+        account::AccountErrorCode, auth::AuthErrorCode,
+        authorization::AUTHORIZATION_ERROR_INVENTORY, authorize::AuthorizeErrorCode,
+        common::CommonErrorCode, device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
         graphql_transport::GraphqlTransportErrorCode, group::GROUP_ERROR_INVENTORY,
         openid_connect::OpenIdConnectErrorCode, rbac::RBAC_ERROR_INVENTORY, token::TokenErrorCode,
         user_management::USER_MANAGEMENT_ERROR_INVENTORY,
@@ -66,16 +65,6 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
             .collect()
     }
     let mut inventory = definitions::<CommonErrorCode>("common");
-    inventory.extend(ADMINISTRATOR_ERROR_INVENTORY.iter().map(|definition| {
-        PublicErrorDefinition {
-            code: definition.numeric_code,
-            kind: definition.kind,
-            fluent_key: definition.fluent_key.to_owned(),
-            usage_module: definition.usage_module,
-            required: definition.required_params,
-            optional: definition.optional_params,
-        }
-    }));
     inventory.extend(definitions::<AuthErrorCode>("auth"));
     inventory.extend(definitions::<AccountErrorCode>("account"));
     inventory.extend(definitions::<AuthorizeErrorCode>(
@@ -242,8 +231,8 @@ mod tests {
     #[test]
     fn public_inventory_covers_typed_errors_without_conflicts() {
         use identity_application::error::codes::{
-            administrator::AdministratorErrorCode, authorization::AuthorizationErrorCode,
-            group::GroupErrorCode, rbac::RbacErrorCode, user_management::UserManagementErrorCode,
+            authorization::AuthorizationErrorCode, group::GroupErrorCode, rbac::RbacErrorCode,
+            user_management::UserManagementErrorCode,
         };
         use std::collections::BTreeSet;
         use strum::IntoEnumIterator;
@@ -284,7 +273,6 @@ mod tests {
         }
         covered::<UserManagementErrorCode>(&inventory, 16000..=16099);
         covered::<RbacErrorCode>(&inventory, 17000..=17099);
-        covered::<AdministratorErrorCode>(&inventory, 18000..=18019);
         covered::<GroupErrorCode>(&inventory, 19000..=19099);
         covered::<AuthorizationErrorCode>(&inventory, 27000..=27099);
     }

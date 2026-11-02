@@ -19,9 +19,9 @@
 
 use identity_domain::{
     authorization::{
-        administrator::OwnerAccessSnapshot,
         authority::{UserPermissionAuthority, full_management_permissions},
         ids::AuthorizationVersion,
+        recovery::OwnerAccessSnapshot,
     },
     user::UserOid,
 };

@@ -313,11 +313,6 @@ mod tests {
             include_str!("../../../assets/i18n/en-US/errors/user_management.ftl"),
             include_str!("../../../assets/i18n/zh-CN/errors/user_management.ftl"),
         ),
-        (
-            "administrator",
-            include_str!("../../../assets/i18n/en-US/errors/administrator.ftl"),
-            include_str!("../../../assets/i18n/zh-CN/errors/administrator.ftl"),
-        ),
     ];
 
     fn parse_catalog(source: &str) -> BTreeMap<String, BTreeSet<String>> {

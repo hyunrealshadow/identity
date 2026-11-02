@@ -1,5 +1,4 @@
 pub mod account;
-pub mod administrator;
 pub mod auth;
 pub mod authorization;
 pub mod authorize;
@@ -49,7 +48,6 @@ mod tests {
         check::<super::account::AccountErrorCode>(&mut seen, 15000..=15099);
         check::<super::user_management::UserManagementErrorCode>(&mut seen, 16000..=16099);
         check::<super::rbac::RbacErrorCode>(&mut seen, 17000..=17099);
-        check::<super::administrator::AdministratorErrorCode>(&mut seen, 18000..=18019);
         check::<super::group::GroupErrorCode>(&mut seen, 19000..=19099);
         check::<super::provider::ProviderErrorCode>(&mut seen, 20000..=20099);
         check::<super::openid_connect::OpenIdConnectErrorCode>(&mut seen, 21000..=21099);
