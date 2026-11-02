@@ -9,7 +9,7 @@ use salvo::{
 };
 use serde_json::Value;
 
-use crate::router::app_router;
+use identity_web::router::app_router;
 
 mod fixtures;
 

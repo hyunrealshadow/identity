@@ -2,7 +2,7 @@ use http::{StatusCode, header};
 use identity_infrastructure::test_app_state_with_cors_origin;
 use salvo::{Service, affix_state::inject, test::TestClient};
 
-use super::super::routes;
+use identity_web::controllers::oauth2::routes;
 
 #[tokio::test]
 async fn token_preflight_uses_cached_client_origin_but_authorization_does_not() {

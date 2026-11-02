@@ -1,0 +1,14 @@
+# Migration Rules
+
+- Migration names must describe the actual operation and target. Use `mYYYYMMDD_HHMMSS_<action>_<target_or_change>`, such as `create_security_audit`, `add_user_preferences`, or `add_session_user_activity_index`. Do not use only a table name or a generic module name.
+- For features that have not been deployed, update the initial definitions and seed directly. Do not add compatibility migrations for naming changes made during development. Local verification data does not create a production compatibility requirement.
+- Use one migration per table. For new tables that have not been deployed, define the final columns, constraints, and indexes in their initial migrations. Do not combine multiple management tables into one large file. Keep necessary upgrades to deployed tables in separate migrations per table; do not replace upgrades by modifying old table-creation migrations.
+- Names must describe the actual change to persisted data and its purpose, rather than implementation choices such as Relay, cursor pagination frameworks, or libraries. For example, use `add_session_user_activity_index` for the session user/activity index. Index migration names must identify the indexed target and indicate uniqueness when applicable.
+- When renaming files, update module declarations and source references together. Deployed migrations must retain their original `MigrationName` ledger identifiers to avoid missing historical versions or executing migrations twice after source reorganization. Undeployed migrations must use their final action names directly; do not preserve old identities for local test ledgers.
+- Migrations expressible with SeaORM / SeaQuery must use the standard builders, not direct SQL.
+- This rule applies to table creation, column changes, indexes, foreign keys, check constraints, and data backfills that the builders can express.
+- Do not bypass the builders through `execute_unprepared`, raw SQL strings, or separate `.sql` files.
+- Use minimal raw SQL only when the current dependency versions genuinely cannot express the required database feature. Document the specific limitation next to the code.
+- Implement business rules, authorization calculations, and audit writes in Rust application/domain code and transactional repositories. Use the existing seed entry point for preset data.
+- Do not add tests for migration implementation details. Verify results through compilation and real database migration checks when necessary.
+- Table and column identifiers must use enums derived with `#[derive(DeriveIden)]`. Reuse the target table's enum for foreign key references. Do not substitute `Alias::new("table_or_column_name")` or bare strings. Keep explicit strings for index and constraint names; function names and database type aliases are not table or column identifiers.

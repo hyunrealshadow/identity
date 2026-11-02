@@ -11,7 +11,7 @@ use salvo::{Response, Service, affix_state::inject, test::TestClient};
 use url::Url;
 use uuid::Uuid;
 
-use crate::controllers::oauth2::routes;
+use identity_web::controllers::oauth2::routes;
 
 mod fixtures;
 

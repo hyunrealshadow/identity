@@ -33,7 +33,14 @@ use crate::infrastructure::database::entity::{
     login, session::Model, setting, user::Model as UserModel,
 };
 
-pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
+/// First-hop authorization state for a reusable browser session.
+///
+/// The query sequence follows the current protocol path: live client lookup,
+/// resource-aware scope resolution, exact client ceiling, session selection,
+/// authorization-request creation with the semantic client boundary, pending
+/// login creation and auto-selection. No legacy client-management policy row
+/// or policy toggle is consulted.
+pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
     let now = Utc::now();
     let client_oid = Uuid::nil();
     let selected_session_oid = Uuid::new_v4();
@@ -99,12 +106,14 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         updated_at: None,
     };
     let client_model = client::Model {
+        version: uuid::Uuid::new_v4(),
         id: 17,
         oid: client_oid,
         protocol: "openid_connect".to_owned(),
         name: "Continue RP".to_owned(),
         names: None,
         description: Some("OIDC relying party".to_owned()),
+        descriptions: None,
         built_in: false,
         created_at: now.into(),
         updated_at: None,
@@ -116,6 +125,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         r#type: ClientAuthorizationType::AuthorizationRequest.to_string(),
         data: to_value(StoredAuthorizationRequest {
             request: AuthorizationRequestData {
+                management: None,
                 resources: Vec::new(),
                 response_type: "code".parse().unwrap(),
                 response_mode: None,
@@ -249,6 +259,7 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
     let active_user = UserModel {
         id: 47,
         oid: selected_user_oid,
+        version: Uuid::new_v4(),
         name: "Ada Lovelace".to_owned(),
         name_normalized: "ada lovelace".to_owned(),
         email: "ada@example.com".to_owned(),
@@ -281,6 +292,10 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         created_at: now.into(),
         updated_at: None,
     };
+    let protocol_scope_names = [
+        BTreeMap::from([("code".to_owned(), Value::String(Some("openid".to_owned())))]),
+        BTreeMap::from([("code".to_owned(), Value::String(Some("profile".to_owned())))]),
+    ];
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[
@@ -295,27 +310,60 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         .append_query_results([Vec::<setting::Model>::new()])
         .append_query_results([[symmetric_key.clone()]])
         .append_query_results([[symmetric_key.clone()]])
+        // Live client, metadata, platforms and exact assigned scopes.
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
         .append_query_results([[platform_model]])
-        .append_query_results([[
-            BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]),
-            BTreeMap::from([("name".to_owned(), Value::String(Some("profile".to_owned())))]),
-        ]])
-        .append_query_results([[
-            BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]),
-            BTreeMap::from([("name".to_owned(), Value::String(Some("profile".to_owned())))]),
-        ]])
-        .append_query_results([[
-            BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]),
-            BTreeMap::from([("name".to_owned(), Value::String(Some("profile".to_owned())))]),
-        ]])
+        .append_query_results([protocol_scope_names.clone()])
+        // Resource-aware catalog resolution and the client protocol ceiling.
+        .append_query_results([protocol_scope_names.clone()])
+        .append_query_results([protocol_scope_names])
+        // Reusable browser session selected from the OP session cookie.
         .append_query_results([[(active_session.clone(), active_user)]])
-        .append_query_results([[client_model.clone()]])
+        // Create the authorization request: take the shared issuance lock,
+        // lock the client row and its OIDC configuration, derive the semantic
+        // client boundary, then return the inserted record. This request has no
+        // target resources, so it takes no resource row lock.
+        .append_query_results([[BTreeMap::from([(
+            "id".to_owned(),
+            Value::from(client_model.id),
+        )])]])
+        .append_query_results([[BTreeMap::from([(
+            "id".to_owned(),
+            Value::from(client_model.id),
+        )])]])
+        .append_query_results([[BTreeMap::from([(
+            "client_id".to_owned(),
+            Value::from(client_model.id),
+        )])]])
+        .append_query_results([[BTreeMap::from([(
+            "dependencies".to_owned(),
+            Value::from(json!([[
+                "client",
+                [client_oid.to_string(), "openid_connect"]
+            ]])),
+        )])]])
         .append_query_results([[inserted_authorization_model.clone()]])
+        // Create the pending login: client, authorization request, insert.
         .append_query_results([[client_model.clone()]])
         .append_query_results([[inserted_authorization_model.clone()]])
         .append_query_results([[inserted_login_model.clone()]])
-        .append_query_results([[inserted_login_model]])
+        .append_exec_results([
+            // `client_authorization.create` takes the shared authorization
+            // issuance lock before touching the target resources or subject.
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+            // `login.create_pending` audit row.
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+        ])
+        // Bind the selected session: reload the login and its client/request,
+        // reload the stored request with its client, then compare-and-set the
+        // selection.
+        .append_query_results([[inserted_login_model.clone()]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[inserted_authorization_model.clone()]])
         .append_query_results([[(inserted_authorization_model.clone(), Some(client_model))]])
@@ -324,7 +372,12 @@ pub(in super::super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
             last_insert_id: 0,
             rows_affected: 1,
         }])
+        // bind_session reads the live session, updates the login and audits it.
         .append_query_results([[active_session]])
+        .append_exec_results([MockExecResult {
+            last_insert_id: 0,
+            rows_affected: 1,
+        }])
         .append_exec_results([MockExecResult {
             last_insert_id: 0,
             rows_affected: 1,

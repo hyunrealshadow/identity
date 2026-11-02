@@ -79,10 +79,6 @@ impl Default for ContinueFixture {
 
 pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, String, Option<Uuid>) {
     let now = Utc::now();
-    let should_mock_auto_selection_write = fixture.selection.is_none()
-        && (fixture.active_session.is_some() || !fixture.additional_active_sessions.is_empty())
-        && fixture.max_age.is_none()
-        && !matches!(fixture.prompt.as_deref(), Some("login" | "select_account"));
     let client_oid = Uuid::new_v4();
     let authorization_oid = Uuid::new_v4();
     let login_oid = Uuid::new_v4();
@@ -163,18 +159,21 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
         updated_at: None,
     };
     let client_model = client::Model {
+        version: uuid::Uuid::new_v4(),
         id: 17,
         oid: client_oid,
         protocol: "openid_connect".to_owned(),
         name: "Continue RP".to_owned(),
         names: None,
         description: Some("OIDC relying party".to_owned()),
+        descriptions: None,
         built_in: false,
         created_at: now.into(),
         updated_at: None,
     };
     let authorization_request = StoredAuthorizationRequest {
         request: AuthorizationRequestData {
+            management: None,
             resources: Vec::new(),
             response_type: "code".parse().unwrap(),
             response_mode: None,
@@ -367,6 +366,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
             UserModel {
                 id: 47,
                 oid: user_oid,
+                version: Uuid::new_v4(),
                 name: "Ada Lovelace".to_owned(),
                 name_normalized: "ada lovelace".to_owned(),
                 email: "ada@example.com".to_owned(),
@@ -435,6 +435,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
             UserModel {
                 id,
                 oid: user_oid,
+                version: Uuid::new_v4(),
                 name: user_name,
                 name_normalized: "normalized".to_owned(),
                 email: user_email.clone(),
@@ -477,6 +478,31 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
             .map(|(session, _)| session.clone())
     });
 
+    let approval_session_and_user = active_session_and_users
+        .iter()
+        .find(|(session, _)| Some(session.oid) == selected_session_oid)
+        .or_else(|| active_session_and_users.first())
+        .cloned()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let consent_user_model = active_session_and_users
+        .first()
+        .map(|(_, user)| user.clone());
+    let persisted_covers_request = fixture
+        .persisted_consent_scopes
+        .iter()
+        .any(|scope| scope == "openid");
+    let should_approve = selected_session_oid.is_some()
+        && match fixture.consent_state {
+            ConsentState::Denied => false,
+            ConsentState::Approved => true,
+            ConsentState::Pending => {
+                fixture.skip_consent || (should_query_user_consent && persisted_covers_request)
+            }
+        };
+    let should_deny =
+        selected_session_oid.is_some() && fixture.consent_state == ConsentState::Denied;
+
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[
             installation_initialized_setting,
@@ -488,10 +514,12 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
             device_authorization_setting,
         ]])
         .append_query_results([Vec::<setting::Model>::new()])
-        .append_query_results([[symmetric_key.clone()]]);
-
-    let db = db
         .append_query_results([[symmetric_key.clone()]])
+        // The signing ring has no asymmetric key; protected interaction ids
+        // only need the live symmetric key row.
+        .append_query_results([[symmetric_key.clone()]])
+        // `load_continue_context_by_login`: login, its client, its queued
+        // authorization request, then the optional bound session.
         .append_query_results([[login_model.clone()]])
         .append_query_results([[client_model.clone()]])
         .append_query_results([[authorization_model.clone()]]);
@@ -499,22 +527,26 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
         Some(session) => db.append_query_results([[session]]),
         None => db,
     };
+    // The joined authorization request, the live OIDC client and its exact
+    // assigned scopes.
     let db = db
         .append_query_results([[(authorization_model.clone(), client_model.clone())]])
         .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
         .append_query_results([[platform_model]])
         .append_query_results([[BTreeMap::from([(
-            "name".to_owned(),
+            "code".to_owned(),
             Value::String(Some("openid".to_owned())),
         )])]]);
 
-    let consent_user_model = active_session_and_users
-        .first()
-        .map(|(_, user)| user.clone());
-    let db = if active_session_and_users.is_empty() {
-        db.append_query_results([Vec::<(Model, UserModel)>::new()])
+    // `load_selected_sessions` reads only the session bound to the login.
+    let db = if selected_session_oid.is_some() {
+        if active_session_and_users.is_empty() {
+            db.append_query_results([Vec::<(Model, UserModel)>::new()])
+        } else {
+            db.append_query_results([active_session_and_users.clone()])
+        }
     } else {
-        db.append_query_results([active_session_and_users])
+        db
     };
 
     let db = if should_query_user_consent {
@@ -543,35 +575,90 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
         db
     };
 
-    let db = if should_mock_auto_selection_write {
-        db.append_query_results([[authorization_model.clone()]])
+    let db = if should_approve {
+        db
+            // Approval re-reads the stored request and validates the bound
+            // session before issuing the code.
+            .append_query_results([[(authorization_model.clone(), client_model.clone())]])
+            .append_query_results([approval_session_and_user])
+            // `client_authorization.create`: live user and session guards,
+            // client/config share locks, semantic client boundary, subject
+            // authority fingerprint, then the inserted code.
+            .append_query_results([[BTreeMap::from([(
+                "active".to_owned(),
+                Value::Bool(Some(true)),
+            )])]])
+            .append_query_results([[BTreeMap::from([(
+                "active".to_owned(),
+                Value::Bool(Some(true)),
+            )])]])
+            .append_query_results([[BTreeMap::from([(
+                "id".to_owned(),
+                Value::from(client_model.id),
+            )])]])
+            .append_query_results([[BTreeMap::from([(
+                "id".to_owned(),
+                Value::from(client_model.id),
+            )])]])
+            .append_query_results([[BTreeMap::from([(
+                "client_id".to_owned(),
+                Value::from(client_model.id),
+            )])]])
+            .append_query_results([[BTreeMap::from([(
+                "dependencies".to_owned(),
+                Value::from(json!([[
+                    "client",
+                    [client_oid.to_string(), "openid_connect"]
+                ]])),
+            )])]])
+            .append_query_results([[BTreeMap::from([
+                ("kind".to_owned(), Value::from("subject")),
+                (
+                    "payload".to_owned(),
+                    Value::from(json!([
+                        selected_user_oid.unwrap_or_else(Uuid::new_v4),
+                        true,
+                        false,
+                        null
+                    ])),
+                ),
+            ])]])
+            .append_query_results([[authorization_code_model]])
+            .append_exec_results([
+                // `client_authorization.create` takes the shared authorization
+                // issuance lock before the credential, session and client locks.
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+                // user credential advisory lock
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+                // session advisory lock
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+                // mark_authorization_request_completed
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+            ])
+    } else if should_deny {
+        db
+            // Denial only re-reads the stored request before completing it.
+            .append_query_results([[(authorization_model.clone(), client_model.clone())]])
             .append_exec_results([MockExecResult {
                 last_insert_id: 0,
                 rows_affected: 1,
             }])
     } else {
         db
-    };
-
-    let db = db.append_query_results([[(authorization_model.clone(), client_model.clone())]]);
-    let db = match bound_session_model {
-        Some(session) => db.append_query_results([[session]]),
-        None => db,
-    };
-    let db = db
-        .append_query_results([[client_model.clone()]])
-        .append_query_results([[authorization_code_model]])
-        .append_exec_results([
-            MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            },
-            MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            },
-        ])
-        .into_connection();
+    }
+    .into_connection();
 
     let i18n = build_i18n().unwrap();
     let tera = build_tera(i18n.loader()).unwrap();

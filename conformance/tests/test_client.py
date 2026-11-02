@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -60,7 +61,7 @@ class ConformanceClientPlanTests(unittest.TestCase):
 
         self.assertEqual(plan_id, "plan-1")
         url = self.client.session.post.call_args.args[0]
-        self.assertIn("variant=", url)
+        self.assertEqual(json.loads(parse_qs(urlsplit(url).query)["variant"][0]), {"server_metadata": "discovery", "client_registration": "static_client"})
 
     def test_create_plan_from_dict_includes_variant_when_provided(self):
         config = {"alias": "identity"}
@@ -69,7 +70,7 @@ class ConformanceClientPlanTests(unittest.TestCase):
 
         self.assertEqual(plan_id, "plan-1")
         url = self.client.session.post.call_args.args[0]
-        self.assertIn("variant=", url)
+        self.assertEqual(json.loads(parse_qs(urlsplit(url).query)["variant"][0]), variant)
 
 
 if __name__ == "__main__":

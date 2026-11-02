@@ -29,11 +29,11 @@ pub(super) async fn consent_get_is_a_json_api_without_content_negotiation() {
     assert_eq!(payload["account"]["name"], "Ada Lovelace");
     assert_eq!(payload["account"]["email"], "ada@example.com");
     assert!(payload["account"].get("picture").is_none());
-    assert_eq!(payload["scopes"][0]["name"], "openid");
+    assert_eq!(payload["scopes"][0]["code"], "openid");
     assert_eq!(payload["scopes"][0]["previously_granted"], true);
-    assert_eq!(payload["scopes"][1]["name"], "profile");
+    assert_eq!(payload["scopes"][1]["code"], "profile");
     assert_eq!(payload["scopes"][1]["previously_granted"], false);
-    assert_eq!(payload["scopes"][1]["display_name"], "Configured profile");
+    assert_eq!(payload["scopes"][1]["name"], "Configured profile");
     assert_eq!(
         payload["scopes"][1]["descriptions"]["zh-CN"],
         "数据库描述 profile"
@@ -70,11 +70,8 @@ pub(super) async fn consent_get_displays_registered_custom_scope() {
     .await;
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let payload: Value = from_str(&response.take_string().await.unwrap()).unwrap();
-    assert_eq!(payload["scopes"][1]["name"], "orders.read");
-    assert_eq!(
-        payload["scopes"][1]["display_name"],
-        "Configured orders.read"
-    );
+    assert_eq!(payload["scopes"][1]["code"], "orders.read");
+    assert_eq!(payload["scopes"][1]["name"], "Configured orders.read");
 }
 
 #[tokio::test]
@@ -198,6 +195,12 @@ pub(super) async fn device_code_check_does_not_choose_an_account() {
 #[tokio::test]
 pub(super) async fn device_decision_is_recorded_against_the_bound_login() {
     let (state, protected_login_id, session_oid) = device_decision_test_state().await;
+    let protected_session_id = identity_web::controllers::shared::protect_session_id(
+        &state,
+        identity_domain::auth::SessionOid(session_oid),
+    )
+    .await
+    .unwrap();
     let db = state.resources().db().clone();
     let service = Service::new(app_router(state, &consent_test_config()));
 
@@ -207,7 +210,11 @@ pub(super) async fn device_decision_is_recorded_against_the_bound_login() {
     let mut description = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
     ))
-    .add_header("x-sessions", format!("[\"{session_oid}\"]"), true)
+    .add_header(
+        "x-sessions",
+        serde_json::to_string(&vec![protected_session_id]).unwrap(),
+        true,
+    )
     .send(&service)
     .await;
     let body = description.take_string().await.unwrap();

@@ -7,7 +7,7 @@ use salvo::{
 };
 use serde_json::{Value, from_str};
 
-use super::super::routes;
+use identity_web::controllers::oauth2::routes;
 
 #[tokio::test]
 async fn inspection_and_revocation_preserve_client_errors_and_endpoint_challenges() {

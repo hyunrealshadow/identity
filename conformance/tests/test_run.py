@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import run
-from plans import PLANS, get_plan, ci_cases, RESPONSE_TYPES, conformance_case_id
+from plans import PLANS, get_plan, ci_cases, RESPONSE_TYPES, RESPONSE_TYPE_PROFILES, conformance_case_id
 from scripts.runner import TestResult
 DEFAULT_VARIANT = {
     "server_metadata": "discovery",
@@ -119,11 +119,17 @@ class PlanVariantTests(unittest.TestCase):
 
 
 class ProfileConfigurationTests(unittest.TestCase):
-    def test_ci_expands_all_response_type_profiles_without_overwriting_reports(self):
+    def test_ci_expands_all_profiles_with_unique_report_case_ids(self):
         cases = ci_cases()
-        self.assertEqual(len(cases), 43)
-        self.assertEqual(len({case['id'] for case in cases}), 43)
-        for profile in ("dynamic", "third-party-init", "rp-init-logout", "session", "backchannel", "frontchannel"):
+        self.assertTrue(cases)
+        self.assertEqual(len({case['id'] for case in cases}), len(cases))
+        expected = {
+            (profile, response_type)
+            for profile in PLANS
+            for response_type in (RESPONSE_TYPES if profile in RESPONSE_TYPE_PROFILES else ("",))
+        }
+        self.assertEqual({(case['profile'], case['response_type']) for case in cases}, expected)
+        for profile in RESPONSE_TYPE_PROFILES:
             selected = [case for case in cases if case['profile'] == profile]
             self.assertEqual([case['response_type'] for case in selected], list(RESPONSE_TYPES))
             for case in selected:

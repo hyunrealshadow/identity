@@ -36,7 +36,7 @@ use uuid::Uuid;
 use crate::infrastructure::database::entity::{
     client, client_authorization, client_openid_connect,
     client_openid_connect_platform::Model as ClientOpenidConnectPlatformModel, key, login,
-    scope::Model, session, setting, user, user_client_consent::Model as UserClientConsentModel,
+    scope::Model, session, setting, user,
 };
 
 /// The user code of the queued device request, as the verification page
@@ -67,6 +67,7 @@ pub(super) fn consent_test_config() -> AppConfig {
         database: DatabaseConfig::default(),
         health: HealthConfig::default(),
         graphql: Default::default(),
+        console: Default::default(),
         observability: Default::default(),
         openid_connect: Default::default(),
         settings: SettingsConfig::default(),
@@ -169,6 +170,7 @@ async fn consent_test_state_for(
     let active_user = user::Model {
         id: 7,
         oid: user_oid,
+        version: Uuid::new_v4(),
         name: "Ada Lovelace".to_owned(),
         name_normalized: "ada lovelace".to_owned(),
         email: "ada@example.com".to_owned(),
@@ -227,18 +229,21 @@ async fn consent_test_state_for(
         updated_at: None,
     };
     let client_model = client::Model {
+        version: uuid::Uuid::new_v4(),
         id: 17,
         oid: client_oid,
         protocol: "openid_connect".to_owned(),
         name: "Conformance RP".to_owned(),
         names: None,
         description: Some("OIDC relying party".to_owned()),
+        descriptions: None,
         built_in: false,
         created_at: now.into(),
         updated_at: None,
     };
     let authorization_request = StoredAuthorizationRequest {
         request: AuthorizationRequestData {
+            management: None,
             resources: Vec::new(),
             response_type: "code".parse().unwrap(),
             response_mode: None,
@@ -380,7 +385,7 @@ async fn consent_test_state_for(
     };
 
     let openid_scope_row =
-        BTreeMap::from([("name".to_owned(), Value::String(Some("openid".to_owned())))]);
+        BTreeMap::from([("code".to_owned(), Value::String(Some("openid".to_owned())))]);
     let scope_descriptions = scope
         .split_whitespace()
         .filter(|name| *name != "unknown_scope")
@@ -388,12 +393,15 @@ async fn consent_test_state_for(
         .map(|(index, name)| Model {
             id: index as i64,
             oid: Uuid::new_v4(),
-            protocol: "openid_connect".to_owned(),
-            name: name.to_owned(),
-            display_name: format!("Configured {name}"),
+            resource_id: None,
+            enabled: true,
+            code: name.to_owned(),
+            name: format!("Configured {name}"),
+            names: json!({"en-US": format!("Configured {name}")}),
             description: format!("Database description for {name}"),
             descriptions: json!({"zh-CN": format!("数据库描述 {name}")}),
             built_in: true,
+            version: Uuid::new_v4(),
             created_at: now.into(),
             updated_at: None,
         })
@@ -466,27 +474,36 @@ async fn consent_test_state_for(
                     )])
                 })
                 .collect::<Vec<_>>()])
+            // PostgreSQL Insert::exec reads generated IDs with RETURNING.
             .append_query_results([scope
                 .split_whitespace()
                 .enumerate()
-                .map(|(index, _)| UserClientConsentModel {
-                    id: 41 + i64::try_from(index).unwrap(),
-                    user_id: active_user.id,
-                    client_id: client_model.id,
-                    scope_id: 100 + i64::try_from(index).unwrap(),
-                    approved_at: now.into(),
+                .map(|(index, _)| {
+                    BTreeMap::from([(
+                        "id".to_owned(),
+                        Value::BigInt(Some(700 + i64::try_from(index).unwrap())),
+                    )])
                 })
                 .collect::<Vec<_>>()])
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            }])
+            .append_exec_results([
+                // update the stored interaction
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+                // transactional audit of the consent decision
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+            ])
             .into_connection(),
         QueuedInteraction::DeviceRequest => queued
             // The code is read first, the browser session second: the
             // verification page resolves the code before it needs a session.
             .append_query_results([[(device_request_model, client_model.clone())]])
-            // The description loads the client the request was registered for.
+            // The description loads the client the request was registered for
+            // and its exact assigned scopes.
             .append_query_results([[(client_model.clone(), Some(oidc_metadata_model))]])
             .append_query_results([Vec::<ClientOpenidConnectPlatformModel>::new()])
             .append_query_results([[openid_scope_row]])
