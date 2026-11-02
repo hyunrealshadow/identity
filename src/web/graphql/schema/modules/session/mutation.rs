@@ -1,4 +1,6 @@
-use async_graphql::{Context, Error, ID, Object, Result};
+use crate::graphql::schema::access::access;
+use async_graphql::{Context, ID, Object, Result};
+use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
 use identity_domain::{auth::SessionOid, openid_connect::ApiScope};
 use identity_infrastructure::graphql::id::GlobalId;
 use tracing::warn;
@@ -9,8 +11,8 @@ use super::{
     types::{RevokeOtherSessionsPayload, RevokeSessionPayload, SessionNode},
 };
 use crate::graphql::schema::{
-    authorization::{request_context, require_scope},
-    error::{app_error, internal_error},
+    authorization::{ScopeGuard, UserPrincipalGuard, request_context},
+    error::{app_error, coded_error, internal_error},
 };
 
 #[derive(Default)]
@@ -18,22 +20,23 @@ pub(crate) struct SessionMutation;
 
 #[Object]
 impl SessionMutation {
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::SessionRevoke))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::SessionRevoke)))]
     async fn revoke_session(
         &self,
         ctx: &Context<'_>,
         id: ID,
-        client_mutation_id: Option<String>,
+        #[graphql(validator(chars_max_length = 255))] client_mutation_id: Option<String>,
     ) -> Result<RevokeSessionPayload> {
-        require_scope(ctx, ApiScope::SessionRevoke)?;
         let request = request_context(ctx)?;
         let oid = GlobalId::<SessionGlobalId>::try_from(&id)
-            .map_err(|_| Error::new("invalid session id"))?
+            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidSessionId, ErrorParams::new()))?
             .oid();
         let session = request
             .state
             .services()
             .session()
-            .revoke_for_user(SessionOid(oid), Uuid::from(request.claims.user_oid))
+            .revoke_for_user(SessionOid(oid), Uuid::from(request.user_oid()?))
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(RevokeSessionPayload::new(
@@ -42,25 +45,28 @@ impl SessionMutation {
         ))
     }
 
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::SessionRevoke))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::SessionRevoke)))]
     async fn revoke_other_sessions(
         &self,
         ctx: &Context<'_>,
-        client_mutation_id: Option<String>,
+        #[graphql(validator(chars_max_length = 255))] client_mutation_id: Option<String>,
     ) -> Result<RevokeOtherSessionsPayload> {
-        require_scope(ctx, ApiScope::SessionRevoke)?;
         let request = request_context(ctx)?;
+        let session_oid = request.claims.session_oid.ok_or_else(|| {
+            coded_error(
+                ctx,
+                GraphqlErrorCode::BrowserSessionRequired,
+                ErrorParams::new(),
+            )
+        })?;
         let outcome = request
             .state
             .services()
             .session()
-            .revoke_other_sessions(
-                Uuid::from(request.claims.user_oid),
-                request.claims.session_oid.ok_or_else(|| {
-                    Error::new("this token was not issued from a browser session")
-                })?,
-            )
+            .revoke_other_sessions(Uuid::from(request.user_oid()?), session_oid)
             .await
-            .map_err(internal_error)?;
+            .map_err(|error| internal_error(ctx, error))?;
         if outcome.has_failures() {
             warn!(
                 target: "identity.graphql",

@@ -19,18 +19,31 @@ use tracing::{Instrument, error, info_span};
 use url::form_urlencoded::parse;
 
 use self::schema::{ApiSchema, RESOURCE_AUDIENCE, RequestContext, build_schema};
+use crate::middleware::RequestCorrelation;
 use crate::{
     controllers::response::{accepts_html, app_state, insert_no_store_headers},
     infrastructure::i18n::resolve_locale_from_headers,
     middleware::security_headers_middleware,
 };
+use identity_application::error::{
+    AppError, code::AppErrorCode,
+    codes::graphql_transport::GraphqlTransportErrorCode as TransportError,
+};
+use identity_infrastructure::i18n::error_i18n;
+use unic_langid::LanguageIdentifier;
 
+mod observability;
+mod permissions;
 mod schema;
-#[cfg(test)]
-mod tests;
 
 const MAX_BODY_BYTES: usize = 256 * 1024;
 const MAX_URI_BYTES: usize = 16 * 1024;
+
+/// Export the actual executable schema for typed browser operations.
+#[must_use]
+pub fn schema_sdl() -> String {
+    build_schema(12, 300).sdl()
+}
 
 pub fn router(state: AppState, config: &GraphqlConfig) -> Router {
     let schema = build_schema(config.max_depth, config.max_complexity);
@@ -50,14 +63,14 @@ async fn graphql_options(depot: &mut Depot, req: &mut Request, res: &mut Respons
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
         return;
     };
-    if apply_cors(req, res, config) {
+    if apply_cors(req, res, config, depot) {
         res.headers_mut().insert(
             header::ACCESS_CONTROL_ALLOW_METHODS,
             HeaderValue::from_static("GET, POST, OPTIONS"),
         );
         res.headers_mut().insert(
             header::ACCESS_CONTROL_ALLOW_HEADERS,
-            HeaderValue::from_static("authorization, content-type"),
+            HeaderValue::from_static("authorization, content-type, accept-language"),
         );
         res.status_code(StatusCode::NO_CONTENT);
     } else {
@@ -67,12 +80,20 @@ async fn graphql_options(depot: &mut Depot, req: &mut Request, res: &mut Respons
 
 #[handler]
 async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Response) {
+    let mut observation = observability::RequestObservation::new();
     set_graphql_response_headers(res);
+    let locale = resolve_locale_from_headers(req.headers());
+    let correlation = depot
+        .get_typed::<RequestCorrelation>()
+        .cloned()
+        .unwrap_or_else(|_| RequestCorrelation::fresh());
     let Ok(state) = app_state(depot) else {
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            "internal server error",
+            TransportError::Internal,
+            &locale,
+            &correlation,
         );
         return;
     };
@@ -80,16 +101,30 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            "internal server error",
+            TransportError::Internal,
+            &locale,
+            &correlation,
         );
         return;
     };
     if req.uri().to_string().len() > MAX_URI_BYTES {
-        write_protocol_error(res, StatusCode::URI_TOO_LONG, "request URI is too long");
+        write_protocol_error(
+            res,
+            StatusCode::URI_TOO_LONG,
+            TransportError::UriTooLong,
+            &locale,
+            &correlation,
+        );
         return;
     }
-    if req.headers().contains_key(header::ORIGIN) && !apply_cors(req, res, config) {
-        write_protocol_error(res, StatusCode::FORBIDDEN, "origin is not allowed");
+    if req.headers().contains_key(header::ORIGIN) && !apply_cors(req, res, config, depot) {
+        write_protocol_error(
+            res,
+            StatusCode::FORBIDDEN,
+            TransportError::OriginDenied,
+            &locale,
+            &correlation,
+        );
         return;
     }
 
@@ -115,7 +150,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     let graphql_request = match parse_graphql_request(req).await {
         Ok(request) => request,
         Err((status, message)) => {
-            write_protocol_error(res, status, message);
+            write_protocol_error(res, status, message, &locale, &correlation);
             return;
         }
     };
@@ -125,49 +160,81 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         write_protocol_error(
             res,
             StatusCode::METHOD_NOT_ALLOWED,
-            "mutations require POST",
+            TransportError::MethodNotAllowed,
+            &locale,
+            &correlation,
         );
         return;
     }
 
     let Some(token) = bearer_token(req) else {
-        write_unauthorized(res, "Bearer access token is required");
+        write_unauthorized(res, TransportError::Unauthenticated, &locale, &correlation);
         return;
     };
     let claims = match state
         .services()
         .user_info()
-        .validate_access_token(token)
+        .validate_principal_access_token(token)
         .await
     {
         Ok(claims) if claims.audience.iter().any(|aud| aud == RESOURCE_AUDIENCE) => claims,
         _ => {
-            write_unauthorized(res, "invalid access token");
+            write_unauthorized(res, TransportError::InvalidToken, &locale, &correlation);
             return;
         }
     };
-    let user = match state.services().account().find_user(claims.user_oid).await {
-        Ok(Some(user)) if user.enabled && !user.locked => user,
-        Ok(_) => {
-            write_unauthorized(res, "invalid access token");
-            return;
-        }
-        Err(error) => {
-            error!(target: "identity.graphql", error = %error, "access token user lookup failed");
-            write_protocol_error(
-                res,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal server error",
-            );
-            return;
-        }
+    let user = match claims.user_oid {
+        Some(user_oid) => match state.services().account().find_user(user_oid).await {
+            Ok(Some(user)) if user.enabled && !user.locked => Some(user),
+            Ok(_) => {
+                write_unauthorized(res, TransportError::InvalidToken, &locale, &correlation);
+                return;
+            }
+            Err(error) => {
+                error!(target: "identity.graphql", error = %error, "access token user lookup failed");
+                write_protocol_error(
+                    res,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    TransportError::Internal,
+                    &locale,
+                    &correlation,
+                );
+                return;
+            }
+        },
+        None => None,
+    };
+
+    use identity_domain::authorization::{
+        ActorContext, HumanAuthenticationContext, RequestId, TraceId,
+    };
+    let request_id =
+        RequestId::new(correlation.request_id.clone()).expect("generated or trusted request ID");
+    let trace_id = correlation
+        .trace_id
+        .clone()
+        .and_then(|id| TraceId::new(id).ok());
+    let actor = if let Some(user_oid) = claims.user_oid {
+        let auth_time = claims
+            .auth_time
+            .and_then(|time| chrono::DateTime::from_timestamp(time, 0));
+        let authentication = if claims.acr.as_deref() == Some(identity_domain::auth::ACR_AAL2) {
+            HumanAuthenticationContext::aal2(auth_time)
+        } else {
+            HumanAuthenticationContext::aal1(auth_time)
+        };
+        ActorContext::for_user(user_oid, authentication, request_id, trace_id)
+    } else {
+        ActorContext::for_client(claims.client_oid, request_id, trace_id)
     };
 
     let Some(schema) = depot.get_typed::<ApiSchema>().ok().cloned() else {
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            "internal server error",
+            TransportError::Internal,
+            &locale,
+            &correlation,
         );
         return;
     };
@@ -177,30 +244,53 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         "query"
     };
     let operation_name = graphql_request.operation_name.clone().unwrap_or_default();
+    observation.operation = operation_type;
     let request = graphql_request
         .data(RequestContext {
             state,
             claims,
             user,
-            locale: resolve_locale_from_headers(req.headers()),
+            locale: locale.clone(),
+            correlation: correlation.clone(),
+            actor: actor.clone(),
         })
-        .data(config.max_page_size);
+        .data(config.max_page_size)
+        .data(std::sync::Arc::new(permissions::LiveEffectivePermissions)
+            as std::sync::Arc<
+                dyn schema::authorization::EffectivePermissionsProvider,
+            >);
     let operation_span = info_span!(
         "graphql.operation",
         graphql.operation.type = %operation_type,
         graphql.operation.name = %operation_name,
     );
-    let response = match timeout(
+    let mut response = match timeout(
         Duration::from_secs(config.timeout_secs),
-        schema.execute(request).instrument(operation_span),
+        identity_infrastructure::database::audit::with_actor(
+            actor,
+            schema.execute(request).instrument(operation_span),
+        ),
     )
     .await
     {
         Ok(response) => response,
         Err(_) => {
-            write_protocol_error(res, StatusCode::GATEWAY_TIMEOUT, "request timed out");
+            observation.outcome = "timeout";
+            write_protocol_error(
+                res,
+                StatusCode::GATEWAY_TIMEOUT,
+                TransportError::TimedOut,
+                &locale,
+                &correlation,
+            );
             return;
         }
+    };
+    attach_correlation(&mut response, &locale, &correlation);
+    observation.outcome = if response.errors.is_empty() {
+        "success"
+    } else {
+        "resolver_error"
     };
     if let Some(challenge) = step_up_challenge(&response) {
         res.status_code(StatusCode::UNAUTHORIZED);
@@ -239,10 +329,10 @@ fn step_up_challenge(response: &AsyncGraphqlResponse) -> Option<String> {
 
 async fn parse_graphql_request(
     req: &mut Request,
-) -> Result<GraphqlRequest, (StatusCode, &'static str)> {
+) -> Result<GraphqlRequest, (StatusCode, TransportError)> {
     match *req.method() {
         Method::GET => parse_query_string(req.uri().query().unwrap_or_default())
-            .map_err(|_| (StatusCode::BAD_REQUEST, "invalid GraphQL request")),
+            .map_err(|_| (StatusCode::BAD_REQUEST, TransportError::InvalidRequest)),
         Method::POST => {
             let content_type = req
                 .headers()
@@ -256,16 +346,25 @@ async fn parse_graphql_request(
             {
                 return Err((
                     StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                    "content type must be application/json",
+                    TransportError::UnsupportedMediaType,
                 ));
             }
             let payload = req
                 .payload_with_max_size(MAX_BODY_BYTES)
                 .await
-                .map_err(|_| (StatusCode::PAYLOAD_TOO_LARGE, "request body is too large"))?;
-            from_slice(payload).map_err(|_| (StatusCode::BAD_REQUEST, "invalid GraphQL request"))
+                .map_err(|_| {
+                    (
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        TransportError::PayloadTooLarge,
+                    )
+                })?;
+            from_slice(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, TransportError::InvalidRequest))
         }
-        _ => Err((StatusCode::METHOD_NOT_ALLOWED, "method not allowed")),
+        _ => Err((
+            StatusCode::METHOD_NOT_ALLOWED,
+            TransportError::MethodNotAllowed,
+        )),
     }
 }
 
@@ -288,7 +387,7 @@ fn bearer_token(req: &Request) -> Option<&str> {
     (scheme.eq_ignore_ascii_case("Bearer") && !token.trim().is_empty()).then_some(token.trim())
 }
 
-fn apply_cors(req: &Request, res: &mut Response, config: &GraphqlConfig) -> bool {
+fn apply_cors(req: &Request, res: &mut Response, config: &GraphqlConfig, depot: &Depot) -> bool {
     let Some(origin) = req
         .headers()
         .get(header::ORIGIN)
@@ -296,13 +395,26 @@ fn apply_cors(req: &Request, res: &mut Response, config: &GraphqlConfig) -> bool
     else {
         return true;
     };
-    if !config
-        .allowed_origins
+    let installed_origin = app_state(depot).ok().is_some_and(|state| {
+        use identity_application::setting::{AppSettings, SettingsSource};
+        identity_application::setting::application_origins::trusted_application_origins(
+            &state.settings().store().snapshot().section::<AppSettings>(),
+        )
         .iter()
         .any(|allowed| allowed == origin)
+    });
+    if !installed_origin
+        && !config
+            .allowed_origins
+            .iter()
+            .any(|allowed| allowed == origin)
     {
         return false;
     }
+    res.headers_mut().insert(
+        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("X-Request-ID, X-Trace-ID, WWW-Authenticate, Retry-After"),
+    );
     if let Ok(value) = HeaderValue::from_str(origin) {
         res.headers_mut()
             .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, value);
@@ -320,19 +432,80 @@ fn set_graphql_response_headers(res: &mut Response) {
     insert_no_store_headers(res);
 }
 
-fn write_unauthorized(res: &mut Response, message: &'static str) {
+fn localized_transport_error(code: TransportError, locale: &LanguageIdentifier) -> String {
+    error_i18n()
+        .map(|i18n| i18n.t_code(locale, code.code()))
+        .unwrap_or_else(|| {
+            if locale.language.as_str() == "zh" {
+                "暂时无法完成请求，请稍后重试。".to_owned()
+            } else {
+                "The request could not be completed. Please try again later.".to_owned()
+            }
+        })
+}
+
+fn attach_correlation(
+    response: &mut AsyncGraphqlResponse,
+    locale: &LanguageIdentifier,
+    correlation: &RequestCorrelation,
+) {
+    response.extensions.insert(
+        "requestId".to_owned(),
+        Value::from(correlation.request_id.clone()),
+    );
+    if let Some(trace_id) = &correlation.trace_id {
+        response
+            .extensions
+            .insert("traceId".to_owned(), Value::from(trace_id.clone()));
+    }
+    for error in &mut response.errors {
+        let extensions = error.extensions.get_or_insert_with(Default::default);
+        if extensions.get("code").is_none() {
+            // Parser/type/validator errors may contain supplied literal values.
+            // Preserve locations and path, expose a stable localized envelope.
+            error.message = localized_transport_error(TransportError::InvalidRequest, locale);
+            extensions.set("code", TransportError::InvalidRequest.code());
+            extensions.set("kind", "validation");
+        }
+        extensions.set("requestId", correlation.request_id.clone());
+        if let Some(trace_id) = &correlation.trace_id {
+            extensions.set("traceId", trace_id.clone());
+        }
+    }
+}
+
+fn write_unauthorized(
+    res: &mut Response,
+    code: TransportError,
+    locale: &LanguageIdentifier,
+    correlation: &RequestCorrelation,
+) {
     res.headers_mut().insert(
         header::WWW_AUTHENTICATE,
         HeaderValue::from_static("Bearer realm=\"graphql\", error=\"invalid_token\""),
     );
-    write_protocol_error(res, StatusCode::UNAUTHORIZED, message);
+    write_protocol_error(res, StatusCode::UNAUTHORIZED, code, locale, correlation);
 }
 
-fn write_protocol_error(res: &mut Response, status: StatusCode, message: &'static str) {
+fn write_protocol_error(
+    res: &mut Response,
+    status: StatusCode,
+    code: TransportError,
+    locale: &LanguageIdentifier,
+    correlation: &RequestCorrelation,
+) {
     res.status_code(status);
-    res.render(Json(json!({
-        "errors": [{ "message": message }]
-    })));
+    let mut extensions = json!({"code": code.code(), "kind": format!("{:?}", AppError::from_code(code).kind()).to_lowercase(), "requestId": correlation.request_id});
+    let mut envelope = json!({"requestId": correlation.request_id});
+    if let Some(trace_id) = &correlation.trace_id {
+        extensions["traceId"] = json!(trace_id);
+        envelope["traceId"] = json!(trace_id);
+    }
+    res.headers_mut().insert(
+        "x-request-id",
+        HeaderValue::from_str(&correlation.request_id).expect("generated or validated request ID"),
+    );
+    res.render(Json(json!({ "errors": [{ "message": localized_transport_error(code, locale), "extensions": extensions }], "extensions": envelope })));
 }
 
 pub fn bind_address(graphql: &GraphqlConfig, server: &ServerConfig) -> String {
@@ -406,7 +579,7 @@ mod unit_tests {
             "mutation Revoke { revokeSession(id: \"x\") { clientMutationId } }",
         )));
         assert!(!is_mutation(&GraphqlRequest::new(
-            "query Viewer { viewer { account { id } } }",
+            "query Account { account { id } }",
         )));
     }
 }

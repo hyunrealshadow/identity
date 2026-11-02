@@ -3,4 +3,4 @@ mod query;
 mod types;
 
 pub(crate) use mutation::SecurityMutation;
-pub(crate) use query::SecurityViewer;
+pub(crate) use query::SecurityQuery;

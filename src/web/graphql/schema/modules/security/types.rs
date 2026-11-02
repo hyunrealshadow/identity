@@ -51,7 +51,9 @@ impl AccountSecurity {
 
 #[derive(InputObject)]
 pub(super) struct ChangePasswordInput {
+    #[graphql(secret, validator(chars_min_length = 12, chars_max_length = 1024))]
     pub new_password: String,
+    #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,
 }
 
@@ -150,8 +152,11 @@ impl BeginTotpEnrollmentPayload {
 
 #[derive(InputObject)]
 pub(super) struct ConfirmTotpEnrollmentInput {
+    #[graphql(validator(chars_max_length = 4096))]
     pub enrollment_token: String,
+    #[graphql(validator(chars_min_length = 6, chars_max_length = 16))]
     pub code: String,
+    #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,
 }
 
@@ -178,8 +183,10 @@ impl From<TotpAlgorithmInput> for OtpAlgorithm {
 
 #[derive(InputObject)]
 pub(super) struct ChangeTotpEnrollmentAlgorithmInput {
+    #[graphql(validator(chars_max_length = 4096))]
     pub enrollment_token: String,
     pub algorithm: TotpAlgorithmInput,
+    #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,
 }
 

@@ -133,3 +133,54 @@ impl RevokeOtherSessionsPayload {
         self.client_mutation_id.as_deref()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use identity_domain::auth::{SessionStatus, model::Session};
+    use identity_infrastructure::graphql::id::GlobalId;
+    use uuid::Uuid;
+
+    use super::{SessionGlobalId, SessionNode};
+
+    fn session(oid: Uuid) -> Session {
+        Session {
+            oid: identity_domain::auth::SessionOid(oid),
+            user_oid: Uuid::new_v4(),
+            status: SessionStatus::Active,
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            last_active_at: None,
+            expires_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+            acr: None,
+            acr_expires_at: None,
+            amr: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn session_node_id_is_a_global_id_and_roundtrips() {
+        let oid = Uuid::new_v4();
+        let node = SessionNode::new(session(oid), None);
+
+        assert_ne!(node.id.as_str(), oid.to_string());
+        assert_eq!(
+            GlobalId::<SessionGlobalId>::decode(node.id.as_str())
+                .unwrap()
+                .oid(),
+            oid
+        );
+        assert!(
+            GlobalId::<SessionGlobalId>::decode(&oid.to_string()).is_err(),
+            "a raw UUID must never be accepted as a session ID"
+        );
+    }
+}

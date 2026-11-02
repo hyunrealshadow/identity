@@ -1,25 +1,27 @@
+use crate::graphql::schema::access::access;
 use async_graphql::{Context, Object, Result};
 use identity_domain::openid_connect::ApiScope;
 
 use super::types::AccountSecurity;
 use crate::graphql::schema::{
-    authorization::{request_context, require_scope},
+    authorization::{ScopeGuard, UserPrincipalGuard, request_context},
     error::app_error,
 };
 
 #[derive(Default)]
-pub(crate) struct SecurityViewer;
+pub(crate) struct SecurityQuery;
 
 #[Object]
-impl SecurityViewer {
+impl SecurityQuery {
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)))]
     async fn passkeys(&self, ctx: &Context<'_>) -> Result<Vec<PasskeyInfo>> {
-        require_scope(ctx, ApiScope::AccountRead)?;
         let request = request_context(ctx)?;
         let keys = request
             .state
             .services()
             .passkey()
-            .list(request.claims.user_oid)
+            .list(request.user_oid()?)
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(keys
@@ -31,21 +33,22 @@ impl SecurityViewer {
             .collect())
     }
 
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)))]
     async fn security(&self, ctx: &Context<'_>) -> Result<AccountSecurity> {
-        require_scope(ctx, ApiScope::AccountRead)?;
         let request = request_context(ctx)?;
         let status = request
             .state
             .services()
             .mfa()
-            .status(request.claims.user_oid)
+            .status(request.user_oid()?)
             .await
             .map_err(|error| app_error(ctx, error))?;
         let passkey_enabled = !request
             .state
             .services()
             .passkey()
-            .list(request.claims.user_oid)
+            .list(request.user_oid()?)
             .await
             .map_err(|error| app_error(ctx, error))?
             .is_empty();
@@ -53,7 +56,7 @@ impl SecurityViewer {
             status.totp_enabled,
             passkey_enabled,
             status.recovery_codes_remaining as i32,
-            request.user.preferred_mfa_method,
+            request.user()?.preferred_mfa_method,
         ))
     }
 }
