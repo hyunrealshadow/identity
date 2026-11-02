@@ -125,17 +125,13 @@ impl AppConfig {
     }
 
     pub fn validate_https_contract(&self) -> ConfigResult<()> {
-        let host = self
-            .server
-            .host
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| invalid_config("server.host must be an https URL"))?;
-        let host = Url::parse(host)
-            .map_err(|error| invalid_config(format!("server.host must be a valid URL: {error}")))?;
-
-        if host.scheme() != "https" {
-            return Err(invalid_config("server.host must use https").into());
+        if let Some(host) = self.server.host.as_deref() {
+            let host = Url::parse(host.trim()).map_err(|error| {
+                invalid_config(format!("server.host must be a valid URL: {error}"))
+            })?;
+            if host.scheme() != "https" {
+                return Err(invalid_config("server.host must use https").into());
+            }
         }
 
         if self.server.tls.termination == TlsTermination::Upstream

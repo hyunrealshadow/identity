@@ -255,7 +255,6 @@ fn https_contract_accepts_upstream_tls_termination() {
     let config: AppConfig = from_str(
         r#"
 server:
-  host: https://identity.example.com
   tls:
     termination: upstream
     trusted_proxies:
@@ -279,7 +278,6 @@ fn https_contract_accepts_an_explicit_direct_http_client() {
     let config: AppConfig = from_str(
         r#"
 server:
-  host: https://identity.example.com
   tls:
     termination: upstream
     direct_http_clients:
@@ -379,7 +377,6 @@ fn https_contract_rejects_upstream_tls_without_an_allowed_source() {
     let config: AppConfig = from_str(
         r#"
 server:
-  host: https://identity.example.com
   tls:
     termination: upstream
 database:

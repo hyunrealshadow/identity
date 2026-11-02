@@ -9,6 +9,7 @@ pub struct ServerConfig {
     pub port: u16,
     #[serde(default = "default_binding")]
     pub binding: String,
+    /// Optional bootstrap metadata. Installed public addresses come from settings.
     #[serde(default)]
     pub host: Option<String>,
     #[serde(default)]

@@ -17,6 +17,13 @@ cargo test -p identity --test http --test network --test filesystem --test obser
 cargo test -p identity --features oidc-conformance --test http
 ```
 
+With Helm installed, verify rendered Chart configuration through the actual
+production file loader in both TLS modes (no database or cluster access):
+
+```powershell
+cargo test -p identity --test helm_configuration -- --ignored
+```
+
 - `http/`: production HTTP/GraphQL routes, authorization interactions, protocol errors, CORS, and discovery metadata
 - `network/`: HTTP response limits and redirects, logout notifications, and HTTPS password checks with a local certificate
 - `filesystem/`: TLS files and workload credential loading
