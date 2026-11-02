@@ -98,6 +98,11 @@ def verify(image):
                 assert redirect.headers["Location"] == "/console/"
             assert response.headers["Cache-Control"] == "no-store"
             assert response.headers["X-Frame-Options"] == "DENY"
+            # Readiness probes use the Pod address, not the installed public host.
+            request = urllib.request.Request(origin + "/health/ready", headers={"Host": "10.42.0.10:8080"})
+            with urllib.request.urlopen(request) as ready:
+                assert ready.status == 200
+                assert ready.read() == b"ok\n"
             assert docker("exec", container, "id", "-u").stdout.strip() != "0"
             assert docker("exec", container, "curl", "--fail", "--silent",
                           "http://127.0.0.1:8081/health").stdout.strip() == "ok"
@@ -117,6 +122,7 @@ def verify(image):
             with urllib.request.urlopen(origin + "/console/callback?code=must-not-be-logged&state=private") as response:
                 assert response.status == 200
             logs = docker("logs", container)
+            assert '"path":"/health/ready"' not in logs.stdout
             assert token not in logs.stdout + logs.stderr
             assert "must-not-be-logged" not in logs.stdout + logs.stderr
             assert docker("exec", container, "sh", "-c",
