@@ -1,0 +1,1368 @@
+enum AccessAuthentication {
+	SESSION
+	AAL2
+	RECENT
+	RECENT_AAL2
+	"""
+	Assurance depends on the account's registered factors.
+	"""
+	ACCOUNT_SECURITY
+}
+
+input AccessPolicy {
+	scopes: [String!]!
+	authentication: AccessAuthentication!
+	maxAge: Int
+	elevatedMaxAge: Int
+	userOnly: Boolean!
+	"""
+	Additional target-dependent authorization cannot be proved from tokens.
+	"""
+	runtime: Boolean!
+}
+
+type AccountSecurity {
+	mfaEnabled: Boolean!
+	preferredMfaMethod: String!
+	totpEnabled: Boolean!
+	recoveryCodesRemaining: Int!
+}
+
+input AddGroupMemberInput {
+	groupId: ID!
+	userId: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input AssignUserRolesInput {
+	userId: ID!
+	roleIds: [ID!]!
+	expectedUserVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type AuthenticationContext {
+	acr: String
+	authTime: DateTime
+	aal2: Boolean!
+	recent: Boolean!
+}
+
+type BeginTotpEnrollmentPayload {
+	secret: String!
+	otpAuthUri: String!
+	enrollmentToken: String!
+	recoveryCodes: [String!]!
+	clientMutationId: String
+}
+
+input ChangePasswordInput {
+	newPassword: String!
+	clientMutationId: String
+}
+
+type ChangePasswordPayload {
+	changed: Boolean!
+	"""
+	Number of other sessions that were revoked after the password change.
+	"""
+	revokedOtherSessions: Int!
+	"""
+	Sessions that could not be revoked. A non-zero value means the password
+	change succeeded but the revocation batch partially failed.
+	"""
+	sessionRevocationFailures: Int!
+	clientMutationId: String
+}
+
+input ChangeTotpEnrollmentAlgorithmInput {
+	enrollmentToken: String!
+	algorithm: TotpAlgorithm!
+	clientMutationId: String
+}
+
+type ClientScopeSetPayload {
+	clientId: ID!
+	version: UUID!
+	scopeIds: [ID!]!
+	clientMutationId: String
+}
+
+type ClientScopeTarget {
+	clientId: ID!
+	name: String!
+	builtIn: Boolean!
+	"""
+	Current `client.version` CAS token used by `setClientScopes`.
+	"""
+	version: UUID!
+	allowedScopeCount: Int!
+}
+
+type ClientScopeTargetConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ClientScopeTargetEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [ClientScopeTarget!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ClientScopeTargetEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: ClientScopeTarget!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input ClientScopeTargetFilter {
+	query: String
+}
+
+enum ClientScopeTargetOrder {
+	NAME_ASC
+	NAME_DESC
+}
+
+input ConfirmTotpEnrollmentInput {
+	enrollmentToken: String!
+	code: String!
+	clientMutationId: String
+}
+
+input CreateGroupInput {
+	name: String!
+	description: String! = ""
+	names: [LocalizedTextInput!]! = []
+	descriptions: [LocalizedTextInput!]! = []
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input CreateResourceInput {
+	uri: String!
+	name: String!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input CreateRoleInput {
+	name: String!
+	description: String! = ""
+	names: [LocalizedTextInput!]! = []
+	descriptions: [LocalizedTextInput!]! = []
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input CreateScopeInput {
+	"""
+	Every custom scope is owned by an API resource.
+	"""
+	resourceId: ID!
+	code: String!
+	name: String!
+	names: [ScopeDescriptionInput!]! = []
+	description: String! = ""
+	descriptions: [ScopeDescriptionInput!]
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input CreateUserInput {
+	username: String!
+	email: String!
+	password: String!
+	profile: UserProfilePatchInput
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type CreateUserPayload {
+	userId: ID!
+	version: UUID!
+	user: User
+	clientMutationId: String
+}
+
+"""
+Implement the DateTime<Utc> scalar
+
+The input/output is a string in RFC3339 format.
+"""
+scalar DateTime
+
+type DeleteGroupPayload {
+	groupId: ID!
+	deleted: Boolean!
+	clientMutationId: String
+}
+
+type EffectiveGroupPermissionSource {
+	groupId: ID!
+	membershipId: ID!
+	groupRoleBindingId: ID!
+	roleId: ID!
+	group: Group @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type EffectivePermission {
+	"""
+	Canonical `Scope` identity; the field name retains authorization meaning.
+	"""
+	permissionId: ID!
+	resourceId: ID!
+	code: String!
+	scope: String!
+	sources: [EffectivePermissionSource!]!
+	groupSources: [EffectiveGroupPermissionSource!]! @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type EffectivePermissionConnection {
+	pageInfo: PageInfo!
+	edges: [EffectivePermissionEdge!]!
+	nodes: [EffectivePermission!]!
+	userVersion: UUID! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	totalCount: Int! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type EffectivePermissionEdge {
+	cursor: String!
+	node: EffectivePermission!
+}
+
+enum EffectivePermissionOrder {
+	CODE_ASC
+	CODE_DESC
+}
+
+type EffectivePermissionSource {
+	bindingId: ID!
+	roleId: ID!
+}
+
+type EffectivePermissions {
+	role: String
+	requestableScopes: [String!]!
+	grantedScopes: [String!]!
+	effectiveScopes: [String!]!
+	authentication: AuthenticationContext!
+}
+
+type Group implements Node {
+	id: ID!
+	name: String!
+	description: String!
+	builtIn: Boolean!
+	names: [LocalizedText!]!
+	descriptions: [LocalizedText!]!
+	enabled: Boolean!
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+	members(filter: GroupMembershipFilter, orderBy: GroupMembershipOrder, first: Int, after: String, last: Int, before: String): GroupMembershipConnection! @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roles(filter: GroupRoleFilter, orderBy: GroupRoleOrder, first: Int, after: String, last: Int, before: String): GroupRoleBindingConnection! @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type GroupConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [GroupEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Group!]!
+	totalCount: Int!
+}
+
+"""
+An edge in a connection.
+"""
+type GroupEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Group!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input GroupFilter {
+	query: String
+	enabled: Boolean
+	builtIn: Boolean
+	userId: ID
+	roleId: ID
+}
+
+type GroupMemberPayload {
+	groupId: ID!
+	userId: ID!
+	membershipId: ID!
+	groupVersion: UUID!
+	membershipVersion: UUID!
+	clientMutationId: String
+}
+
+type GroupMembership implements Node {
+	id: ID!
+	groupId: ID!
+	userId: ID!
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	grantedByUserId: ID
+	reason: String!
+	enabled: Boolean!
+	revokedAt: DateTime
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+}
+
+type GroupMembershipConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [GroupMembershipEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [GroupMembership!]!
+}
+
+"""
+An edge in a connection.
+"""
+type GroupMembershipEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: GroupMembership!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input GroupMembershipFilter {
+	enabled: Boolean
+	userId: ID
+}
+
+enum GroupMembershipOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+}
+
+enum GroupOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+}
+
+type GroupPayload {
+	groupId: ID!
+	version: UUID!
+	clientMutationId: String
+}
+
+type GroupRoleBinding implements Node {
+	id: ID!
+	groupId: ID!
+	roleId: ID!
+	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	grantedByUserId: ID
+	reason: String!
+	enabled: Boolean!
+	revokedAt: DateTime
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+}
+
+type GroupRoleBindingConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [GroupRoleBindingEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [GroupRoleBinding!]!
+}
+
+"""
+An edge in a connection.
+"""
+type GroupRoleBindingEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: GroupRoleBinding!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input GroupRoleFilter {
+	enabled: Boolean
+	roleId: ID
+}
+
+enum GroupRoleOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+	ROLE_NAME_ASC
+	ROLE_NAME_DESC
+}
+
+type GroupRolesPayload {
+	groupId: ID!
+	groupVersion: UUID!
+	roleIds: [ID!]!
+	addedCount: Int!
+	removedCount: Int!
+	clientMutationId: String
+}
+
+input GroupStateInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type InstanceApplicationOverview {
+	total: Int!
+	enabled: Int!
+	builtIn: Int!
+}
+
+type InstanceDailyCount {
+	date: NaiveDate!
+	count: Int!
+}
+
+type InstanceInfo {
+	name: String!
+	environment: String!
+	issuer: String!
+	version: String!
+}
+
+type InstanceOverview {
+	generatedAt: DateTime!
+	users(timeZone: String! = "UTC"): InstanceUserOverview @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	applications: InstanceApplicationOverview @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	sessions: InstanceSessionOverview @access(policy: {scopes: ["management.session.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	resources: InstanceResourceOverview @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type InstanceResourceOverview {
+	total: Int!
+	enabled: Int!
+}
+
+type InstanceSessionOverview {
+	active: Int!
+	createdLast24Hours: Int!
+}
+
+type InstanceUserOverview {
+	total: Int!
+	enabled: Int!
+	createdLast7Days: Int!
+	registrations: [InstanceDailyCount!]!
+}
+
+"""
+A scalar that can represent any JSON value.
+"""
+scalar JSON
+
+type LocalizedText {
+	locale: String!
+	value: String!
+}
+
+input LocalizedTextInput {
+	locale: String!
+	value: String!
+}
+
+type MutationRoot {
+	updateUsername(input: UpdateUsernameInput!): UpdateProfilePayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
+	updateEmail(input: UpdateEmailInput!): UpdateProfilePayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
+	updateProfile(input: UpdateProfileInput!): UpdateProfilePayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	prepareMfaManagement: Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	prepareMfaRecoveryCodes: RecoveryCodeEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	updatePreferredMfaMethod(method: PreferredMfaMethod!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	beginPasskeyRegistration(recoveryEnrollmentToken: String): JSON! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	finishPasskeyRegistration(challengeId: String!, name: String!, credential: JSON!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	deletePasskey(id: String!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	changePassword(input: ChangePasswordInput!): ChangePasswordPayload! @access(policy: {scopes: ["password.change"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	beginTotpEnrollment(clientMutationId: String): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	confirmTotpEnrollment(input: ConfirmTotpEnrollmentInput!): RecoveryCodesPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	changeTotpEnrollmentAlgorithm(input: ChangeTotpEnrollmentAlgorithmInput!): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	disableTotp(clientMutationId: String): TotpChangedPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	regenerateRecoveryCodes(clientMutationId: String): RecoveryCodesPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	revokeSession(id: ID!, clientMutationId: String): RevokeSessionPayload! @access(policy: {scopes: ["session.revoke"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	revokeOtherSessions(clientMutationId: String): RevokeOtherSessionsPayload! @access(policy: {scopes: ["session.revoke"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	createUser(input: CreateUserInput!): CreateUserPayload! @access(policy: {scopes: ["management.user.create"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	updateUser(input: UpdateUserInput!): UpdateUserPayload! @access(policy: {scopes: ["management.user.update"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	disableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	unlockUser(input: UnlockUserInput!): UserStatePayload! @access(policy: {scopes: ["management.user.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	createGroup(input: CreateGroupInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	updateGroup(input: UpdateGroupInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	setGroupEnabled(input: SetGroupEnabledInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	deleteGroup(input: GroupStateInput!): DeleteGroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	addGroupMember(input: AddGroupMemberInput!): GroupMemberPayload! @access(policy: {scopes: ["management.group_membership.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	removeGroupMember(input: RemoveGroupMemberInput!): GroupMemberPayload! @access(policy: {scopes: ["management.group_membership.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	setGroupRoles(input: SetGroupRolesInput!): GroupRolesPayload! @access(policy: {scopes: ["management.group_role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	createResource(input: CreateResourceInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	updateResource(input: UpdateResourceInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enableResource(input: ResourceStateInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	disableResource(input: ResourceStateInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	createScope(input: CreateScopeInput!): ScopePayload! @access(policy: {scopes: ["management.scope.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	updateScope(input: UpdateScopeInput!): ScopePayload! @access(policy: {scopes: ["management.scope.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enableScope(input: ScopeStateInput!): ScopePayload! @access(policy: {scopes: ["management.scope.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	disableScope(input: ScopeStateInput!): ScopePayload! @access(policy: {scopes: ["management.scope.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	createRole(input: CreateRoleInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	updateRole(input: UpdateRoleInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	enableRole(input: RoleStateInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	disableRole(input: RoleStateInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	setRolePermissions(input: SetRolePermissionsInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	assignUserRoles(input: AssignUserRolesInput!): UserRoleBindingPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	revokeUserRoles(input: RevokeUserRolesInput!): UserRoleBindingPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.scope"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+"""
+ISO 8601 calendar date without timezone.
+Format: %Y-%m-%d
+
+# Examples
+
+* `1994-11-13`
+* `2000-02-24`
+"""
+scalar NaiveDate
+
+interface Node {
+	id: ID!
+}
+
+"""
+Information about pagination in a connection
+"""
+type PageInfo {
+	"""
+	When paginating backwards, are there more items?
+	"""
+	hasPreviousPage: Boolean!
+	"""
+	When paginating forwards, are there more items?
+	"""
+	hasNextPage: Boolean!
+	"""
+	When paginating backwards, the cursor to continue.
+	"""
+	startCursor: String
+	"""
+	When paginating forwards, the cursor to continue.
+	"""
+	endCursor: String
+}
+
+type PasskeyInfo {
+	id: String!
+	name: String!
+}
+
+enum PreferredMfaMethod {
+	PASSKEY
+	OTP
+}
+
+"""
+Flat self-service and management query root. Each functional module
+contributes its own business field; there is no `viewer` wrapper and no
+`management` namespace.
+"""
+type QueryRoot {
+	account: User @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	passkeys: [PasskeyInfo!]! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	security: AccountSecurity! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	sessions(after: String, before: String, first: Int, last: Int): SessionConnection! @access(policy: {scopes: ["session.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	node(id: ID!): Node @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	nodes(ids: [ID!]!): [Node!]! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Aggregate instance dashboard. The container itself is available to any
+	authenticated principal and captures its timestamp once; each nested
+	aggregate is guarded and loaded lazily.
+	"""
+	instanceOverview: InstanceOverview! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
+	"""
+	Safe public deployment metadata. No management scope is required, but
+	the transport still requires a valid access token.
+	"""
+	instanceInfo: InstanceInfo! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
+	"""
+	Effective permissions for the current principal. This field only needs
+	a valid principal: it never requires a management scope, never accepts a
+	target user and never grants a role or scope by itself.
+	"""
+	effectivePermissions: EffectivePermissions! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
+	group(id: ID!): Group @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	user(id: ID!): User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	users(filter: UserFilter, orderBy: UserOrder, first: Int, after: String, last: Int, before: String): UserConnection! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	resource(id: ID!): Resource @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	resources(filter: ResourceFilter, orderBy: ResourceOrder, first: Int, after: String, last: Int, before: String): ResourceConnection! @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	scope(id: ID!): Scope @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	scopes(filter: ScopeFilter, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	role(id: ID!): Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roles(filter: RoleFilter, orderBy: RoleOrder, first: Int, after: String, last: Int, before: String): RoleConnection! @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	userRoles(userId: ID!, enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roleUsers(roleId: ID!, enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	userPermissions(userId: ID!, resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Self-only account summary. This field deliberately carries only the
+	existing `account.read` self-service scope and accepts no caller-supplied
+	user identity.
+	"""
+	accountPermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	clientScopeTargets(filter: ClientScopeTargetFilter, orderBy: ClientScopeTargetOrder, first: Int, after: String, last: Int, before: String): ClientScopeTargetConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientScopes(clientId: ID!, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type RecoveryCodeEnrollmentPayload {
+	recoveryCodes: [String!]!
+	enrollmentToken: String
+}
+
+type RecoveryCodesPayload {
+	recoveryCodes: [String!]!
+	clientMutationId: String
+}
+
+input RemoveGroupMemberInput {
+	groupId: ID!
+	userId: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type Resource implements Node {
+	id: ID!
+	uri: String!
+	name: String!
+	enabled: Boolean!
+	"""
+	Read-only projection derived from scope rows owned by this resource.
+	"""
+	acceptedScopes: [String!]!
+	"""
+	UUID optimistic-lock version of the resource row.
+	"""
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+	"""
+	Canonical scopes owned by this resource. The name is retained for
+	authorization meaning; nodes are `Scope` identities.
+	"""
+	permissions(filter: ScopeFilter, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type ResourceConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ResourceEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Resource!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ResourceEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Resource!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input ResourceFilter {
+	query: String
+	enabled: Boolean
+}
+
+enum ResourceOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+	NAME_ASC
+	NAME_DESC
+	URI_ASC
+	URI_DESC
+}
+
+type ResourcePayload {
+	resourceId: ID!
+	version: UUID!
+	resource: Resource @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
+input ResourceStateInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type RevokeOtherSessionsPayload {
+	revokedCount: Int!
+	clientMutationId: String
+}
+
+type RevokeSessionPayload {
+	session: Session!
+	clientMutationId: String
+}
+
+input RevokeUserRolesInput {
+	userId: ID!
+	roleIds: [ID!]!
+	expectedUserVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type Role implements Node {
+	id: ID!
+	"""
+	Independent default name; clients choose matching translations from `names`.
+	"""
+	name: String!
+	"""
+	Independent default description; optional translations never overwrite it.
+	"""
+	description: String!
+	builtIn: Boolean!
+	names: [LocalizedText!]!
+	descriptions: [LocalizedText!]!
+	enabled: Boolean!
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Scopes explicitly contained by this role. The field name is retained for
+	authorization meaning; nodes are canonical `Scope` identities.
+	"""
+	permissions(filter: ScopeFilter, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	users(enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type RoleConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [RoleEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Role!]!
+	totalCount: Int!
+}
+
+"""
+An edge in a connection.
+"""
+type RoleEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Role!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input RoleFilter {
+	query: String
+	enabled: Boolean
+	builtIn: Boolean
+	"""
+	Optional membership filter on a canonical scope identity.
+	"""
+	scopeId: ID
+}
+
+enum RoleOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+	NAME_ASC
+	NAME_DESC
+}
+
+type RolePayload {
+	roleId: ID!
+	version: UUID!
+	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
+input RoleStateInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type Scope implements Node {
+	id: ID!
+	"""
+	Owning API resource id. `null` marks a protocol/identity scope.
+	"""
+	resourceId: ID
+	"""
+	Stable machine token used in protocol requests and assignments.
+	"""
+	code: String!
+	"""
+	Independent fallback name.
+	"""
+	name: String!
+	names: [ScopeDescription!]!
+	description: String!
+	descriptions: [ScopeDescription!]!
+	builtIn: Boolean!
+	enabled: Boolean!
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+	resource: Resource @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roles(first: Int, after: String, last: Int, before: String): RoleConnection! @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type ScopeConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ScopeEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Scope!]!
+	totalCount: Int!
+}
+
+type ScopeDescription {
+	locale: String!
+	value: String!
+}
+
+input ScopeDescriptionInput {
+	locale: String!
+	value: String!
+}
+
+type ScopeEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Scope!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input ScopeFilter {
+	query: String
+	builtIn: Boolean
+	enabled: Boolean
+	resourceId: ID
+	roleId: ID
+	apiOnly: Boolean! = false
+}
+
+enum ScopeOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+	CODE_ASC
+	CODE_DESC
+}
+
+type ScopePayload {
+	scopeId: ID!
+	version: UUID!
+	scope: Scope @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
+input ScopeStateInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type Session implements Node {
+	id: ID!
+	status: String!
+	current: Boolean!
+	deviceName: String
+	deviceType: String
+	osName: String
+	osVersion: String
+	browserName: String
+	browserVersion: String
+	ipAddress: String
+	lastActiveAt: DateTime
+	expiresAt: DateTime
+	createdAt: DateTime!
+}
+
+type SessionConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [SessionEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Session!]!
+}
+
+"""
+An edge in a connection.
+"""
+type SessionEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Session!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input SetClientScopesInput {
+	clientId: ID!
+	scopeIds: [ID!]!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input SetGroupEnabledInput {
+	id: ID!
+	enabled: Boolean!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input SetGroupRolesInput {
+	groupId: ID!
+	roleIds: [ID!]!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input SetRolePermissionsInput {
+	roleId: ID!
+	permissionIds: [ID!]!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+enum TotpAlgorithm {
+	SHA1
+	SHA256
+	SHA512
+}
+
+type TotpChangedPayload {
+	changed: Boolean!
+	clientMutationId: String
+}
+
+"""
+A UUID is a unique 128-bit number, stored as 16 octets. UUIDs are parsed as
+Strings within GraphQL. UUIDs are used to assign unique identifiers to
+entities without requiring a central allocating authority.
+
+# References
+
+* [Wikipedia: Universally Unique Identifier](http://en.wikipedia.org/wiki/Universally_unique_identifier)
+* [RFC4122: A Universally Unique Identifier (UUID) URN Namespace](http://tools.ietf.org/html/rfc4122)
+"""
+scalar UUID
+
+input UnlockUserInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateEmailInput {
+	email: String!
+	clientMutationId: String
+}
+
+input UpdateGroupInput {
+	name: String
+	description: String
+	id: ID!
+	names: [LocalizedTextInput!]
+	descriptions: [LocalizedTextInput!]
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateProfileInput {
+	givenName: String
+	familyName: String
+	middleName: String
+	nickname: String
+	profile: String
+	picture: String
+	website: String
+	gender: String
+	birthdate: String
+	zoneInfo: String
+	locale: String
+	theme: String
+	addressFormatted: String
+	addressStreetAddress: String
+	addressLocality: String
+	addressRegion: String
+	addressPostalCode: String
+	addressCountry: String
+	clientMutationId: String
+}
+
+type UpdateProfilePayload {
+	user: User!
+	clientMutationId: String
+}
+
+input UpdateResourceInput {
+	id: ID!
+	name: String
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateRoleInput {
+	name: String
+	description: String
+	id: ID!
+	names: [LocalizedTextInput!]
+	descriptions: [LocalizedTextInput!]
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateScopeInput {
+	id: ID!
+	name: String
+	names: [ScopeDescriptionInput!]
+	description: String
+	descriptions: [ScopeDescriptionInput!]
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateUserInput {
+	id: ID!
+	username: String
+	email: String
+	profile: UserProfilePatchInput
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type UpdateUserPayload {
+	userId: ID!
+	version: UUID!
+	user: User
+	clientMutationId: String
+}
+
+input UpdateUsernameInput {
+	username: String!
+	clientMutationId: String
+}
+
+type User implements Node {
+	id: ID!
+	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roleBindings(enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	effectivePermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	username: String!
+	email: String!
+	emailVerified: Boolean!
+	givenName: String
+	familyName: String
+	middleName: String
+	nickname: String
+	profile: String
+	picture: String
+	website: String
+	birthdate: String
+	zoneInfo: String
+	locale: String
+	theme: String
+	createdAt: DateTime!
+	updatedAt: DateTime
+	version: UUID! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enabled: Boolean @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	locked: Boolean @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	lockedUntil: DateTime @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	failedAttempts: Int @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type UserConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [UserEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [User!]!
+	totalCount: Int!
+}
+
+"""
+An edge in a connection.
+"""
+type UserEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: User!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input UserFilter {
+	query: String
+	username: String
+	email: String
+	enabled: Boolean
+	locked: Boolean
+	createdFrom: DateTime
+	createdBefore: DateTime
+}
+
+"""
+Stable user-management ordering. Explicit SDL names keep consumers and the
+persisted cursor contract independent from Rust identifier conventions.
+"""
+enum UserOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+	USERNAME_ASC
+	USERNAME_DESC
+}
+
+input UserProfilePatchInput {
+	givenName: String
+	familyName: String
+	middleName: String
+	nickname: String
+	profile: String
+	picture: String
+	website: String
+	gender: String
+	birthdate: String
+	zoneInfo: String
+	locale: String
+	theme: String
+	addressFormatted: String
+	addressStreetAddress: String
+	addressLocality: String
+	addressRegion: String
+	addressPostalCode: String
+	addressCountry: String
+}
+
+type UserRoleBinding {
+	id: ID!
+	userId: ID!
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roleId: ID!
+	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	grantedByUserId: ID
+	reason: String!
+	enabled: Boolean!
+	revokedAt: DateTime
+	version: UUID!
+	userVersion: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+}
+
+type UserRoleBindingConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [UserRoleBindingEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [UserRoleBinding!]!
+	userVersion: UUID @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+"""
+An edge in a connection.
+"""
+type UserRoleBindingEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: UserRoleBinding!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+enum UserRoleBindingOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+}
+
+type UserRoleBindingPayload {
+	userId: ID!
+	userVersion: UUID!
+	bindingIds: [ID!]!
+	createdCount: Int!
+	revokedCount: Int!
+	"""
+	Expanded bindings for the server-produced IDs returned by this
+	mutation. Scalar payload fields stay unguarded so a writer without read
+	authority can still confirm the write; only this read object is guarded.
+	"""
+	bindings: [UserRoleBinding!] @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
+input UserStateInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type UserStatePayload {
+	userId: ID!
+	version: UUID!
+	user: User
+	clientMutationId: String
+}
+
+"""
+Requirements are conjunctive, including repeated declarations on a field.
+An empty scope list adds no permission requirement beyond the authenticated
+transport. Runtime requirements are not a grant or a client-side guarantee.
+"""
+directive @access(policy: AccessPolicy!) repeatable on FIELD_DEFINITION
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Provides a scalar specification URL for specifying the behavior of custom scalar types.
+"""
+directive @specifiedBy(url: String!) on SCALAR
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}

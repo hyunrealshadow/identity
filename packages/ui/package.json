@@ -1,0 +1,23 @@
+{
+  "name": "@identity/ui",
+  "license": "Apache-2.0",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./date-picker-field": "./src/date-picker-field.tsx",
+    "./data-table": "./src/data-table.tsx",
+    "./styles.css": "./styles.css"
+  },
+  "peerDependencies": {
+    "@heroui/react": "3.2.6",
+    "react": "^19.3.0"
+  },
+  "dependencies": {
+    "@internationalized/date": "3.12.4",
+    "react-aria": "3.52.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

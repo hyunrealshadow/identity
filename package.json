@@ -6,7 +6,20 @@
   "scripts": {
     "build:error-css": "tailwindcss -i ./assets/styles/error.css -o ./assets/static/css/error.css --minify",
     "dev:login": "pnpm --filter login dev",
-    "build:login": "pnpm --filter login build"
+    "build:login": "pnpm --filter login build",
+    "dev:console": "pnpm --filter console dev",
+    "build:console": "pnpm --filter console build",
+    "typecheck:console": "pnpm --filter console typecheck",
+    "test:console": "pnpm --filter console test",
+    "graphql:schema": "node scripts/export-graphql-schema.mjs && node packages/graphql-access/generator.mjs",
+    "graphql:check": "node scripts/export-graphql-schema.mjs --check && node packages/graphql-access/generator.mjs --check",
+    "graphql:codegen": "pnpm graphql:schema && pnpm --filter console codegen",
+    "errors:catalog": "node scripts/export-graphql-schema.mjs --error-catalog",
+    "errors:check": "node scripts/export-graphql-schema.mjs --error-catalog --check",
+    "scopes:catalog": "node scripts/export-graphql-schema.mjs --management-catalog",
+    "scopes:check": "node scripts/export-graphql-schema.mjs --management-catalog --check",
+    "graphql:access": "node packages/graphql-access/generator.mjs",
+    "graphql:access:check": "node packages/graphql-access/generator.mjs --check"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.3",

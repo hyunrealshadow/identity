@@ -1,0 +1,127 @@
+@source "./src";
+
+@layer utilities {
+  /* Keep cursor hit testing without restoring hover or press feedback. Native
+     disabled semantics remain responsible for blocking activation. */
+  :is(
+    button,
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset']
+  ):disabled {
+    cursor: var(--cursor-disabled, not-allowed);
+    pointer-events: auto;
+    transform: none;
+    scale: 1;
+  }
+
+  :is(
+      button,
+      input[type='button'],
+      input[type='submit'],
+      input[type='reset']
+    ):disabled
+    * {
+    pointer-events: none;
+  }
+
+  .button:disabled {
+    --button-bg-hover: var(--button-bg);
+    --button-bg-pressed: var(--button-bg);
+  }
+
+  .pagination__link:disabled {
+    --pagination-link-bg-hover: var(--pagination-link-bg);
+    --pagination-link-bg-pressed: var(--pagination-link-bg);
+  }
+
+  .toggle-button:disabled {
+    --toggle-button-bg-hover: var(--toggle-button-bg);
+    --toggle-button-bg-pressed: var(--toggle-button-bg);
+    --toggle-button-bg-selected-hover: var(--toggle-button-bg-selected);
+    --toggle-button-bg-selected-pressed: var(--toggle-button-bg-selected);
+  }
+
+  .select__trigger:disabled {
+    background-color: var(--select-trigger-bg, var(--field-background));
+    border-color: var(--field-border);
+  }
+
+  .close-button:disabled {
+    background-color: var(--default);
+  }
+
+  :is(
+    .calendar__nav-button,
+    .select__clear-button,
+    .number-field__increment-button,
+    .number-field__decrement-button
+  ):disabled {
+    background-color: transparent;
+  }
+}
+
+@layer components {
+  .identity-date-picker-popover,
+  .identity-date-picker-popover
+    :is(
+      [data-slot='calendar'],
+      [data-slot='calendar-cell'],
+      [data-slot='calendar-cell-indicator'],
+      [data-slot='calendar-nav-button'],
+      [data-slot='calendar-year-picker-trigger'],
+      [data-slot='calendar-year-picker-year-cell']
+    ) {
+    border-radius: var(--field-radius);
+  }
+
+  .identity-data-table {
+    --radius-2xl: var(--field-radius);
+    min-width: 0;
+  }
+
+  .identity-data-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .identity-data-table-scroll[data-bounded] {
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .identity-data-table .table__column {
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    color: var(--foreground);
+    background: var(--surface-secondary);
+  }
+
+  .identity-data-table .table__cell {
+    padding: 1rem;
+    vertical-align: top;
+  }
+
+  .identity-data-table .chip__label {
+    white-space: nowrap;
+  }
+
+  .identity-data-table [data-density='compact'] .table__cell {
+    padding-block: 0.5rem;
+  }
+
+  .identity-data-table [data-wrap] .table__cell {
+    overflow-wrap: anywhere;
+  }
+
+  .identity-data-table [data-wrap] .table__cell :is(p, span) {
+    white-space: normal;
+    -webkit-line-clamp: unset;
+  }
+
+  .identity-data-table [data-wrap] .table__cell .chip__label {
+    white-space: nowrap;
+  }
+}
