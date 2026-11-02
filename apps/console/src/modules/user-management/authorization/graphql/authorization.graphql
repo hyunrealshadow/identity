@@ -1,0 +1,162 @@
+query ConsoleUserRoles(
+  $userId: ID!
+  $enabled: Boolean
+  $orderBy: UserRoleBindingOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $includeRole: Boolean!
+) {
+  userRoles(
+    userId: $userId
+    enabled: $enabled
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    userVersion
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        userId
+        roleId
+        grantedByUserId
+        reason
+        enabled
+        revokedAt
+        version
+        userVersion
+        createdAt
+        updatedAt
+        role @include(if: $includeRole) {
+          id
+          name
+          description
+          enabled
+          names {
+            locale
+            value
+          }
+        }
+      }
+    }
+  }
+}
+
+query ConsoleUserRoleVersion($userId: ID!) {
+  userRoles(userId: $userId, first: 1) {
+    userVersion
+  }
+}
+
+query ConsoleUserPermissions(
+  $userId: ID!
+  $resourceId: ID!
+  $orderBy: EffectivePermissionOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  userPermissions(
+    userId: $userId
+    resourceId: $resourceId
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    userVersion
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        permissionId
+        resourceId
+        code
+        sources {
+          bindingId
+          roleId
+        }
+        groupSources {
+          groupId
+          membershipId
+          groupRoleBindingId
+          roleId
+        }
+      }
+    }
+  }
+}
+
+mutation ConsoleAssignUserRoles($input: AssignUserRolesInput!) {
+  assignUserRoles(input: $input) {
+    userId
+    userVersion
+    bindingIds
+    createdCount
+    revokedCount
+  }
+}
+
+mutation ConsoleRevokeUserRoles($input: RevokeUserRolesInput!) {
+  revokeUserRoles(input: $input) {
+    userId
+    userVersion
+    bindingIds
+    createdCount
+    revokedCount
+  }
+}
+
+query ConsoleAuthorizationLabels($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    id
+    __typename
+    ... on Scope {
+      code
+      name
+      description
+      names {
+        locale
+        value
+      }
+      descriptions {
+        locale
+        value
+      }
+    }
+    ... on Group {
+      name
+      names {
+        locale
+        value
+      }
+    }
+    ... on Role {
+      name
+      description
+      names {
+        locale
+        value
+      }
+    }
+  }
+}

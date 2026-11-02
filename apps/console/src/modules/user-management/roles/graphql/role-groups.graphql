@@ -1,0 +1,47 @@
+query ConsoleRoleGroups(
+  $roleId: ID!
+  $filter: GroupFilter
+  $orderBy: GroupOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  role(id: $roleId) {
+    id
+    groups(
+      filter: $filter
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          id
+          builtIn
+          name
+          description
+          names {
+            locale
+            value
+          }
+          descriptions {
+            locale
+            value
+          }
+          enabled
+          updatedAt
+        }
+      }
+    }
+  }
+}

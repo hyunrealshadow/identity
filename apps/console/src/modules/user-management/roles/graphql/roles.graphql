@@ -1,0 +1,178 @@
+query ConsoleRoles(
+  $filter: RoleFilter
+  $orderBy: RoleOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  roles(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        name
+        description
+        builtIn
+        names {
+          locale
+          value
+        }
+        descriptions {
+          locale
+          value
+        }
+        enabled
+        version
+        createdAt
+        updatedAt
+      }
+    }
+  }
+}
+
+query ConsoleRole($id: ID!) {
+  role(id: $id) {
+    id
+    name
+    description
+    builtIn
+    names {
+      locale
+      value
+    }
+    descriptions {
+      locale
+      value
+    }
+    enabled
+    version
+    createdAt
+    updatedAt
+  }
+}
+
+mutation ConsoleCreateRole($input: CreateRoleInput!) {
+  createRole(input: $input) {
+    roleId
+    version
+  }
+}
+
+mutation ConsoleUpdateRole($input: UpdateRoleInput!) {
+  updateRole(input: $input) {
+    roleId
+    version
+  }
+}
+
+mutation ConsoleEnableRole($input: RoleStateInput!) {
+  enableRole(input: $input) {
+    roleId
+    version
+  }
+}
+
+mutation ConsoleDisableRole($input: RoleStateInput!) {
+  disableRole(input: $input) {
+    roleId
+    version
+  }
+}
+
+mutation ConsoleSetRolePermissions($input: SetRolePermissionsInput!) {
+  setRolePermissions(input: $input) {
+    roleId
+    version
+  }
+}
+
+query ConsoleRoleUsers(
+  $roleId: ID!
+  $enabled: Boolean
+  $orderBy: UserRoleBindingOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $includeUser: Boolean!
+) {
+  roleUsers(
+    roleId: $roleId
+    enabled: $enabled
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    userVersion
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        userId
+        roleId
+        grantedByUserId
+        reason
+        enabled
+        revokedAt
+        version
+        userVersion
+        createdAt
+        updatedAt
+        user @include(if: $includeUser) {
+          id
+          username
+          email
+          enabled
+          locked
+        }
+      }
+    }
+  }
+}
+
+query ConsoleResourceOptions(
+  $filter: ResourceFilter
+  $first: Int
+  $after: String
+) {
+  resources(filter: $filter, orderBy: NAME_ASC, first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        uri
+        name
+        enabled
+      }
+    }
+  }
+}

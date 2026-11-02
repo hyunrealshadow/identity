@@ -1,0 +1,45 @@
+query ConsolePermissionOptions(
+  $filter: ScopeFilter
+  $orderBy: ScopeOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  permissions: scopes(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        resourceId
+        code
+        name
+        description
+        builtIn
+        enabled
+        names {
+          locale
+          value
+        }
+        descriptions {
+          locale
+          value
+        }
+      }
+    }
+  }
+}
