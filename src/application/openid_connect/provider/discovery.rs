@@ -156,7 +156,7 @@ fn endpoint_url(issuer: &Url, path: &str) -> Result<Url, AppError> {
     ))
 }
 
-fn normalize_issuer(
+pub(crate) fn normalize_issuer(
     installation: &InstallationSettings,
     domain: Option<&str>,
 ) -> Result<Url, AppError> {

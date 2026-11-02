@@ -4,6 +4,7 @@ use identity_application::{
     auth::{
         account::AccountService, login::LoginService, mfa::MfaService, session::SessionService,
     },
+    console::ConsoleRuntimeService,
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
     instance_overview::InstanceOverviewService,
@@ -35,10 +36,9 @@ use sea_orm::DatabaseConnection;
 use super::settings::AppRuntimeSettings;
 use crate::{
     auth::{
-        otp::TotpVerifierImpl, password::PasswordHasherImpl,
-        workload::build_login_workload_authenticator,
+        otp::TotpVerifierImpl, password::PasswordHasherImpl, workload::build_workload_authenticator,
     },
-    config::LoginWorkloadConfig,
+    config::WorkloadsConfig,
     crypto::{
         certificate_generator::CertificateGeneratorImpl,
         data_protection::XChaCha20DataProtectionCipher, key::AsymmetricKeyGeneratorImpl,
@@ -113,6 +113,7 @@ pub struct AppServices {
     dynamic_client_registration: AppDynamicClientRegistrationService,
     device_authorization: AppDeviceAuthorizationService,
     login_runtime: LoginRuntimeService,
+    console_runtime: ConsoleRuntimeService,
     workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
     oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
@@ -125,8 +126,8 @@ impl AppServices {
         Self::from_db_with_workload_auth(
             db,
             settings,
-            build_login_workload_authenticator(&LoginWorkloadConfig::default())
-                .expect("default login workload authenticator must build"),
+            build_workload_authenticator(&WorkloadsConfig::default())
+                .expect("default workload authenticator must build"),
         )
     }
 
@@ -401,6 +402,7 @@ impl AppServices {
                 Arc::new(LoginRuntimeRepositoryImpl::new(db.clone())),
                 settings.store(),
             ),
+            console_runtime: ConsoleRuntimeService::new(settings.store()),
             workload_authenticator,
             oidc_client_repo,
             oidc_credential_repo,
@@ -519,6 +521,11 @@ impl AppServices {
     #[must_use]
     pub fn login_runtime(&self) -> &LoginRuntimeService {
         &self.login_runtime
+    }
+
+    #[must_use]
+    pub fn console_runtime(&self) -> &ConsoleRuntimeService {
+        &self.console_runtime
     }
 
     #[must_use]

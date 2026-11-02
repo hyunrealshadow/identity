@@ -15,6 +15,7 @@ async fn static_token_accepts_configured_tokens() {
     let authenticator = StaticTokenWorkloadAuthenticator::new(
         vec![PathBuf::from(&current), PathBuf::from(&previous)],
         Vec::new(),
+        BuiltInWorkload::Login,
     )
     .unwrap();
 
@@ -41,8 +42,12 @@ async fn static_token_normalizes_file_whitespace() {
     let token_file = dir.join("token");
     fs::write(&token_file, "workload-token-with-32-characters-minimum\r\n").unwrap();
 
-    let authenticator =
-        StaticTokenWorkloadAuthenticator::new(vec![token_file.clone()], Vec::new()).unwrap();
+    let authenticator = StaticTokenWorkloadAuthenticator::new(
+        vec![token_file.clone()],
+        Vec::new(),
+        BuiltInWorkload::Login,
+    )
+    .unwrap();
 
     assert_eq!(
         authenticator
@@ -57,13 +62,18 @@ fn static_token_rejects_short_or_missing_sources() {
     let short = dir.join("short");
     fs::write(&short, "too-short").unwrap();
 
-    let error = StaticTokenWorkloadAuthenticator::new(vec![PathBuf::from(&short)], Vec::new())
-        .err()
-        .expect("short token must be rejected");
+    let error = StaticTokenWorkloadAuthenticator::new(
+        vec![PathBuf::from(&short)],
+        Vec::new(),
+        BuiltInWorkload::Login,
+    )
+    .err()
+    .expect("short token must be rejected");
     assert!(error.contains("32 characters"));
 
-    let error = StaticTokenWorkloadAuthenticator::new(Vec::new(), Vec::new())
-        .err()
-        .expect("missing sources must be rejected");
+    let error =
+        StaticTokenWorkloadAuthenticator::new(Vec::new(), Vec::new(), BuiltInWorkload::Login)
+            .err()
+            .expect("missing sources must be rejected");
     assert!(error.contains("at least one token file"));
 }

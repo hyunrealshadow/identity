@@ -41,10 +41,7 @@ use crate::{
     },
 };
 
-/// Stable OID so repeated runs reconcile the same protected client and never
-/// create parallel Console clients.
-pub const CONSOLE_CLIENT_OID: &str = "00000000-0000-0000-0000-0000000000c0";
-pub const CONSOLE_CLIENT_NAME: &str = "Identity Console";
+pub use identity_domain::client::built_in::{CONSOLE_CLIENT_NAME, CONSOLE_CLIENT_OID};
 pub const CONSOLE_CLIENT_PROTOCOL: &str = "openid_connect";
 
 /// Base scopes plus every trusted management catalog entry. This is an allowed

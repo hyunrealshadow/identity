@@ -12,7 +12,7 @@ use super::{
     controllers,
     middleware::{
         RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
-        TraceContextMiddleware, security_headers_middleware,
+        TraceContextMiddleware, require_login_workload, security_headers_middleware,
     },
 };
 use crate::{controllers::response::handle_404, graphql, health};
@@ -71,18 +71,21 @@ pub fn internal_router(
     config: &AppConfig,
     authenticator: Arc<dyn WorkloadAuthenticator>,
 ) -> Router {
-    let mut internal = Router::with_path("internal")
+    let mut login = Router::new()
+        .hoop(require_login_workload)
         .push(controllers::install::status_routes())
-        .push(controllers::install::routes())
-        .push(controllers::login_runtime::routes());
+        .push(controllers::install::routes());
     if config.observability.self_metrics.enable {
-        internal = internal.push(
+        login = login.push(
             Router::with_path(internal_relative_route(
                 &config.observability.self_metrics.route,
             ))
             .get(controllers::observability::observability_metrics),
         );
     }
+    let internal = Router::with_path("internal")
+        .push(controllers::workload_runtime::routes())
+        .push(login);
 
     Router::new()
         .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(

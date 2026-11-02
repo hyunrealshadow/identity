@@ -32,19 +32,21 @@ impl Default for InternalServerConfig {
 #[serde(deny_unknown_fields)]
 pub struct WorkloadsConfig {
     #[serde(default)]
-    pub login: LoginWorkloadConfig,
+    pub login: WorkloadConfig,
+    #[serde(default)]
+    pub console: WorkloadConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LoginWorkloadConfig {
+pub struct WorkloadConfig {
     #[serde(default)]
     pub static_tokens: Vec<StaticTokenConfig>,
     #[serde(default)]
     pub kubernetes_service_account: KubernetesServiceAccountConfig,
 }
 
-impl LoginWorkloadConfig {
+impl WorkloadConfig {
     #[must_use]
     pub fn has_any_authentication(&self) -> bool {
         !self.static_tokens.is_empty() || self.kubernetes_service_account.enabled

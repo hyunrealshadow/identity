@@ -34,8 +34,8 @@ pub use openid_connect::{DynamicClientRegistrationConfig, OpenIdConnectConfig};
 pub use server::{ServerConfig, TlsConfig, TlsTermination};
 pub use storage::{DatabaseConfig, SettingsConfig};
 pub use workloads::{
-    InternalConfig, InternalServerConfig, KubernetesServiceAccountConfig, LoginWorkloadConfig,
-    StaticTokenConfig, WorkloadsConfig,
+    InternalConfig, InternalServerConfig, KubernetesServiceAccountConfig, StaticTokenConfig,
+    WorkloadConfig, WorkloadsConfig,
 };
 
 use server::default_tls_domain_from_host;
@@ -162,38 +162,38 @@ impl AppConfig {
             )
             .into());
         }
-        if self
-            .internal
-            .workloads
-            .login
-            .static_tokens
-            .iter()
-            .any(|source| !source.has_exactly_one_source())
-        {
-            return Err(invalid_config(
-                "each login static token must configure exactly one of file, environment, or token",
-            )
-            .into());
-        }
-        let kubernetes = &self.internal.workloads.login.kubernetes_service_account;
-        if kubernetes.enabled
-            && (kubernetes.namespace.trim().is_empty()
-                || kubernetes.service_account.trim().is_empty()
-                || kubernetes.audience.trim().is_empty()
-                || kubernetes.issuer.trim().is_empty()
-                || kubernetes
-                    .ca_file
-                    .as_deref()
-                    .is_some_and(|path| path.trim().is_empty())
-                || kubernetes
-                    .token_file
-                    .as_deref()
-                    .is_some_and(|path| path.trim().is_empty()))
-        {
-            return Err(invalid_config(
-                "kubernetes_service_account namespace, service_account, audience, issuer, and configured credential files must not be empty",
-            )
-            .into());
+        for workload in [
+            &self.internal.workloads.login,
+            &self.internal.workloads.console,
+        ] {
+            if workload
+                .static_tokens
+                .iter()
+                .any(|source| !source.has_exactly_one_source())
+            {
+                return Err(invalid_config(
+                    "each workload static token must configure exactly one of file, environment, or token",
+                ).into());
+            }
+            let kubernetes = &workload.kubernetes_service_account;
+            if kubernetes.enabled
+                && (kubernetes.namespace.trim().is_empty()
+                    || kubernetes.service_account.trim().is_empty()
+                    || kubernetes.audience.trim().is_empty()
+                    || kubernetes.issuer.trim().is_empty()
+                    || kubernetes
+                        .ca_file
+                        .as_deref()
+                        .is_some_and(|path| path.trim().is_empty())
+                    || kubernetes
+                        .token_file
+                        .as_deref()
+                        .is_some_and(|path| path.trim().is_empty()))
+            {
+                return Err(invalid_config(
+                    "kubernetes_service_account namespace, service_account, audience, issuer, and configured credential files must not be empty",
+                ).into());
+            }
         }
         Ok(())
     }

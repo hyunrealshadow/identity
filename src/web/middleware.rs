@@ -2,7 +2,9 @@ use std::{net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use http::{HeaderValue, StatusCode, header};
-use identity_domain::openid_connect::{AuthenticatedWorkload, WorkloadAuthenticator};
+use identity_domain::openid_connect::{
+    AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
+};
 use identity_infrastructure::observability::context::{
     self as trace_context, ParentDecision, TraceTrustPolicy,
 };
@@ -74,6 +76,15 @@ impl Handler for RequireWorkload {
 #[must_use]
 pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
     depot.get_typed::<AuthenticatedWorkload>().ok().copied()
+}
+
+/// Installation and operational controls belong to the Login workload.
+#[handler]
+pub async fn require_login_workload(depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
+    if authenticated_workload(depot) != Some(AuthenticatedWorkload(BuiltInWorkload::Login)) {
+        render_app_error_json(res, AppError::from_code(CommonErrorCode::Forbidden));
+        ctrl.skip_rest();
+    }
 }
 
 /// Correlation is assigned before parsing the body and exists even without an

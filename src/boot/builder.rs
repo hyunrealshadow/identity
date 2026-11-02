@@ -11,7 +11,7 @@ use identity_application::{
 use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
-    auth::{password::PasswordHasherImpl, workload::build_login_workload_authenticator},
+    auth::{password::PasswordHasherImpl, workload::build_workload_authenticator},
     config::{AppConfig, AppEnvironment, InstallConfig},
     crypto::{certificate_generator::CertificateGeneratorImpl, key::AsymmetricKeyGeneratorImpl},
     database,
@@ -205,9 +205,8 @@ impl AppBuilder {
             .as_ref()
             .expect("runtime settings must be loaded first");
 
-        let workload_authenticator =
-            build_login_workload_authenticator(&self.config.internal.workloads.login)
-                .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
+        let workload_authenticator = build_workload_authenticator(&self.config.internal.workloads)
+            .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
 
         self.services = Some(Arc::new(
             AppServices::from_db_with_workload_auth(

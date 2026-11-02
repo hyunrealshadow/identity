@@ -9,6 +9,7 @@ use crate::client::model::ClientOid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltInWorkload {
     Login,
+    Console,
 }
 
 /// An authenticated internal API caller. The domain and application layers

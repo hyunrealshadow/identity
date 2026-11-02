@@ -1,5 +1,7 @@
 //! Provider composition, scope policies, and public discovery interface.
 
+pub(crate) use discovery::normalize_issuer;
+
 use crate::{
     error::{AppError, codes::common::CommonErrorCode},
     setting::{OpenIdConnectSettings, PushedAuthorizationSettings, SettingsSource},

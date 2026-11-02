@@ -22,21 +22,27 @@ async fn runtime_configuration(depot: &mut Depot) -> JsonWebResult<AppResponse> 
             CommonErrorCode::Unauthorized,
         )));
     };
-    if workload.0 != BuiltInWorkload::Login {
-        return Err(JsonWebError(AppError::from_code(
-            CommonErrorCode::Forbidden,
-        )));
-    }
-    let Some(config) = ctx
-        .services()
-        .login_runtime()
-        .runtime_config()
-        .await
-        .map_err(JsonWebError)?
-    else {
-        return Err(JsonWebError(AppError::from_code(CommonErrorCode::NotFound)));
+    let mut response = match workload.0 {
+        BuiltInWorkload::Login => {
+            let config = ctx
+                .services()
+                .login_runtime()
+                .runtime_config()
+                .await
+                .map_err(JsonWebError)?
+                .ok_or_else(|| JsonWebError(AppError::from_code(CommonErrorCode::NotFound)))?;
+            json_response(StatusCode::OK, config)
+        }
+        BuiltInWorkload::Console => {
+            let config = ctx
+                .services()
+                .console_runtime()
+                .runtime_config(ctx.context().environment().as_str())
+                .map_err(JsonWebError)?
+                .ok_or_else(|| JsonWebError(AppError::from_code(CommonErrorCode::NotFound)))?;
+            json_response(StatusCode::OK, config)
+        }
     };
-    let mut response = json_response(StatusCode::OK, config);
     insert_no_store_headers(&mut response);
     Ok(response.into())
 }

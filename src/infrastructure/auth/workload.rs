@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use tokio::sync::Mutex;
 
-use crate::config::{KubernetesServiceAccountConfig, LoginWorkloadConfig};
+use crate::config::{KubernetesServiceAccountConfig, WorkloadConfig, WorkloadsConfig};
 
 const JWKS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 
@@ -27,12 +27,23 @@ fn token_digest(token: &str) -> Vec<u8> {
     Sha256::digest(token.trim().as_bytes()).to_vec()
 }
 
-/// Builds the authenticator chain for the Login workload from configuration.
-/// Static tokens come from configured files, named process environment
-/// variables, or template-resolved inline values; the Kubernetes
-/// ServiceAccount adapter is appended when enabled.
-pub fn build_login_workload_authenticator(
-    config: &LoginWorkloadConfig,
+/// Bind each configured credential source to its own internal workload identity.
+pub fn build_workload_authenticator(
+    config: &WorkloadsConfig,
+) -> Result<Arc<dyn WorkloadAuthenticator>, String> {
+    let mut adapters = Vec::new();
+    for (identity, config) in [
+        (BuiltInWorkload::Login, &config.login),
+        (BuiltInWorkload::Console, &config.console),
+    ] {
+        adapters.push(build_named_workload_authenticator(config, identity)?);
+    }
+    Ok(Arc::new(AnyWorkloadAuthenticator::new(adapters)))
+}
+
+fn build_named_workload_authenticator(
+    config: &WorkloadConfig,
+    identity: BuiltInWorkload,
 ) -> Result<Arc<dyn WorkloadAuthenticator>, String> {
     let mut adapters: Vec<Arc<dyn WorkloadAuthenticator>> = Vec::new();
     if !config.static_tokens.is_empty() {
@@ -60,6 +71,7 @@ pub fn build_login_workload_authenticator(
         adapters.push(Arc::new(StaticTokenWorkloadAuthenticator::new(
             files,
             inline_tokens,
+            identity,
         )?));
     }
     if config.kubernetes_service_account.enabled {
@@ -68,6 +80,7 @@ pub fn build_login_workload_authenticator(
             KubernetesServiceAccountWorkloadAuthenticator::new(
                 &config.kubernetes_service_account,
                 http,
+                identity,
             ),
         ));
     }
@@ -95,12 +108,13 @@ fn kubernetes_http_client(config: &KubernetesServiceAccountConfig) -> Result<Cli
         .map_err(|error| format!("failed to build Kubernetes issuer HTTP client: {error}"))
 }
 
-/// Authenticates the Login workload with a deployer-managed 256-bit static
+/// Authenticates a configured workload with a deployer-managed 256-bit static
 /// token read from files (or an inline fallback for local development).
 ///
 /// Token files are re-read on every authentication attempt so the accepted
 /// set can change without restarting Identity.
 pub struct StaticTokenWorkloadAuthenticator {
+    identity: BuiltInWorkload,
     files: Vec<PathBuf>,
     inline_digests: Vec<Vec<u8>>,
 }
@@ -108,10 +122,14 @@ pub struct StaticTokenWorkloadAuthenticator {
 impl StaticTokenWorkloadAuthenticator {
     /// Creates the authenticator from token files plus resolved environment
     /// tokens. Fails when no source is configured.
-    pub fn new(files: Vec<PathBuf>, inline_tokens: Vec<String>) -> Result<Self, String> {
+    pub fn new(
+        files: Vec<PathBuf>,
+        inline_tokens: Vec<String>,
+        identity: BuiltInWorkload,
+    ) -> Result<Self, String> {
         if files.is_empty() && inline_tokens.is_empty() {
             return Err(
-                "login workload static token requires at least one token file or an inline token"
+                "workload static token requires at least one token file or an inline token"
                     .to_owned(),
             );
         }
@@ -119,7 +137,7 @@ impl StaticTokenWorkloadAuthenticator {
         for file in &files {
             sources.push(fs::read_to_string(file).map_err(|error| {
                 format!(
-                    "failed to read login workload token file {}: {error}",
+                    "failed to read workload token file {}: {error}",
                     file.display()
                 )
             })?);
@@ -129,11 +147,10 @@ impl StaticTokenWorkloadAuthenticator {
             .iter()
             .all(|token| token.trim().chars().count() >= 32)
         {
-            return Err(
-                "login workload static tokens must contain at least 32 characters".to_owned(),
-            );
+            return Err("workload static tokens must contain at least 32 characters".to_owned());
         }
         Ok(Self {
+            identity,
             files,
             inline_digests: inline_tokens
                 .iter()
@@ -162,15 +179,16 @@ impl WorkloadAuthenticator for StaticTokenWorkloadAuthenticator {
             .read_digests()
             .iter()
             .any(|expected| bool::from(presented.ct_eq(expected)));
-        valid.then_some(AuthenticatedWorkload(BuiltInWorkload::Login))
+        valid.then_some(AuthenticatedWorkload(self.identity))
     }
 }
 
-/// Authenticates the Login workload with a Kubernetes projected ServiceAccount
+/// Authenticates a configured workload with a Kubernetes projected ServiceAccount
 /// token. The token is verified against the cluster issuer's JWKS and must
 /// carry the configured audience and the exact configured ServiceAccount
 /// subject.
 pub struct KubernetesServiceAccountWorkloadAuthenticator {
+    identity: BuiltInWorkload,
     config: KubernetesServiceAccountConfig,
     http: Client,
     keys: Mutex<Option<(Instant, Vec<PublicJwk>)>>,
@@ -178,8 +196,13 @@ pub struct KubernetesServiceAccountWorkloadAuthenticator {
 
 impl KubernetesServiceAccountWorkloadAuthenticator {
     #[must_use]
-    pub fn new(config: &KubernetesServiceAccountConfig, http: Client) -> Self {
+    pub fn new(
+        config: &KubernetesServiceAccountConfig,
+        http: Client,
+        identity: BuiltInWorkload,
+    ) -> Self {
         Self {
+            identity,
             config: config.clone(),
             http,
             keys: Mutex::new(None),
@@ -296,15 +319,14 @@ impl WorkloadAuthenticator for KubernetesServiceAccountWorkloadAuthenticator {
                 continue;
             };
             if self.valid_claims(&payload) {
-                return Some(AuthenticatedWorkload(BuiltInWorkload::Login));
+                return Some(AuthenticatedWorkload(self.identity));
             }
         }
         None
     }
 }
 
-/// Tries every configured adapter in order until one authenticates the
-/// credential.
+/// Accepts matching adapters only when they agree on one workload identity.
 pub struct AnyWorkloadAuthenticator {
     adapters: Vec<Arc<dyn WorkloadAuthenticator>>,
 }
@@ -319,12 +341,16 @@ impl AnyWorkloadAuthenticator {
 #[async_trait]
 impl WorkloadAuthenticator for AnyWorkloadAuthenticator {
     async fn authenticate(&self, token: &str) -> Option<AuthenticatedWorkload> {
+        let mut matched = None;
         for adapter in &self.adapters {
             if let Some(workload) = adapter.authenticate(token).await {
-                return Some(workload);
+                if matched.is_some_and(|previous| previous != workload) {
+                    return None;
+                }
+                matched = Some(workload);
             }
         }
-        None
+        matched
     }
 }
 
@@ -355,10 +381,54 @@ mod tests {
     use crate::config::KubernetesServiceAccountConfig;
 
     #[tokio::test]
+    async fn workload_credentials_are_isolated_and_ambiguous_sources_are_rejected() {
+        use crate::config::{StaticTokenConfig, WorkloadConfig, WorkloadsConfig};
+        let source = |token: &str| WorkloadConfig {
+            static_tokens: vec![StaticTokenConfig {
+                file: None,
+                environment: None,
+                token: Some(token.to_owned()),
+            }],
+            ..Default::default()
+        };
+        let mut config = WorkloadsConfig {
+            login: source("login-workload-test-credential-0123456789"),
+            console: source("console-workload-test-credential-0123456789"),
+        };
+        let auth = super::build_workload_authenticator(&config).unwrap();
+        assert_eq!(
+            auth.authenticate("console-workload-test-credential-0123456789")
+                .await,
+            Some(AuthenticatedWorkload(BuiltInWorkload::Console))
+        );
+        assert_eq!(
+            auth.authenticate("login-workload-test-credential-0123456789")
+                .await,
+            Some(AuthenticatedWorkload(BuiltInWorkload::Login))
+        );
+        assert!(
+            auth.authenticate("unknown-workload-credential-0123456789")
+                .await
+                .is_none()
+        );
+        config.console = config.login.clone();
+        let auth = super::build_workload_authenticator(&config).unwrap();
+        assert!(
+            auth.authenticate("login-workload-test-credential-0123456789")
+                .await
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
     async fn static_token_accepts_resolved_environment_tokens() {
         let token = "environment-workload-token-0123456789abcdef".to_owned();
-        let authenticator =
-            StaticTokenWorkloadAuthenticator::new(Vec::new(), vec![token.clone()]).unwrap();
+        let authenticator = StaticTokenWorkloadAuthenticator::new(
+            Vec::new(),
+            vec![token.clone()],
+            BuiltInWorkload::Login,
+        )
+        .unwrap();
 
         assert_eq!(
             authenticator.authenticate(&token).await,
@@ -377,8 +447,11 @@ mod tests {
             ca_file: None,
             token_file: None,
         };
-        let authenticator =
-            KubernetesServiceAccountWorkloadAuthenticator::new(&config, Client::new());
+        let authenticator = KubernetesServiceAccountWorkloadAuthenticator::new(
+            &config,
+            Client::new(),
+            BuiltInWorkload::Login,
+        );
         let mut payload = JwtPayload::new();
         payload.set_issuer(&config.issuer);
         payload.set_subject("system:serviceaccount:identity:identity-login");
@@ -423,8 +496,11 @@ mod tests {
             ca_file: None,
             token_file: Some("this-kubernetes-token-does-not-exist".to_owned()),
         };
-        let authenticator =
-            KubernetesServiceAccountWorkloadAuthenticator::new(&config, Client::new());
+        let authenticator = KubernetesServiceAccountWorkloadAuthenticator::new(
+            &config,
+            Client::new(),
+            BuiltInWorkload::Login,
+        );
 
         let error = authenticator
             .request("https://kubernetes.default.svc.cluster.local/openid/v1/jwks")

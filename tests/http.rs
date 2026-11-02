@@ -11,3 +11,6 @@ mod oauth2;
 #[cfg(feature = "oidc-conformance")]
 #[path = "http/conformance.rs"]
 mod conformance;
+
+#[path = "http/workload_runtime.rs"]
+mod workload_runtime;

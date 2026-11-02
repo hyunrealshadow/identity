@@ -11,12 +11,16 @@ use identity_web::controllers::well_known::routes;
 /// Build a test state whose scope catalog answers the production
 /// `SELECT code ...` query shape.
 async fn metadata_state() -> identity_infrastructure::AppState {
+    runtime_state(None).await
+}
+
+pub(super) async fn runtime_state(console: Option<&str>) -> identity_infrastructure::AppState {
     use std::{collections::BTreeMap, sync::Arc};
 
     use chrono::Utc;
     use identity_application::setting::{
-        DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting, PasswordHashSetting,
-        SettingDefinition,
+        ConsoleDomainSetting, DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting,
+        PasswordHashSetting, SettingDefinition,
     };
     use identity_infrastructure::{
         AppContext, AppLifecycle, AppResources, AppState,
@@ -51,7 +55,12 @@ async fn metadata_state() -> identity_infrastructure::AppState {
         id: 3,
         oid: Uuid::new_v4(),
         key: DomainSetting::KEY.to_string(),
-        value: to_value("identity.example.com").unwrap(),
+        value: to_value(if console.is_some() {
+            "https://identity.example.com/tenant/"
+        } else {
+            "identity.example.com"
+        })
+        .unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -83,7 +92,16 @@ async fn metadata_state() -> identity_infrastructure::AppState {
         id: 12,
         oid: Uuid::new_v4(),
         key: LoginDomainSetting::KEY.to_string(),
-        value: to_value(LoginDomainSetting::default_value()).unwrap(),
+        value: to_value(console.map(|_| "https://login.example.com")).unwrap(),
+        created_at: now.into(),
+        updated_at: None,
+    };
+
+    let console_domain_setting = setting::Model {
+        id: 13,
+        oid: Uuid::new_v4(),
+        key: ConsoleDomainSetting::KEY.to_owned(),
+        value: to_value(console).unwrap(),
         created_at: now.into(),
         updated_at: None,
     };
@@ -96,6 +114,7 @@ async fn metadata_state() -> identity_infrastructure::AppState {
             password_setting,
             dynamic_registration_setting,
             login_domain_setting,
+            console_domain_setting,
             device_authorization_setting,
         ]])
         .append_query_results([Vec::<BTreeMap<String, DbValue>>::new()])
