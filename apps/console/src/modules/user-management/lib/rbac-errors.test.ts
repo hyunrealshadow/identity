@@ -14,9 +14,11 @@ describe('RBAC error presentation', () => {
         {
           message: 'stale',
           kind: 'conflict',
-          code: 'version_mismatch',
-          fields: [],
-          extensions: { params: { current_version: '9f0c2b1a-3d4e-4f50-8a9b-1c2d3e4f5a6b' } },
+          code: 19004,
+          fields: [{ path: 'input.expectedVersion', code: 19004 }],
+          extensions: {
+            params: { current_version: '9f0c2b1a-3d4e-4f50-8a9b-1c2d3e4f5a6b' },
+          },
         },
       ]),
     ).toEqual({
@@ -28,6 +30,7 @@ describe('RBAC error presentation', () => {
       rbacConflict([
         {
           message: 'role name already exists',
+          kind: 'conflict',
           code: 'role_name_conflict',
           fields: [{ path: 'input.names', message: 'Taken' }],
         },

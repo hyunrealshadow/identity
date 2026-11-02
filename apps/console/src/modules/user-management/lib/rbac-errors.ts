@@ -48,10 +48,18 @@ function currentVersion(issue: GraphQLIssue): string | undefined {
  * RBAC version and authorization-generation conflicts are intentionally
  * broader than user-profile conflicts, but never match field uniqueness errors.
  */
-export function rbacConflict(issues: ReadonlyArray<GraphQLIssue>): RbacConflict {
+export function rbacConflict(
+  issues: ReadonlyArray<GraphQLIssue>,
+): RbacConflict {
   for (const issue of issues) {
-    if (issue.fields.length > 0) continue
-    const value = `${issue.kind ?? ''} ${String(issue.code ?? '')}`.toLowerCase()
+    const versionField = issue.fields.some(({ path }) =>
+      ['expectedVersion', 'expectedUserVersion'].includes(
+        path.split('.').at(-1) ?? '',
+      ),
+    )
+    if (issue.fields.length > 0 && !versionField) continue
+    const value =
+      `${issue.kind ?? ''} ${String(issue.code ?? '')}`.toLowerCase()
     if (
       value.includes('conflict') ||
       value.includes('stale') ||
