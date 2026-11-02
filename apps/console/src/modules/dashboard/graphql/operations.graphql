@@ -1,0 +1,33 @@
+query InstanceDashboard(
+  $timeZone: String!
+  $includeUsers: Boolean!
+  $includeApplications: Boolean!
+  $includeSessions: Boolean!
+  $includeResources: Boolean!
+) {
+  instanceOverview {
+    generatedAt
+    users(timeZone: $timeZone) @include(if: $includeUsers) {
+      total
+      enabled
+      createdLast7Days
+      registrations {
+        date
+        count
+      }
+    }
+    applications @include(if: $includeApplications) {
+      total
+      enabled
+      builtIn
+    }
+    sessions @include(if: $includeSessions) {
+      active
+      createdLast24Hours
+    }
+    resources @include(if: $includeResources) {
+      total
+      enabled
+    }
+  }
+}
