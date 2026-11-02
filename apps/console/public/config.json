@@ -1,0 +1,11 @@
+{
+  "issuer": "https://localhost:5150",
+  "graphqlUrl": "https://localhost:5150/graphql",
+  "clientId": "00000000-0000-0000-0000-0000000000c0",
+  "redirectUri": "https://localhost:3100/callback",
+  "postLogoutRedirectUri": "https://localhost:3100/signed-out",
+  "accountUrl": "https://localhost:3000/account",
+  "scope": "openid profile email management.*",
+  "displayName": "Identity Console",
+  "environment": "development"
+}

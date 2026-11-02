@@ -1,0 +1,20 @@
+query ConsoleBootstrap {
+  effectivePermissions {
+    role
+    requestableScopes
+    grantedScopes
+    effectiveScopes
+    authentication {
+      acr
+      authTime
+      aal2
+      recent
+    }
+  }
+  instanceInfo {
+    name
+    environment
+    issuer
+    version
+  }
+}

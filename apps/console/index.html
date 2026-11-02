@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en-US" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f8" />
+    <title>Identity</title>
+    <script>
+      ;(() => {
+        try {
+          const preference = localStorage.getItem('heroui-theme') || 'system'
+          const dark =
+            preference === 'dark' ||
+            (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.remove('light', 'dark')
+          document.documentElement.classList.add(dark ? 'dark' : 'light')
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        } catch {
+          document.documentElement.classList.add('light')
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
