@@ -1,0 +1,277 @@
+query ConsoleGroups(
+  $filter: GroupFilter
+  $orderBy: GroupOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  groups(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        builtIn
+        name
+        description
+        names {
+          locale
+          value
+        }
+        descriptions {
+          locale
+          value
+        }
+        enabled
+        version
+        createdAt
+        updatedAt
+      }
+    }
+  }
+}
+
+query ConsoleGroup($id: ID!) {
+  group(id: $id) {
+    id
+    builtIn
+    name
+    description
+    names {
+      locale
+      value
+    }
+    descriptions {
+      locale
+      value
+    }
+    enabled
+    version
+    createdAt
+    updatedAt
+  }
+}
+
+query ConsoleGroupMembers(
+  $groupId: ID!
+  $filter: GroupMembershipFilter
+  $orderBy: GroupMembershipOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $includeUser: Boolean!
+) {
+  group(id: $groupId) {
+    id
+    builtIn
+    name
+    description
+    names {
+      locale
+      value
+    }
+    version
+    members(
+      filter: $filter
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          id
+          groupId
+          userId
+          grantedByUserId
+          enabled
+          revokedAt
+          version
+          createdAt
+          updatedAt
+          user @include(if: $includeUser) {
+            id
+            username
+            email
+            enabled
+            locked
+          }
+        }
+      }
+    }
+  }
+}
+
+query ConsoleGroupRoles(
+  $groupId: ID!
+  $filter: GroupRoleFilter
+  $orderBy: GroupRoleOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $includeRole: Boolean!
+) {
+  group(id: $groupId) {
+    id
+    builtIn
+    name
+    description
+    names {
+      locale
+      value
+    }
+    version
+    roles(
+      filter: $filter
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          id
+          groupId
+          roleId
+          grantedByUserId
+          enabled
+          revokedAt
+          version
+          createdAt
+          updatedAt
+          role @include(if: $includeRole) {
+            id
+            name
+            builtIn
+            description
+            names {
+              locale
+              value
+            }
+            descriptions {
+              locale
+              value
+            }
+            enabled
+            version
+          }
+        }
+      }
+    }
+  }
+}
+
+query ConsoleGroupRoleIds($groupId: ID!, $first: Int!, $after: String) {
+  group(id: $groupId) {
+    id
+    version
+    roles(
+      filter: { enabled: true }
+      orderBy: ROLE_NAME_ASC
+      first: $first
+      after: $after
+    ) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        node {
+          roleId
+          enabled
+          revokedAt
+        }
+      }
+    }
+  }
+}
+
+mutation ConsoleCreateGroup($input: CreateGroupInput!) {
+  createGroup(input: $input) {
+    groupId
+    version
+  }
+}
+
+mutation ConsoleUpdateGroup($input: UpdateGroupInput!) {
+  updateGroup(input: $input) {
+    groupId
+    version
+  }
+}
+
+mutation ConsoleAddGroupMember($input: AddGroupMemberInput!) {
+  addGroupMember(input: $input) {
+    groupId
+    userId
+    membershipId
+    groupVersion
+    membershipVersion
+  }
+}
+
+mutation ConsoleRemoveGroupMember($input: RemoveGroupMemberInput!) {
+  removeGroupMember(input: $input) {
+    groupId
+    userId
+    membershipId
+    groupVersion
+    membershipVersion
+  }
+}
+
+mutation ConsoleSetGroupRoles($input: SetGroupRolesInput!) {
+  setGroupRoles(input: $input) {
+    groupId
+    groupVersion
+    roleIds
+    addedCount
+    removedCount
+  }
+}
+
+mutation ConsoleSetGroupEnabled($input: SetGroupEnabledInput!) {
+  setGroupEnabled(input: $input) {
+    groupId
+    version
+  }
+}
+
+mutation ConsoleDeleteGroup($input: GroupStateInput!) {
+  deleteGroup(input: $input) {
+    groupId
+    deleted
+  }
+}

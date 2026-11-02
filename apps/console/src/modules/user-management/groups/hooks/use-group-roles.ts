@@ -1,0 +1,174 @@
+import { useMemo } from 'react'
+
+import {
+  ConsoleGroupRolesDocument,
+  ConsoleGroupRoleIdsDocument,
+  ConsoleSetGroupRolesDocument,
+  type ConsoleGroupRolesQuery,
+  type ConsoleGroupRolesQueryVariables,
+  type ConsoleGroupRoleIdsQuery,
+  type ConsoleGroupRoleIdsQueryVariables,
+  type ConsoleSetGroupRolesMutation,
+  type ConsoleSetGroupRolesMutationVariables,
+  type SetGroupRolesInput,
+} from '#/gql/graphql'
+import type {
+  GraphQLFailure,
+  GraphQLIssue,
+  GraphQLResult,
+  GraphQLStepUp,
+} from '#/lib/graphql/transport'
+import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+
+const ROLE_LINK_SCAN_SIZE = 25
+const MAX_ROLE_LINK_PAGES = 40
+
+function nextClientMutationId(): string {
+  try {
+    const value = globalThis.crypto?.randomUUID?.()
+    if (value) return value
+  } catch {
+    // A blocked crypto implementation still gets a fresh opaque value.
+  }
+  return `console-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
+export function useGroupRoles(
+  variables: ConsoleGroupRolesQueryVariables | null,
+) {
+  return useConsoleQuery<ConsoleGroupRolesQuery, ConsoleGroupRolesQueryVariables>(
+    ConsoleGroupRolesDocument,
+    variables,
+    'ConsoleGroupRoles',
+    Boolean(variables),
+    'missing_group_roles',
+  )
+}
+
+export interface GroupRoleLinkSnapshot {
+  roleIds: string[]
+  errors: GraphQLIssue[]
+  failure?: GraphQLFailure
+  requestId?: string
+  traceId?: string
+  stepUp?: GraphQLStepUp
+  forbidden: boolean
+  partial: boolean
+}
+
+/**
+ * Loads the complete set of currently active role links before an explicit
+ * replacement. setGroupRoles replaces the whole business role set, so a
+ * bounded page alone would silently drop links the operator cannot see.
+ */
+export function useGroupRoleMutations() {
+  const request = useGraphQL()
+
+  return useMemo(
+    () => ({
+      setRoles(input: SetGroupRolesInput) {
+        return request<
+          ConsoleSetGroupRolesMutation,
+          ConsoleSetGroupRolesMutationVariables
+        >(
+          ConsoleSetGroupRolesDocument,
+          { input: { ...input, clientMutationId: nextClientMutationId() } },
+          'ConsoleSetGroupRoles',
+        )
+      },
+      async loadActiveRoleIds(groupId: string): Promise<GroupRoleLinkSnapshot> {
+        const ids = new Set<string>()
+        let after: string | undefined
+        let requestId: string | undefined
+        let traceId: string | undefined
+        let partial = false
+
+        for (let page = 0; page < MAX_ROLE_LINK_PAGES; page += 1) {
+          const result: GraphQLResult<ConsoleGroupRoleIdsQuery> = await request<
+            ConsoleGroupRoleIdsQuery,
+            ConsoleGroupRoleIdsQueryVariables
+          >(
+            ConsoleGroupRoleIdsDocument,
+            {
+              groupId,
+              first: ROLE_LINK_SCAN_SIZE,
+              ...(after ? { after } : {}),
+            },
+            'ConsoleGroupRoleIds',
+          )
+          requestId = result.requestId ?? requestId
+          traceId = result.traceId ?? traceId
+          if (result.partial) partial = true
+          const connection = result.data?.group?.roles ?? null
+          if (!connection) {
+            return {
+              roleIds: [...ids],
+              errors: result.errors,
+              failure:
+                result.failure ?? {
+                  kind: 'invalid_response',
+                  code: 'missing_group_role_snapshot',
+                  requestId: result.requestId,
+                  traceId: result.traceId,
+                },
+              requestId,
+              traceId,
+              stepUp: result.stepUp,
+              forbidden: result.forbidden,
+              partial,
+            }
+          }
+          for (const edge of connection.edges) {
+            const node = edge.node
+            if (node.enabled && !node.revokedAt) ids.add(node.roleId)
+          }
+          if (!connection.pageInfo.hasNextPage) {
+            return {
+              roleIds: [...ids],
+              errors: result.errors,
+              requestId,
+              traceId,
+              forbidden: result.forbidden,
+              partial,
+            }
+          }
+          after = connection.pageInfo.endCursor ?? undefined
+          if (!after) {
+            return {
+              roleIds: [...ids],
+              errors: result.errors,
+              failure: {
+                kind: 'invalid_response',
+                code: 'missing_group_role_cursor',
+                requestId,
+                traceId,
+              },
+              requestId,
+              traceId,
+              forbidden: result.forbidden,
+              partial,
+            }
+          }
+        }
+        return {
+          roleIds: [...ids],
+          errors: [],
+          failure: {
+            kind: 'invalid_response',
+            code: 'group_role_snapshot_limit',
+            requestId,
+            traceId,
+          },
+          requestId,
+          traceId,
+          forbidden: false,
+          partial,
+        }
+      },
+    }),
+    [request],
+  )
+}
