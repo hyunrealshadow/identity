@@ -3,6 +3,7 @@ import http.server
 import json
 import re
 import secrets
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -124,6 +125,65 @@ def verify(image):
             docker("rm", container)
             container = None
 
+            # The same read-only/non-root image can terminate TLS on a custom port.
+            certificate = Path(temporary) / "console.crt"
+            private_key = Path(temporary) / "console.key"
+            subprocess.run([
+                "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+                "-keyout", str(private_key), "-out", str(certificate),
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            certificate.chmod(0o444)
+            private_key.chmod(0o444)
+            tls_args = [
+                *args, "-e", "IDENTITY_INTERNAL_API_ALLOW_HTTP=true",
+                "-e", "IDENTITY_CONSOLE_TLS_ENABLED=true", "-e", "PORT=8443",
+                "--mount", f"type=bind,source={certificate},target=/etc/identity/console-tls/tls.crt,readonly",
+                "--mount", f"type=bind,source={private_key},target=/etc/identity/console-tls/tls.key,readonly",
+            ]
+            container = docker("run", "-d", *tls_args, "-p", "127.0.0.1::8443", image).stdout.strip()
+            port = docker("port", container, "8443/tcp").stdout.strip().split(":")[-1]
+            origin = f"https://127.0.0.1:{port}"
+            context = ssl.create_default_context(cafile=str(certificate))
+            for _ in range(100):
+                try:
+                    response = urllib.request.urlopen(origin + "/console/config.json", context=context, timeout=1)
+                    break
+                except (OSError, urllib.error.URLError):
+                    time.sleep(0.2)
+            else:
+                raise AssertionError("TLS Console did not start")
+            assert json.load(response) == config
+            with urllib.request.urlopen(origin + "/health/ready", context=context) as ready:
+                assert ready.read() == b"ok\n"
+            with urllib.request.urlopen(origin + "/console/users/example/roles", context=context) as response:
+                assert "<!doctype html" in response.read().decode().lower()
+            try:
+                urllib.request.urlopen(origin + "/health/ready", timeout=2)
+                raise AssertionError("Untrusted serving certificate was accepted")
+            except urllib.error.URLError as error:
+                assert isinstance(error.reason, ssl.SSLCertVerificationError)
+            assert docker("exec", container, "curl", "--fail", "--silent",
+                          "http://127.0.0.1:8081/health").stdout.strip() == "ok"
+            docker("stop", "--time", "3", container)
+            docker("rm", container)
+            container = None
+
+            missing_tls = docker("run", "--rm", *args, "-e", "IDENTITY_CONSOLE_TLS_ENABLED=true",
+                                 image, check=False)
+            assert missing_tls.returncode != 0
+            assert "readable certificate and private key" in missing_tls.stderr
+            mismatched_key = Path(temporary) / "mismatched.key"
+            subprocess.run(["openssl", "genrsa", "-out", str(mismatched_key), "2048"],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            mismatched_key.chmod(0o444)
+            rejected = docker("run", "--rm", *args, "-e", "IDENTITY_CONSOLE_TLS_ENABLED=true",
+                              "--mount", f"type=bind,source={certificate},target=/etc/identity/console-tls/tls.crt,readonly",
+                              "--mount", f"type=bind,source={mismatched_key},target=/etc/identity/console-tls/tls.key,readonly",
+                              image, check=False)
+            assert rejected.returncode != 0
+            assert "key values mismatch" in rejected.stderr
+
             # Startup rejects HTTP unless explicitly allowed.
             rejected = docker("run", "--rm", *args, image, check=False)
             assert rejected.returncode != 0
@@ -143,7 +203,7 @@ def verify(image):
             docker("rm", "-f", container, check=False)
         upstream.shutdown()
         upstream.server_close()
-    print("Console container startup, routing, caching and failure handling passed")
+    print("Console HTTP/HTTPS startup, custom port, certificate validation, routing, caching and failure handling passed")
 
 
 if __name__ == "__main__":

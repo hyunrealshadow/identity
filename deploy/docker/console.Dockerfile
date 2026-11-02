@@ -15,7 +15,7 @@ FROM nginx:stable-alpine
 RUN apk add --no-cache ca-certificates curl jq \
     && mkdir -p /run/identity-console \
     && chown nginx:nginx /run/identity-console
-COPY deploy/docker/console/nginx.conf /etc/nginx/nginx.conf
+COPY deploy/docker/console/nginx.conf /etc/nginx/nginx.conf.template
 COPY --chmod=755 deploy/docker/console/entrypoint.sh /usr/local/bin/console-entrypoint
 COPY --from=builder /app/apps/console/dist/ /usr/share/nginx/html/console/
 USER nginx
@@ -23,4 +23,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=60s \
     CMD curl --fail --silent http://127.0.0.1:8081/health || exit 1
 ENTRYPOINT ["/usr/local/bin/console-entrypoint"]
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx", "-c", "/run/identity-console/nginx.conf", "-g", "daemon off;"]

@@ -14,6 +14,9 @@ Service endpoints:
 Pod transport:
   Identity: {{ ternary "HTTPS" "HTTP; public traffic requires a trusted HTTPS proxy" .Values.identity.tls.enabled }}
   Login: {{ ternary "HTTPS" "HTTP; public traffic requires HTTPS forwarding metadata" .Values.login.tls.enabled }}
+{{- if .Values.console.enabled }}
+  Console: {{ ternary "HTTPS" "HTTP behind an HTTPS gateway" .Values.console.tls.enabled }}
+{{- end }}
 
 Workload authentication:
   Login subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.loginServiceAccountName" . }}

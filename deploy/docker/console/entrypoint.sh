@@ -8,11 +8,40 @@ rm -f "$runtime/config.json"
 headers=$(mktemp "$runtime/.headers.XXXXXX")
 response=$(mktemp "$runtime/.response.XXXXXX")
 config=$(mktemp "$runtime/.config.XXXXXX")
-trap 'rm -f "$headers" "$response" "$config"' EXIT
+nginx_config=$(mktemp "$runtime/.nginx.XXXXXX")
+trap 'rm -f "$headers" "$response" "$config" "$nginx_config"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 131' QUIT
+
+port=${PORT:-8080}
+case "$port" in
+    ''|*[!0-9]*) echo 'Console PORT must be a valid TCP port' >&2; exit 1 ;;
+esac
+if [ "${#port}" -gt 5 ] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ] || [ "$port" -eq 8081 ]; then
+    echo 'Console PORT must be between 1 and 65535, excluding health port 8081' >&2
+    exit 1
+fi
+listen=$port
+tls=''
+case "${IDENTITY_CONSOLE_TLS_ENABLED:-false}" in
+    true)
+        if [ ! -r /etc/identity/console-tls/tls.crt ] || [ ! -r /etc/identity/console-tls/tls.key ]; then
+            echo 'Console TLS requires a readable certificate and private key' >&2
+            exit 1
+        fi
+        listen="$port ssl"
+        tls='ssl_certificate /etc/identity/console-tls/tls.crt; ssl_certificate_key /etc/identity/console-tls/tls.key; ssl_protocols TLSv1.2 TLSv1.3;'
+        ;;
+    false) ;;
+    *) echo 'IDENTITY_CONSOLE_TLS_ENABLED must be true or false' >&2; exit 1 ;;
+esac
+sed -e "s/@CONSOLE_LISTEN@/$listen/" -e "s|@CONSOLE_TLS@|$tls|" \
+    /etc/nginx/nginx.conf.template > "$nginx_config"
+chmod 644 "$nginx_config"
+mv -f "$nginx_config" "$runtime/nginx.conf"
+nginx -t -c "$runtime/nginx.conf"
 
 write_headers() {
     if [ -n "${IDENTITY_WORKLOAD_TOKEN_FILE:-}" ]; then

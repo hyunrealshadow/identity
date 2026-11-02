@@ -52,7 +52,9 @@ python3 tests/deployment/console-container.py identity-console:local
 
 The check runs the actual image against a temporary local configuration server
 using generated test credentials. It covers startup retries, runtime JSON,
-read-only/non-root operation, SPA routing, caching, sanitized callback logs, and
-rejection of invalid configuration. It removes its containers and temporary
+read-only/non-root operation, HTTP/HTTPS and custom listener ports, TLS certificate
+validation and startup failures, SPA routing, caching, sanitized callback logs,
+and rejection of invalid configuration. OpenSSL must be available to generate
+temporary test certificates. It removes its containers and temporary
 credentials afterward and does not access a database or a deployed instance.
 The image publishing workflow runs it for each native platform image.

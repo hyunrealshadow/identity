@@ -63,6 +63,6 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - ports:
-        - port: 8080
+        - port: {{ .Values.console.service.port }}
           protocol: TCP
 {{- end }}

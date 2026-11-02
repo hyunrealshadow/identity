@@ -94,11 +94,14 @@ Restart Console Pods after changing saved public addresses to refresh their
 local public configuration. Login refreshes its in-memory snapshot on demand.
 
 Console public addresses are not repeated in workload environment variables.
-Its optional routing hostname is configured above; public TLS belongs to the
-Gateway. Its Service uses
-HTTP port 8080 behind the HTTPS Gateway. It runs as non-root with a read-only
-root filesystem and writable `emptyDir` volumes for `/tmp` and runtime config.
-Readiness checks its loopback health listener with an exec probe. Its workload
+Its optional routing hostname is configured above. Like Login, Console supports
+either HTTP behind the HTTPS Gateway or direct Pod TLS through `console.tls`.
+The Service, named port and readiness scheme follow that switch. The listener
+uses `console.service.port` (8080 by default; 8081 is reserved for local health).
+It runs as non-root with a read-only root filesystem and writable `emptyDir`
+volumes for `/tmp` and runtime config. Readiness checks `/health/ready` on the
+application listener. Startup/liveness exec probes keep the installation waiter
+alive before configuration exists and check the local health listener afterward. Its workload
 identity can fetch only Console configuration, not Login secrets or installation.
 Set `console.enabled=false` to omit the workload, identity, route and policy.
 
@@ -134,6 +137,28 @@ When `login.tls.enabled=true`, also create the configured Login TLS Secret:
 kubectl -n identity create secret tls identity-login-tls \
   --cert=login.crt --key=login.key
 ```
+
+For direct Console TLS, create a Secret containing its serving certificate and
+key, then use the same TLS fields as Login:
+
+```sh
+kubectl -n identity create secret tls identity-console-tls \
+  --cert=console.crt --key=console.key
+```
+
+```yaml
+console:
+  tls:
+    enabled: true
+    existingSecret: identity-console-tls
+    certKey: tls.crt
+    privateKeyKey: tls.key
+```
+
+These keys are mounted read-only at `/etc/identity/console-tls/tls.crt` and
+`tls.key`. They identify Console to its clients. `console.internalCa` instead
+verifies Identity's internal API and is mounted only when `identity.tls.enabled`
+is true. These trust directions and Secrets are independent.
 
 ## Values and installation
 
@@ -194,8 +219,8 @@ share a hostname, protocol paths (`/oauth2`, `/.well-known`, `/api/auth`, `/stat
 and `/graphql` go to Identity; `/console` goes to Console; the remaining paths
 go to Login. The internal workload listener is never exposed by these routes.
 
-`identity.tls.enabled` and `login.tls.enabled` independently control whether
-each Pod terminates TLS. Their Services, named ports, and probes advertise and
+`identity.tls.enabled`, `login.tls.enabled`, and `console.tls.enabled`
+independently control whether each Pod terminates TLS. Their Services, named ports, and probes advertise and
 use the matching `http` or `https` protocol. When a value is `true`, the
 Gateway controller must support HTTPS backends and trust the certificate served
 by that Pod. With a controller that supports it, use Gateway API

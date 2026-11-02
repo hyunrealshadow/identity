@@ -71,8 +71,8 @@ spec:
   selector:
     {{- include "identity.consoleSelectorLabels" . | nindent 4 }}
   ports:
-    - name: http
-      appProtocol: http
+    - name: {{ ternary "https" "http" .Values.console.tls.enabled }}
+      appProtocol: {{ ternary "https" "http" .Values.console.tls.enabled }}
       port: {{ .Values.console.service.port }}
-      targetPort: http
+      targetPort: {{ ternary "https" "http" .Values.console.tls.enabled }}
 {{- end }}

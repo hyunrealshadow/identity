@@ -62,14 +62,22 @@ until settings exist, rereading projected credentials on each attempt. Rejected
 credentials or invalid responses stop startup. There is no development-config
 or stale-file fallback. Restart the container after changing application domains.
 
-The non-root runtime serves the SPA on HTTP port `8080`; terminate public HTTPS
-at your ingress or reverse proxy using the installed `app.console_domain`.
+The non-root runtime listens on `PORT` (8080 by default; 8081 is reserved for
+local health). HTTP is the default for an HTTPS ingress or reverse proxy. Set
+`IDENTITY_CONSOLE_TLS_ENABLED=true` and mount the serving certificate and private
+key at `/etc/identity/console-tls/tls.crt` and `tls.key` to serve HTTPS directly.
+Missing, unreadable or mismatched TLS material prevents startup. The serving TLS
+certificate is independent of `IDENTITY_CA_FILE`, which verifies Identity's
+internal API. Entrypoint renders Nginx configuration under `/run/identity-console`
+without modifying the read-only image. Use the installed `app.console_domain`
+for public routing.
 The image and development server serve `/console/`, including assets, configuration
 and OAuth callbacks. Forward `/console` without stripping its prefix. Direct
 visits to nested routes return the SPA; missing assets remain 404. The Console
 may share the Login origin, with `/account` owned by Login.
 Route the public issuer's `/graphql` path to Identity's GraphQL listener. Health
-checks use the container-local `http://127.0.0.1:8081/health`. A read-only root
+checks use the container-local `http://127.0.0.1:8081/health`. Kubernetes readiness
+uses `/health/ready` on the application port with the selected HTTP/HTTPS scheme. A read-only root
 filesystem is supported with writable `/tmp` and `/run/identity-console` mounts.
 
 The image workflow publishes `ghcr.io/<owner>/<repository>-console` for both

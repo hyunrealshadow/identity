@@ -146,6 +146,11 @@ console:
   service:
     type: ClusterIP
     port: 8080
+  tls:
+    enabled: false
+    existingSecret: identity-console-tls
+    certKey: tls.crt
+    privateKeyKey: tls.key
   serviceAccount:
     create: true
     name: ""

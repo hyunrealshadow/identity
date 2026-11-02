@@ -123,7 +123,8 @@
         "image",
         "service",
         "serviceAccount",
-        "internalCa"
+        "internalCa",
+        "tls"
       ],
       "properties": {
         "enabled": {
@@ -147,7 +148,8 @@
             "port": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 65535
+              "maximum": 65535,
+              "not": { "const": 8081 }
             }
           }
         },
@@ -178,6 +180,32 @@
               "minLength": 1
             },
             "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "existingSecret",
+            "certKey",
+            "privateKeyKey"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "existingSecret": {
+              "type": "string",
+              "minLength": 1
+            },
+            "certKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "privateKeyKey": {
               "type": "string",
               "minLength": 1
             }
