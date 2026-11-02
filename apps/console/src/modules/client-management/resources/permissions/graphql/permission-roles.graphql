@@ -1,0 +1,32 @@
+query ConsolePermissionRoles(
+  $id: ID!
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  permission: scope(id: $id) {
+    id
+    roles(first: $first, after: $after, last: $last, before: $before) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        node {
+          id
+          name
+          builtIn
+          enabled
+          description
+          names {
+            locale
+            value
+          }
+        }
+      }
+    }
+  }
+}

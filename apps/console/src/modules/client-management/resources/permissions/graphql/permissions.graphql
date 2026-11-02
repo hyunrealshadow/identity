@@ -1,0 +1,197 @@
+query ConsolePermission($id: ID!, $includeResource: Boolean!) {
+  permission: scope(id: $id) {
+    id
+    resourceId
+
+    code
+    name
+    description
+    builtIn
+    names {
+      locale
+      value
+    }
+    descriptions {
+      locale
+      value
+    }
+    enabled
+    version
+    createdAt
+    updatedAt
+    resource @include(if: $includeResource) {
+      id
+      uri
+      name
+      enabled
+    }
+  }
+}
+
+mutation ConsoleCreatePermission($input: CreateScopeInput!) {
+  createPermission: createScope(input: $input) {
+    permissionId: scopeId
+    version
+  }
+}
+
+mutation ConsoleUpdatePermission($input: UpdateScopeInput!) {
+  updatePermission: updateScope(input: $input) {
+    permissionId: scopeId
+    version
+  }
+}
+
+mutation ConsoleEnablePermission($input: ScopeStateInput!) {
+  enablePermission: enableScope(input: $input) {
+    permissionId: scopeId
+    version
+  }
+}
+
+mutation ConsoleDisablePermission($input: ScopeStateInput!) {
+  disablePermission: disableScope(input: $input) {
+    permissionId: scopeId
+    version
+  }
+}
+
+query ConsoleScopes(
+  $filter: ScopeFilter
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  scopes(
+    filter: $filter
+    orderBy: CODE_ASC
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        code
+        name
+        description
+        names {
+          locale
+          value
+        }
+      }
+    }
+  }
+}
+
+query ConsolePermissions(
+  $filter: ScopeFilter
+  $orderBy: ScopeOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $includeResource: Boolean!
+) {
+  permissions: scopes(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        resourceId
+
+        code
+        name
+        description
+        builtIn
+        names {
+          locale
+          value
+        }
+        descriptions {
+          locale
+          value
+        }
+        enabled
+        version
+        createdAt
+        updatedAt
+        resource @include(if: $includeResource) {
+          id
+          uri
+          name
+          enabled
+        }
+      }
+    }
+  }
+}
+
+query ConsoleResourcePermissions(
+  $filter: ScopeFilter
+  $orderBy: ScopeOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  permissions: scopes(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        code
+        name
+        description
+        builtIn
+        enabled
+        createdAt
+        names {
+          locale
+          value
+        }
+        descriptions {
+          locale
+          value
+        }
+      }
+    }
+  }
+}

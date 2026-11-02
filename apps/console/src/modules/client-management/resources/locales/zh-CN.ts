@@ -1,0 +1,20 @@
+const messages = {
+  resourcesTitle: '资源',
+  resourcesDescription: '管理 API 资源及其权限',
+  resourcesDetailTitle: '资源详情',
+  resourcesName: '名称',
+  resourcesIdentifier: '标识符',
+  resourcesStatus: '状态',
+  resourcesTable: '资源列表',
+  resourcesSearch: '搜索',
+  resourcesSearchPlaceholder: '名称或标识符',
+  resourcesFilter: '应用筛选',
+  resourcesReset: '重置',
+  resourcesEmpty: '暂无资源',
+  resourcesBack: '返回资源列表',
+  resourcesTabs: '资源详情',
+  resourcesDetails: '资料',
+  resourcesPermissions: '权限',
+  resourcePermissionsDescription: '此 API 资源定义的权限',
+} as const
+export default messages

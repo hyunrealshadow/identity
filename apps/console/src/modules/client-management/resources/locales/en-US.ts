@@ -1,0 +1,20 @@
+const messages = {
+  resourcesTitle: 'Resources',
+  resourcesDescription: 'API resources and their permissions',
+  resourcesDetailTitle: 'Resource details',
+  resourcesName: 'Name',
+  resourcesIdentifier: 'Identifier',
+  resourcesStatus: 'Status',
+  resourcesTable: 'Resources',
+  resourcesSearch: 'Search',
+  resourcesSearchPlaceholder: 'Name or identifier',
+  resourcesFilter: 'Apply filters',
+  resourcesReset: 'Reset',
+  resourcesEmpty: 'No resources found',
+  resourcesBack: 'Back to resources',
+  resourcesTabs: 'Resource sections',
+  resourcesDetails: 'Details',
+  resourcesPermissions: 'Permissions',
+  resourcePermissionsDescription: 'Permissions defined for this API resource',
+} as const
+export default messages

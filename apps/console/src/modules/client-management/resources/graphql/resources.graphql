@@ -1,0 +1,46 @@
+query ConsoleResources(
+  $filter: ResourceFilter
+  $orderBy: ResourceOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  resources(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        name
+        uri
+        enabled
+        createdAt
+        updatedAt
+      }
+    }
+  }
+}
+query ConsoleResource($id: ID!) {
+  resource(id: $id) {
+    id
+    name
+    uri
+    enabled
+    version
+    createdAt
+    updatedAt
+  }
+}
