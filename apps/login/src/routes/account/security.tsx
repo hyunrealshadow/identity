@@ -36,8 +36,8 @@ export const Route = createFileRoute('/account/security')({
 function SecurityPage() {
   const { locale, data, flash, mfa } = useAccount()
   const search = Route.useSearch()
-  const security = data.viewer.security
-  const loginHint = data.viewer.account.username
+  const security = data.security
+  const loginHint = data.account.username
   const t = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) => translate(locale, key, values)
 
   return (
@@ -49,18 +49,18 @@ function SecurityPage() {
         </SettingsCard>
         <SettingsCard title={t('accountMfaRowTitle')} description={t('accountMfaDescription')}>
           <div className="divide-y divide-separator">
-            {(data.viewer.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} /></div> : null}
-            <div className={(data.viewer.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings totpEnabled={security.totpEnabled} loginHint={loginHint} openRequested={search.confirm === 'passkeys'} locale={locale} keys={data.viewer.passkeys ?? []} /></div>
+            {(data.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} /></div> : null}
+            <div className={(data.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings totpEnabled={security.totpEnabled} loginHint={loginHint} openRequested={search.confirm === 'passkeys'} locale={locale} keys={data.passkeys ?? []} /></div>
             <div className={security.totpEnabled ? 'py-5' : 'pt-5'}>
               <SettingsRow
                 title={t('accountMfa')}
                 description={security.totpEnabled ? t('accountMfaEnabled') : t('accountMfaNotEnabled')}
                 action={security.totpEnabled
-                  ? <DeleteMfaModal lastMethod={(data.viewer.passkeys?.length ?? 0) === 0} loginHint={loginHint} openConfirm={search.confirm === 'disable-mfa'} t={t} />
+                  ? <DeleteMfaModal lastMethod={(data.passkeys?.length ?? 0) === 0} loginHint={loginHint} openConfirm={search.confirm === 'disable-mfa'} t={t} />
                   : <MfaSetupAction flash={flash} mfa={mfa} loginHint={loginHint} openSetup={search.setup === 'mfa'} initialStep={search.step === 'verify' ? 3 : undefined} t={t} />}
               />
             </div>
-            {security.totpEnabled || (data.viewer.passkeys?.length ?? 0) > 0 ? (
+            {security.totpEnabled || (data.passkeys?.length ?? 0) > 0 ? (
               <div className="pt-5">
                 <SettingsRow
                   title={t('accountRecoveryCodes')}

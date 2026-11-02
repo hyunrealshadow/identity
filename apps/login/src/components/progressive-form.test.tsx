@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
+import { FieldError, Input, Label, TextField } from '@heroui/react'
 
 import { ProgressiveForm } from './progressive-form'
 
@@ -12,6 +13,64 @@ afterEach(() => {
 })
 
 describe('ProgressiveForm', () => {
+  it('clears a server field error after editing so the form can submit again', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('offline'))
+    vi.stubGlobal('fetch', fetch)
+    render(
+      <ProgressiveForm
+        action="/install"
+        enhancementErrorMessage="Try again"
+        validationErrors={{ email: '邮箱地址格式无效' }}
+      >
+        <TextField name="email" defaultValue="old@example.test" isRequired>
+          <Label>Email</Label>
+          <Input />
+          <FieldError />
+        </TextField>
+        <button type="submit">Install</button>
+      </ProgressiveForm>,
+    )
+    const input = screen.getByRole('textbox', { name: 'Email' }) as HTMLInputElement
+    await waitFor(() => expect(input.validity.customError).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+    expect(fetch).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: 'corrected@example.test' } })
+    await waitFor(() => expect(input.validity.customError).toBe(false))
+    expect(screen.queryByText('邮箱地址格式无效')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+    expect((fetch.mock.calls[0][1].body as FormData).get('email')).toBe('corrected@example.test')
+  })
+
+  it('retains a corrected password while clearing its server error', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('offline'))
+    vi.stubGlobal('fetch', fetch)
+    render(
+      <ProgressiveForm
+        action="/install"
+        enhancementErrorMessage="Try again"
+        validationErrors={{ confirm_password: '两次输入的密码不一致' }}
+      >
+        <TextField name="confirm_password" type="password" isRequired>
+          <Label>Confirm password</Label>
+          <Input />
+          <FieldError />
+        </TextField>
+        <button type="submit">Install</button>
+      </ProgressiveForm>,
+    )
+    const input = screen.getByLabelText('Confirm password') as HTMLInputElement
+    expect(await screen.findByText('两次输入的密码不一致')).not.toBeNull()
+    fireEvent.input(input, { target: { value: 'corrected-test-password' } })
+    await waitFor(() => expect(input.value).toBe('corrected-test-password'))
+    await waitFor(() => expect(screen.queryByText('两次输入的密码不一致')).toBeNull())
+    expect(input.validity.valueMissing).toBe(false)
+    expect(input.validity.customError).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+    expect((fetch.mock.calls[0][1].body as FormData).get('confirm_password')).toBe('corrected-test-password')
+  })
+
   it('signals enhancement only after hydration while preserving the native form', () => {
     const form = (
       <ProgressiveForm action="/login" enhancementErrorMessage="Try again">

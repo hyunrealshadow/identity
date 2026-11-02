@@ -128,12 +128,12 @@ describe('observability.server', () => {
   })
 
   it('keeps merge semantics to one real exchange span', async () => {
-    const posts: Array<{ url: string }> = []
+    const posts: Array<{ url: string; body?: string }> = []
     let resolveFetch: ((value: Response) => void) | undefined
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        posts.push({ url: String(input) })
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        posts.push({ url: String(input), body: typeof init?.body === 'string' ? init.body : undefined })
         if (String(input).includes('/oauth2/token')) {
           return await new Promise<Response>((resolve) => {
             resolveFetch = resolve
@@ -175,7 +175,7 @@ describe('observability.server', () => {
           ) ?? [],
       )
       .filter((span) => span.name === 'token.exchange')
-    expect(exchanged.length).toBeLessThanOrEqual(1)
+    expect(exchanged).toHaveLength(1)
   })
 
   it('renders bounded Prometheus metrics without business identifiers', async () => {

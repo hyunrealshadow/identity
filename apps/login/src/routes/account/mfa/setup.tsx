@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { GraphqlRequestError, identityGraphql } from '#/lib/graphql.server'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
-import { storeMfaEnrollment } from '#/lib/oauth.server'
+import { restartAccountSignIn, storeMfaEnrollment } from '#/lib/oauth.server'
 import { storeAccountFlash } from '#/lib/oauth-session.server'
 
 interface BeginTotpEnrollmentResult {
@@ -29,7 +29,7 @@ export const Route = createFileRoute('/account/mfa/setup')({
             { authorization: 'elevated' },
           )
           if (!result) {
-            throw new Error(translate(locale, 'accountAuthenticationRequired'))
+            return new Response(null, { status: 303, headers: { location: (await restartAccountSignIn('/account/security?setup=mfa')).toString() } })
           }
           await storeMfaEnrollment({
             secret: result.beginTotpEnrollment.secret,

@@ -20,7 +20,7 @@ export function LoginMethodAlternatives({ currentMethod, status, loginId, uiLoca
 }) {
   if (!status || (status.status !== 'identifier_verified' && status.status !== 'mfa_required')) return null
 
-  const secondFactor = status.status === 'mfa_required' || status.requires_reauthentication
+  const secondFactor = status.status === 'mfa_required'
   const alternatives = methods.filter(({ type }) => {
     if (type === currentMethod || !status.credential_types.includes(type)) return false
     if (type === 'password') return status.status === 'identifier_verified'

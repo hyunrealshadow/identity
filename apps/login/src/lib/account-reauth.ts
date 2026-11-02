@@ -8,17 +8,15 @@ export const PASSWORD_CHANGE_CONTINUATION = '/account/security?confirm=change-pa
 export const PASSKEY_MANAGEMENT_CONTINUATION = '/account/security?confirm=passkeys'
 
 export function requiresAccountReauthentication(error: GraphqlRequestError) {
-  return error.errors.some(
+  return error.challenge !== undefined || error.errors.some(
     ({ extensions }) =>
       extensions?.code === 'FRESH_AUTHENTICATION_REQUIRED' ||
-      extensions?.code === 'insufficient_user_authentication' ||
-      extensions?.requiredScope === 'password.change' ||
-      extensions?.requiredScope === 'account.update',
+      extensions?.code === 'insufficient_user_authentication',
   )
 }
 
 export function accountReauthenticationReturnTo(action: string) {
-  if (action === 'prepare-manage-passkeys') return PASSKEY_MANAGEMENT_CONTINUATION
+  if (action === 'prepare-manage-passkeys' || ['passkey-prepare', 'passkey-begin', 'passkey-finish', 'passkey-delete'].includes(action)) return PASSKEY_MANAGEMENT_CONTINUATION
   if (action === 'begin-totp') return MFA_SETUP_CONTINUATION
   if (action === 'confirm-totp') return MFA_VERIFICATION_CONTINUATION
   if (action === 'prepare-disable-totp') return MFA_DISABLE_CONTINUATION

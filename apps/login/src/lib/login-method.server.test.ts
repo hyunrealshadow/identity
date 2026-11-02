@@ -1,5 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { identityJson, IdentityApiError } from './identity.server'
+import {
+  identityJson,
+  IdentityApiError,
+  UpstreamTransportError,
+} from './identity.server'
 import { submitLoginMethod } from './login-method.server'
 
 vi.mock('./identity.server', async (original) => ({
@@ -43,6 +47,19 @@ it('keeps the current method when an expired login needs restarting', async () =
   vi.mocked(identityJson).mockRejectedValue(new IdentityApiError('Expired', 400, 11004))
   const response = await submit('otp', { totp: '123456' })
   expect(response.headers.get('location')).toBe('/login/otp?login_id=login&ui_locales=zh-CN&restart=required')
+})
+
+it('keeps transport details out of the localized submit failure', async () => {
+  vi.mocked(identityJson).mockRejectedValue(
+    new UpstreamTransportError(new TypeError('fetch failed')),
+  )
+  const response = await submit('recovery-code', { credential: 'bad-code' })
+  const cookie = response.headers.get('set-cookie') ?? ''
+  const encoded = cookie.slice(cookie.indexOf('=') + 1, cookie.indexOf(';'))
+  const flash = JSON.parse(decodeURIComponent(encoded)) as { message: string }
+
+  expect(flash.message).toBe('请求暂时无法完成，请稍后重试')
+  expect(cookie).not.toContain('fetch failed')
 })
 
 it('rejects an unknown method before calling the identity API', async () => {

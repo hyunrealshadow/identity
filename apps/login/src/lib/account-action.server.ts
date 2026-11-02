@@ -1,13 +1,17 @@
+import { accountOperation, accountOperations } from './account-operations'
 import { getRequestHeader } from '@tanstack/react-start/server'
 
 import { graphqlFieldErrors } from './account-errors'
 import { localePreferenceValue } from './account-locale'
 import { themePreferenceValue } from './appearance'
+import { timeZonePreferenceValue } from './time-zone'
 import {
+  accountActionDestination,
   accountReauthenticationReturnTo,
   requiresAccountReauthentication,
 } from './account-reauth'
-import { GraphqlRequestError, identityGraphql } from './graphql.server'
+import type { AccountReauthRequest } from './popup-reauth'
+import { AccountSessionExpiredError, GraphqlRequestError, identityGraphql, preflightIdentityGraphql } from './graphql.server'
 import { translate, type Locale } from './i18n'
 import { requestLocale } from './i18n.server'
 import {
@@ -15,12 +19,13 @@ import {
   clearMfaUiState,
   completeTotpStateChange,
   finishLogout,
-  hasFreshAuthentication,
   mfaUiState,
-  startReauthorization,
+  startAccountSwitch,
+  startPopupReauthorization,
+  restartPopupReauthorization,
+  restartAccountSignIn,
   storeMfaEnrollment,
   storeRegeneratedRecoveryCodes,
-  storeTotpEnabled,
 } from './oauth.server'
 import { storeAccountFlash } from './oauth-session.server'
 import { loadApplicationUrl } from './runtime-config.server'
@@ -28,10 +33,13 @@ import { loadApplicationUrl } from './runtime-config.server'
 export interface AccountActionInput {
   action: string
   values: Record<string, string>
+  preflightOnly?: boolean
 }
 
 export interface AccountActionResult {
   redirect?: string
+  /** Present only when a reauthentication should continue in the dialog. */
+  reauth?: AccountReauthRequest
   ok?: boolean
 }
 
@@ -50,6 +58,23 @@ export async function executeAccountAction(
 
   const { action, values } = input
   try {
+    if (input.preflightOnly) {
+      const operation = accountOperation(action)
+      if (!operation) throw new AccountActionError(translate(locale, 'accountUnknownAction'))
+      await preflightIdentityGraphql(operation.document, undefined, { authorization: operation.authorization })
+      return { ok: true }
+    }
+    if (action === 'retry-reauthentication') {
+      if (!await currentAccountLoginHint()) throw new AccountSessionExpiredError()
+      const reauth = await restartPopupReauthorization(values.state ?? '')
+      return reauth ? { reauth } : { ok: false }
+    }
+    if (action === 'switch-account') {
+      // A normal sign-in with explicit provider-side selection. It uses a fixed
+      // safe route and never inherits a reauthentication login hint.
+      const response = await startAccountSwitch('/account/profile')
+      return { redirect: response.headers.get('location') ?? '/' }
+    }
     if (action === 'logout') {
       const response = await finishLogout(applicationUrl)
       return { redirect: response.headers.get('location') ?? '/' }
@@ -60,69 +85,64 @@ export async function executeAccountAction(
     }
     if (action === 'prepare-manage-passkeys') {
       await requireGraphql(
-        'mutation PrepareMfaManagement { prepareMfaManagement }',
+        accountOperations["prepare-manage-passkeys"].document,
         undefined,
         { authorization: 'elevated' },
       )
       return { ok: true }
     }
     if (action === 'prepare-change-password' || action === 'prepare-disable-totp') {
-      const requiredAcr = action === 'prepare-disable-totp'
-        ? 'aal2'
-        : await passwordChangeRequiredAcr()
-      const requiresAal2 = requiredAcr === 'aal2'
-      if (await hasFreshAuthentication(requiredAcr)) return { ok: true }
-
-      const loginHint = values.login_hint?.trim()
-      if (!loginHint) {
-        throw new AccountActionError(
-          translate(locale, 'accountAuthenticationRequired'),
-        )
-      }
-      const response = await startReauthorization(
-        accountReauthenticationReturnTo(action),
-        action === 'prepare-change-password' ? 'password' : 'mfa',
-        {
-          loginHint,
-          acrValues: requiredAcr ?? 'aal1',
-          maxAge: requiresAal2 ? 60 * 60 : 5 * 60,
-        },
+      await preflightIdentityGraphql(
+        action === 'prepare-change-password'
+          ? accountOperations["change-password"].document
+          : accountOperations["disable-totp"].document,
+        undefined,
+        { authorization: 'elevated' },
       )
-      return { redirect: response.headers.get('location') ?? '/' }
+      return { ok: true }
     } else if (action === 'revoke-session') {
       await requireGraphql(
-        `mutation RevokeSession($id: ID!) { revokeSession(id: $id) { session { id status } } }`,
+        accountOperations["revoke-session"].document,
         { id: values.session_id ?? '' },
       )
     } else if (action === 'revoke-others') {
       await requireGraphql(
-        `mutation RevokeOthers { revokeOtherSessions { revokedCount } }`,
+        accountOperations["revoke-others"].document,
       )
     } else if (action === 'update-mfa-preference') {
       const method = values.preferred_mfa_method
       if (method !== 'passkey' && method !== 'otp') throw new AccountActionError(translate(locale, 'mfaInvalidPriority'))
       await requireGraphql(
-        'mutation UpdateMfaPreference($method: PreferredMfaMethod!) { updatePreferredMfaMethod(method: $method) }',
+        accountOperations["update-mfa-preference"].document,
         { method: method.toUpperCase() },
       )
     } else if (action === 'update-profile') {
+      const input: Record<string, string | null> = {}
+      const addProfileValue = (
+        formName: string,
+        fieldName: string,
+        normalize: (value: string | undefined) => string | null = nullableValue,
+      ) => {
+        // Profile forms are sparse patches: fields absent from the submitted
+        // form are omitted instead of being cleared.
+        if (!Object.prototype.hasOwnProperty.call(values, formName)) return
+        input[fieldName] = normalize(values[formName])
+      }
+      addProfileValue('given_name', 'givenName')
+      addProfileValue('family_name', 'familyName')
+      addProfileValue('nickname', 'nickname')
+      addProfileValue('website', 'website')
+      addProfileValue('birthdate', 'birthdate')
+      addProfileValue('locale', 'locale', localePreferenceValue)
+      addProfileValue('theme', 'theme', themePreferenceValue)
+      addProfileValue('zone_info', 'zoneInfo', timeZonePreferenceValue)
       await requireGraphql(
-        `mutation UpdateProfile($input: UpdateProfileInput!) { updateProfile(input: $input) { user { id username givenName familyName nickname locale theme } } }`,
-        {
-          input: {
-            givenName: nullableValue(values.given_name),
-            familyName: nullableValue(values.family_name),
-            nickname: nullableValue(values.nickname),
-            website: nullableValue(values.website),
-            birthdate: nullableValue(values.birthdate),
-            locale: localePreferenceValue(values.locale),
-            theme: themePreferenceValue(values.theme),
-          },
-        },
+        accountOperations["update-profile"].document,
+        { input },
       )
     } else if (action === 'update-username') {
       await requireGraphql(
-        `mutation UpdateUsername($input: UpdateUsernameInput!) { updateUsername(input: $input) { user { id username } } }`,
+        accountOperations["update-username"].document,
         {
           input: {
             username: values.username ?? '',
@@ -133,7 +153,7 @@ export async function executeAccountAction(
       await clearElevatedAuthorization()
     } else if (action === 'update-email') {
       await requireGraphql(
-        `mutation UpdateEmail($input: UpdateEmailInput!) { updateEmail(input: $input) { user { id email emailVerified } } }`,
+        accountOperations["update-email"].document,
         {
           input: {
             email: values.email ?? '',
@@ -151,7 +171,7 @@ export async function executeAccountAction(
         )
       }
       await requireGraphql(
-        `mutation ChangePassword($input: ChangePasswordInput!) { changePassword(input: $input) { changed } }`,
+        accountOperations["change-password"].document,
         {
           input: {
             newPassword,
@@ -169,7 +189,7 @@ export async function executeAccountAction(
           recoveryCodes: Array<string>
         }
       }>(
-        `mutation BeginTotpEnrollment { beginTotpEnrollment { secret otpAuthUri enrollmentToken recoveryCodes } }`,
+        accountOperations["begin-totp"].document,
         undefined,
         { authorization: 'elevated' },
       )
@@ -195,11 +215,7 @@ export async function executeAccountAction(
           recoveryCodes: Array<string>
         }
       }>(
-        `mutation ChangeTotpEnrollmentAlgorithm($input: ChangeTotpEnrollmentAlgorithmInput!) {
-          changeTotpEnrollmentAlgorithm(input: $input) {
-            secret otpAuthUri enrollmentToken recoveryCodes
-          }
-        }`,
+        accountOperations["use-legacy-totp"].document,
         {
           input: {
             enrollmentToken: mfa.enrollment.enrollment_token,
@@ -215,25 +231,6 @@ export async function executeAccountAction(
         recovery_codes: result.changeTotpEnrollmentAlgorithm.recoveryCodes,
       })
     } else if (action === 'confirm-totp') {
-      if (!(await hasFreshAuthentication())) {
-        const loginHint = values.login_hint?.trim() || await currentAccountLoginHint()
-        if (!loginHint) {
-          throw new AccountActionError(
-            translate(locale, 'accountAuthenticationRequired'),
-            { code: translate(locale, 'accountAuthenticationRequired') },
-          )
-        }
-        const response = await startReauthorization(
-          accountReauthenticationReturnTo(action),
-          'account',
-          {
-            loginHint,
-            acrValues: 'aal1',
-            maxAge: 5 * 60,
-          },
-        )
-        return { redirect: response.headers.get('location') ?? '/' }
-      }
       const mfa = await mfaUiState()
       if (!mfa.enrollment) {
         throw new AccountActionError(
@@ -242,7 +239,7 @@ export async function executeAccountAction(
         )
       }
       await requireGraphql(
-        `mutation ConfirmTotpEnrollment($input: ConfirmTotpEnrollmentInput!) { confirmTotpEnrollment(input: $input) { recoveryCodes } }`,
+        accountOperations["confirm-totp"].document,
         {
           input: {
             enrollmentToken: mfa.enrollment.enrollment_token,
@@ -255,36 +252,17 @@ export async function executeAccountAction(
       await clearElevatedAuthorization()
     } else if (action === 'disable-totp') {
       await requireGraphql(
-        `mutation DisableTotp { disableTotp { changed } }`,
+        accountOperations["disable-totp"].document,
         undefined,
         { authorization: 'elevated' },
       )
       await completeTotpStateChange(false)
       await clearElevatedAuthorization()
     } else if (action === 'regenerate-recovery-codes') {
-      const requiredAcr = 'aal2'
-      if (!(await hasFreshAuthentication(requiredAcr))) {
-        const loginHint = values.login_hint?.trim() || await currentAccountLoginHint()
-        if (!loginHint) {
-          throw new AccountActionError(
-            translate(locale, 'accountAuthenticationRequired'),
-          )
-        }
-        const response = await startReauthorization(
-          accountReauthenticationReturnTo(action),
-          'mfa',
-          {
-            loginHint,
-            acrValues: requiredAcr,
-            maxAge: 60 * 60,
-          },
-        )
-        return { redirect: response.headers.get('location') ?? '/' }
-      }
       const result = await requireGraphql<{
         regenerateRecoveryCodes: { recoveryCodes: Array<string> }
       }>(
-        `mutation RegenerateRecoveryCodes { regenerateRecoveryCodes { recoveryCodes } }`,
+        accountOperations["regenerate-recovery-codes"].document,
         undefined,
         { authorization: 'elevated' },
       )
@@ -301,6 +279,9 @@ export async function executeAccountAction(
     }
     return { ok: true }
   } catch (error) {
+    if (error instanceof AccountSessionExpiredError) {
+      return { redirect: (await restartAccountSignIn(accountActionDestination(action))).toString() }
+    }
     if (
       (action === 'change-password' ||
         action === 'prepare-change-password' ||
@@ -310,14 +291,19 @@ export async function executeAccountAction(
       requiresAccountReauthentication(error)
     ) {
       const challenge = error.challenge
-      const loginHint = values.login_hint?.trim() || await currentAccountLoginHint()
-      if (!loginHint) {
-        await storeAccountFlash({
-          error: translate(locale, 'accountAuthenticationRequired'),
-        })
+      // A page's submitted hint is not evidence that its session is still
+      // usable. Check live access before choosing the popup recovery path.
+      let loginHint: string | undefined
+      try {
+        loginHint = await currentAccountLoginHint()
+      } catch (lookupError) {
+        await storeAccountFlash(accountFlashFromError(lookupError, locale))
         return { ok: false }
       }
-      const response = await startReauthorization(
+      if (!loginHint) {
+        return { redirect: (await restartAccountSignIn(accountActionDestination(action))).toString() }
+      }
+      const reauth = await startPopupReauthorization(
         accountReauthenticationReturnTo(action),
         reauthPurpose(action),
         {
@@ -326,9 +312,7 @@ export async function executeAccountAction(
           maxAge: challenge?.maxAge,
         },
       )
-      return {
-        redirect: response.headers.get('location') ?? '/',
-      }
+      return { reauth }
     }
     await storeAccountFlash(accountFlashFromError(error, locale))
     return { ok: false }
@@ -336,35 +320,10 @@ export async function executeAccountAction(
 }
 
 async function currentAccountLoginHint() {
-  try {
-    const data = await identityGraphql<{
-      viewer: { account: { username: string } }
-    }>(
-      `query ReauthenticationLoginHint { viewer { account { username } } }`,
-    )
-    const username = data?.viewer.account.username.trim()
-    return username || undefined
-  } catch {
-    return undefined
-  }
-}
-
-async function passwordChangeRequiredAcr() {
-  const knownState = await mfaUiState()
-  if (typeof knownState.totpEnabled === 'boolean') {
-    return knownState.totpEnabled ? 'aal2' : undefined
-  }
-  const data = await requireGraphql<{
-    viewer: { security: { totpEnabled: boolean } }
-  }>(
-    `query PasswordChangeAuthenticationRequirements {
-      viewer { security { totpEnabled } }
-    }`,
+  const data = await identityGraphql<{ account: { username: string } }>(
+    `query ReauthenticationLoginHint { account { username } }`,
   )
-  await storeTotpEnabled(data.viewer.security.totpEnabled)
-  return data.viewer.security.totpEnabled
-    ? 'aal2'
-    : undefined
+  return data?.account.username.trim() || undefined
 }
 
 async function requireGraphql<T>(
@@ -374,9 +333,7 @@ async function requireGraphql<T>(
 ) {
   const data = await identityGraphql<T>(query, variables, options)
   if (!data) {
-    throw new AccountActionError(
-      translate(requestLocale(), 'accountAuthenticationRequired'),
-    )
+    throw new AccountSessionExpiredError()
   }
   return data
 }
@@ -416,6 +373,7 @@ function accountFlashFromError(
 function isMfaAction(action: string) {
   return [
     'prepare-manage-passkeys',
+    'passkey-prepare', 'passkey-begin', 'passkey-finish', 'passkey-delete',
     'prepare-disable-totp',
     'begin-totp',
     'use-legacy-totp',

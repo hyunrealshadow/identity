@@ -1,9 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ graphql: vi.fn(), reauthorize: vi.fn(), origin: vi.fn() }))
+const mocks = vi.hoisted(() => ({ graphql: vi.fn(), reauthorize: vi.fn(), restart: vi.fn(), origin: vi.fn() }))
 vi.mock('@tanstack/react-start/server', () => ({ getRequestHeader: mocks.origin }))
 vi.mock('./graphql.server', async (original) => ({ ...await original<typeof import('./graphql.server')>(), identityGraphql: mocks.graphql }))
-vi.mock('./oauth.server', () => ({ startReauthorization: mocks.reauthorize }))
+vi.mock('./oauth.server', () => ({ restartAccountSignIn: mocks.restart, startReauthorization: mocks.reauthorize }))
 vi.mock('./runtime-config.server', () => ({ loadApplicationUrl: () => 'https://login.example.com' }))
 vi.mock('./i18n.server', () => ({ requestLocale: () => 'en-US' }))
 
@@ -13,6 +13,7 @@ import { passkeyAccountAction } from './passkey-account.server'
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.origin.mockReturnValue('https://login.example.com')
+  mocks.restart.mockResolvedValue(new URL('https://identity.example.com/oauth2/authorize?state=signin'))
 })
 
 it('rejects a cross-origin mutation before calling the backend', async () => {
@@ -36,7 +37,7 @@ it('passes the credential JSON to the authenticated completion mutation', async 
 
 it('binds reauthentication to the current account and honors AAL2', async () => {
   mocks.graphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { code: 'insufficient_user_authentication' } }], { acrValues: 'aal2', maxAge: 3600 }))
-  mocks.graphql.mockResolvedValueOnce({ viewer: { account: { username: 'person' } } })
+  mocks.graphql.mockResolvedValueOnce({ account: { username: 'person' } })
   mocks.reauthorize.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: '/reauth' } }))
   expect(await passkeyAccountAction({ action: 'delete', id: 'key' })).toEqual({ redirect: '/reauth' })
   expect(mocks.reauthorize).toHaveBeenCalledWith('/account/security?confirm=passkeys', 'account', { loginHint: 'person', acrValues: 'aal2', maxAge: 3600 })
@@ -61,4 +62,11 @@ it('forwards the protected recovery batch into passkey registration', async () =
   mocks.graphql.mockResolvedValueOnce({ beginPasskeyRegistration: {} })
   await passkeyAccountAction({ action: 'begin', recoveryEnrollmentToken: 'protected-batch' })
   expect(mocks.graphql.mock.calls[0][1]).toEqual({ recoveryEnrollmentToken: 'protected-batch' })
+})
+
+it.each(['prepare', 'begin', 'finish', 'delete'] as const)('uses ordinary sign-in when the %s passkey request loses its session', async (action) => {
+  mocks.graphql.mockResolvedValueOnce(undefined)
+  expect(await passkeyAccountAction({ action })).toEqual({ redirect: 'https://identity.example.com/oauth2/authorize?state=signin' })
+  expect(mocks.reauthorize).not.toHaveBeenCalled()
+  expect(mocks.restart).toHaveBeenCalledWith('/account/security?confirm=passkeys')
 })

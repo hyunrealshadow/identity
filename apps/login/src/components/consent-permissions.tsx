@@ -13,8 +13,18 @@ const scopeIcons = new Map<string, LucideIcon>([
   ['offline_access', RefreshCw],
 ])
 
+function localizedText(values: Record<string, string> | undefined, locale: string, fallback: string) {
+  const parts = locale.split('-')
+  while (parts.length > 0) {
+    const value = values?.[parts.join('-')]
+    if (value?.trim()) return value
+    parts.pop()
+  }
+  return fallback
+}
+
 export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[]; locale: Locale }) {
-  const hasScopeIcons = scopes.some((scope) => scopeIcons.has(scope.name))
+  const hasScopeIcons = scopes.some((scope) => scopeIcons.has(scope.code))
 
   return (
     <details open className="group">
@@ -31,10 +41,10 @@ export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[];
         className="consent-permissions-list mt-3 max-h-[min(20rem,40dvh)] space-y-5 overflow-y-auto overscroll-contain rounded-sm pr-2 outline-none [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
       >
         {scopes.map((scope) => {
-          const Icon = scopeIcons.get(scope.name)
+          const Icon = scopeIcons.get(scope.code)
 
           return (
-            <li key={scope.name} className={hasScopeIcons ? 'grid grid-cols-[2.25rem_minmax(0,1fr)] items-start gap-3' : undefined}>
+            <li key={scope.code} className={hasScopeIcons ? 'grid grid-cols-[2.25rem_minmax(0,1fr)] items-start gap-3' : undefined}>
               {Icon ? (
                 <span className="flex size-9 items-center justify-center rounded-lg bg-surface-secondary text-foreground">
                   <Icon className="size-4" aria-hidden="true" />
@@ -43,13 +53,13 @@ export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[];
               <div className={hasScopeIcons ? 'col-start-2 min-w-0' : 'min-w-0'}>
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <p className="min-w-0 break-all text-sm font-medium">
-                    {scope.display_name || scope.name}
+                    {localizedText(scope.names, locale, scope.name || scope.code)}
                     {scope.essential ? <span className="sr-only"> ({translate(locale, 'required')})</span> : null}
                   </p>
                   <ScopeConsentStatus granted={scope.previously_granted} locale={locale} />
                 </div>
                 <p className="mt-0.5 text-xs leading-5 text-muted [overflow-wrap:anywhere]">
-                  {scope.descriptions?.[locale] || scope.description}
+                  {localizedText(scope.descriptions, locale, scope.description)}
                 </p>
               </div>
             </li>

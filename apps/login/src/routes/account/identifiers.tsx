@@ -12,7 +12,7 @@ export const Route = createFileRoute('/account/identifiers')({
 
 function IdentifiersPage() {
   const { locale, data, flash } = useAccount()
-  const account = data.viewer.account
+  const account = data.account
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
 
   return (
@@ -47,16 +47,14 @@ function IdentifiersPage() {
   )
 }
 
-type Account = ReturnType<typeof useAccount>['data']['viewer']['account']
+type Account = ReturnType<typeof useAccount>['data']['account']
 type Flash = ReturnType<typeof useAccount>['flash']
 type Translator = (key: Parameters<typeof translate>[1]) => string
 
 function UsernameModal({ account, flash, t }: { account: Account; flash: Flash; t: Translator }) {
   return (
     <Modal>
-      <Modal.Trigger>
-        <Button variant="secondary">{t('accountChangeUsername')}</Button>
-      </Modal.Trigger>
+      <Button variant="secondary">{t('accountChangeUsername')}</Button>
       <Modal.Backdrop isDismissable={false}>
         <Modal.Container size="md">
           <Modal.Dialog>
@@ -97,9 +95,7 @@ function UsernameModal({ account, flash, t }: { account: Account; flash: Flash; 
 function EmailModal({ account, flash, t }: { account: Account; flash: Flash; t: Translator }) {
   return (
     <Modal>
-      <Modal.Trigger>
-        <Button variant="secondary">{t('accountChangeEmail')}</Button>
-      </Modal.Trigger>
+      <Button variant="secondary">{t('accountChangeEmail')}</Button>
       <Modal.Backdrop isDismissable={false}>
         <Modal.Container size="md">
           <Modal.Dialog>

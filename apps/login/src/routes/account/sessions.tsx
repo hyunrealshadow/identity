@@ -5,13 +5,19 @@ import { Globe2, Laptop, Smartphone, Tablet } from 'lucide-react'
 import { AccountActionForm } from '#/components/account-action-form'
 import { PageHeading } from '#/components/account-settings'
 import { translate } from '#/lib/i18n'
+import {
+  formatAccountExactDateTime,
+  formatRecentActivity,
+  useAccountTimeZone,
+} from '#/lib/time-zone'
 import { type AccountSession, useAccount } from './route'
 
 export const Route = createFileRoute('/account/sessions')({ component: SessionsPage })
 
 function SessionsPage() {
   const { locale, data } = useAccount()
-  const sessions = data.viewer.sessions.edges.map((edge) => edge.node)
+  const timeZone = useAccountTimeZone(data.account.zoneInfo)
+  const sessions = data.sessions.edges.map((edge) => edge.node)
   const current = sessions.find((session) => session.current)
   const others = sessions.filter((session) => !session.current)
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
@@ -34,7 +40,7 @@ function SessionsPage() {
                 {sessionDetails(current) ? <p className="mt-0.5 truncate text-sm text-muted" title={sessionDetails(current)}>{sessionDetails(current)}</p> : null}
                 {current.ipAddress ? <p className="mt-1 text-xs text-muted"><span className="font-medium">IP</span> {current.ipAddress}</p> : null}
               </div>
-              <time className="shrink-0 text-xs text-muted" dateTime={current.lastActiveAt ?? current.createdAt} title={formatExactDate(current.lastActiveAt ?? current.createdAt, locale)}>{formatRecentActivity(current.lastActiveAt ?? current.createdAt, locale)}</time>
+              <time className="shrink-0 text-xs text-muted" dateTime={current.lastActiveAt ?? current.createdAt} title={`${formatAccountExactDateTime(current.lastActiveAt ?? current.createdAt, locale, timeZone)} (${timeZone})`}>{formatRecentActivity(current.lastActiveAt ?? current.createdAt, locale, timeZone)}</time>
             </div>
           </div>
         ) : null}
@@ -42,7 +48,7 @@ function SessionsPage() {
           <h2 className="border-b border-separator px-5 py-3 text-sm font-semibold sm:px-6">{t('accountOtherDevices')}</h2>
           {others.length ? (
             <>
-              <ul className="divide-y divide-separator" aria-label={t('accountOtherDevices')}>
+              <ul className="max-h-[min(32rem,60dvh)] divide-y divide-separator overflow-y-auto overscroll-contain" tabIndex={0} aria-label={t('accountOtherDevices')}>
                 {others.map((session) => {
                   const title = sessionTitle(session, t('accountUnknownDevice'))
                   const details = sessionDetails(session)
@@ -59,7 +65,7 @@ function SessionsPage() {
                         {session.ipAddress ? <p className="mt-1 text-xs text-muted"><span className="font-medium">IP</span> {session.ipAddress}</p> : null}
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        <time className="text-xs text-muted" dateTime={activityAt} title={formatExactDate(activityAt, locale)}>{formatRecentActivity(activityAt, locale)}</time>
+                        <time className="text-xs text-muted" dateTime={activityAt} title={`${formatAccountExactDateTime(activityAt, locale, timeZone)} (${timeZone})`}>{formatRecentActivity(activityAt, locale, timeZone)}</time>
                         <AccountActionForm action="revoke-session" requestFailedMessage={t('accountRequestFailed')}>
                           <input type="hidden" name="session_id" value={session.id} />
                           <Button type="submit" size="sm" variant="secondary" className="text-danger">{t('accountRevoke')}</Button>
@@ -103,24 +109,4 @@ function sessionDetails(session: AccountSession) {
     : undefined
   const operatingSystem = [session.osName, session.osVersion].filter(Boolean).join(' ')
   return [browser, operatingSystem].filter(Boolean).join(' ')
-}
-
-function formatRecentActivity(value: string, locale: string) {
-  const date = new Date(value)
-  const now = new Date()
-  const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
-  if (sameDay) return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date)
-
-  const dayDifference = Math.floor((startOfDay(now).getTime() - startOfDay(date).getTime()) / 86_400_000)
-  if (dayDifference > 0 && dayDifference < 7) return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date)
-  if (date.getFullYear() === now.getFullYear()) return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(date)
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date)
-}
-
-function formatExactDate(value: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-}
-
-function startOfDay(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
 }

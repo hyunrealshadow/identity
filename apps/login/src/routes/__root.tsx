@@ -12,6 +12,7 @@ import { createServerFn } from '@tanstack/react-start'
 import appCss from '../styles.css?url'
 import { anonymousThemePreference } from '#/lib/appearance.server'
 import { cachedInstallationStatus } from '#/lib/installation-status.server'
+import { requestLocale } from '#/lib/i18n.server'
 
 const initializeAppearance = `(()=>{const d=document.documentElement,p=d.dataset.themePreference,s='identity-theme';let v=p;if(!v){try{v=localStorage.getItem(s)}catch{}}const t=v==='dark'||(v!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';d.dataset.theme=t;d.classList.remove('no-js','light','dark');d.classList.add('js',t)})()`
 
@@ -20,8 +21,22 @@ const loadRootState = createServerFn({ method: 'GET' }).handler(async () => ({
   theme: anonymousThemePreference(),
 }))
 
+// Resolve language before the installation-status request can fail, so the
+// root boundary remains localized even when Identity is unavailable.
+const loadRootLocale = createServerFn({ method: 'GET' })
+  .validator((data: { uiLocales?: string }) => data)
+  .handler(({ data }) => requestLocale(data.uiLocales?.split(' ')))
+
 export const Route = createRootRoute({
   staleTime: Infinity,
+  validateSearch: (search: Record<string, unknown>): { ui_locales?: string } => ({
+    ui_locales: typeof search.ui_locales === 'string' ? search.ui_locales : undefined,
+  }),
+  beforeLoad: async ({ search }) => ({
+    locale: await loadRootLocale({
+      data: { uiLocales: search.ui_locales },
+    }),
+  }),
   loader: async ({ location }) => {
     const { installed, theme } = await loadRootState()
     const isInstallRoute = location.pathname === '/install'
@@ -35,6 +50,7 @@ export const Route = createRootRoute({
     return { installed, theme }
   },
   errorComponent: RootError,
+  notFoundComponent: RootNotFound,
   head: () => ({
     meta: [
       {
@@ -63,22 +79,46 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 })
 
-function RootError({ error }: ErrorComponentProps) {
-  const locale = useRouterState({
+function useRootLocale() {
+  return useRouterState({
     select: (state) => resolveLocale({
-      uiLocales: [...state.matches].reverse().map((match) =>
-        (match.loaderData as { locale?: string } | undefined)?.locale ?? ''),
+      uiLocales: [...state.matches].reverse().flatMap((match) => [
+        (match.loaderData as { locale?: string } | undefined)?.locale ?? '',
+        (match.context as { locale?: string } | undefined)?.locale ?? '',
+      ]),
     }),
   })
+}
+
+function RootNotFound() {
+  const locale = useRootLocale()
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+      <section className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
+        <h1 className="text-lg font-semibold">{translate(locale, 'pageNotFoundTitle')}</h1>
+        <p className="mt-2 text-sm text-muted">
+          {translate(locale, 'pageNotFoundDescription')}
+        </p>
+        <a className="mt-5 inline-flex min-h-10 items-center rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href="/">
+          {translate(locale, 'pageNotFoundReturn')}
+        </a>
+      </section>
+    </main>
+  )
+}
+
+function RootError(_props: ErrorComponentProps) {
+  const locale = useRootLocale()
+  const retryHref = useRouterState({ select: (state) => state.location.href })
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
-        <h1 className="text-lg font-semibold">Unable to continue</h1>
+        <h1 className="text-lg font-semibold">{translate(locale, 'unableToContinue')}</h1>
         <p className="mt-2 text-sm text-muted">
-          {import.meta.env.DEV && error instanceof Error ? error.message : 'Please try again.'}
+          {translate(locale, 'temporaryError')}
         </p>
-        <a className="mt-5 inline-flex rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href="/">
+        <a className="mt-5 inline-flex rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href={retryHref}>
           {translate(locale, 'tryAgain')}
         </a>
       </div>
@@ -92,6 +132,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       for (const match of [...state.matches].reverse()) {
         const data = match.loaderData as { locale?: string } | undefined
         if (data?.locale) return data.locale
+      }
+      for (const match of [...state.matches].reverse()) {
+        const context = match.context as { locale?: string } | undefined
+        if (context?.locale) return context.locale
       }
       return 'en-US'
     },

@@ -1,16 +1,18 @@
+import { configuredApplicationOrigin } from './application-origins.server'
+
 const DEFAULT_IDENTITY_URL = 'https://localhost:5150'
 
 function configuredUrl(name: string, fallback: string, allowHttp: boolean) {
   const url = new URL(process.env[name] ?? fallback)
   if (url.protocol !== 'https:' && !(allowHttp && url.protocol === 'http:')) {
-    throw new Error(
-      `${name} must use HTTPS${allowHttp ? ' or HTTP' : ''}`,
-    )
+    throw new Error(`${name} must use HTTPS${allowHttp ? ' or HTTP' : ''}`)
   }
   return url
 }
 
 export function publicIdentityApiUrl() {
+  const installed = configuredApplicationOrigin('domain')
+  if (installed) return new URL(installed)
   return configuredUrl('IDENTITY_API_URL', DEFAULT_IDENTITY_URL, false)
 }
 

@@ -13,7 +13,7 @@ export function SettingsRow({ title, description, detail, action }: { title: str
 }
 
 export function ProfileField({ name, label, value, error, required = false, type }: { name: string; label: string; value?: string; error?: string; required?: boolean; type?: string }) {
-  return <TextField isRequired={required} fullWidth isInvalid={Boolean(error)} name={name}><Label>{label}</Label><Input type={type} defaultValue={value} /><FieldError>{error}</FieldError></TextField>
+  return <TextField isRequired={required} fullWidth isInvalid={Boolean(error)} name={name} defaultValue={value ?? ''}><Label>{label}</Label><Input type={type} /><FieldError>{error}</FieldError></TextField>
 }
 
 export function PasswordField({ name, label, error }: { name: string; label: string; error?: string }) {

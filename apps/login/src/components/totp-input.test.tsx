@@ -144,14 +144,8 @@ describe('TotpInput', () => {
   it('exposes the stable semantics expected by authenticator extensions', () => {
     const { container } = render(<TotpInput name="totp" />)
     const input = container.querySelector<HTMLInputElement>('[data-slot="input-otp"] > input')
-    const root = container.querySelector<HTMLElement>('[data-slot="input-otp"]')
-    const group = container.querySelector<HTMLElement>('[data-slot="input-otp-group"]')
-    const firstSlot = container.querySelector<HTMLElement>('[data-slot="input-otp-slot"]')
 
     expect(container.querySelector('[data-slot="input-otp-group"]')).not.toBeNull()
-    expect(root?.classList).toContain('w-fit')
-    expect(group?.className).toBe('input-otp__group pointer-events-none items-center')
-    expect(firstSlot?.className).toBe('input-otp__slot')
     expect(input?.name).toBe('totp')
     expect(input?.hasAttribute('id')).toBe(false)
     expect(input?.autocomplete).toBe('one-time-code')

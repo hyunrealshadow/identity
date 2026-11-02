@@ -1,3 +1,4 @@
+import { Alert } from '@heroui/react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
@@ -42,14 +43,19 @@ function AuthorizationErrorPage() {
       title={t('authorizationFailedTitle')}
       description={t('authorizationFailedDescription')}
     >
-      <div className="rounded-xl border border-danger/30 bg-danger/10 p-4">
-        <code className="block break-all text-sm font-semibold text-danger">
-          {search.error ?? 'invalid_request'}
-        </code>
-        <p className="mt-2 text-sm leading-6 text-foreground">
-          {search.error_description ?? t('oauthCallbackInvalid')}
-        </p>
-      </div>
+      <Alert status="danger">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>
+            <code className="break-all text-sm">
+              {search.error ?? 'invalid_request'}
+            </code>
+          </Alert.Title>
+          <Alert.Description>
+            {search.error_description ?? t('oauthCallbackInvalid')}
+          </Alert.Description>
+        </Alert.Content>
+      </Alert>
       <Link
         to="/"
         className="mt-6 flex min-h-9 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"

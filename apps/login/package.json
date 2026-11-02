@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@identity/graphql-access": "workspace:*",
     "@heroui/react": "^3.2.6",
     "@heroui/styles": "^3.2.6",
     "@internationalized/date": "^3.12.4",
@@ -31,7 +32,8 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-intl": "^12.1.4",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "@identity/ui": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",

@@ -11,6 +11,7 @@ import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
   identityJson,
+  LocalizedError,
 } from '#/lib/identity.server'
 import type {
   ConsentApiResponse,
@@ -63,7 +64,7 @@ const loadConsentPage = createServerFn({ method: 'GET' })
         error: flash?.message,
       }
     } catch (error) {
-      const locale = requestLocale()
+      const locale = requestLocale(uiLocales.split(' '))
       return {
         consent: undefined,
         locale,
@@ -110,7 +111,7 @@ export const Route = createFileRoute('/consent')({
             },
           )
           if (!result.continue_uri) {
-            throw new Error(translate(locale, 'continuationMissing'))
+            throw new LocalizedError(translate(locale, 'continuationMissing'))
           }
           return navigationResponse(request, withUiLocales(result.continue_uri, uiLocales))
         } catch (error) {

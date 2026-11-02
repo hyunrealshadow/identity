@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "@identity/ui/styles.css";
 
 :root {
   --radius: 0.25rem;
@@ -393,6 +394,21 @@ body {
     0 0 0 1px rgb(0 0 0 / 0.05),
     var(--surface-shadow),
     0 12px 28px -12px rgb(0 0 0 / 0.15);
+}
+
+:is(.dark, [data-theme="dark"]) .auth-alert {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    var(--surface-shadow),
+    0 12px 28px -12px rgb(0 0 0 / 0.5);
+}
+
+:is(.dark, [data-theme="dark"]) .auth-alert.alert--danger :is(.alert__indicator, .alert__title) {
+  color: var(--danger);
+}
+
+:is(.dark, [data-theme="dark"]) .auth-alert .alert__description {
+  color: var(--foreground);
 }
 
 /* ---------------------------------------------------------------

@@ -17,8 +17,8 @@ vi.mock('@tanstack/react-router', async (original) => ({
 }))
 vi.mock('#/routes/account/route', () => ({ useAccount: () => ({
   locale: 'en-US', flash: {}, mfa: { enrollment: fixture.enrollment },
-  data: { viewer: { account: { username: 'person' }, passkeys: fixture.passkeys,
-    security: { totpEnabled: false, preferredMfaMethod: 'passkey', recoveryCodesRemaining: fixture.remaining } } },
+  data: { account: { username: 'person' }, passkeys: fixture.passkeys,
+    security: { totpEnabled: false, preferredMfaMethod: 'passkey', recoveryCodesRemaining: fixture.remaining } },
 }) }))
 vi.mock('#/components/passkey-settings', () => ({ PasskeySettings: () => null }))
 vi.mock('#/components/mfa-priority', () => ({ MfaPriority: () => null }))

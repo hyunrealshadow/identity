@@ -5,10 +5,11 @@ import { AtSign, KeyRound, Laptop, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
+import { AccountReauthProvider } from '#/components/reauthentication-popup'
 import { UserMenu } from '#/components/user-menu'
 import { resolveAccountLocale } from '#/lib/account-locale'
 import { beginAuthorization } from '#/lib/authorization-flow'
-import { GraphqlRequestError, identityGraphql } from '#/lib/graphql.server'
+import { GraphqlRequestError, identityGraphql, accountAccessContext } from '#/lib/graphql.server'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { mfaUiState, storeTotpEnabled } from '#/lib/oauth.server'
@@ -31,21 +32,17 @@ export interface AccountSession {
 }
 
 export interface AccountData {
-  viewer: {
-    passkeys: Array<{ id: string; name: string }>
-    account: { id: string; username: string; email: string; emailVerified: boolean; givenName?: string; familyName?: string; nickname?: string; picture?: string; website?: string; birthdate?: string; locale?: string; theme?: string; createdAt: string }
-    sessions: { edges: Array<{ node: AccountSession }> }
-    security: { totpEnabled: boolean; recoveryCodesRemaining: number; preferredMfaMethod: 'passkey' | 'otp' }
-  }
+  passkeys: Array<{ id: string; name: string }>
+  account: { id: string; username: string; email: string; emailVerified: boolean; givenName?: string; familyName?: string; nickname?: string; picture?: string; website?: string; birthdate?: string; zoneInfo?: string; locale?: string; theme?: string; createdAt: string }
+  sessions: { edges: Array<{ node: AccountSession }> }
+  security: { mfaEnabled: boolean; totpEnabled: boolean; recoveryCodesRemaining: number; preferredMfaMethod: 'passkey' | 'otp' }
 }
 
 const ACCOUNT_QUERY = `query AccountHome {
-  viewer {
-    account { id username email emailVerified givenName familyName nickname picture website birthdate locale theme createdAt }
-    sessions(first: 50) { edges { node { id status current deviceName deviceType osName osVersion browserName browserVersion ipAddress lastActiveAt createdAt } } }
-    security { totpEnabled recoveryCodesRemaining preferredMfaMethod }
-    passkeys { id name }
-  }
+  account { id username email emailVerified givenName familyName nickname picture website birthdate zoneInfo locale theme createdAt }
+  sessions(first: 50) { edges { node { id status current deviceName deviceType osName osVersion browserName browserVersion ipAddress lastActiveAt createdAt } } }
+  security { mfaEnabled totpEnabled recoveryCodesRemaining preferredMfaMethod }
+  passkeys { id name }
 }`
 
 const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
@@ -53,14 +50,15 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
   const flash = await consumeAccountFlash()
   try {
     const [data, mfa] = await Promise.all([identityGraphql<AccountData>(ACCOUNT_QUERY), mfaUiState()])
-    if (data) await storeTotpEnabled(data.viewer.security.totpEnabled)
+    if (data) await storeTotpEnabled(data.security.totpEnabled)
     return {
       locale: resolveAccountLocale(
-        data?.viewer.account.locale,
+        data?.account.locale,
         browserLocale,
       ),
-      theme: accountTheme(data?.viewer.account.theme),
+      theme: accountTheme(data?.account.theme),
       data,
+      access: await accountAccessContext(data?.security.mfaEnabled),
       mfa,
       flash,
       error: undefined,
@@ -70,6 +68,7 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
       locale: browserLocale,
       theme: 'system' as const,
       data: undefined,
+      access: undefined,
       mfa: { enrollment: undefined },
       flash,
       error: error instanceof GraphqlRequestError ? error.message : error instanceof Error ? error.message : translate(browserLocale, 'temporaryError'),
@@ -123,7 +122,7 @@ function AccountLayout() {
     return <main className="flex min-h-screen items-center justify-center p-6"><Alert status="danger" className="max-w-lg"><Alert.Indicator /><Alert.Content><Alert.Title>{translate(page.locale, 'unableToContinue')}</Alert.Title><Alert.Description>{page.error}</Alert.Description></Alert.Content></Alert></main>
   }
 
-  const account = page.data.viewer.account
+  const account = page.data.account
   const displayName = [account.givenName, account.familyName].filter(Boolean).join(' ') || account.nickname || account.username
   const t = (key: Parameters<typeof translate>[1]) => translate(page.locale, key)
   const navItems = [
@@ -144,6 +143,7 @@ function AccountLayout() {
                   user={{ name: displayName, email: account.email, picture: account.picture }}
                   menuLabel={t('accountMenuLabel')}
                   signOutLabel={t('accountSignOut')}
+                  switchAccountLabel={t('switchAccount')}
                   requestFailedLabel={t('accountRequestFailed')}
                 />
               </span>
@@ -156,18 +156,20 @@ function AccountLayout() {
               <AccountAvatar name={displayName} picture={account.picture} size="md" className="shrink-0" />
               <div className="min-w-0"><p className="truncate text-sm font-medium">{displayName}</p><p className="truncate text-xs text-muted">{account.email}</p></div>
             </div>
-            <nav className="account-nav flex gap-1 overflow-x-auto md:flex-col" aria-label={t('accountSettings')}>
+            <nav className="account-nav grid grid-cols-2 gap-1 md:flex md:flex-col" aria-label={t('accountSettings')}>
               {navItems.map(({ to, label, icon: Icon }) => {
                 return <Link key={to} to={to} preload={false} activeOptions={{ exact: true }} activeProps={{ className: 'font-medium' }} inactiveProps={{ className: 'text-muted' }} className="account-nav-link flex min-w-fit items-center gap-2.5 rounded-field px-3 py-2 text-sm"><Icon className="size-4" aria-hidden="true" />{label}</Link>
               })}
             </nav>
           </aside>
           <section className="min-w-0">
+            <AccountReauthProvider locale={page.locale} access={page.access}>
             <div className="mb-5 space-y-3">
               {visibleMessage ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</Alert.Title></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
               {visibleError ? <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{t('accountRequestFailed')}</Alert.Title><Alert.Description>{visibleError}</Alert.Description></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
             </div>
             <Outlet />
+            </AccountReauthProvider>
           </section>
         </div>
     </main>

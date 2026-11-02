@@ -27,6 +27,23 @@ it('selects browser mode without a URL preference even when the page is Chinese'
   expect(screen.getByRole('link', { name: '简体中文' }).querySelector('svg')).toBeNull()
 })
 
+it('keeps both preference variants inside one normal-flow wrapper', () => {
+  const { container } = render(<AppearanceControls locale="zh-CN" />)
+  const wrapper = container.firstElementChild as HTMLElement
+  expect(wrapper.className).toContain('flex')
+  expect(wrapper.className).not.toContain('absolute')
+
+  const jsVariant = wrapper.querySelector('.js-only')
+  const noJsVariant = wrapper.querySelector('.no-js-only')
+  expect(jsVariant?.className).not.toContain('absolute')
+  expect(noJsVariant?.className).not.toContain('absolute')
+  expect(screen.getByRole('button', { name: '语言: 跟随浏览器' })).toBeTruthy()
+
+  const noJsTrigger = noJsVariant?.querySelector('details')
+  expect(noJsTrigger?.className).toContain('relative')
+  expect(noJsTrigger?.querySelector('div')?.className).toContain('absolute')
+})
+
 it('removes every ui_locales parameter while preserving the login context and fragment', () => {
   router.state.location.href = '/login/password?login_id=opaque&ui_locales=zh-CN&restart=required&ui_locales=en-US#credential'
   render(<AppearanceControls locale="zh-CN" />)

@@ -7,16 +7,26 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { SettingsRow } from './account-settings'
 import { MfaRecoverySetup } from './mfa-recovery-setup'
 import { MfaStepper } from './mfa-stepper'
+import { useAccountReauth } from './reauthentication-popup'
 import { useSecurityModal } from './use-security-modal'
 import { translate, type Locale } from '#/lib/i18n'
+import { startPopupPasskeyReauthFromRedirect } from '#/lib/popup-reauth.server'
 import { createPasskey, MAX_PASSKEYS_PER_ACCOUNT, passkeysSupported, type PasskeyOptions } from '#/lib/passkey'
 import { passkeyAccountAction } from '#/lib/passkey-account.server'
 
 const action = createServerFn({ method: 'POST' })
   .validator((data: Parameters<typeof passkeyAccountAction>[0]) => data)
   .handler(async ({ data }) => {
-    const { options, ...result } = await passkeyAccountAction(data)
-    return { ...result, optionsJson: options ? JSON.stringify(options) : undefined }
+    const { options, redirect, ...result } = await passkeyAccountAction(data)
+    // Inside the account center the standard passkey reauthorization redirect
+    // becomes a dialog request that resumes the passkey continuation.
+    const reauth = await startPopupPasskeyReauthFromRedirect(redirect)
+    return {
+      ...result,
+      redirect: reauth ? undefined : redirect,
+      reauth,
+      optionsJson: options ? JSON.stringify(options) : undefined,
+    }
   })
 
 export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEnabled = false }: {
@@ -27,6 +37,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
   totpEnabled?: boolean
 }) {
   const router = useRouter()
+  const { requestReauth, prepareAction } = useAccountReauth()
   const [view, setView] = useState<'manage' | 'enroll'>('manage')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,6 +53,14 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
   const { modal, prepare, pending, error: preparationError } = useSecurityModal({
     action: 'prepare-manage-passkeys', locale, loginHint, openRequested,
   })
+
+  async function executePasskey(data: Parameters<typeof passkeyAccountAction>[0]): ReturnType<typeof action> {
+    const prepared = await prepareAction(`passkey-${data.action}`)
+    if (prepared.redirect) return { redirect: prepared.redirect, reauth: undefined, optionsJson: undefined }
+    if (prepared.reauth) return { reauth: prepared.reauth, redirect: undefined, optionsJson: undefined }
+    if (prepared.localError || !prepared.ok) return { error: prepared.localError ?? translate(locale, 'accountRequestFailed'), reauth: undefined, redirect: undefined, optionsJson: undefined }
+    return action({ data })
+  }
 
   useEffect(() => {
     if (!modal.isOpen) return
@@ -66,8 +85,9 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
     let cancelled = false
     void (async () => {
       try {
-        const result = await action({ data: { action: 'prepare' } })
+        const result = await executePasskey({ action: 'prepare' })
         if (cancelled) return
+        if (result.reauth) { requestReauth(result.reauth); return }
         if (result.redirect) { window.location.assign(result.redirect); return }
         if (result.error) { setRegistrationError(result.error); return }
         if (!result.recoveryEnrollment) throw new Error('Missing recovery-code enrollment')
@@ -78,7 +98,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
       }
     })()
     return () => { cancelled = true }
-  }, [modal.isOpen, view, atLimit, keys.length, locale])
+  }, [modal.isOpen, view, atLimit, keys.length, locale, requestReauth, prepareAction])
 
   useEffect(() => {
     setSupported(passkeysSupported())
@@ -94,18 +114,20 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
     setBusy(true)
     setRegistrationError('')
     try {
-      const begin = await action({ data: { action: 'begin', recoveryEnrollmentToken: recoveryEnrollment?.enrollmentToken } })
+      const begin = await executePasskey({ action: 'begin', recoveryEnrollmentToken: recoveryEnrollment?.enrollmentToken })
       if (controller.signal.aborted) return
+      if (begin.reauth) { requestReauth(begin.reauth); return }
       if (begin.redirect) { window.location.assign(begin.redirect); return }
       if (begin.error) { setRegistrationError(begin.error); return }
       if (!begin.optionsJson) throw new Error('Missing passkey registration options')
       const options = JSON.parse(begin.optionsJson) as PasskeyOptions
       const credential = await createPasskey(options, controller.signal)
       if (controller.signal.aborted) return
-      const result = await action({ data: {
+      const result = await executePasskey({
         action: 'finish', id: options.challenge_id, name: name.trim(), credential: JSON.stringify(credential),
-      } })
+      })
       if (controller.signal.aborted) return
+      if (result.reauth) { requestReauth(result.reauth); return }
       if (result.redirect) { window.location.assign(result.redirect); return }
       if (result.error) { setRegistrationError(result.error); return }
       if (!result.ok) throw new Error('Passkey registration failed')
@@ -131,7 +153,8 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
     setBusy(true)
     setError('')
     try {
-      const result = await action({ data: { action: 'delete', id } })
+      const result = await executePasskey({ action: 'delete', id })
+      if (result.reauth) { requestReauth(result.reauth); return }
       if (result.redirect) { window.location.assign(result.redirect); return }
       if (result.error) { setError(result.error); return }
       if (!result.ok) throw new Error('Passkey deletion failed')

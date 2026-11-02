@@ -5,6 +5,12 @@ import { requestLocale } from './i18n.server'
 import { forwardRequestContext } from './request-context.server'
 import { PASSWORD_CHANGE_CONTINUATION } from './account-reauth'
 import {
+  ACCOUNT_REAUTH_MESSAGE_TYPE,
+  type AccountReauthMessage,
+  type AccountReauthRequest,
+  type AccountReauthResult,
+} from './popup-reauth'
+import {
   type OAuthFlowSession,
   type OAuthTokenSession,
   useAuthorizationSession,
@@ -23,16 +29,14 @@ import {
 
 const API_RESOURCE = 'urn:identity:graphql'
 const SCOPES =
-  'openid profile email offline_access account session password.change'
+  'openid profile email offline_access account.* session.* password.change'
 const REAUTHENTICATION_SCOPES = {
   password: 'openid password.change',
-  account: 'openid account',
-  mfa: 'openid account',
+  account: 'openid account.*',
+  mfa: 'openid account.*',
 } as const
 const ACR_AAL1 = 'aal1'
 const ACR_AAL2 = 'aal2'
-const RECENT_AUTHENTICATION_SECONDS = 5 * 60
-const ELEVATED_AUTHENTICATION_SECONDS = 60 * 60
 
 interface TokenResponse {
   access_token: string
@@ -51,6 +55,13 @@ interface ReauthenticationRequirements {
   acrValues?: string
   maxAge?: number
 }
+
+/**
+ * The account-switch flag is stored alongside the ordinary sign-in flow. It is
+ * an extension of the existing flow shape so the cookie format stays the same
+ * apart from one additive, non-secret boolean.
+ */
+type SelectAccountFlow = OAuthFlowSession & { select_account?: boolean }
 
 const pendingTokenExchanges = new Map<string, Promise<TokenResponse>>()
 
@@ -78,12 +89,34 @@ export class OAuthTokenExchangeError extends Error {
   }
 }
 
-export async function prepareAuthorization() {
-  return startSignIn()
+export async function prepareAuthorization(options?: {
+  selectAccount?: boolean
+}) {
+  return startSignIn(undefined, options)
 }
 
-export async function startSignIn(returnTo?: string) {
-  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'))
+export async function startSignIn(
+  returnTo?: string,
+  options?: { selectAccount?: boolean },
+) {
+  return startAuthorizationFlow('signin', safeReturnTo(returnTo, '/'), {
+    selectAccount: options?.selectAccount === true,
+  })
+}
+
+/** Clear rejected account credentials before starting ordinary top-level sign-in. */
+export async function restartAccountSignIn(returnTo: string) {
+  await clearAuthorizationCookie()
+  emitEvent('account.authentication.recovery', { outcome: 'started', reason: 'session_invalid' })
+  return startSignIn(returnTo)
+}
+
+/**
+ * Starts a normal sign-in that asks the provider to show account selection.
+ * It deliberately uses no prior-account login hint and no subject binding.
+ */
+export async function startAccountSwitch(returnTo = '/account/profile') {
+  return redirect(await startSignIn(returnTo, { selectAccount: true }))
 }
 
 export async function startReauthorization(
@@ -97,6 +130,41 @@ export async function startReauthorization(
       safeReturnTo(returnTo, '/?message=reauthenticated'),
       { reauthPurpose: purpose, requirements },
     ),
+  )
+}
+
+/**
+ * Starts the same bounded reauthentication, but keeps the browser in the
+ * account-center popup. The callback posts a small state-bound result to the
+ * configured Login application origin instead of navigating the whole page.
+ */
+export async function startPopupReauthorization(
+  returnTo: string | undefined,
+  purpose: 'password' | 'account' | 'mfa' = 'password',
+  requirements: ReauthenticationRequirements,
+): Promise<AccountReauthRequest> {
+  const authorizeUrl = await startAuthorizationFlow(
+    'reauth',
+    safeReturnTo(returnTo, '/?message=reauthenticated'),
+    { reauthPurpose: purpose, requirements, popup: true },
+  )
+  const state = authorizeUrl.searchParams.get('state')
+  if (!state) throw new Error('Reauthentication state is missing')
+  return { url: authorizeUrl.toString(), state }
+}
+
+/** Retries only the sealed pending flow, with a fresh state and PKCE verifier. */
+export async function restartPopupReauthorization(state: string) {
+  const flow = await useOAuthFlowSession()
+  if (!state || flow.data.mode !== 'reauth' || !flow.data.popup ||
+      !flow.data.state || !constantTimeEqual(state, flow.data.state) ||
+      !flow.data.reauth_requirements) {
+    return undefined
+  }
+  return startPopupReauthorization(
+    flow.data.return_to,
+    flow.data.reauth_purpose,
+    flow.data.reauth_requirements,
   )
 }
 
@@ -118,16 +186,38 @@ export function reauthenticationRequestParameters(
   }
 }
 
+/**
+ * Account switching is an explicit normal sign-in mode. Reauthentication must
+ * stay bound to the account that started it, so combining both is rejected
+ * instead of silently weakening the subject binding.
+ */
+export function resolveAccountSelection(
+  mode: OAuthFlowSession['mode'],
+  selectAccount: boolean | undefined,
+): boolean {
+  if (mode === 'reauth' && selectAccount) {
+    throw new Error('Reauthentication cannot switch accounts')
+  }
+  return mode === 'signin' && selectAccount === true
+}
+
 async function startAuthorizationFlow(
   mode: OAuthFlowSession['mode'],
   returnTo: string,
   options?: {
     reauthPurpose?: 'password' | 'account' | 'mfa'
     requirements?: ReauthenticationRequirements
-  },
+    selectAccount?: boolean
+    popup?: boolean
+  }
 ) {
   const reauthPurpose = options?.reauthPurpose ?? 'password'
   const requirements = options?.requirements
+  const selectAccount = resolveAccountSelection(mode, options?.selectAccount)
+  const popup = options?.popup === true
+  if (popup && mode !== 'reauth') {
+    throw new Error('Only reauthentication can use a popup')
+  }
   const oauthClient = await loadOAuthClient()
   const state = randomBytes(32).toString('base64url')
   const verifier = randomBytes(48).toString('base64url')
@@ -158,29 +248,42 @@ async function startAuthorizationFlow(
     authorizeUrl.searchParams.set('max_age', String(parameters.maxAge))
     authorizeUrl.searchParams.set('acr_values', parameters.acrValues)
     authorizeUrl.searchParams.set('login_hint', parameters.loginHint)
+  } else if (selectAccount) {
+    // Only the explicit switch-account mode asks the provider to choose an
+    // account. It intentionally carries no prior-user hint or binding.
+    authorizeUrl.searchParams.set('prompt', 'select_account')
   }
 
   const flow = await useOAuthFlowSession()
-  await flow.update({
+  const flowData: SelectAccountFlow = {
     state,
     verifier,
     mode,
     return_to: returnTo,
     reauth_purpose: mode === 'reauth' ? reauthPurpose : undefined,
-  } satisfies OAuthFlowSession)
+    select_account: selectAccount ? true : undefined,
+    popup: popup ? true : undefined,
+    reauth_requirements: popup ? requirements : undefined,
+  }
+  await flow.update(flowData)
 
   return authorizeUrl
 }
 
 export async function finishAuthorization(request: Request) {
   const result = await finishAuthorizationInner(request)
+  const popupResult = result.headers.get('x-identity-reauth-result')
+  const succeeded =
+    (result.status >= 300 && result.status < 400) ||
+    popupResult === 'success'
   emitEvent('login.callback.result', {
-    outcome: result.status >= 300 && result.status < 400 ? 'success' : 'rejected',
-    reason:
-      result.status >= 300 && result.status < 400
-        ? undefined
-        : result.status === 400
-          ? 'invalid_callback'
+    outcome: succeeded ? 'success' : 'rejected',
+    reason: succeeded
+      ? undefined
+      : result.status === 400
+        ? 'invalid_callback'
+        : popupResult === 'cancelled'
+          ? 'cancelled'
           : 'provider_error',
     category: 'audit',
   })
@@ -192,10 +295,15 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
   const code = url.searchParams.get('code')
   const returnedState = url.searchParams.get('state')
   const flow = await useOAuthFlowSession()
+  const flowState =
+    typeof flow.data.state === 'string' ? flow.data.state : ''
+  const flowReturnTo = safeReturnTo(flow.data.return_to, '/')
+  const popupReauth =
+    flow.data.mode === 'reauth' && flow.data.popup === true
   const stateMatches =
     !!returnedState &&
-    typeof flow.data.state === 'string' &&
-    constantTimeEqual(returnedState, flow.data.state)
+    !!flowState &&
+    constantTimeEqual(returnedState, flowState)
 
   if (url.searchParams.has('error')) {
     if (!stateMatches) {
@@ -204,6 +312,16 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
       })
     }
     await clearFailedAuthorization(flow)
+    if (popupReauth) {
+      return popupAuthorizationResponse({
+        state: flowState,
+        returnTo: flowReturnTo,
+        result:
+          url.searchParams.get('error') === 'access_denied'
+            ? 'cancelled'
+            : 'error',
+      })
+    }
     return authorizationFailureResponse(
       request,
       url.searchParams.get('error'),
@@ -237,6 +355,13 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof OAuthTokenExchangeError) {
       await clearFailedAuthorization(flow)
+      if (popupReauth) {
+        return popupAuthorizationResponse({
+          state: flowState,
+          returnTo: flowReturnTo,
+          result: error.oauthError === 'access_denied' ? 'cancelled' : 'error',
+        })
+      }
       return authorizationFailureResponse(request, error.oauthError, error.message)
     }
     throw error
@@ -244,8 +369,38 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
 
   const authorization = await useAuthorizationSession()
   const mode = flow.data.mode === 'reauth' ? 'reauth' : 'signin'
-  const returnTo = safeReturnTo(flow.data.return_to, '/')
+  const switchingAccount =
+    mode === 'signin' &&
+    (flow.data as SelectAccountFlow).select_account === true
+  const returnTo = flowReturnTo
   if (mode === 'reauth') {
+    // A reauthentication strengthens the account that is already signed in.
+    // It must never replace that account with whichever subject the provider
+    // happens to return for the login hint.
+    const existingSubject =
+      tokenSubject(authorization.data.id_token) ??
+      tokenSubject(authorization.data.access_token)
+    const grantedSubject =
+      tokenSubject(tokens.id_token) ?? tokenSubject(tokens.access_token)
+    if (
+      !existingSubject ||
+      !grantedSubject ||
+      !constantTimeEqual(existingSubject, grantedSubject)
+    ) {
+      await clearFailedAuthorization(flow)
+      if (popupReauth) {
+        return popupAuthorizationResponse({
+          state: flowState,
+          returnTo: flowReturnTo,
+          result: 'error',
+        })
+      }
+      return authorizationFailureResponse(
+        request,
+        'invalid_request',
+        translate(requestLocale(), 'accountAuthenticationRequired'),
+      )
+    }
     await authorization.update({
       elevated_access_token: tokens.access_token,
       elevated_expires_at: Date.now() + tokens.expires_in * 1000,
@@ -254,9 +409,32 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
       await storeAccountFlash({ message: 'reauthenticated' })
     }
   } else {
-    await authorization.update(toStoredTokens(tokens))
+    // The previous account stays usable until the new grant succeeds. Only
+    // then is the old account's elevated access and account-specific UI state
+    // cleared, so a canceled or failed switch cannot destroy it first.
+    if (switchingAccount) {
+      await (await useMfaUiSession()).clear()
+      await (await useAccountFlashSession()).clear()
+    }
+    await authorization.update({
+      ...toStoredTokens(tokens),
+      ...(switchingAccount
+        ? {
+            elevated_access_token: undefined,
+            elevated_expires_at: undefined,
+          }
+        : {}),
+    })
   }
   await flow.clear()
+
+  if (popupReauth) {
+    return popupAuthorizationResponse({
+      state: flowState,
+      returnTo: flowReturnTo,
+      result: 'success',
+    })
+  }
 
   const response = redirect(new URL(returnTo, loadApplicationUrl()))
   // The callback is the only sign-in path that never touches the login
@@ -284,6 +462,13 @@ function providerSessionId(tokens: TokenResponse) {
 function sidClaim(token: string | undefined) {
   const sid = tokenClaims(token)?.sid
   return typeof sid === 'string' && sid.length > 0 ? sid : undefined
+}
+
+export function tokenSubject(token: string | undefined) {
+  const subject = tokenClaims(token)?.sub
+  return typeof subject === 'string' && subject.length > 0
+    ? subject
+    : undefined
 }
 
 function tokenClaims(token: string | undefined) {
@@ -315,8 +500,19 @@ function authorizationFailureResponse(
 async function clearFailedAuthorization(
   flow: Awaited<ReturnType<typeof useOAuthFlowSession>>,
 ) {
+  // An unsuccessful popup attempt does not withdraw earlier authorization.
+  // Keep its sealed retry parameters until success, replacement, or cookie expiry.
+  if (flow.data.mode === 'reauth' && flow.data.popup) return
   const mode = flow.data.mode === 'reauth' ? 'reauth' : 'signin'
+  const switchingAccount =
+    mode === 'signin' &&
+    (flow.data as SelectAccountFlow).select_account === true
   await flow.clear()
+  if (switchingAccount) {
+    // A canceled or failed switch leaves the previous account exactly as it
+    // was: the new grant never replaced it, so nothing is withdrawn here.
+    return
+  }
   await clearMfaUiState()
   if (mode === 'reauth') {
     await clearElevatedAuthorization()
@@ -378,31 +574,6 @@ export async function elevatedAccessToken() {
     return
   }
   return session.data.elevated_access_token
-}
-
-export async function hasFreshAuthentication(requiredAcr?: string) {
-  const tokens = [await elevatedAccessToken(), await accessToken()]
-  return tokens.some(
-    (token) => token && tokenAuthenticationIsFresh(token, requiredAcr),
-  )
-}
-
-export function tokenAuthenticationIsFresh(
-  token: string,
-  requiredAcr?: string,
-  now = Math.floor(Date.now() / 1000),
-) {
-  const claims = tokenClaims(token)
-  const authTime = claims?.auth_time
-  const acr = claims?.acr
-  if (typeof authTime !== 'number' || typeof acr !== 'string') {
-    return false
-  }
-  if (requiredAcr && acr !== requiredAcr) return false
-  const maxAge = requiredAcr === ACR_AAL2
-    ? ELEVATED_AUTHENTICATION_SECONDS
-    : RECENT_AUTHENTICATION_SECONDS
-  return Math.max(0, now - authTime) <= maxAge
 }
 
 export async function clearElevatedAuthorization() {
@@ -632,6 +803,48 @@ export function safeReturnTo(value: string | undefined, fallback: string) {
   } catch {
     return fallback
   }
+}
+
+/**
+ * A tiny no-store document that answers the account-center popup. The target
+ * origin is the configured Login application origin, never a caller-supplied
+ * value, and the payload contains no tokens or credentials.
+ */
+function popupAuthorizationResponse(input: {
+  state: string
+  returnTo: string
+  result: AccountReauthResult
+}) {
+  const targetOrigin = new URL(loadApplicationUrl()).origin
+  const message: AccountReauthMessage = {
+    type: ACCOUNT_REAUTH_MESSAGE_TYPE,
+    state: input.state,
+    returnTo: input.returnTo,
+    result: input.result,
+  }
+  const nonce = randomBytes(16).toString('base64url')
+  const payload = JSON.stringify(message)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029')
+  // When a popup cannot open, the explicit top-level fallback reaches this same document. In
+  // that case it resumes the safe continuation instead of leaving a blank page.
+  const fallback =
+    input.result === 'success' ? input.returnTo : '/account/security'
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Identity</title></head><body><script nonce="${nonce}">(()=>{const message=${payload};if(window.opener&&!window.opener.closed){window.opener.postMessage(message,${JSON.stringify(targetOrigin)})}else{window.location.replace(${JSON.stringify(fallback)})}})()</script></body></html>`
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'cache-control': 'no-store',
+      pragma: 'no-cache',
+      'content-type': 'text/html; charset=utf-8',
+      'content-security-policy': `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+      // Observability reads the completed popup result without parsing HTML.
+      'x-identity-reauth-result': input.result,
+    },
+  })
 }
 
 function redirect(location: URL) {

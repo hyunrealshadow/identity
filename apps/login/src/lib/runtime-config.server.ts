@@ -1,5 +1,10 @@
 import { identityInternalJson } from './identity.server'
 import { emitEvent } from './observability.server'
+import {
+  applyApplicationOrigins,
+  configuredApplicationOrigin,
+  type ApplicationOrigins,
+} from './application-origins.server'
 
 export interface RuntimeConfiguration {
   version: number
@@ -10,6 +15,7 @@ export interface RuntimeConfiguration {
     expires_at: string
   }
   refresh_after: number
+  applications?: ApplicationOrigins
 }
 
 let snapshot: RuntimeConfiguration | undefined
@@ -42,8 +48,12 @@ async function refreshRuntimeConfiguration() {
   )
   const previousGeneration = snapshot?.oauth_client.generation
   snapshot = value
+  applyApplicationOrigins(value.applications)
   snapshotAt = Date.now()
-  if (previousGeneration !== undefined && previousGeneration !== value.oauth_client.generation) {
+  if (
+    previousGeneration !== undefined &&
+    previousGeneration !== value.oauth_client.generation
+  ) {
     // Login observes the credential generation change; Identity owns the
     // rotation fact itself.
     emitEvent('login.runtime_configuration.changed', {
@@ -103,6 +113,7 @@ export function loadSessionSecret() {
 
 export function loadApplicationUrl() {
   const value =
+    configuredApplicationOrigin('login_domain') ??
     process.env.IDENTITY_PUBLIC_APP_URL ??
     (process.env.NODE_ENV === 'development'
       ? 'https://localhost:3000'

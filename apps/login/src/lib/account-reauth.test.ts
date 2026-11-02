@@ -2,55 +2,20 @@ import { describe, expect, it } from 'vitest'
 
 import { GraphqlRequestError } from './graphql.server'
 import {
-  MFA_SETUP_CONTINUATION,
-  MFA_VERIFICATION_CONTINUATION,
-  MFA_DISABLE_CONTINUATION,
-  PASSWORD_CHANGE_CONTINUATION,
-  RECOVERY_CODES_CONTINUATION,
   accountReauthenticationReturnTo,
   requiresAccountReauthentication,
 } from './account-reauth'
 
 describe('account reauthentication', () => {
-  it('recognizes the account.update scope required by MFA enrollment', () => {
-    const error = new GraphqlRequestError([
-      {
-        message: 'insufficient scope',
-        extensions: { requiredScope: 'account.update' },
-      },
-    ])
-
-    expect(requiresAccountReauthentication(error)).toBe(true)
-  })
-
-  it('continues initial MFA enrollment after reauthentication', () => {
-    expect(accountReauthenticationReturnTo('begin-totp')).toBe(
-      MFA_SETUP_CONTINUATION,
-    )
-  })
-
-  it('returns an interrupted MFA confirmation to the verification step', () => {
-    expect(accountReauthenticationReturnTo('confirm-totp')).toBe(
-      MFA_VERIFICATION_CONTINUATION,
-    )
-  })
-
-  it('returns MFA removal to its confirmation after reauthentication', () => {
-    expect(accountReauthenticationReturnTo('prepare-disable-totp')).toBe(
-      MFA_DISABLE_CONTINUATION,
-    )
-  })
-
-  it('returns recovery-code regeneration to its management dialog', () => {
-    expect(accountReauthenticationReturnTo('regenerate-recovery-codes')).toBe(
-      RECOVERY_CODES_CONTINUATION,
-    )
-  })
-
-  it('returns password changes to their form after reauthentication', () => {
-    expect(accountReauthenticationReturnTo('prepare-change-password')).toBe(
-      PASSWORD_CHANGE_CONTINUATION,
-    )
+  it('does not turn a permission denial into an authentication challenge', () => {
+    for (const requiredScope of ['account.update', 'password.change']) {
+      expect(requiresAccountReauthentication(new GraphqlRequestError([{
+        message: 'insufficient scope', extensions: { code: 'insufficient_scope', requiredScope },
+      }]))).toBe(false)
+    }
+    expect(requiresAccountReauthentication(new GraphqlRequestError([{
+      message: 'recent authentication required', extensions: { code: 'insufficient_user_authentication' },
+    }], { acrValues: 'aal2', maxAge: 300 }))).toBe(true)
   })
 
   it('returns identifier changes to their dedicated page', () => {

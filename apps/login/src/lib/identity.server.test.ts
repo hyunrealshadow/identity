@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  errorMessage,
   IdentityApiError,
   identityInternalJson,
   identityJson,
   isTerminalLoginError,
+  LocalizedError,
+  UpstreamTransportError,
 } from './identity.server'
 
 const mocks = vi.hoisted(() => ({
@@ -162,6 +165,19 @@ describe('identityJson', () => {
     })
   })
 
+  it('keeps transport failures on the cause chain for server diagnostics', async () => {
+    const failure = new TypeError('fetch failed')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(failure))
+
+    const error = await identityJson('/api/auth/login/unknown').catch(
+      (caught: unknown) => caught,
+    )
+
+    expect(error).toBeInstanceOf(UpstreamTransportError)
+    expect((error as UpstreamTransportError).cause).toBe(failure)
+    expect(errorMessage(error, 'zh-CN')).toBe('请求暂时无法完成，请稍后重试')
+  })
+
   it('refuses a plaintext Identity API endpoint', async () => {
     process.env.IDENTITY_API_URL = 'http://identity.example.com'
 
@@ -193,6 +209,53 @@ describe('identityJson', () => {
   })
 })
 
+describe('errorMessage', () => {
+  it.each([
+    ['en-US', 'The request cannot be completed right now. Try again later.'],
+    ['zh-CN', '请求暂时无法完成，请稍后重试'],
+  ] as const)(
+    'uses the localized temporary message for unknown failures in %s',
+    (locale, expected) => {
+      expect(errorMessage(new Error('fetch failed'), locale)).toBe(expected)
+      expect(errorMessage(new TypeError('getaddrinfo ENOTFOUND api'), locale)).toBe(expected)
+      expect(errorMessage('upstream unavailable', locale)).toBe(expected)
+    },
+  )
+
+  it('never exposes technical transport or internal text', () => {
+    const message = errorMessage(
+      new Error('connect ECONNREFUSED 10.0.0.1:443 certificate verify failed'),
+      'en-US',
+    )
+
+    expect(message).not.toContain('ECONNREFUSED')
+    expect(message).not.toContain('certificate')
+    expect(message).not.toContain('fetch failed')
+  })
+
+  it('maps status-only API failures to the temporary message', () => {
+    expect(
+      errorMessage(new IdentityApiError('Identity API request failed (503)', 503), 'zh-CN'),
+    ).toBe('请求暂时无法完成，请稍后重试')
+  })
+
+  it('keeps explicit localized presentation messages', () => {
+    expect(errorMessage(new LocalizedError('Enter a valid email'), 'zh-CN'))
+      .toBe('Enter a valid email')
+  })
+
+  it('keeps typed business messages and their field errors', () => {
+    const error = new IdentityApiError('Email address is invalid', 422, 15004, [
+      { field: 'email', code: 15004, message: 'Enter a valid email' },
+    ])
+
+    expect(errorMessage(error, 'zh-CN')).toBe('Email address is invalid')
+    expect(error.fields).toEqual([
+      { field: 'email', code: 15004, message: 'Enter a valid email' },
+    ])
+  })
+})
+
 describe('isTerminalLoginError', () => {
   it.each([11004, 11005])('restarts terminal login error %i', (code) => {
     expect(isTerminalLoginError(new IdentityApiError('restart', 410, code))).toBe(true)
@@ -204,6 +267,25 @@ describe('isTerminalLoginError', () => {
 })
 
 describe('identityInternalJson', () => {
+  it('forwards browser language for localized internal business errors', async () => {
+    process.env.IDENTITY_WORKLOAD_TOKEN = 'a'.repeat(32)
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({
+      error: {
+        code: 13006,
+        message: '邮箱地址格式无效',
+        fields: [{ field: 'email', code: 13006, message: '邮箱地址格式无效' }],
+      },
+    }, 422))
+    vi.stubGlobal('fetch', fetch)
+    const error = await identityInternalJson('/internal/installation', {
+      method: 'POST', body: { email: 'invalid' }, locale: 'zh-CN',
+    }).catch((error: unknown) => error)
+    const headers = new Headers(fetch.mock.calls[0][1].headers)
+    expect(headers.get('accept-language')).toBe('zh-CN')
+    expect(headers.get('authorization')).toBe(`Bearer ${'a'.repeat(32)}`)
+    expect((error as IdentityApiError).fields[0].message).toBe('邮箱地址格式无效')
+  })
+
   it('rejects plaintext internal traffic unless it is explicitly enabled', async () => {
     process.env.IDENTITY_INTERNAL_API_URL = 'http://identity:5151'
     process.env.IDENTITY_WORKLOAD_TOKEN = 'a'.repeat(32)

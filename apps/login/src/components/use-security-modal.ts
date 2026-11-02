@@ -1,10 +1,9 @@
 import { useOverlayState } from '@heroui/react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { runAccountAction } from '#/lib/account-actions'
 import { translate, type Locale } from '#/lib/i18n'
+import { useAccountReauth } from './reauthentication-popup'
 
 /** Open security settings only after the backend authorizes the current session */
 export function useSecurityModal({ action, locale, loginHint, openRequested = false }: {
@@ -14,7 +13,7 @@ export function useSecurityModal({ action, locale, loginHint, openRequested = fa
   openRequested?: boolean
 }) {
   const modal = useOverlayState()
-  const execute = useServerFn(runAccountAction)
+  const { requestReauth, executeAction } = useAccountReauth()
   const router = useRouter()
   const navigate = useNavigate()
   const [pending, setPending] = useState(false)
@@ -34,8 +33,10 @@ export function useSecurityModal({ action, locale, loginHint, openRequested = fa
     setPending(true)
     setError('')
     try {
-      const result = await execute({ data: { action, values: { login_hint: loginHint } } })
+      const result = await executeAction({ action, values: { login_hint: loginHint } })
       if (!mounted.current) return
+      if (result.localError) { setError(result.localError); return }
+      if (result.reauth) { requestReauth(result.reauth); return }
       if (result.redirect) { window.location.assign(result.redirect); return }
       if (!result.ok) {
         await router.invalidate()
@@ -49,7 +50,7 @@ export function useSecurityModal({ action, locale, loginHint, openRequested = fa
       inFlight.current = false
       if (mounted.current) setPending(false)
     }
-  }, [action, execute, locale, loginHint, modal.open, navigate, openRequested, router])
+  }, [action, executeAction, locale, loginHint, modal.open, navigate, openRequested, requestReauth, router])
 
   useEffect(() => {
     if (!openRequested) { resumed.current = false; return }

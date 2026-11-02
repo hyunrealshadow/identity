@@ -5,7 +5,10 @@ import {
 } from './oauth.server'
 import { forwardRequestContext } from './request-context.server'
 import { backchannelIdentityGraphqlUrl } from './identity-url.server'
-import { fetchWithSpan } from './observability.server'
+import { emitEvent, fetchWithSpan } from './observability.server'
+import { preflightOperation, type PreflightContext } from '@identity/graphql-access'
+import { translate } from './i18n'
+import { requestLocale } from './i18n.server'
 
 export interface GraphqlError {
   message: string
@@ -13,6 +16,7 @@ export interface GraphqlError {
     kind?: string
     code?: string | number
     requiredScope?: string
+    requiredScopes?: string[]
     acr_values?: string
     max_age?: number
     fields?: Array<{ field: string; code: number; message: string }>
@@ -31,21 +35,48 @@ export class GraphqlRequestError extends Error {
   }
 }
 
+/** No usable account credential remains; recovery must use ordinary sign-in. */
+export class AccountSessionExpiredError extends Error {
+  constructor() {
+    super(translate(requestLocale(), 'accountAuthenticationRequired'))
+    this.name = 'AccountSessionExpiredError'
+  }
+}
+
 export interface StepUpChallenge {
   acrValues?: string
   maxAge?: number
 }
 
+interface GraphqlOptions { authorization?: 'default' | 'elevated' }
+
+async function graphqlAccessToken(options?: GraphqlOptions) {
+  return options?.authorization === 'elevated'
+    ? ((await elevatedAccessToken()) ?? (await accessToken()))
+    : await accessToken()
+}
+
+/** Check the selected API before opening a form, without submitting it. */
+export async function preflightIdentityGraphql(
+  query: string,
+  variables?: Record<string, unknown>,
+  options?: GraphqlOptions,
+) {
+  const token = await graphqlAccessToken(options)
+  if (!token) {
+    throw new AccountSessionExpiredError()
+  }
+  await preflightGraphql(query, variables, token)
+}
+
 export async function identityGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
-  options?: { authorization?: 'default' | 'elevated' },
+  options?: GraphqlOptions,
 ) {
-  const token =
-    options?.authorization === 'elevated'
-      ? ((await elevatedAccessToken()) ?? (await accessToken()))
-      : await accessToken()
+  const token = await graphqlAccessToken(options)
   if (!token) return
+  await preflightGraphql(query, variables, token)
   const headers = forwardRequestContext(
     new Headers({
       accept: 'application/graphql-response+json, application/json',
@@ -84,6 +115,90 @@ export async function identityGraphql<T>(
     )
   }
   return payload.data
+}
+
+function tokenPreflightContext(token: string): PreflightContext | undefined {
+  let claims: Record<string, unknown>
+  try {
+    claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'))
+  } catch {
+    // Opaque tokens have no locally readable requirements context.
+    return
+  }
+  if (claims === null || typeof claims !== 'object' || Array.isArray(claims)) return
+  if (typeof claims.scope !== 'string') return
+  return {
+    scopes: claims.scope.split(/\s+/).filter(Boolean),
+    acr: typeof claims.acr === 'string' ? claims.acr : undefined,
+    authTime: typeof claims.auth_time === 'number' ? claims.auth_time : undefined,
+    user: true,
+  }
+}
+
+/** Serialize only the context used by the same server preflight. */
+export async function accountAccessContext(mfaEnabled?: boolean) {
+  const standard = await graphqlAccessToken()
+  const elevated = await graphqlAccessToken({ authorization: 'elevated' })
+  const context = (token?: string) => {
+    const parsed = token ? tokenPreflightContext(token) : undefined
+    return parsed ? { ...parsed, mfaEnabled } : undefined
+  }
+  return { default: context(standard), elevated: context(elevated) }
+}
+
+/** Local checks never replace live authorization or submit the pending write. */
+async function preflightGraphql(
+  query: string,
+  variables: Record<string, unknown> | undefined,
+  token: string,
+) {
+  const context = tokenPreflightContext(token)
+  if (!context) return
+  let result = preflightOperation(query, variables, context)
+  if (result.status === 'unknown' && context.scopes.includes('account.read')) {
+    const withoutMfa = preflightOperation(query, variables, { ...context, mfaEnabled: false })
+    const withMfa = preflightOperation(query, variables, { ...context, mfaEnabled: true })
+    if (JSON.stringify(withoutMfa) !== JSON.stringify(withMfa)) {
+      // Resolve the account-dependent requirement with a read-only query and
+      // the same authorization that will be used for the pending operation.
+      const headers = forwardRequestContext(new Headers({
+        accept: 'application/graphql-response+json, application/json',
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      }))
+      try {
+        const response = await fetchWithSpan(new URL('/graphql', backchannelIdentityGraphqlUrl()), {
+          method: 'POST', headers,
+          body: JSON.stringify({ query: 'query AccessPreflightFactors { security { mfaEnabled } }' }),
+        })
+        const payload = await response.json() as { data?: { security?: { mfaEnabled?: boolean } } }
+        if (response.ok && typeof payload?.data?.security?.mfaEnabled === 'boolean') {
+          result = preflightOperation(query, variables, { ...context, mfaEnabled: payload.data.security.mfaEnabled })
+        }
+      } catch {
+        // Unavailable advisory state leaves the authoritative API check intact.
+        emitEvent('graphql.access_preflight', { outcome: 'unresolved', reason: 'factor_context_unavailable' })
+      }
+    }
+  }
+  if (result.status !== 'forbidden' && result.status !== 'reauthentication') return
+  const authentication = result.status === 'reauthentication'
+  emitEvent('graphql.access_preflight', {
+    outcome: 'rejected', reason: result.status,
+    attributes: { 'graphql.preflight': true },
+  })
+  const message = translate(requestLocale(), authentication ? 'accountAuthenticationRequired' : 'accountPermissionRequired')
+  const challenge = authentication ? { acrValues: result.acrValues, maxAge: result.maxAge } : undefined
+  throw new GraphqlRequestError([{
+    message,
+    extensions: {
+      kind: 'authorization_error',
+      code: authentication ? 'insufficient_user_authentication' : 'insufficient_scope',
+      requiredScopes: result.requiredScopes,
+      acr_values: result.acrValues,
+      max_age: result.maxAge,
+    },
+  }], challenge)
 }
 
 export function parseStepUpChallenge(

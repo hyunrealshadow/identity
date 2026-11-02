@@ -1,7 +1,7 @@
 import { Dropdown, Label } from '@heroui/react'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { LogOut } from 'lucide-react'
+import { ArrowLeftRight, LogOut } from 'lucide-react'
 import { useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
@@ -17,39 +17,45 @@ interface UserMenuProps {
   user: AccountMenuUser
   menuLabel: string
   signOutLabel: string
+  switchAccountLabel: string
   requestFailedLabel: string
 }
 
 /**
- * Clerk UserButton-style account menu. Rendered inside a `.js-only` gate; the
- * The account area is SPA-only; sign-out invokes the account server function
- * and follows the provider logout redirect returned by the server.
+ * Account menu for the SPA-only account area. Sign-out invokes the account server function
+ * and follows the provider logout redirect returned by the server. Switch account
+ * starts a normal sign-in with explicit provider-side account selection.
  */
-export function UserMenu({ user, menuLabel, signOutLabel, requestFailedLabel }: UserMenuProps) {
+export function UserMenu({
+  user,
+  menuLabel,
+  signOutLabel,
+  switchAccountLabel,
+  requestFailedLabel,
+}: UserMenuProps) {
   const router = useRouter()
   const execute = useServerFn(runAccountAction)
-  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [isPending, setIsPending] = useState(false)
   const [requestError, setRequestError] = useState<string>()
 
   async function onAction(key: React.Key) {
-    if (key === 'signout') {
-      if (isSigningOut) return
-      setIsSigningOut(true)
-      setRequestError(undefined)
-      try {
-        const result = await execute({
-          data: { action: 'logout', values: {} },
-        })
-        if (result.redirect) {
-          window.location.assign(result.redirect)
-          return
-        }
-        await router.invalidate()
-      } catch {
-        setRequestError(requestFailedLabel)
-      } finally {
-        setIsSigningOut(false)
+    const action = key === 'signout' ? 'logout' : key === 'switch-account' ? 'switch-account' : undefined
+    if (!action || isPending) return
+    setIsPending(true)
+    setRequestError(undefined)
+    try {
+      const result = await execute({
+        data: { action, values: {} },
+      })
+      if (result.redirect) {
+        window.location.assign(result.redirect)
+        return
       }
+      await router.invalidate()
+    } catch {
+      setRequestError(requestFailedLabel)
+    } finally {
+      setIsPending(false)
     }
   }
 
@@ -64,6 +70,10 @@ export function UserMenu({ user, menuLabel, signOutLabel, requestFailedLabel }: 
           <p className="truncate text-xs text-muted">{user.email}</p>
         </div>
         <Dropdown.Menu onAction={(key) => void onAction(key)}>
+          <Dropdown.Item id="switch-account" textValue={switchAccountLabel}>
+            <ArrowLeftRight className="size-4 shrink-0 text-muted" aria-hidden="true" />
+            <Label>{switchAccountLabel}</Label>
+          </Dropdown.Item>
           <Dropdown.Item id="signout" textValue={signOutLabel} variant="danger">
             <LogOut className="size-4 shrink-0 text-danger" aria-hidden="true" />
             <Label>{signOutLabel}</Label>

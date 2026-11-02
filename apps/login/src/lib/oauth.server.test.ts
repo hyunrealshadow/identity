@@ -12,8 +12,8 @@ import {
   providerLogoutUrl,
   reauthenticationRequestParameters,
   reauthenticationScope,
+  resolveAccountSelection,
   safeReturnTo,
-  tokenAuthenticationIsFresh,
 } from './oauth.server'
 
 afterEach(() => {
@@ -26,8 +26,8 @@ afterEach(() => {
 
 describe('OAuth reauthentication scopes', () => {
   it('uses the broad account scope assigned to the built-in client', () => {
-    expect(reauthenticationScope('account')).toBe('openid account')
-    expect(reauthenticationScope('mfa')).toBe('openid account')
+    expect(reauthenticationScope('account')).toBe('openid account.*')
+    expect(reauthenticationScope('mfa')).toBe('openid account.*')
   })
 
   it('keeps password reauthentication scoped to password changes', () => {
@@ -63,22 +63,19 @@ describe('OAuth reauthentication request', () => {
   })
 })
 
-describe('local authentication freshness', () => {
-  const token = (claims: Record<string, unknown>) =>
-    `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`
-
-  it('uses the same five-minute recent-authentication window as the API', () => {
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 700, acr: 'aal1' }), undefined, 1_000)).toBe(true)
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 699, acr: 'aal1' }), undefined, 1_000)).toBe(false)
+describe('OAuth account selection', () => {
+  it('enables selection only for an explicit normal sign-in', () => {
+    expect(resolveAccountSelection('signin', true)).toBe(true)
+    expect(resolveAccountSelection('signin', false)).toBe(false)
+    expect(resolveAccountSelection('signin', undefined)).toBe(false)
   })
 
-  it('requires AAL2 and uses its one-hour freshness window', () => {
-    const aal2 = 'aal2'
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 400, acr: aal2 }), aal2, 4_000)).toBe(true)
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 399, acr: aal2 }), aal2, 4_000)).toBe(false)
-    expect(tokenAuthenticationIsFresh(token({ auth_time: 4_000, acr: 'aal1' }), aal2, 4_000)).toBe(false)
+  it('never allows a reauthentication to switch the bound account', () => {
+    expect(() => resolveAccountSelection('reauth', true)).toThrow(
+      'Reauthentication cannot switch accounts',
+    )
+    expect(resolveAccountSelection('reauth', undefined)).toBe(false)
   })
-
 })
 
 describe('OAuth return locations', () => {

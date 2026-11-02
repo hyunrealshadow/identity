@@ -4,8 +4,12 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@12.9.1 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/login/package.json apps/login/package.json
+COPY packages/graphql-access/package.json packages/graphql-access/package.json
+COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile --filter login...
 COPY apps/login apps/login
+COPY packages/graphql-access packages/graphql-access
+COPY packages/ui packages/ui
 RUN pnpm --filter login build
 RUN mkdir -p /app/apps/login/node_modules/.vite-temp \
     && chown node:node /app/apps/login/node_modules/.vite-temp

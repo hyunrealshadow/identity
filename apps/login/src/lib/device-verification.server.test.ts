@@ -6,6 +6,7 @@ import {
   deviceInteractionPath,
   loadDeviceVerification,
 } from './device-verification.server'
+import { translate } from './i18n'
 
 const mocks = vi.hoisted(() => ({
   getRequestHeader: vi.fn(),
@@ -109,7 +110,7 @@ describe('beginDeviceVerification', () => {
   it('reports transport failures without pretending the code is wrong', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')))
     await expect(beginDeviceVerification('WDJB-MJHT', 'en-US')).resolves.toEqual({
-      status: 'failed', message: 'fetch failed',
+      status: 'failed', message: translate('en-US', 'temporaryError'),
     })
   })
 })

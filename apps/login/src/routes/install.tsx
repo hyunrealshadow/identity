@@ -27,11 +27,13 @@ interface InstallSearch {
   email?: string
   domain?: string
   application_url?: string
+  console_url?: string
 }
 
 const visibleInstallFields = new Set([
   'domain',
   'application_url',
+  'console_url',
   'username',
   'email',
   'password',
@@ -68,6 +70,7 @@ export const Route = createFileRoute('/install')({
     email: optionalString(search.email),
     domain: optionalString(search.domain),
     application_url: optionalString(search.application_url),
+    console_url: optionalString(search.console_url),
   }),
   loader: () => loadInstallPage(),
   server: {
@@ -80,6 +83,7 @@ export const Route = createFileRoute('/install')({
         const applicationUrl = String(
           form.get('application_url') ?? '',
         ).trim()
+        const consoleUrl = String(form.get('console_url') ?? '').trim()
         const password = String(form.get('password') ?? '')
         const confirmPassword = String(form.get('confirm_password') ?? '')
         const values = {
@@ -87,6 +91,7 @@ export const Route = createFileRoute('/install')({
           email,
           domain,
           application_url: applicationUrl,
+          console_url: consoleUrl,
         }
         const locale = formLocale(request, null)
 
@@ -103,12 +108,14 @@ export const Route = createFileRoute('/install')({
         try {
           await identityInternalJson<InstallResponse>('/internal/installation', {
             method: 'POST',
+            locale,
             body: {
               username,
               email,
               password,
               domain,
               application_url: applicationUrl,
+              console_url: consoleUrl,
               key_algorithm: String(
                 form.get('key_algorithm') ?? 'ecdsa-p256',
               ),
@@ -134,7 +141,7 @@ export const Route = createFileRoute('/install')({
           return formErrorResponse(
             request,
             '/install',
-            errorMessage(error),
+            errorMessage(error, locale),
             values,
           )
         }
@@ -148,7 +155,6 @@ function InstallPage() {
   const search = Route.useSearch()
   const { locale, error, fieldErrors, formValues } = Route.useLoaderData()
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
-  const fieldError = (name: string) => fieldErrors[name]
 
   return (
     <AuthShell
@@ -173,97 +179,100 @@ function InstallPage() {
         action="/install"
         className="progressive-form space-y-5"
         enhancementErrorMessage={t('installNavigationError')}
+        validationErrors={fieldErrors}
       >
         <TextField
           isRequired
           fullWidth
           name="domain"
-          isInvalid={Boolean(fieldError('domain'))}
+          defaultValue={formValues.domain ?? search.domain ?? 'https://localhost:5150'}
         >
           <Label>{t('installIdentityUrl')}</Label>
           <Input
             autoFocus
-            defaultValue={
-              formValues.domain ?? search.domain ?? 'https://localhost:5150'
-            }
             inputMode="url"
             placeholder="https://id.example.com"
           />
-          <FieldError>{fieldError('domain')}</FieldError>
+          <FieldError />
         </TextField>
 
         <TextField
           isRequired
           fullWidth
           name="application_url"
-          isInvalid={Boolean(fieldError('application_url'))}
+          defaultValue={formValues.application_url ?? search.application_url ?? 'https://localhost:3000'}
         >
           <Label>{t('installApplicationUrl')}</Label>
           <Input
-            defaultValue={
-              formValues.application_url ??
-              search.application_url ??
-              'https://localhost:3000'
-            }
             inputMode="url"
-            placeholder="https://account.example.com"
+            placeholder="https://login.example.com"
           />
-          <FieldError>{fieldError('application_url')}</FieldError>
+          <FieldError />
+        </TextField>
+
+        <TextField
+          isRequired
+          fullWidth
+          name="console_url"
+          defaultValue={formValues.console_url ?? search.console_url ?? 'https://localhost:3100'}
+        >
+          <Label>{t('installConsoleUrl')}</Label>
+          <Input
+            inputMode="url"
+            placeholder="https://console.example.com"
+          />
+          <FieldError />
         </TextField>
 
         <TextField
           isRequired
           fullWidth
           name="username"
-          isInvalid={Boolean(fieldError('username'))}
+          defaultValue={formValues.username ?? search.username}
         >
           <Label>{t('installAdminUsername')}</Label>
           <Input
             autoComplete="username"
-            defaultValue={formValues.username ?? search.username}
             placeholder="admin"
           />
-          <FieldError>{fieldError('username')}</FieldError>
+          <FieldError />
         </TextField>
 
         <TextField
           isRequired
           fullWidth
           name="email"
-          isInvalid={Boolean(fieldError('email'))}
+          defaultValue={formValues.email ?? search.email}
         >
           <Label>{t('installAdminEmail')}</Label>
           <Input
             autoComplete="email"
-            defaultValue={formValues.email ?? search.email}
             inputMode="email"
             placeholder="admin@example.com"
           />
-          <FieldError>{fieldError('email')}</FieldError>
+          <FieldError />
         </TextField>
 
         <TextField
           isRequired
           fullWidth
           name="password"
-          isInvalid={Boolean(fieldError('password'))}
+          type="password"
         >
           <Label>{t('installPassword')}</Label>
           <Input autoComplete="new-password" type="password" />
-          <FieldError>{fieldError('password')}</FieldError>
+          <FieldError />
         </TextField>
 
         <TextField
           isRequired
           fullWidth
           name="confirm_password"
-          isInvalid={Boolean(fieldError('confirm_password'))}
+          type="password"
         >
           <Label>{t('installConfirmPassword')}</Label>
           <Input autoComplete="new-password" type="password" />
-          <FieldError>
-            {fieldError('confirm_password')}
-          </FieldError>
+          <FieldError />
         </TextField>
 
         <input type="hidden" name="key_algorithm" value="ecdsa-p256" />

@@ -1,9 +1,8 @@
 import { Alert } from '@heroui/react'
 import { useRouter } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
 import { useState, type FormEvent, type ReactNode } from 'react'
 
-import { runAccountAction } from '#/lib/account-actions'
+import { useAccountReauth } from '#/components/reauthentication-popup'
 
 interface AccountActionFormProps {
   action: string
@@ -21,7 +20,7 @@ export function AccountActionForm({
   onSuccess,
 }: AccountActionFormProps) {
   const router = useRouter()
-  const execute = useServerFn(runAccountAction)
+  const { requestReauth, executeAction } = useAccountReauth()
   const [isPending, setIsPending] = useState(false)
   const [requestError, setRequestError] = useState<string>()
 
@@ -45,9 +44,14 @@ export function AccountActionForm({
     setIsPending(true)
     setRequestError(undefined)
     try {
-      const result = await execute({
-        data: { action: submittedAction, values },
-      })
+      const result = await executeAction({ action: submittedAction, values })
+      if (result.localError) { setRequestError(result.localError); return }
+      if (result.reauth) {
+        // Reauthentication resumes the intended dialog through its continuation.
+        // The originally submitted sensitive mutation is never replayed.
+        requestReauth(result.reauth)
+        return
+      }
       if (result.redirect) {
         window.location.assign(result.redirect)
         return

@@ -25,6 +25,7 @@ import {
   errorMessage,
   IdentityApiError,
   identityJson,
+  LocalizedError,
 } from '#/lib/identity.server'
 import type {
   ActiveAccountsResponse,
@@ -108,7 +109,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         client: status.client,
       }
     } catch (error) {
-      const locale = requestLocale()
+      const locale = requestLocale(uiLocales.split(' '))
       return {
         accounts: [],
         csrfToken: '',
@@ -201,7 +202,7 @@ export const Route = createFileRoute('/login')({
           )
           const credentialType = result.preferred_credential_type
 
-          if (!credentialType) throw new Error(translate(locale, 'noCredential'))
+          if (!credentialType) throw new LocalizedError(translate(locale, 'noCredential'))
 
           return navigationResponse(
             request,

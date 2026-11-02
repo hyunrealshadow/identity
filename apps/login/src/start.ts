@@ -4,6 +4,21 @@ import { forwardedProtoIsHttps } from '#/lib/upstream-https'
 
 const healthRoutes = new Set(['/health/live', '/health/ready'])
 
+const applicationRuntime = createMiddleware().server(async ({ next, pathname }) => {
+  const { setResponseHeader } = await import('@tanstack/react-start/server')
+  if (!healthRoutes.has(pathname) && pathname !== '/install') {
+    try {
+      const { loadRuntimeConfiguration } = await import('#/lib/runtime-config.server')
+      await loadRuntimeConfiguration()
+    } catch {
+      // Installation and recovery retain the configured bootstrap addresses.
+    }
+  }
+  setResponseHeader('X-Frame-Options', 'DENY')
+  setResponseHeader('Content-Security-Policy', "frame-ancestors 'none'")
+  return next()
+})
+
 const requireUpstreamHttps = createMiddleware().server(
   async ({ next, pathname, request }) => {
     if (
@@ -36,9 +51,8 @@ const traceRequests = createMiddleware().server(
     if (healthRoutes.has(pathname)) {
       return next()
     }
-    const { initObservability, runWithServerSpan } = await import(
-      '#/lib/observability.server'
-    )
+    const { initObservability, runWithServerSpan } =
+      await import('#/lib/observability.server')
     initObservability()
     return runWithServerSpan(
       'http.server',
@@ -53,5 +67,5 @@ const traceRequests = createMiddleware().server(
 )
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [requireUpstreamHttps, traceRequests],
+  requestMiddleware: [requireUpstreamHttps, traceRequests, applicationRuntime],
 }))

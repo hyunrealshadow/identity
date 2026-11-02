@@ -3,20 +3,21 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType, ReactNode } from 'react'
 
-const fixture = vi.hoisted(() => ({ method: 'passkey', preferred: 'passkey', status: 'identifier_verified', reauthentication: false, credentials: ['password', 'otp', 'passkey', 'recovery_code'] }))
+const fixture = vi.hoisted(() => ({ method: 'passkey', preferred: 'passkey', status: 'identifier_verified', reauthentication: false, credentials: ['password', 'otp', 'passkey', 'recovery_code'], restart: undefined as string | undefined, error: undefined as string | undefined }))
 vi.mock('@tanstack/react-router', async (original) => ({
   ...await original<typeof import('@tanstack/react-router')>(),
   createFileRoute: () => (options: unknown) => ({
     options,
-    useSearch: () => ({}),
+    useSearch: () => ({ restart: fixture.restart }),
     useParams: () => ({ method: fixture.method }),
     useLoaderData: () => ({
       loginId: 'login', csrfToken: 'csrf', locale: 'en-US', uiLocales: 'en-US',
+      error: fixture.error,
       status: { status: fixture.status, preferred_credential_type: fixture.preferred, credential_types: fixture.credentials, requires_reauthentication: fixture.reauthentication },
     }),
   }),
 }))
-vi.mock('#/components/auth-shell', () => ({ AuthShell: ({ title, children }: { title: string; children: ReactNode }) => <main><h1>{title}</h1>{children}</main> }))
+vi.mock('#/components/auth-shell', () => ({ AuthShell: ({ title, description, children }: { title: string; description: string; children: ReactNode }) => <main><h1>{title}</h1><p>{description}</p>{children}</main> }))
 vi.mock('#/components/passkey-login', () => ({ PasskeyLogin: ({ primary }: { primary: boolean }) => <button data-primary={primary}>Passkey verification</button> }))
 
 import { Route } from '#/routes/login.$method'
@@ -29,7 +30,7 @@ async function renderChallenge() {
 }
 
 afterEach(cleanup)
-beforeEach(() => { fixture.method = 'passkey'; fixture.preferred = 'passkey'; fixture.status = 'identifier_verified'; fixture.reauthentication = false; fixture.credentials = ['password', 'otp', 'passkey', 'recovery_code'] })
+beforeEach(() => { fixture.method = 'passkey'; fixture.preferred = 'passkey'; fixture.status = 'identifier_verified'; fixture.reauthentication = false; fixture.credentials = ['password', 'otp', 'passkey', 'recovery_code']; fixture.restart = undefined; fixture.error = undefined })
 
 it('opens the preferred passkey path without a password field or premature OTP links', async () => {
   const { container } = await renderChallenge()
@@ -75,7 +76,8 @@ it.each([
   expect(screen.queryByRole('link', { name: 'Use password' })).toBeNull()
 })
 
-it('offers configured second factors in the same section during reauthentication', async () => {
+it('offers configured second factors in the MFA stage', async () => {
+  fixture.status = 'mfa_required'
   fixture.reauthentication = true
   fixture.credentials = ['passkey', 'otp']
   const { container } = await renderChallenge()
@@ -91,8 +93,14 @@ it('omits other methods when no alternative credential is configured', async () 
   expect(screen.queryByText('Other verification methods')).toBeNull()
 })
 
-it('does not offer alternatives once the login has expired', async () => {
+it('offers only recovery with one error message once the login has expired', async () => {
   fixture.status = 'expired'
+  fixture.restart = 'required'
+  fixture.error = 'Restart sign-in to continue. Your original authorization request will be preserved.'
   await renderChallenge()
   expect(screen.queryByText('Other verification methods')).toBeNull()
+  expect(screen.getAllByText('Verification expired')).toHaveLength(1)
+  expect(screen.getAllByText(fixture.error)).toHaveLength(1)
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Restart sign-in' })).toBeTruthy()
 })

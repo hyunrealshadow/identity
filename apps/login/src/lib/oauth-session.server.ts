@@ -18,6 +18,16 @@ export interface OAuthFlowSession {
   mode: 'signin' | 'reauth'
   return_to: string
   reauth_purpose?: 'password' | 'account' | 'mfa'
+  /**
+   * Reauthentication requested by the account-center popup. Its callback
+   * answers the opener window instead of navigating the whole page.
+   */
+  popup?: boolean
+  reauth_requirements?: {
+    loginHint: string
+    acrValues?: string
+    maxAge?: number
+  }
 }
 
 export interface OAuthTokenSession {

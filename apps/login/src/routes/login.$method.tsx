@@ -6,9 +6,9 @@ import {
   Label,
   TextField,
 } from '@heroui/react'
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, CircleAlert, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 
 import { LoginMethodAlternatives } from '#/components/login-method-alternatives'
@@ -34,7 +34,7 @@ import {
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { submitLoginMethod } from '#/lib/login-method.server'
-import { loginCredentialType, loginMethodPath } from '#/lib/login-navigation'
+import { loginCredentialType, loginMethodPath, loginChallengeDestination } from '#/lib/login-navigation'
 
 interface ChallengeSearch {
   login_id?: string
@@ -145,7 +145,7 @@ const loadChallengePage = createServerFn({ method: 'GET' })
           restartUnavailable: false,
         }
       }
-      const locale = requestLocale()
+      const locale = requestLocale(uiLocales.split(' '))
       return {
         status: undefined,
         csrfToken: '',
@@ -172,9 +172,15 @@ export const Route = createFileRoute('/login/$method')({
     restart: search.restart,
     uiLocales: search.ui_locales,
   }),
-  loader: ({ deps, params }) => {
+  loader: async ({ deps, params }) => {
     if (!loginCredentialType(params.method)) throw notFound()
-    return loadChallengePage({ data: { ...deps, method: params.method } })
+    const page = await loadChallengePage({ data: { ...deps, method: params.method } })
+    if (params.method === 'password' && page.status &&
+        !page.status.credential_types.includes('password') &&
+        page.status.preferred_credential_type) {
+      throw redirect({ href: loginChallengeDestination(page.loginId, page.status.preferred_credential_type, page.uiLocales) })
+    }
+    return page
   },
   server: {
     handlers: {
@@ -211,6 +217,8 @@ function ChallengePage() {
       lang={data.locale}
       locale={data.locale}
       showPreferences
+      tone={restartRequired ? 'danger' : 'default'}
+      titleIcon={restartRequired ? <CircleAlert className="size-6" aria-hidden="true" /> : undefined}
       title={
         restartRequired
           ? t('challengeExpiredTitle')
@@ -226,7 +234,7 @@ function ChallengePage() {
         restartUnavailable
           ? t('authorizationRestartUnavailable')
           : restartRequired
-          ? t('challengeExpiredDescription')
+          ? visibleError || t('challengeExpiredDescription')
           : isPasskey
           ? t('passkeySignInDescription')
           : isRecoveryCode
@@ -247,7 +255,7 @@ function ChallengePage() {
         </div>
       ) : null}
 
-      {visibleError ? (
+      {visibleError && !restartRequired ? (
         <Alert
           status="danger"
           className="auth-alert mb-5"
@@ -255,9 +263,7 @@ function ChallengePage() {
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>
-              {restartRequired
-                ? t('challengeExpiredTitle')
-                : t('verificationFailed')}
+              {t('verificationFailed')}
             </Alert.Title>
             <Alert.Description>{visibleError}</Alert.Description>
           </Alert.Content>

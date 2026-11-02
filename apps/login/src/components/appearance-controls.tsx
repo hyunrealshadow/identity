@@ -75,8 +75,8 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
   const ThemeIcon = themeOptions.find((option) => option.id === theme)?.icon ?? Monitor
 
   return (
-    <>
-      <div className="js-only absolute right-4 top-4 z-10 flex items-center gap-1 rounded-field border border-border bg-surface/90 p-1 shadow-sm backdrop-blur sm:right-6 sm:top-6">
+    <div className="flex shrink-0 items-center justify-end gap-1">
+      <div className="js-only flex items-center gap-1 rounded-field border border-border bg-surface/90 p-1 shadow-sm backdrop-blur">
         <Dropdown>
           <Button
             variant="ghost"
@@ -137,7 +137,7 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
         </Dropdown>
       </div>
 
-      <div className="no-js-only absolute right-4 top-4 z-10 flex items-start gap-1 sm:right-6 sm:top-6">
+      <div className="no-js-only flex items-start gap-1">
         <details name="appearance-preference" className="relative rounded-field border border-border bg-surface/95 shadow-sm">
           <summary className="flex h-10 cursor-pointer list-none items-center gap-1 px-3 text-xs font-medium [&::-webkit-details-marker]:hidden">
             {languageLabel}
@@ -177,6 +177,6 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
           </div>
         </details>
       </div>
-    </>
+    </div>
   )
 }

@@ -12,7 +12,7 @@ import { ConsentRevokeNotice } from '#/components/consent-revoke-notice'
 import { DeviceCodeConfirmation } from '#/components/device-code-confirmation'
 import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput } from '#/components/totp-input'
-import { errorMessage } from '#/lib/identity.server'
+import { errorMessage, LocalizedError } from '#/lib/identity.server'
 import {
   beginDeviceVerification,
   decideDeviceVerification,
@@ -209,7 +209,7 @@ export const Route = createFileRoute('/device')({
           )
           const outcome = deviceOutcome(result.status)
           if (!outcome) {
-            throw new Error(translate(locale, 'deviceDecisionUnknown'))
+            throw new LocalizedError(translate(locale, 'deviceDecisionUnknown'))
           }
 
           return navigationResponse(

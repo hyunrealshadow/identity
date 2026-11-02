@@ -1,5 +1,5 @@
-import { Alert } from '@heroui/react'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { Alert, Form } from '@heroui/react'
+import { useEffect, useMemo, useState, type ComponentProps, type FormEvent, type ReactNode } from 'react'
 
 import { FormPendingContext } from '#/components/submit-button'
 
@@ -11,6 +11,7 @@ interface ProgressiveFormProps {
   className?: string
   enhancementErrorMessage: string
   noValidate?: boolean
+  validationErrors?: ComponentProps<typeof Form>['validationErrors']
 }
 
 export function ProgressiveForm({
@@ -19,12 +20,36 @@ export function ProgressiveForm({
   className,
   enhancementErrorMessage,
   noValidate = false,
+  validationErrors,
 }: ProgressiveFormProps) {
   // `undefined` = idle, otherwise the `value` of the clicked submitter
   // (null when the submitter carries no value attribute).
   const [pendingSubmitter, setPendingSubmitter] = useState<string | null>()
   const [enhancementError, setEnhancementError] = useState<string>()
   const [enhanced, setEnhanced] = useState(false)
+  const [editedValidation, setEditedValidation] = useState(() => ({
+    source: validationErrors,
+    fields: new Set<string>(),
+  }))
+  const currentValidationErrors = useMemo(() => {
+    if (!validationErrors || editedValidation.source !== validationErrors) return validationErrors
+    return Object.fromEntries(Object.entries(validationErrors).filter(
+      ([name]) => !editedValidation.fields.has(name),
+    ))
+  }, [editedValidation, validationErrors])
+
+  function clearEditedFieldError(event: FormEvent<HTMLFormElement>) {
+    const name = (event.target as { name?: string }).name
+    if (!name || !validationErrors || !(name in validationErrors)) return
+    // Let the field update its value before removing its previous server error.
+    setEditedValidation((current) => ({
+      source: validationErrors,
+      fields: new Set([
+        ...(current.source === validationErrors ? current.fields : []),
+        name,
+      ]),
+    }))
+  }
 
   // The server-rendered fields can be visible before React has attached their
   // handlers. Expose completion so browser clients can safely fill the form.
@@ -59,13 +84,15 @@ export function ProgressiveForm({
   const isPending = pendingSubmitter !== undefined
 
   return (
-    <form
+    <Form
       action={action}
       method="post"
       className={className}
       aria-busy={isPending}
       data-enhanced={enhanced ? 'true' : 'false'}
-      noValidate={noValidate}
+      validationBehavior={noValidate ? 'aria' : 'native'}
+      validationErrors={currentValidationErrors}
+      render={(props) => <form {...props} onChange={clearEditedFieldError} />}
       onSubmit={enhance}
     >
       <FormPendingContext
@@ -84,6 +111,6 @@ export function ProgressiveForm({
           </Alert.Content>
         </Alert>
       ) : null}
-    </form>
+    </Form>
   )
 }

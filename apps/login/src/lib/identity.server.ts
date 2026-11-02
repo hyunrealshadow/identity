@@ -39,6 +39,29 @@ export class IdentityApiError extends Error {
   }
 }
 
+/**
+ * An error whose message was produced by the application for presentation and
+ * is already localized. Technical errors must not be wrapped in this type.
+ */
+export class LocalizedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'LocalizedError'
+  }
+}
+
+/**
+ * A transport failure while calling Identity. The original error stays on the
+ * `cause` chain for server-side diagnostics; its message is never shown to the
+ * browser.
+ */
+export class UpstreamTransportError extends Error {
+  constructor(cause: unknown) {
+    super('Identity upstream request failed', { cause })
+    this.name = 'UpstreamTransportError'
+  }
+}
+
 export function isTerminalLoginError(error: unknown) {
   return (
     error instanceof IdentityApiError &&
@@ -177,6 +200,14 @@ function responseFieldErrors(
   )
 }
 
+async function upstreamFetch(input: URL, init: RequestInit) {
+  try {
+    return await fetchWithSpan(input, init)
+  } catch (error) {
+    throw new UpstreamTransportError(error)
+  }
+}
+
 export async function identityJson<T>(
   path: string,
   init?: {
@@ -190,7 +221,7 @@ export async function identityJson<T>(
   if (init?.body) headers.set('content-type', 'application/json')
   if (init?.csrfToken) headers.set(CSRF_HEADER_NAME, init.csrfToken)
 
-  const response = await fetchWithSpan(
+  const response = await upstreamFetch(
     new URL(path, backchannelIdentityApiUrl()),
     {
       method: init?.method ?? 'GET',
@@ -238,12 +269,14 @@ export async function identityInternalJson<T>(
   init?: {
     method?: 'GET' | 'POST'
     body?: Record<string, unknown>
+    locale?: Locale
   },
 ) {
   const headers = new Headers({ accept: 'application/json' })
+  if (init?.locale) headers.set('accept-language', init.locale)
   headers.set('authorization', `Bearer ${await internalApiToken()}`)
   if (init?.body) headers.set('content-type', 'application/json')
-  const response = await fetchWithSpan(
+  const response = await upstreamFetch(
     new URL(path, internalApiBaseUrl()),
     {
       method: init?.method ?? 'GET',
@@ -271,7 +304,7 @@ export async function identityInternalJson<T>(
 }
 
 export async function identityResponse(path: string) {
-  const response = await fetchWithSpan(
+  const response = await upstreamFetch(
     new URL(path, backchannelIdentityApiUrl()),
     {
       headers: requestHeaders(),
@@ -296,8 +329,19 @@ export async function identityResponse(path: string) {
   })
 }
 
+/**
+ * Convert an error into a message that is safe to render.
+ *
+ * Only typed business failures returned by Identity (they carry a stable code)
+ * and explicit localized presentation errors keep their message. Transport,
+ * DNS, TLS, timeout and other technical failures collapse to the localized
+ * temporary-failure message; their details stay on the server-side error/cause
+ * chain and in the existing request spans.
+ */
 export function errorMessage(error: unknown, locale: Locale = 'en-US') {
-  if (error instanceof IdentityApiError) return error.message
-  if (error instanceof Error) return error.message
+  if (error instanceof IdentityApiError && error.code !== undefined) {
+    return error.message
+  }
+  if (error instanceof LocalizedError) return error.message
   return translate(locale, 'temporaryError')
 }
