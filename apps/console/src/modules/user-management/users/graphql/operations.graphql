@@ -1,0 +1,150 @@
+query ConsoleUsers(
+  $filter: UserFilter
+  $orderBy: UserOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  users(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        username
+        email
+        emailVerified
+        enabled
+        locked
+        lockedUntil
+        failedAttempts
+        version
+        createdAt
+        updatedAt
+      }
+    }
+  }
+}
+
+query ConsoleUser($id: ID!) {
+  user(id: $id) {
+    id
+    username
+    email
+    emailVerified
+    enabled
+    locked
+    lockedUntil
+    failedAttempts
+    version
+    givenName
+    familyName
+    middleName
+    nickname
+    profile
+    picture
+    website
+    birthdate
+    locale
+    theme
+    createdAt
+    updatedAt
+  }
+}
+
+mutation ConsoleCreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    userId
+    version
+  }
+}
+
+mutation ConsoleUpdateUser($input: UpdateUserInput!) {
+  updateUser(input: $input) {
+    userId
+    version
+  }
+}
+
+mutation ConsoleEnableUser($input: UserStateInput!) {
+  enableUser(input: $input) {
+    userId
+    version
+  }
+}
+
+mutation ConsoleDisableUser($input: UserStateInput!) {
+  disableUser(input: $input) {
+    userId
+    version
+  }
+}
+
+mutation ConsoleUnlockUser($input: UnlockUserInput!) {
+  unlockUser(input: $input) {
+    userId
+    version
+  }
+}
+
+query ConsoleUserGroups(
+  $userId: ID!
+  $filter: GroupFilter
+  $orderBy: GroupOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  user(id: $userId) {
+    id
+    groups(
+      filter: $filter
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          id
+          builtIn
+          name
+          description
+          names {
+            locale
+            value
+          }
+          descriptions {
+            locale
+            value
+          }
+          enabled
+          version
+        }
+      }
+    }
+  }
+}
