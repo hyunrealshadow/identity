@@ -7,13 +7,16 @@
 
 use std::sync::Arc;
 
-use identity_domain::user::{
-    User, UserOid,
-    normalization::{
-        EmailNormalizationError, UsernameValidationError, normalize_email,
-        validate_username as normalization_validate_username,
+use identity_domain::{
+    time_zone::TimeZone,
+    user::{
+        User, UserOid,
+        normalization::{
+            EmailNormalizationError, UsernameValidationError, normalize_email,
+            validate_username as normalization_validate_username,
+        },
+        repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
     },
-    repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
 use uuid::Uuid;
 
@@ -80,8 +83,9 @@ impl AccountService {
     pub async fn update_profile(
         &self,
         user_oid: UserOid,
-        patch: UserProfilePatch,
+        mut patch: UserProfilePatch,
     ) -> Result<User, AppError> {
+        patch.zone_info = normalize_zone_info(patch.zone_info)?;
         let user = self
             .user_repo
             .update_profile(user_oid, patch)
@@ -166,6 +170,29 @@ fn validate_email(email: &str) -> Result<UserIdentifierUpdate, AppError> {
     }
 }
 
+/// Omitted stays omitted, null clears, empty/whitespace clears, and a valid
+/// IANA identifier is stored under its canonical name.
+fn normalize_zone_info(
+    zone_info: Option<Option<String>>,
+) -> Result<Option<Option<String>>, AppError> {
+    let Some(value) = zone_info else {
+        return Ok(None);
+    };
+    let Some(raw) = value else {
+        return Ok(Some(None));
+    };
+    TimeZone::profile_patch_value(&raw)
+        .map(Some)
+        .map_err(|_| invalid_time_zone())
+}
+
+fn invalid_time_zone() -> AppError {
+    AppError::from_code(AccountErrorCode::ValidationFailed).with_field_error(
+        "zoneInfo",
+        AppError::from_code(CommonErrorCode::InvalidTimeZone),
+    )
+}
+
 fn map_identifier_error(error: UserRepositoryError) -> AppError {
     match error {
         UserRepositoryError::UsernameExists => {
@@ -182,7 +209,7 @@ fn map_identifier_error(error: UserRepositoryError) -> AppError {
 mod tests {
     use identity_domain::user::repository::UserIdentifierUpdate;
 
-    use super::{validate_email, validate_username};
+    use super::{normalize_zone_info, validate_email, validate_username};
 
     #[test]
     fn username_validation_reports_missing_and_invalid_values() {
@@ -214,5 +241,35 @@ mod tests {
             }
         );
         assert_eq!(validate_email("").unwrap_err().code(), 15000);
+    }
+
+    #[test]
+    fn zone_info_patch_preserves_omission_clears_empty_and_canonicalizes_valid_input() {
+        assert_eq!(normalize_zone_info(None).unwrap(), None);
+        assert_eq!(normalize_zone_info(Some(None)).unwrap(), Some(None));
+        assert_eq!(
+            normalize_zone_info(Some(Some(String::new()))).unwrap(),
+            Some(None)
+        );
+        assert_eq!(
+            normalize_zone_info(Some(Some("   ".to_owned()))).unwrap(),
+            Some(None)
+        );
+        // Omitted and explicit-null cases are asserted above; empty strings
+        // must become an explicit clear rather than a stored empty value.
+        assert_eq!(
+            normalize_zone_info(Some(Some("europe/paris".to_owned()))).unwrap(),
+            Some(Some("Europe/Paris".to_owned()))
+        );
+    }
+
+    #[test]
+    fn invalid_zone_info_is_a_localized_zone_info_field_error() {
+        let error = normalize_zone_info(Some(Some("+02:00".to_owned()))).unwrap_err();
+
+        assert_eq!(error.code(), 15000);
+        let field = &error.validation().unwrap().fields()[0];
+        assert_eq!(field.field(), "zoneInfo");
+        assert_eq!(field.code(), 10010);
     }
 }

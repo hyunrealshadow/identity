@@ -4,8 +4,11 @@
 //! structure remains encoded by the ordered migration crate.
 
 pub mod authentication_challenge;
+pub mod group_membership;
+pub mod group_role_binding;
 pub mod prelude;
 pub mod resource;
+pub mod user_group;
 
 pub mod client;
 pub mod client_authorization;
@@ -17,9 +20,12 @@ pub mod client_scope;
 pub mod key;
 pub mod key_jwk;
 pub mod login;
+pub mod role;
+pub mod role_permission;
 pub mod scope;
 pub mod session;
 pub mod setting;
 pub mod user;
 pub mod user_client_consent;
 pub mod user_credential;
+pub mod user_role_binding;

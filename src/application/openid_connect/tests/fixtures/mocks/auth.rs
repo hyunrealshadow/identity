@@ -62,12 +62,14 @@ mock! {
             &self,
             user_oid: Uuid,
             client_oid: ClientOid,
+            resources: &[String],
         ) -> Result<Vec<String>, ClientAuthorizationRepositoryError>;
         async fn has_user_consent(
             &self,
             user_oid: Uuid,
             client_oid: ClientOid,
             requested_scope: &ScopeSet,
+            resources: &[String],
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn mark_authorization_request_completed(
             &self,
@@ -141,7 +143,7 @@ pub fn mock_client_auth_repo() -> MockClientAuthorizationRepository {
     mock.expect_record_authorization_request_consent()
         .returning(|_oid, _consent_state, _decided_at| Ok(false));
     mock.expect_has_user_consent()
-        .returning(|_user_oid, _client_oid, _requested_scope| Ok(false));
+        .returning(|_user_oid, _client_oid, _requested_scope, _resources| Ok(false));
     mock.expect_mark_authorization_request_completed()
         .returning(|_oid, _completed_at| Ok(false));
 

@@ -63,7 +63,7 @@ pub(in crate::controllers::oauth2) async fn device_login_consent_api(
     let previously_granted = ctx
         .services()
         .oidc_authorize()
-        .user_consented_scope_names(actor.user_oid, login.client_oid)
+        .user_consented_scope_names(actor.user_oid, login.client_oid, &description.resources)
         .await?;
     Ok(json_response(
         StatusCode::OK,
@@ -80,7 +80,7 @@ pub(in crate::controllers::oauth2) async fn device_login_consent_api(
                 &previously_granted,
                 &ctx.services()
                     .oidc_authorize()
-                    .scope_descriptions(&scope)
+                    .scope_descriptions(&scope, &description.resources)
                     .await?,
             ),
             csrf_token: csrf_token(depot),

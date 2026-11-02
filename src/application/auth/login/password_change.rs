@@ -35,12 +35,13 @@ impl LoginService {
             &[&user.name, &user.email],
             "newPassword",
         )?;
-        if self.breach_checker.is_breached(new_password).await? {
-            return Err(super::super::password_policy::password_error(
-                AuthErrorCode::PasswordBreached,
-                "newPassword",
-            ));
-        }
+        super::super::password_policy::validate_breached_password(
+            self.breach_checker.as_ref(),
+            &self.settings.snapshot(),
+            new_password,
+            "newPassword",
+        )
+        .await?;
         let credential = self
             .credential_repo
             .find_by_user_oid_and_type(user_oid, CredentialType::Password)

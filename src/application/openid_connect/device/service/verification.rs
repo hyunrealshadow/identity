@@ -45,6 +45,7 @@ pub struct DeviceVerificationDescription {
     pub client_uri: Option<String>,
     pub logo_uri: Option<String>,
     pub scopes: Vec<String>,
+    pub resources: Vec<String>,
     /// `false` for trusted (skip_consent) clients, which are approved as soon
     /// as the user is identified; every other client needs an explicit
     /// decision for this request, even when the user consented before.
@@ -151,6 +152,26 @@ impl DeviceAuthorizationService {
         if !data.is_pending() {
             return Err(AppError::from_code(
                 DeviceAuthorizationErrorCode::RequestAlreadyDecided,
+            ));
+        }
+        if ScopeSet::parse(&data.scope).is_ok_and(|scope| scope.has_management_scopes()) {
+            // Legacy stored requests must not be approved into a device token.
+            return Err(
+                AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid).with_param(
+                    "reason",
+                    "management scopes are not allowed for device authorization",
+                ),
+            );
+        }
+        if self
+            .provider_service
+            .has_rbac_resource(&data.resources)
+            .await?
+        {
+            // No historical request may be approved into an RBAC business
+            // token; exchange would reject it, but approval must fail too.
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::ScopeInvalid,
             ));
         }
 
@@ -280,6 +301,7 @@ pub(super) fn description(
         client_uri: client.metadata().client_uri.as_ref().map(Url::to_string),
         logo_uri: client.metadata().logo_uri.as_ref().map(Url::to_string),
         scopes,
+        resources: data.resources.clone(),
         consent_required: !client.metadata().settings.skip_consent,
     }
 }

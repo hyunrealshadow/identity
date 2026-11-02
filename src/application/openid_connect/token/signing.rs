@@ -1,6 +1,10 @@
 use std::time::{Duration, SystemTime};
 
 use identity_domain::{
+    client_authorization::{
+        AccessTokenPrincipal, BusinessAuthorizationSnapshotData,
+        ManagementAuthorizationSnapshotData,
+    },
     key::{JwaSigningAlgorithm, JwsAlgorithm},
     openid_connect::{ClaimsRequest, OpenIdConnectClient, ScopeSet},
     user::User,
@@ -26,7 +30,9 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub issuer: &'a Url,
     pub audience: &'a str,
     pub client_id: &'a str,
-    pub user_oid: &'a Uuid,
+    /// JWT `sub`: user OID for a human token, client OID for a machine token.
+    pub subject: &'a str,
+    pub principal: AccessTokenPrincipal,
     pub client: &'a OpenIdConnectClient,
     pub user: Option<&'a User>,
     /// `None` for device issued tokens: they have no browser session, so no
@@ -37,6 +43,8 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub auth_time: Option<i64>,
     pub acr: Option<&'a str>,
     pub amr: &'a [String],
+    pub management: Option<&'a ManagementAuthorizationSnapshotData>,
+    pub business: Option<&'a BusinessAuthorizationSnapshotData>,
 }
 
 pub(super) struct SignIdTokenInput<'a> {
@@ -77,10 +85,24 @@ impl TokenService {
         header.set_token_type(JwtTokenType::ACCESS_TOKEN);
         header.set_key_id(input.key_id);
 
+        if input.principal == AccessTokenPrincipal::Client
+            && (input.user.is_some()
+                || input.protected_session_id.is_some()
+                || input.auth_time.is_some()
+                || input.acr.is_some()
+                || !input.amr.is_empty())
+        {
+            return Err(AppError::from_code(
+                TokenErrorCode::ClientCredentialsScopeNotAllowed,
+            ));
+        }
+        if input.management.is_some() && input.business.is_some() {
+            return Err(AppError::from_code(TokenErrorCode::SignAccessTokenFailed));
+        }
         let mut payload = JwtPayload::new();
         let now = SystemTime::now();
         payload.set_issuer(input.issuer.as_str());
-        payload.set_subject(input.user_oid.to_string());
+        payload.set_subject(input.subject);
         payload.set_audience(if input.resources.is_empty() {
             vec![input.audience]
         } else {
@@ -103,6 +125,60 @@ impl TokenService {
         payload
             .set_claim(JwtClaimNames::TOKEN_USE, Some(json!(TokenUse::AccessToken)))
             .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+        payload
+            .set_claim(
+                JwtClaimNames::PRINCIPAL_KIND,
+                Some(json!(input.principal.as_str())),
+            )
+            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+        if let Some(management) = input.management {
+            payload
+                .set_claim(
+                    JwtClaimNames::MANAGEMENT_GRANT_KIND,
+                    Some(json!(management.grant_kind)),
+                )
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(
+                    JwtClaimNames::MANAGEMENT_GRANT_OID,
+                    Some(json!(management.grant_oid)),
+                )
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(
+                    JwtClaimNames::MANAGEMENT_GRANT_VERSION,
+                    Some(json!(management.grant_version)),
+                )
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(
+                    JwtClaimNames::MANAGEMENT_POLICY_VERSION,
+                    Some(json!(management.policy_version)),
+                )
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(
+                    JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
+                    Some(json!(management.client_policy_version)),
+                )
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(JwtClaimNames::MANAGEMENT_ROLE, Some(json!(management.role)))
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(
+                    JwtClaimNames::MANAGEMENT_PERMISSIONS,
+                    Some(json!(management.permissions)),
+                )
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+        }
+        if let Some(business) = input.business {
+            let claim = crate::openid_connect::rbac::signed_business_claim(business)
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::SignAccessTokenFailed))?;
+            payload
+                .set_claim(crate::openid_connect::rbac::RBAC_CLAIM, Some(claim))
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+        }
         if let Some(auth_time) = input.auth_time {
             payload
                 .set_claim(JwtClaimNames::AUTH_TIME, Some(json!(auth_time)))
@@ -113,9 +189,11 @@ impl TokenService {
                 .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
-        payload
-            .set_claim(JwtClaimNames::AMR, Some(json!(input.amr)))
-            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+        if input.principal == AccessTokenPrincipal::User {
+            payload
+                .set_claim(JwtClaimNames::AMR, Some(json!(input.amr)))
+                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+        }
         if let Some(claims_value) = input.claims {
             payload
                 .set_claim(

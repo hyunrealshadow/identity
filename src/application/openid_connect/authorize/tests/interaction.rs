@@ -34,6 +34,7 @@ fn request() -> AuthorizationRequestData {
         acr_values: None,
         claims: None,
         ui_locales: None,
+        management: None,
     }
 }
 
@@ -164,7 +165,7 @@ fn continue_action_redirects_to_consent_when_pending_and_required() {
 }
 
 #[test]
-fn prompt_consent_forces_confirmation_even_when_consent_was_persisted() {
+fn prompt_consent_overrides_skip_consent_policy() {
     let selected_session = active_session();
     let mut stored = stored(ConsentState::Pending);
     stored.request.prompt = Some([PromptValue::Consent].into_iter().collect());
@@ -177,6 +178,16 @@ fn prompt_consent_forces_confirmation_even_when_consent_was_persisted() {
     );
 
     assert_eq!(action, ContinueAction::Consent);
+    stored.request.prompt = None;
+    assert!(matches!(
+        determine_continue_action(
+            &stored,
+            &login(LoginStatus::AUTHENTICATED),
+            Some(&selected_session),
+            true,
+        ),
+        ContinueAction::Approve { .. }
+    ));
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::{
 
 use identity_application::{
     install::{InstallInput, InstallService},
-    setting::InstallationSettings,
+    setting::{ConsoleDomainSetting, DomainSetting, InstallationSettings, SettingsSource},
 };
 use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
 use identity_infrastructure::{
@@ -28,6 +28,7 @@ use identity_infrastructure::{
 use sea_orm::DatabaseConnection;
 use tera::Tera;
 use tracing::info;
+use url::Url;
 
 use super::{AppResult, install_guard::ensure_install_startup_guard};
 
@@ -87,6 +88,11 @@ impl AppBuilder {
     /// `AppError` -> HTTP response conversion.
     pub fn init_i18n_and_templates(mut self) -> AppResult<Self> {
         let i18n = web::tera::build_i18n()?;
+        if self.config.console.enabled && i18n.loader().is_none() {
+            return Err(
+                Error::other("console management requires both backend error locales").into(),
+            );
+        }
         init_error_i18n(i18n.clone());
         let tera = web::tera::build_tera(i18n.loader())?;
         self.i18n = Some(i18n);
@@ -100,6 +106,16 @@ impl AppBuilder {
         let db = self.db.as_ref().expect("database must be connected first");
 
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
+        let installed = settings
+            .store()
+            .snapshot()
+            .section::<InstallationSettings>()
+            .initialized;
+        if installed
+            && let Some(config) = installed_console_seed_config(settings.as_ref(), &self.config)?
+        {
+            seed::console::ensure_console_client(db, &config).await?;
+        }
         ensure_install_startup_guard(db, settings.as_ref()).await?;
 
         let refresh_interval =
@@ -144,7 +160,11 @@ impl AppBuilder {
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         let key_algorithm = cfg.key_algorithm.to_string();
-        let svc = build_install_service(&settings, db.clone())?;
+        let mut svc = build_install_service(&settings, db.clone())?;
+        svc.repository = Arc::new(
+            InstallRepositoryImpl::new(db.clone())
+                .with_console_client_config(console_seed_config(&self.config)?),
+        );
 
         let domain = install_domain(cfg, &self.config);
 
@@ -162,6 +182,13 @@ impl AppBuilder {
                 .application_url
                 .clone()
                 .unwrap_or_else(|| "https://localhost:3000".to_owned()),
+            console_url: self
+                .config
+                .console
+                .validated_origin()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "https://localhost:3100".to_owned()),
             key_algorithm,
         })
         .await?;
@@ -182,11 +209,14 @@ impl AppBuilder {
             build_login_workload_authenticator(&self.config.internal.workloads.login)
                 .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
 
-        self.services = Some(Arc::new(AppServices::from_db_with_workload_auth(
-            db,
-            settings.as_ref(),
-            workload_authenticator,
-        )?));
+        self.services = Some(Arc::new(
+            AppServices::from_db_with_workload_auth(
+                db.clone(),
+                settings.as_ref(),
+                workload_authenticator,
+            )?
+            .with_console_installation(db, console_seed_config(&self.config)?),
+        ));
         Ok(self)
     }
 
@@ -216,6 +246,61 @@ async fn is_installed(db: &DatabaseConnection) -> AppResult<bool> {
     Ok(read_section::<InstallationSettings, _>(db)
         .await?
         .initialized)
+}
+
+/// When the installation recorded its own console origin, that value is the
+/// only source of the Console client configuration. Process configuration is
+/// used solely for an older installed database that has no `app.console_domain`
+/// yet.
+fn installed_console_seed_config(
+    settings: &AppRuntimeSettings,
+    config: &AppConfig,
+) -> AppResult<Option<seed::console::ConsoleClientSeedConfig>> {
+    let snapshot = settings.store().snapshot();
+    let Some(origin) = snapshot.get::<ConsoleDomainSetting>() else {
+        return console_seed_config(config);
+    };
+    let origin = Url::parse(&origin)
+        .map_err(|error| Error::other(error.to_string()))?
+        .origin()
+        .ascii_serialization();
+    let domain = snapshot
+        .get::<DomainSetting>()
+        .ok_or_else(|| Error::other("console requires the installed issuer domain"))?;
+    let issuer = issuer_from_domain(&domain)?;
+    Ok(Some(seed::console::ConsoleClientSeedConfig::new(
+        &origin,
+        issuer.as_str(),
+        &format!("{origin}/callback"),
+    )?))
+}
+
+fn issuer_from_domain(domain: &str) -> AppResult<Url> {
+    let candidate = if domain.contains("://") {
+        domain.to_owned()
+    } else {
+        format!("https://{domain}")
+    };
+    let url = Url::parse(&candidate).map_err(|error| Error::other(error.to_string()))?;
+    Ok(url)
+}
+
+fn console_seed_config(
+    config: &AppConfig,
+) -> AppResult<Option<seed::console::ConsoleClientSeedConfig>> {
+    let Some(origin) = config.console.validated_origin().map_err(Error::other)? else {
+        return Ok(None);
+    };
+    let issuer = config
+        .server
+        .host
+        .as_deref()
+        .ok_or_else(|| Error::other("console requires the configured issuer"))?;
+    Ok(Some(seed::console::ConsoleClientSeedConfig::new(
+        &origin,
+        issuer,
+        &format!("{origin}/callback"),
+    )?))
 }
 
 fn build_install_service(

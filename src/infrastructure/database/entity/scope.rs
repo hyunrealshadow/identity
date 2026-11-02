@@ -16,16 +16,21 @@ pub struct Model {
     #[sea_orm(unique)]
     #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
     pub oid: Uuid,
-    #[sea_orm(unique_key = "idx_scope_protocol_name")]
-    pub protocol: String,
-    #[sea_orm(unique_key = "idx_scope_protocol_name")]
+    /// Owning API resource. Protocol/identity scopes have no resource.
+    pub resource_id: Option<Uuid>,
+    pub code: String,
     pub name: String,
-    pub display_name: String,
+    #[sea_orm(default_expr = "Expr::cust(\"'{}'::jsonb\")")]
+    pub names: Json,
     pub description: String,
     #[sea_orm(default_expr = "Expr::cust(\"'{}'::jsonb\")")]
     pub descriptions: Json,
     #[sea_orm(default_value = false)]
     pub built_in: bool,
+    #[sea_orm(default_value = true)]
+    pub enabled: bool,
+    #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
+    pub version: Uuid,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

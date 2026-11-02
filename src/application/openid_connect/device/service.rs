@@ -155,18 +155,29 @@ impl DeviceAuthorizationService {
         );
 
         self.check_client_grant(&client)?;
-        self.provider_service
-            .validate_scope_names(params.scope.as_deref().unwrap_or("openid"))
-            .await
-            .map_err(|error| {
-                if error.code() == CommonErrorCode::InvalidScope.code() {
-                    AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid)
-                        .with_source(error)
-                } else {
-                    error
-                }
-            })?;
-        let scope = self.resolve_scope(&client, params.scope.as_deref())?;
+        let scope = self
+            .resolve_scope(&client, params.scope.as_deref(), &params.resources)
+            .await?;
+        let unassigned = scope
+            .names()
+            .into_iter()
+            .filter(|code| !client.has_assigned_scope(code))
+            .collect::<Vec<_>>();
+        if !unassigned.is_empty() {
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::ScopeNotAssignedToClient,
+            )
+            .with_param("scopes", unassigned.join(", ")));
+        }
+        if scope.has_management_scopes() {
+            // Device authorization is never a management issuance path.
+            return Err(
+                AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid).with_param(
+                    "reason",
+                    "management scopes are not allowed for device authorization",
+                ),
+            );
+        }
         let resources = if params.resources.is_empty() {
             let selection = self
                 .provider_service
@@ -182,6 +193,17 @@ impl DeviceAuthorizationService {
                 .validate_authorization_resources(&params.resources, &scope)
                 .await?
         };
+        self.provider_service
+            .validate_client_resource_ceiling(&client, &resources, &scope)
+            .await?;
+        if self.provider_service.has_rbac_resource(&resources).await? {
+            // Business RBAC is not enabled for device authorization in this
+            // release. Reject instead of recording a request that could later
+            // escalate through the legacy scope path.
+            return Err(AppError::from_code(
+                DeviceAuthorizationErrorCode::ScopeInvalid,
+            ));
+        }
         let issuer = self.provider_service.issuer()?;
 
         let device_code = generate_device_code();
@@ -253,28 +275,24 @@ impl DeviceAuthorizationService {
         Ok(())
     }
 
-    fn resolve_scope(
+    async fn resolve_scope(
         &self,
-        client: &OpenIdConnectClient,
+        _client: &OpenIdConnectClient,
         requested: Option<&str>,
+        resources: &[String],
     ) -> Result<ScopeSet, AppError> {
         let requested = requested.unwrap_or("openid");
-        let scope = ScopeSet::parse(requested).map_err(AppError::map_source(
-            DeviceAuthorizationErrorCode::ScopeInvalid,
-        ))?;
-
-        if scope
-            .names()
-            .iter()
-            .any(|name| !client.has_assigned_scope(name))
-        {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::ScopeNotAssignedToClient,
-            )
-            .with_param("scope", scope.to_scope_string()));
-        }
-
-        Ok(scope)
+        self.provider_service
+            .resolve_scope_for_resources(resources, requested)
+            .await
+            .map_err(|error| {
+                if error.code() == CommonErrorCode::InvalidScope.code() {
+                    AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid)
+                        .with_source(error)
+                } else {
+                    error
+                }
+            })
     }
 
     async fn create_request(

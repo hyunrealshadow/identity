@@ -1,15 +1,26 @@
 use chrono::Utc;
+use identity_domain::{
+    client_authorization::{
+        AccessTokenPrincipal, ClientAuthorizationData, ClientAuthorizationType,
+    },
+    openid_connect::{ScopeSet, resource::valid_resource_uri},
+    user::UserOid,
+};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{TokenIntrospectionParams, TokenService, resolve_client_id};
 use crate::{
-    domain::{
-        auth::SessionStatus,
-        client_authorization::{ClientAuthorizationData, ClientAuthorizationType},
-    },
+    domain::auth::SessionStatus,
     error::{AppError, codes::token::TokenErrorCode},
-    openid_connect::jwt_checks::validate_required_exp_and_optional_window,
+    openid_connect::{
+        jwt_checks::validate_required_exp_and_optional_window,
+        management::{
+            ManagementLivePorts, has_management_claims, validate_management_authorization,
+            validate_signed_management_snapshot,
+        },
+        rbac as shared,
+    },
 };
 
 impl TokenService {
@@ -88,19 +99,53 @@ impl TokenService {
         {
             return Ok(json!({"active": false}));
         }
-        let (scope, subject, session, device) = match &record.data {
-            ClientAuthorizationData::AccessToken(data) if access => (
-                &data.scope,
-                &data.user_oid,
-                data.session_oid,
-                data.device_authorization_oid.as_deref(),
-            ),
-            ClientAuthorizationData::RefreshToken(data) if !access => (
-                &data.scope,
-                &data.user_oid,
-                data.session_oid,
-                data.device_authorization_oid.as_deref(),
-            ),
+        let (scope, subject, session, device, issuance, principal, user_oid) = match &record.data {
+            ClientAuthorizationData::AccessToken(data) if access => {
+                let (subject, user_oid) = match data.principal {
+                    AccessTokenPrincipal::User => {
+                        let Some(user_oid) = &data.user_oid else {
+                            return Ok(json!({"active": false}));
+                        };
+                        let Some(parsed) = Uuid::parse_str(user_oid).ok() else {
+                            return Ok(json!({"active": false}));
+                        };
+                        (user_oid.clone(), Some(parsed))
+                    }
+                    AccessTokenPrincipal::Client => {
+                        // Machine tokens never expose a user subject or session.
+                        if data.user_oid.is_some()
+                            || data.session_oid.is_some()
+                            || data.protected_session_id.is_some()
+                        {
+                            return Ok(json!({"active": false}));
+                        }
+                        (record.client_oid.to_string(), None)
+                    }
+                };
+                (
+                    &data.scope,
+                    subject,
+                    data.session_oid,
+                    data.device_authorization_oid.as_deref(),
+                    data.management.as_ref(),
+                    data.principal,
+                    user_oid,
+                )
+            }
+            ClientAuthorizationData::RefreshToken(data) if !access => {
+                let Some(user_oid) = Uuid::parse_str(&data.user_oid).ok() else {
+                    return Ok(json!({"active": false}));
+                };
+                (
+                    &data.scope,
+                    data.user_oid.clone(),
+                    data.session_oid,
+                    data.device_authorization_oid.as_deref(),
+                    data.management.as_ref(),
+                    AccessTokenPrincipal::User,
+                    Some(user_oid),
+                )
+            }
             _ => return Ok(json!({"active": false})),
         };
         if let Some(device) = device {
@@ -130,11 +175,144 @@ impl TokenService {
                     session.revoked_at.is_none()
                         && session.status == SessionStatus::ACTIVE
                         && session.expires_at.is_none_or(|expiry| expiry > now)
-                        && session.user_oid.to_string() == *subject
+                        && session.user_oid.to_string() == subject
                 });
             if !active {
                 return Ok(json!({"active": false}));
             }
+        }
+        if let Some(user_oid) = user_oid {
+            let user = self
+                .user_repo
+                .find_by_oid(UserOid(user_oid))
+                .await
+                .map_err(AppError::map_source(
+                    TokenErrorCode::RefreshTokenLookupFailed,
+                ))?;
+            if !user.is_some_and(|user| user.enabled && !user.locked) {
+                return Ok(json!({"active": false}));
+            }
+        }
+        if principal == AccessTokenPrincipal::User && session.is_none() && device.is_none() {
+            return Ok(json!({"active": false}));
+        }
+
+        let scope_set = match ScopeSet::parse(scope) {
+            Ok(scope_set) => scope_set,
+            Err(_) => return Ok(json!({"active": false})),
+        };
+        let persisted_management = shared::management_snapshot(issuance);
+        let persisted_business = shared::business_snapshot(issuance);
+        if principal == AccessTokenPrincipal::Client
+            && scope_set.has_management_scopes()
+            && persisted_business.is_none()
+        {
+            return Ok(json!({"active": false}));
+        }
+        let management_requested = persisted_management.is_some()
+            || (principal == AccessTokenPrincipal::User && scope_set.has_management_scopes());
+        if management_requested {
+            let Some(persisted) = persisted_management else {
+                return Ok(json!({"active": false}));
+            };
+            if let Some(payload) = jwt_payload.as_ref()
+                && validate_signed_management_snapshot(persisted, payload).is_err()
+            {
+                return Ok(json!({"active": false}));
+            }
+            let live_client = self
+                .client_repo
+                .find_by_oid(client.client().oid)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
+            let Some(live_client) = live_client else {
+                return Ok(json!({"active": false}));
+            };
+            if validate_management_authorization(
+                ManagementLivePorts {
+                    binding_repo: self.management_authority_repo.as_ref(),
+                    provider_service: &self.provider_service,
+                },
+                &live_client,
+                persisted,
+                scope,
+                &scope_set,
+                principal,
+            )
+            .await
+            .is_err()
+            {
+                return Ok(json!({"active": false}));
+            }
+        } else if jwt_payload.as_ref().is_some_and(has_management_claims) {
+            return Ok(json!({"active": false}));
+        }
+
+        let audience = if let Some(payload) = jwt_payload.as_ref() {
+            payload
+                .audience()
+                .unwrap_or_default()
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        } else {
+            match &record.data {
+                ClientAuthorizationData::RefreshToken(data) => data.resources.clone(),
+                _ => Vec::new(),
+            }
+        };
+        let resource_audience = audience
+            .iter()
+            .filter(|uri| valid_resource_uri(uri))
+            .cloned()
+            .collect::<Vec<_>>();
+        let resource_is_rbac = !resource_audience.is_empty()
+            && self
+                .provider_service
+                .has_rbac_resource(&resource_audience)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
+        if let Some(persisted) = persisted_business {
+            if let Some(payload) = jwt_payload.as_ref()
+                && shared::validate_signed_business_snapshot(persisted, payload).is_err()
+            {
+                return Ok(json!({"active": false}));
+            }
+            let live_client = self
+                .client_repo
+                .find_by_oid(client.client().oid)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
+            let Some(live_client) = live_client else {
+                return Ok(json!({"active": false}));
+            };
+            if shared::validate_business_authorization(
+                shared::BusinessLivePorts {
+                    repository: self.rbac_authorization_repo.as_ref(),
+                    provider_service: &self.provider_service,
+                },
+                &live_client,
+                persisted,
+                scope,
+                &scope_set,
+                principal,
+                user_oid.map(UserOid),
+                &audience,
+            )
+            .await
+            .is_err()
+            {
+                return Ok(json!({"active": false}));
+            }
+        } else if jwt_payload
+            .as_ref()
+            .is_some_and(shared::has_business_claims)
+        {
+            return Ok(json!({"active": false}));
+        } else if resource_is_rbac {
+            // A legacy token for a resource that now uses RBAC has no original
+            // business snapshot and must not remain active.
+            return Ok(json!({"active": false}));
         }
         let mut response = json!({
             "active": true, "scope": scope, "client_id": record.client_oid.to_string(),

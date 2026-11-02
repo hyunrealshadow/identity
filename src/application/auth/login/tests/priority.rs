@@ -1,6 +1,50 @@
 use super::*;
 
 #[test]
+fn bound_mfa_challenge_excludes_password_and_keeps_enrolled_second_factors() {
+    use crate::auth::login::{challenge_credential_types, preferred_credential_type};
+    use identity_domain::user::MfaMethod;
+    let mut login = test_login(Uuid::new_v4(), 0);
+    login.status = LoginStatus::MFA_REQUIRED;
+    login.session_oid = Some(SessionOid(Uuid::new_v4()));
+    let credentials = [
+        CredentialType::Password,
+        CredentialType::Otp,
+        CredentialType::RecoveryCode,
+        CredentialType::Passkey,
+    ];
+    assert_eq!(
+        challenge_credential_types(&login, &credentials),
+        [
+            CredentialType::Otp,
+            CredentialType::RecoveryCode,
+            CredentialType::Passkey
+        ]
+    );
+    assert_eq!(
+        preferred_credential_type(&login, &credentials, MfaMethod::Otp),
+        Some(CredentialType::Otp)
+    );
+    assert_eq!(
+        preferred_credential_type(&login, &credentials, MfaMethod::Passkey),
+        Some(CredentialType::Passkey)
+    );
+    assert_eq!(
+        preferred_credential_type(
+            &login,
+            &[CredentialType::Password, CredentialType::RecoveryCode],
+            MfaMethod::Otp
+        ),
+        Some(CredentialType::RecoveryCode)
+    );
+    assert!(challenge_credential_types(&login, &[CredentialType::Password]).is_empty());
+    assert_eq!(
+        preferred_credential_type(&login, &[CredentialType::Password], MfaMethod::Otp),
+        None
+    );
+}
+
+#[test]
 fn mfa_priority_selects_a_complete_authentication_path() {
     use crate::auth::login::preferred_credential_type;
     use identity_domain::user::MfaMethod;
@@ -12,30 +56,26 @@ fn mfa_priority_selects_a_complete_authentication_path() {
         CredentialType::Passkey,
     ];
     assert_eq!(
-        preferred_credential_type(&login, &credentials, MfaMethod::Passkey, false),
+        preferred_credential_type(&login, &credentials, MfaMethod::Passkey),
         Some(CredentialType::Passkey)
     );
     assert_eq!(
-        preferred_credential_type(&login, &credentials, MfaMethod::Otp, false),
-        Some(CredentialType::Password)
-    );
-    // An OTP preference never lets a fresh login skip its password.
-    assert_eq!(
-        preferred_credential_type(&login, &credentials, MfaMethod::Otp, true),
+        preferred_credential_type(&login, &credentials, MfaMethod::Otp),
         Some(CredentialType::Password)
     );
     login.session_oid = Some(SessionOid(Uuid::new_v4()));
+    login.status = LoginStatus::MFA_REQUIRED;
     assert_eq!(
-        preferred_credential_type(&login, &credentials, MfaMethod::Otp, true),
+        preferred_credential_type(&login, &credentials, MfaMethod::Otp),
         Some(CredentialType::Otp)
     );
     assert_eq!(
-        preferred_credential_type(&login, &credentials, MfaMethod::Passkey, true),
+        preferred_credential_type(&login, &credentials, MfaMethod::Passkey),
         Some(CredentialType::Passkey)
     );
-    login.status = LoginStatus::MFA_REQUIRED;
+    login.session_oid = None;
     assert_eq!(
-        preferred_credential_type(&login, &credentials, MfaMethod::Passkey, false),
+        preferred_credential_type(&login, &credentials, MfaMethod::Passkey),
         Some(CredentialType::Otp)
     );
 }
@@ -51,7 +91,6 @@ fn mfa_priority_ignores_unavailable_methods_and_unidentified_logins() {
             &login,
             &[CredentialType::Password, CredentialType::Otp],
             MfaMethod::Passkey,
-            false
         ),
         Some(CredentialType::Password)
     );
@@ -60,33 +99,22 @@ fn mfa_priority_ignores_unavailable_methods_and_unidentified_logins() {
             &login,
             &[CredentialType::Password, CredentialType::Passkey],
             MfaMethod::Otp,
-            false
         ),
         Some(CredentialType::Passkey)
     );
     assert_eq!(
-        preferred_credential_type(&login, &[CredentialType::Otp], MfaMethod::Otp, false),
+        preferred_credential_type(&login, &[CredentialType::Otp], MfaMethod::Otp),
         None
     );
     login.status = LoginStatus::CREATED;
     assert_eq!(
-        preferred_credential_type(
-            &login,
-            &[CredentialType::Passkey],
-            MfaMethod::Passkey,
-            false
-        ),
+        preferred_credential_type(&login, &[CredentialType::Passkey], MfaMethod::Passkey),
         None
     );
     login.status = LoginStatus::IDENTIFIER_VERIFIED;
     login.user_oid = None;
     assert_eq!(
-        preferred_credential_type(
-            &login,
-            &[CredentialType::Passkey],
-            MfaMethod::Passkey,
-            false
-        ),
+        preferred_credential_type(&login, &[CredentialType::Passkey], MfaMethod::Passkey),
         None
     );
 }

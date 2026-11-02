@@ -10,6 +10,10 @@ use crate::openid_connect::tests::fixtures::client::{
 use super::*;
 
 pub(in crate::openid_connect) struct InMemoryClientRepository;
+/// A client whose exact persisted scope ceiling is supplied by the test.
+pub(in crate::openid_connect) struct AssignedScopesClientRepository {
+    pub(in crate::openid_connect) scopes: Vec<String>,
+}
 pub(in crate::openid_connect) struct IdTokenAlgorithmClientRepository {
     pub(in crate::openid_connect) algorithm: JwaSigningAlgorithm,
 }
@@ -44,6 +48,24 @@ impl OpenIdConnectClientRepository for InMemoryClientRepository {
                 test_metadata(None, Some("client_secret_basic")),
                 test_platforms(),
                 test_scopes(),
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+#[async_trait]
+impl OpenIdConnectClientRepository for AssignedScopesClientRepository {
+    async fn find_by_oid(
+        &self,
+        oid: ClientOid,
+    ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
+        Ok(Some(
+            OpenIdConnectClient::new(
+                test_client(oid),
+                test_metadata(None, Some("client_secret_basic")),
+                test_platforms(),
+                self.scopes.clone(),
             )
             .unwrap(),
         ))
@@ -130,7 +152,11 @@ impl OpenIdConnectClientRepository for MachineClientRepository {
                 test_client(oid),
                 metadata,
                 test_platforms(),
-                vec!["account.read".to_owned(), "session.read".to_owned()],
+                vec![
+                    "account.read".to_owned(),
+                    "session.read".to_owned(),
+                    "orders.read".to_owned(),
+                ],
             )
             .unwrap(),
         ))
@@ -153,7 +179,7 @@ impl OpenIdConnectClientRepository for MachineAlgorithmClientRepository {
                 test_client(oid),
                 metadata,
                 test_platforms(),
-                vec!["account.read".to_owned()],
+                vec!["account.read".to_owned(), "orders.read".to_owned()],
             )
             .unwrap(),
         ))

@@ -9,14 +9,14 @@ use crate::database::{
         client_authorization, client_authorization::Entity as ClientAuthorizationEntity, login,
         session,
     },
-    repository::shared::non_expiring_timestamp,
+    repository::shared::{lock_resource_rows, non_expiring_timestamp},
 };
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::SessionOid,
     client_authorization::{
-        ClientAuthorizationData, DeviceAuthorizationApproval, DeviceAuthorizationData,
-        DeviceAuthorizationRepositoryError, DevicePollOutcome, SLOW_DOWN_INCREMENT_SECONDS,
+        DeviceAuthorizationApproval, DeviceAuthorizationData, DeviceAuthorizationRepositoryError,
+        DevicePollOutcome, SLOW_DOWN_INCREMENT_SECONDS,
     },
     openid_connect::ScopeSet,
 };
@@ -110,16 +110,22 @@ pub(super) async fn claim_device_request(
         .await
         .map_err(query_failed)?;
     data.claimed_login_oid = Some(login_oid);
+    let data = super::request_data_with_markers(&request.data, &data)?;
     ClientAuthorizationEntity::update_many()
-        .col_expr(
-            client_authorization::Column::Data,
-            Expr::value(to_value(data).map_err(query_failed)?),
-        )
+        .col_expr(client_authorization::Column::Data, Expr::value(data))
         .col_expr(client_authorization::Column::UpdatedAt, Expr::value(now))
         .filter(client_authorization::Column::Id.eq(request.id))
         .exec(&transaction)
         .await
         .map_err(query_failed)?;
+    crate::database::audit::record(
+        &transaction,
+        "device_authorization.claimed",
+        "device_authorization_request",
+        request_oid,
+    )
+    .await
+    .map_err(query_failed)?;
     transaction.commit().await.map_err(query_failed)?;
     Ok(true)
 }
@@ -164,9 +170,7 @@ pub(super) async fn record_device_poll(
         DevicePollOutcome::Accepted
     };
 
-    let data = DeviceAuthorizationRepositoryImpl::write_data(
-        &ClientAuthorizationData::DeviceAuthorizationRequest(request),
-    )?;
+    let data = super::request_data_with_markers(&model.data, &request)?;
     ClientAuthorizationEntity::update_many()
         .col_expr(
             client_authorization::Column::Data,
@@ -194,6 +198,26 @@ pub(super) async fn approve_device_request(
 ) -> Result<Option<Uuid>, DeviceAuthorizationRepositoryError> {
     let approved_scope = ScopeSet::parse(&approval.approved_scope).map_err(query_failed)?;
     let transaction = db.begin().await.map_err(query_failed)?;
+    let user_oid = Uuid::parse_str(&approval.user_oid).map_err(query_failed)?;
+    crate::database::repository::authorization_lifecycle::lock_authorization_issuance(&transaction)
+        .await
+        .map_err(query_failed)?;
+    // The request row is the source of the relation's target resources. Read
+    // it only to discover those URIs, lock the resource rows first, then take
+    // the user lock and re-read the request authoritatively below.
+    if let Some(initial) = ClientAuthorizationEntity::find()
+        .filter(client_authorization::Column::Oid.eq(request_oid))
+        .filter(client_authorization::Column::Type.eq(device_request_type()))
+        .one(&transaction)
+        .await
+        .map_err(query_failed)?
+    {
+        let initial_request = parse_device_request(initial.data)?;
+        lock_resource_rows(&transaction, &initial_request.resources)
+            .await
+            .map_err(query_failed)?;
+    }
+    DeviceAuthorizationRepositoryImpl::lock_live_user(&transaction, user_oid).await?;
     let Some(model) =
         DeviceAuthorizationRepositoryImpl::lock_row(&transaction, request_oid).await?
     else {
@@ -227,12 +251,47 @@ pub(super) async fn approve_device_request(
         request_oid,
         approved_at: decided_at,
     };
+    let issued_client_fingerprint = model
+        .data
+        .get("_issuance_client_fingerprint")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| Uuid::parse_str(value).ok());
+    let (client_enabled, client_fingerprint) =
+        crate::database::repository::client_authority::lock_live_client_boundary(
+            &transaction,
+            model.client_id,
+        )
+        .await
+        .map_err(query_failed)?;
+    if !client_enabled || issued_client_fingerprint != Some(client_fingerprint.as_uuid()) {
+        return Ok(None);
+    }
+    // All inactive-user/session/device/client guards have passed. Bind the
+    // relation to the current semantic authority state, never to a record
+    // version.
+    let authority_fingerprint = crate::database::authority_snapshot::user_authority_fingerprint(
+        &transaction,
+        identity_domain::user::UserOid(user_oid),
+    )
+    .await
+    .map_err(query_failed)?;
+    let mut relation_data = to_value(&relation).map_err(query_failed)?;
+    if let Some(object) = relation_data.as_object_mut() {
+        object.insert(
+            "_issuance_client_fingerprint".into(),
+            client_fingerprint.as_uuid().to_string().into(),
+        );
+        object.insert(
+            "_issuance_authority_fingerprint".into(),
+            authority_fingerprint.as_uuid().to_string().into(),
+        );
+    }
     client_authorization::ActiveModel {
         id: Default::default(),
         oid: Set(relation_oid),
         client_id: Set(model.client_id),
         r#type: Set(device_authorization_type()),
-        data: Set(to_value(&relation).map_err(query_failed)?),
+        data: Set(relation_data),
         expires_at: Set(non_expiring_timestamp()),
         completed_at: Set(None),
         revoked_at: Set(None),
@@ -247,9 +306,7 @@ pub(super) async fn approve_device_request(
     request
         .approve(approval, decided_at)
         .map_err(transition_failed)?;
-    let data = DeviceAuthorizationRepositoryImpl::write_data(
-        &ClientAuthorizationData::DeviceAuthorizationRequest(request),
-    )?;
+    let data = super::request_data_with_markers(&model.data, &request)?;
     ClientAuthorizationEntity::update_many()
         .col_expr(
             client_authorization::Column::Data,
@@ -263,6 +320,14 @@ pub(super) async fn approve_device_request(
         .exec(&transaction)
         .await
         .map_err(query_failed)?;
+    crate::database::audit::record(
+        &transaction,
+        "device_authorization.approved",
+        "device_authorization",
+        relation_oid,
+    )
+    .await
+    .map_err(query_failed)?;
     transaction.commit().await.map_err(query_failed)?;
 
     Ok(Some(relation_oid))
@@ -294,9 +359,7 @@ pub(super) async fn deny_device_request(
         return Ok(false);
     }
 
-    let data = DeviceAuthorizationRepositoryImpl::write_data(
-        &ClientAuthorizationData::DeviceAuthorizationRequest(request),
-    )?;
+    let data = super::request_data_with_markers(&model.data, &request)?;
     ClientAuthorizationEntity::update_many()
         .col_expr(
             client_authorization::Column::Data,
@@ -310,6 +373,14 @@ pub(super) async fn deny_device_request(
         .exec(&transaction)
         .await
         .map_err(query_failed)?;
+    crate::database::audit::record(
+        &transaction,
+        "device_authorization.denied",
+        "device_authorization_request",
+        request_oid,
+    )
+    .await
+    .map_err(query_failed)?;
     transaction.commit().await.map_err(query_failed)?;
 
     Ok(true)

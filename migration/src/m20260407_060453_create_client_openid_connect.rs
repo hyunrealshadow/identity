@@ -1,3 +1,5 @@
+use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::ExprTrait;
 use sea_orm_migration::{
     async_trait,
     prelude::{
@@ -127,7 +129,7 @@ impl MigrationTrait for Migration {
                     .col(json_binary_null(ClientOpenIdConnect::RequestUris))
                     .col(
                         json_binary(ClientOpenIdConnect::Settings)
-                            .default(Expr::cust("'{}'::jsonb")),
+                            .default(Expr::val("{}").cast_as(Alias::new("jsonb"))),
                     )
                     .col(
                         timestamp_with_time_zone(ClientOpenIdConnect::CreatedAt)

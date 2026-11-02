@@ -75,39 +75,67 @@ pub(super) async fn revoke_access_tokens_for_authorization_code(
     authorization_code_oid: Uuid,
 ) -> Result<(), ClientAuthorizationRepositoryError> {
     let now = Utc::now();
-    ClientAuthorizationEntity::update_many()
+    let transaction = db.begin().await.map_err(query_error(
+        "client_authorization.revoke_access_tokens_for_authorization_code",
+    ))?;
+    let changed = ClientAuthorizationEntity::update_many()
         .col_expr(
             client_authorization::Column::RevokedAt,
-            SimpleExpr::Value(now.into()),
+            Expr::cust("COALESCE(revoked_at, CURRENT_TIMESTAMP)"),
         )
         .col_expr(
             client_authorization::Column::UpdatedAt,
             SimpleExpr::Value(now.into()),
         )
+        // A replay withdraws the code and all descendants, including consumed
+        // refresh parents that another exchange may already be processing.
+        .col_expr(
+            client_authorization::Column::Data,
+            Expr::cust("jsonb_set(data, '{_authority_withdrawn}', 'true'::jsonb, true)"),
+        )
         .filter(
             Condition::all()
+                .add(client_authorization::Column::Type.is_in([
+                    ClientAuthorizationType::AuthorizationCode.to_string(),
+                    ClientAuthorizationType::AccessToken.to_string(),
+                    ClientAuthorizationType::RefreshToken.to_string(),
+                ]))
                 .add(
-                    client_authorization::Column::Type
-                        .eq(ClientAuthorizationType::AccessToken.to_string()),
-                )
-                .add(client_authorization::Column::RevokedAt.is_null())
-                .add(
-                    json_text(
-                        (
-                            client_authorization::Entity,
-                            client_authorization::Column::Data,
+                    Condition::any()
+                        .add(client_authorization::Column::Oid.eq(authorization_code_oid))
+                        .add(
+                            json_text(
+                                (
+                                    client_authorization::Entity,
+                                    client_authorization::Column::Data,
+                                ),
+                                "authorization_code_oid",
+                            )
+                            .eq(authorization_code_oid.to_string()),
                         ),
-                        "authorization_code_oid",
-                    )
-                    .eq(authorization_code_oid.to_string()),
                 ),
         )
-        .exec(db)
+        .exec(&transaction)
         .await
         .map_err(query_error(
             "client_authorization.revoke_access_tokens_for_authorization_code",
         ))?;
 
+    if changed.rows_affected > 0 {
+        crate::database::audit::record(
+            &transaction,
+            "authorization.code_access_revoked",
+            "client_authorization",
+            authorization_code_oid,
+        )
+        .await
+        .map_err(query_error(
+            "client_authorization.revoke_access_tokens_for_authorization_code",
+        ))?;
+    }
+    transaction.commit().await.map_err(query_error(
+        "client_authorization.revoke_access_tokens_for_authorization_code",
+    ))?;
     Ok(())
 }
 
@@ -118,6 +146,10 @@ pub(super) async fn revoke_if_active(
     type_: ClientAuthorizationType,
     now: DateTime<Utc>,
 ) -> Result<bool, ClientAuthorizationRepositoryError> {
+    let transaction = db
+        .begin()
+        .await
+        .map_err(query_error("client_authorization.revoke_if_active"))?;
     let result = ClientAuthorizationEntity::update_many()
         .col_expr(
             client_authorization::Column::RevokedAt,
@@ -134,11 +166,26 @@ pub(super) async fn revoke_if_active(
                 .add(client_authorization::Column::RevokedAt.is_null())
                 .add(client_authorization::Column::ExpiresAt.gt(now)),
         )
-        .exec(db)
+        .exec(&transaction)
         .await
         .map_err(query_error("client_authorization.revoke_if_active"))?;
 
-    Ok(result.rows_affected == 1)
+    let changed = result.rows_affected == 1;
+    if changed {
+        crate::database::audit::record(
+            &transaction,
+            "authorization.revoked",
+            "client_authorization",
+            oid,
+        )
+        .await
+        .map_err(query_error("client_authorization.revoke_if_active"))?;
+    }
+    transaction
+        .commit()
+        .await
+        .map_err(query_error("client_authorization.revoke_if_active"))?;
+    Ok(changed)
 }
 
 #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_refresh_token_family"))]
@@ -203,6 +250,16 @@ pub(super) async fn revoke_refresh_token_family(
                 "client_authorization.revoke_refresh_token_family",
             ))?;
     }
+    crate::database::audit::record(
+        &transaction,
+        "authorization.refresh_replay_revoked",
+        "client_authorization",
+        root_oid,
+    )
+    .await
+    .map_err(query_error(
+        "client_authorization.revoke_refresh_token_family",
+    ))?;
     transaction.commit().await.map_err(query_error(
         "client_authorization.revoke_refresh_token_family",
     ))?;
@@ -216,14 +273,33 @@ pub(super) async fn revoke_access_token_for_client(
     client_oid: ClientOid,
     now: DateTime<Utc>,
 ) -> Result<(), ClientAuthorizationRepositoryError> {
-    db.execute(&query::revoke_token_for_client(
-        Expr::col(client_authorization::Column::Oid).eq(access_oid),
-        client_oid,
-        "access_token",
-        now,
-    ))
-    .await
-    .map_err(query_error(
+    let transaction = db.begin().await.map_err(query_error(
+        "client_authorization.revoke_access_token_for_client",
+    ))?;
+    let result = transaction
+        .execute(&query::revoke_token_for_client(
+            Expr::col(client_authorization::Column::Oid).eq(access_oid),
+            client_oid,
+            "access_token",
+            now,
+        ))
+        .await
+        .map_err(query_error(
+            "client_authorization.revoke_access_token_for_client",
+        ))?;
+    if result.rows_affected() > 0 {
+        crate::database::audit::record(
+            &transaction,
+            "authorization.access_revoked",
+            "client_authorization",
+            access_oid,
+        )
+        .await
+        .map_err(query_error(
+            "client_authorization.revoke_access_token_for_client",
+        ))?;
+    }
+    transaction.commit().await.map_err(query_error(
         "client_authorization.revoke_access_token_for_client",
     ))?;
     Ok(())
@@ -291,6 +367,16 @@ pub(super) async fn revoke_refresh_grant_for_client(
                 "client_authorization.revoke_refresh_grant_for_client",
             ))?;
     }
+    crate::database::audit::record(
+        &transaction,
+        "authorization.refresh_grant_revoked",
+        "client_authorization",
+        root_oid,
+    )
+    .await
+    .map_err(query_error(
+        "client_authorization.revoke_refresh_grant_for_client",
+    ))?;
     transaction.commit().await.map_err(query_error(
         "client_authorization.revoke_refresh_grant_for_client",
     ))?;

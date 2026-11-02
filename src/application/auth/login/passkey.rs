@@ -15,7 +15,7 @@ impl LoginService {
         &self,
         login_oid: Uuid,
     ) -> Result<crate::auth::passkey::PasskeyOptions, AppError> {
-        let login = self.get(login_oid).await?;
+        let login = self.prepare_challenge(login_oid).await?;
         validate_passkey_login(&login)?;
         let user = self
             .get_user(

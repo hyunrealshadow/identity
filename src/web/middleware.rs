@@ -76,9 +76,62 @@ pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
     depot.get_typed::<AuthenticatedWorkload>().ok().copied()
 }
 
+/// Correlation is assigned before parsing the body and exists even without an
+/// OTel subscriber or sampling. Trace IDs are included only for valid spans.
+pub use identity_infrastructure::observability::context::RequestCorrelation;
+
+fn valid_request_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
 /// Extracts W3C trace context, decides whether it may be continued and wraps
 /// the rest of the request in a server span. Invalid headers never fail the
 /// request; untrusted contexts become links instead of parents.
+#[derive(Clone, Debug)]
+pub struct RequestIdMiddleware {
+    policy: TraceTrustPolicy,
+}
+
+impl RequestIdMiddleware {
+    pub fn new(policy: TraceTrustPolicy) -> Self {
+        Self { policy }
+    }
+}
+
+#[async_trait]
+impl Handler for RequestIdMiddleware {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        let request_id = req
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| {
+                self.policy.trusts_request_id(req.remote_addr().ip()) && valid_request_id(value)
+            })
+            .map(str::to_owned)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let correlation = RequestCorrelation {
+            request_id: request_id.clone(),
+            trace_id: None,
+        };
+        depot.insert_typed(correlation.clone());
+        trace_context::with_request_correlation(correlation, ctrl.call_next(req, depot, res)).await;
+        if let Ok(value) = HeaderValue::from_str(&request_id) {
+            res.headers_mut().insert("x-request-id", value);
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TraceContextMiddleware {
     policy: TraceTrustPolicy,
@@ -102,6 +155,18 @@ impl Handler for TraceContextMiddleware {
     ) {
         let extracted = trace_context::extract(req.headers());
         let peer = req.remote_addr().ip();
+        let request_id = depot
+            .get_typed::<RequestCorrelation>()
+            .ok()
+            .map(|value| value.request_id.clone())
+            .unwrap_or_else(|| {
+                req.headers()
+                    .get("x-request-id")
+                    .and_then(|value| value.to_str().ok())
+                    .filter(|value| self.policy.trusts_request_id(peer) && valid_request_id(value))
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+            });
         // Only a verified workload identity counts as trust; the authenticated
         // subject of a user-facing request does not.
         let verified_workload = depot.get_typed::<AuthenticatedWorkload>().is_ok();
@@ -112,11 +177,13 @@ impl Handler for TraceContextMiddleware {
         let path = req.uri().path().to_owned();
         let client_address = peer.map(|ip| ip.to_string()).unwrap_or_default();
         let span = info_span!(
+            parent: None,
             "http.server",
             otel.kind = "server",
             http.request.method = %method,
             url.path = %path,
             client.address = %client_address,
+            request.id = %request_id,
             http.route = Empty,
             http.response.status_code = Empty,
         );
@@ -129,9 +196,28 @@ impl Handler for TraceContextMiddleware {
         }
 
         let request_span = span.clone();
-        async { ctrl.call_next(req, depot, res).await }
-            .instrument(span)
-            .await;
+        async {
+            let trace_id = trace_context::current_span_context()
+                .filter(|context| context.is_valid())
+                .map(|context| context.trace_id().to_string());
+            let correlation = RequestCorrelation {
+                request_id: request_id.clone(),
+                trace_id: trace_id.clone(),
+            };
+            depot.insert_typed(correlation.clone());
+            trace_context::with_request_correlation(correlation, ctrl.call_next(req, depot, res))
+                .await;
+            if let Ok(value) = HeaderValue::from_str(&request_id) {
+                res.headers_mut().insert("x-request-id", value);
+            }
+            if let Some(trace_id) = trace_id.and_then(|id| HeaderValue::from_str(&id).ok()) {
+                res.headers_mut().insert("x-trace-id", trace_id);
+            } else {
+                res.headers_mut().remove("x-trace-id");
+            }
+        }
+        .instrument(span)
+        .await;
 
         request_span.record("http.route", req.matched_path());
         if let Some(status) = res.status_code {
@@ -581,6 +667,69 @@ mod tests {
 
     const VALID_TRACEPARENT: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
+    #[handler]
+    async fn correlation_echo(depot: &mut salvo::Depot, res: &mut Response) {
+        let correlation = depot.get_typed::<super::RequestCorrelation>().unwrap();
+        let current =
+            identity_infrastructure::observability::context::current_request_correlation().unwrap();
+        assert_eq!(current.request_id, correlation.request_id);
+        res.render(salvo::prelude::Json(
+            serde_json::json!({"requestId": correlation.request_id}),
+        ));
+    }
+
+    #[tokio::test]
+    async fn request_id_is_available_without_tracing_and_only_explicit_gateways_can_supply_it() {
+        use tracing::instrument::WithSubscriber;
+        for (trust_id, incoming, accepted) in [
+            (false, "external-id", false),
+            (true, "gateway.valid_1", true),
+            (true, "bad value", false),
+            (
+                true,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                false,
+            ),
+        ] {
+            let policy = TraceTrustPolicy::new(TraceContextConfig {
+                trusted_request_id_gateways: if trust_id {
+                    vec!["127.0.0.1/32".parse().unwrap()]
+                } else {
+                    vec![]
+                },
+                ..Default::default()
+            });
+            let service = Service::new(
+                Router::new()
+                    .hoop(TraceContextMiddleware::new(policy))
+                    .get(correlation_echo),
+            );
+            let mut request = TestClient::get("http://127.0.0.1:5800/")
+                .add_header("x-request-id", incoming, true)
+                .build();
+            *request.remote_addr_mut() = "127.0.0.1:41000".parse::<SocketAddr>().unwrap().into();
+            let mut response = service
+                .handle(request)
+                .with_subscriber(tracing::subscriber::NoSubscriber::default())
+                .await;
+            let id = response
+                .headers()
+                .get("x-request-id")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            assert_eq!(id == incoming, accepted);
+            if !accepted {
+                assert!(uuid::Uuid::parse_str(&id).is_ok());
+            }
+            assert!(response.headers().get("x-trace-id").is_none());
+            let body: serde_json::Value =
+                serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+            assert_eq!(body["requestId"], id);
+        }
+    }
+
     #[derive(Clone, Debug, Default)]
     struct CapturingSpanExporter {
         spans: Arc<Mutex<Vec<SpanData>>>,
@@ -602,6 +751,7 @@ mod tests {
             },
             trust_verified_workload: false,
             propagate_to_origins: Vec::new(),
+            trusted_request_id_gateways: Vec::new(),
         };
         TraceTrustPolicy::new(config)
     }

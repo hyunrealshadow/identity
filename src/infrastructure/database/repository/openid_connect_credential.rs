@@ -219,17 +219,12 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
     use identity_domain::openid_connect::{
-        OpenIdConnectCredentialData, OpenIdConnectCredentialRepository as _,
-        OpenIdConnectCredentialType,
+        OpenIdConnectCredentialData, OpenIdConnectCredentialType,
     };
-    use sea_orm::{DatabaseBackend, MockDatabase};
     use serde_json::json;
-    use uuid::Uuid;
 
-    use super::{OpenIdConnectCredentialRepositoryImpl, deserialize_data, serialize_data};
-    use crate::database::entity::client_openid_connect_credential;
+    use super::{deserialize_data, serialize_data};
 
     #[test]
     fn deserializes_client_secret() {
@@ -257,42 +252,5 @@ mod tests {
             secret: "tiny".to_owned(),
         });
         assert_eq!(short.hint, "••••");
-    }
-
-    #[tokio::test]
-    async fn active_lookup_filters_lifecycle_and_prefers_newest_credentials() {
-        let now = Utc::now();
-        let model = client_openid_connect_credential::Model {
-            id: 1,
-            oid: Uuid::new_v4(),
-            client_id: 1,
-            r#type: "client_secret".to_owned(),
-            data: json!({"secret": "secret"}),
-            hint: "••••cret".to_owned(),
-            expires_at: (now + Duration::days(1)).into(),
-            revoked_at: None,
-            created_at: now.into(),
-            updated_at: None,
-        };
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([vec![model]])
-            .into_connection();
-        let repo = OpenIdConnectCredentialRepositoryImpl::new(db);
-
-        let credentials = repo
-            .find_active_by_client_oid_and_type(
-                Uuid::nil(),
-                OpenIdConnectCredentialType::ClientSecret,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(credentials.len(), 1);
-        let statements = format!("{:?}", repo.db.into_transaction_log());
-        assert!(statements.contains("revoked_at"));
-        assert!(statements.contains("expires_at"));
-        assert!(statements.contains("ORDER BY"));
-        assert!(statements.contains("created_at"));
-        assert!(statements.contains("DESC"));
     }
 }

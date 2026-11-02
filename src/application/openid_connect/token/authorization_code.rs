@@ -1,6 +1,8 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
-    client_authorization::ClientAuthenticationMode,
+    client_authorization::{
+        AccessTokenPrincipal, ClientAuthenticationMode, ManagementGrantKindData,
+    },
     openid_connect::{API_RESOURCE, CodeChallengeMethod, OAuthProtocolVersion, ScopeSet},
 };
 use tracing::{Span, debug, field::display};
@@ -12,6 +14,7 @@ use super::{
 use crate::{
     domain::auth::SessionStatus,
     observability::{BusinessEvent, EventValue},
+    openid_connect::rbac as shared,
 };
 
 use super::*;
@@ -138,6 +141,100 @@ impl TokenService {
         };
         let code_scope = ScopeSet::parse(&data.scope)
             .map_err(AppError::map_source(TokenErrorCode::DeserializeCodeFailed))?;
+        let management_snapshot = shared::management_snapshot(data.management.as_ref());
+        let business_snapshot = shared::business_snapshot(data.management.as_ref());
+        let management = management_snapshot.is_some() || code_scope.has_management_scopes();
+        let business_resource = !code_scope.has_management_scopes()
+            && self
+                .provider_service
+                .has_rbac_resource(&data.resources)
+                .await?;
+        let business = business_snapshot.is_some() || business_resource;
+        if management && business {
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+        }
+        if business && business_snapshot.is_none() {
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+        }
+        if management {
+            // A management code is authoritative only with S256 PKCE, the
+            // single GraphQL resource, no refresh grant, and a live binding
+            // snapshot. Anything missing fails closed.
+            let snapshot_data = management_snapshot
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+            if !code_scope.has_management_scopes()
+                || snapshot_data.grant_kind != ManagementGrantKindData::UserRbac
+            {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            if code_scope.contains_offline_access() {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            if !crate::openid_connect::management::is_single_graphql_resource(&data.resources) {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            if data.code_challenge.as_deref().is_none_or(str::is_empty)
+                || data.code_challenge_method != Some(CodeChallengeMethod::S256)
+            {
+                return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
+                    .with_param("code_challenge_method", "S256 required for management"));
+            }
+
+            let client_fingerprint = self
+                .provider_service
+                .client_authority_fingerprint(&authenticated_client)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+            if client_fingerprint.as_uuid() != snapshot_data.client_policy_version {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid)
+                    .with_param("reason", "client scope ceiling changed"));
+            }
+
+            let binding_repo = self.management_authority_repo.as_ref().ok_or_else(|| {
+                AppError::from_code(TokenErrorCode::AuthCodeInvalid)
+                    .with_param("reason", "user permission authority support unavailable")
+            })?;
+            let snapshot = snapshot_data
+                .to_snapshot()
+                .map_err(|_| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+            binding_repo
+                .validate_snapshot(&snapshot)
+                .await
+                .map_err(|_| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+        }
+        if business {
+            let snapshot = business_snapshot
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+            if data.resources.len() != 1 || data.resources[0] != snapshot.resource_uri {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            if data.code_challenge.as_deref().is_none_or(str::is_empty)
+                || data.code_challenge_method != Some(CodeChallengeMethod::S256)
+            {
+                return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
+                    .with_param("code_challenge_method", "S256"));
+            }
+            if code_scope.contains_offline_access()
+                && !authenticated_client.allows_grant(GrantType::RefreshToken)
+            {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            let repository = self
+                .rbac_authorization_repo
+                .as_ref()
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+            let persisted = snapshot
+                .to_snapshot()
+                .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+            repository
+                .validate_snapshot(&persisted)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+        }
+        if management && self.session_repo.is_none() {
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid)
+                .with_param("reason", "management requires live session validation"));
+        }
         let (session_acr, session_amr) = if let Some(session_repo) = &self.session_repo {
             let session = session_repo
                 .find_by_oid(data.session_oid)
@@ -167,6 +264,13 @@ impl TokenService {
         } else {
             (data.acr.clone(), data.amr.clone())
         };
+        if management
+            && !session_acr.as_deref().is_some_and(|acr| {
+                identity_domain::auth::acr_satisfies(acr, identity_domain::auth::ACR_AAL2)
+            })
+        {
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+        }
         let protected_session_id = self
             .protected_session_id(data.session_oid, data.protected_session_id.as_deref())
             .await?;
@@ -224,6 +328,62 @@ impl TokenService {
             .provider_service
             .select_resources(&params.resources, &data.resources, &data.scope)
             .await?;
+        let selected_scope_set = ScopeSet::parse(&selection.scope)
+            .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+        self.provider_service
+            .validate_client_resource_ceiling(
+                &authenticated_client,
+                &selection.resources,
+                &selected_scope_set,
+            )
+            .await
+            .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+        if management {
+            // Never expand or silently drop management at exchange time. The
+            // signed token must carry exactly the clipped code scope at the
+            // single GraphQL audience.
+            let selected = ScopeSet::parse(&selection.scope)
+                .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+            if !crate::openid_connect::management::is_single_graphql_resource(&selection.resources)
+                || selected.management_scopes() != code_scope.management_scopes()
+            {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid)
+                    .with_param("reason", "management resource or scope changed"));
+            }
+        }
+        if business {
+            // The code's original business scope is the immutable ceiling. A
+            // live intersection may shrink but must never add or silently
+            // remove an already granted business scope.
+            let snapshot_data = business_snapshot
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
+            let selected = ScopeSet::parse(&selection.scope)
+                .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+            if selection.resources.len() != 1
+                || selection.resources[0] != snapshot_data.resource_uri
+                || shared::business_scope_names(&selected)
+                    != shared::business_scope_names(&code_scope)
+            {
+                return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
+            }
+            shared::validate_business_authorization(
+                shared::BusinessLivePorts {
+                    repository: self.rbac_authorization_repo.as_ref(),
+                    provider_service: &self.provider_service,
+                },
+                &authenticated_client,
+                snapshot_data,
+                &selection.scope,
+                &selected,
+                AccessTokenPrincipal::User,
+                Some(UserOid(Uuid::parse_str(&data.user_oid).map_err(
+                    AppError::map_source(TokenErrorCode::StoredUserOidInvalid),
+                )?)),
+                &selection.resources,
+            )
+            .await
+            .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
+        }
         let refresh_resources = if data.resources.is_empty() {
             &selection.resources
         } else {
@@ -241,6 +401,19 @@ impl TokenService {
                     .as_deref(),
             )
             .await?;
+
+        let user_oid = Uuid::parse_str(&data.user_oid)
+            .map_err(AppError::map_source(TokenErrorCode::StoredUserOidInvalid))?;
+        let user = self
+            .user_repo
+            .find_by_oid(UserOid(user_oid))
+            .await
+            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeUserNotFound))?;
+        if !user.enabled || user.locked {
+            return Err(AppError::from_code(TokenErrorCode::AuthCodeUserNotFound)
+                .with_param("reason", "user is disabled or locked"));
+        }
 
         let claimed = self
             .client_authorization_repo
@@ -268,28 +441,17 @@ impl TokenService {
         );
         debug!("authorization code consumed; issuing tokens");
 
-        let user_oid = Uuid::parse_str(&data.user_oid)
-            .map_err(AppError::map_source(TokenErrorCode::StoredUserOidInvalid))?;
-        let user = self
-            .user_repo
-            .find_by_oid(UserOid(user_oid))
-            .await
-            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeUserNotFound))?;
-
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self
             .load_access_token_signing_key(&configured_signing_key)
             .await?;
         let audience = client_id.clone();
-        let access_token_audience = if ScopeSet::parse(&data.scope)
-            .map(|scope| scope.has_api_scopes())
-            .unwrap_or(false)
-        {
-            API_RESOURCE
-        } else {
-            audience.as_str()
-        };
+        let access_token_audience =
+            if code_scope.has_api_scopes() || code_scope.has_management_scopes() {
+                API_RESOURCE
+            } else {
+                audience.as_str()
+            };
         let client_id_str = record.client_oid.to_string();
         let access_token_record = self
             .client_authorization_repo
@@ -297,13 +459,16 @@ impl TokenService {
                 record.client_oid,
                 ClientAuthorizationData::AccessToken(AccessTokenData {
                     scope: selection.scope.clone(),
-                    user_oid: data.user_oid.clone(),
+                    resources: selection.resources.clone(),
+                    user_oid: Some(data.user_oid.clone()),
+                    principal: AccessTokenPrincipal::User,
                     session_oid: Some(data.session_oid),
                     protected_session_id: Some(protected_session_id.clone()),
                     authorization_code_oid: Some(record.oid.to_string()),
                     refresh_token_oid: None,
                     device_authorization_oid: None,
                     client_authentication_mode: Some(client_authentication_mode),
+                    management: data.management.clone(),
                 }),
                 Utc::now() + Duration::hours(1),
             )
@@ -323,7 +488,8 @@ impl TokenService {
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id: &client_id_str,
-                user_oid: &user_oid,
+                subject: &data.user_oid,
+                principal: AccessTokenPrincipal::User,
                 client: &authenticated_client,
                 user: Some(&user),
                 protected_session_id: Some(&protected_session_id),
@@ -332,6 +498,8 @@ impl TokenService {
                 auth_time: data.auth_time,
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
+                management: management_snapshot,
+                business: business_snapshot,
             })
             .await?;
         let id_token = if issue_id_token {
@@ -362,7 +530,9 @@ impl TokenService {
             None
         };
         let refresh_scope_string = code_scope.to_scope_string();
-        let refresh_token = if authenticated_client.allows_grant(GrantType::RefreshToken)
+        let refresh_token = if !management
+            && !code_scope.has_management_scopes()
+            && authenticated_client.allows_grant(GrantType::RefreshToken)
             && code_scope.contains_offline_access()
         {
             Some(
@@ -381,6 +551,7 @@ impl TokenService {
                         rotated_from: None,
                         authorization_code_oid: Some(record.oid.to_string()),
                         client_authentication_mode: Some(client_authentication_mode),
+                        management: data.management.clone(),
                     },
                     event,
                 )

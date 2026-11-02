@@ -1,4 +1,4 @@
-use identity_domain::openid_connect::{API_RESOURCE, GrantType};
+use identity_domain::openid_connect::GrantType;
 use serde_json::{Value, from_slice};
 
 use super::{RecordingSink, decode_unverified_payload};
@@ -22,22 +22,47 @@ fn request(scope: &str) -> ClientCredentialsGrantParams {
     }
 }
 
+fn with_business_resource(mut service: TokenService) -> TokenService {
+    let resource = business_resource("urn:orders", &["orders.read"]);
+    let rbac = TestRbacRepository::shared(vec![delegated_user_state(
+        &resource,
+        UserOid(Uuid::new_v4()),
+    )]);
+    let provider = Arc::try_unwrap(provider_service())
+        .ok()
+        .unwrap()
+        .with_scope_catalog(Arc::new(
+            crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog(vec![
+                "orders.read".to_owned(),
+            ]),
+        ))
+        .with_resource_repo(Arc::new(
+            TestOAuthResources::new(vec![oauth_resource("urn:orders", &["orders.read"])])
+                .with_client_ceiling(Uuid::nil(), "urn:orders", &["orders.read"]),
+        ))
+        .with_rbac_authorization_repository(rbac.clone());
+    service.provider_service = Arc::new(provider);
+    service.with_rbac_authorization_repository(rbac)
+}
+
 #[tokio::test]
 async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
     let sink = Arc::new(RecordingSink::default());
     let repo = Arc::new(mock_client_auth_repo());
-    let service = build_token_service_with_client_repo(
-        repo,
-        Uuid::new_v4(),
-        Arc::new(MachineClientRepository),
-    )
-    .with_events(sink.clone());
+    let service = with_business_resource(
+        build_token_service_with_client_repo(
+            repo,
+            Uuid::new_v4(),
+            Arc::new(MachineClientRepository),
+        )
+        .with_events(sink.clone()),
+    );
 
-    let mut params = request("account.read");
-    params.resources = vec![API_RESOURCE.to_owned()];
+    let mut params = request("orders.read");
+    params.resources = vec!["urn:orders".to_owned()];
     let response = service.exchange_client_credentials(params).await.unwrap();
     assert!(!response.access_token.is_empty());
-    assert_eq!(response.scope, "account.read");
+    assert_eq!(response.scope, "orders.read");
     assert!(response.id_token.is_none());
     assert!(response.refresh_token.is_none());
     let access = decode_unverified_payload(&response.access_token);
@@ -52,14 +77,14 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
 #[tokio::test]
 async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
     let repo = Arc::new(mock_client_auth_repo());
-    let mut service = build_token_service_with_client_repo(
+    let mut service = with_business_resource(build_token_service_with_client_repo(
         repo,
         Uuid::new_v4(),
         Arc::new(MachineAlgorithmClientRepository {
             algorithm: JwaSigningAlgorithm::Rs256,
             include_access_claims: true,
         }),
-    );
+    ));
     let default_ec_key = key_for_algorithm("ES256");
     let requested_rsa_key = key_for_algorithm("RS256");
     let ec_binding = key_jwk_binding(&default_ec_key, "ES256", Uuid::new_v4());
@@ -71,7 +96,11 @@ async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
     ]));
 
     let response = service
-        .exchange_client_credentials(request("account.read"))
+        .exchange_client_credentials({
+            let mut params = request("orders.read");
+            params.resources = vec!["urn:orders".to_owned()];
+            params
+        })
         .await
         .unwrap();
     assert!(response.id_token.is_none());
@@ -106,7 +135,13 @@ async fn client_credentials_rejects_user_scope_and_unassigned_scope() {
         Uuid::new_v4(),
         Arc::new(MachineClientRepository),
     );
-    for scope in ["openid", "offline_access", "account.update"] {
+    for scope in [
+        "openid",
+        "offline_access",
+        "account.read",
+        "account.update",
+        "session.read",
+    ] {
         let error = service
             .exchange_client_credentials(request(scope))
             .await

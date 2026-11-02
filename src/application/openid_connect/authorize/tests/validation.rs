@@ -335,11 +335,11 @@ async fn validate_request_reports_missing_required_fields() {
     };
 
     let error = service.validate_request(params).await.unwrap_err();
-    let debug = format!("{error:?}");
-
-    assert!(debug.contains("response_type"));
-    assert!(debug.contains("client_id"));
-    assert!(debug.contains("scope"));
+    assert_eq!(error.code(), 23013);
+    assert_eq!(
+        error.params().get("fields"),
+        Some("response_type, client_id, scope")
+    );
 }
 
 #[tokio::test]
@@ -494,14 +494,18 @@ async fn validate_request_rejects_unassigned_openid_scope() {
 async fn api_scopes_require_graphql_resource() {
     let service = build_test_service(
         Arc::new(ScopedClientRepository {
-            assigned_scopes: vec!["openid".to_string(), "account".to_string()],
+            assigned_scopes: vec![
+                "openid".to_string(),
+                "account.read".to_string(),
+                "account.update".to_string(),
+            ],
         }),
         Arc::new(empty_cred_repo()),
         Arc::new(mock_login_repo()),
     );
 
     let error = service
-        .validate_request(params("openid account"))
+        .validate_request(params("openid account.*"))
         .await
         .unwrap_err();
 
@@ -510,14 +514,20 @@ async fn api_scopes_require_graphql_resource() {
 
 #[tokio::test]
 async fn api_scopes_accept_graphql_resource() {
+    // Persisted client ceilings are concrete scope rows; `account.*` remains a
+    // request selector that expands against the GraphQL resource catalog.
     let service = build_test_service(
         Arc::new(ScopedClientRepository {
-            assigned_scopes: vec!["openid".to_string(), "account".to_string()],
+            assigned_scopes: vec![
+                "openid".to_string(),
+                "account.read".to_string(),
+                "account.update".to_string(),
+            ],
         }),
         Arc::new(empty_cred_repo()),
         Arc::new(mock_login_repo()),
     );
-    let mut request = params("openid account");
+    let mut request = params("openid account.*");
     request.resources = vec![API_RESOURCE.to_string()];
 
     assert!(service.validate_request(request).await.is_ok());
@@ -554,6 +564,7 @@ async fn global_oauth_version_applies_unless_client_explicitly_overrides_it() {
         service.provider_service = Arc::new(OpenIdProviderService::new(Arc::new(
             SettingsSnapshot::default()
                 .with_section(&AppSettings {
+                    console_domain: None,
                     domain: Some("https://identity.example.com".to_owned()),
                     ..Default::default()
                 })

@@ -28,6 +28,7 @@ use crate::{
             OpenIdConnectCredentialRepository, ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
         },
+        rbac::RbacAuthorizationRepository,
         user::{User, UserOid, repository::UserRepository},
     },
     key::runtime::RuntimeKeyRingProvider,

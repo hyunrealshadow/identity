@@ -167,16 +167,65 @@ impl AuthorizeService {
             None => None,
         };
 
-        self.provider_service
-            .validate_scope_names(&params.scope)
+        let scope = self
+            .provider_service
+            .resolve_scope_for_resources(&params.resources, &params.scope)
             .await?;
-        let scope = ScopeSet::parse(&params.scope)
-            .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
+        let management = scope.has_management_scopes();
+        if management {
+            // Management authorization is code-only. Implicit/hybrid responses
+            // would mint a front-channel management token without the required
+            // code-exchange snapshot validation.
+            if response_type != ResponseType::Code {
+                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", response_type.to_string()));
+            }
+            if scope.contains_offline_access() {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_param(
+                        "scopes",
+                        "management and offline_access are mutually exclusive",
+                    ),
+                );
+            }
+        }
 
+        Self::validate_client_scope_assignment(client, &scope)?;
         let resources = self
             .provider_service
             .validate_authorization_resources(&params.resources, &scope)
             .await?;
+        self.provider_service
+            .validate_client_resource_ceiling(client, &resources, &scope)
+            .await?;
+        if management && !crate::openid_connect::management::is_single_graphql_resource(&resources)
+        {
+            return Err(
+                AppError::from_code(CommonErrorCode::InvalidTarget).with_param(
+                    "resources",
+                    "management requires the single GraphQL resource",
+                ),
+            );
+        }
+
+        // Business RBAC is code-only. The approval, exchange and online
+        // validation paths all carry the same single-resource/S256 invariant.
+        let rbac = self.provider_service.has_rbac_resource(&resources).await?;
+        if rbac {
+            if management {
+                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            }
+            if response_type != ResponseType::Code {
+                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", response_type.to_string()));
+            }
+            if scope.has_api_scopes() {
+                return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+            }
+            if resources.len() != 1 {
+                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            }
+        }
 
         // An identity token only exists in OIDC, so the response types that
         // ask for one demand `openid`. Code and token responses work as plain
@@ -185,8 +234,6 @@ impl AuthorizeService {
         if response_type.includes_id_token() && !scope.contains_openid() {
             return Err(AppError::from_code(AuthorizeErrorCode::OpenidScopeRequired));
         }
-        Self::validate_client_scope_assignment(client, &scope)?;
-
         let InteractionParameters {
             display,
             prompt,
@@ -198,6 +245,7 @@ impl AuthorizeService {
             client,
             oauth_version,
             &response_type,
+            management || rbac,
             params.code_challenge.as_deref(),
             params.code_challenge_method.as_deref(),
         )?;
@@ -323,6 +371,7 @@ impl AuthorizeService {
         client: &OpenIdConnectClient,
         oauth_version: OAuthProtocolVersion,
         response_type: &ResponseType,
+        management: bool,
         challenge: Option<&str>,
         method: Option<&str>,
     ) -> Result<Option<CodeChallengeMethod>, AppError> {
@@ -336,6 +385,22 @@ impl AuthorizeService {
         };
 
         let has_code_challenge = challenge.is_some_and(|challenge| !challenge.is_empty());
+        if management {
+            // Management authorization requires S256 PKCE even for
+            // confidential clients, so a stolen code cannot be exchanged.
+            if !has_code_challenge {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
+                        .with_param("field", "code_challenge"),
+                );
+            }
+            if code_challenge_method != Some(CodeChallengeMethod::S256) {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
+                        .with_param("code_challenge_method", "S256 required for management"),
+                );
+            }
+        }
         if challenge.is_some() || code_challenge_method.is_some() {
             if !has_code_challenge {
                 return Err(

@@ -3,10 +3,12 @@ mod installation;
 mod openid_connect;
 mod password;
 
-pub use app::{AppSettings, DomainSetting, LoginClientIdSetting, LoginDomainSetting};
+pub use app::{
+    AppSettings, ConsoleDomainSetting, DomainSetting, LoginClientIdSetting, LoginDomainSetting,
+};
 pub use installation::InstallationSettings;
 pub use openid_connect::{
     DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings,
     PushedAuthorizationSettings,
 };
-pub use password::PasswordHashSetting;
+pub use password::{BreachedPasswordCheckEnabledSetting, PasswordHashSetting};

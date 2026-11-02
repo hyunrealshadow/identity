@@ -2,6 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Range: 20000-20099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum ProviderErrorCode {
     NotInitialized,
     DomainMissing,

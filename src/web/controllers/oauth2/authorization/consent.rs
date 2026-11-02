@@ -26,8 +26,8 @@ use crate::{
         shared::{csrf_token, protocol_continue_uri},
     },
     views::oauth2::{
-        ConsentAccount, ConsentApiResponse, ConsentDecision, ConsentDecisionPayload, ConsentPageData,
-        build_scope_display,
+        ConsentAccount, ConsentApiResponse, ConsentDecision, ConsentDecisionPayload,
+        ConsentPageData, build_scope_display,
     },
 };
 
@@ -116,7 +116,11 @@ async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
     let previously_granted = ctx
         .services()
         .oidc_authorize()
-        .user_consented_scope_names(session.user_oid, loaded.client.client().oid)
+        .user_consented_scope_names(
+            session.user_oid,
+            loaded.client.client().oid,
+            &loaded.stored.request.resources,
+        )
         .await?;
 
     Ok(json_response(
@@ -146,7 +150,7 @@ async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
                 &previously_granted,
                 &ctx.services()
                     .oidc_authorize()
-                    .scope_descriptions(&loaded.scope)
+                    .scope_descriptions(&loaded.scope, &loaded.stored.request.resources)
                     .await?,
             ),
             csrf_token: csrf_token(depot),

@@ -1,3 +1,5 @@
+use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::Func;
 use sea_orm_migration::{
     async_trait,
     prelude::{
@@ -53,7 +55,7 @@ impl MigrationTrait for Migration {
                     .table(Session::Table)
                     .if_not_exists()
                     .col(pk_auto(Session::Id).big_integer())
-                    .col(uuid_uniq(Session::Oid).default(Expr::cust("gen_random_uuid()")))
+                    .col(uuid_uniq(Session::Oid).default(Func::cust(Alias::new("gen_random_uuid"))))
                     .col(big_integer(Session::UserId))
                     .col(string(Session::Status))
                     .col(string_null(Session::Acr))
@@ -107,10 +109,29 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_session_user_activity")
+                    .table(Session::Table)
+                    .col(Session::UserId)
+                    .col(Session::LastActiveAt)
+                    .col(Session::Id)
+                    .to_owned(),
+            )
+            .await?;
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .table(Session::Table)
+                    .name("idx_session_user_activity")
+                    .to_owned(),
+            )
+            .await?;
         manager
             .drop_index(
                 Index::drop()

@@ -6,6 +6,7 @@ use identity_application::{
     },
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
+    instance_overview::InstanceOverviewService,
     key::{asymmetric::AsymmetricKeyService, rotation::KeyRotationService},
     observability::EventSink,
     openid_connect::{
@@ -21,6 +22,8 @@ use identity_application::{
         token::{TokenService, TokenServiceDependencies},
         user_info::UserInfoService,
     },
+    rbac::{GroupManagementService, RbacManagementService},
+    user::management::UserManagementService,
 };
 use identity_domain::openid_connect::{
     BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
@@ -45,14 +48,18 @@ use crate::{
     database::repository::{
         challenge::ChallengeRepositoryImpl,
         client_authorization::ClientAuthorizationRepositoryImpl,
-        device_authorization::DeviceAuthorizationRepositoryImpl, install::InstallRepositoryImpl,
-        key::KeyRepositoryImpl, key_jwk::KeyJwkRepositoryImpl,
-        key_rotation::KeyRotationRepositoryImpl, login::LoginRepositoryImpl,
-        login_runtime::LoginRuntimeRepositoryImpl, oauth_resource::OAuthResourceRepositoryImpl,
+        device_authorization::DeviceAuthorizationRepositoryImpl,
+        group_management::GroupManagementRepositoryImpl, install::InstallRepositoryImpl,
+        instance_overview::InstanceOverviewRepositoryImpl, key::KeyRepositoryImpl,
+        key_jwk::KeyJwkRepositoryImpl, key_rotation::KeyRotationRepositoryImpl,
+        login::LoginRepositoryImpl, login_runtime::LoginRuntimeRepositoryImpl,
+        oauth_resource::OAuthResourceRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
         openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
-        scope_catalog::ScopeCatalogRepositoryImpl, session::SessionRepositoryImpl,
-        user::UserRepositoryImpl, user_credential::UserCredentialRepositoryImpl,
+        rbac_management::RbacManagementRepositoryImpl, scope_catalog::ScopeCatalogRepositoryImpl,
+        session::SessionRepositoryImpl, user::UserRepositoryImpl,
+        user_credential::UserCredentialRepositoryImpl,
+        user_management::UserManagementRepositoryImpl,
     },
     observability::events::sink,
     openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
@@ -84,6 +91,7 @@ pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
 
 pub type AppDeviceAuthorizationService = DeviceAuthorizationService;
 pub struct AppServices {
+    authorization: Arc<crate::database::repository::authorization::AuthorizationRepositoryImpl>,
     login: AppLoginService,
     passkey: Arc<identity_application::auth::passkey::PasskeyService>,
     account: AppAccountService,
@@ -92,6 +100,10 @@ pub struct AppServices {
     key: AppKeyService,
     key_rotation: KeyRotationService,
     install: AppInstallService,
+    instance_overview: InstanceOverviewService,
+    user_management: UserManagementService,
+    rbac_management: RbacManagementService,
+    group_management: GroupManagementService,
     oidc: AppOpenIdProviderService,
     oidc_authorize: AppOpenIdAuthorizeService,
     pushed_authorization: PushedAuthorizationService,
@@ -144,6 +156,11 @@ impl AppServices {
         let totp = Arc::new(TotpVerifierImpl);
 
         let events = sink();
+        let authorization = Arc::new(
+            crate::database::repository::authorization::AuthorizationRepositoryImpl::new(
+                db.clone(),
+            ),
+        );
         let breach_checker = Arc::new(crate::auth::breached_password::PwnedPasswordChecker::new()?);
         let passkey = Arc::new(
             identity_application::auth::passkey::PasskeyService::new(
@@ -155,6 +172,9 @@ impl AppServices {
             )
             .with_events(Arc::clone(&events)),
         );
+
+        let rbac_authorization_repo: Arc<dyn identity_domain::rbac::RbacAuthorizationRepository> =
+            Arc::new(crate::database::repository::rbac_authorization::RbacAuthorizationRepositoryImpl::new(db.clone()));
 
         let client_authorization_repo =
             Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone()));
@@ -169,15 +189,20 @@ impl AppServices {
             provider_service: Arc::new(
                 OpenIdProviderService::new(settings.store())
                     .with_scope_catalog(scope_catalog.clone())
-                    .with_resource_repo(oauth_resource_repo.clone()),
+                    .with_resource_repo(oauth_resource_repo.clone())
+                    .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
             ),
             signing_algorithm_detector: signing_algorithm_detector.clone(),
             data_protector: data_protector.clone(),
             http_client: request_uri_http_client.clone(),
         })
         .with_scope_catalog(Arc::new(ScopeCatalogRepositoryImpl::new(db.clone())))
+        .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
+        .with_management_authority_repository(authorization.clone())
+        .with_rbac_authorization_repository(rbac_authorization_repo.clone())
         .with_events(Arc::clone(&events));
         Ok(Self {
+            authorization: authorization.clone(),
             passkey: passkey.clone(),
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
@@ -224,9 +249,31 @@ impl AppServices {
                 runtime_key_ring: settings.key_ring(),
                 client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
             },
+            instance_overview: InstanceOverviewService::new(Arc::new(
+                InstanceOverviewRepositoryImpl::new(db.clone()),
+            )),
+            user_management: UserManagementService::new(
+                Arc::new(UserManagementRepositoryImpl::new(db.clone())),
+                Arc::new(PasswordHasherImpl::new()),
+                breach_checker.clone(),
+                settings.store(),
+                data_protector.clone(),
+            )
+            .with_events(Arc::clone(&events)),
+            rbac_management: RbacManagementService::new(
+                Arc::new(RbacManagementRepositoryImpl::new(db.clone())),
+                data_protector.clone(),
+            )
+            .with_events(Arc::clone(&events)),
+            group_management: GroupManagementService::new(
+                Arc::new(GroupManagementRepositoryImpl::new(db.clone())),
+                data_protector.clone(),
+            )
+            .with_events(Arc::clone(&events)),
             oidc: OpenIdProviderService::new(settings.store())
                 .with_scope_catalog(scope_catalog.clone())
                 .with_resource_repo(oauth_resource_repo.clone())
+                .with_rbac_authorization_repository(rbac_authorization_repo.clone())
                 .with_key_repo(key_repo.clone())
                 .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
                 .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
@@ -238,7 +285,8 @@ impl AppServices {
                     provider_service: Arc::new(
                         OpenIdProviderService::new(settings.store())
                             .with_scope_catalog(scope_catalog.clone())
-                            .with_resource_repo(oauth_resource_repo.clone()),
+                            .with_resource_repo(oauth_resource_repo.clone())
+                            .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
                     ),
                 })),
                 oidc_authorize,
@@ -246,7 +294,8 @@ impl AppServices {
                 Arc::new(
                     OpenIdProviderService::new(settings.store())
                         .with_scope_catalog(scope_catalog.clone())
-                        .with_resource_repo(oauth_resource_repo.clone()),
+                        .with_resource_repo(oauth_resource_repo.clone())
+                        .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
                 ),
             ),
             oidc_token: TokenService::new(TokenServiceDependencies {
@@ -262,20 +311,24 @@ impl AppServices {
                 provider_service: Arc::new(
                     OpenIdProviderService::new(settings.store())
                         .with_scope_catalog(scope_catalog.clone())
-                        .with_resource_repo(oauth_resource_repo.clone()),
+                        .with_resource_repo(oauth_resource_repo.clone())
+                        .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
                 ),
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
             })
             .with_runtime_key_ring(settings.key_ring())
             .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
+            .with_management_authority_repository(authorization.clone())
+            .with_rbac_authorization_repository(rbac_authorization_repo.clone())
             .with_events(Arc::clone(&events)),
             oidc_logout: LogoutService::new(LogoutServiceDependencies {
                 client_repo: oidc_client_repo.clone(),
                 provider_service: Arc::new(
                     OpenIdProviderService::new(settings.store())
                         .with_scope_catalog(scope_catalog.clone())
-                        .with_resource_repo(oauth_resource_repo.clone()),
+                        .with_resource_repo(oauth_resource_repo.clone())
+                        .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
                 ),
                 key_repo: Arc::new(KeyRepositoryImpl::new(db.clone())),
                 key_jwk_repo: Arc::new(KeyJwkRepositoryImpl::new(db.clone())),
@@ -301,14 +354,19 @@ impl AppServices {
                 Arc::new(
                     OpenIdProviderService::new(settings.store())
                         .with_scope_catalog(scope_catalog.clone())
-                        .with_resource_repo(oauth_resource_repo.clone()),
+                        .with_resource_repo(oauth_resource_repo.clone())
+                        .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
                 ),
             )
-            .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone()))),
+            .with_device_repository(Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())))
+            .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
+            .with_management_authority_repository(authorization.clone())
+            .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
             dynamic_client_registration: DynamicClientRegistrationService::new(
                 settings.store(),
                 oidc_client_registration_repo.clone(),
             )
+            .with_credential_repository(oidc_credential_repo.clone())
             .with_scope_catalog(scope_catalog.clone())
             .with_events(Arc::clone(&events)),
             device_authorization: DeviceAuthorizationService::new(
@@ -320,7 +378,10 @@ impl AppServices {
                             provider_service: Arc::new(
                                 OpenIdProviderService::new(settings.store())
                                     .with_scope_catalog(scope_catalog.clone())
-                                    .with_resource_repo(oauth_resource_repo.clone()),
+                                    .with_resource_repo(oauth_resource_repo.clone())
+                                    .with_rbac_authorization_repository(
+                                        rbac_authorization_repo.clone(),
+                                    ),
                             ),
                         },
                     )),
@@ -329,7 +390,8 @@ impl AppServices {
                     provider_service: Arc::new(
                         OpenIdProviderService::new(settings.store())
                             .with_scope_catalog(scope_catalog.clone())
-                            .with_resource_repo(oauth_resource_repo.clone()),
+                            .with_resource_repo(oauth_resource_repo.clone())
+                            .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
                     ),
                     settings: settings.store(),
                 },
@@ -396,6 +458,26 @@ impl AppServices {
     }
 
     #[must_use]
+    pub fn instance_overview(&self) -> &InstanceOverviewService {
+        &self.instance_overview
+    }
+
+    #[must_use]
+    pub fn user_management(&self) -> &UserManagementService {
+        &self.user_management
+    }
+
+    #[must_use]
+    pub fn rbac_management(&self) -> &RbacManagementService {
+        &self.rbac_management
+    }
+
+    #[must_use]
+    pub fn group_management(&self) -> &GroupManagementService {
+        &self.group_management
+    }
+
+    #[must_use]
     pub fn oidc(&self) -> &AppOpenIdProviderService {
         &self.oidc
     }
@@ -457,5 +539,22 @@ impl AppServices {
     #[must_use]
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
+    }
+
+    #[must_use]
+    pub fn authorization(
+        &self,
+    ) -> &Arc<crate::database::repository::authorization::AuthorizationRepositoryImpl> {
+        &self.authorization
+    }
+
+    pub fn with_console_installation(
+        mut self,
+        db: DatabaseConnection,
+        config: Option<crate::database::seed::console::ConsoleClientSeedConfig>,
+    ) -> Self {
+        self.install.repository =
+            Arc::new(InstallRepositoryImpl::new(db).with_console_client_config(config));
+        self
     }
 }

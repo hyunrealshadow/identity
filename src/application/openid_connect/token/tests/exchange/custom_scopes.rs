@@ -1,31 +1,11 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Duration;
-use identity_domain::{
-    auth::SessionOid,
-    openid_connect::resource::{
-        OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
-    },
-};
+use identity_domain::auth::SessionOid;
 use serde_json::{Value, from_slice};
 
 use crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog;
 
 use crate::openid_connect::token::tests::{fixtures::*, *};
-
-struct Orders;
-#[async_trait::async_trait]
-impl OAuthResourceRepository for Orders {
-    async fn find_by_uri(
-        &self,
-        uri: &str,
-    ) -> Result<Option<OAuthResource>, OAuthResourceRepositoryError> {
-        Ok((uri == "urn:orders").then(|| OAuthResource {
-            uri: uri.into(),
-            scopes: vec!["orders.read".into(), "orders.write".into()],
-            enabled: true,
-        }))
-    }
-}
 
 #[tokio::test]
 async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
@@ -33,6 +13,9 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
     let user_oid = Uuid::new_v4();
     let mut service =
         build_token_service_with_key(repo.clone(), key_for_algorithm("RS256"), user_oid);
+    let resource = business_resource("urn:orders", &["orders.read", "orders.write"]);
+    let user_state = delegated_user_state(&resource, UserOid(user_oid));
+    let rbac = TestRbacRepository::shared(vec![user_state.clone()]);
     let provider = Arc::try_unwrap(provider_service())
         .ok()
         .unwrap()
@@ -42,8 +25,31 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
             "orders.read".into(),
             "orders.write".into(),
         ])))
-        .with_resource_repo(Arc::new(Orders));
+        .with_resource_repo(Arc::new(
+            TestOAuthResources::new(vec![oauth_resource(
+                "urn:orders",
+                &["orders.read", "orders.write"],
+            )])
+            .with_client_ceiling(
+                Uuid::nil(),
+                "urn:orders",
+                &["openid", "offline_access", "orders.read", "orders.write"],
+            ),
+        ))
+        .with_rbac_authorization_repository(rbac.clone());
     service.provider_service = Arc::new(provider);
+    service = service.with_rbac_authorization_repository(rbac);
+    service.client_repo = Arc::new(AssignedScopesClientRepository {
+        scopes: vec![
+            "openid".into(),
+            "offline_access".into(),
+            "orders.read".into(),
+            "orders.write".into(),
+        ],
+    });
+
+    let verifier = "verifier-custom-scopes";
+    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     let record = repo
         .create(
             Uuid::nil(),
@@ -51,8 +57,8 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
                 resources: vec!["urn:orders".into()],
                 scope: "openid offline_access orders.read orders.write".into(),
                 nonce: None,
-                code_challenge: None,
-                code_challenge_method: None,
+                code_challenge: Some(challenge),
+                code_challenge_method: Some("S256".parse().unwrap()),
                 user_oid: user_oid.to_string(),
                 session_oid: SessionOid::from(Uuid::new_v4()),
                 protected_session_id: None,
@@ -62,6 +68,7 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
                 claims: None,
                 redirect_uri: "https://client.example.com/callback".into(),
                 redirect_uri_was_supplied: true,
+                management: Some(delegated_snapshot(&user_state)),
             }),
             Utc::now() + Duration::minutes(10),
         )
@@ -77,7 +84,7 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
             client_secret_basic: true,
             client_assertion_type: None,
             client_assertion: None,
-            code_verifier: None,
+            code_verifier: Some(verifier.into()),
         })
         .await
         .unwrap();

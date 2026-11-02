@@ -1,7 +1,7 @@
 use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Range: 10000-10099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum CommonErrorCode {
     InvalidRequest,
     InternalError,
@@ -13,6 +13,7 @@ pub enum CommonErrorCode {
     InvalidScope,
     ResourceLookupFailed,
     PushedRequestStorageFailed,
+    InvalidTimeZone,
 }
 
 impl AppErrorCode for CommonErrorCode {
@@ -21,7 +22,8 @@ impl AppErrorCode for CommonErrorCode {
             Self::InvalidRequest
             | Self::ValidationFailed
             | Self::InvalidTarget
-            | Self::InvalidScope => ErrorKind::Validation,
+            | Self::InvalidScope
+            | Self::InvalidTimeZone => ErrorKind::Validation,
             Self::InternalError | Self::ResourceLookupFailed | Self::PushedRequestStorageFailed => {
                 ErrorKind::Internal
             }
@@ -44,6 +46,7 @@ impl AppErrorCode for CommonErrorCode {
             Self::InvalidScope => 10009,
             Self::ResourceLookupFailed => 10007,
             Self::PushedRequestStorageFailed => 10008,
+            Self::InvalidTimeZone => 10010,
         }
     }
 }

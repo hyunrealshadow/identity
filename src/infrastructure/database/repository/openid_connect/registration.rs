@@ -7,7 +7,7 @@ use crate::database::{
         client_openid_connect_cors_origin, client_openid_connect_credential,
         client_openid_connect_platform,
         client_openid_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
-        client_scope::Entity as ClientScopeEntity, scope, scope::Entity as ScopeEntity,
+        resource, scope, scope::Entity as ScopeEntity,
     },
     repository::{
         openid_connect_credential::serialize_data as serialize_credential_data,
@@ -27,8 +27,8 @@ use identity_domain::{
     },
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, QuerySelect, Set,
-    TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use serde_json::{Value, json, to_value};
 use std::collections::BTreeSet;
@@ -95,6 +95,11 @@ impl OpenIdConnectClientRepositoryImpl {
         self.db
             .transaction::<_, _, DbErr>(|txn| {
                 Box::pin(async move {
+                    if update_auth.is_none() && registration.assigned_scopes.iter().any(|scope| {
+                        identity_domain::authorization::catalog::is_reserved_management_name(scope)
+                    }) {
+                        return Err(DbErr::Custom("registration_invalid_scope".into()));
+                    }
                     let existing = if let Some((token, secret)) = &update_auth {
                         let existing = ClientEntity::find()
                             .filter(client::Column::Oid.eq(client_oid))
@@ -159,47 +164,54 @@ impl OpenIdConnectClientRepositoryImpl {
                                 return Err(DbErr::Custom("registration_invalid_secret".into()));
                             }
                         }
-                        OpenIdConnectClientEntity::delete_many()
+                        let metadata = OpenIdConnectClientEntity::find()
                             .filter(client_openid_connect::Column::ClientId.eq(existing.id))
-                            .exec(txn)
-                            .await?;
-                        ClientOpenIdConnectPlatformEntity::delete_many()
+                            .lock_exclusive()
+                            .one(txn)
+                            .await?
+                            .ok_or_else(|| DbErr::Custom("registration_metadata_missing".into()))?;
+                        Some((existing, metadata))
+                    } else {
+                        None
+                    };
+                    let mut existing_credentials = if let Some((client_model, _)) = &existing {
+                        client_openid_connect_credential::Entity::find()
                             .filter(
-                                client_openid_connect_platform::Column::ClientId.eq(existing.id),
+                                client_openid_connect_credential::Column::ClientId
+                                    .eq(client_model.id),
                             )
-                            .exec(txn)
-                            .await?;
-                        ClientScopeEntity::delete_many()
-                            .filter(client_scope::Column::ClientId.eq(existing.id))
-                            .exec(txn)
-                            .await?;
-                        client_openid_connect_cors_origin::Entity::delete_many()
-                            .filter(
-                                client_openid_connect_cors_origin::Column::ClientId.eq(existing.id),
+                            .order_by_asc(client_openid_connect_credential::Column::Id)
+                            .all(txn)
+                            .await?
+                    } else {
+                        Vec::new()
+                    };
+                    // Capture the authority boundary before any of the update
+                    // writes. Display-only edits must not advance it.
+                    let before_fingerprint = if let Some((client_model, _)) = &existing {
+                        Some(
+                            crate::database::client_authorization_boundary::client_boundary_fingerprint(
+                                txn,
+                                client_model.id,
                             )
-                            .exec(txn)
-                            .await?;
-                        client_openid_connect_credential::Entity::delete_many()
-                            .filter(
-                                client_openid_connect_credential::Column::ClientId.eq(existing.id),
-                            )
-                            .exec(txn)
-                            .await?;
-                        Some(existing)
+                            .await?,
+                        )
                     } else {
                         None
                     };
                     let client_model = client::ActiveModel {
                         id: existing
                             .as_ref()
-                            .map(|model| Set(model.id))
+                            .map(|(model, _)| Set(model.id))
                             .unwrap_or_default(),
                         oid: Set(registration.client.oid),
                         protocol: Set(registration.client.protocol.to_string()),
                         name: Set(registration.client.name),
                         names: Set(optional_strings_to_json(Some(registration.client.names))),
                         description: Set(registration.client.description),
+                        descriptions: Default::default(),
                         built_in: Set(registration.client.built_in),
+                        version: Set(Uuid::new_v4()),
                         created_at: Set(registration.client.created_at.into()),
                         updated_at: Set(registration.client.updated_at.map(Into::into)),
                     };
@@ -208,11 +220,17 @@ impl OpenIdConnectClientRepositoryImpl {
                     } else {
                         client_model.insert(txn).await?
                     };
+                    if existing.is_none() {
+                    }
 
                     let metadata = registration.metadata;
                     let settings = to_value(metadata.settings)
                         .map_err(|error| DbErr::Custom(error.to_string()))?;
-                    client_openid_connect::ActiveModel {
+                    let existing_metadata = existing.as_ref().map(|(_, metadata)| metadata);
+                    let metadata_model = client_openid_connect::ActiveModel {
+                        id: existing_metadata
+                            .map(|metadata| Set(metadata.id))
+                            .unwrap_or_default(),
                         client_id: Set(client_model.id),
                         post_logout_redirect_uris: Set(optional_urls_to_json(
                             metadata.post_logout_redirect_uris,
@@ -287,12 +305,38 @@ impl OpenIdConnectClientRepositoryImpl {
                             .map(|value| value.to_string())),
                         request_uris: Set(optional_urls_to_json(metadata.request_uris)),
                         settings: Set(settings),
-                        created_at: Set(now.into()),
-                        updated_at: Set(None),
+                        created_at: match existing_metadata {
+                            Some(metadata) => Set(metadata.created_at),
+                            None => Set(now.into()),
+                        },
+                        updated_at: match existing_metadata {
+                            Some(_) => Set(Some(now.into())),
+                            None => Set(None),
+                        },
                         ..Default::default()
+                    };
+                    if existing_metadata.is_some() {
+                        metadata_model.update(txn).await?;
+                    } else {
+                        metadata_model.insert(txn).await?;
                     }
-                    .insert(txn)
-                    .await?;
+
+                    if existing.is_some() {
+                        ClientOpenIdConnectPlatformEntity::delete_many()
+                            .filter(
+                                client_openid_connect_platform::Column::ClientId
+                                    .eq(client_model.id),
+                            )
+                            .exec(txn)
+                            .await?;
+                        client_openid_connect_cors_origin::Entity::delete_many()
+                            .filter(
+                                client_openid_connect_cors_origin::Column::ClientId
+                                    .eq(client_model.id),
+                            )
+                            .exec(txn)
+                            .await?;
+                    }
 
                     for platform in registration.platforms {
                         client_openid_connect_platform::ActiveModel {
@@ -323,13 +367,24 @@ impl OpenIdConnectClientRepositoryImpl {
                         .await?;
                     }
 
-                    if !registration.assigned_scopes.is_empty() {
+                    if existing.is_none() && !registration.assigned_scopes.is_empty() {
                         let scope_models = ScopeEntity::find()
-                            .filter(scope::Column::Protocol.eq("openid_connect"))
                             .filter(
-                                scope::Column::Name
+                                scope::Column::Code
                                     .is_in(registration.assigned_scopes.iter().cloned()),
                             )
+                            .filter(scope::Column::Enabled.eq(true))
+                            .filter(scope::Column::BuiltIn.eq(true))
+                            .filter(Condition::any()
+                                .add(scope::Column::ResourceId.is_null())
+                                .add(Condition::all()
+                                    .add(scope::Column::Code.is_in([
+                                        "account.read", "account.update", "session.read", "session.revoke", "password.change",
+                                    ]))
+                                    .add(scope::Column::ResourceId.in_subquery(resource::Entity::find()
+                                        .select_only().column(resource::Column::Oid)
+                                        .filter(resource::Column::Uri.eq(identity_domain::openid_connect::API_RESOURCE))
+                                        .into_query()))))
                             .all(txn)
                             .await?;
                         let expected = registration
@@ -366,6 +421,18 @@ impl OpenIdConnectClientRepositoryImpl {
                         };
                         let serialized = serialize_credential_data(credential);
 
+                        // Credential identity and expiry are part of the
+                        // authority boundary. Re-submitting the exact same
+                        // type and data keeps the existing row untouched,
+                        // including a revoked tombstone; never reset a same
+                        // secret's expiry or revive it through a new row.
+                        if let Some(position) = existing_credentials.iter().position(|row| {
+                            row.r#type == serialized.type_ && row.data == serialized.data
+                        }) {
+                            existing_credentials.remove(position);
+                            continue;
+                        }
+
                         client_openid_connect_credential::ActiveModel {
                             oid: Set(Uuid::new_v4()),
                             client_id: Set(client_model.id),
@@ -381,7 +448,19 @@ impl OpenIdConnectClientRepositoryImpl {
                         .insert(txn)
                         .await?;
                     }
+                    if !existing_credentials.is_empty() {
+                        let removed_ids = existing_credentials
+                            .into_iter()
+                            .map(|credential| credential.id)
+                            .collect::<Vec<_>>();
+                        client_openid_connect_credential::Entity::delete_many()
+                            .filter(client_openid_connect_credential::Column::Id.is_in(removed_ids))
+                            .exec(txn)
+                            .await?;
+                    }
 
+                    // The registration control-plane token belongs to the
+                    // update endpoint itself and is never replaced on update.
                     if update_auth.is_none() {
                         let registration_access_token = registration.registration_access_token;
                         client_authorization::ActiveModel {
@@ -402,6 +481,32 @@ impl OpenIdConnectClientRepositoryImpl {
                         .insert(txn)
                         .await?;
                     }
+
+                    // Only a real change to the issuance boundary withdraws
+                    // existing artifacts. A metadata-only write renews the
+                    // public record version without advancing authority.
+                    if let (Some(before), Some((target, _))) =
+                        (before_fingerprint, existing.as_ref())
+                    {
+                        let after = crate::database::client_authorization_boundary::client_boundary_fingerprint(
+                            txn, target.id,
+                        )
+                        .await?;
+                        if after.1 != before.1 {
+                            crate::database::client_authorization_boundary::withdraw_on_boundary_change(txn, target.id).await?;
+                        }
+                    }
+                    crate::database::audit::record(
+                        txn,
+                        if update_auth.is_some() {
+                            "client.registration.update"
+                        } else {
+                            "client.registration.create"
+                        },
+                        "client",
+                        client_oid,
+                    )
+                    .await?;
                     Ok(())
                 })
             })
@@ -421,6 +526,9 @@ impl OpenIdConnectClientRepositoryImpl {
                         field: "client_secret",
                         value: String::new(),
                     };
+                }
+                if error.to_string().contains("registration_metadata_missing") {
+                    return OpenIdConnectClientRepositoryError::MissingMetadata(client_oid);
                 }
                 OpenIdConnectClientRepositoryError::QueryFailed(Box::new(DbErr::Custom(
                     error.to_string(),
@@ -510,16 +618,28 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             return Err(OpenIdConnectClientRepositoryError::ClientNotFound);
         };
 
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
         let result = ClientEntity::delete_many()
             .filter(client::Column::Id.eq(client_model.id))
             .filter(client::Column::BuiltIn.eq(false))
-            .exec(&self.db)
+            .exec(&txn)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         if result.rows_affected == 0 {
             return Err(OpenIdConnectClientRepositoryError::BuiltInClient);
         }
+
+        crate::database::audit::record(&txn, "client.registration.delete", "client", client_oid)
+            .await
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
+        txn.commit()
+            .await
+            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
 
         Ok(())
     }

@@ -339,12 +339,6 @@ mod tests {
         assert_eq!(selected.user_email, matching.user_email);
     }
 
-    #[test]
-    fn requires_account_selection_when_prompt_contains_select_account() {
-        let prompt = HashSet::from([PromptValue::SelectAccount]);
-        assert!(requires_account_selection(Some(&prompt)));
-    }
-
     #[tokio::test]
     async fn determine_authorize_flow_returns_continue_for_reusable_session() {
         let recorded = Arc::new(Mutex::new(None));

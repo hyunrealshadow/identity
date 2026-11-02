@@ -17,6 +17,11 @@ pub struct TokenService {
     pub(super) runtime_key_ring: Option<Arc<dyn RuntimeKeyRingProvider>>,
     pub(super) session_repo: Option<Arc<dyn SessionRepository>>,
     pub(super) events: Arc<dyn EventSink>,
+    pub(super) management_authority_repo:
+        Option<Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>>,
+    /// Live resource-owned canonical scope state. Issuance/exchange/refresh
+    /// fails closed when this is absent.
+    pub(super) rbac_authorization_repo: Option<Arc<dyn RbacAuthorizationRepository>>,
 }
 
 pub struct TokenServiceDependencies {
@@ -56,7 +61,27 @@ impl TokenService {
             runtime_key_ring: None,
             session_repo: None,
             events: Arc::new(NoopEventSink),
+            management_authority_repo: None,
+            rbac_authorization_repo: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_management_authority_repository(
+        mut self,
+        repository: Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>,
+    ) -> Self {
+        self.management_authority_repo = Some(repository);
+        self
+    }
+
+    #[must_use]
+    pub fn with_rbac_authorization_repository(
+        mut self,
+        repository: Arc<dyn RbacAuthorizationRepository>,
+    ) -> Self {
+        self.rbac_authorization_repo = Some(repository);
+        self
     }
 
     /// Attach the key event and audit sink. Without an attached sink, business

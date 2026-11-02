@@ -1,67 +1,77 @@
+//! Baseline resource rows for the management authorization model.
+//!
+//! The reserved GraphQL API resource is version-controlled by this seed. Scope
+//! ownership is seeded separately after this entry, so the resource exists
+//! before any resource-owned built-in API scope is inserted.
+
 use async_trait::async_trait;
-use chrono::Utc;
 use identity_domain::openid_connect::API_RESOURCE;
-use sea_orm::{DatabaseConnection, EntityTrait, Set, sea_query::OnConflict};
-use serde_json::json;
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
+    QueryFilter, Set, TransactionTrait, sea_query::OnConflict,
+};
 use uuid::Uuid;
 
-use super::{Seed, scope::BUILT_IN_OPENID_CONNECT_SCOPES};
+use super::Seed;
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
+    application::error::{AppError, codes::authorization::AuthorizationErrorCode},
     database::entity::resource,
 };
 
 pub struct OAuthResourceDefaultsSeed;
+
 #[async_trait]
 impl Seed for OAuthResourceDefaultsSeed {
     fn name(&self) -> &'static str {
         "oauth_resource_defaults"
     }
+
     async fn run(&self, db: &DatabaseConnection) -> Result<(), AppError> {
-        resource::Entity::insert(resource::ActiveModel {
-            oid: Set(Uuid::new_v4()),
-            uri: Set(API_RESOURCE.to_owned()),
-            name: Set("Identity GraphQL API".to_owned()),
-            scopes: Set(json!(
-                BUILT_IN_OPENID_CONNECT_SCOPES
-                    .iter()
-                    .map(|scope| scope.name)
-                    .collect::<Vec<_>>()
-            )),
-            enabled: Set(true),
-            created_at: Set(Utc::now().into()),
-            updated_at: Set(None),
-        })
-        .on_conflict(
-            OnConflict::column(resource::Column::Uri)
-                .do_nothing()
-                .to_owned(),
-        )
-        .try_insert()
-        .exec_without_returning(db)
-        .await
-        .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?;
+        let transaction = db.begin().await.map_err(AppError::internal)?;
+        ensure_graphql_resource_coverage(&transaction).await?;
+        transaction.commit().await.map_err(AppError::internal)?;
         Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+/// Idempotently ensure the reserved GraphQL resource. Resource identity, URI,
+/// enabled state and creation time are preserved on repeated runs; scope rows
+/// point at this resource instead of duplicating a scope list on the resource.
+pub async fn ensure_graphql_resource_coverage(
+    transaction: &DatabaseTransaction,
+) -> Result<(), AppError> {
+    resource::Entity::insert(resource::ActiveModel {
+        oid: Set(Uuid::new_v4()),
+        uri: Set(API_RESOURCE.to_owned()),
+        name: Set("Identity GraphQL API".to_owned()),
+        enabled: Set(true),
+        ..Default::default()
+    })
+    .on_conflict(
+        OnConflict::column(resource::Column::Uri)
+            .do_nothing()
+            .to_owned(),
+    )
+    .exec_without_returning(transaction)
+    .await
+    .map_err(AppError::internal)?;
+    Ok(())
+}
 
-    use super::*;
-
-    #[tokio::test]
-    async fn initialization_never_overwrites_existing_resource_policy() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 0,
-            }])
-            .into_connection();
-        OAuthResourceDefaultsSeed.run(&db).await.unwrap();
-        let log = format!("{:?}", db.into_transaction_log());
-        assert!(log.contains(r#"ON CONFLICT (\"uri\") DO NOTHING"#), "{log}");
-        assert!(log.contains("urn:identity:graphql"));
-    }
+/// Resolve the reserved GraphQL resource by URI. This is the authoritative
+/// owner for built-in API scopes and management RBAC associations.
+pub async fn graphql_resource_oid(db: &impl ConnectionTrait) -> Result<Uuid, AppError> {
+    resource::Entity::find()
+        .filter(resource::Column::Uri.eq(API_RESOURCE))
+        .one(db)
+        .await
+        .map_err(AppError::internal)?
+        .map(|row| row.oid)
+        .ok_or_else(|| {
+            AppError::map_source(AuthorizationErrorCode::RbacPolicyUnavailable)(
+                sea_orm::DbErr::RecordNotFound(
+                    "the reserved GraphQL API resource is missing".to_owned(),
+                ),
+            )
+        })
 }

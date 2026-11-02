@@ -24,7 +24,10 @@ pub use model::oauth_error::{OAuthErrorCode, OAuthErrorResponse};
 pub use model::provider::{
     ClaimType, OpenIdProviderMetadata, SubjectType, TokenEndpointAuthMethod,
 };
-pub use model::scope::{API_RESOURCE, ApiScope, ResourceScopeCoverage, ScopeParseError, ScopeSet};
+pub use model::scope::{
+    API_RESOURCE, ApiScope, ResourceScopeCoverage, ScopeParseError, ScopeSet, is_scope_pattern,
+    scope_pattern_matches,
+};
 pub use repository::{
     OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
     OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,

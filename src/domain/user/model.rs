@@ -77,6 +77,8 @@ impl FromStr for UserTheme {
 #[derive(Debug, Clone)]
 pub struct User {
     pub oid: UserOid,
+    /// UUID optimistic-lock and authorization change marker for the whole user.
+    pub version: Uuid,
     pub email: String,
     pub email_normalized: String,
     pub name: String,

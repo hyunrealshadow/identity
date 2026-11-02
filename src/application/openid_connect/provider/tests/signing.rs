@@ -5,6 +5,7 @@ async fn discovery_uses_rsa_key_repo_algorithm() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -54,6 +55,7 @@ async fn discovery_advertises_only_published_signing_algorithms() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -79,6 +81,7 @@ async fn discovery_uses_rsa_pss_key_repo_algorithm() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -109,6 +112,7 @@ async fn discovery_uses_ec_key_repo_algorithm() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -137,6 +141,7 @@ async fn discovery_uses_all_detected_key_repo_algorithms() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -176,6 +181,7 @@ async fn discovery_falls_back_to_capabilities_when_key_repo_has_no_detected_algo
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -201,6 +207,7 @@ async fn discovery_maps_key_repo_errors() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,

@@ -8,6 +8,8 @@ pub use super::client_openid_connect_cors_origin::Entity as ClientOpenIdConnectC
 pub use super::client_openid_connect_credential::Entity as ClientOpenIdConnectCredential;
 pub use super::client_openid_connect_platform::Entity as ClientOpenIdConnectPlatform;
 pub use super::client_scope::Entity as ClientScope;
+pub use super::group_membership::Entity as GroupMembership;
+pub use super::group_role_binding::Entity as GroupRoleBinding;
 pub use super::key::Entity as Key;
 pub use super::key_jwk::Entity as KeyJwk;
 pub use super::login::Entity as Login;
@@ -16,3 +18,4 @@ pub use super::session::Entity as Session;
 pub use super::setting::Entity as Setting;
 pub use super::user::Entity as User;
 pub use super::user_credential::Entity as UserCredential;
+pub use super::user_group::Entity as UserGroup;

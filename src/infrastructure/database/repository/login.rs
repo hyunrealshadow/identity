@@ -143,8 +143,20 @@ impl LoginRepository for LoginRepositoryImpl {
             expires_at: Set((now + expiry_duration).into()),
             ..Default::default()
         };
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
         let model = active
-            .insert(&self.db)
+            .insert(&transaction)
+            .await
+            .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
+        crate::database::audit::record(&transaction, "login.created", "login", model.oid)
+            .await
+            .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
+        transaction
+            .commit()
             .await
             .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
         to_domain(model, client_oid, client_authorization_oid, None, None)
@@ -205,6 +217,9 @@ impl LoginRepository for LoginRepositoryImpl {
                 .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::LoginNotFound)?;
 
+        crate::database::audit::record(&txn, "login.identifier_verified", "login", model.oid)
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         txn.commit()
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
@@ -264,6 +279,26 @@ impl LoginRepository for LoginRepositoryImpl {
             return Err(LoginRepositoryError::InvalidTransition);
         }
 
+        let status_changed = current_status != status;
+        let session_changed = session_id.is_some_and(|sid| model.session_id != Some(sid));
+        let acr_changed = acr.is_some_and(|value| model.acr.as_deref() != Some(value));
+        let audit_action = if status_changed {
+            Some(match status {
+                LoginStatus::Created => "login.created",
+                LoginStatus::IdentifierVerified => "login.identifier_verified",
+                LoginStatus::MfaRequired => "login.mfa_required",
+                LoginStatus::Authenticated => "login.authenticated",
+                LoginStatus::Expired => "login.expired",
+                LoginStatus::Failed => "login.failed",
+            })
+        } else if session_changed {
+            Some("login.session_bound")
+        } else if acr_changed {
+            Some("login.context_updated")
+        } else {
+            None
+        };
+
         let transaction = self
             .db
             .begin()
@@ -294,6 +329,11 @@ impl LoginRepository for LoginRepositoryImpl {
         super::challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        if let Some(action) = audit_action {
+            crate::database::audit::record(&transaction, action, "login", login_oid)
+                .await
+                .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        }
         transaction
             .commit()
             .await
@@ -323,13 +363,25 @@ impl LoginRepository for LoginRepositoryImpl {
             );
         }
 
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
         let updated = update
-            .exec_with_returning(&self.db)
+            .exec_with_returning(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?
             .into_iter()
             .next()
             .ok_or(LoginRepositoryError::LoginNotFound)?;
+        crate::database::audit::record(&transaction, "login.failed_attempt", "login", login_oid)
+            .await
+            .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
         Ok(updated.failed_attempts)
     }
 
@@ -372,6 +424,9 @@ impl LoginRepository for LoginRepositoryImpl {
         super::challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        crate::database::audit::record(&transaction, "login.identity_reset", "login", login_oid)
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         transaction
             .commit()
             .await
@@ -385,9 +440,14 @@ impl LoginRepository for LoginRepositoryImpl {
         login_oid: Uuid,
         session_oid: SessionOid,
     ) -> Result<(), LoginRepositoryError> {
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let session = SessionEntity::find()
             .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
-            .one(&self.db)
+            .one(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::SessionNotFound)?;
@@ -399,13 +459,20 @@ impl LoginRepository for LoginRepositoryImpl {
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
             .filter(login::Column::Oid.eq(login_oid))
-            .exec(&self.db)
+            .exec(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
 
         if result.rows_affected == 0 {
             return Err(LoginRepositoryError::LoginNotFound);
         }
+        crate::database::audit::record(&transaction, "login.session_bound", "login", login_oid)
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        transaction
+            .commit()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
 
         Ok(())
     }
@@ -413,11 +480,31 @@ impl LoginRepository for LoginRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "reset_failed_attempts"))]
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError> {
         let now = Utc::now().fixed_offset();
-        LoginEntity::update_many()
+        let transaction = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
+        let result = LoginEntity::update_many()
             .col_expr(login::Column::FailedAttempts, Expr::value(0))
             .col_expr(login::Column::UpdatedAt, Expr::value(Some(now)))
             .filter(login::Column::Oid.eq(login_oid))
-            .exec(&self.db)
+            .filter(login::Column::FailedAttempts.ne(0_i32))
+            .exec(&transaction)
+            .await
+            .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
+        if result.rows_affected == 1 {
+            crate::database::audit::record(
+                &transaction,
+                "login.failed_attempts_reset",
+                "login",
+                login_oid,
+            )
+            .await
+            .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
+        }
+        transaction
+            .commit()
             .await
             .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
         Ok(())

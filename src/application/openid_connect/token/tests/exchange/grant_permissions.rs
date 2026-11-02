@@ -18,6 +18,7 @@ fn refresh_token_data(user_oid: Uuid) -> RefreshTokenData {
         authorization_code_oid: None,
         device_authorization_oid: None,
         client_authentication_mode: None,
+        management: None,
     }
 }
 
@@ -50,6 +51,7 @@ async fn code_exchange_rejects_client_without_authorization_code_grant() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),
@@ -108,6 +110,7 @@ async fn code_exchange_does_not_issue_unusable_refresh_token() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_owned(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),

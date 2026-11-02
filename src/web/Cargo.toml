@@ -9,6 +9,10 @@ publish = false
 [lib]
 path = "mod.rs"
 
+[[bin]]
+name = "identity-schema"
+path = "bin/export-schema.rs"
+
 [dependencies]
 async-trait = { workspace = true }
 async-graphql = { workspace = true }

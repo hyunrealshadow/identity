@@ -1,6 +1,5 @@
 use chrono::Utc;
 use serde_json::Value;
-use tokio::{spawn, time::sleep};
 
 use crate::openid_connect::{
     authorize::tests::fixtures::repositories::{
@@ -189,59 +188,6 @@ pub(in crate::openid_connect) fn authorize_service_with_request_uri(
         data_protector: test_data_protector(),
         http_client: test_http_client(),
     })
-}
-
-pub(in crate::openid_connect) async fn spawn_chunked_response_server(
-    chunks: Vec<Vec<u8>>,
-    keep_open_for: Duration,
-) -> Url {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-
-    spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        stream
-                .write_all(
-                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n",
-                )
-                .await
-                .unwrap();
-
-        for chunk in chunks {
-            stream
-                .write_all(format!("{:X}\r\n", chunk.len()).as_bytes())
-                .await
-                .unwrap();
-            stream.write_all(&chunk).await.unwrap();
-            stream.write_all(b"\r\n").await.unwrap();
-        }
-
-        sleep(keep_open_for).await;
-    });
-
-    Url::parse(&format!("http://{address}/request.jwt")).unwrap()
-}
-
-pub(in crate::openid_connect) async fn spawn_redirect_response_server(_location: &str) -> Url {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let location = format!("http://{address}/final.jwt");
-
-    spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        let response = format!(
-            "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n"
-        );
-        stream.write_all(response.as_bytes()).await.unwrap();
-
-        let (mut stream, _) = listener.accept().await.unwrap();
-        stream
-            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
-            .await
-            .unwrap();
-    });
-
-    Url::parse(&format!("http://{address}/request.jwt")).unwrap()
 }
 
 pub(in crate::openid_connect) fn signed_request_object(

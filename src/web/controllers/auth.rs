@@ -104,7 +104,7 @@ async fn login_status(
         .oidc_authorize()
         .decrypt_login_id(&id)
         .await?;
-    let login = ctx.services().login().get(login_oid).await?;
+    let login = ctx.services().login().prepare_challenge(login_oid).await?;
 
     let (user, credential_types, mfa_preference) = match login.user_oid {
         Some(user_oid) => {
@@ -188,8 +188,9 @@ async fn login_status(
         &login,
         &credential_types,
         mfa_preference,
-        requires_reauthentication,
     );
+    let credential_types =
+        crate::application::auth::login::challenge_credential_types(&login, &credential_types);
     let challenge_uri = if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
             || requires_reauthentication)
@@ -470,7 +471,6 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 &pending,
                 &credentials,
                 user.preferred_mfa_method,
-                false,
             );
             render_json(
                 res,

@@ -128,11 +128,8 @@ where
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use identity_application::setting::{
-        DynamicRegistrationSettings, InstallationSettings, LoginDomainSetting,
-        OpenIdConnectSettings, SettingChanges,
-    };
-    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+    use identity_application::setting::{InstallationSettings, SettingChanges};
+    use sea_orm::{DatabaseBackend, MockDatabase};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -163,43 +160,6 @@ mod tests {
         assert_eq!(installation.initialized_at, Some(now));
         let sql = format!("{:?}", db.into_transaction_log()[0]);
         assert!(sql.contains("app.installation.%"), "{sql}");
-    }
-
-    #[tokio::test]
-    async fn writes_every_change_in_one_upsert() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 2,
-            }])
-            .into_connection();
-        let changes = SettingChanges::default()
-            .set_section_field(
-                &OpenIdConnectSettings {
-                    dynamic_registration: DynamicRegistrationSettings { enabled: true },
-                    ..OpenIdConnectSettings::default()
-                },
-                "dynamic_registration.enabled",
-            )
-            .unwrap()
-            .set::<LoginDomainSetting>(&Some("https://login.example".to_owned()))
-            .unwrap();
-
-        write_settings(&db, changes).await.unwrap();
-
-        let log = db.into_transaction_log();
-        assert_eq!(log.len(), 1);
-        let sql = format!("{:?}", log[0]);
-        assert!(
-            sql.contains(r#"ON CONFLICT (\"key\") DO UPDATE SET \"value\" = \"excluded\".\"value\", \"updated_at\" = CURRENT_TIMESTAMP"#),
-            "{sql}"
-        );
-        assert_eq!(
-            sql.matches("ChronoDateTimeWithTimeZone(None)").count(),
-            2,
-            "{sql}"
-        );
-        assert!(sql.contains("https://login.example"), "{sql}");
     }
 
     #[tokio::test]

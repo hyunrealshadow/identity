@@ -72,8 +72,8 @@ pub enum ChallengeOutcome {
     /// Password was verified and the user has no OTP credential — session
     /// created or renewed immediately with password-only ACR.
     Authenticated { login: Login, session: Box<Session> },
-    /// Password was verified and the user has an OTP credential — the client
-    /// MUST call challenge again with [`CredentialType::Otp`].
+    /// The first factor is established; the client must supply an allowed
+    /// second factor before authentication can complete.
     MfaRequired { login: Login },
 }
 
@@ -145,7 +145,36 @@ impl LoginService {
             .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
     }
 
-    /// Return the credential types currently available to the user.
+    /// Enter the credential phase using established authentication evidence.
+    /// The chosen credential, transport and presentation do not determine it.
+    #[tracing::instrument(skip_all, name = "authentication.prepare")]
+    pub async fn prepare_challenge(&self, login_oid: Uuid) -> Result<Login, AppError> {
+        let mut login = self.get(login_oid).await?;
+        if login.status != LoginStatus::IDENTIFIER_VERIFIED
+            || login.session_oid.is_none()
+            || login.expires_at <= Utc::now()
+        {
+            return Ok(login);
+        }
+        let Some(user_oid) = login.user_oid else {
+            return Ok(login);
+        };
+        let credentials = self.credential_types(user_oid.into()).await?;
+        if login.requested_acr.as_deref() == Some(identity_domain::auth::ACR_AAL2)
+            || credentials
+                .iter()
+                .any(|kind| *kind != CredentialType::Password)
+        {
+            self.login_repo
+                .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
+                .await?;
+            login.status = LoginStatus::MFA_REQUIRED;
+        }
+        Ok(login)
+    }
+
+    /// Return the credential types enrolled by the user. The interaction's
+    /// phase determines which of these may be offered for a challenge.
     ///
     /// This is also used by the first-party login UI when an authorization
     /// interaction is already bound to an active session. In that case the UI
@@ -241,18 +270,35 @@ impl LoginService {
                 &login,
                 &credential_types,
                 user.preferred_mfa_method,
-                false,
             ),
+            credential_types: challenge_credential_types(&login, &credential_types),
             login,
             user,
-            credential_types,
         })
     }
 }
 
 fn can_challenge_second_factor(login: &Login) -> bool {
     login.status == LoginStatus::MFA_REQUIRED
-        || (login.status == LoginStatus::IDENTIFIER_VERIFIED && login.session_oid.is_some())
+}
+
+/// Methods allowed by the current authentication phase.
+#[must_use]
+pub fn challenge_credential_types(
+    login: &Login,
+    credentials: &[CredentialType],
+) -> Vec<CredentialType> {
+    credentials
+        .iter()
+        .copied()
+        .filter(|kind| match login.status {
+            LoginStatus::IDENTIFIER_VERIFIED => {
+                matches!(kind, CredentialType::Password | CredentialType::Passkey)
+            }
+            LoginStatus::MFA_REQUIRED => *kind != CredentialType::Password,
+            _ => false,
+        })
+        .collect()
 }
 
 fn failed_attempt_lock_until() -> DateTime<Utc> {
@@ -265,7 +311,6 @@ pub fn preferred_credential_type(
     login: &Login,
     credentials: &[CredentialType],
     preference: identity_domain::user::MfaMethod,
-    reauthentication: bool,
 ) -> Option<CredentialType> {
     use identity_domain::user::MfaMethod;
     let has = |kind| credentials.contains(&kind);
@@ -273,6 +318,12 @@ pub fn preferred_credential_type(
         return None;
     }
     if login.status == LoginStatus::MFA_REQUIRED {
+        if login.session_oid.is_some()
+            && preference == MfaMethod::Passkey
+            && has(CredentialType::Passkey)
+        {
+            return Some(CredentialType::Passkey);
+        }
         return has(CredentialType::Otp)
             .then_some(CredentialType::Otp)
             .or_else(|| has(CredentialType::Passkey).then_some(CredentialType::Passkey))
@@ -285,9 +336,6 @@ pub fn preferred_credential_type(
         && (preference == MfaMethod::Passkey || !has(CredentialType::Otp))
     {
         return Some(CredentialType::Passkey);
-    }
-    if reauthentication && login.session_oid.is_some() && has(CredentialType::Otp) {
-        return Some(CredentialType::Otp);
     }
     if has(CredentialType::Password) {
         return Some(CredentialType::Password);

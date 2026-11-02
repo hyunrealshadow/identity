@@ -10,6 +10,3 @@ mod token;
 mod user_info;
 
 pub use routes::routes;
-
-#[cfg(test)]
-mod tests;

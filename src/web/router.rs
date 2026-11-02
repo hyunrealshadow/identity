@@ -11,15 +11,17 @@ use salvo::{Router, affix_state::inject, serve_static::StaticDir};
 use super::{
     controllers,
     middleware::{
-        RequireUpstreamHttps, RequireWorkload, ResolveClientIp, TraceContextMiddleware,
-        security_headers_middleware,
+        RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
+        TraceContextMiddleware, security_headers_middleware,
     },
 };
 use crate::{controllers::response::handle_404, graphql, health};
 
 pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
-    let mut router = Router::new();
+    let mut router = Router::new().hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
+        config.observability.trace_context.clone(),
+    )));
     if config.server.tls.termination == TlsTermination::Upstream {
         router = router.hoop(RequireUpstreamHttps::new(
             &config.server.tls.trusted_proxies,
@@ -83,6 +85,9 @@ pub fn internal_router(
     }
 
     Router::new()
+        .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
+            config.observability.trace_context.clone(),
+        )))
         .hoop(RequireWorkload::new(authenticator))
         .hoop(ResolveClientIp::new(
             &config.server.tls.trusted_proxies,

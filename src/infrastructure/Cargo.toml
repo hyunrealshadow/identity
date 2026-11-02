@@ -10,6 +10,7 @@ publish = false
 path = "mod.rs"
 
 [dependencies]
+strum = { workspace = true }
 apalis = { workspace = true }
 apalis-cron = { workspace = true }
 apalis-sql = { workspace = true }

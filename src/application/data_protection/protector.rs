@@ -417,6 +417,11 @@ mod tests {
         let expired_provider = Arc::new(MockKeyRingProvider::new(vec![expired_key]));
         let expired_protector = DataProtectorImpl::new(expired_provider, test_cipher());
 
+        assert!(matches!(
+            expired_protector.protect("session", plaintext).await,
+            Err(DataProtectionError::KeyRingEmpty)
+        ));
+
         let decrypted = expired_protector
             .unprotect("session", &token)
             .await

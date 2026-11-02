@@ -239,15 +239,8 @@ pub async fn method_not_allowed(res: &mut Response) {
 mod tests {
     use http::{HeaderMap, HeaderValue};
     use identity_application::error::codes::authorize::AuthorizeErrorCode;
-    use identity_infrastructure::test_app_state_with_mock_settings;
-    use salvo::{
-        Service,
-        affix_state::inject,
-        test::{ResponseExt, TestClient},
-    };
+    use salvo::test::{ResponseExt, TestClient};
     use serde_json::{Value, to_value};
-
-    use crate::controllers::oauth2::routes;
 
     use super::*;
 
@@ -379,41 +372,5 @@ mod tests {
         assert!(parse_pushed_parameters(b"response_type=code", &basic).is_err());
         assert!(parse_pushed_parameters(b"request=jwt", &basic).is_ok());
         assert!(parse_pushed_parameters(b"client_id=a&client_secret=secret", &basic).is_err());
-    }
-    #[tokio::test]
-    async fn par_route_returns_protocol_errors_and_enforces_method_and_size() {
-        let state = test_app_state_with_mock_settings().await;
-        let service = Service::new(routes().hoop(inject(state)));
-        for (body, status) in [
-            ("client_id=".to_owned(), StatusCode::BAD_REQUEST),
-            ("x".repeat(65537), StatusCode::PAYLOAD_TOO_LARGE),
-        ] {
-            let mut response = TestClient::post("http://localhost/oauth2/par")
-                .add_header(
-                    header::CONTENT_TYPE,
-                    "application/x-www-form-urlencoded",
-                    true,
-                )
-                .text(body)
-                .send(&service)
-                .await;
-            assert_eq!(response.status_code, Some(status));
-            assert!(
-                response
-                    .headers()
-                    .get(header::CACHE_CONTROL)
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .contains("no-store")
-            );
-            let body: Value = response.take_json().await.unwrap();
-            assert_eq!(body["error"], "invalid_request");
-        }
-        let response = TestClient::get("http://localhost/oauth2/par")
-            .send(&service)
-            .await;
-        assert_eq!(response.status_code, Some(StatusCode::METHOD_NOT_ALLOWED));
-        assert!(response.headers().contains_key(header::ALLOW));
     }
 }

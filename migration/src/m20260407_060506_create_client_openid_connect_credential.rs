@@ -1,3 +1,5 @@
+use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::Func;
 use sea_orm_migration::{
     async_trait,
     prelude::{
@@ -11,7 +13,7 @@ use sea_orm_migration::{
     sea_orm,
 };
 
-use crate::m20260306_031058_create_client::Client;
+use crate::m20260407_060453_create_client_openid_connect::ClientOpenIdConnect;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -43,7 +45,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(ClientOpenIdConnectCredential::Id).big_integer())
                     .col(
                         uuid_uniq(ClientOpenIdConnectCredential::Oid)
-                            .default(Expr::cust("gen_random_uuid()")),
+                            .default(Func::cust(Alias::new("gen_random_uuid"))),
                     )
                     .col(big_integer(ClientOpenIdConnectCredential::ClientId))
                     .col(string(ClientOpenIdConnectCredential::Type))
@@ -64,12 +66,12 @@ impl MigrationTrait for Migration {
                     ))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_client_openid_connect_credential_client_id")
+                            .name("fk_client_openid_connect_credential_oidc_client_id")
                             .from(
                                 ClientOpenIdConnectCredential::Table,
                                 ClientOpenIdConnectCredential::ClientId,
                             )
-                            .to(Client::Table, Client::Id)
+                            .to(ClientOpenIdConnect::Table, ClientOpenIdConnect::ClientId)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )

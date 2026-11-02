@@ -62,6 +62,7 @@ fn pairwise_implicit_client() -> OpenIdConnectClient {
 fn hybrid_user(user_oid: Uuid) -> User {
     User {
         oid: UserOid::from(user_oid),
+        version: Uuid::new_v4(),
         email: "hybrid@example.com".to_string(),
         email_normalized: "hybrid@example.com".to_string(),
         name: "Hybrid User".to_string(),
@@ -100,6 +101,7 @@ fn hybrid_user(user_oid: Uuid) -> User {
 fn id_token_user(user_oid: Uuid) -> User {
     User {
         oid: UserOid::from(user_oid),
+        version: Uuid::new_v4(),
         email: "alice@example.com".to_string(),
         email_normalized: "alice@example.com".to_string(),
         name: "Alice Example".to_string(),
@@ -365,10 +367,7 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         .unwrap();
     assert_eq!(reset_login.status, LoginStatus::CREATED);
     assert_eq!(reset_login.expires_at, original_expires_at);
-    assert_eq!(
-        reset_login.requested_acr.as_deref(),
-        Some("aal2")
-    );
+    assert_eq!(reset_login.requested_acr.as_deref(), Some("aal2"));
     assert!(reset_login.user_oid.is_none());
     assert!(reset_login.session_oid.is_none());
     assert!(reset_login.acr.is_none());
@@ -1238,6 +1237,65 @@ async fn deny_authorization_request_failure_does_not_burn_interaction() {
 
     assert_eq!(denied_request.state, "state123");
     assert!(completed_at_for_test(&request_repo, oid).is_some());
+}
+
+#[cfg(test)]
+mod session_validation_tests {
+    use std::sync::Arc;
+
+    use chrono::Utc;
+    use identity_domain::auth::{SessionStatus, model::Session};
+
+    use crate::openid_connect::tests::fixtures::mocks::session::MockSessionRepository;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn approval_rejects_a_revoked_session() {
+        let (service, _) = default_authorize_service_with_request_repo();
+        let session_oid = SessionOid::from(Uuid::new_v4());
+        let user_oid = Uuid::new_v4();
+        let mut session_repo = MockSessionRepository::new();
+        let stored_session = Session {
+            oid: session_oid,
+            user_oid,
+            status: SessionStatus::Active,
+            device_name: None,
+            device_type: None,
+            os_name: None,
+            os_version: None,
+            browser_name: None,
+            browser_version: None,
+            user_agent: None,
+            ip_address: None,
+            last_active_at: None,
+            expires_at: None,
+            revoked_at: Some(Utc::now()),
+            created_at: Utc::now(),
+            acr: None,
+            acr_expires_at: None,
+            amr: Vec::new(),
+        };
+        session_repo
+            .expect_find_by_oid()
+            .returning(move |_| Ok(Some(stored_session.clone())));
+        let service = service.with_session_repo(Arc::new(session_repo));
+
+        let (request, _) = service
+            .validate_request(params("openid profile"))
+            .await
+            .unwrap();
+        let oid = service
+            .create_authorization_request(&request)
+            .await
+            .unwrap();
+
+        let error = service
+            .approve_authorization_request(oid, session_oid, user_oid, None, None)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), 23062);
+    }
 }
 
 #[test]

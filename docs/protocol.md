@@ -116,69 +116,78 @@ for authorization requests.
 
 ### Register resources and scopes
 
-Resources are registered in the PostgreSQL `resource` table.
-Each row has a unique `uri`, display `name`, JSON array of allowed `scopes`,
-and `enabled` flag. Initialization registers `urn:identity:graphql` without
-overwriting an existing row, including an administrator's disabled state.
-Additional resources can be registered with SQL:
+The PostgreSQL `resource` table identifies each target API by a unique `uri`,
+display `name`, `enabled` state and UUID `version` for optimistic locking.
+The `scope` table owns the permission definitions: `scope.resource_id` references
+`resource.oid`. A scope's `code` is unique within its resource; the same code may
+exist at another resource without conveying any authority there. Resources do
+not store a second JSON scope list or an authorization-mode setting.
 
-```sql
-INSERT INTO resource (uri, name, scopes)
-VALUES ('https://api.example.com/account', 'Account API', '["account.read"]'::jsonb);
-```
+`openid`, `profile`, `email`, `address`, `phone` and `offline_access` are global
+protocol scopes with a NULL resource reference. They are not role permissions.
+There is no scope `protocol` column. The built-in GraphQL API resource is
+`urn:identity:graphql`.
 
-The `scope` table is the supported scope catalog for each protocol. OpenID
-Connect discovery reads rows with `protocol = 'openid_connect'`; `client_scope`
-assigns the scopes a client may request. Custom scope names use OAuth scope-token
-syntax and exact matching, and survive consent, token issuance, and refresh.
-Add their definitions to `scope`, assign them through `client_scope`, and include
-their names in the appropriate resource's `scopes` array. Custom resource
-permissions require an explicit resource indicator and do not default to the
-built-in GraphQL API. Resource registration does not add scope definitions or
-provide an administration API. Client scope assignments and consent still apply.
-Resources identify target APIs, while scopes define permissions. Each resource
-is associated with the scopes it accepts.
+GraphQL exposes `createResource`, `createScope`, scope metadata updates and scope
+state changes. `createScope` requires a resource global ID. Resource ownership
+and code cannot be changed after creation. `client_scope` and `role_permission`
+reference the same canonical scope IDs; there is no separate permission catalog.
+See the [executable schema](../graphql/schema.graphql) for inputs and access
+requirements.
 
-Consent pages use the scope table's `display_name` and `description`. Its
-`descriptions` JSONB object maps language tags such as `zh-CN` and `en-US` to
-localized descriptions; a missing translation falls back to `description`.
+Clients receive an explicit scope ceiling through `client_scope`. Public dynamic
+registration can request protocol and intrinsic account self-service scopes;
+it cannot declare arbitrary API permissions. Registration metadata updates retain
+existing exact scope IDs and cannot turn delegated user authority into a new
+client-credentials grant.
+
+Request selectors such as `account.*`, `session.*` and `management.*` expand only
+against registered scopes at the requested resource. A selector can be used at
+any hierarchy level, includes descendants rather than the prefix itself, and
+cannot create a permission. Persistent assignments contain concrete scope IDs,
+not wildcard definitions.
+
+Scope display fields are `name`/`names` and `description`/`descriptions`. The
+JSONB maps use language tags as keys and translations as string values. Display
+language and fallback are selected by the viewing application; definitions have
+no `default_locale`. Names and descriptions never participate in authorization.
 
 ### Request and select targets
 
-Authorization and token requests accept repeated `resource` parameters, for
-example `resource=https%3A%2F%2Fapi.example.com%2Faccount&resource=urn%3Aidentity%3Agraphql`.
-Request Objects accept a single URI string or a nonempty array of URI strings.
-Device authorization also accepts and persists resource indicators. Values must
-be absolute, fragment-free URIs; matching preserves the exact spelling. Query
-components are accepted. Resource identifiers are never fetched.
+Authorization and token requests parse repeated `resource` parameters. Request
+Objects accept a URI string or a nonempty array of URI strings. Exact duplicate
+URIs are deduplicated. Values must be absolute and fragment-free; matching
+preserves the exact spelling, query components are accepted, and identifiers are
+never fetched.
 
-Explicit authorization targets must be enabled and collectively cover the
-requested scopes. Code and refresh exchanges may select a subset of the original
-targets; access-token scopes are reduced to those allowed by the selected targets.
-JWT access-token `aud` contains those targets, while ID Token `aud` remains the
-client ID. Refresh tokens retain the original resource grant and scopes, allowing
-a subsequent refresh for another originally authorized resource. An explicit
-refresh `scope` still narrows the grant under RFC 6749.
+API-scope authorization requests require an explicit resource indicator. Custom
+API scopes always require their owning resource. Self-service or management
+scopes at token endpoints may resolve the built-in GraphQL resource when no
+indicator is supplied. A protocol-only login may omit a resource; its protocol
+scopes are still checked against the client's explicit assignments.
 
-Multi-audience access tokens include only scopes allowed by every selected
-resource. Protocol controls (`openid` and `offline_access`) remain grant context
-and are retained separately from resource permissions. If no requested resource
-permission is common to all targets, the token
-request returns `invalid_target` without consuming the grant. Authorization-code
-grants can still cover distinct permissions at distinct resources; clients can
-request a separate access token for each resource. This scope restriction does
-not prevent bearer-token forwarding between audiences: multi-audience tokens
-still require mutual trust between resource servers, as described in
-[RFC 8707 Section 3](https://www.rfc-editor.org/rfc/rfc8707.html#section-3).
+Custom API user authorization uses code flow with S256 PKCE and one target API.
+Combining custom APIs or mixing a custom API with GraphQL is rejected. A flat
+scope string cannot disambiguate equal codes at different resources; it must
+never transfer one resource's grant to another resource.
 
-Unknown, disabled, malformed, out-of-grant, or incompatible targets return
-`invalid_target`; failed target validation does not consume the code or refresh
-token. Omitting targets reuses the grant's targets. Legacy grants without resource
-indicators retain their audience behavior and may select a registered target at
-the token endpoint; the resulting refresh token records that selection. API-scope
-authorization requests require an explicit resource indicator. API-scope token
-requests without indicators resolve the built-in GraphQL resource through the
-registry, so disabling it also blocks new tokens targeting it.
+Requests must fit the client's exact scope IDs at the target resource. User
+requests are additionally limited by effective direct-role and group-role
+permissions; intrinsic account/session self-service does not require an
+administrator role. Machine requests use the client's own scope ceiling without
+human role membership, MFA or an extra client-management grant.
+
+Code and refresh exchanges cannot expand their original resource grant. JWT
+access-token `aud` identifies the selected API, while ID Token `aud` remains the
+client ID. All six protocol scopes remain separate from resource permission
+intersection. Explicit refresh `scope` may narrow the grant under RFC 6749.
+Device authorization records resource indicators but rejects custom business
+RBAC and management issuance paths in the current implementation.
+
+Unknown, disabled, malformed, out-of-grant or incompatible targets are rejected.
+Failed target validation does not consume the code or refresh token. Scope
+ownership, client ceiling and live user authority are checked again at issuance,
+refresh, introspection and online bearer validation.
 
 ## Pushed authorization requests (RFC 9126)
 
@@ -187,7 +196,7 @@ registry, so disabling it also blocks new tokens targeting it.
 Clients POST authorization parameters as `application/x-www-form-urlencoded` to
 `/oauth2/par`, using their token-endpoint authentication method. Public clients
 must have `allow_public_client_flow` enabled and satisfy the applicable PKCE rules.
-The endpoint validates client policy, redirect URI, scopes, resource indicators,
+The endpoint validates client registration, redirect URI, scopes, resource indicators,
 and Request Objects before returning HTTP 201 with `request_uri` and `expires_in`.
 It does not start login or consent interactions. Requests larger than 64 KiB are
 rejected. A `request_uri` parameter cannot be pushed.
@@ -203,7 +212,7 @@ using type `pushed_authorization_request`, without client credentials. A partial
 unique index covers the reference digest. `completed_at` records consumption;
 the existing expiry and revocation fields also apply.
 Consumption atomically checks the client, expiry, and unused state; concurrent
-requests cannot reuse a reference. Current client policy is checked again before
+requests cannot reuse a reference. Current client registration is checked again before
 authorization proceeds.
 
 ### Runtime policy and Request Objects
@@ -262,11 +271,22 @@ The browser returns to `/oauth2/continue` after login or consent.
 
 ### GraphQL
 
-`/graphql` provides authenticated account, security, and session operations.
-It validates bearer tokens and resource audience, enforces API scopes, and
-requires recent authentication for sensitive operations. It has configurable
-query depth, complexity, pagination, and timeout limits. Its listener may be
-shared with the public API or bound separately.
+`/graphql` provides account self-service, security, sessions and functional
+instance-management queries and named mutations. It validates bearer identity,
+resource audience, current scope authority and the required authentication level.
+Machine principals do not acquire a human identity or satisfy human-only
+operations.
+
+Operation entry points and protected relationship fields publish their access
+requirements through repeatable `@access` directives, which drive the shared
+frontend preflight. Live ownership, delegation
+and transaction checks remain authoritative; `runtime: true` marks requirements
+that cannot be proved from token contents alone. Guards and transaction-level
+authentication failures return the same standard authentication challenge, so
+clients can use the existing session and complete MFA in a browser popup.
+
+Input validators, query depth, complexity, pagination and timeout limits apply.
+The GraphQL listener may be shared with the public API or bound separately.
 
 ### Internal workload API
 

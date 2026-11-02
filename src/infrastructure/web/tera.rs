@@ -54,6 +54,8 @@ pub fn build_i18n() -> Result<I18n, Box<dyn StdError + Send + Sync + 'static>> {
         return Ok(I18n::disabled());
     }
 
+    crate::i18n::catalog::validate_error_catalogs(&path).map_err(IoError::other)?;
+
     let loader = ArcLoader::builder(path.as_path(), langid!("en-US"))
         .customize(|bundle| {
             bundle.set_use_isolating(false);
@@ -72,7 +74,7 @@ pub fn build_i18n() -> Result<I18n, Box<dyn StdError + Send + Sync + 'static>> {
 ///   `{ LIST($fields) }`                  - conjunction (default), e.g. "A and B"
 ///   `{ LIST($fields, listType: "or") }`  - disjunction, e.g. "A or B"
 ///   `{ LIST($fields, listType: "unit") }` - unit list, e.g. "A B"
-fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
+pub(crate) fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
     let langid = bundle.locales.first().cloned().unwrap_or(langid!("en-US"));
     let locale: IcuLocaleCoreLanguageIdentifier = langid
         .to_string()

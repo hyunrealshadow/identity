@@ -6,6 +6,18 @@ use crate::{
 
 pub struct PasswordHashSetting;
 
+pub struct BreachedPasswordCheckEnabledSetting;
+
+impl SettingDefinition for BreachedPasswordCheckEnabledSetting {
+    type Value = bool;
+
+    const KEY: &'static str = "auth.password.breached_check_enabled";
+
+    fn default_value() -> Self::Value {
+        true
+    }
+}
+
 impl SettingDefinition for PasswordHashSetting {
     type Value = HashOptions;
 

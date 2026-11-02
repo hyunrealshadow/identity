@@ -1,3 +1,4 @@
+pub mod application_origins;
 pub mod binding;
 pub mod definition;
 mod definitions;
@@ -8,8 +9,8 @@ pub use binding::{SettingChanges, SettingRegistry, SettingsSnapshot, SettingsSou
 pub use definition::{SettingDefinition, SettingSection, SettingValidationError, SettingValue};
 pub use definitions::PushedAuthorizationSettings;
 pub use definitions::{
-    AppSettings, DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings,
-    InstallationSettings, LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings,
-    PasswordHashSetting,
+    AppSettings, BreachedPasswordCheckEnabledSetting, ConsoleDomainSetting,
+    DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings, InstallationSettings,
+    LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting,
 };
 pub use error::SettingError;

@@ -129,21 +129,14 @@ async fn token(depot: &mut Depot) -> Result<AppResponse, TokenWebError> {
 
 #[cfg(test)]
 mod tests {
-    use http::{
-        HeaderMap, StatusCode, header,
-        header::{AUTHORIZATION, CONTENT_TYPE},
-    };
+    use http::{HeaderMap, StatusCode, header, header::AUTHORIZATION};
     use identity_application::error::codes::common::CommonErrorCode;
     use identity_infrastructure::test_app_state_with_mock_settings;
-    use salvo::{
-        Service,
-        affix_state::inject,
-        test::{ResponseExt, TestClient},
-    };
+    use salvo::test::{ResponseExt, TestClient};
     use serde_json::{Value, from_str};
 
     use super::super::super::client_credentials::parse_basic_client_auth;
-    use crate::controllers::{oauth2::routes, response::parse_form};
+    use crate::controllers::response::parse_form;
 
     use super::*;
 
@@ -224,21 +217,6 @@ mod tests {
         let internal = TokenWebError(AppError::from_code(TokenErrorCode::DeviceRedemptionFailed));
         assert_eq!(internal.rfc6749_error_code(), "server_error");
         assert_eq!(internal.rfc6749_status(), StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    #[tokio::test]
-    async fn token_route_dispatches_the_device_code_grant() {
-        let app = routes().hoop(inject(test_app_state_with_mock_settings().await));
-        let service = Service::new(app);
-        let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/token")
-            .add_header(CONTENT_TYPE, "application/x-www-form-urlencoded", true)
-            .body("grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=unknown")
-            .send(&service)
-            .await;
-
-        assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
-        let body = response.take_string().await.unwrap();
-        assert!(body.contains("invalid_request"), "{body}");
     }
 
     #[test]

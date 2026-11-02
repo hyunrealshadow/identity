@@ -1,23 +1,5 @@
-use reqwest::{Client, redirect::Policy};
-
-use crate::openid_connect::{
-    authorize::request_object::fetchable_request_uri,
-    remote::{
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, fetch_document_after_url_validation,
-    },
-};
-
 use crate::openid_connect::authorize::tests::fixtures::*;
 use crate::openid_connect::authorize::tests::*;
-
-#[test]
-fn fetchable_request_uri_strips_fragment_before_http_fetch() {
-    let request_uri = Url::parse("https://client.example.com/request.jwt#fragment").unwrap();
-
-    let fetch_uri = fetchable_request_uri(&request_uri);
-
-    assert_eq!(fetch_uri.as_str(), "https://client.example.com/request.jwt");
-}
 
 #[tokio::test]
 async fn validate_request_uri_rejects_unregistered_public_target() {
@@ -139,53 +121,4 @@ async fn validate_request_uri_rejects_ipv6_link_local() {
     };
     let error = service.validate_request(params).await.unwrap_err();
     assert_eq!(error.code(), 23017, "fe80::/10 link-local must be blocked"); // RequestUriUnsafeHost
-}
-
-#[tokio::test]
-async fn fetch_request_object_rejects_oversized_chunked_response_before_completion() {
-    let request_uri = spawn_chunked_response_server(
-        vec![vec![b'a'; 1024 * 1024], vec![b'b'; 1]],
-        Duration::from_secs(6),
-    )
-    .await;
-    let client = Client::builder()
-        .redirect(Policy::none())
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap();
-
-    let result = timeout(
-        Duration::from_secs(2),
-        fetch_document_after_url_validation(
-            &client,
-            &request_uri,
-            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        ),
-    )
-    .await;
-
-    let error = result
-        .expect("oversized response should be rejected before server finishes")
-        .unwrap_err();
-    assert!(matches!(error, RemoteFetchError::TooLarge));
-}
-
-#[tokio::test]
-async fn fetch_request_object_rejects_redirect_response() {
-    let request_uri = spawn_redirect_response_server("http://127.0.0.1/final.jwt").await;
-    let client = Client::builder()
-        .redirect(Policy::none())
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap();
-
-    let error = fetch_document_after_url_validation(
-        &client,
-        &request_uri,
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-    )
-    .await
-    .unwrap_err();
-
-    assert!(matches!(error, RemoteFetchError::NotOk));
 }

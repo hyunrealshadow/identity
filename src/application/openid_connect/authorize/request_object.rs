@@ -1,8 +1,6 @@
 //! Resolving inline or registered remote Request Objects and locating their client.
 
 use super::{AuthorizationRequestParams, AuthorizeService};
-#[cfg(test)]
-use crate::openid_connect::remote::fetchable_url;
 use crate::{
     error::{AppError, codes::authorize::AuthorizeErrorCode},
     openid_connect::remote::{
@@ -105,11 +103,6 @@ impl AuthorizeService {
             AuthorizeErrorCode::RequestObjectPayloadInvalid,
         ))
     }
-}
-
-#[cfg(test)]
-pub(in crate::openid_connect::authorize) fn fetchable_request_uri(request_uri: &Url) -> Url {
-    fetchable_url(request_uri)
 }
 
 fn map_request_uri_fetch_error(error: RemoteFetchError) -> AppError {

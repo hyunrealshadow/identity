@@ -12,10 +12,10 @@ pub struct Model {
     #[sea_orm(unique, column_type = "Text")]
     pub uri: String,
     pub name: String,
-    #[sea_orm(column_type = "JsonBinary")]
-    pub scopes: Json,
     #[sea_orm(default_value = true)]
     pub enabled: bool,
+    #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
+    pub version: Uuid,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

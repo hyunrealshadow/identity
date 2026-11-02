@@ -90,6 +90,7 @@ fn provider_service() -> Arc<OpenIdProviderService> {
             value: Arc::new(
                 SettingsSnapshot::default()
                     .with_section(&AppSettings {
+                        console_domain: None,
                         domain: Some("https://identity.example.com".to_owned()),
                         login_domain: None,
                         login_client_id: None,
@@ -599,6 +600,58 @@ async fn unparsable_scope_is_rejected() {
         .await
         .unwrap_err();
 
+    assert_eq!(
+        error.code(),
+        DeviceAuthorizationErrorCode::ScopeInvalid.code()
+    );
+}
+
+#[tokio::test]
+async fn management_scopes_are_rejected_at_device_request_issuance() {
+    let mut metadata = test_metadata(None, None);
+    metadata.grant_types = Some(device_grant());
+    let client = OpenIdConnectClient::new(
+        test_client(CLIENT_ID),
+        metadata,
+        test_platforms(),
+        vec!["openid".to_owned(), "management.user.read".to_owned()],
+    )
+    .unwrap();
+    let service = build_service(client, Arc::new(MockDeviceAuthorizationRepository::new()));
+
+    let error = service
+        .authorize(params(
+            Some("secret-123"),
+            Some("openid management.user.read"),
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.code(),
+        DeviceAuthorizationErrorCode::ScopeInvalid.code()
+    );
+}
+
+#[tokio::test]
+async fn management_scopes_are_rejected_at_device_approval() {
+    let record = pending_record(
+        "WDJBMJHT",
+        "openid management.user.read",
+        Utc::now() + Duration::minutes(5),
+    );
+    let service = build_service(
+        device_client(device_grant(), false),
+        device_repo_with(record),
+    );
+
+    let error = service
+        .decide_verification(
+            "WDJBMJHT",
+            &verification_user(),
+            DeviceVerificationDecision::Approve,
+        )
+        .await
+        .unwrap_err();
     assert_eq!(
         error.code(),
         DeviceAuthorizationErrorCode::ScopeInvalid.code()

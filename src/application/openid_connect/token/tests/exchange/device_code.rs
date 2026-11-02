@@ -258,9 +258,16 @@ fn device_repo(
         .returning(move |_, _| Ok(poll));
     let (sender, receiver) = unbounded_channel();
     let consume = options.consume.unwrap_or(DeviceConsumeOutcome::Consumed);
+    let mut consumed = false;
     repo.expect_consume_device_request_with_tokens()
         .returning(move |_, records, _| {
-            let _ = sender.send(records);
+            if consume == DeviceConsumeOutcome::Consumed {
+                if consumed {
+                    return Ok(DeviceConsumeOutcome::NotRedeemable);
+                }
+                consumed = true;
+                let _ = sender.send(records);
+            }
             Ok(consume)
         });
 
@@ -434,7 +441,7 @@ async fn consumed_requests_report_invalid_grant() {
 }
 
 #[tokio::test]
-async fn an_approved_request_issues_its_token_set_once() {
+async fn an_approved_request_issues_bound_tokens_and_rejects_replay() {
     let sink = Arc::new(RecordingSink::default());
     let (repo, mut records) = device_repo(
         request_record(
@@ -521,6 +528,42 @@ async fn an_approved_request_issues_its_token_set_once() {
     }
     assert!(found_access && found_refresh);
     assert!(response.refresh_token.is_some());
+    let mut replay = params();
+    replay.resources = vec![API_RESOURCE.to_owned()];
+    assert_eq!(
+        service
+            .exchange_device_code(replay)
+            .await
+            .unwrap_err()
+            .code(),
+        24062
+    );
+    assert!(
+        records.try_recv().is_err(),
+        "replay must not commit another token set"
+    );
+}
+
+#[tokio::test]
+async fn approved_request_for_a_disabled_or_locked_user_is_rejected() {
+    for (enabled, locked) in [(false, false), (true, true)] {
+        let (repo, _records) = device_repo(
+            request_record(
+                DeviceRequestStatus::Approved,
+                Utc::now() + Duration::minutes(10),
+            ),
+            Some(relation_record(false)),
+            DeviceRepoOptions::default(),
+        );
+        let mut service = build_service(device_client(vec![GrantType::DeviceCode]), repo);
+        let mut user = test_user(Uuid::nil());
+        user.enabled = enabled;
+        user.locked = locked;
+        service.user_repo = Arc::new(InMemoryUserRepository { user });
+
+        let error = service.exchange_device_code(params()).await.unwrap_err();
+        assert_eq!(error.code(), 24069);
+    }
 }
 
 #[tokio::test]
@@ -669,6 +712,7 @@ async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, sco
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
         client_authentication_mode: None,
+        management: None,
     };
     let record = repo
         .create(
@@ -814,6 +858,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
         client_authentication_mode: None,
+        management: None,
     };
     let repo = Arc::new(mock_client_auth_repo());
     let record = repo
@@ -876,6 +921,7 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
         client_authentication_mode: None,
+        management: None,
     };
     let repo = Arc::new(mock_client_auth_repo());
     let record = repo

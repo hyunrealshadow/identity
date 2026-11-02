@@ -121,6 +121,7 @@ impl PasswordHasher for StubPasswordHasher {
 fn test_user() -> User {
     User {
         oid: UserOid(Uuid::new_v4()),
+        version: Uuid::new_v4(),
         email: "user@example.com".to_owned(),
         email_normalized: "user@example.com".to_owned(),
         name: "user".to_owned(),

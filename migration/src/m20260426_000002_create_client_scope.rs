@@ -67,10 +67,27 @@ impl MigrationTrait for Migration {
                     .unique()
                     .to_owned(),
             )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_client_scope_scope")
+                    .table(ClientScope::Table)
+                    .col(ClientScope::ScopeId)
+                    .to_owned(),
+            )
             .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("idx_client_scope_scope")
+                    .table(ClientScope::Table)
+                    .to_owned(),
+            )
+            .await?;
         manager
             .drop_index(
                 Index::drop()

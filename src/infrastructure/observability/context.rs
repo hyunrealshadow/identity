@@ -26,6 +26,39 @@ use crate::config::TraceContextConfig;
 pub const TRACEPARENT: &str = "traceparent";
 pub const TRACESTATE: &str = "tracestate";
 
+#[derive(Clone, Debug)]
+pub struct RequestCorrelation {
+    pub request_id: String,
+    pub trace_id: Option<String>,
+}
+
+impl RequestCorrelation {
+    #[must_use]
+    pub fn fresh() -> Self {
+        Self {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            trace_id: None,
+        }
+    }
+}
+
+tokio::task_local! {
+    static REQUEST_CORRELATION: RequestCorrelation;
+}
+
+/// Task-local scope survives await points without holding a thread-local guard.
+pub async fn with_request_correlation<F: std::future::Future>(
+    correlation: RequestCorrelation,
+    future: F,
+) -> F::Output {
+    REQUEST_CORRELATION.scope(correlation, future).await
+}
+
+#[must_use]
+pub fn current_request_correlation() -> Option<RequestCorrelation> {
+    REQUEST_CORRELATION.try_with(Clone::clone).ok()
+}
+
 /// Parsed, validated `traceparent` version 00/0x.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TraceParent {
@@ -220,6 +253,16 @@ impl TraceTrustPolicy {
             .iter()
             .any(|allowed| allowed == &origin)
     }
+
+    #[must_use]
+    pub fn trusts_request_id(&self, peer: Option<IpAddr>) -> bool {
+        peer.is_some_and(|peer| {
+            self.config
+                .trusted_request_id_gateways
+                .iter()
+                .any(|network| network.contains(&peer))
+        })
+    }
 }
 
 struct HeaderInjector<'a>(&'a mut HeaderMap);
@@ -352,6 +395,7 @@ mod tests {
     fn gateway_trust_can_be_configured_per_network() {
         let config = TraceContextConfig {
             trusted_gateways: vec!["10.0.0.0/8".parse::<IpNet>().unwrap()],
+            trusted_request_id_gateways: Vec::new(),
             trust_verified_workload: false,
             propagate_to_origins: Vec::new(),
         };
@@ -368,6 +412,7 @@ mod tests {
     fn outbound_propagation_is_origin_scoped() {
         let config = TraceContextConfig {
             trusted_gateways: Vec::new(),
+            trusted_request_id_gateways: Vec::new(),
             trust_verified_workload: true,
             propagate_to_origins: vec!["https://login.internal:8443".to_owned()],
         };

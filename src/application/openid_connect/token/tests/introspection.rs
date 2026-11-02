@@ -1,5 +1,5 @@
 use chrono::Duration;
-use identity_domain::client_authorization::AccessTokenData;
+use identity_domain::{auth::SessionOid, client_authorization::AccessTokenData};
 use serde_json::json;
 
 use crate::{
@@ -33,13 +33,16 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             Uuid::nil(),
             ClientAuthorizationData::AccessToken(AccessTokenData {
                 scope: "openid".to_owned(),
-                user_oid: user_oid.to_string(),
-                session_oid: None,
+                resources: Vec::new(),
+                user_oid: Some(user_oid.to_string()),
+                principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+                session_oid: Some(SessionOid::from(Uuid::new_v4())),
                 protected_session_id: None,
                 authorization_code_oid: None,
                 refresh_token_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                management: None,
             }),
             Utc::now() + Duration::hours(1),
         )
@@ -65,7 +68,8 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             issuer: &issuer,
             audience: &client_id,
             client_id: &client_id,
-            user_oid: &user_oid,
+            subject: &user_oid.to_string(),
+            principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
             client: &client,
             user: None,
             protected_session_id: None,
@@ -74,6 +78,8 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             auth_time: None,
             acr: None,
             amr: &[],
+            management: None,
+            business: None,
         })
         .await
         .unwrap();
@@ -127,7 +133,8 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
 #[tokio::test]
 async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
     let repo = Arc::new(fixtures::mock_client_auth_repo());
-    let service = fixtures::build_token_service(repo.clone(), Uuid::new_v4());
+    let user_oid = Uuid::new_v4();
+    let service = fixtures::build_token_service(repo.clone(), user_oid);
     for (owner, expired) in [
         (Uuid::nil(), false),
         (Uuid::new_v4(), false),
@@ -139,8 +146,8 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
                 ClientAuthorizationData::RefreshToken(RefreshTokenData {
                     resources: Vec::new(),
                     scope: "openid offline_access".into(),
-                    user_oid: Uuid::new_v4().to_string(),
-                    session_oid: None,
+                    user_oid: user_oid.to_string(),
+                    session_oid: Some(SessionOid::from(Uuid::new_v4())),
                     protected_session_id: None,
                     auth_time: None,
                     acr: None,
@@ -149,6 +156,7 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
                     authorization_code_oid: None,
                     device_authorization_oid: None,
                     client_authentication_mode: None,
+                    management: None,
                 }),
                 Utc::now() + Duration::seconds(if expired { -60 } else { 3600 }),
             )
@@ -184,6 +192,74 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
             .unwrap(),
         json!({"active": false})
     );
+}
+
+#[tokio::test]
+async fn machine_access_token_introspects_with_the_client_subject() {
+    let repo = Arc::new(fixtures::mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let service = fixtures::build_token_service(repo.clone(), user_oid);
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AccessToken(AccessTokenData {
+                scope: "account.read".to_owned(),
+                resources: Vec::new(),
+                user_oid: None,
+                principal: identity_domain::client_authorization::AccessTokenPrincipal::Client,
+                session_oid: None,
+                protected_session_id: None,
+                authorization_code_oid: None,
+                refresh_token_oid: None,
+                device_authorization_oid: None,
+                client_authentication_mode: None,
+                management: None,
+            }),
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+    let issuer = service.provider_service.issuer().unwrap();
+    let (key_id, private_key_pem, alg) = service.load_signing_key().await.unwrap();
+    let token_id = record.oid.to_string();
+    let client_id = Uuid::nil().to_string();
+    let resources = vec!["urn:identity:graphql".to_owned()];
+    let client = service
+        .client_repo
+        .find_by_oid(Uuid::nil())
+        .await
+        .unwrap()
+        .unwrap();
+    let token = service
+        .sign_access_token(SignAccessTokenInput {
+            resources: &resources,
+            token_id: &token_id,
+            key_id: &key_id,
+            private_key_pem: &private_key_pem,
+            alg,
+            issuer: &issuer,
+            audience: "urn:identity:graphql",
+            client_id: &client_id,
+            subject: &client_id,
+            principal: identity_domain::client_authorization::AccessTokenPrincipal::Client,
+            client: &client,
+            user: None,
+            protected_session_id: None,
+            scope: "account.read",
+            claims: None,
+            auth_time: None,
+            acr: None,
+            amr: &[],
+            management: None,
+            business: None,
+        })
+        .await
+        .unwrap();
+
+    let result = service.introspect_token(request(token)).await.unwrap();
+    assert_eq!(result["active"], true);
+    assert_eq!(result["sub"], client_id);
+    assert_eq!(result["scope"], "account.read");
 }
 
 #[tokio::test]

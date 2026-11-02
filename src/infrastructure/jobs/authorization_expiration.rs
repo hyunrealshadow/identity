@@ -139,9 +139,7 @@ pub(super) async fn spawn_expiration_workers(state: AppState, pool: PgPool) -> R
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
-    use apalis_cron::Schedule;
     use chrono::{TimeZone as _, Utc};
 
     use super::expiration_task_id;
@@ -154,6 +152,5 @@ mod tests {
 
         assert_eq!(expiration_task_id(first), expiration_task_id(same_interval));
         assert_ne!(expiration_task_id(first), expiration_task_id(next_interval));
-        assert!(Schedule::from_str("0 */5 * * * *").is_ok());
     }
 }

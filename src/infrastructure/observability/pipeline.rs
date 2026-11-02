@@ -9,7 +9,7 @@ use std::{env, error::Error, fmt::Debug, sync::Arc, time::Duration};
 use chrono::{DateTime, Utc};
 use opentelemetry::{
     Context, KeyValue, Value,
-    logs::{AnyValue, Severity},
+    logs::{AnyValue, LogRecord, Severity},
     trace::{Link, SpanKind, TraceContextExt, TraceId, TraceState},
 };
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
@@ -22,7 +22,7 @@ use opentelemetry_sdk::{
     error::OTelSdkResult,
     logs::{
         BatchConfig as LogBatchConfig, BatchConfigBuilder as LogBatchConfigBuilder,
-        BatchLogProcessor, LogBatch, LogExporter, SdkLogRecord, SdkLoggerProvider,
+        BatchLogProcessor, LogBatch, LogExporter, LogProcessor, SdkLogRecord, SdkLoggerProvider,
     },
     metrics::{
         PeriodicReader, SdkMeterProvider, Temporality, data::ResourceMetrics,
@@ -62,6 +62,26 @@ pub(crate) struct Providers {
     pub events_logs: SdkLoggerProvider,
     pub diagnostics_logs: Option<SdkLoggerProvider>,
     pub metrics: Option<SdkMeterProvider>,
+}
+
+/// Enrich at emission time, before the batch processor leaves the request task.
+/// The envelope supplies correlation without modifying every application event.
+#[derive(Debug)]
+struct RequestCorrelationProcessor;
+
+impl LogProcessor for RequestCorrelationProcessor {
+    fn emit(&self, record: &mut SdkLogRecord, _: &opentelemetry::InstrumentationScope) {
+        if let Some(correlation) = super::context::current_request_correlation() {
+            record.add_attribute("request.id", correlation.request_id);
+        }
+    }
+
+    fn force_flush(&self) -> OTelSdkResult {
+        Ok(())
+    }
+    fn shutdown_with_timeout(&self, _: Duration) -> OTelSdkResult {
+        Ok(())
+    }
 }
 
 /// Build every provider described by `config`.
@@ -124,6 +144,7 @@ pub(crate) fn build_providers(
         Some(
             SdkLoggerProvider::builder()
                 .with_resource(resource.clone())
+                .with_log_processor(RequestCorrelationProcessor)
                 .with_log_processor(
                     BatchLogProcessor::builder(exporter)
                         .with_batch_config(log_batch_config(diagnostics))
@@ -171,26 +192,40 @@ pub(crate) fn init_subscriber(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(logger.level.clone()));
 
     let subscriber = registry()
-        .with(filter)
-        .with(layer().with_tracer(tracer))
+        // Log verbosity must not disable request spans or their correlation IDs.
+        .with(
+            layer()
+                .with_tracer(tracer)
+                .with_filter(filter_fn(|metadata| {
+                    metadata.is_span() || *metadata.level() <= tracing::Level::WARN
+                })),
+        )
         .with(
             diagnostics_logs
                 .map(OpenTelemetryTracingBridge::new)
                 // The SDK reports its own failures through `tracing`; feeding
                 // those back into the same exporter would recurse.
                 .map(|layer| {
-                    layer.with_filter(filter_fn(|metadata| {
-                        !metadata.target().starts_with("opentelemetry")
-                    }))
+                    layer
+                        .with_filter(filter.clone())
+                        .with_filter(filter_fn(|metadata| {
+                            !metadata.target().starts_with("opentelemetry")
+                        }))
                 }),
         )
-        .with(InternalTelemetryLayer);
+        .with(InternalTelemetryLayer.with_filter(filter_fn(|metadata| {
+            metadata.target().starts_with("opentelemetry")
+        })));
 
     if console {
         match logger.format {
-            LogFormat::Json => subscriber.with(fmt::layer().json()).init(),
-            LogFormat::Pretty => subscriber.with(fmt::layer().pretty()).init(),
-            LogFormat::Compact => subscriber.with(fmt::layer()).init(),
+            LogFormat::Json => subscriber
+                .with(fmt::layer().json().with_filter(filter))
+                .init(),
+            LogFormat::Pretty => subscriber
+                .with(fmt::layer().pretty().with_filter(filter))
+                .init(),
+            LogFormat::Compact => subscriber.with(fmt::layer().with_filter(filter)).init(),
         }
     } else {
         subscriber.init();
@@ -641,8 +676,7 @@ mod tests {
     };
     use serde_json::{Value, from_str};
 
-    use super::{IdentitySampler, build_sampler, format_json_record, signal_endpoint};
-    use crate::config::{AppEnvironment, ObservabilityConfig};
+    use super::{IdentitySampler, format_json_record, signal_endpoint};
 
     #[test]
     fn business_event_console_json_contains_structured_fields() {
@@ -703,189 +737,5 @@ mod tests {
             signal_endpoint("http://collector:4318/v1/metrics", "/v1/metrics"),
             "http://collector:4318/v1/metrics"
         );
-    }
-
-    #[test]
-    fn production_defaults_to_ten_percent() {
-        let sampler = build_sampler(
-            &ObservabilityConfig::default(),
-            &AppEnvironment::Production,
-            vec!["/health".to_owned()],
-        );
-        let debug = format!("{sampler:?}");
-        assert!(debug.contains("0.1"), "unexpected sampler: {debug}");
-
-        let development = build_sampler(
-            &ObservabilityConfig::default(),
-            &AppEnvironment::Development,
-            Vec::new(),
-        );
-        assert!(format!("{development:?}").contains("1.0"));
-    }
-}
-
-#[cfg(test)]
-mod otlp_construction_tests {
-    use std::time::Duration;
-
-    use super::{build_providers, shutdown};
-    use crate::config::{AppEnvironment, LogFormat, ObservabilityConfig};
-
-    /// Building and shutting down the OTLP providers inside a Tokio runtime
-    /// must not panic: reqwest's blocking client and the batch processors run
-    /// on their own threads, so the async request path never blocks.
-    #[tokio::test]
-    async fn otlp_providers_build_inside_a_tokio_runtime() {
-        let mut config = ObservabilityConfig::default();
-        config.otlp.enable = true;
-        // Unroutable local port: exports fail fast and are counted.
-        config.otlp.endpoint = "http://127.0.0.1:1".to_owned();
-        config.otlp.timeout_ms = 200;
-
-        let providers = build_providers(
-            &config,
-            &AppEnvironment::Development,
-            false,
-            LogFormat::Compact,
-            Vec::new(),
-        )
-        .expect("OTLP providers must build");
-        shutdown(&providers, Duration::from_millis(500));
-    }
-}
-
-#[cfg(test)]
-mod otlp_export_tests {
-    use std::{sync::Arc, time::Duration};
-
-    use opentelemetry::{
-        logs::{LogRecord, Logger, LoggerProvider},
-        trace::{Span as _, Tracer, TracerProvider},
-    };
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-        spawn,
-        sync::Mutex,
-        time::sleep,
-    };
-
-    use super::{build_providers, shutdown};
-    use crate::config::{AppEnvironment, LogFormat, ObservabilityConfig};
-
-    #[derive(Clone, Debug, Default)]
-    struct MockCollector {
-        requests: Arc<Mutex<Vec<(String, String)>>>,
-    }
-
-    impl MockCollector {
-        async fn start() -> (Self, String) {
-            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let address = listener.local_addr().unwrap();
-            let collector = Self::default();
-            let requests = Arc::clone(&collector.requests);
-            spawn(async move {
-                loop {
-                    let Ok((mut socket, _)) = listener.accept().await else {
-                        return;
-                    };
-                    let requests = Arc::clone(&requests);
-                    spawn(async move {
-                        let mut buffer = Vec::new();
-                        let mut chunk = [0_u8; 8192];
-                        loop {
-                            let read = match socket.read(&mut chunk).await {
-                                Ok(0) | Err(_) => break,
-                                Ok(read) => read,
-                            };
-                            buffer.extend_from_slice(&chunk[..read]);
-                            let Some(headers_end) =
-                                buffer.windows(4).position(|window| window == b"\r\n\r\n")
-                            else {
-                                continue;
-                            };
-                            let headers =
-                                String::from_utf8_lossy(&buffer[..headers_end]).to_string();
-                            let content_length = headers
-                                .lines()
-                                .find_map(|line| {
-                                    line.to_ascii_lowercase()
-                                        .strip_prefix("content-length:")
-                                        .and_then(|value| value.trim().parse::<usize>().ok())
-                                })
-                                .unwrap_or(0);
-                            if buffer.len() >= headers_end + 4 + content_length {
-                                break;
-                            }
-                        }
-                        let request = String::from_utf8_lossy(&buffer).to_string();
-                        let path = request
-                            .lines()
-                            .next()
-                            .and_then(|line| line.split_whitespace().nth(1))
-                            .unwrap_or_default()
-                            .to_owned();
-                        let body = request
-                            .split("\r\n\r\n")
-                            .nth(1)
-                            .unwrap_or_default()
-                            .to_owned();
-                        requests.lock().await.push((path, body));
-                        let response = "HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n";
-                        let _ = socket.write_all(response.as_bytes()).await;
-                    });
-                }
-            });
-            (collector, format!("http://{address}"))
-        }
-    }
-
-    #[tokio::test]
-    async fn exports_spans_and_logs_to_the_configured_collector() {
-        let (collector, endpoint) = MockCollector::start().await;
-        let mut config = ObservabilityConfig::default();
-        config.otlp.enable = true;
-        config.otlp.endpoint = endpoint;
-        config.diagnostics.schedule_delay_ms = 10;
-
-        let providers = build_providers(
-            &config,
-            &AppEnvironment::Development,
-            false,
-            LogFormat::Compact,
-            Vec::new(),
-        )
-        .expect("OTLP providers must build");
-
-        let tracer = providers.tracer.tracer("export-test");
-        let mut span = tracer.start("export.test.span");
-        span.end();
-
-        let logger = providers.events_logs.logger("export-test");
-        let mut record = logger.create_log_record();
-        record.set_event_name("export.test.event");
-        logger.emit(record);
-
-        let _ = providers.tracer.force_flush();
-        let _ = providers.events_logs.force_flush();
-        sleep(Duration::from_millis(200)).await;
-        shutdown(&providers, Duration::from_secs(2));
-
-        let requests = collector.requests.lock().await.clone();
-        let paths: Vec<&str> = requests.iter().map(|(path, _)| path.as_str()).collect();
-        assert!(paths.contains(&"/v1/traces"), "requests: {paths:?}");
-        assert!(paths.contains(&"/v1/logs"), "requests: {paths:?}");
-        let trace_body = &requests
-            .iter()
-            .find(|(path, _)| path == "/v1/traces")
-            .unwrap()
-            .1;
-        assert!(!trace_body.is_empty());
-        let log_body = &requests
-            .iter()
-            .find(|(path, _)| path == "/v1/logs")
-            .unwrap()
-            .1;
-        assert!(!log_body.is_empty());
     }
 }

@@ -31,6 +31,11 @@ The range password check requires HTTPS egress to `api.pwnedpasswords.com` or a
 trusted compatible service configured through `IDENTITY_PWNED_PASSWORDS_URL`.
 Timeouts fail closed; no complete password or complete hash is transmitted.
 
+The persisted typed setting `auth.password.breached_check_enabled` defaults to
+`true`. An explicit `false` skips the external check for installation, user
+creation, and password changes. Local password rules and hashing remain in
+effect. The setting uses the existing runtime settings refresh mechanism.
+
 ## Docker Compose
 
 The Compose deployment runs PostgreSQL, Identity, and Login. Identity uses four

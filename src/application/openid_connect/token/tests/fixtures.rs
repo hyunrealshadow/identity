@@ -22,12 +22,17 @@ pub(super) use crate::openid_connect::tests::fixtures::mocks::{
 };
 
 mod clients;
+mod rbac;
 
 pub(super) use clients::{
-    AccessClaimsClientRepository, AuthMethodClientRepository, IdTokenAlgorithmClientRepository,
-    InMemoryClientRepository, MachineAlgorithmClientRepository, MachineClientRepository,
-    MixedClientRepository, RegisteredPublicClientRepository, RestrictedGrantClientRepository,
-    ScopedClaimsClientRepository,
+    AccessClaimsClientRepository, AssignedScopesClientRepository, AuthMethodClientRepository,
+    IdTokenAlgorithmClientRepository, InMemoryClientRepository, MachineAlgorithmClientRepository,
+    MachineClientRepository, MixedClientRepository, RegisteredPublicClientRepository,
+    RestrictedGrantClientRepository, ScopedClaimsClientRepository,
+};
+pub(super) use rbac::{
+    TestOAuthResources, TestRbacRepository, business_resource, delegated_snapshot,
+    delegated_user_state, oauth_resource,
 };
 
 pub(super) const CLIENT_SECRET_JWT_SECRET: &str =
@@ -148,6 +153,7 @@ pub(super) fn provider_service() -> Arc<OpenIdProviderService> {
             value: Arc::new(
                 SettingsSnapshot::default()
                     .with_section(&AppSettings {
+                        console_domain: None,
                         domain: Some("https://identity.example.com".to_string()),
                         login_domain: None,
                         login_client_id: None,
@@ -294,6 +300,7 @@ pub(super) fn build_token_service_with_device_repo(
         user_repo: Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
+                version: Uuid::new_v4(),
                 email: "a@example.com".to_string(),
                 email_normalized: "a@example.com".to_string(),
                 name: "A".to_string(),

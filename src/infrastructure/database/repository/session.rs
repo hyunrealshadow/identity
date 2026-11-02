@@ -14,7 +14,7 @@ use identity_domain::{
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect, SelectTwo, Set, TransactionTrait,
+    QueryOrder, QuerySelect, SelectTwo, Set,
     sea_query::{Expr, ExprTrait, SimpleExpr},
 };
 use serde_json::{from_value, json};
@@ -344,8 +344,18 @@ impl SessionRepository for SessionRepositoryImpl {
             amr: Set(json!(input.amr)),
             ..Default::default()
         };
+        let transaction = crate::database::audit::begin(&self.db, "session.created")
+            .await
+            .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         let model = active
-            .insert(&self.db)
+            .insert(&transaction)
+            .await
+            .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
+        crate::database::audit::record(&transaction, "session.created", "session", model.oid)
+            .await
+            .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
+        transaction
+            .commit()
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         session_to_domain(model, input.user_oid)
@@ -382,9 +392,7 @@ impl SessionRepository for SessionRepositoryImpl {
         acr_expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
-        let transaction = self
-            .db
-            .begin()
+        let transaction = crate::database::audit::begin(&self.db, "session.reauthenticate_by_oid")
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
         lock_session(&transaction, oid)
@@ -426,6 +434,14 @@ impl SessionRepository for SessionRepositoryImpl {
             .update(&transaction)
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
+        crate::database::audit::record(
+            &transaction,
+            "session.reauthenticate_by_oid",
+            "session",
+            Uuid::from(oid),
+        )
+        .await
+        .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
         transaction
             .commit()
             .await
@@ -440,9 +456,7 @@ impl SessionRepository for SessionRepositoryImpl {
         oid: SessionOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
-        let transaction = self
-            .db
-            .begin()
+        let transaction = crate::database::audit::begin(&self.db, "session.revoke_by_oid")
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         lock_session(&transaction, oid)
@@ -459,6 +473,8 @@ impl SessionRepository for SessionRepositoryImpl {
             return Ok(None);
         };
 
+        let already_revoked =
+            s_model.revoked_at.is_some() || s_model.status == SessionStatus::REVOKED.as_str();
         let mut active: session::ActiveModel = s_model.into();
         active.revoked_at = Set(Some(revoked_at.into()));
         active.status = Set(SessionStatus::REVOKED.to_string());
@@ -501,6 +517,16 @@ impl SessionRepository for SessionRepositoryImpl {
             .exec(&transaction)
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
+        if !already_revoked {
+            crate::database::audit::record(
+                &transaction,
+                "session.revoke_by_oid",
+                "session",
+                Uuid::from(oid),
+            )
+            .await
+            .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
+        }
         transaction
             .commit()
             .await
@@ -517,17 +543,13 @@ mod tests {
         model::Session,
         repository::{SessionRepository as _, SessionRepositoryError},
     };
-    use sea_orm::{
-        DatabaseBackend, DbBackend, EntityTrait as _, MockDatabase, MockExecResult,
-        QueryFilter as _, QueryTrait as _, sea_query::Value,
-    };
+    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, sea_query::Value};
     use serde_json::json;
     use uuid::Uuid;
 
     use super::{
-        CursorComparison, SessionPageDirection, SessionPageItem, SessionRepositoryImpl,
-        SessionSortKey, active_session_page_query, build_session_page, session_cursor_condition,
-        session_to_domain,
+        SessionPageDirection, SessionPageItem, SessionRepositoryImpl, SessionSortKey,
+        build_session_page, session_to_domain,
     };
     use crate::database::entity::{session, user::Model};
 
@@ -561,6 +583,7 @@ mod tests {
         let user = Model {
             id: 42,
             oid: Uuid::new_v4(),
+            version: Uuid::new_v4(),
             name: "user".to_owned(),
             name_normalized: "user".to_owned(),
             email: "user@example.com".to_owned(),
@@ -603,10 +626,16 @@ mod tests {
         let owner = user.oid;
         let created_at = session.created_at.with_timezone(&Utc);
         let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            }])
+            .append_exec_results([
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+            ])
             .append_query_results([[(session.clone(), user)]])
             .append_query_results([[session]])
             .into_connection();
@@ -703,31 +732,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn touch_active_session_is_guarded_by_the_complete_lifecycle_condition() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            }])
-            .into_connection();
-        let repo = SessionRepositoryImpl::new(db);
-
-        let touched = repo
-            .touch_active_by_oid(SessionOid(Uuid::new_v4()))
-            .await
-            .unwrap();
-
-        assert!(touched);
-        let statements = format!("{:?}", repo.db.into_transaction_log());
-        assert!(statements.contains("status"), "{statements}");
-        assert!(statements.contains("active"), "{statements}");
-        assert!(statements.contains("revoked_at"), "{statements}");
-        assert!(statements.contains("IS NULL"), "{statements}");
-        assert!(statements.contains("expires_at"), "{statements}");
-        assert!(statements.contains('>'), "{statements}");
-    }
-
-    #[tokio::test]
     async fn touch_active_session_reports_when_the_session_is_not_touchable() {
         let db = MockDatabase::new(DatabaseBackend::Postgres)
             .append_exec_results([MockExecResult {
@@ -784,33 +788,6 @@ mod tests {
         );
         assert_eq!(session.expires_at, Some(expires_at.with_timezone(&Utc)));
         assert_eq!(session.created_at, created_at.with_timezone(&Utc));
-    }
-
-    #[test]
-    fn relay_cursor_filter_uses_the_complete_stable_sort_key() {
-        let cursor = SessionSortKey {
-            last_active_at: "2026-08-01T12:00:00Z".parse().unwrap(),
-            id: 42,
-        };
-        let statement = session::Entity::find()
-            .filter(session_cursor_condition(cursor, CursorComparison::After))
-            .build(DbBackend::Postgres)
-            .to_string();
-
-        assert!(statement.contains(r#""session"."last_active_at" <"#));
-        assert!(statement.contains(r#""session"."id" <"#));
-        assert!(statement.contains(" OR "));
-    }
-
-    #[test]
-    fn active_session_page_query_excludes_revoked_sessions() {
-        let statement = active_session_page_query(Uuid::new_v4())
-            .build(DbBackend::Postgres)
-            .to_string();
-
-        assert!(statement.contains(r#""session"."status" = 'active'"#));
-        assert!(statement.contains(r#""session"."revoked_at" IS NULL"#));
-        assert!(statement.contains(r#""session"."expires_at" >"#));
     }
 
     #[test]

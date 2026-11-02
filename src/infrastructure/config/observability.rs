@@ -105,6 +105,10 @@ pub struct TraceContextConfig {
     /// nothing.
     #[serde(default)]
     pub trusted_gateways: Vec<IpNet>,
+    /// Gateways allowed to supply X-Request-ID. This separate, explicit trust
+    /// list defaults to empty; trace trust alone never permits ID injection.
+    #[serde(default)]
+    pub trusted_request_id_gateways: Vec<IpNet>,
     /// Continue the inbound trace of requests authenticated as a verified
     /// workload (internal API). This is a service identity check, not a
     /// network position check.
@@ -121,6 +125,7 @@ impl Default for TraceContextConfig {
     fn default() -> Self {
         Self {
             trusted_gateways: Vec::new(),
+            trusted_request_id_gateways: Vec::new(),
             trust_verified_workload: true,
             propagate_to_origins: Vec::new(),
         }

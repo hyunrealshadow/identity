@@ -8,13 +8,13 @@ use sea_orm_migration::{
     sea_orm,
 };
 
-use crate::m20260306_031058_create_client::Client;
+use crate::m20260407_060453_create_client_openid_connect::ClientOpenIdConnect;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
 #[derive(DeriveIden)]
-enum ClientOpenIdConnectCorsOrigin {
+pub enum ClientOpenIdConnectCorsOrigin {
     #[sea_orm(iden = "client_openid_connect_cors_origin")]
     Table,
     Id,
@@ -44,13 +44,14 @@ impl MigrationTrait for Migration {
                     ))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_client_openid_connect_cors_origin_client_id")
+                            .name("fk_client_openid_connect_cors_origin_oidc_client_id")
                             .from(
                                 ClientOpenIdConnectCorsOrigin::Table,
                                 ClientOpenIdConnectCorsOrigin::ClientId,
                             )
-                            .to(Client::Table, Client::Id)
-                            .on_delete(ForeignKeyAction::Cascade),
+                            .to(ClientOpenIdConnect::Table, ClientOpenIdConnect::ClientId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

@@ -35,6 +35,10 @@ struct InstallRequest {
     password: String,
     domain: String,
     application_url: String,
+    /// Defaulted so a missing field reaches install validation as the
+    /// localized "console URL required" error instead of a transport error.
+    #[serde(default)]
+    console_url: String,
     key_algorithm: String,
 }
 
@@ -115,6 +119,7 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
         password: request.password.clone(),
         domain: request.domain.clone(),
         application_url: request.application_url.clone(),
+        console_url: request.console_url.clone(),
         key_algorithm: request.key_algorithm.clone(),
     };
 
@@ -151,6 +156,7 @@ mod tests {
             password: "super-secret-password".to_owned(),
             domain: "identity.example.com".to_owned(),
             application_url: "https://login.example.com".to_owned(),
+            console_url: "https://console.example.com".to_owned(),
             key_algorithm: "ed25519".to_owned(),
         };
         let error = AppError::from_code(CommonErrorCode::InternalError);

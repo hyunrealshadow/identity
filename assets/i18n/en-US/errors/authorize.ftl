@@ -67,3 +67,4 @@ E23064 = No encryption key is available for this client.
 E23065 = Failed to encrypt the response.
 E23066 = Unsupported response_mode: { $response_mode }.
 E23067 = The client has no registered initiate_login_uri.
+E23068 = This client cannot use the requested authorization flow.

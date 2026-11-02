@@ -1,6 +1,7 @@
 use identity_domain::client::model::ClientProtocol;
-use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 use serde_json::json;
+use std::collections::BTreeMap;
 
 use super::OpenIdConnectClientRepositoryImpl;
 use crate::database::entity::{
@@ -12,9 +13,23 @@ use identity_domain::{
     openid_connect::{
         OpenIdConnectClientMetadata, OpenIdConnectClientRegistration,
         OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepositoryError,
+        OpenIdConnectCredentialData,
     },
 };
 use uuid::Uuid;
+
+fn fingerprint_row(oid: Uuid) -> BTreeMap<String, Value> {
+    BTreeMap::from([
+        ("enabled".to_owned(), Value::from(true)),
+        (
+            "dependencies".to_owned(),
+            Value::from(json!([[
+                "client",
+                [oid.to_string(), "openid_connect", true]
+            ]])),
+        ),
+    ])
+}
 
 fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
     OpenIdConnectClientRegistration {
@@ -38,12 +53,14 @@ fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
 
 fn client_row(oid: Uuid) -> client::Model {
     client::Model {
+        version: uuid::Uuid::new_v4(),
         id: 1,
         oid,
         protocol: "openid_connect".into(),
         name: "Old".into(),
         names: None,
         description: None,
+        descriptions: None,
         built_in: false,
         created_at: Utc::now().into(),
         updated_at: None,
@@ -53,7 +70,7 @@ fn client_row(oid: Uuid) -> client::Model {
 fn metadata_row() -> client_openid_connect::Model {
     client_openid_connect::Model {
         id: 1,
-        client_id: 2,
+        client_id: 1,
         post_logout_redirect_uris: None,
         frontchannel_logout_uri: Some("https://rp.example.com/frontchannel_logout".to_owned()),
         frontchannel_logout_session_required: Some(true),
@@ -85,6 +102,21 @@ fn metadata_row() -> client_openid_connect::Model {
         initiate_login_uri: None,
         request_uris: None,
         settings: json!({}),
+        created_at: Utc::now().into(),
+        updated_at: None,
+    }
+}
+
+fn credential_row(oid: Uuid) -> client_openid_connect_credential::Model {
+    client_openid_connect_credential::Model {
+        id: 1,
+        oid,
+        client_id: 1,
+        r#type: "client_secret".into(),
+        data: json!({"secret": "same-secret"}),
+        hint: "••••cret".into(),
+        expires_at: (Utc::now() + Duration::days(30)).into(),
+        revoked_at: None,
         created_at: Utc::now().into(),
         updated_at: None,
     }
@@ -145,11 +177,19 @@ async fn update_rechecks_token_and_secret_before_mutation() {
 async fn update_replaces_metadata_in_one_transaction_without_deleting_grants() {
     let oid = Uuid::new_v4();
     let db = MockDatabase::new(DatabaseBackend::Postgres)
+        // Client lock, registration token, existing OIDC metadata, credentials,
+        // authority before the write, then the client/metadata write returns,
+        // then authority after the write.
         .append_query_results([vec![client_row(oid)]])
         .append_query_results([vec![auth_row()]])
+        .append_query_results([vec![metadata_row()]])
+        .append_query_results([Vec::<client_openid_connect_credential::Model>::new()])
+        .append_query_results([vec![fingerprint_row(oid)]])
         .append_query_results([vec![client_row(oid)]])
         .append_query_results([vec![metadata_row()]])
-        .append_exec_results((0..5).map(|_| MockExecResult {
+        .append_query_results([vec![fingerprint_row(oid)]])
+        // ensure, platform/cors/scope replacement, CAS renewal, audit.
+        .append_exec_results((0..6).map(|_| MockExecResult {
             last_insert_id: 1,
             rows_affected: 1,
         }))
@@ -167,5 +207,52 @@ async fn update_replaces_metadata_in_one_transaction_without_deleting_grants() {
     assert!(
         !log.contains(r#"INSERT INTO \"client_authorization\""#),
         "{log}"
+    );
+}
+
+#[tokio::test]
+async fn metadata_only_update_preserves_the_same_client_secret_identity() {
+    let oid = Uuid::new_v4();
+    let credential_oid = Uuid::new_v4();
+    let db = MockDatabase::new(DatabaseBackend::Postgres)
+        .append_query_results([vec![client_row(oid)]])
+        .append_query_results([vec![auth_row()]])
+        .append_query_results([vec![metadata_row()]])
+        .append_query_results([vec![credential_row(credential_oid)]])
+        .append_query_results([vec![fingerprint_row(oid)]])
+        .append_query_results([vec![client_row(oid)]])
+        .append_query_results([vec![metadata_row()]])
+        .append_query_results([vec![fingerprint_row(oid)]])
+        .append_exec_results((0..6).map(|_| MockExecResult {
+            last_insert_id: 1,
+            rows_affected: 1,
+        }))
+        .into_connection();
+    let repo = OpenIdConnectClientRepositoryImpl::new(db.clone());
+    let mut registration = registration(oid);
+    registration.credentials = vec![OpenIdConnectCredentialData::ClientSecret {
+        secret: "same-secret".into(),
+    }];
+
+    repo.update(registration, "rat", None).await.unwrap();
+
+    let log = format!("{:?}", db.into_transaction_log());
+    assert!(log.contains("COMMIT"), "{log}");
+    assert!(
+        !log.contains(r#"UPDATE \"client_openid_connect_credential\""#),
+        "{log}"
+    );
+    assert!(
+        !log.contains(r#"INSERT INTO \"client_openid_connect_credential\""#),
+        "{log}"
+    );
+    assert!(
+        !log.contains(r#"DELETE FROM \"client_openid_connect_credential\""#),
+        "{log}"
+    );
+    assert!(!log.contains("_authority_withdrawn"), "{log}");
+    assert!(
+        log.contains(r#"UPDATE \"client\" SET"#) && log.contains(r#"\"version\" ="#),
+        "metadata-only identity preservation renews CAS without advancing authority: {log}"
     );
 }

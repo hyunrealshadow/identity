@@ -15,8 +15,9 @@ pub enum ConsentDecision {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScopeDisplay {
+    pub code: String,
     pub name: String,
-    pub display_name: String,
+    pub names: BTreeMap<String, String>,
     pub description: String,
     pub descriptions: BTreeMap<String, String>,
     pub essential: bool,
@@ -135,11 +136,11 @@ pub fn build_scope_display(
         .names()
         .into_iter()
         .map(|name| {
-            let metadata = descriptions.iter().find(|entry| entry.name == name);
+            let metadata = descriptions.iter().find(|entry| entry.code == name);
             ScopeDisplay {
-                name: name.to_owned(),
-                display_name: metadata
-                    .map_or_else(|| name.to_owned(), |entry| entry.display_name.clone()),
+                code: name.to_owned(),
+                name: metadata.map_or_else(|| name.to_owned(), |entry| entry.name.clone()),
+                names: metadata.map_or_else(Default::default, |entry| entry.names.clone()),
                 description: metadata.map_or_else(String::new, |entry| entry.description.clone()),
                 descriptions: metadata
                     .map_or_else(Default::default, |entry| entry.descriptions.clone()),

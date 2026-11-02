@@ -37,6 +37,7 @@ pub(in crate::openid_connect) fn provider_service() -> Arc<OpenIdProviderService
             value: Arc::new(
                 SettingsSnapshot::default()
                     .with_section(&AppSettings {
+                        console_domain: None,
                         domain: Some("https://identity.example.com".to_string()),
                         login_domain: None,
                         login_client_id: None,

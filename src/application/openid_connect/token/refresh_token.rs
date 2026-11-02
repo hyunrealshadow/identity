@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
-    client_authorization::ClientAuthenticationMode,
+    client_authorization::{AccessTokenPrincipal, ClientAuthenticationMode},
     openid_connect::{API_RESOURCE, ScopeSet, TokenEndpointAuthMethod},
 };
 
@@ -11,6 +11,7 @@ use super::{
 use crate::{
     domain::auth::SessionStatus,
     observability::{BusinessEvent, EventValue},
+    openid_connect::rbac as shared,
 };
 
 use super::*;
@@ -119,6 +120,14 @@ impl TokenService {
                 ));
             }
         };
+        let management_snapshot = shared::management_snapshot(refresh_data.management.as_ref());
+        let business_snapshot = shared::business_snapshot(refresh_data.management.as_ref());
+        if management_snapshot.is_some() {
+            // Management refresh is deferred: a management grant must never be
+            // extended by rotating a refresh token.
+            return Err(AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed)
+                .with_param("reason", "management refresh is not supported"));
+        }
         let issued_mode = refresh_data.client_authentication_mode.unwrap_or_else(|| {
             if authenticated_client
                 .metadata()
@@ -156,24 +165,33 @@ impl TokenService {
             }
         }
 
-        let (session_acr, session_amr) = if let (Some(session_repo), Some(refresh_session_oid)) =
-            (&self.session_repo, refresh_data.session_oid)
-        {
-            let session = session_repo
-                .find_by_oid(refresh_session_oid)
-                .await
-                .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?
-                .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenInvalid))?;
-            let session_is_active = session.status == SessionStatus::ACTIVE
-                && session.revoked_at.is_none()
-                && session.expires_at.is_none_or(|expires_at| expires_at > now)
-                && session.user_oid.to_string() == refresh_data.user_oid;
-            if !session_is_active {
-                return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+        let device_linked = refresh_data.device_authorization_oid.is_some();
+        let (session_acr, session_amr) = match refresh_data.session_oid {
+            Some(refresh_session_oid) => {
+                if let Some(session_repo) = &self.session_repo {
+                    let session = session_repo
+                        .find_by_oid(refresh_session_oid)
+                        .await
+                        .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?
+                        .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenInvalid))?;
+                    let session_is_active = session.status == SessionStatus::ACTIVE
+                        && session.revoked_at.is_none()
+                        && session.expires_at.is_none_or(|expires_at| expires_at > now)
+                        && session.user_oid.to_string() == refresh_data.user_oid;
+                    if !session_is_active {
+                        return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid)
+                            .with_param("reason", "session is not active for the user"));
+                    }
+                    (session.effective_acr(now).map(str::to_owned), session.amr)
+                } else {
+                    (refresh_data.acr.clone(), refresh_data.amr.clone())
+                }
             }
-            (session.effective_acr(now).map(str::to_owned), session.amr)
-        } else {
-            (refresh_data.acr.clone(), refresh_data.amr.clone())
+            None if self.session_repo.is_some() && !device_linked => {
+                return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid)
+                    .with_param("reason", "human refresh requires a live session"));
+            }
+            None => (refresh_data.acr.clone(), refresh_data.amr.clone()),
         };
         let protected_session_id = match refresh_data.session_oid {
             Some(session_oid) => Some(
@@ -194,12 +212,83 @@ impl TokenService {
         let granted_scope = ScopeSet::parse(&refresh_data.scope).map_err(AppError::map_source(
             TokenErrorCode::DeserializeRefreshFailed,
         ))?;
-        let requested_scope = refresh_scope(&granted_scope, params.scope.as_deref())?;
+        if granted_scope.has_management_scopes() {
+            return Err(AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed)
+                .with_param("reason", "management refresh is not supported"));
+        }
+        let business_resource = self
+            .provider_service
+            .has_rbac_resource(&refresh_data.resources)
+            .await?;
+        let business = business_snapshot.is_some() || business_resource;
+        if business && business_snapshot.is_none() {
+            return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+        }
+        if let Some(snapshot_data) = business_snapshot {
+            // The original snapshot must still be authoritative before any
+            // requested/current-scope intersection is calculated.
+            let repository = self
+                .rbac_authorization_repo
+                .as_ref()
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenInvalid))?;
+            let persisted = snapshot_data
+                .to_snapshot()
+                .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?;
+            repository
+                .validate_snapshot(&persisted)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?;
+        }
+        let resolved_scope = match params
+            .scope
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(scope) => Some(
+                self.provider_service
+                    .resolve_scope_for_resources(&refresh_data.resources, scope)
+                    .await?
+                    .to_scope_string(),
+            ),
+            None => None,
+        };
+        let requested_scope = refresh_scope(&granted_scope, resolved_scope.as_deref())?;
         let grant_scope = requested_scope.to_scope_string();
         let selection = self
             .provider_service
             .select_resources(&params.resources, &refresh_data.resources, &grant_scope)
             .await?;
+        if business {
+            let snapshot_data = business_snapshot
+                .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenInvalid))?;
+            let selected = ScopeSet::parse(&selection.scope)
+                .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?;
+            if selection.resources.len() != 1
+                || selection.resources[0] != snapshot_data.resource_uri
+                || !shared::business_scope_names(&selected)
+                    .is_subset(&shared::business_scope_names(&granted_scope))
+            {
+                return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+            }
+            shared::validate_business_authorization(
+                shared::BusinessLivePorts {
+                    repository: self.rbac_authorization_repo.as_ref(),
+                    provider_service: &self.provider_service,
+                },
+                &authenticated_client,
+                snapshot_data,
+                &selection.scope,
+                &selected,
+                AccessTokenPrincipal::User,
+                Some(UserOid(Uuid::parse_str(&refresh_data.user_oid).map_err(
+                    AppError::map_source(TokenErrorCode::RefreshTokenSubInvalid),
+                )?)),
+                &selection.resources,
+            )
+            .await
+            .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?;
+        }
         let refresh_resources = if refresh_data.resources.is_empty() {
             &selection.resources
         } else {
@@ -219,6 +308,21 @@ impl TokenService {
             )
             .await?;
 
+        let user_oid = Uuid::parse_str(&refresh_data.user_oid)
+            .map_err(AppError::map_source(TokenErrorCode::RefreshTokenSubInvalid))?;
+        let user = self
+            .user_repo
+            .find_by_oid(UserOid(user_oid))
+            .await
+            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
+            .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenUserNotFound))?;
+        if !user.enabled || user.locked {
+            return Err(
+                AppError::from_code(TokenErrorCode::RefreshTokenUserNotFound)
+                    .with_param("reason", "user is disabled or locked"),
+            );
+        }
+
         let claimed = self
             .client_authorization_repo
             .revoke_if_active(
@@ -233,15 +337,6 @@ impl TokenService {
                 .await?;
             return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
         }
-
-        let user_oid = Uuid::parse_str(&refresh_data.user_oid)
-            .map_err(AppError::map_source(TokenErrorCode::RefreshTokenSubInvalid))?;
-        let user = self
-            .user_repo
-            .find_by_oid(UserOid(user_oid))
-            .await
-            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::RefreshTokenUserNotFound))?;
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self
@@ -261,7 +356,9 @@ impl TokenService {
                 authenticated_client_oid,
                 ClientAuthorizationData::AccessToken(AccessTokenData {
                     scope: scope.clone(),
-                    user_oid: refresh_data.user_oid.clone(),
+                    resources: selection.resources.clone(),
+                    user_oid: Some(refresh_data.user_oid.clone()),
+                    principal: AccessTokenPrincipal::User,
                     session_oid: refresh_data.session_oid,
                     protected_session_id: protected_session_id.clone(),
                     authorization_code_oid: refresh_data
@@ -276,6 +373,7 @@ impl TokenService {
                         .map(|oid| oid.to_string()),
                     refresh_token_oid: Some(refresh_record.oid.to_string()),
                     client_authentication_mode: Some(issued_mode),
+                    management: refresh_data.management.clone(),
                 }),
                 Utc::now() + Duration::hours(1),
             )
@@ -295,7 +393,8 @@ impl TokenService {
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id: &client_id,
-                user_oid: &user_oid,
+                subject: &refresh_data.user_oid,
+                principal: AccessTokenPrincipal::User,
                 client: &authenticated_client,
                 user: Some(&user),
                 protected_session_id: protected_session_id.as_deref(),
@@ -304,6 +403,8 @@ impl TokenService {
                 auth_time: refresh_data.auth_time,
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
+                management: shared::management_snapshot(refresh_data.management.as_ref()),
+                business: shared::business_snapshot(refresh_data.management.as_ref()),
             })
             .await?;
         // A refresh never turns a plain OAuth grant into an OIDC one: the
@@ -361,6 +462,7 @@ impl TokenService {
                         .and_then(|oid| oid.parse::<Uuid>().ok())
                         .map(|oid| oid.to_string()),
                     client_authentication_mode: Some(issued_mode),
+                    management: refresh_data.management.clone(),
                 },
                 event,
             )
@@ -456,6 +558,14 @@ impl TokenService {
         data: RefreshTokenData,
         event: &mut BusinessEvent,
     ) -> Result<(Uuid, String), AppError> {
+        // Never persist a refresh token for a management scope/snapshot. A
+        // business RBAC snapshot is preserved unchanged across rotation.
+        if shared::management_snapshot(data.management.as_ref()).is_some()
+            || ScopeSet::parse(&data.scope).is_ok_and(|scope| scope.has_management_scopes())
+        {
+            return Err(AppError::from_code(TokenErrorCode::RefreshScopeNotAllowed)
+                .with_param("reason", "management refresh is not supported"));
+        }
         let is_rotation = data.rotated_from.is_some();
         let record = self
             .client_authorization_repo
@@ -507,7 +617,7 @@ mod tests {
 
     #[test]
     fn refresh_scope_allows_hierarchical_narrowing_but_rejects_expansion() {
-        let granted = ScopeSet::parse("account offline_access").unwrap();
+        let granted = ScopeSet::parse("account.* offline_access").unwrap();
         assert_eq!(
             refresh_scope(&granted, Some("account.read"))
                 .unwrap()

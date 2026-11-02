@@ -4,6 +4,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 /// request extraction, method validation, and interaction routing.
 /// Range: 22000-22099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum AuthorizeHttpErrorCode {
     /// POST request does not use `application/x-www-form-urlencoded` Content-Type.
     PostContentTypeInvalid,

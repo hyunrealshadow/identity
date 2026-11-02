@@ -10,6 +10,8 @@ use http::{HeaderMap, header::ACCEPT_LANGUAGE};
 use identity_application::error::params::ErrorParams;
 use unic_langid::{LanguageIdentifier, langid};
 
+pub mod catalog;
+
 // Global I18n instance used by `AppError` response rendering to translate error
 // codes without access to `AppState`. Initialised once during startup.
 static ERROR_I18N: OnceLock<I18n> = OnceLock::new();
@@ -23,6 +25,12 @@ pub fn error_i18n() -> Option<&'static I18n> {
     ERROR_I18N.get()
 }
 
+/// Negotiate the only two supported request locales.
+///
+/// Compatible tags are normalized (`en`, `en-GB`, `en-*` -> `en-US`;
+/// `zh`, `zh-Hans`, `zh-Hans-CN`, `zh-*` -> `zh-CN`). `q` weights are honored
+/// (default `1.0`, highest first, stable on ties), `q=0` entries and malformed
+/// or unsupported tags are ignored, and `en-US` is the fallback.
 pub fn resolve_locale_from_headers(headers: &HeaderMap) -> LanguageIdentifier {
     let fallback = langid!("en-US");
 
@@ -30,24 +38,63 @@ pub fn resolve_locale_from_headers(headers: &HeaderMap) -> LanguageIdentifier {
         return fallback;
     };
 
+    let mut best: Option<(f64, LanguageIdentifier)> = None;
     for part in raw.split(',') {
-        let locale = part.split(';').next().unwrap_or_default().trim();
-        if locale.is_empty() {
+        let mut segments = part.split(';');
+        let tag = segments.next().unwrap_or_default().trim();
+        if tag.is_empty() {
             continue;
         }
 
-        if let Ok(langid) = LanguageIdentifier::from_str(locale) {
-            return langid;
+        let mut weight = 1.0_f64;
+        let mut malformed = false;
+        for parameter in segments {
+            let parameter = parameter.trim();
+            if parameter.is_empty() {
+                continue;
+            }
+            let Some((name, value)) = parameter.split_once('=') else {
+                malformed = true;
+                break;
+            };
+            if !name.trim().eq_ignore_ascii_case("q") {
+                malformed = true;
+                break;
+            }
+            match value.trim().parse::<f64>() {
+                Ok(parsed) if parsed.is_finite() => weight = parsed,
+                _ => {
+                    malformed = true;
+                    break;
+                }
+            }
+        }
+        if malformed || weight <= 0.0 {
+            continue;
         }
 
-        if let Some(primary) = locale.split('-').next()
-            && let Ok(langid) = LanguageIdentifier::from_str(primary)
+        let Some(locale) = normalize_supported_locale(tag) else {
+            continue;
+        };
+        if best
+            .as_ref()
+            .is_none_or(|(best_weight, _)| weight > *best_weight)
         {
-            return langid;
+            best = Some((weight, locale));
         }
     }
 
-    fallback
+    best.map_or(fallback, |(_, locale)| locale)
+}
+
+fn normalize_supported_locale(tag: &str) -> Option<LanguageIdentifier> {
+    // Reject syntactically malformed tags (e.g. `fr-`) before normalizing.
+    let parsed = LanguageIdentifier::from_str(tag).ok()?;
+    match parsed.language.as_str() {
+        "en" => Some(langid!("en-US")),
+        "zh" => Some(langid!("zh-CN")),
+        _ => None,
+    }
 }
 
 #[derive(Clone)]
@@ -161,19 +208,257 @@ fn code_key(code: u32) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
     use http::{HeaderMap, HeaderValue, header::ACCEPT_LANGUAGE};
     use unic_langid::langid;
 
     use super::{I18n, resolve_locale_from_headers};
 
+    /// Every error catalog in both locales. Keep this list in sync with
+    /// `assets/i18n/*/errors/`; the parity test covers the whole directory.
+    const ERROR_CATALOGS: &[(&str, &str, &str)] = &[
+        (
+            "account",
+            include_str!("../../../assets/i18n/en-US/errors/account.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/account.ftl"),
+        ),
+        (
+            "auth",
+            include_str!("../../../assets/i18n/en-US/errors/auth.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/auth.ftl"),
+        ),
+        (
+            "authorization",
+            include_str!("../../../assets/i18n/en-US/errors/authorization.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/authorization.ftl"),
+        ),
+        (
+            "authorize",
+            include_str!("../../../assets/i18n/en-US/errors/authorize.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/authorize.ftl"),
+        ),
+        (
+            "authorize_http",
+            include_str!("../../../assets/i18n/en-US/errors/authorize_http.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/authorize_http.ftl"),
+        ),
+        (
+            "common",
+            include_str!("../../../assets/i18n/en-US/errors/common.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/common.ftl"),
+        ),
+        (
+            "data_protection",
+            include_str!("../../../assets/i18n/en-US/errors/data_protection.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/data_protection.ftl"),
+        ),
+        (
+            "device",
+            include_str!("../../../assets/i18n/en-US/errors/device.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/device.ftl"),
+        ),
+        (
+            "graphql",
+            include_str!("../../../assets/i18n/en-US/errors/graphql.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/graphql.ftl"),
+        ),
+        (
+            "graphql_transport",
+            include_str!("../../../assets/i18n/en-US/errors/graphql_transport.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/graphql_transport.ftl"),
+        ),
+        (
+            "group",
+            include_str!("../../../assets/i18n/en-US/errors/group.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/group.ftl"),
+        ),
+        (
+            "install",
+            include_str!("../../../assets/i18n/en-US/errors/install.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/install.ftl"),
+        ),
+        (
+            "key",
+            include_str!("../../../assets/i18n/en-US/errors/key.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/key.ftl"),
+        ),
+        (
+            "oauth",
+            include_str!("../../../assets/i18n/en-US/errors/oauth.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/oauth.ftl"),
+        ),
+        (
+            "openid_connect",
+            include_str!("../../../assets/i18n/en-US/errors/openid_connect.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/openid_connect.ftl"),
+        ),
+        (
+            "provider",
+            include_str!("../../../assets/i18n/en-US/errors/provider.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/provider.ftl"),
+        ),
+        (
+            "registration",
+            include_str!("../../../assets/i18n/en-US/errors/registration.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/registration.ftl"),
+        ),
+        (
+            "token",
+            include_str!("../../../assets/i18n/en-US/errors/token.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/token.ftl"),
+        ),
+        (
+            "user_management",
+            include_str!("../../../assets/i18n/en-US/errors/user_management.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/user_management.ftl"),
+        ),
+        (
+            "administrator",
+            include_str!("../../../assets/i18n/en-US/errors/administrator.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/administrator.ftl"),
+        ),
+    ];
+
+    fn parse_catalog(source: &str) -> BTreeMap<String, BTreeSet<String>> {
+        let mut entries = BTreeMap::new();
+        let mut current: Option<String> = None;
+        for line in source.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = split_entry(line) {
+                let mut params = BTreeSet::new();
+                collect_params(value, &mut params);
+                entries.insert(key.clone(), params);
+                current = Some(key);
+            } else if line.starts_with(|character: char| character.is_whitespace()) {
+                if let Some(key) = &current
+                    && let Some(params) = entries.get_mut(key)
+                {
+                    collect_params(line, params);
+                }
+            } else {
+                current = None;
+            }
+        }
+        entries
+    }
+
+    fn split_entry(line: &str) -> Option<(String, &str)> {
+        if line.starts_with(|character: char| character.is_whitespace()) {
+            return None;
+        }
+        let (key, value) = line.split_once('=')?;
+        let key = key.trim();
+        let digits = key.strip_prefix('E')?;
+        if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        Some((key.to_owned(), value))
+    }
+
+    fn collect_params(text: &str, params: &mut BTreeSet<String>) {
+        let mut rest = text;
+        while let Some(index) = rest.find('$') {
+            let after = &rest[index + 1..];
+            let name = after
+                .chars()
+                .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+                .collect::<String>();
+            if !name.is_empty() {
+                params.insert(name);
+            }
+            rest = after;
+        }
+    }
+
+    fn compare_catalog(module: &str, en: &str, zh: &str) -> Result<(), String> {
+        let en_entries = parse_catalog(en);
+        let zh_entries = parse_catalog(zh);
+        for key in en_entries.keys() {
+            if !zh_entries.contains_key(key) {
+                return Err(format!("{module}: zh-CN is missing {key}"));
+            }
+        }
+        for key in zh_entries.keys() {
+            if !en_entries.contains_key(key) {
+                return Err(format!("{module}: en-US is missing {key}"));
+            }
+        }
+        for (key, en_params) in &en_entries {
+            let Some(zh_params) = zh_entries.get(key) else {
+                continue;
+            };
+            if en_params != zh_params {
+                return Err(format!(
+                    "{module}: {key} parameter mismatch: en-US {en_params:?} vs zh-CN {zh_params:?}"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn assert_catalog_parity() -> Result<(), String> {
+        for (module, en, zh) in ERROR_CATALOGS {
+            compare_catalog(module, en, zh)?;
+        }
+        Ok(())
+    }
+
     #[test]
-    fn resolve_locale_uses_primary_subtag_when_full_locale_is_invalid() {
+    fn resolve_locale_normalizes_english_variants() {
+        for tag in ["en", "en-GB", "en-AU", "en-US"] {
+            let mut headers = HeaderMap::new();
+            headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_str(tag).unwrap());
+            assert_eq!(resolve_locale_from_headers(&headers), langid!("en-US"));
+        }
+    }
+
+    #[test]
+    fn resolve_locale_normalizes_chinese_variants() {
+        for tag in ["zh", "zh-Hans", "zh-Hans-CN", "zh-CN", "zh-TW"] {
+            let mut headers = HeaderMap::new();
+            headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_str(tag).unwrap());
+            assert_eq!(resolve_locale_from_headers(&headers), langid!("zh-CN"));
+        }
+    }
+
+    #[test]
+    fn resolve_locale_honors_quality_weights() {
         let mut headers = HeaderMap::new();
-        headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("fr-,en-US;q=0.8"));
+        headers.insert(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_static("en-US;q=0.4, zh-CN;q=0.9, fr;q=1.0"),
+        );
+        assert_eq!(resolve_locale_from_headers(&headers), langid!("zh-CN"));
+    }
 
-        let locale = resolve_locale_from_headers(&headers);
+    #[test]
+    fn resolve_locale_is_stable_on_ties_and_skips_zero_weight() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_static("zh-CN;q=0.5, en-US;q=0.5"),
+        );
+        assert_eq!(resolve_locale_from_headers(&headers), langid!("zh-CN"));
 
-        assert_eq!(locale, langid!("fr"));
+        headers.insert(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_static("zh-CN;q=0, en-US;q=0.1"),
+        );
+        assert_eq!(resolve_locale_from_headers(&headers), langid!("en-US"));
+    }
+
+    #[test]
+    fn resolve_locale_ignores_malformed_and_unsupported_tags() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_static("fr-,fr;q=0.9,*,de;q=1.0,en-GB;q=0.2"),
+        );
+        assert_eq!(resolve_locale_from_headers(&headers), langid!("en-US"));
     }
 
     #[test]
@@ -184,17 +469,69 @@ mod tests {
     }
 
     #[test]
+    fn error_catalogs_have_identical_keys_and_params() {
+        assert_catalog_parity().expect("error catalogs must stay in parity");
+    }
+
+    #[test]
+    fn required_self_service_codes_exist_in_both_locales() {
+        let mut en = BTreeMap::new();
+        let mut zh = BTreeMap::new();
+        for (_, en_source, zh_source) in ERROR_CATALOGS {
+            en.extend(parse_catalog(en_source));
+            zh.extend(parse_catalog(zh_source));
+        }
+
+        let required = (10000..=10009)
+            .chain(11000..=11026)
+            .chain(15000..=15006)
+            .chain(28000..=28019);
+        for code in required {
+            let key = format!("E{code}");
+            assert!(en.contains_key(&key), "en-US is missing {key}");
+            assert!(zh.contains_key(&key), "zh-CN is missing {key}");
+        }
+    }
+
+    #[test]
+    fn parity_check_rejects_a_missing_key() {
+        let error = compare_catalog("synthetic", "E1 = Present\n", "E2 = 缺失\n")
+            .expect_err("missing key must fail");
+
+        assert!(error.contains("missing"), "{error}");
+    }
+
+    #[test]
+    fn parity_check_rejects_a_mismatched_parameter() {
+        let error = compare_catalog(
+            "synthetic",
+            "E1 = Hello { $name }\n",
+            "E1 = 你好 { $other }\n",
+        )
+        .expect_err("mismatched parameter must fail");
+
+        assert!(error.contains("parameter mismatch"), "{error}");
+    }
+
+    #[test]
+    fn real_loader_has_distinct_non_empty_chinese_messages() {
+        let i18n = crate::web::tera::build_i18n().expect("workspace i18n assets must load");
+        assert!(i18n.loader().is_some(), "i18n loader must be enabled");
+
+        for code in [10000, 11000, 15000, 28000, 28011] {
+            let key = format!("E{code}");
+            let en = i18n.t_code(&langid!("en-US"), code);
+            let zh = i18n.t_code(&langid!("zh-CN"), code);
+            assert!(!zh.is_empty(), "{key} zh-CN message is empty");
+            assert_ne!(zh, key, "{key} zh-CN fell back to the raw key");
+            assert_ne!(zh, en, "{key} zh-CN fell back to en-US");
+        }
+    }
+
+    #[test]
     fn disabled_i18n_returns_key_for_explicit_locale() {
         let i18n = I18n::disabled();
 
         assert_eq!(i18n.t(&langid!("en-US"), "auth-login"), "auth-login");
-    }
-
-    #[test]
-    fn disabled_i18n_uses_explicit_locale_when_no_loader_is_configured() {
-        let i18n = I18n::disabled();
-        let translated = i18n.t(&langid!("zh-CN"), "welcome");
-
-        assert_eq!(translated, "welcome");
     }
 }

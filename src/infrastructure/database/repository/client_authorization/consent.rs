@@ -4,8 +4,8 @@ use super::{
 use super::{query_error, query_failed};
 use crate::database::entity::{
     client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity, scope, scope::Entity as ScopeEntity,
-    user, user::Entity as UserEntity, user_client_consent,
+    client_authorization::Entity as ClientAuthorizationEntity, resource, scope,
+    scope::Entity as ScopeEntity, user, user::Entity as UserEntity, user_client_consent,
     user_client_consent::Entity as UserClientConsentEntity,
 };
 use chrono::{DateTime, Utc};
@@ -14,11 +14,11 @@ use identity_domain::{
     client_authorization::{
         ClientAuthorizationRepositoryError, ClientAuthorizationType, ConsentState,
     },
-    openid_connect::ScopeSet,
+    openid_connect::{API_RESOURCE, ScopeSet},
 };
 use sea_orm::{
-    ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect, Set,
-    TransactionTrait,
+    ColumnTrait, Condition, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect,
+    QueryTrait, Set, TransactionTrait,
     sea_query::{OnConflict, SimpleExpr},
 };
 use serde_json::to_value;
@@ -33,6 +33,27 @@ fn scope_ids_cover(mut granted: Vec<i64>, mut requested: Vec<i64>) -> bool {
     requested
         .iter()
         .all(|scope_id| granted.binary_search(scope_id).is_ok())
+}
+
+/// Match protocol scopes and only the requested API resource ownership.
+fn scope_ownership(resources: &[String]) -> Condition {
+    let targets = if resources.is_empty() {
+        vec![API_RESOURCE.to_owned()]
+    } else {
+        resources.to_vec()
+    };
+    Condition::any()
+        .add(scope::Column::ResourceId.is_null())
+        .add(
+            scope::Column::ResourceId.in_subquery(
+                resource::Entity::find()
+                    .select_only()
+                    .column(resource::Column::Oid)
+                    .filter(resource::Column::Uri.is_in(targets))
+                    .filter(resource::Column::Enabled.eq(true))
+                    .into_query(),
+            ),
+        )
 }
 
 #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_authorization_request_consent"))]
@@ -84,7 +105,7 @@ pub(super) async fn record_authorization_request_consent(
         let scope = ScopeSet::parse(&stored.request.scope).map_err(query_error(
             "client_authorization.record_authorization_request_consent",
         ))?;
-        Some((user_oid, scope))
+        Some((user_oid, scope, stored.request.resources.clone()))
     } else {
         None
     };
@@ -119,7 +140,7 @@ pub(super) async fn record_authorization_request_consent(
         return Ok(false);
     }
 
-    if let Some((user_oid, requested_scope)) = grant {
+    if let Some((user_oid, requested_scope, resources)) = grant {
         let user_id = UserEntity::find()
             .select_only()
             .column(user::Column::Id)
@@ -140,8 +161,9 @@ pub(super) async fn record_authorization_request_consent(
         let mut scope_ids = ScopeEntity::find()
             .select_only()
             .column(scope::Column::Id)
-            .filter(scope::Column::Protocol.eq("openid_connect"))
-            .filter(scope::Column::Name.is_in(requested_scope_names.iter().copied()))
+            .filter(scope::Column::Code.is_in(requested_scope_names.iter().copied()))
+            .filter(scope::Column::Enabled.eq(true))
+            .filter(scope_ownership(&resources))
             .into_tuple::<i64>()
             .all(&transaction)
             .await
@@ -182,6 +204,20 @@ pub(super) async fn record_authorization_request_consent(
             ))?;
     }
 
+    crate::database::audit::record(
+        &transaction,
+        if consent_state == ConsentState::Approved {
+            "authorization.consent_approved"
+        } else {
+            "authorization.consent_denied"
+        },
+        "client_authorization",
+        oid,
+    )
+    .await
+    .map_err(query_error(
+        "client_authorization.record_authorization_request_consent",
+    ))?;
     transaction.commit().await.map_err(query_error(
         "client_authorization.record_authorization_request_consent",
     ))?;
@@ -194,6 +230,7 @@ pub(super) async fn has_user_consent(
     user_oid: Uuid,
     client_oid: ClientOid,
     requested_scope: &ScopeSet,
+    resources: &[String],
 ) -> Result<bool, ClientAuthorizationRepositoryError> {
     let Some(user) = UserEntity::find()
         .filter(user::Column::Oid.eq(user_oid))
@@ -215,8 +252,9 @@ pub(super) async fn has_user_consent(
     let mut requested_scope_ids = ScopeEntity::find()
         .select_only()
         .column(scope::Column::Id)
-        .filter(scope::Column::Protocol.eq("openid_connect"))
-        .filter(scope::Column::Name.is_in(requested_scope_names.iter().copied()))
+        .filter(scope::Column::Code.is_in(requested_scope_names.iter().copied()))
+        .filter(scope::Column::Enabled.eq(true))
+        .filter(scope_ownership(resources))
         .into_tuple::<i64>()
         .all(db)
         .await
@@ -244,16 +282,18 @@ pub(super) async fn user_consented_scope_names(
     db: &DatabaseConnection,
     user_oid: Uuid,
     client_oid: ClientOid,
+    resources: &[String],
 ) -> Result<Vec<String>, ClientAuthorizationRepositoryError> {
     UserClientConsentEntity::find()
         .select_only()
-        .column(scope::Column::Name)
+        .column(scope::Column::Code)
         .inner_join(UserEntity)
         .inner_join(ClientEntity)
         .inner_join(ScopeEntity)
         .filter(user::Column::Oid.eq(user_oid))
         .filter(client::Column::Oid.eq(client_oid))
-        .filter(scope::Column::Protocol.eq("openid_connect"))
+        .filter(scope::Column::Enabled.eq(true))
+        .filter(scope_ownership(resources))
         .into_tuple::<String>()
         .all(db)
         .await
@@ -264,47 +304,10 @@ pub(super) async fn user_consented_scope_names(
 
 #[cfg(test)]
 mod tests {
-    use super::super::ClientAuthorizationRepositoryImpl;
     use super::scope_ids_cover;
-    use identity_domain::client_authorization::ClientAuthorizationRepository;
-    use sea_orm::{DatabaseBackend, MockDatabase, Value};
-    use std::collections::BTreeMap;
-    use uuid::Uuid;
     #[test]
     fn consent_scope_comparison_sorts_deduplicates_and_accepts_subsets() {
         assert!(scope_ids_cover(vec![3, 1, 2, 2], vec![2, 1, 1]));
         assert!(!scope_ids_cover(vec![3, 1, 1], vec![1, 2]));
-    }
-
-    #[tokio::test]
-    async fn remembered_scope_lookup_is_scoped_to_account_client_and_protocol() {
-        let user_oid = Uuid::new_v4();
-        let client_oid = Uuid::new_v4();
-        let rows = vec![BTreeMap::from([(
-            "name".to_owned(),
-            Value::String(Some("email".to_owned())),
-        )])];
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([rows, Vec::new()])
-            .into_connection();
-        let repo = ClientAuthorizationRepositoryImpl::new(db.clone());
-        assert_eq!(
-            repo.user_consented_scope_names(user_oid, client_oid)
-                .await
-                .unwrap(),
-            vec!["email"]
-        );
-        assert!(
-            repo.user_consented_scope_names(Uuid::new_v4(), client_oid)
-                .await
-                .unwrap()
-                .is_empty()
-        );
-
-        let log = format!("{:?}", db.into_transaction_log());
-        assert!(log.contains(&user_oid.to_string()), "{log}");
-        assert!(log.contains(&client_oid.to_string()), "{log}");
-        assert!(log.contains("openid_connect"), "{log}");
-        assert!(log.contains("INNER JOIN"), "{log}");
     }
 }

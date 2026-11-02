@@ -140,7 +140,8 @@ async fn validate_request_rejects_mismatched_request_object_field() {
     };
 
     let error = service.validate_request(params).await.unwrap_err();
-    assert!(format!("{error:?}").contains("scope"));
+    assert_eq!(error.code(), 23034);
+    assert_eq!(error.params().get("field"), Some("scope"));
 }
 
 #[tokio::test]

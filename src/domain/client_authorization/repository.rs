@@ -56,6 +56,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         &self,
         user_oid: Uuid,
         client_oid: ClientOid,
+        resources: &[String],
     ) -> Result<Vec<String>, ClientAuthorizationRepositoryError>;
 
     async fn has_user_consent(
@@ -63,6 +64,7 @@ pub trait ClientAuthorizationRepository: Send + Sync {
         user_oid: Uuid,
         client_oid: ClientOid,
         requested_scope: &ScopeSet,
+        resources: &[String],
     ) -> Result<bool, ClientAuthorizationRepositoryError>;
 
     async fn mark_authorization_request_completed(

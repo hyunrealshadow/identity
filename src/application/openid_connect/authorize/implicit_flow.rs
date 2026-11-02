@@ -1,7 +1,9 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
     auth::SessionOid,
-    client_authorization::{AccessTokenData, ClientAuthenticationMode, ClientAuthorizationData},
+    client_authorization::{
+        AccessTokenData, AccessTokenPrincipal, ClientAuthenticationMode, ClientAuthorizationData,
+    },
     openid_connect::{API_RESOURCE, TokenEndpointAuthMethod},
 };
 use url::form_urlencoded::Serializer;
@@ -43,6 +45,13 @@ impl AuthorizeService {
         response_type: ResponseType,
         authentication: AuthenticationContext<'_>,
     ) -> Result<Url, AppError> {
+        if ScopeSet::parse(&request.scope)
+            .map(|scope| scope.has_management_scopes())
+            .unwrap_or(false)
+        {
+            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                .with_param("response_type", response_type.to_string()));
+        }
         let nonce = request
             .nonce
             .as_deref()
@@ -62,6 +71,7 @@ impl AuthorizeService {
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+
         if client.metadata().require_auth_time == Some(true) && authentication.auth_time.is_none() {
             return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
         }
@@ -72,7 +82,13 @@ impl AuthorizeService {
             .find_by_oid(user_oid_obj)
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound))?;
+        if !user.enabled || user.locked {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound)
+                    .with_param("reason", "user is disabled or locked"),
+            );
+        }
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
@@ -100,13 +116,16 @@ impl AuthorizeService {
                     &request.resources,
                     AccessTokenData {
                         scope: request.scope.clone(),
-                        user_oid: user_oid.to_string(),
+                        resources: Vec::new(),
+                        user_oid: Some(user_oid.to_string()),
+                        principal: AccessTokenPrincipal::User,
                         session_oid: Some(session_oid),
                         protected_session_id: Some(protected_session_id.to_owned()),
                         authorization_code_oid: None,
                         refresh_token_oid: None,
                         device_authorization_oid: None,
                         client_authentication_mode: Some(front_channel_token_mode(&client)),
+                        management: None,
                     },
                 )
                 .await?;
@@ -207,6 +226,7 @@ impl AuthorizeService {
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+
         if response_type.includes_id_token()
             && client.metadata().require_auth_time == Some(true)
             && authentication.auth_time.is_none()
@@ -222,6 +242,7 @@ impl AuthorizeService {
                     session_oid,
                     protected_session_id,
                     authentication,
+                    rbac_snapshot: None,
                 },
             )
             .await?;
@@ -252,13 +273,16 @@ impl AuthorizeService {
                     &request.resources,
                     AccessTokenData {
                         scope: request.scope.clone(),
-                        user_oid: user_oid.to_string(),
+                        resources: Vec::new(),
+                        user_oid: Some(user_oid.to_string()),
+                        principal: AccessTokenPrincipal::User,
                         session_oid: Some(session_oid),
                         protected_session_id: Some(protected_session_id.to_owned()),
                         authorization_code_oid: Some(authorization_code_oid.to_string()),
                         refresh_token_oid: None,
                         device_authorization_oid: None,
                         client_authentication_mode: Some(front_channel_token_mode(&client)),
+                        management: None,
                     },
                 )
                 .await?;
@@ -300,7 +324,13 @@ impl AuthorizeService {
                 .find_by_oid(UserOid(user_oid))
                 .await
                 .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-                .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+                .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound))?;
+            if !user.enabled || user.locked {
+                return Err(
+                    AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound)
+                        .with_param("reason", "user is disabled or locked"),
+                );
+            }
             let signed_id_token = self.sign_implicit_id_token(SignImplicitIdTokenInput {
                 key_id: &id_key_id,
                 private_key_pem: &id_key_pem,
@@ -356,7 +386,7 @@ impl AuthorizeService {
         &self,
         client_id: Uuid,
         resources: &[String],
-        data: AccessTokenData,
+        mut data: AccessTokenData,
     ) -> Result<(Uuid, Vec<String>), AppError> {
         let selection = self
             .provider_service
@@ -365,6 +395,10 @@ impl AuthorizeService {
         if selection.scope != data.scope {
             return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
         }
+        // Persist exactly the selection used for the front-channel JWT
+        // audience/scope; an empty selection stays empty rather than inventing
+        // a resource from the client-ID audience.
+        data.resources = selection.resources.clone();
         let record = self
             .client_authorization_repo
             .create(

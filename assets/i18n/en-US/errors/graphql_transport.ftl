@@ -1,0 +1,10 @@
+E28100 = The GraphQL request is invalid.
+E28101 = Use the application/json content type.
+E28102 = The request body is too large.
+E28103 = The request URL is too long.
+E28104 = This operation requires a different HTTP method.
+E28105 = This origin is not allowed to access the API.
+E28106 = The request timed out. Please try again.
+E28107 = Sign in to continue.
+E28108 = The request could not be completed. Please try again later.
+E28109 = Your session is invalid or has expired. Please sign in again.

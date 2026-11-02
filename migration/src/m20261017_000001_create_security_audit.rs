@@ -1,0 +1,152 @@
+use sea_orm_migration::{
+    prelude::*,
+    schema::{
+        big_integer, pk_auto, text, text_null, timestamp_with_time_zone, uuid, uuid_null, uuid_uniq,
+    },
+};
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[derive(DeriveIden)]
+pub(crate) enum SecurityAudit {
+    Table,
+    Id,
+    Oid,
+    OccurredAt,
+    TransactionId,
+    ResourceType,
+    ResourceOid,
+    SubjectOid,
+    Operation,
+    CredentialType,
+    PreviousStatus,
+    Status,
+    ActorType,
+    ActorOid,
+    Action,
+    TargetType,
+    TargetOid,
+    Reason,
+    RequestId,
+    TraceId,
+    EventKind,
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(SecurityAudit::Table)
+                    .col(pk_auto(SecurityAudit::Id).big_integer())
+                    .col(
+                        uuid_uniq(SecurityAudit::Oid)
+                            .default(Func::cust(Alias::new("gen_random_uuid"))),
+                    )
+                    .col(
+                        timestamp_with_time_zone(SecurityAudit::OccurredAt)
+                            .default(Func::cust(Alias::new("clock_timestamp"))),
+                    )
+                    .col(
+                        big_integer(SecurityAudit::TransactionId)
+                            .default(Func::cust(Alias::new("txid_current"))),
+                    )
+                    .col(text(SecurityAudit::ResourceType))
+                    .col(uuid(SecurityAudit::ResourceOid))
+                    .col(uuid_null(SecurityAudit::SubjectOid))
+                    .col(text(SecurityAudit::Operation))
+                    .col(text_null(SecurityAudit::CredentialType))
+                    .col(text_null(SecurityAudit::PreviousStatus))
+                    .col(text_null(SecurityAudit::Status))
+                    .col(text_null(SecurityAudit::ActorType))
+                    .col(uuid_null(SecurityAudit::ActorOid))
+                    .col(text_null(SecurityAudit::Action))
+                    .col(text_null(SecurityAudit::TargetType))
+                    .col(uuid_null(SecurityAudit::TargetOid))
+                    .col(text_null(SecurityAudit::Reason))
+                    .col(text_null(SecurityAudit::RequestId))
+                    .col(text_null(SecurityAudit::TraceId))
+                    .col(text_null(SecurityAudit::EventKind))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .table(SecurityAudit::Table)
+                    .name("security_audit_subject_time")
+                    .col(SecurityAudit::SubjectOid)
+                    .col(SecurityAudit::Id)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .table(SecurityAudit::Table)
+                    .name("security_audit_time")
+                    .col(SecurityAudit::OccurredAt)
+                    .col(SecurityAudit::Id)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("security_audit_request_id")
+                    .table(SecurityAudit::Table)
+                    .col(SecurityAudit::RequestId)
+                    .and_where(Expr::col(SecurityAudit::RequestId).is_not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("security_audit_actor_time")
+                    .table(SecurityAudit::Table)
+                    .col(SecurityAudit::ActorOid)
+                    .col(SecurityAudit::OccurredAt)
+                    .and_where(Expr::col(SecurityAudit::ActorOid).is_not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("security_audit_target_time")
+                    .table(SecurityAudit::Table)
+                    .col(SecurityAudit::TargetType)
+                    .col(SecurityAudit::TargetOid)
+                    .col(SecurityAudit::OccurredAt)
+                    .and_where(Expr::col(SecurityAudit::TargetOid).is_not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("security_audit_action_time")
+                    .table(SecurityAudit::Table)
+                    .col(SecurityAudit::Action)
+                    .col(SecurityAudit::OccurredAt)
+                    .and_where(Expr::col(SecurityAudit::Action).is_not_null())
+                    .to_owned(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(SecurityAudit::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await
+    }
+}

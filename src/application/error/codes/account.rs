@@ -1,7 +1,7 @@
 use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Range: 15000-15099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum AccountErrorCode {
     ValidationFailed,
     UsernameRequired,

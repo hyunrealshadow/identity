@@ -31,16 +31,77 @@ use crate::{
             DEFAULT_GRANT_TYPES, GrantType, OpenIdConnectClientMetadata,
             OpenIdConnectClientPlatform, OpenIdConnectClientRegistration,
             OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepositoryError,
-            OpenIdConnectClientSettings, OpenIdConnectCredentialData, ResponseType, ScopeSet,
+            OpenIdConnectClientSettings, OpenIdConnectCredentialData,
+            OpenIdConnectCredentialRepository, OpenIdConnectCredentialType, ResponseType, ScopeSet,
             SubjectType, TokenEndpointAuthMethod, scope_catalog::ScopeCatalogRepository,
         },
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
 };
 
+const CLIENT_SECRET_LIFETIME_DAYS: i64 = 365;
+
+/// Scopes a public client may self-declare at registration. API/business and
+/// management scopes require a trusted management scope-assignment write.
+fn is_publicly_registerable_scope(name: &str) -> bool {
+    identity_domain::rbac::STANDARD_OIDC_SCOPES.contains(&name)
+        || identity_domain::rbac::ACCOUNT_SELF_SERVICE_SCOPES.contains(&name)
+}
+
+fn auth_method_uses_client_secret(method: TokenEndpointAuthMethod) -> bool {
+    matches!(
+        method,
+        TokenEndpointAuthMethod::ClientSecretBasic
+            | TokenEndpointAuthMethod::ClientSecretPost
+            | TokenEndpointAuthMethod::ClientSecretJwt
+    )
+}
+
+/// Select the credential data to persist for a JWKS registration update.
+///
+/// A JWKS refresh only updates cache metadata (`last_updated` / `expires_at`).
+/// When the `jwks_uri` and the actual key material (`jwks` / `public_keys`) are
+/// unchanged, retain the active credential's complete data so the
+/// repository's serialized-equality replacement keeps the original credential
+/// identity. Any URI or key-material change keeps the newly prepared data.
+/// Pure and I/O-free so it can be tested without a network fetch.
+pub(super) fn choose_effective_jwks(
+    prepared: OpenIdConnectCredentialData,
+    active: Option<&OpenIdConnectCredentialData>,
+) -> OpenIdConnectCredentialData {
+    let Some(OpenIdConnectCredentialData::ClientJsonWebKeySet {
+        jwks_uri: active_uri,
+        public_keys: active_public_keys,
+        jwks: active_jwks,
+        ..
+    }) = active
+    else {
+        return prepared;
+    };
+    let OpenIdConnectCredentialData::ClientJsonWebKeySet {
+        jwks_uri: prepared_uri,
+        public_keys: prepared_public_keys,
+        jwks: prepared_jwks,
+        ..
+    } = &prepared
+    else {
+        return prepared;
+    };
+    if prepared_uri == active_uri
+        && prepared_public_keys == active_public_keys
+        && prepared_jwks == active_jwks
+    {
+        if let Some(active) = active {
+            return active.clone();
+        }
+    }
+    prepared
+}
+
 pub struct DynamicClientRegistrationService {
     settings: Arc<dyn SettingsSource>,
     repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
+    credential_repo: Option<Arc<dyn OpenIdConnectCredentialRepository>>,
     scope_catalog: Option<Arc<dyn ScopeCatalogRepository>>,
     events: Arc<dyn EventSink>,
 }
@@ -54,9 +115,21 @@ impl DynamicClientRegistrationService {
         Self {
             settings,
             repo,
+            credential_repo: None,
             scope_catalog: None,
             events: Arc::new(NoopEventSink),
         }
+    }
+
+    /// Attach the credential reader used to preserve active secret material
+    /// across metadata-only registration updates and to report its real expiry.
+    #[must_use]
+    pub fn with_credential_repository(
+        mut self,
+        repo: Arc<dyn OpenIdConnectCredentialRepository>,
+    ) -> Self {
+        self.credential_repo = Some(repo);
+        self
     }
 
     /// Attach the key event and audit sink.
@@ -348,10 +421,11 @@ impl DynamicClientRegistrationService {
             request.request_object_encryption_enc.as_deref(),
         )?;
         let public_client = token_auth_method == TokenEndpointAuthMethod::None;
-        let client_secret = (!public_client).then(generate_client_secret);
+        let client_secret =
+            auth_method_uses_client_secret(token_auth_method).then(generate_client_secret);
         let client_secret_expires_at = client_secret
             .as_ref()
-            .map(|_| (Utc::now() + Duration::days(365)).timestamp());
+            .map(|_| (Utc::now() + Duration::days(CLIENT_SECRET_LIFETIME_DAYS)).timestamp());
         let registration_access_token = generate_registration_access_token();
         let assigned_scopes = split_scope(request.scope.as_deref());
         let raw_scope = assigned_scopes.join(" ");
@@ -365,15 +439,54 @@ impl DynamicClientRegistrationService {
             .into_iter()
             .filter(|name| seen.insert(name.clone()))
             .collect::<Vec<_>>();
-        if let Some(catalog) = &self.scope_catalog {
-            let names = catalog.list_names().await.map_err(AppError::internal)?;
-            if assigned_scopes.iter().any(|scope| !names.contains(scope)) {
+        if assigned_scopes
+            .iter()
+            .any(|scope| !is_publicly_registerable_scope(scope))
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "scope"),
+            );
+        }
+        let available = if let Some(catalog) = &self.scope_catalog {
+            catalog
+                .list_names_for_resources(&[
+                    identity_domain::openid_connect::API_RESOURCE.to_owned()
+                ])
+                .await
+                .map_err(AppError::internal)?
+        } else {
+            identity_domain::rbac::STANDARD_OIDC_SCOPES
+                .iter()
+                .chain(identity_domain::rbac::ACCOUNT_SELF_SERVICE_SCOPES.iter())
+                .filter(|code| {
+                    !identity_domain::openid_connect::model::scope::is_scope_pattern(code)
+                })
+                .map(|code| (*code).to_owned())
+                .collect()
+        };
+        let mut concrete = BTreeSet::new();
+        for requested in &assigned_scopes {
+            let mut found = false;
+            for code in &available {
+                if is_publicly_registerable_scope(code)
+                    && !identity_domain::openid_connect::model::scope::is_scope_pattern(code)
+                    && identity_domain::openid_connect::model::scope::scope_pattern_matches(
+                        requested, code,
+                    )
+                {
+                    concrete.insert(code.clone());
+                    found = true;
+                }
+            }
+            if !found {
                 return Err(
                     AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
                         .with_param("field", "scope"),
                 );
             }
         }
+        let assigned_scopes = concrete.into_iter().collect::<Vec<_>>();
         let client_name = request
             .client_name
             .clone()
@@ -593,8 +706,37 @@ impl DynamicClientRegistrationService {
                 RegistrationErrorCode::ClientUpdateForbidden,
             ));
         }
-        let (mut registration, mut response) =
-            self.prepare_registration(request.metadata, issuer).await?;
+        let current_secret = request.client_secret.clone();
+        let existing_scopes = existing.assigned_scopes().to_vec();
+        let existing_has_client_credentials = existing.allows_grant(GrantType::ClientCredentials);
+        let existing_has_api_scopes = existing_scopes
+            .iter()
+            .any(|scope| !is_publicly_registerable_scope(scope));
+        // Public update is metadata-only. Scope grants are trusted management
+        // writes, never a client-declared registration field, so the request
+        // cannot add or remove delegated API authority.
+        let mut metadata = request.metadata;
+        metadata.scope = None;
+        let (mut registration, mut response) = self.prepare_registration(metadata, issuer).await?;
+        if !existing_has_client_credentials
+            && existing_has_api_scopes
+            && registration
+                .metadata
+                .grant_types
+                .as_deref()
+                .is_some_and(|grants| grants.contains(&GrantType::ClientCredentials))
+        {
+            return Err(
+                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    .with_param("field", "grant_types"),
+            );
+        }
+        // Preserve the exact existing trusted assignments on safe metadata
+        // updates. The repository resolves the same canonical scope IDs; the
+        // public request is never allowed to re-declare them.
+        registration.assigned_scopes = existing_scopes;
+        response.scope = (!registration.assigned_scopes.is_empty())
+            .then(|| registration.assigned_scopes.join(" "));
         registration.client.oid = client_oid;
         registration.client.created_at = existing.client().created_at;
         registration.client.updated_at = Some(Utc::now());
@@ -608,12 +750,79 @@ impl DynamicClientRegistrationService {
             .settings
             .require_pushed_authorization_requests = require_par;
         registration.registration_access_token = registration_access_token.to_owned();
-        self.repo
-            .update(
-                registration,
-                registration_access_token,
-                request.client_secret,
+
+        // A metadata-only update must not replace existing authority. Cached
+        // JWKS timestamps are refreshed on an otherwise unchanged fetch, so
+        // preserve the original active data when the URI and key material are
+        // identical. Only active credentials are read; tombstoned or expired
+        // rows never cross the credential repository boundary.
+        if registration.credentials.iter().any(|credential| {
+            matches!(
+                credential,
+                OpenIdConnectCredentialData::ClientJsonWebKeySet { .. }
             )
+        }) {
+            if let Some(active) = self.active_client_jwks(client_oid).await? {
+                if let Some(index) = registration.credentials.iter().position(|credential| {
+                    matches!(
+                        credential,
+                        OpenIdConnectCredentialData::ClientJsonWebKeySet { .. }
+                    )
+                }) {
+                    let prepared = registration.credentials.remove(index);
+                    let effective = choose_effective_jwks(prepared, Some(&active));
+                    registration.credentials.insert(index, effective);
+                }
+            }
+        }
+
+        // RFC 7592 replaces metadata; it does not by itself rotate credentials.
+        // When the authentication method is unchanged and still uses a shared
+        // secret, keep the active secret (and its real expiry) instead of
+        // accepting the freshly generated secret from `prepare_registration`.
+        // The request's `client_secret`, when present, is only the current-secret
+        // verification input and is still handed to the repository unchanged.
+        let auth_methods_unchanged = existing.metadata().effective_token_endpoint_auth_methods()
+            == registration
+                .metadata
+                .effective_token_endpoint_auth_methods();
+        let desired_auth_method = registration
+            .metadata
+            .token_endpoint_auth_methods
+            .as_deref()
+            .and_then(|methods| methods.first())
+            .copied();
+        if auth_methods_unchanged && desired_auth_method.is_some_and(auth_method_uses_client_secret)
+        {
+            let Some((preserved_secret, expires_at)) = self
+                .preserved_client_secret(client_oid, current_secret.as_deref())
+                .await?
+            else {
+                // Neither an active reader nor a supplied current secret can
+                // identify the existing material. Never persist the freshly
+                // generated secret as if it were the original authority.
+                return Err(AppError::from_code(
+                    RegistrationErrorCode::ClientLookupFailed,
+                ));
+            };
+            registration.credentials.retain(|credential| {
+                !matches!(credential, OpenIdConnectCredentialData::ClientSecret { .. })
+            });
+            registration
+                .credentials
+                .push(OpenIdConnectCredentialData::ClientSecret {
+                    secret: preserved_secret.clone(),
+                });
+            response.client_secret = Some(preserved_secret);
+            response.client_secret_expires_at = expires_at;
+        }
+        if !auth_methods_unchanged {
+            registration.metadata.settings.allow_public_client_flow =
+                desired_auth_method == Some(TokenEndpointAuthMethod::None);
+        }
+
+        self.repo
+            .update(registration, registration_access_token, current_secret)
             .await
             .map_err(|error| match error {
                 OpenIdConnectClientRepositoryError::InvalidMetadataValue { .. } => {
@@ -630,6 +839,75 @@ impl DynamicClientRegistrationService {
         response.registration_access_token = Some(registration_access_token.to_owned());
         self.record_client_change("client.updated", client_oid, "success");
         Ok(response)
+    }
+
+    /// Resolve the secret that a metadata-only update must retain.
+    ///
+    /// Readable active credential material always wins. The request's
+    /// `client_secret` is only a current-secret verification input and must not
+    /// shape the credential set. It is used as material only when no active
+    /// secret row is readable (for example, when the credential reader is not
+    /// wired); in that case the expiry is unknown and stays unset.
+    async fn preserved_client_secret(
+        &self,
+        client_oid: Uuid,
+        current_secret: Option<&str>,
+    ) -> Result<Option<(String, Option<i64>)>, AppError> {
+        let active = self.active_client_secret(client_oid).await?;
+        Ok(match active {
+            Some((stored, expires_at)) => Some((stored, Some(expires_at))),
+            None => current_secret.map(|secret| (secret.to_owned(), None)),
+        })
+    }
+
+    async fn active_client_jwks(
+        &self,
+        client_oid: Uuid,
+    ) -> Result<Option<OpenIdConnectCredentialData>, AppError> {
+        let Some(repo) = &self.credential_repo else {
+            return Ok(None);
+        };
+        let credentials = repo
+            .find_active_by_client_oid_and_type(
+                client_oid,
+                OpenIdConnectCredentialType::ClientJsonWebKeySet,
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
+            })?;
+        Ok(credentials
+            .into_iter()
+            .find_map(|credential| match credential.data {
+                data @ OpenIdConnectCredentialData::ClientJsonWebKeySet { .. } => Some(data),
+                _ => None,
+            }))
+    }
+
+    async fn active_client_secret(
+        &self,
+        client_oid: Uuid,
+    ) -> Result<Option<(String, i64)>, AppError> {
+        let Some(repo) = &self.credential_repo else {
+            return Ok(None);
+        };
+        let credentials = repo
+            .find_active_by_client_oid_and_type(
+                client_oid,
+                OpenIdConnectCredentialType::ClientSecret,
+            )
+            .await
+            .map_err(|error| {
+                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
+            })?;
+        Ok(credentials
+            .into_iter()
+            .find_map(|credential| match credential.data {
+                OpenIdConnectCredentialData::ClientSecret { secret } => {
+                    Some((secret, credential.expires_at.timestamp()))
+                }
+                _ => None,
+            }))
     }
 
     pub async fn read(

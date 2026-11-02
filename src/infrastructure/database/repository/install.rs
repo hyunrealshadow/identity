@@ -4,8 +4,8 @@ use chrono::Utc;
 use identity_domain::user::normalization::{normalize_email, normalize_username};
 use rand::{RngExt, rng};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
+    QueryFilter, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use serde_json::{json, to_value};
 use url::Url;
@@ -26,7 +26,7 @@ use crate::{
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
         openid_connect::{
-            GrantType, OpenIdConnectCredentialData, ResponseType, SubjectType,
+            API_RESOURCE, GrantType, OpenIdConnectCredentialData, ResponseType, SubjectType,
             TokenEndpointAuthMethod,
         },
     },
@@ -35,7 +35,7 @@ use crate::{
         database::{
             entity::{
                 client, client_openid_connect, client_openid_connect_credential,
-                client_openid_connect_platform, client_scope, key, key_jwk, scope, user,
+                client_openid_connect_platform, client_scope, key, key_jwk, resource, scope, user,
                 user_credential,
             },
             repository::{
@@ -48,6 +48,9 @@ use crate::{
 
 pub struct InstallRepositoryImpl {
     db: DatabaseConnection,
+    /// Startup/process configuration, used only when the installation input
+    /// itself does not carry a console origin.
+    console: Option<crate::database::seed::console::ConsoleClientSeedConfig>,
 }
 
 // Deliberately distinct from the process-lifetime startup guard lock.
@@ -56,7 +59,15 @@ const INSTALL_TRANSACTION_LOCK_ID: i64 = 841_463_791_178_241_512;
 impl InstallRepositoryImpl {
     #[must_use]
     pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+        Self { db, console: None }
+    }
+
+    pub fn with_console_client_config(
+        mut self,
+        config: Option<crate::database::seed::console::ConsoleClientSeedConfig>,
+    ) -> Self {
+        self.console = config;
+        self
     }
 }
 
@@ -136,6 +147,73 @@ impl InstallRepository for InstallRepositoryImpl {
         .await
         .map_err(AppError::internal)?;
 
+        // The trusted built-in definitions must be present before the first
+        // membership references them. The startup seed normally already ran;
+        // this idempotent call makes the ordering explicit inside the same
+        // installation transaction and cannot adopt a same-name custom object.
+        crate::database::seed::rbac::ensure_built_in_rbac(&txn).await?;
+
+        // The first owner is the user explicitly created by this installation.
+        // The membership is written in the same transaction as its credential
+        // and initial settings, so a failed installation leaves neither behind.
+        let owner_group_oid = identity_domain::rbac::built_in_group_oid(
+            identity_domain::authorization::catalog::AdministratorRole::Owner,
+        );
+        let owner_group = txn
+            .query_one_raw(sea_orm::Statement::from_sql_and_values(
+                sea_orm::DbBackend::Postgres,
+                "SELECT id FROM user_group WHERE oid = $1 AND built_in = true AND enabled = true",
+                [owner_group_oid.0.into()],
+            ))
+            .await
+            .map_err(AppError::internal)?
+            .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        let owner_group_id = owner_group
+            .try_get::<i64>("", "id")
+            .map_err(AppError::internal)?;
+        let membership_oid = identity_domain::rbac::GroupMembershipOid::new();
+        txn.execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DbBackend::Postgres,
+            "INSERT INTO group_membership(oid, group_id, user_id, granted_by_user_id, reason, \
+                enabled, version, created_at) \
+             VALUES($1, $2, $3, NULL, 'initial_installation', true, gen_random_uuid(), now())",
+            [
+                membership_oid.0.into(),
+                owner_group_id.into(),
+                created_user.id.into(),
+            ],
+        ))
+        .await
+        .map_err(AppError::internal)?;
+        super::authorization_lifecycle::renew_user_version_in_txn(&txn, created_user.id)
+            .await
+            .map_err(AppError::internal)?;
+        let request_id = identity_domain::authorization::RequestId::new(
+            crate::observability::context::current_request_correlation()
+                .map(|context| context.request_id)
+                .unwrap_or_else(|| Uuid::new_v4().to_string()),
+        )
+        .expect("generated or validated request ID");
+        crate::database::owner_bootstrap::record_group_membership_audit(
+            &txn,
+            "rbac.group_membership.install",
+            membership_oid.0,
+            "initial_installation",
+            &request_id,
+        )
+        .await?;
+        // The installation input is authoritative for the console origin, so
+        // an installed console is never derived from process configuration.
+        let console_config = installation_console_config(
+            data.console_url.as_ref(),
+            data.issuer.as_ref(),
+            self.console.as_ref(),
+        )?;
+        if let Some(config) = console_config {
+            crate::database::seed::console::ensure_console_client_in_transaction(&txn, &config)
+                .await?;
+        }
+
         let created_client = client::ActiveModel {
             oid: Set(client_oid),
             protocol: Set("openid_connect".to_owned()),
@@ -194,13 +272,29 @@ impl InstallRepository for InstallRepositoryImpl {
             "profile",
             "email",
             "offline_access",
-            "account",
-            "session",
+            "account.read",
+            "account.update",
+            "session.read",
+            "session.revoke",
             "password.change",
         ];
         let assigned_scopes = scope::Entity::find()
-            .filter(scope::Column::Protocol.eq("openid_connect"))
-            .filter(scope::Column::Name.is_in(assigned_scope_names))
+            .filter(scope::Column::Code.is_in(assigned_scope_names))
+            .filter(scope::Column::BuiltIn.eq(true))
+            .filter(scope::Column::Enabled.eq(true))
+            .filter(
+                Condition::any()
+                    .add(scope::Column::ResourceId.is_null())
+                    .add(
+                        scope::Column::ResourceId.in_subquery(
+                            resource::Entity::find()
+                                .select_only()
+                                .column(resource::Column::Oid)
+                                .filter(resource::Column::Uri.eq(API_RESOURCE))
+                                .into_query(),
+                        ),
+                    ),
+            )
             .all(&txn)
             .await
             .map_err(AppError::internal)?;
@@ -307,6 +401,26 @@ impl InstallRepository for InstallRepositoryImpl {
     }
 }
 
+fn installation_console_config(
+    console_url: Option<&Url>,
+    issuer: Option<&Url>,
+    fallback: Option<&crate::database::seed::console::ConsoleClientSeedConfig>,
+) -> Result<Option<crate::database::seed::console::ConsoleClientSeedConfig>, AppError> {
+    match (console_url, issuer) {
+        (Some(console_url), Some(issuer)) => {
+            let console_origin = console_url.origin().ascii_serialization();
+            crate::database::seed::console::ConsoleClientSeedConfig::new(
+                &console_origin,
+                issuer.as_str(),
+                &format!("{console_origin}/callback"),
+            )
+            .map(Some)
+            .map_err(|_| AppError::from_code(InstallErrorCode::DomainInvalid))
+        }
+        _ => Ok(fallback.cloned()),
+    }
+}
+
 async fn acquire_install_transaction_lock<C>(db: &C) -> Result<(), AppError>
 where
     C: ConnectionTrait,
@@ -332,9 +446,12 @@ mod tests {
 
     use super::{
         INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock, built_in_callback_url,
-        built_in_logout_url,
+        built_in_logout_url, installation_console_config,
     };
-    use crate::database::query::advisory_transaction_lock;
+    use crate::{
+        database::query::advisory_transaction_lock,
+        database::seed::console::ConsoleClientSeedConfig,
+    };
 
     #[test]
     fn built_in_client_uses_top_level_callback_route() {
@@ -354,6 +471,43 @@ mod tests {
             built_in_logout_url(&application_url).unwrap().as_str(),
             "https://identity.example/logout"
         );
+    }
+
+    #[test]
+    fn installation_console_config_prefers_the_wire_input_over_process_config() {
+        let console_url = Url::parse("https://console.example.com").unwrap();
+        let issuer = Url::parse("https://identity.example.com").unwrap();
+        let process = ConsoleClientSeedConfig::new(
+            "https://process-console.example.com",
+            "https://process-issuer.example.com",
+            "https://process-console.example.com/callback",
+        )
+        .unwrap();
+
+        let config =
+            installation_console_config(Some(&console_url), Some(&issuer), Some(&process)).unwrap();
+
+        let config = config.expect("installation input must provision a console client");
+        assert_eq!(config.origin.as_str(), "https://console.example.com/");
+        assert_eq!(config.issuer.as_str(), "https://identity.example.com/");
+        assert_eq!(
+            config.redirect_uri.as_str(),
+            "https://console.example.com/callback"
+        );
+    }
+
+    #[test]
+    fn installation_console_config_keeps_the_bootstrap_fallback() {
+        let process = ConsoleClientSeedConfig::new(
+            "https://process-console.example.com",
+            "https://process-issuer.example.com",
+            "https://process-console.example.com/callback",
+        )
+        .unwrap();
+
+        let config = installation_console_config(None, None, Some(&process)).unwrap();
+
+        assert_eq!(config, Some(process));
     }
 
     #[tokio::test]

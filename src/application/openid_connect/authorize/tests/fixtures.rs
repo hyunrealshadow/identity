@@ -15,7 +15,6 @@ pub(super) use clients::{
 pub(super) use request_object::{
     authorize_service_with_public_key, authorize_service_with_request_object_encryption_key,
     authorize_service_with_request_uri, signed_request_object, signing_keypair,
-    spawn_chunked_response_server, spawn_redirect_response_server,
 };
 pub(super) use services::{
     build_test_service, empty_cred_repo, provider_service, stub_key_repo, stub_user_repo,

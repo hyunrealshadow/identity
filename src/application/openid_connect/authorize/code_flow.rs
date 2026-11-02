@@ -8,7 +8,10 @@ use crate::{
 use chrono::{Duration, Utc};
 use identity_domain::{
     auth::SessionOid,
-    client_authorization::{AuthorizationCodeData, ClientAuthorizationData},
+    client_authorization::{
+        AuthorizationCodeData, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
+        ClientAuthorizationData,
+    },
     openid_connect::AuthorizationRequestData,
 };
 use url::Url;
@@ -21,6 +24,8 @@ pub(super) struct AuthorizationCodeContext<'a> {
     pub session_oid: SessionOid,
     pub protected_session_id: &'a str,
     pub authentication: AuthenticationContext<'a>,
+    /// Immutable business snapshot captured before this code is created.
+    pub rbac_snapshot: Option<&'a BusinessAuthorizationSnapshotData>,
 }
 
 impl AuthorizeService {
@@ -60,7 +65,20 @@ impl AuthorizeService {
             session_oid,
             protected_session_id,
             authentication,
+            rbac_snapshot,
         } = context;
+        let authorization_snapshot = match (&request.management, rbac_snapshot) {
+            (Some(_), Some(_)) => {
+                return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+            }
+            (Some(management), None) => {
+                Some(AuthorizationSnapshotData::Management((*management).clone()))
+            }
+            (None, Some(snapshot)) => {
+                Some(AuthorizationSnapshotData::Business((*snapshot).clone()))
+            }
+            (None, None) => None,
+        };
         let record = self
             .client_authorization_repo
             .create(
@@ -86,6 +104,7 @@ impl AuthorizeService {
                         .as_deref()
                         .map(Self::parse_claims_request)
                         .transpose()?,
+                    management: authorization_snapshot,
                 }),
                 Utc::now() + Duration::minutes(10),
             )

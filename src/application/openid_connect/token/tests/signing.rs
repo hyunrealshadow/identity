@@ -437,6 +437,7 @@ pub(super) fn user_info_service_with_key(
 pub(super) fn test_user(user_oid: Uuid) -> User {
     User {
         oid: UserOid(user_oid),
+        version: Uuid::new_v4(),
         email: "alg@example.com".to_string(),
         email_normalized: "alg@example.com".to_string(),
         name: "Alg User".to_string(),

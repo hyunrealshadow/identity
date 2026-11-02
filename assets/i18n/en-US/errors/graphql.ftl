@@ -1,0 +1,21 @@
+# GraphQL execution and schema errors
+E28000 = The input is invalid.
+E28001 = The pagination cursor is invalid.
+E28002 = The page size cannot exceed { $max }.
+E28003 = The global ID is invalid.
+E28004 = The requested node type is not supported.
+E28005 = The required scope is missing: { $scope }.
+E28006 = User authentication is required.
+E28007 = The request is not permitted.
+E28008 = More recent authentication is required.
+E28009 = This operation requires a browser session.
+E28010 = The theme must be light or dark.
+E28011 = An unexpected error occurred. Please try again.
+E28012 = The authentication context is unavailable.
+E28013 = The session ID is invalid.
+E28014 = Provide either forward or backward pagination, not both.
+E28015 = Instance metadata is unavailable.
+E28016 = The passkey challenge is invalid.
+E28017 = The passkey ID is invalid.
+E28018 = The response could not be serialized.
+E28019 = The account is unavailable.

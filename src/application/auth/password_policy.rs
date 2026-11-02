@@ -23,6 +23,21 @@ impl BreachedPasswordChecker for UnavailableBreachChecker {
     }
 }
 
+#[tracing::instrument(skip_all, name = "password.breach_check", fields(enabled))]
+pub async fn validate_breached_password(
+    checker: &dyn BreachedPasswordChecker,
+    settings: &crate::setting::SettingsSnapshot,
+    password: &str,
+    field: &str,
+) -> Result<(), AppError> {
+    let enabled = settings.get::<crate::setting::BreachedPasswordCheckEnabledSetting>();
+    tracing::Span::current().record("enabled", enabled);
+    if enabled && checker.is_breached(password).await? {
+        return Err(password_error(AuthErrorCode::PasswordBreached, field));
+    }
+    Ok(())
+}
+
 pub fn password_error(code: AuthErrorCode, field: &str) -> AppError {
     AppError::from_code(CommonErrorCode::ValidationFailed)
         .with_field_error(field, AppError::from_code(code))
@@ -103,12 +118,50 @@ fn edit_distance(left: &str, right: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct UnavailableCountingChecker(AtomicUsize);
+
+    #[async_trait]
+    impl BreachedPasswordChecker for UnavailableCountingChecker {
+        async fn is_breached(&self, _: &str) -> Result<bool, AppError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(AppError::from_code(AuthErrorCode::PasswordCheckUnavailable))
+        }
+    }
+
+    #[tokio::test]
+    async fn disabled_breach_check_never_contacts_the_dependency() {
+        let checker = UnavailableCountingChecker(AtomicUsize::new(0));
+        let settings = crate::setting::SettingsSnapshot::default()
+            .with::<crate::setting::BreachedPasswordCheckEnabledSetting>(false);
+        validate_breached_password(&checker, &settings, "test-only password", "password")
+            .await
+            .unwrap();
+        assert_eq!(checker.0.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn missing_setting_defaults_to_enabled_and_dependency_failure_stays_closed() {
+        let checker = UnavailableCountingChecker(AtomicUsize::new(0));
+        let error = validate_breached_password(
+            &checker,
+            &crate::setting::SettingsSnapshot::default(),
+            "test-only password",
+            "password",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code(), 11026);
+        assert_eq!(checker.0.load(Ordering::SeqCst), 1);
+    }
+
     fn validate(password: &str, identifiers: &[&str]) -> Result<(), AppError> {
         validate_password(password, identifiers, "newPassword")
     }
 
     #[test]
-    fn counts_unicode_and_preserves_password_text() {
+    fn counts_unicode_characters_and_accepts_whitespace() {
         assert!(validate("安全密码", &[]).is_err());
         assert!(validate("春夏秋冬天地玄黄宇宙洪荒", &[]).is_ok());
         assert!(validate(" a varied pass phrase ", &[]).is_ok());

@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::controllers::response::app_state;
 
-const ALLOWED_HEADERS: &str = "authorization, content-type";
+const ALLOWED_HEADERS: &str = "authorization, content-type, accept-language";
 
 /// CORS for protocol endpoints accessed by browser clients. The authorization
 /// endpoint deliberately does not install this handler.
@@ -43,7 +43,7 @@ fn preflight_headers_allowed(raw: &str) -> bool {
     raw.split(',').all(|header| {
         matches!(
             header.trim().to_ascii_lowercase().as_str(),
-            "authorization" | "content-type"
+            "authorization" | "content-type" | "accept-language"
         )
     })
 }
@@ -114,6 +114,10 @@ impl Handler for ClientCors {
         res.headers_mut()
             .append(header::VARY, HeaderValue::from_static("Origin"));
         if let Some(origin) = origin.as_deref().filter(|_| allowed) {
+            res.headers_mut().insert(
+                header::ACCESS_CONTROL_EXPOSE_HEADERS,
+                HeaderValue::from_static("X-Request-ID, X-Trace-ID, WWW-Authenticate, Retry-After"),
+            );
             res.headers_mut().insert(
                 header::ACCESS_CONTROL_ALLOW_ORIGIN,
                 HeaderValue::from_str(origin).expect("validated Origin header"),

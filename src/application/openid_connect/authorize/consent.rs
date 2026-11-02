@@ -56,9 +56,10 @@ impl AuthorizeService {
         &self,
         user_oid: Uuid,
         client_oid: ClientOid,
+        resources: &[String],
     ) -> Result<Vec<String>, AppError> {
         self.client_authorization_repo
-            .user_consented_scope_names(user_oid, client_oid)
+            .user_consented_scope_names(user_oid, client_oid, resources)
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))
     }
@@ -68,12 +69,13 @@ impl AuthorizeService {
         user_oid: Uuid,
         client_oid: ClientOid,
         requested_scope: &str,
+        resources: &[String],
     ) -> Result<bool, AppError> {
         let requested_scope = ScopeSet::parse(requested_scope).map_err(AppError::map_source(
             AuthorizeErrorCode::DeserializeRequestFailed,
         ))?;
         self.client_authorization_repo
-            .has_user_consent(user_oid, client_oid, &requested_scope)
+            .has_user_consent(user_oid, client_oid, &requested_scope, resources)
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))
     }

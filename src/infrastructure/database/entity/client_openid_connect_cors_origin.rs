@@ -1,6 +1,7 @@
 //! Materialized CORS origins for OpenID Connect clients.
 
 use super::client::Entity as ClientEntity;
+use super::client_openid_connect::Entity as OidcClientEntity;
 
 use sea_orm::entity::prelude::*;
 
@@ -25,17 +26,27 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::client::Entity",
+        belongs_to = "super::client_openid_connect::Entity",
         from = "Column::ClientId",
-        to = "super::client::Column::Id",
+        to = "super::client_openid_connect::Column::ClientId",
+        on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    Client,
+    OpenIdConnectClient,
+}
+
+impl Related<OidcClientEntity> for Entity {
+    fn to() -> RelationDef {
+        Relation::OpenIdConnectClient.def()
+    }
 }
 
 impl Related<ClientEntity> for Entity {
     fn to() -> RelationDef {
-        Relation::Client.def()
+        super::client_openid_connect::Relation::Client.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(Relation::OpenIdConnectClient.def())
     }
 }
 

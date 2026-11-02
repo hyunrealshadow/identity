@@ -42,25 +42,75 @@ async fn recovery_consumption_uses_the_same_account_lock_as_mfa_mutations() {
 async fn mfa_removal_is_locked_and_clears_recovery_codes_only_after_the_last_method() {
     for kind in [CredentialType::Otp, CredentialType::Passkey] {
         for remains in [false, true] {
+            let mut query_results = vec![vec![id_row(1)]];
+            let mut exec_results = Vec::new();
+            if kind == CredentialType::Passkey {
+                // Lifecycle advisory lock before the credential lock and delete.
+                exec_results.push(MockExecResult {
+                    rows_affected: 0,
+                    last_insert_id: 0,
+                });
+                let recovery_user = Uuid::new_v4();
+                query_results.push(vec![BTreeMap::from([
+                    ("id".to_owned(), Value::from(2i64)),
+                    ("oid".to_owned(), Value::from(recovery_user)),
+                ])]);
+                let permissions =
+                    identity_domain::authorization::ManagementScope::ALL
+                        .into_iter()
+                        .map(|scope| {
+                            serde_json::json!({
+                                "permission_oid": identity_domain::rbac::built_in_permission_oid(scope).0,
+                                "permission_code": scope.name(),
+                                "scope_code": scope.name(),
+                                "permission_enabled": true,
+                                "permission_built_in": true,
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                query_results.push(vec![BTreeMap::from([(
+                    "permissions".to_owned(),
+                    Value::from(serde_json::json!(permissions)),
+                )])]);
+                query_results.push(vec![BTreeMap::from([
+                    ("kind".to_owned(), Value::from("subject")),
+                    (
+                        "payload".to_owned(),
+                        Value::from(serde_json::json!([recovery_user, true, false, null])),
+                    ),
+                ])]);
+            }
+            exec_results.push(MockExecResult {
+                rows_affected: 0,
+                last_insert_id: 0,
+            });
+            exec_results.push(MockExecResult {
+                rows_affected: 1,
+                last_insert_id: 0,
+            });
+            query_results.push(if remains { vec![id_row(2)] } else { Vec::new() });
+            exec_results.push(MockExecResult {
+                rows_affected: 10,
+                last_insert_id: 0,
+            });
+            // Authority withdrawal rotates the user CAS UUID and tombstones
+            // existing artifacts before the semantic audit insert.
+            query_results.push(vec![BTreeMap::from([(
+                "version".to_owned(),
+                Value::from(Uuid::new_v4()),
+            )])]);
+            exec_results.push(MockExecResult {
+                rows_affected: 0,
+                last_insert_id: 0,
+            });
+            // Semantic audit insert appended after the successful mutation.
+            exec_results.push(MockExecResult {
+                rows_affected: 1,
+                last_insert_id: 0,
+            });
             let db = MockDatabase::new(DatabaseBackend::Postgres)
-                .append_query_results([
-                    vec![id_row(1)],
-                    if remains { vec![id_row(2)] } else { Vec::new() },
-                ])
-                .append_exec_results([
-                    MockExecResult {
-                        rows_affected: 0,
-                        last_insert_id: 0,
-                    },
-                    MockExecResult {
-                        rows_affected: 1,
-                        last_insert_id: 0,
-                    },
-                    MockExecResult {
-                        rows_affected: 10,
-                        last_insert_id: 0,
-                    },
-                ])
+                .append_query_results(query_results)
+                .append_exec_results(exec_results)
                 .into_connection();
             let user = UserOid(Uuid::new_v4());
             let repo = UserCredentialRepositoryImpl::new(db.clone());

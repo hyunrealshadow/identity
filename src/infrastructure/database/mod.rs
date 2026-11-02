@@ -5,7 +5,11 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbErr as SeaOrmDbErr
 
 use crate::config::DatabaseConfig;
 
+pub mod audit;
+pub(crate) mod authority_snapshot;
+pub mod client_authorization_boundary;
 pub mod entity;
+pub mod owner_bootstrap;
 pub mod query;
 pub mod repository;
 pub mod seed;

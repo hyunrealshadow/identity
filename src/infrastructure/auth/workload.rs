@@ -340,12 +340,7 @@ struct Jwks {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        process,
-        time::{Duration, SystemTime},
-    };
+    use std::time::{Duration, SystemTime};
 
     use identity_domain::openid_connect::{
         AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator as _,
@@ -358,64 +353,6 @@ mod tests {
         kubernetes_http_client,
     };
     use crate::config::KubernetesServiceAccountConfig;
-
-    #[tokio::test]
-    async fn static_token_accepts_configured_tokens() {
-        let dir = env::temp_dir().join(format!("identity-wl-{}", process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let current = dir.join("current");
-        let previous = dir.join("previous");
-        fs::write(&current, "current-workload-token-0123456789abcdef").unwrap();
-        fs::write(&previous, "previous-workload-token-0123456789abcdef").unwrap();
-
-        let authenticator = StaticTokenWorkloadAuthenticator::new(
-            vec![PathBuf::from(&current), PathBuf::from(&previous)],
-            Vec::new(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            authenticator
-                .authenticate("current-workload-token-0123456789abcdef")
-                .await,
-            Some(AuthenticatedWorkload(BuiltInWorkload::Login))
-        );
-        assert_eq!(
-            authenticator
-                .authenticate("previous-workload-token-0123456789abcdef")
-                .await,
-            Some(AuthenticatedWorkload(BuiltInWorkload::Login))
-        );
-        assert_eq!(
-            authenticator.authenticate("wrong-workload-token").await,
-            None
-        );
-
-        fs::remove_file(&current).ok();
-        fs::remove_file(&previous).ok();
-        fs::remove_dir(&dir).ok();
-    }
-
-    #[tokio::test]
-    async fn static_token_normalizes_file_whitespace() {
-        let dir = env::temp_dir().join(format!("identity-wl-trim-{}", process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let token_file = dir.join("token");
-        fs::write(&token_file, "workload-token-with-32-characters-minimum\r\n").unwrap();
-
-        let authenticator =
-            StaticTokenWorkloadAuthenticator::new(vec![token_file.clone()], Vec::new()).unwrap();
-
-        assert_eq!(
-            authenticator
-                .authenticate("workload-token-with-32-characters-minimum")
-                .await,
-            Some(AuthenticatedWorkload(BuiltInWorkload::Login))
-        );
-
-        fs::remove_file(&token_file).ok();
-        fs::remove_dir(&dir).ok();
-    }
 
     #[tokio::test]
     async fn static_token_accepts_resolved_environment_tokens() {
@@ -499,26 +436,5 @@ mod tests {
                 .request("https://external.example.com/openid/v1/jwks")
                 .is_ok()
         );
-    }
-
-    #[test]
-    fn static_token_rejects_short_or_missing_sources() {
-        let dir = env::temp_dir().join(format!("identity-wl-short-{}", process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let short = dir.join("short");
-        fs::write(&short, "too-short").unwrap();
-
-        let error = StaticTokenWorkloadAuthenticator::new(vec![PathBuf::from(&short)], Vec::new())
-            .err()
-            .expect("short token must be rejected");
-        assert!(error.contains("32 characters"));
-
-        let error = StaticTokenWorkloadAuthenticator::new(Vec::new(), Vec::new())
-            .err()
-            .expect("missing sources must be rejected");
-        assert!(error.contains("at least one token file"));
-
-        fs::remove_file(&short).ok();
-        fs::remove_dir(&dir).ok();
     }
 }

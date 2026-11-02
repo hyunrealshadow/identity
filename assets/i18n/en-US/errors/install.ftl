@@ -10,3 +10,5 @@ E13007 = That username is already taken.
 E13008 = That email address is already registered.
 E13009 = Unsupported key algorithm: { $algorithm }.
 E13010 = The application URL must be a valid HTTPS origin without a path, query, or fragment.
+E13011 = Console URL is required.
+E13012 = The console URL must be a valid HTTPS origin without credentials, a path, query, or fragment.

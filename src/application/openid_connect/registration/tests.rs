@@ -1,12 +1,17 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Mutex},
+};
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use identity_domain::{
     client::model::{Client, ClientOid, ClientProtocol},
+    key::PublicJwk,
     openid_connect::{
         GrantType, OpenIdConnectClient, OpenIdConnectClientMetadata, OpenIdConnectClientPlatform,
         OpenIdConnectClientPlatformType, OpenIdConnectClientRegistration,
-        OpenIdConnectCredentialData, ResponseType, TokenEndpointAuthMethod,
+        OpenIdConnectClientRepositoryError, OpenIdConnectCredential, OpenIdConnectCredentialData,
+        OpenIdConnectCredentialType, ResponseType, TokenEndpointAuthMethod,
     },
 };
 use serde_json::{Value, from_value, json, to_value};
@@ -14,6 +19,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use url::Url;
 use uuid::Uuid;
 
+use super::service::choose_effective_jwks;
 use super::validation::sector_redirect_uris_include_registered_redirects;
 use crate::{
     openid_connect::{
@@ -21,9 +27,12 @@ use crate::{
             DynamicClientRegistrationRequest, DynamicClientRegistrationService,
             DynamicClientUpdateRequest,
         },
-        remote::conformance_mode_active,
         tests::fixtures::{
-            mocks::MockOpenIdConnectClientRegistrationRepository, scope_catalog::TestScopeCatalog,
+            mocks::{
+                MockOpenIdConnectClientRegistrationRepository,
+                MockOpenIdConnectCredentialRepository,
+            },
+            scope_catalog::TestScopeCatalog,
         },
     },
     setting::{
@@ -37,7 +46,7 @@ use super::DynamicClientJwks;
 struct TestRegistrationSetting(bool);
 
 #[tokio::test]
-async fn registration_validates_catalog_and_preserves_custom_scope_assignments() {
+async fn public_registration_never_self_declares_api_scopes() {
     let captured = Arc::new(Mutex::new(None));
     let repo = Arc::new(capturing_registration_repo(
         captured.clone(),
@@ -47,23 +56,53 @@ async fn registration_validates_catalog_and_preserves_custom_scope_assignments()
         DynamicClientRegistrationService::new(Arc::new(TestRegistrationSetting(true)), repo)
             .with_scope_catalog(Arc::new(TestScopeCatalog(vec![
                 "openid".into(),
+                "profile".into(),
+                "account.read".into(),
                 "orders.read".into(),
             ])));
-    for scope in ["openid missing", "openid orders\tread"] {
+    for scope in [
+        "openid missing",
+        "openid orders\tread",
+        "openid orders.read",
+        "management.user.read",
+    ] {
         let request = from_value(
             json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": scope}),
         )
         .unwrap();
         let error = service.register(request, &issuer()).await.unwrap_err();
-        assert_eq!(error.code(), 25009);
-        assert!(captured.lock().unwrap().is_none());
+        assert_eq!(error.code(), 25009, "{scope}");
+        assert!(captured.lock().unwrap().is_none(), "{scope}");
     }
-    let request = from_value(json!({"redirect_uris": ["https://rp.example.com/callback"], "scope": "openid orders.read orders.read"})).unwrap();
+    let request = from_value(json!({
+        "redirect_uris": ["https://rp.example.com/callback"],
+        "scope": "openid profile account.read account.read"
+    }))
+    .unwrap();
     let response = service.register(request, &issuer()).await.unwrap();
-    assert_eq!(response.scope.as_deref(), Some("openid orders.read"));
+    let expected = ["account.read", "openid", "profile"]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
     assert_eq!(
-        captured.lock().unwrap().as_ref().unwrap().assigned_scopes,
-        ["openid", "orders.read"]
+        response
+            .scope
+            .as_deref()
+            .unwrap()
+            .split(' ')
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+    assert_eq!(
+        captured
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .assigned_scopes
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        expected
     );
 }
 
@@ -125,39 +164,7 @@ fn registered_client_with_built_in(client_oid: ClientOid, built_in: bool) -> Ope
             created_at: Utc::now(),
             updated_at: None,
         },
-        OpenIdConnectClientMetadata {
-            post_logout_redirect_uris: None,
-            frontchannel_logout_uri: None,
-            frontchannel_logout_session_required: None,
-            backchannel_logout_uri: None,
-            backchannel_logout_session_required: None,
-            response_types: None,
-            grant_types: None,
-            contacts: None,
-            logo_uri: None,
-            client_uri: None,
-            policy_uri: None,
-            tos_uri: None,
-            sector_identifier_uri: None,
-            subject_type: None,
-            id_token_signed_response_algs: None,
-            id_token_encrypted_response_algs: None,
-            id_token_encrypted_response_encs: None,
-            userinfo_signed_response_algs: None,
-            userinfo_encrypted_response_algs: None,
-            userinfo_encrypted_response_encs: None,
-            request_object_signing_algs: None,
-            request_object_encryption_algs: None,
-            request_object_encryption_encs: None,
-            token_endpoint_auth_methods: None,
-            token_endpoint_auth_signing_algs: None,
-            default_max_age: None,
-            require_auth_time: None,
-            default_acr_values: None,
-            initiate_login_uri: None,
-            request_uris: None,
-            settings: Default::default(),
-        },
+        registered_metadata(),
         vec![OpenIdConnectClientPlatform {
             platform: OpenIdConnectClientPlatformType::Web,
             redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
@@ -165,6 +172,89 @@ fn registered_client_with_built_in(client_oid: ClientOid, built_in: bool) -> Ope
         vec!["openid".to_owned()],
     )
     .unwrap()
+}
+
+fn registered_client_with_auth_method(
+    client_oid: ClientOid,
+    method: TokenEndpointAuthMethod,
+) -> OpenIdConnectClient {
+    let mut metadata = registered_metadata();
+    metadata.token_endpoint_auth_methods = Some(vec![method]);
+    OpenIdConnectClient::new(
+        Client {
+            oid: client_oid,
+            protocol: ClientProtocol::OpenIdConnect,
+            name: "Dynamic Client".to_owned(),
+            names: vec![],
+            description: None,
+            built_in: false,
+            created_at: Utc::now(),
+            updated_at: None,
+        },
+        metadata,
+        vec![OpenIdConnectClientPlatform {
+            platform: OpenIdConnectClientPlatformType::Web,
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
+        }],
+        vec!["openid".to_owned()],
+    )
+    .unwrap()
+}
+
+fn registered_metadata() -> OpenIdConnectClientMetadata {
+    OpenIdConnectClientMetadata {
+        post_logout_redirect_uris: None,
+        frontchannel_logout_uri: None,
+        frontchannel_logout_session_required: None,
+        backchannel_logout_uri: None,
+        backchannel_logout_session_required: None,
+        response_types: None,
+        grant_types: None,
+        contacts: None,
+        logo_uri: None,
+        client_uri: None,
+        policy_uri: None,
+        tos_uri: None,
+        sector_identifier_uri: None,
+        subject_type: None,
+        id_token_signed_response_algs: None,
+        id_token_encrypted_response_algs: None,
+        id_token_encrypted_response_encs: None,
+        userinfo_signed_response_algs: None,
+        userinfo_encrypted_response_algs: None,
+        userinfo_encrypted_response_encs: None,
+        request_object_signing_algs: None,
+        request_object_encryption_algs: None,
+        request_object_encryption_encs: None,
+        token_endpoint_auth_methods: None,
+        token_endpoint_auth_signing_algs: None,
+        default_max_age: None,
+        require_auth_time: None,
+        default_acr_values: None,
+        initiate_login_uri: None,
+        request_uris: None,
+        settings: Default::default(),
+    }
+}
+
+fn active_client_secret(
+    client_oid: ClientOid,
+    secret: &str,
+    expires_at: chrono::DateTime<Utc>,
+) -> OpenIdConnectCredential {
+    OpenIdConnectCredential {
+        oid: Uuid::new_v4(),
+        client_oid,
+        r#type: OpenIdConnectCredentialType::ClientSecret,
+        hint: "••••".to_owned(),
+        data: OpenIdConnectCredentialData::ClientSecret {
+            secret: secret.to_owned(),
+        },
+        expires_at,
+        revoked_at: None,
+        created_at: Utc::now(),
+        updated_at: None,
+    }
 }
 
 #[tokio::test]
@@ -366,17 +456,19 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
         "https://rp.example.com/login"
     );
     assert_eq!(
-        captured_val.assigned_scopes,
-        vec!["openid", "profile", "email"]
+        captured_val
+            .assigned_scopes
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        ["email", "openid", "profile"]
+            .into_iter()
+            .collect::<BTreeSet<_>>()
     );
     assert!(captured_val.credentials.iter().any(|credential| {
         matches!(credential, OpenIdConnectCredentialData::ClientSecret { secret } if response.client_secret.as_ref() == Some(secret))
     }));
     assert!(!captured_val.registration_access_token.is_empty());
-    assert_eq!(
-        captured_val.metadata.settings.skip_consent,
-        conformance_mode_active()
-    );
 }
 
 #[tokio::test]
@@ -1129,4 +1221,427 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
             .code(),
         25009
     );
+}
+
+#[tokio::test]
+async fn update_preserves_delegated_api_scopes_and_rejects_client_credentials_escalation() {
+    let client_oid = Uuid::new_v4();
+    let mut metadata = registered_metadata();
+    metadata.grant_types = Some(vec![GrantType::AuthorizationCode]);
+    let existing = OpenIdConnectClient::new(
+        Client {
+            oid: client_oid,
+            protocol: ClientProtocol::OpenIdConnect,
+            name: "Delegated Client".to_owned(),
+            names: vec![],
+            description: None,
+            built_in: false,
+            created_at: Utc::now(),
+            updated_at: None,
+        },
+        metadata,
+        vec![OpenIdConnectClientPlatform {
+            platform: OpenIdConnectClientPlatformType::Web,
+            redirect_uris: vec!["https://rp.example.com/callback".to_owned()],
+        }],
+        vec!["openid".to_owned(), "orders.read".to_owned()],
+    )
+    .unwrap();
+    let captured = Arc::new(Mutex::new(None));
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    let existing_for_find = existing.clone();
+    repo.expect_find_by_registration_access_token()
+        .returning(move |_, _| Ok(Some(existing_for_find.clone())));
+    let c = captured.clone();
+    repo.expect_update()
+        .returning(move |registration: OpenIdConnectClientRegistration, _, _| {
+            *c.lock().unwrap() = Some(registration);
+            Ok(())
+        });
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_active_by_client_oid_and_type()
+        .withf(move |oid, type_| {
+            *oid == client_oid && type_ == &OpenIdConnectCredentialType::ClientSecret
+        })
+        .times(1)
+        .returning(move |oid, _| {
+            Ok(vec![active_client_secret(
+                oid,
+                "existing-delegated-secret",
+                Utc::now() + Duration::days(30),
+            )])
+        });
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(repo),
+    )
+    .with_credential_repository(Arc::new(credential_repo));
+    let request = from_value::<DynamicClientUpdateRequest>(json!({
+        "client_id": client_oid.to_string(),
+        "client_name": "Renamed Delegated Client",
+        "redirect_uris": ["https://rp.example.com/callback"],
+        "scope": "openid orders.read",
+        "grant_types": ["authorization_code", "client_credentials"]
+    }))
+    .unwrap();
+    let error = service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            request,
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 25009);
+    assert!(captured.lock().unwrap().is_none());
+
+    let request = from_value::<DynamicClientUpdateRequest>(json!({
+        "client_id": client_oid.to_string(),
+        "client_name": "Renamed Delegated Client",
+        "redirect_uris": ["https://rp.example.com/callback"]
+    }))
+    .unwrap();
+    let response = service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            request,
+            &issuer(),
+        )
+        .await
+        .unwrap();
+    let captured = captured.lock().unwrap();
+    let registration = captured.as_ref().unwrap();
+    assert_eq!(registration.assigned_scopes, ["openid", "orders.read"]);
+    assert!(registration.credentials.iter().any(|credential| {
+        matches!(
+            credential,
+            OpenIdConnectCredentialData::ClientSecret { secret }
+                if secret == "existing-delegated-secret"
+        )
+    }));
+    assert_eq!(
+        response.client_secret.as_deref(),
+        Some("existing-delegated-secret")
+    );
+}
+
+#[tokio::test]
+async fn update_keeps_secret_material_and_real_expiry_when_auth_method_is_unchanged() {
+    let client_oid = Uuid::new_v4();
+    let expires_at = Utc::now() + Duration::days(30);
+    let expected_expiry = expires_at.timestamp();
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    repo.expect_find_by_registration_access_token()
+        .returning(move |oid, token| {
+            assert_eq!(oid, client_oid);
+            assert_eq!(token, "registration-token");
+            Ok(Some(registered_client_with_auth_method(
+                oid,
+                TokenEndpointAuthMethod::ClientSecretBasic,
+            )))
+        });
+    repo.expect_update()
+        .times(1)
+        .returning(|registration, token, current_secret| {
+            assert_eq!(token, "registration-token");
+            assert_eq!(current_secret.as_deref(), Some("old-secret"));
+            let secrets = registration
+                .credentials
+                .iter()
+                .filter_map(|credential| match credential {
+                    OpenIdConnectCredentialData::ClientSecret { secret } => Some(secret.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(secrets, vec!["old-secret"]);
+            assert_eq!(registration.client.name, "Renamed Client");
+            Ok(())
+        });
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_active_by_client_oid_and_type()
+        .withf(move |oid, type_| {
+            *oid == client_oid && type_ == &OpenIdConnectCredentialType::ClientSecret
+        })
+        .times(1)
+        .returning(move |oid, _| {
+            Ok(vec![active_client_secret(
+                oid,
+                "old-secret",
+                expires_at.to_owned(),
+            )])
+        });
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(repo),
+    )
+    .with_credential_repository(Arc::new(credential_repo));
+
+    let response = service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            from_value(json!({
+                "client_id": client_oid.to_string(),
+                "client_secret": "old-secret",
+                "client_name": "Renamed Client",
+                "redirect_uris": ["https://rp.example.com/callback"],
+                "token_endpoint_auth_method": "client_secret_basic"
+            }))
+            .unwrap(),
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.client_secret.as_deref(), Some("old-secret"));
+    assert_eq!(response.client_secret_expires_at, Some(expected_expiry));
+}
+
+#[tokio::test]
+async fn update_without_current_secret_preserves_active_secret_and_leaves_validation_to_repository()
+{
+    let client_oid = Uuid::new_v4();
+    let expires_at = Utc::now() + Duration::days(30);
+    let expected_expiry = expires_at.timestamp();
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    repo.expect_find_by_registration_access_token()
+        .returning(move |oid, _| {
+            Ok(Some(registered_client_with_auth_method(
+                oid,
+                TokenEndpointAuthMethod::ClientSecretPost,
+            )))
+        });
+    repo.expect_update()
+        .times(1)
+        .returning(|registration, _, current_secret| {
+            assert!(current_secret.is_none());
+            assert!(registration.credentials.iter().any(|credential| {
+                matches!(credential, OpenIdConnectCredentialData::ClientSecret { secret } if secret == "old-secret")
+            }));
+            Ok(())
+        });
+    let mut credential_repo = MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_active_by_client_oid_and_type()
+        .returning(move |oid, _| {
+            Ok(vec![active_client_secret(
+                oid,
+                "old-secret",
+                expires_at.to_owned(),
+            )])
+        });
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(repo),
+    )
+    .with_credential_repository(Arc::new(credential_repo));
+
+    let response = service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            from_value(json!({
+                "client_id": client_oid.to_string(),
+                "client_name": "Renamed Client",
+                "redirect_uris": ["https://rp.example.com/callback"],
+                "token_endpoint_auth_method": "client_secret_post"
+            }))
+            .unwrap(),
+            &issuer(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.client_secret.as_deref(), Some("old-secret"));
+    assert_eq!(response.client_secret_expires_at, Some(expected_expiry));
+
+    // Wrong current secrets are not validated (or used as credential material)
+    // in the service: the repository receives the supplied value for verification
+    // while the readable active secret stays in the credential set.
+    let wrong_expires_at = Utc::now() + Duration::days(30);
+    let mut rejecting_repo = MockOpenIdConnectClientRegistrationRepository::new();
+    rejecting_repo
+        .expect_find_by_registration_access_token()
+        .returning(move |oid, _| {
+            Ok(Some(registered_client_with_auth_method(
+                oid,
+                TokenEndpointAuthMethod::ClientSecretPost,
+            )))
+        });
+    rejecting_repo.expect_update().times(1).returning(
+        |registration, _, current_secret| {
+            assert_eq!(current_secret.as_deref(), Some("wrong-secret"));
+            assert!(registration.credentials.iter().any(|credential| {
+                matches!(credential, OpenIdConnectCredentialData::ClientSecret { secret } if secret == "old-secret")
+            }));
+            assert!(registration.credentials.iter().all(|credential| {
+                !matches!(credential, OpenIdConnectCredentialData::ClientSecret { secret } if secret == "wrong-secret")
+            }));
+            Err(OpenIdConnectClientRepositoryError::InvalidMetadataValue {
+                field: "client_secret",
+                value: String::new(),
+            })
+        },
+    );
+    let mut rejecting_credential_repo = MockOpenIdConnectCredentialRepository::new();
+    rejecting_credential_repo
+        .expect_find_active_by_client_oid_and_type()
+        .times(1)
+        .returning(move |oid, _| {
+            Ok(vec![active_client_secret(
+                oid,
+                "old-secret",
+                wrong_expires_at.to_owned(),
+            )])
+        });
+    let rejecting_service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(rejecting_repo),
+    )
+    .with_credential_repository(Arc::new(rejecting_credential_repo));
+    let error = rejecting_service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            from_value(json!({
+                "client_id": client_oid.to_string(),
+                "client_secret": "wrong-secret",
+                "client_name": "Renamed Client",
+                "redirect_uris": ["https://rp.example.com/callback"],
+                "token_endpoint_auth_method": "client_secret_post"
+            }))
+            .unwrap(),
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), 25009);
+}
+
+fn jwks_credential(
+    jwks_uri: &str,
+    last_updated: chrono::DateTime<Utc>,
+    expires_at: chrono::DateTime<Utc>,
+    kid: &str,
+) -> OpenIdConnectCredentialData {
+    let jwk: PublicJwk = from_value(json!({
+        "kty": "RSA",
+        "use": "sig",
+        "alg": "RS256",
+        "kid": kid,
+        "n": "test-modulus",
+        "e": "AQAB"
+    }))
+    .unwrap();
+    OpenIdConnectCredentialData::ClientJsonWebKeySet {
+        jwks_uri: Url::parse(jwks_uri).unwrap(),
+        last_updated,
+        expires_at,
+        public_keys: vec![format!("pem:{kid}")],
+        jwks: vec![jwk],
+    }
+}
+
+#[test]
+fn unchanged_jwks_uri_and_material_preserve_active_credential_data() {
+    let previous_updated = Utc::now() - Duration::hours(2);
+    let previous_expires = Utc::now() - Duration::hours(1);
+    let active = jwks_credential(
+        "https://rp.example.com/jwks.json",
+        previous_updated,
+        previous_expires,
+        "key-1",
+    );
+    let prepared = jwks_credential(
+        "https://rp.example.com/jwks.json",
+        Utc::now(),
+        Utc::now() + Duration::hours(1),
+        "key-1",
+    );
+    assert_ne!(prepared, active);
+
+    let selected = choose_effective_jwks(prepared, Some(&active));
+    assert_eq!(selected, active);
+    let OpenIdConnectCredentialData::ClientJsonWebKeySet {
+        last_updated,
+        expires_at,
+        ..
+    } = selected
+    else {
+        panic!("expected a client JWKS credential");
+    };
+    assert_eq!(last_updated, previous_updated);
+    assert_eq!(expires_at, previous_expires);
+}
+
+#[test]
+fn changed_jwks_uri_or_material_keeps_prepared_credentials() {
+    let previous_updated = Utc::now() - Duration::hours(2);
+    let previous_expires = Utc::now() - Duration::hours(1);
+    let active = jwks_credential(
+        "https://rp.example.com/jwks.json",
+        previous_updated,
+        previous_expires,
+        "key-1",
+    );
+
+    let changed_keys = jwks_credential(
+        "https://rp.example.com/jwks.json",
+        Utc::now(),
+        Utc::now() + Duration::hours(1),
+        "key-2",
+    );
+    let selected = choose_effective_jwks(changed_keys.clone(), Some(&active));
+    assert_eq!(selected, changed_keys);
+    assert_ne!(selected, active);
+
+    let changed_uri = jwks_credential(
+        "https://rp.example.com/new-jwks.json",
+        Utc::now(),
+        Utc::now() + Duration::hours(1),
+        "key-1",
+    );
+    let selected = choose_effective_jwks(changed_uri.clone(), Some(&active));
+    assert_eq!(selected, changed_uri);
+    assert_ne!(selected, active);
+}
+
+#[tokio::test]
+async fn update_fails_closed_when_existing_secret_material_cannot_be_identified() {
+    let client_oid = Uuid::new_v4();
+    let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+    repo.expect_find_by_registration_access_token()
+        .returning(move |oid, _| {
+            Ok(Some(registered_client_with_auth_method(
+                oid,
+                TokenEndpointAuthMethod::ClientSecretBasic,
+            )))
+        });
+    repo.expect_update().never();
+    let service = DynamicClientRegistrationService::new(
+        Arc::new(TestRegistrationSetting(true)),
+        Arc::new(repo),
+    );
+
+    let error = service
+        .update(
+            &client_oid.to_string(),
+            "registration-token",
+            from_value(json!({
+                "client_id": client_oid.to_string(),
+                "client_name": "Renamed Client",
+                "redirect_uris": ["https://rp.example.com/callback"],
+                "token_endpoint_auth_method": "client_secret_basic"
+            }))
+            .unwrap(),
+            &issuer(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), 25006);
 }

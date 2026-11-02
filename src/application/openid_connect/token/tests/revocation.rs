@@ -53,6 +53,7 @@ async fn refresh_token_revokes_its_grant() {
                 authorization_code_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                management: None,
             }),
             Utc::now() + Duration::hours(1),
         )
@@ -84,6 +85,7 @@ async fn public_flow_disabled_blocks_revocation_of_previously_public_token() {
                 authorization_code_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: Some(ClientAuthenticationMode::Public),
+                management: None,
             }),
             Utc::now() + Duration::hours(1),
         )
@@ -117,6 +119,7 @@ async fn disabled_public_method_cannot_revoke_a_confidential_token_without_crede
                 authorization_code_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
+                management: None,
             }),
             Utc::now() + Duration::hours(1),
         )
@@ -148,6 +151,7 @@ async fn another_clients_refresh_token_is_rejected() {
                 authorization_code_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                management: None,
             }),
             Utc::now() + Duration::hours(1),
         )
@@ -177,13 +181,16 @@ async fn signed_access_token_revokes_only_its_record() {
             Uuid::nil(),
             ClientAuthorizationData::AccessToken(AccessTokenData {
                 scope: "openid".to_owned(),
-                user_oid: user_oid.to_string(),
+                resources: Vec::new(),
+                user_oid: Some(user_oid.to_string()),
+                principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
                 session_oid: None,
                 protected_session_id: None,
                 authorization_code_oid: None,
                 refresh_token_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                management: None,
             }),
             Utc::now() + Duration::hours(1),
         )
@@ -209,7 +216,8 @@ async fn signed_access_token_revokes_only_its_record() {
             issuer: &issuer,
             audience: &client_id,
             client_id: &client_id,
-            user_oid: &user_oid,
+            subject: &user_oid.to_string(),
+            principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
             client: &client,
             user: None,
             protected_session_id: None,
@@ -218,6 +226,8 @@ async fn signed_access_token_revokes_only_its_record() {
             auth_time: None,
             acr: None,
             amr: &[],
+            management: None,
+            business: None,
         })
         .await
         .unwrap();

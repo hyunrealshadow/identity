@@ -34,6 +34,7 @@ use crate::database::{
         client_authorization::Entity as ClientAuthorizationEntity,
     },
     query::json_text,
+    repository::shared::lock_resource_rows,
 };
 
 mod redemption;
@@ -89,6 +90,36 @@ fn parse_device_request(
     from_value(data).map_err(query_failed)
 }
 
+/// Issuance and withdrawal markers are not part of the typed request document.
+/// Rewriting a request after a poll/claim/decision must carry them forward or a
+/// later approval/redemption would lose its authority comparison and permanent
+/// tombstone.
+const PRESERVED_REQUEST_MARKERS: [&str; 3] = [
+    "_issuance_client_fingerprint",
+    "_issuance_authority_fingerprint",
+    "_authority_withdrawn",
+];
+
+fn preserve_request_markers(original: &Value, updated: &mut Value) {
+    let (Some(source), Some(target)) = (original.as_object(), updated.as_object_mut()) else {
+        return;
+    };
+    for key in PRESERVED_REQUEST_MARKERS {
+        if let Some(value) = source.get(key) {
+            target.insert(key.to_owned(), value.clone());
+        }
+    }
+}
+
+fn request_data_with_markers(
+    original: &Value,
+    request: &DeviceAuthorizationRequestData,
+) -> Result<Value, DeviceAuthorizationRepositoryError> {
+    let mut updated = to_value(request).map_err(query_failed)?;
+    preserve_request_markers(original, &mut updated);
+    Ok(updated)
+}
+
 /// Rebuilds the domain row or maps the storage error back to the device error.
 fn to_device_domain(
     result: Result<ClientAuthorization, ClientAuthorizationRepositoryError>,
@@ -126,12 +157,66 @@ impl DeviceAuthorizationRepositoryImpl {
         transaction: &C,
         oid: Uuid,
     ) -> Result<Option<client_authorization::Model>, DeviceAuthorizationRepositoryError> {
+        // Acquire policy before authorization rows: disabling a client locks
+        // its policy before revoking those rows in the same transaction.
+        let Some(candidate) = ClientAuthorizationEntity::find()
+            .filter(client_authorization::Column::Oid.eq(oid))
+            .one(transaction)
+            .await
+            .map_err(query_failed)?
+        else {
+            return Ok(None);
+        };
+        Self::lock_live_client(transaction, candidate.client_id).await?;
         ClientAuthorizationEntity::find()
             .filter(client_authorization::Column::Oid.eq(oid))
             .lock_exclusive()
             .one(transaction)
             .await
             .map_err(query_failed)
+    }
+
+    async fn lock_live_client<C: ConnectionTrait>(
+        transaction: &C,
+        client_id: i64,
+    ) -> Result<identity_domain::authorization::PolicyVersion, DeviceAuthorizationRepositoryError>
+    {
+        let (enabled, fingerprint) =
+            crate::database::repository::client_authority::lock_live_client_boundary(
+                transaction,
+                client_id,
+            )
+            .await
+            .map_err(query_failed)?;
+        if !enabled {
+            return Err(query_failed(DbErr::RecordNotFound(
+                "client is inactive".into(),
+            )));
+        }
+        Ok(fingerprint)
+    }
+
+    /// Serialize with credential/account transitions and fail closed when the
+    /// user is inactive. The authority fingerprint is computed separately after
+    /// the remaining session/client guards, from the same transaction.
+    async fn lock_live_user<C: ConnectionTrait>(
+        transaction: &C,
+        user: Uuid,
+    ) -> Result<(), DeviceAuthorizationRepositoryError> {
+        crate::database::repository::shared::lock_user_credentials(transaction, user.into())
+            .await
+            .map_err(query_failed)?;
+        let row = transaction.query_one_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DbBackend::Postgres,
+            "SELECT u.enabled AND NOT u.locked AS active FROM \"user\" u WHERE u.oid=$1 FOR SHARE OF u",
+            [user.into()])).await.map_err(query_failed)?
+            .ok_or_else(|| query_failed(DbErr::RecordNotFound("user is inactive".into())))?;
+        if !row.try_get::<bool>("", "active").map_err(query_failed)? {
+            return Err(query_failed(DbErr::RecordNotFound(
+                "user is inactive".into(),
+            )));
+        }
+        Ok(())
     }
 
     async fn find_by_type(
@@ -165,6 +250,15 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         expires_at: DateTime<Utc>,
     ) -> Result<ClientAuthorization, DeviceAuthorizationRepositoryError> {
         let transaction = self.db.begin().await.map_err(query_failed)?;
+        super::authorization_lifecycle::lock_authorization_issuance(&transaction)
+            .await
+            .map_err(query_failed)?;
+        // The request row will carry the actual target resources. Serialize
+        // with resource semantic writers before touching the client policy or
+        // inserting the request, in deterministic URI order.
+        lock_resource_rows(&transaction, &data.resources)
+            .await
+            .map_err(query_failed)?;
         let client_model = ClientEntity::find()
             .filter(client::Column::Oid.eq(client_oid))
             .one(&transaction)
@@ -177,6 +271,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             })?;
 
         let now = Utc::now();
+        let client_fingerprint = Self::lock_live_client(&transaction, client_model.id).await?;
         // Release an expired owner immediately, even if the scheduled expiry
         // job has not reached it yet. The unique index still serializes active
         // owners across instances.
@@ -199,12 +294,15 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             .await
             .map_err(query_failed)?;
 
+        let mut stored_data = to_value(&data).map_err(query_failed)?;
+        stored_data["_issuance_client_fingerprint"] =
+            client_fingerprint.as_uuid().to_string().into();
         let model = client_authorization::ActiveModel {
             id: Default::default(),
             oid: Set(Uuid::new_v4()),
             client_id: Set(client_model.id),
             r#type: Set(device_request_type()),
-            data: Set(to_value(&data).map_err(query_failed)?),
+            data: Set(stored_data),
             expires_at: Set(expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
@@ -221,6 +319,14 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
                 query_failed(error)
             }
         })?;
+        crate::database::audit::record(
+            &transaction,
+            "device_authorization.requested",
+            "device_authorization_request",
+            model.oid,
+        )
+        .await
+        .map_err(query_failed)?;
         transaction.commit().await.map_err(query_failed)?;
 
         to_device_domain(to_domain(model, client_oid))
@@ -296,6 +402,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         device_authorization_oid: Uuid,
         revoked_at: DateTime<Utc>,
     ) -> Result<bool, DeviceAuthorizationRepositoryError> {
+        let transaction = self.db.begin().await.map_err(query_failed)?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::RevokedAt,
@@ -311,11 +418,23 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
                     .add(client_authorization::Column::Type.eq(device_authorization_type()))
                     .add(client_authorization::Column::RevokedAt.is_null()),
             )
-            .exec(&self.db)
+            .exec(&transaction)
             .await
             .map_err(query_failed)?;
+        let revoked = result.rows_affected == 1;
+        if revoked {
+            crate::database::audit::record(
+                &transaction,
+                "device_authorization.revoked",
+                "device_authorization",
+                device_authorization_oid,
+            )
+            .await
+            .map_err(query_failed)?;
+        }
+        transaction.commit().await.map_err(query_failed)?;
 
-        Ok(result.rows_affected == 1)
+        Ok(revoked)
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "revoke_device_authorizations_for_user"))]
@@ -324,7 +443,8 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         user_oid: Uuid,
         revoked_at: DateTime<Utc>,
     ) -> Result<u64, DeviceAuthorizationRepositoryError> {
-        let result = ClientAuthorizationEntity::update_many()
+        let transaction = self.db.begin().await.map_err(query_failed)?;
+        let revoked = ClientAuthorizationEntity::update_many()
             .col_expr(
                 client_authorization::Column::RevokedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
@@ -339,11 +459,23 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
                     .add(client_authorization::Column::RevokedAt.is_null())
                     .add(json_field_equals("user_oid", &user_oid.to_string())),
             )
-            .exec(&self.db)
+            .exec_with_returning(&transaction)
             .await
             .map_err(query_failed)?;
+        for relation in &revoked {
+            crate::database::audit::record(
+                &transaction,
+                "device_authorization.revoked",
+                "device_authorization",
+                relation.oid,
+            )
+            .await
+            .map_err(query_failed)?;
+        }
+        let count = revoked.len() as u64;
+        transaction.commit().await.map_err(query_failed)?;
 
-        Ok(result.rows_affected)
+        Ok(count)
     }
 
     async fn claim_device_request(

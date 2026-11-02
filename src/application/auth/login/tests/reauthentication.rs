@@ -1,6 +1,60 @@
 use super::*;
 
 #[tokio::test]
+async fn bound_mfa_reauthentication_rejects_password_without_consuming_attempts() {
+    let user = test_user();
+    let mut login = test_login(user.oid.into(), 0);
+    login.status = LoginStatus::IDENTIFIER_VERIFIED;
+    login.session_oid = Some(SessionOid(Uuid::new_v4()));
+    let service = sign_in_service(user.clone(), vec![login.clone()], true);
+
+    assert_eq!(
+        service.prepare_challenge(login.oid).await.unwrap().status,
+        LoginStatus::MFA_REQUIRED
+    );
+    for password in ["wrong-password", "correct-password"] {
+        let error = service
+            .challenge(
+                login.oid,
+                CredentialType::Password,
+                password,
+                SessionContext::default(),
+            )
+            .await
+            .expect_err("password cannot replace an MFA challenge");
+        assert_error_code(error, AuthErrorCode::InvalidLoginState);
+    }
+    let current = service.get(login.oid).await.unwrap();
+    assert_eq!(current.status, LoginStatus::MFA_REQUIRED);
+    assert_eq!(current.failed_attempts, 0);
+    assert_eq!(current.session_oid, login.session_oid);
+    assert_eq!(service.get_user(user.oid).await.unwrap().failed_attempts, 0);
+}
+
+#[tokio::test]
+async fn password_only_account_can_reauthenticate_at_aal1() {
+    let user = test_user();
+    let mut login = test_login(user.oid.into(), 0);
+    login.status = LoginStatus::IDENTIFIER_VERIFIED;
+    login.session_oid = Some(SessionOid(Uuid::new_v4()));
+    let service = sign_in_service(user, vec![login.clone()], false);
+    let outcome = service
+        .challenge(
+            login.oid,
+            CredentialType::Password,
+            "correct-password",
+            SessionContext::default(),
+        )
+        .await
+        .unwrap();
+    let ChallengeOutcome::Authenticated { session, .. } = outcome else {
+        panic!("password-only reauthentication must complete at AAL1")
+    };
+    assert_eq!(session.oid, login.session_oid.unwrap());
+    assert_eq!(session.acr.as_deref(), Some(ACR_AAL1));
+}
+
+#[tokio::test]
 async fn forced_reauthentication_reuses_the_bound_session() {
     let user = test_user();
     let mut login = test_login(Uuid::from(user.oid), 0);

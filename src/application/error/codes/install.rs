@@ -2,6 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Range: 13000-13099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum InstallErrorCode {
     AlreadyInitialized,
     UsernameRequired,
@@ -14,6 +15,8 @@ pub enum InstallErrorCode {
     EmailExists,
     UnsupportedAlgorithm,
     ApplicationUrlInvalid,
+    ConsoleUrlRequired,
+    ConsoleUrlInvalid,
 }
 
 impl AppErrorCode for InstallErrorCode {
@@ -29,7 +32,9 @@ impl AppErrorCode for InstallErrorCode {
             | Self::DomainInvalid
             | Self::EmailInvalid
             | Self::UnsupportedAlgorithm
-            | Self::ApplicationUrlInvalid => ErrorKind::Validation,
+            | Self::ApplicationUrlInvalid
+            | Self::ConsoleUrlRequired
+            | Self::ConsoleUrlInvalid => ErrorKind::Validation,
         }
     }
 
@@ -46,6 +51,8 @@ impl AppErrorCode for InstallErrorCode {
             Self::EmailExists => 13008,
             Self::UnsupportedAlgorithm => 13009,
             Self::ApplicationUrlInvalid => 13010,
+            Self::ConsoleUrlRequired => 13011,
+            Self::ConsoleUrlInvalid => 13012,
         }
     }
 }

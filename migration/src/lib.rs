@@ -16,17 +16,18 @@ mod m20260426_000001_create_scope;
 mod m20260426_000002_create_client_scope;
 mod m20260427_000001_create_key_jwk;
 mod m20260428_000001_create_client_openid_connect_platform;
-mod m20260801_000001_session_relay_index;
-mod m20260824_000001_add_user_preferences;
 mod m20260907_000001_create_user_client_consent;
 mod m20260927_000001_create_client_openid_connect_cors_origin;
-mod m20260928_000001_add_key_rotation;
 mod m20261001_000001_create_resource;
 
-mod m20261001_000002_index_pushed_authorization_request;
-
 mod m20261016_000001_create_authentication_challenge;
-mod m20261017_000001_security_audit;
+mod m20261017_000001_create_security_audit;
+mod m20261022_000005_create_role;
+mod m20261022_000006_create_role_permission;
+mod m20261022_000007_create_user_role_binding;
+mod m20261022_000012_create_user_group;
+mod m20261022_000013_create_group_membership;
+mod m20261022_000014_create_group_role_binding;
 
 pub struct Migrator;
 
@@ -44,19 +45,22 @@ impl MigratorTrait for Migrator {
             Box::new(m20260407_060506_create_client_openid_connect_credential::Migration),
             Box::new(m20260407_060938_create_client_authorization::Migration),
             Box::new(m20260407_071449_create_login::Migration),
+            // Resource ownership must exist before scope foreign keys.
+            Box::new(m20261001_000001_create_resource::Migration),
             Box::new(m20260426_000001_create_scope::Migration),
             Box::new(m20260426_000002_create_client_scope::Migration),
             Box::new(m20260427_000001_create_key_jwk::Migration),
             Box::new(m20260428_000001_create_client_openid_connect_platform::Migration),
-            Box::new(m20260801_000001_session_relay_index::Migration),
-            Box::new(m20260824_000001_add_user_preferences::Migration),
             Box::new(m20260907_000001_create_user_client_consent::Migration),
             Box::new(m20260927_000001_create_client_openid_connect_cors_origin::Migration),
-            Box::new(m20260928_000001_add_key_rotation::Migration),
-            Box::new(m20261001_000001_create_resource::Migration),
-            Box::new(m20261001_000002_index_pushed_authorization_request::Migration),
             Box::new(m20261016_000001_create_authentication_challenge::Migration),
-            Box::new(m20261017_000001_security_audit::Migration),
+            Box::new(m20261017_000001_create_security_audit::Migration),
+            Box::new(m20261022_000005_create_role::Migration),
+            Box::new(m20261022_000006_create_role_permission::Migration),
+            Box::new(m20261022_000007_create_user_role_binding::Migration),
+            Box::new(m20261022_000012_create_user_group::Migration),
+            Box::new(m20261022_000013_create_group_membership::Migration),
+            Box::new(m20261022_000014_create_group_role_binding::Migration),
         ]
     }
 }

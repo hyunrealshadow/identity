@@ -13,8 +13,7 @@ use identity_domain::auth::{
     repository::{CreateSessionInput, SessionRepositoryError},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
-    sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, sea_query::Expr,
 };
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QuerySelect, Statement};
 use serde_json::json;
@@ -49,7 +48,9 @@ impl SessionRepositoryImpl {
         input: CreateSessionInput,
     ) -> Result<Session, SessionRepositoryError> {
         let fail = |e| SessionRepositoryError::CreateFailed(Box::new(e));
-        let txn = self.db.begin().await.map_err(fail)?;
+        let txn = crate::database::audit::begin(&self.db, "session.complete_login")
+            .await
+            .map_err(fail)?;
         lock_user_credentials(&txn, input.user_oid.into())
             .await
             .map_err(fail)?;
@@ -152,6 +153,9 @@ impl SessionRepositoryImpl {
         txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "UPDATE login SET status = 'authenticated', session_id = $2, acr = $3, updated_at = now() WHERE oid = $1",
             [login_oid.into(), model.id.into(), model.acr.clone().into()])).await.map_err(fail)?;
+        crate::database::audit::record(&txn, "session.complete_login", "session", model.oid)
+            .await
+            .map_err(fail)?;
         super::challenge::clear_for_binding(&txn, ChallengeBinding::Login(login_oid))
             .await
             .map_err(fail)?;

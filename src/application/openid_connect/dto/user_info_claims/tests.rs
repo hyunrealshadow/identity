@@ -17,6 +17,7 @@ fn from_user_creates_claims_from_user_model() {
     let user_oid = Uuid::new_v4();
     let user = User {
         oid: UserOid::from(user_oid),
+        version: Uuid::new_v4(),
         email: "john@example.com".to_string(),
         email_normalized: "john@example.com".to_string(),
         name: "John Doe".to_string(),
@@ -296,6 +297,21 @@ fn scoped_standard_claims_without_scope_returns_nothing_but_sub_is_excluded() {
 }
 
 #[test]
+fn scoped_standard_claims_includes_zoneinfo_only_with_profile_scope() {
+    let mut user = full_profile_user();
+    user.zoneinfo = Some("Europe/Paris".to_string());
+
+    let profile = ScopeSet::parse("openid profile").unwrap();
+    let claims = scoped_standard_claims(&user, &profile, None, "https://issuer.example.com");
+    assert_eq!(claims["zoneinfo"], json!("Europe/Paris"));
+
+    let without_profile = ScopeSet::parse("openid email").unwrap();
+    let claims =
+        scoped_standard_claims(&user, &without_profile, None, "https://issuer.example.com");
+    assert!(!claims.contains_key("zoneinfo"));
+}
+
+#[test]
 fn scoped_profile_claims_convert_update_time_to_unix_seconds() {
     let mut user = full_profile_user();
     user.updated_at = Some(Utc.timestamp_opt(1_700_000_000, 123_000_000).unwrap());
@@ -312,6 +328,7 @@ fn full_profile_user() -> User {
     let user_oid = Uuid::new_v4();
     User {
         oid: UserOid::from(user_oid),
+        version: Uuid::new_v4(),
         email: "john@example.com".to_string(),
         email_normalized: "john@example.com".to_string(),
         name: "John Doe".to_string(),

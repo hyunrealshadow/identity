@@ -14,6 +14,7 @@ use url::Url;
 
 pub type ConfigResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
+mod console;
 mod endpoints;
 mod install;
 mod logging;
@@ -23,6 +24,7 @@ mod server;
 mod storage;
 mod workloads;
 
+pub use console::ConsoleConfig;
 pub use endpoints::{
     GraphqlConfig, GraphqlServerConfig, HealthChecksConfig, HealthConfig, HealthServerConfig,
 };
@@ -64,6 +66,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub graphql: GraphqlConfig,
     #[serde(default)]
+    pub console: ConsoleConfig,
+    #[serde(default)]
     pub settings: SettingsConfig,
     #[serde(default)]
     pub install: InstallConfig,
@@ -79,6 +83,7 @@ impl AppConfig {
         let rendered = render_config_template(&raw)?;
         let config: Self = from_str(&rendered)?;
         let config = config.normalized();
+        config.console.validated_origin().map_err(invalid_config)?;
         config.validate_https_contract()?;
         config.observability.validate()?;
 
@@ -87,6 +92,11 @@ impl AppConfig {
 
     #[must_use]
     pub fn normalized(mut self) -> Self {
+        if let Ok(Some(origin)) = self.console.validated_origin()
+            && !self.graphql.allowed_origins.contains(&origin)
+        {
+            self.graphql.allowed_origins.push(origin);
+        }
         if self
             .server
             .tls

@@ -2,7 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for `TokenService` and the `/oauth2/token` HTTP endpoint.
 /// Range: 24000-24099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum TokenErrorCode {
     // --- grant routing ---
     /// `grant_type` is not supported by this endpoint.

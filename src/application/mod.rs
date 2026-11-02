@@ -1,13 +1,17 @@
 extern crate identity_domain as domain;
 extern crate self as application;
 
+pub mod administrator;
 pub mod auth;
+pub mod authorization;
 pub mod data_protection;
 pub mod error;
 pub mod install;
+pub mod instance_overview;
 pub mod key;
 pub mod observability;
 pub mod openid_connect;
+pub mod rbac;
 pub mod setting;
 pub mod user;
 

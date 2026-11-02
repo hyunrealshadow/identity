@@ -23,6 +23,7 @@ E11014 = The new password must differ from the current password.
 E11015 = An authenticator app is already configured for this account.
 E11016 = No authenticator app is configured for this account.
 E11017 = The authenticator setup is invalid or has expired. Start setup again.
+E11018 = Device authorizations could not be revoked. Please try again.
 E11019 = You can add up to { $limit } passkeys. Delete a passkey before adding another.
 
 E11020 = Recovery code setup is missing or has changed, start enrollment again

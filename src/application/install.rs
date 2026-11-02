@@ -28,8 +28,8 @@ use crate::{
     key::runtime::RuntimeKeyRingProvider,
     observability::{BusinessEvent, EventValue, error_outcome, event_sink},
     setting::{
-        DomainSetting, InstallationSettings, LoginClientIdSetting, LoginDomainSetting,
-        SettingChanges,
+        ConsoleDomainSetting, DomainSetting, InstallationSettings, LoginClientIdSetting,
+        LoginDomainSetting, SettingChanges,
     },
     user::model::Password,
 };
@@ -41,6 +41,9 @@ pub struct InstallInput {
     pub password: String,
     pub domain: String,
     pub application_url: String,
+    /// Exact HTTPS origin of the management console, e.g.
+    /// `https://console.example.com`.
+    pub console_url: String,
     /// Wire name of the signing algorithm, e.g. `ecdsa-p256`.
     pub key_algorithm: String,
 }
@@ -77,6 +80,11 @@ pub struct InstallationData {
     pub password: Password,
     pub user_oid: Uuid,
     pub application_url: Url,
+    /// Issuer origin derived from the installation domain.
+    pub issuer: Option<Url>,
+    /// Console origin used to provision the protected Console client in the
+    /// same transaction.
+    pub console_url: Option<Url>,
     pub client_id: Uuid,
     pub client_secret: String,
     pub client_secret_lifetime: Duration,
@@ -133,12 +141,13 @@ impl InstallService {
             &[&input.username, &input.email],
             "password",
         )?;
-        if self.breach_checker.is_breached(&input.password).await? {
-            return Err(crate::auth::password_policy::password_error(
-                crate::error::codes::auth::AuthErrorCode::PasswordBreached,
-                "password",
-            ));
-        }
+        crate::auth::password_policy::validate_breached_password(
+            self.breach_checker.as_ref(),
+            &self.settings.snapshot(),
+            &input.password,
+            "password",
+        )
+        .await?;
 
         let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
         let password_hasher = Arc::clone(&self.password_hasher);
@@ -160,9 +169,11 @@ impl InstallService {
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
+        let console_domain = input.console_url.origin().ascii_serialization();
         let settings = SettingChanges::default()
             .set::<DomainSetting>(&Some(input.domain))?
             .set::<LoginDomainSetting>(&login_app_domain(&input.application_url))?
+            .set::<ConsoleDomainSetting>(&Some(console_domain))?
             .set::<LoginClientIdSetting>(&Some(client_id))?
             .set_section(&InstallationSettings {
                 initialized: true,
@@ -176,6 +187,8 @@ impl InstallService {
                 password,
                 user_oid,
                 application_url: input.application_url,
+                issuer: Some(input.issuer),
+                console_url: Some(input.console_url),
                 client_id,
                 client_secret: client_secret.clone(),
                 client_secret_lifetime: self.client_secret_lifetime,
@@ -198,7 +211,9 @@ struct ValidatedInstallInput {
     email: String,
     password: String,
     domain: String,
+    issuer: Url,
     application_url: Url,
+    console_url: Url,
     key_algorithm: AsymmetricKeyAlgorithm,
 }
 
@@ -220,10 +235,18 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         },
     );
     let domain = collect_field(&mut validation, "domain", normalize_domain(&input.domain));
+    let issuer = domain
+        .as_deref()
+        .and_then(|domain| collect_field(&mut validation, "domain", normalize_issuer_url(domain)));
     let application_url = collect_field(
         &mut validation,
         "application_url",
         normalize_application_url(&input.application_url),
+    );
+    let console_url = collect_field(
+        &mut validation,
+        "console_url",
+        normalize_console_url(&input.console_url),
     );
     let key_algorithm = collect_field(
         &mut validation,
@@ -242,9 +265,56 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         email: email.expect("validated email"),
         password: password.expect("validated password"),
         domain: domain.expect("validated domain"),
+        issuer: issuer.expect("validated issuer"),
         application_url: application_url.expect("validated application URL"),
+        console_url: console_url.expect("validated console URL"),
         key_algorithm: key_algorithm.expect("validated key algorithm"),
     })
+}
+
+/// The issuer keeps the URL rules the discovery document already applies:
+/// a bare host is treated as HTTPS and a path is allowed.
+fn normalize_issuer_url(domain: &str) -> Result<Url, AppError> {
+    let candidate = if domain.contains("://") {
+        domain.to_owned()
+    } else {
+        format!("https://{domain}")
+    };
+    let url =
+        Url::parse(&candidate).map_err(|_| AppError::from_code(InstallErrorCode::DomainInvalid))?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || url.host_str().is_some_and(|host| host.contains('*'))
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AppError::from_code(InstallErrorCode::DomainInvalid));
+    }
+    Ok(url)
+}
+
+/// The console origin is an exact HTTPS origin. Credentials, a path, a query
+/// or a fragment would make it something other than an origin.
+fn normalize_console_url(value: &str) -> Result<Url, AppError> {
+    if value.trim().is_empty() {
+        return Err(AppError::from_code(InstallErrorCode::ConsoleUrlRequired));
+    }
+    let url = Url::parse(value.trim())
+        .map_err(|_| AppError::from_code(InstallErrorCode::ConsoleUrlInvalid))?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || url.host_str().is_some_and(|host| host.contains('*'))
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AppError::from_code(InstallErrorCode::ConsoleUrlInvalid));
+    }
+    Ok(url)
 }
 
 fn normalize_application_url(value: &str) -> Result<Url, AppError> {
@@ -252,6 +322,9 @@ fn normalize_application_url(value: &str) -> Result<Url, AppError> {
         .map_err(|_| AppError::from_code(InstallErrorCode::ApplicationUrlInvalid))?;
     if url.scheme() != "https"
         || url.host_str().is_none()
+        || url.host_str().is_some_and(|host| host.contains('*'))
+        || !url.username().is_empty()
+        || url.password().is_some()
         || url.path() != "/"
         || url.query().is_some()
         || url.fragment().is_some()
@@ -401,6 +474,7 @@ mod tests {
             password: "correct horse battery staple".to_owned(),
             domain: "identity.example.com".to_owned(),
             application_url: "https://login.example.com".to_owned(),
+            console_url: "https://console.example.com".to_owned(),
             key_algorithm: key_algorithm.to_owned(),
         }
     }
@@ -413,6 +487,7 @@ mod tests {
             password: String::new(),
             domain: "invalid domain".to_owned(),
             application_url: "not-a-url".to_owned(),
+            console_url: "not-a-url".to_owned(),
             key_algorithm: "ecdsa-p256".to_owned(),
         })
         .expect_err("invalid form should fail validation");
@@ -422,7 +497,7 @@ mod tests {
             .validation()
             .expect("validation details should be attached")
             .fields();
-        assert_eq!(fields.len(), 5);
+        assert_eq!(fields.len(), 6);
         assert_eq!(
             fields
                 .iter()
@@ -434,7 +509,111 @@ mod tests {
                 ("password", 13003),
                 ("domain", 13005),
                 ("application_url", 13010),
+                ("console_url", 13012),
             ]
         );
+    }
+
+    #[test]
+    fn install_validation_accepts_distinct_issuer_login_and_console_origins() {
+        let input = validate_install_input(InstallInput {
+            username: "admin".to_owned(),
+            email: "admin@example.com".to_owned(),
+            password: "correct horse battery staple".to_owned(),
+            domain: "identity.example.com".to_owned(),
+            application_url: "https://login.example.com".to_owned(),
+            console_url: "https://console.example.com".to_owned(),
+            key_algorithm: "ecdsa-p256".to_owned(),
+        })
+        .expect("three different HTTPS origins are allowed");
+
+        assert_eq!(input.issuer.as_str(), "https://identity.example.com/");
+        assert_eq!(input.application_url.as_str(), "https://login.example.com/");
+        assert_eq!(input.console_url.as_str(), "https://console.example.com/");
+    }
+
+    #[test]
+    fn install_validation_requires_a_console_origin() {
+        let error = validate_install_input(InstallInput {
+            console_url: "   ".to_owned(),
+            ..install_input("ecdsa-p256")
+        })
+        .expect_err("the console origin is required");
+
+        let fields = error.validation().expect("validation details").fields();
+        assert_eq!(
+            fields
+                .iter()
+                .map(|field| (field.field(), field.code()))
+                .collect::<Vec<_>>(),
+            vec![("console_url", 13011)]
+        );
+    }
+
+    #[test]
+    fn install_validation_rejects_console_urls_that_are_not_exact_https_origins() {
+        for console_url in [
+            "http://console.example.com",
+            "https://user@console.example.com",
+            "https://user:pass@console.example.com",
+            "https://console.example.com/path",
+            "https://console.example.com?query=1",
+            "https://console.example.com#fragment",
+        ] {
+            let error = validate_install_input(InstallInput {
+                console_url: console_url.to_owned(),
+                ..install_input("ecdsa-p256")
+            })
+            .expect_err(console_url);
+
+            let fields = error.validation().expect("validation details").fields();
+            assert_eq!(
+                fields
+                    .iter()
+                    .map(|field| (field.field(), field.code()))
+                    .collect::<Vec<_>>(),
+                vec![("console_url", 13012)],
+                "{console_url}"
+            );
+        }
+    }
+
+    #[test]
+    fn install_validation_keeps_the_existing_issuer_url_rules() {
+        let input = validate_install_input(InstallInput {
+            domain: "https://identity.example.com/tenant".to_owned(),
+            ..install_input("ecdsa-p256")
+        })
+        .expect("the issuer may keep a path, as before");
+
+        assert_eq!(input.issuer.as_str(), "https://identity.example.com/tenant");
+    }
+
+    #[test]
+    fn install_rejects_untrusted_issuer_and_login_addresses() {
+        for value in [
+            "http://example.com",
+            "https://user@example.com",
+            "https://example.com/?q=1",
+            "https://example.com/#fragment",
+            "https://*.example.com",
+        ] {
+            assert!(
+                validate_install_input(InstallInput {
+                    domain: value.to_owned(),
+                    ..install_input("ecdsa-p256")
+                })
+                .is_err(),
+                "unsafe issuer: {value}"
+            );
+            assert!(
+                validate_install_input(InstallInput {
+                    application_url: value.to_owned(),
+                    ..install_input("ecdsa-p256")
+                })
+                .is_err(),
+                "unsafe login address: {value}"
+            );
+        }
     }
 }

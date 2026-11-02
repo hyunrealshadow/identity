@@ -2,7 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for the RFC 8628 device authorization endpoint and the shared
 /// verification interaction. Range: 26000-26099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum DeviceAuthorizationErrorCode {
     // --- device authorization request ---
     /// Client registration does not permit the device code grant.

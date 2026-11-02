@@ -21,6 +21,7 @@ use crate::{
             OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, ResponseType,
             ScopeSet, model::claim::JwtClaimNames,
         },
+        rbac::RbacAuthorizationRepository,
         user::{UserOid, repository::UserRepository},
     },
     observability::EventSink,
@@ -40,7 +41,9 @@ mod code_flow;
 mod consent;
 mod implicit_flow;
 mod interaction;
+mod management;
 mod protection;
+mod rbac;
 mod request_object;
 mod signing;
 mod third_party_initiated;

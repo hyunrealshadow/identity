@@ -1,6 +1,6 @@
 use chrono::{DateTime, FixedOffset, Utc};
 use identity_domain::{auth::SessionOid, user::UserOid};
-use sea_orm::{ConnectionTrait, DbErr};
+use sea_orm::{ConnectionTrait, DatabaseBackend, DbErr, Statement};
 use uuid::Uuid;
 
 use crate::database::query::advisory_transaction_lock;
@@ -42,6 +42,44 @@ pub fn decode_nonnullable_expiry(value: DateTime<FixedOffset>) -> Option<DateTim
 /// but represent optional expiry in the domain model.
 pub fn encode_nonnullable_expiry(value: Option<DateTime<Utc>>) -> DateTime<FixedOffset> {
     value.map(Into::into).unwrap_or_else(non_expiring_timestamp)
+}
+
+/// Lock the actual target API-resource rows in deterministic URI order.
+///
+/// Issuance calls this with the resolved target selection before any
+/// credential, user, session, client or parent lock, and before inserting the
+/// artifact. Semantic resource writers acquire a conflicting `UPDATE` lock on
+/// the same row before permanently withdrawing artifacts, so a withdrawal that
+/// starts after this lock waits for the issuance transaction and then sees the
+/// newly inserted artifact. Parent/request/relation artifacts are still
+/// re-read under their own locks afterwards to observe any withdrawal that
+/// committed before this transaction acquired the resource lock.
+///
+/// A URI that was explicitly selected but no longer exists fails closed. An
+/// empty selection is valid and takes no lock; it is the OAuth resource
+/// omission case, never a fallback for an unknown target.
+pub async fn lock_resource_rows<C: ConnectionTrait>(
+    connection: &C,
+    resource_uris: &[String],
+) -> Result<(), DbErr> {
+    let mut uris = resource_uris.iter().map(String::as_str).collect::<Vec<_>>();
+    uris.sort_unstable();
+    uris.dedup();
+    for uri in uris {
+        let row = connection
+            .query_one_raw(Statement::from_sql_and_values(
+                DatabaseBackend::Postgres,
+                "SELECT 1 AS present FROM resource WHERE uri = $1 AND enabled FOR SHARE",
+                [uri.into()],
+            ))
+            .await?;
+        if row.is_none() {
+            return Err(DbErr::RecordNotFound(format!(
+                "selected resource {uri} not found"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Serializes token issuance and revocation for a session across transactions.

@@ -2,7 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for OIDC userinfo and token validation.
 /// Range: 21000-21099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum OpenIdConnectErrorCode {
     InvalidToken,
     InsufficientScope,

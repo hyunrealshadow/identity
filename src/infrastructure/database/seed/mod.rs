@@ -11,10 +11,11 @@ use crate::{
 
 #[cfg(feature = "oidc-conformance")]
 pub mod conformance;
+pub mod console;
 pub mod oauth_resource;
+pub mod rbac;
 pub mod scope;
 pub mod setting;
-
 type SeedResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
 #[async_trait]
@@ -27,8 +28,11 @@ pub trait Seed: Send + Sync {
 pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
     let seeds: Vec<Box<dyn Seed>> = vec![
         Box::new(setting::SettingDefaultsSeed),
+        // The reserved GraphQL resource must exist before any resource-owned
+        // built-in API scope is inserted.
         Box::new(oauth_resource::OAuthResourceDefaultsSeed),
         Box::new(scope::BuiltInScopeSeed),
+        Box::new(rbac::UnifiedRbacSeed::new()),
         #[cfg(feature = "oidc-conformance")]
         Box::new(conformance::ConformanceSeed),
     ];

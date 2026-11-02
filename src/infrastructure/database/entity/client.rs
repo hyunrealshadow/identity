@@ -26,8 +26,12 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub names: Option<Json>,
     pub description: Option<String>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub descriptions: Option<Json>,
     #[sea_orm(default_value = false)]
     pub built_in: bool,
+    #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
+    pub version: Uuid,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,
@@ -39,12 +43,6 @@ pub enum Relation {
     ClientAuthorization,
     #[sea_orm(has_one = "super::client_openid_connect::Entity")]
     ClientOpenIdConnect,
-    #[sea_orm(has_many = "super::client_openid_connect_cors_origin::Entity")]
-    ClientOpenIdConnectCorsOrigin,
-    #[sea_orm(has_many = "super::client_openid_connect_credential::Entity")]
-    ClientOpenIdConnectCredential,
-    #[sea_orm(has_many = "super::client_openid_connect_platform::Entity")]
-    ClientOpenIdConnectPlatform,
     #[sea_orm(has_many = "super::client_scope::Entity")]
     ClientScope,
     #[sea_orm(has_many = "super::login::Entity")]
@@ -67,19 +65,28 @@ impl Related<ClientOpenidConnectEntity> for Entity {
 
 impl Related<ClientOpenidConnectCorsOriginEntity> for Entity {
     fn to() -> RelationDef {
-        Relation::ClientOpenIdConnectCorsOrigin.def()
+        super::client_openid_connect::Relation::CorsOrigins.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(Relation::ClientOpenIdConnect.def())
     }
 }
 
 impl Related<ClientOpenidConnectCredentialEntity> for Entity {
     fn to() -> RelationDef {
-        Relation::ClientOpenIdConnectCredential.def()
+        super::client_openid_connect::Relation::Credentials.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(Relation::ClientOpenIdConnect.def())
     }
 }
 
 impl Related<ClientOpenidConnectPlatformEntity> for Entity {
     fn to() -> RelationDef {
-        Relation::ClientOpenIdConnectPlatform.def()
+        super::client_openid_connect::Relation::Platforms.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(Relation::ClientOpenIdConnect.def())
     }
 }
 

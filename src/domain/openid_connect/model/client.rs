@@ -393,7 +393,7 @@ impl OpenIdConnectClient {
     pub fn has_assigned_scope(&self, scope_name: &str) -> bool {
         self.assigned_scopes
             .iter()
-            .any(|assigned| assigned == scope_name)
+            .any(|assigned| super::scope::scope_pattern_matches(assigned, scope_name))
     }
 
     /// Whether this client's registration permits the given grant type.

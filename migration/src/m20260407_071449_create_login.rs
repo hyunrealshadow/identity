@@ -1,3 +1,5 @@
+use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::Func;
 use sea_orm_migration::{
     async_trait,
     prelude::{
@@ -21,7 +23,7 @@ use crate::{
 pub struct Migration;
 
 #[derive(DeriveIden)]
-enum Login {
+pub enum Login {
     Table,
     Id,
     Oid,
@@ -48,7 +50,7 @@ impl MigrationTrait for Migration {
                     .table(Login::Table)
                     .if_not_exists()
                     .col(pk_auto(Login::Id).big_integer())
-                    .col(uuid_uniq(Login::Oid).default(Expr::cust("gen_random_uuid()")))
+                    .col(uuid_uniq(Login::Oid).default(Func::cust(Alias::new("gen_random_uuid"))))
                     .col(big_integer(Login::ClientId))
                     .col(big_integer(Login::ClientAuthorizationId))
                     .col(big_integer_null(Login::SessionId))

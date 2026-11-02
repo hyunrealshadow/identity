@@ -10,7 +10,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
-    client_authorization::{ClientAuthenticationMode, ClientAuthorization},
+    client_authorization::{AccessTokenPrincipal, ClientAuthenticationMode, ClientAuthorization},
     openid_connect::{API_RESOURCE, TokenEndpointAuthMethod},
 };
 use tracing::{Span, field::display};
@@ -184,6 +184,20 @@ impl TokenService {
         let scope = ScopeSet::parse(&approval.approved_scope).map_err(AppError::map_source(
             TokenErrorCode::DeviceRequestStateInvalid,
         ))?;
+        if scope.has_management_scopes() {
+            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
+                .with_param("grant_type", GrantType::DeviceCode.as_str()));
+        }
+        if self
+            .provider_service
+            .has_rbac_resource(&data.resources)
+            .await?
+        {
+            // Business RBAC is not enabled for device authorization in this
+            // release. Reject instead of issuing a permissive legacy token.
+            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
+                .with_param("grant_type", GrantType::DeviceCode.as_str()));
+        }
         let selection = self
             .provider_service
             .select_resources(&params.resources, &data.resources, &scope.to_scope_string())
@@ -321,7 +335,8 @@ impl TokenService {
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id,
-                user_oid: &user.oid.0,
+                subject: &approval.user_oid,
+                principal: AccessTokenPrincipal::User,
                 client,
                 user: Some(user),
                 // Device tokens have no browser session and therefore no sid.
@@ -331,6 +346,8 @@ impl TokenService {
                 auth_time: approval.auth_time,
                 acr: approval.acr.as_deref(),
                 amr: &approval.amr,
+                management: None,
+                business: None,
             })
             .await?;
 
@@ -379,13 +396,16 @@ impl TokenService {
             oid: access_token_oid,
             data: ClientAuthorizationData::AccessToken(AccessTokenData {
                 scope: scope_string.clone(),
-                user_oid: approval.user_oid.clone(),
+                resources: selection.resources.clone(),
+                user_oid: Some(approval.user_oid.clone()),
+                principal: AccessTokenPrincipal::User,
                 session_oid: None,
                 protected_session_id: None,
                 authorization_code_oid: None,
                 refresh_token_oid: None,
                 device_authorization_oid: Some(device_authorization_oid.to_string()),
                 client_authentication_mode: Some(client_authentication_mode),
+                management: None,
             }),
             expires_at: now + Duration::hours(1),
         }];
@@ -405,6 +425,7 @@ impl TokenService {
                     authorization_code_oid: None,
                     device_authorization_oid: Some(device_authorization_oid.to_string()),
                     client_authentication_mode: Some(client_authentication_mode),
+                    management: None,
                 }),
                 expires_at: now + Duration::days(30),
             });

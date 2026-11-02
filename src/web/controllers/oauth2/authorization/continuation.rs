@@ -55,7 +55,12 @@ pub(super) async fn handle_continue(
         (Some(session), true) => {
             ctx.services()
                 .oidc_authorize()
-                .has_user_consent(session.user_oid, client.client().oid, &stored.request.scope)
+                .has_user_consent(
+                    session.user_oid,
+                    client.client().oid,
+                    &stored.request.scope,
+                    &stored.request.resources,
+                )
                 .await?
         }
         _ => false,

@@ -19,8 +19,9 @@ impl ScopeCatalogRepository for TestScopeCatalog {
             .iter()
             .filter(|name| names.contains(&name.as_str()))
             .map(|name| ScopeDescription {
+                code: name.clone(),
                 name: name.clone(),
-                display_name: name.clone(),
+                names: Default::default(),
                 description: name.clone(),
                 descriptions: Default::default(),
             })

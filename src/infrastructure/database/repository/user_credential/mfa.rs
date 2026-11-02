@@ -105,7 +105,9 @@ pub(super) async fn disable_totp(
     user_oid: UserOid,
 ) -> Result<bool, UserCredentialRepositoryError> {
     let failure = |error| UserCredentialRepositoryError::DeleteFailed(Box::new(error));
-    let txn = db.begin().await.map_err(failure)?;
+    let txn = audit::begin(db, "security.disable_totp")
+        .await
+        .map_err(failure)?;
     lock_user_credentials(&txn, user_oid)
         .await
         .map_err(failure)?;
@@ -128,6 +130,15 @@ pub(super) async fn disable_totp(
         > 0;
     if deleted {
         clear_recovery_codes_without_mfa(&txn, user_id).await?;
+        // Removing the OTP credential changes the semantic credential
+        // fingerprint. Permanently withdraw authority so a later re-enable
+        // cannot resurrect artifacts issued under the previous credential set.
+        withdraw_user_authority_in_txn(&txn, user_id)
+            .await
+            .map_err(failure)?;
+        audit::record(&txn, "security.disable_totp", "user", Uuid::from(user_oid))
+            .await
+            .map_err(failure)?;
     }
     txn.commit().await.map_err(failure)?;
     Ok(deleted)

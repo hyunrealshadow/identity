@@ -393,6 +393,10 @@ pub struct AuthorizationRequestData {
     pub claims: Option<String>,
     #[serde(default)]
     pub ui_locales: Option<Vec<String>>,
+    /// Management authorization snapshot clipped at approval. Legacy requests
+    /// omit it; the authorization code/token snapshot is authoritative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub management: Option<crate::client_authorization::ManagementAuthorizationSnapshotData>,
 }
 
 impl From<&AuthorizationRequest> for AuthorizationRequestData {
@@ -415,6 +419,7 @@ impl From<&AuthorizationRequest> for AuthorizationRequestData {
             acr_values: value.acr_values.clone(),
             ui_locales: value.ui_locales.clone(),
             claims: value.claims.as_ref().and_then(|c| to_string(c).ok()),
+            management: None,
         }
     }
 }

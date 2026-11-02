@@ -321,6 +321,7 @@ fn service_with_clients_and_signing(
             TestInstallationSetting(Arc::new(
                 SettingsSnapshot::default()
                     .with_section(&AppSettings {
+                        console_domain: None,
                         domain: Some("https://identity.example.com".to_owned()),
                         login_domain: None,
                         login_client_id: None,

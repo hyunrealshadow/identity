@@ -1,12 +1,17 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
-    client_authorization::ClientAuthenticationMode, openid_connect::API_RESOURCE,
+    client_authorization::{
+        AccessTokenPrincipal, AuthorizationSnapshotData, ClientAuthenticationMode,
+    },
+    openid_connect::{API_RESOURCE, ScopeSet},
+    rbac::BusinessAuthorizationSnapshot,
 };
 
 use super::{exchange::issuance_result, signing::SignAccessTokenInput};
 use crate::{
     domain::openid_connect::TokenEndpointAuthMethod,
     observability::{BusinessEvent, EventValue},
+    openid_connect::rbac as shared,
 };
 
 use super::*;
@@ -83,29 +88,80 @@ impl TokenService {
                 .with_param("grant_type", GrantType::ClientCredentials.as_str()));
         }
 
-        let scope = params.scope.unwrap_or_default();
-        self.provider_service.validate_scope_names(&scope).await?;
-        let requested = ScopeSet::parse(&scope)
-            .map_err(|_| AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed))?;
-        let assigned = ScopeSet::parse(&client.assigned_scopes().join(" "))
-            .map_err(|_| AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed))?;
+        let requested_scope = params.scope.unwrap_or_default();
+        let requested = self
+            .provider_service
+            .resolve_scope_for_resources(&params.resources, &requested_scope)
+            .await?;
+        // Machines never receive OpenID identity, offline access or the human
+        // self-service API scopes.
         if requested.openid
             || requested.profile
             || requested.email
             || requested.address
             || requested.phone
             || requested.offline_access
-            || !assigned.covers(&requested)
+            || requested.has_api_scopes()
         {
             return Err(AppError::from_code(
                 TokenErrorCode::ClientCredentialsScopeNotAllowed,
             ));
         }
+
         let selection = self
             .provider_service
             .select_resources(&params.resources, &[], &requested.to_scope_string())
             .await?;
-        let scope = selection.scope;
+        let selected = ScopeSet::parse(&selection.scope).map_err(AppError::map_source(
+            TokenErrorCode::ClientCredentialsScopeNotAllowed,
+        ))?;
+        self.provider_service
+            .validate_client_resource_ceiling(&client, &selection.resources, &selected)
+            .await
+            .map_err(|_| AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed))?;
+
+        let authorization_snapshot = if selected.has_resource_permissions() {
+            if selection.resources.len() != 1 {
+                return Err(AppError::from_code(
+                    TokenErrorCode::ClientCredentialsScopeNotAllowed,
+                ));
+            }
+            let repository = self.rbac_authorization_repo.as_ref().ok_or_else(|| {
+                AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed)
+            })?;
+            let resource = repository
+                .resource_state(&selection.resources[0])
+                .await
+                .map_err(AppError::map_source(
+                    TokenErrorCode::ClientCredentialsScopeNotAllowed,
+                ))?;
+            if !resource.enabled {
+                return Err(AppError::from_code(
+                    TokenErrorCode::ClientCredentialsScopeNotAllowed,
+                ));
+            }
+            // Re-read the canonical scope rows in the same authoritative
+            // snapshot: a scope accepted during target resolution must still
+            // map to an enabled scope owned by this resource.
+            for name in selected.names() {
+                if identity_domain::rbac::STANDARD_OIDC_SCOPES.contains(&name) {
+                    continue;
+                }
+                if resource.enabled_permission_for_scope(name).is_none() {
+                    return Err(AppError::from_code(
+                        TokenErrorCode::ClientCredentialsScopeNotAllowed,
+                    ));
+                }
+            }
+            Some(AuthorizationSnapshotData::Business(
+                identity_domain::client_authorization::BusinessAuthorizationSnapshotData::from_snapshot(
+                    &BusinessAuthorizationSnapshot::for_machine(&resource),
+                ),
+            ))
+        } else {
+            None
+        };
+        let (scope, resources) = (selection.scope, selection.resources);
         let client_oid = client.client().oid;
         let issuer = self.provider_service.issuer()?;
         let configured_signing_key = self
@@ -120,13 +176,16 @@ impl TokenService {
                 client_oid,
                 ClientAuthorizationData::AccessToken(AccessTokenData {
                     scope: scope.clone(),
-                    user_oid: client_oid.to_string(),
+                    resources: resources.clone(),
+                    user_oid: None,
+                    principal: AccessTokenPrincipal::Client,
                     session_oid: None,
                     protected_session_id: None,
                     authorization_code_oid: None,
                     refresh_token_oid: None,
                     device_authorization_oid: None,
                     client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
+                    management: authorization_snapshot.clone(),
                 }),
                 Utc::now() + Duration::hours(1),
             )
@@ -137,7 +196,7 @@ impl TokenService {
             .push(("access_token_oid", EventValue::Text(record.oid.to_string())));
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
-                resources: &selection.resources,
+                resources: &resources,
                 token_id: &record.oid.to_string(),
                 key_id: &key_id,
                 private_key_pem: &private_key_pem,
@@ -145,7 +204,8 @@ impl TokenService {
                 issuer: &issuer,
                 audience: API_RESOURCE,
                 client_id: &client_id,
-                user_oid: &client_oid,
+                subject: &client_id,
+                principal: AccessTokenPrincipal::Client,
                 client: &client,
                 user: None,
                 protected_session_id: None,
@@ -154,6 +214,8 @@ impl TokenService {
                 auth_time: None,
                 acr: None,
                 amr: &[],
+                management: shared::management_snapshot(authorization_snapshot.as_ref()),
+                business: shared::business_snapshot(authorization_snapshot.as_ref()),
             })
             .await?;
         Ok(TokenResponse {

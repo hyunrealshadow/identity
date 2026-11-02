@@ -24,8 +24,8 @@ impl LoginService {
     ///   [`ChallengeOutcome::Authenticated`].
     ///
     /// # OTP flow
-    /// The login status MUST already be `mfa_required` (set by a prior
-    /// password challenge). Up to [`identity_domain::auth::MAX_OTP_ATTEMPTS`] invalid codes are allowed
+    /// The login must enter `mfa_required` after its first factor is established
+    /// by a password or an existing session. Up to [`identity_domain::auth::MAX_OTP_ATTEMPTS`] invalid codes are allowed
     /// per login flow; further attempts return [`AuthErrorCode::TooManyAttempts`]
     /// and invalidate the login. Creates or refreshes the bound session with
     /// `acr = ACR_AAL2` and an internal expiry on success.
@@ -150,11 +150,7 @@ impl LoginService {
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
         // Look up the login record (carries user_oid — no extra identifier needed).
-        let login = self
-            .login_repo
-            .find_by_oid(login_oid)
-            .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?;
+        let login = self.prepare_challenge(login_oid).await?;
 
         if login.user_oid.is_none() {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));

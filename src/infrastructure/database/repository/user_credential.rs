@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_application::error::{AppError, codes::auth::AuthErrorCode};
+use identity_application::error::{
+    AppError,
+    codes::{auth::AuthErrorCode, authorization::AuthorizationErrorCode},
+};
 use identity_application::user::{
     CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
     UserCredential, UserCredentialOid, UserOid,
@@ -9,16 +12,22 @@ use identity_application::user::{
         PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
     },
 };
+use identity_domain::authorization::owner::OwnerProtectionError;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
     QuerySelect, Set, TransactionTrait,
     sea_query::{Expr, ExprTrait, Func},
 };
 use serde_json::{from_value, to_value};
 use uuid::Uuid;
 
+use super::authorization_lifecycle::{
+    ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
+    withdraw_user_authority_in_txn,
+};
 use super::shared::lock_user_credentials;
 use crate::database::{
+    audit,
     entity::{
         user, user::Entity as UserEntity, user_credential,
         user_credential::Entity as UserCredentialEntity,
@@ -192,6 +201,14 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         user_oid: UserOid,
         replacements: Vec<(CredentialType, Vec<CredentialData>)>,
     ) -> Result<(), UserCredentialRepositoryError> {
+        // Only password/passkey replacement can remove a login path. Recovery
+        // code and OTP maintenance must not contend on the global owner lock.
+        let touches_login_credential = replacements.iter().any(|(credential_type, _)| {
+            matches!(
+                credential_type,
+                CredentialType::Password | CredentialType::Passkey
+            )
+        });
         let replacements = replacements
             .into_iter()
             .map(|(credential_type, data)| {
@@ -216,11 +233,15 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 Ok((credential_type.as_ref().to_owned(), serialized))
             })
             .collect::<Result<Vec<_>, UserCredentialRepositoryError>>()?;
-        let txn = self
-            .db
-            .begin()
+        let txn = audit::begin(&self.db, "security.replace_by_user_oid")
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        // Owner-removing writes share one cross-entry serialization point.
+        if touches_login_credential {
+            lock_owner_lifecycle(&txn)
+                .await
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        }
         lock_user_credentials(&txn, user_oid)
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -230,13 +251,21 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
+        let mut authority_changed = false;
         for (credential_type, serialized) in replacements {
-            UserCredentialEntity::delete_many()
+            let affects_authority =
+                matches!(credential_type.as_str(), "password" | "passkey" | "otp");
+            let deleted = UserCredentialEntity::delete_many()
                 .filter(user_credential::Column::UserId.eq(user.id))
                 .filter(user_credential::Column::Type.eq(&credential_type))
                 .exec(&txn)
                 .await
-                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?
+                .rows_affected
+                > 0;
+            if affects_authority && (deleted || !serialized.is_empty()) {
+                authority_changed = true;
+            }
             for value in serialized {
                 user_credential::ActiveModel {
                     oid: Set(Uuid::new_v4()),
@@ -252,6 +281,45 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
             }
         }
+        // Replacement may delete the final password/passkey. Check the
+        // capability-based recovery invariant AFTER the credential mutation and
+        // before commit; a full-capability user must remain recoverable.
+        if touches_login_credential {
+            match ensure_recoverable_authorization_administrator(&txn).await {
+                Ok(()) => {}
+                Err(DbErr::Custom(message))
+                    if message == "no recoverable authorization administrator remains" =>
+                {
+                    return Err(UserCredentialRepositoryError::ReplaceFailed(Box::new(
+                        OwnerProtectionError::LastOwnerProtected,
+                    )));
+                }
+                Err(error) => {
+                    return Err(UserCredentialRepositoryError::ReplaceFailed(Box::new(
+                        error,
+                    )));
+                }
+            }
+        }
+        if authority_changed {
+            // Removing or replacing a fingerprinted credential (password,
+            // passkey or OTP) is a permanent authorization boundary. Rotate the
+            // CAS token and tombstone every subject artifact, including already
+            // consumed single-use parents, so later re-creation cannot revive
+            // credentials minted under an earlier credential set. A no-op
+            // (nothing deleted and nothing inserted) leaves authority intact.
+            withdraw_user_authority_in_txn(&txn, user.id)
+                .await
+                .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        }
+        audit::record(
+            &txn,
+            "security.replace_by_user_oid",
+            "user",
+            Uuid::from(user_oid),
+        )
+        .await
+        .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         txn.commit()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -266,9 +334,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let otp = to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
-        let txn = self
-            .db
-            .begin()
+        let txn = audit::begin(&self.db, "security.enable_totp_if_disabled")
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         lock_user_credentials(&txn, user_oid)
@@ -317,6 +383,20 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         .insert(&txn)
         .await
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        // Adding a fingerprinted OTP credential is an authority boundary even
+        // though this path is reached only when TOTP was disabled. Any artifact
+        // issued under the earlier credential set must stay withdrawn.
+        withdraw_user_authority_in_txn(&txn, user.id)
+            .await
+            .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
+        audit::record(
+            &txn,
+            "security.enable_totp_if_disabled",
+            "user",
+            Uuid::from(user_oid),
+        )
+        .await
+        .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         txn.commit()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -338,9 +418,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .map(to_value)
             .collect::<Result<Vec<_>, _>>()
             .map_err(UserCredentialRepositoryError::Serialization)?;
-        let txn = self
-            .db
-            .begin()
+        let txn = audit::begin(&self.db, "security.replace_recovery_codes_if_mfa_enabled")
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         lock_user_credentials(&txn, user_oid)
@@ -378,6 +456,14 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         }
+        audit::record(
+            &txn,
+            "security.replace_recovery_codes_if_mfa_enabled",
+            "user",
+            Uuid::from(user_oid),
+        )
+        .await
+        .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         txn.commit()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -527,7 +613,9 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         key: StoredPasskey,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<(), AppError> {
-        let txn = self.db.begin().await.map_err(AppError::internal)?;
+        let txn = audit::begin(&self.db, "security.insert")
+            .await
+            .map_err(AppError::internal)?;
         lock_user_credentials(&txn, user_oid)
             .await
             .map_err(AppError::internal)?;
@@ -562,6 +650,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
                 .with_param("limit", MAX_PASSKEYS_PER_USER.to_string()));
         }
         mfa::install_recovery_codes(&txn, user_id, &recovery_codes).await?;
+        let passkey_oid = key.id;
         user_credential::ActiveModel {
             oid: Set(key.id),
             user_id: Set(user_id),
@@ -574,6 +663,15 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         .insert(&txn)
         .await
         .map_err(AppError::internal)?;
+        // A new passkey is a fingerprinted credential addition. Permanently
+        // withdraw authority so artifacts from the prior credential set cannot
+        // be revived by later removal/replacement.
+        withdraw_user_authority_in_txn(&txn, user_id)
+            .await
+            .map_err(AppError::internal)?;
+        audit::record(&txn, "security.insert", "user_credential", passkey_oid)
+            .await
+            .map_err(AppError::internal)?;
         txn.commit().await.map_err(AppError::internal)
     }
 
@@ -587,15 +685,32 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         if before.id != after.id || before.data.credential_id != after.data.credential_id {
             return Ok(false);
         }
-        let result = self.db.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
+        let txn = audit::begin(&self.db, "security.update")
+            .await
+            .map_err(AppError::internal)?;
+        let result = txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "UPDATE user_credential SET data = $1, updated_at = now() WHERE oid = $2 AND user_id = (SELECT id FROM \"user\" WHERE oid = $3) AND type = 'passkey' AND data = $4 AND (expires_at IS NULL OR expires_at > now())",
             [to_value(&after.data).map_err(AppError::internal)?.into(), before.id.into(), Uuid::from(user).into(), to_value(&before.data).map_err(AppError::internal)?.into()]
         )).await.map_err(AppError::internal)?;
-        Ok(result.rows_affected() == 1)
+        let updated = result.rows_affected() == 1;
+        if updated {
+            audit::record(&txn, "security.update", "user_credential", before.id)
+                .await
+                .map_err(AppError::internal)?;
+        }
+        txn.commit().await.map_err(AppError::internal)?;
+        Ok(updated)
     }
 
     async fn delete(&self, user: UserOid, id: Uuid) -> Result<bool, AppError> {
-        let txn = self.db.begin().await.map_err(AppError::internal)?;
+        let txn = audit::begin(&self.db, "security.delete")
+            .await
+            .map_err(AppError::internal)?;
+        // Serialize with owner binding/account changes before touching the
+        // credential set.
+        lock_owner_lifecycle(&txn)
+            .await
+            .map_err(AppError::internal)?;
         lock_user_credentials(&txn, user)
             .await
             .map_err(AppError::internal)?;
@@ -618,7 +733,28 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             .rows_affected
             > 0;
         if deleted {
+            // The deletion is visible in this transaction; reject before audit
+            // and commit if it removed the last recoverable full-capability
+            // administrator login path.
+            ensure_recoverable_authorization_administrator(&txn)
+                .await
+                .map_err(|error| match &error {
+                    DbErr::Custom(message)
+                        if message == "no recoverable authorization administrator remains" =>
+                    {
+                        AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
+                    }
+                    _ => AppError::internal(error),
+                })?;
             mfa::clear_recovery_codes_without_mfa(&txn, user_id).await?;
+            // Removing a passkey can remove the last MFA method; a later
+            // re-enrollment or replacement must not revive earlier artifacts.
+            withdraw_user_authority_in_txn(&txn, user_id)
+                .await
+                .map_err(AppError::internal)?;
+            audit::record(&txn, "security.delete", "user_credential", id)
+                .await
+                .map_err(AppError::internal)?;
         }
         txn.commit().await.map_err(AppError::internal)?;
         Ok(deleted)
@@ -646,11 +782,24 @@ mod passkey_tests {
                 },
             };
             let id_row = |id: i64| BTreeMap::from([("id".to_owned(), Value::BigInt(Some(id)))]);
-            let db = MockDatabase::new(DatabaseBackend::Postgres)
-                .append_exec_results([MockExecResult {
+            let mut exec_results = vec![MockExecResult {
+                rows_affected: 0,
+                last_insert_id: 0,
+            }];
+            if count < MAX_PASSKEYS_PER_USER {
+                // Permanent authority withdrawal writes the client_authorization
+                // tombstone before the semantic audit insert.
+                exec_results.push(MockExecResult {
                     rows_affected: 0,
                     last_insert_id: 0,
-                }])
+                });
+                exec_results.push(MockExecResult {
+                    rows_affected: 1,
+                    last_insert_id: 0,
+                });
+            }
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_exec_results(exec_results)
                 .append_query_results([
                     vec![id_row(7)],
                     (0..count).map(|id| id_row(id as i64)).collect(),
@@ -669,6 +818,12 @@ mod passkey_tests {
                     created_at: Utc::now().into(),
                     updated_at: None,
                 }]])
+                // The withdrawal rotates the user CAS UUID before tombstoning
+                // artifacts.
+                .append_query_results([[BTreeMap::from([(
+                    "version".to_owned(),
+                    Value::from(Uuid::new_v4()),
+                )])]])
                 .into_connection();
             let result = PasskeyCredentialRepository::insert(
                 &UserCredentialRepositoryImpl::new(db.clone()),

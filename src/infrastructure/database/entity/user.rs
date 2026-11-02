@@ -17,6 +17,8 @@ pub struct Model {
     #[sea_orm(unique)]
     #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
     pub oid: Uuid,
+    #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
+    pub version: Uuid,
     pub name: String,
     #[sea_orm(unique)]
     pub name_normalized: String,

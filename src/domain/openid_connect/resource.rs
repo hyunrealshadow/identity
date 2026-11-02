@@ -2,7 +2,12 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::{authorization::ids::PolicyVersion, client::model::ClientOid};
+
 /// A resource server accepted by this authorization server.
+///
+/// `scopes` is a read-only projection of the live, enabled canonical scope rows
+/// owned by the resource. It is never a second authorization definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OAuthResource {
     pub uri: String,
@@ -20,6 +25,37 @@ pub trait OAuthResourceRepository: Send + Sync {
         &self,
         uri: &str,
     ) -> Result<Option<OAuthResource>, OAuthResourceRepositoryError>;
+
+    /// Exact client ceiling for one resource. Returning `None` means the
+    /// adapter cannot express the relation (in-memory test adapters only);
+    /// production adapters must return the exact live `client_scope` rows.
+    async fn client_scope_codes(
+        &self,
+        _client: ClientOid,
+        _resource_uri: &str,
+    ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
+        Ok(None)
+    }
+
+    /// Protocol scopes are not owned by an API resource. This ceiling also
+    /// applies to identity-only requests that have no access-token audience.
+    async fn client_protocol_scope_codes(
+        &self,
+        _client: ClientOid,
+    ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
+        Ok(None)
+    }
+
+    /// Opaque semantic fingerprint of the live client ceiling: client identity,
+    /// exact `client_scope` scope OIDs/codes, resources, OIDC issuance settings,
+    /// platforms and stable credential identifiers. Display text and record
+    /// optimistic-lock versions never participate.
+    async fn client_authority_fingerprint(
+        &self,
+        _client: ClientOid,
+    ) -> Result<Option<PolicyVersion>, OAuthResourceRepositoryError> {
+        Ok(None)
+    }
 }
 
 /// RFC 3986 absolute URI, with exact identifier spelling preserved.

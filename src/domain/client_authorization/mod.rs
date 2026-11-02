@@ -9,10 +9,13 @@ pub use device::{
     format_user_code, normalize_user_code,
 };
 pub use model::{
-    AccessTokenData, AuthorizationCodeData, AuthorizationInteractionState,
+    AccessTokenData, AccessTokenPrincipal, AdministratorRoleData, AuthorizationCodeData,
+    AuthorizationInteractionState, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
+    BusinessBindingSnapshotData, BusinessRoleSnapshotData, BusinessSnapshotDataError,
     ClientAuthenticationMode, ClientAuthorization, ClientAuthorizationData, ClientAuthorizationOid,
-    ClientAuthorizationType, ConsentState, PushedAuthorizationRequestData, RefreshTokenData,
-    RegistrationAccessTokenData, SelectionSource, StoredAuthorizationRequest,
+    ClientAuthorizationType, ConsentState, ManagementAuthorizationSnapshotData,
+    ManagementGrantKindData, ManagementSnapshotDataError, PushedAuthorizationRequestData,
+    RefreshTokenData, RegistrationAccessTokenData, SelectionSource, StoredAuthorizationRequest,
 };
 pub use repository::{
     ClientAuthorizationRepository, ClientAuthorizationRepositoryError,

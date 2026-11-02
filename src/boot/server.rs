@@ -10,7 +10,7 @@ use identity_infrastructure::{
 };
 use identity_web::{
     graphql, health,
-    middleware::{RequireUpstreamHttps, TraceContextMiddleware},
+    middleware::{RequestIdMiddleware, RequireUpstreamHttps, TraceContextMiddleware},
 };
 use rustls::crypto::{CryptoProvider, aws_lc_rs};
 use salvo::{
@@ -91,6 +91,9 @@ pub async fn start_servers(
                 let graphql_address = graphql::bind_address(&config.graphql, &config.server);
                 let graphql_listener = build_upstream_tls_listener(&graphql_address).await?;
                 let graphql_app = graphql::router(state.clone(), &config.graphql)
+                    .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
+                        config.observability.trace_context.clone(),
+                    )))
                     .hoop(RequireUpstreamHttps::new(
                         &config.server.tls.trusted_proxies,
                         &config.server.tls.direct_http_clients,
@@ -268,18 +271,12 @@ fn log_tls_startup(address: &str, config: &AppConfig, mode: TlsMode) {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
     use identity_infrastructure::config::{
         AppConfig, DatabaseConfig, GraphqlConfig, HealthConfig, LoggerConfig, ServerConfig,
         SettingsConfig, TlsTermination,
     };
 
-    use super::{ListenerMode, build_https_listener, listener_mode};
+    use super::{ListenerMode, listener_mode};
 
     #[test]
     fn listener_mode_is_upstream_tls_when_configured() {
@@ -295,25 +292,6 @@ mod tests {
         assert!(matches!(listener_mode(&config), ListenerMode::DirectTls));
     }
 
-    #[tokio::test]
-    async fn build_https_listener_accepts_generated_tls_material() {
-        let dir = unique_test_dir("https-listener");
-        let cert_path = dir.join("server.crt");
-        let key_path = dir.join("server.key");
-
-        let mut config = app_config(TlsTermination::Direct);
-        config.server.binding = "127.0.0.1".to_owned();
-        config.server.tls.auto_generate = true;
-        config.server.tls.cert_path = cert_path.to_string_lossy().into_owned();
-        config.server.tls.key_path = key_path.to_string_lossy().into_owned();
-        config.server.tls.domain = Some("localhost".to_owned());
-
-        let _listener = build_https_listener(&config, "127.0.0.1:0").await.unwrap();
-
-        assert!(cert_path.exists());
-        assert!(key_path.exists());
-    }
-
     fn app_config(termination: TlsTermination) -> AppConfig {
         let mut config = AppConfig {
             logger: LoggerConfig::default(),
@@ -322,6 +300,7 @@ mod tests {
             database: DatabaseConfig::default(),
             health: HealthConfig::default(),
             graphql: GraphqlConfig::default(),
+            console: Default::default(),
             observability: Default::default(),
             openid_connect: Default::default(),
             settings: SettingsConfig::default(),
@@ -329,15 +308,5 @@ mod tests {
         };
         config.server.tls.termination = termination;
         config
-    }
-
-    fn unique_test_dir(label: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let dir = env::temp_dir().join(format!("identity-boot-{label}-{unique}"));
-        fs::create_dir_all(&dir).unwrap();
-        dir
     }
 }

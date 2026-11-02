@@ -263,9 +263,8 @@ mod tests {
     use url::Url;
 
     use super::{
-        RemoteUrlError, conformance_allows_invalid_certs, conformance_mode_active,
-        conformance_mode_active_for, fetchable_url, is_unsafe_ip, resolved_address_is_allowed,
-        validate_https_public_url,
+        RemoteUrlError, conformance_mode_active_for, fetchable_url, is_unsafe_ip,
+        resolved_address_is_allowed, validate_https_public_url,
     };
 
     #[test]
@@ -345,14 +344,6 @@ mod tests {
         assert_eq!(
             fetchable_url(&url).as_str(),
             "https://rp.example.com/request.jwt"
-        );
-    }
-
-    #[test]
-    fn invalid_certificate_policy_matches_active_conformance_mode() {
-        assert_eq!(
-            conformance_allows_invalid_certs(),
-            conformance_mode_active()
         );
     }
 

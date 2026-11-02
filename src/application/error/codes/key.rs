@@ -2,6 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Range: 12000-12099
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum KeyErrorCode {
     NotFound,
     Revoked,

@@ -65,9 +65,8 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         let assigned_scopes = ScopeEntity::find()
             .inner_join(ClientScopeEntity)
             .filter(client_scope::Column::ClientId.eq(client_id))
-            .filter(scope::Column::Protocol.eq("openid_connect"))
             .select_only()
-            .column(scope::Column::Name)
+            .column(scope::Column::Code)
             .into_tuple::<String>()
             .all(&self.db)
             .await
@@ -172,10 +171,9 @@ impl OpenIdConnectClientRepositoryImpl {
         let scope_rows = ClientScopeEntity::find()
             .inner_join(ScopeEntity)
             .filter(client_scope::Column::ClientId.is_in(matched_client_ids))
-            .filter(scope::Column::Protocol.eq("openid_connect"))
             .select_only()
             .column(client_scope::Column::ClientId)
-            .column(scope::Column::Name)
+            .column(scope::Column::Code)
             .into_tuple::<(i64, String)>()
             .all(&self.db)
             .await

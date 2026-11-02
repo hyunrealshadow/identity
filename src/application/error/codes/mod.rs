@@ -1,79 +1,65 @@
 pub mod account;
+pub mod administrator;
 pub mod auth;
+pub mod authorization;
 pub mod authorize;
 pub mod authorize_http;
 pub mod common;
 pub mod data_protection;
 pub mod device;
+pub mod graphql;
+pub mod graphql_transport;
+pub mod group;
 pub mod install;
 pub mod key;
 pub mod openid_connect;
 pub mod provider;
+pub mod rbac;
 pub mod registration;
 pub mod token;
+pub mod user_management;
 
 #[cfg(test)]
 mod tests {
+    use crate::error::code::AppErrorCode;
     use std::{collections::HashSet, ops::RangeInclusive};
-
-    use regex::Regex;
-
-    const CODE_MODULES: &[(&str, &str, RangeInclusive<u32>)] = &[
-        ("common", include_str!("common.rs"), 10000..=10099),
-        ("auth", include_str!("auth.rs"), 11000..=11099),
-        ("key", include_str!("key.rs"), 12000..=12099),
-        ("install", include_str!("install.rs"), 13000..=13099),
-        (
-            "data_protection",
-            include_str!("data_protection.rs"),
-            14000..=14099,
-        ),
-        ("account", include_str!("account.rs"), 15000..=15099),
-        ("provider", include_str!("provider.rs"), 20000..=20099),
-        (
-            "openid_connect",
-            include_str!("openid_connect.rs"),
-            21000..=21099,
-        ),
-        (
-            "authorize_http",
-            include_str!("authorize_http.rs"),
-            22000..=22099,
-        ),
-        ("authorize", include_str!("authorize.rs"), 23000..=23099),
-        ("token", include_str!("token.rs"), 24000..=24099),
-        (
-            "registration",
-            include_str!("registration.rs"),
-            25000..=25099,
-        ),
-        ("device", include_str!("device.rs"), 26000..=26099),
-    ];
+    use strum::IntoEnumIterator;
 
     #[test]
-    fn error_codes_are_five_digit_unique_and_module_scoped() {
-        let code_pattern = Regex::new(r"=>\s*(\d+)").expect("regex should compile");
-        let mut seen = HashSet::new();
-
-        for (module, source, range) in CODE_MODULES {
-            let mut module_code_count = 0;
-
-            for captures in code_pattern.captures_iter(source) {
-                let code = captures[1].parse::<u32>().expect("code should be numeric");
-                module_code_count += 1;
-
-                assert!(
-                    (10000..=99999).contains(&code),
-                    "{module} code {code} is not five digits"
-                );
-                assert!(
-                    range.contains(&code),
-                    "{module} code {code} is outside module range {range:?}"
-                );
-                assert!(seen.insert(code), "duplicate application error code {code}");
+    fn error_codes_are_unique_and_module_scoped() {
+        fn check<E: AppErrorCode + IntoEnumIterator>(
+            seen: &mut HashSet<u32>,
+            range: RangeInclusive<u32>,
+        ) {
+            let mut nonempty = false;
+            for error in E::iter() {
+                nonempty = true;
+                let code = error.code();
+                assert!(range.contains(&code), "{code} outside {range:?}");
+                assert!(seen.insert(code), "duplicate error code {code}");
             }
-
-            assert!(module_code_count > 0, "{module} has no error codes");
+            assert!(nonempty, "empty error registry");
         }
+        let mut seen = HashSet::new();
+        check::<super::common::CommonErrorCode>(&mut seen, 10000..=10099);
+        check::<super::auth::AuthErrorCode>(&mut seen, 11000..=11099);
+        check::<super::key::KeyErrorCode>(&mut seen, 12000..=12099);
+        check::<super::install::InstallErrorCode>(&mut seen, 13000..=13099);
+        check::<super::data_protection::DataProtectionErrorCode>(&mut seen, 14000..=14099);
+        check::<super::account::AccountErrorCode>(&mut seen, 15000..=15099);
+        check::<super::user_management::UserManagementErrorCode>(&mut seen, 16000..=16099);
+        check::<super::rbac::RbacErrorCode>(&mut seen, 17000..=17099);
+        check::<super::administrator::AdministratorErrorCode>(&mut seen, 18000..=18019);
+        check::<super::group::GroupErrorCode>(&mut seen, 19000..=19099);
+        check::<super::provider::ProviderErrorCode>(&mut seen, 20000..=20099);
+        check::<super::openid_connect::OpenIdConnectErrorCode>(&mut seen, 21000..=21099);
+        check::<super::authorize_http::AuthorizeHttpErrorCode>(&mut seen, 22000..=22099);
+        check::<super::authorize::AuthorizeErrorCode>(&mut seen, 23000..=23099);
+        check::<super::token::TokenErrorCode>(&mut seen, 24000..=24099);
+        check::<super::registration::RegistrationErrorCode>(&mut seen, 25000..=25099);
+        check::<super::device::DeviceAuthorizationErrorCode>(&mut seen, 26000..=26099);
+        check::<super::authorization::AuthorizationErrorCode>(&mut seen, 27000..=27099);
+        check::<super::graphql_transport::GraphqlTransportErrorCode>(&mut seen, 28100..=28199);
+        check::<super::graphql::GraphqlErrorCode>(&mut seen, 28000..=28099);
     }
 }

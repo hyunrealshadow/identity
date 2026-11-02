@@ -1,8 +1,11 @@
 use sea_orm_migration::{
     async_trait,
-    prelude::{DbErr, DeriveIden, DeriveMigrationName, Expr, MigrationTrait, SchemaManager, Table},
+    prelude::{
+        Alias, ColumnDef, DbErr, DeriveIden, DeriveMigrationName, Expr, ExprTrait, Func,
+        MigrationTrait, SchemaManager, Table,
+    },
     schema::{
-        boolean, boolean_null, integer, pk_auto, string, string_null, string_uniq,
+        boolean, boolean_null, integer, json_binary, pk_auto, string, string_null, string_uniq,
         timestamp_with_time_zone, timestamp_with_time_zone_null, uuid_uniq,
     },
     sea_orm,
@@ -16,6 +19,7 @@ pub enum User {
     Table,
     Id,
     Oid,
+    Version,
     Name,
     NameNormalized,
     Email,
@@ -40,6 +44,7 @@ pub enum User {
     AddressRegion,
     AddressPostalCode,
     AddressCountry,
+    Preferences,
     FailedAttempts,
     Enabled,
     Locked,
@@ -57,7 +62,13 @@ impl MigrationTrait for Migration {
                     .table(User::Table)
                     .if_not_exists()
                     .col(pk_auto(User::Id).big_integer())
-                    .col(uuid_uniq(User::Oid).default(Expr::cust("gen_random_uuid()")))
+                    .col(uuid_uniq(User::Oid).default(Func::cust(Alias::new("gen_random_uuid"))))
+                    .col(
+                        ColumnDef::new(User::Version)
+                            .uuid()
+                            .not_null()
+                            .default(Func::cust(Alias::new("gen_random_uuid"))),
+                    )
                     .col(string(User::Name))
                     .col(string_uniq(User::NameNormalized))
                     .col(string(User::Email))
@@ -82,6 +93,10 @@ impl MigrationTrait for Migration {
                     .col(string_null(User::AddressRegion))
                     .col(string_null(User::AddressPostalCode))
                     .col(string_null(User::AddressCountry))
+                    .col(
+                        json_binary(User::Preferences)
+                            .default(Expr::val("{}").cast_as(Alias::new("jsonb"))),
+                    )
                     .col(integer(User::FailedAttempts).default(0))
                     .col(boolean(User::Enabled).default(true))
                     .col(boolean(User::Locked).default(false))

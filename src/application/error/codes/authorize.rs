@@ -2,7 +2,7 @@ use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Error codes for `AuthorizeService` (OIDC authorization request processing).
 /// Range: 23000-23099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum AuthorizeErrorCode {
     // --- client lookup ---
     /// `client_id` is not a valid UUID.

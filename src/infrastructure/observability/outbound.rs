@@ -54,64 +54,132 @@ impl OutboundTrace for OutboundTraceImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use http::HeaderMap;
-    use identity_application::observability::OutboundTrace;
-    use opentelemetry::trace::{SpanId, TraceId};
-    use tracing::Span;
-    use tracing_opentelemetry::OpenTelemetrySpanExt;
-
     use super::OutboundTraceImpl;
     use crate::{
         config::TraceContextConfig,
         observability::context::{TraceTrustPolicy, format_traceparent},
     };
+    use http::HeaderMap;
+    use identity_application::observability::OutboundTrace;
+    use opentelemetry::trace::{TraceContextExt, TracerProvider};
+    use opentelemetry_sdk::{
+        error::OTelSdkResult,
+        trace::{SdkTracerProvider, SpanData, SpanExporter},
+    };
+    use std::sync::{Arc, Mutex};
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
+    use tracing_subscriber::prelude::*;
 
+    #[derive(Debug, Clone, Default)]
+    struct Exporter(Arc<Mutex<Vec<SpanData>>>);
+    impl SpanExporter for Exporter {
+        async fn export(&self, batch: Vec<SpanData>) -> OTelSdkResult {
+            self.0.lock().unwrap().extend(batch);
+            Ok(())
+        }
+    }
     fn policy(origins: Vec<String>) -> Arc<dyn OutboundTrace> {
         OutboundTraceImpl::shared(TraceTrustPolicy::new(TraceContextConfig {
             trusted_gateways: Vec::new(),
+            trusted_request_id_gateways: Vec::new(),
             trust_verified_workload: true,
             propagate_to_origins: origins,
         }))
     }
-
     #[test]
     fn client_span_records_host_but_not_query() {
-        let span = policy(Vec::new()).client_span(
-            "POST",
-            &"https://rp.example.com/logout?token=secret"
-                .parse()
-                .unwrap(),
+        let exporter = Exporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_simple_exporter(exporter.clone())
+            .build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("outbound-test")));
+        tracing::subscriber::with_default(subscriber, || {
+            let span = policy(Vec::new()).client_span(
+                "POST",
+                &"https://rp.example.com/logout?token=secret"
+                    .parse()
+                    .unwrap(),
+            );
+            let _entered = span.enter();
+        });
+        provider.force_flush().unwrap();
+        let spans = exporter.0.lock().unwrap();
+        assert_eq!(
+            spans.len(),
+            1,
+            "tracing must actually export the client span"
         );
-        let _ = span;
+        assert_eq!(spans[0].name, "http.client");
+        let attributes: std::collections::BTreeMap<_, _> = spans[0]
+            .attributes
+            .iter()
+            .map(|a| (a.key.as_str(), a.value.to_string()))
+            .collect();
+        assert_eq!(
+            attributes.get("server.address").map(String::as_str),
+            Some("rp.example.com")
+        );
+        assert_eq!(
+            attributes.get("http.request.method").map(String::as_str),
+            Some("POST")
+        );
+        assert_eq!(
+            attributes.get("url.scheme").map(String::as_str),
+            Some("https")
+        );
+        let exported = format!("{:?}", spans[0]);
+        for sensitive in ["token=", "secret", "/logout", "url.full", "url.query"] {
+            assert!(
+                !exported.contains(sensitive),
+                "sensitive URL detail leaked: {exported}"
+            );
+        }
     }
-
     #[test]
     fn injection_is_origin_scoped() {
-        let trace = policy(vec!["https://login.internal:8443".to_owned()]);
-
-        let mut headers = HeaderMap::new();
-        trace.inject(
-            &"https://evil.example/callback".parse().unwrap(),
-            &mut headers,
+        // Match normal observability bootstrap: a tracer alone does not install W3C propagation.
+        opentelemetry::global::set_text_map_propagator(
+            opentelemetry_sdk::propagation::TraceContextPropagator::new(),
         );
-        assert!(headers.get("traceparent").is_none());
-
-        // Without an active context nothing to inject even for allowed origins.
-        let mut headers = HeaderMap::new();
+        let provider = SdkTracerProvider::builder()
+            .with_simple_exporter(Exporter::default())
+            .build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("outbound-test")));
+        let trace = policy(vec!["https://login.internal:8443".to_owned()]);
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!("request");
+            let _entered = span.enter();
+            let context = span.context();
+            let active = context.span();
+            let sc = active.span_context();
+            assert!(sc.is_valid());
+            let expected = format_traceparent(sc.trace_id(), sc.span_id(), sc.is_sampled());
+            let mut allowed = HeaderMap::new();
+            trace.inject(
+                &"https://login.internal:8443/callback".parse().unwrap(),
+                &mut allowed,
+            );
+            assert_eq!(
+                allowed.get("traceparent").unwrap().to_str().unwrap(),
+                expected
+            );
+            for target in [
+                "https://evil.example/callback",
+                "https://login.internal/callback",
+                "http://login.internal:8443/callback",
+            ] {
+                let mut denied = HeaderMap::new();
+                trace.inject(&target.parse().unwrap(), &mut denied);
+                assert!(!denied.contains_key("traceparent"), "{target}");
+            }
+        });
+        let mut inactive = HeaderMap::new();
         trace.inject(
             &"https://login.internal:8443/callback".parse().unwrap(),
-            &mut headers,
+            &mut inactive,
         );
-        assert!(headers.get("traceparent").is_none());
-        // The formatting helper compiles against the same W3C shape used for
-        // inbound parsing.
-        let _ = format_traceparent(
-            TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap(),
-            SpanId::from_hex("00f067aa0ba902b7").unwrap(),
-            true,
-        );
-        let _ = OpenTelemetrySpanExt::context(&Span::none());
+        assert!(!inactive.contains_key("traceparent"));
     }
 }

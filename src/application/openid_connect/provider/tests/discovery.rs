@@ -5,6 +5,7 @@ async fn normalizes_plain_domain_to_https_issuer() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -26,6 +27,7 @@ async fn assembles_discovery_document_from_issuer_and_capabilities() {
     let service = OpenIdProviderService::for_test(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com/issuer1/".to_owned()),
                 login_domain: None,
                 login_client_id: None,
@@ -92,6 +94,7 @@ async fn discovery_advertises_registration_endpoint_when_enabled() {
     let service = OpenIdProviderService::for_test_with_registration(
         SettingsSnapshot::default()
             .with_section(&AppSettings {
+                console_domain: None,
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,

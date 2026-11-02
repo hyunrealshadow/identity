@@ -27,15 +27,19 @@ use serde_json::{Value, json, to_value};
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use super::Seed;
+use super::{
+    Seed,
+    oauth_resource::graphql_resource_oid,
+    scope::{BUILT_IN_OPENID_CONNECT_SCOPES, resolve_builtin_scope_ids},
+};
 use crate::{
     application::{error::AppError, user::CredentialType},
     auth::password::PasswordHasherImpl,
-    database::seed::scope::OPENID_CONNECT_PROTOCOL,
-    infrastructure::database::{
+    database::{
+        audit,
         entity::{
             client, client_openid_connect, client_openid_connect_credential,
-            client_openid_connect_platform, client_scope, scope, user, user_credential,
+            client_openid_connect_platform, client_scope, user, user_credential,
         },
         repository::{
             openid_connect_credential::serialize_data as serialize_credential_data,
@@ -238,9 +242,16 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
     // ── OIDC clients ───────────────────────────────────────────────────────
 
     for spec in conformance_client_specs() {
-        let client_id = ensure_conformance_client(&txn, spec, now).await?;
-        ensure_web_platform_redirect_uri(&txn, client_id).await?;
-        assign_all_built_in_oidc_scopes(&txn, client_id).await?;
+        let (client_id, client_oid, mut material_change) =
+            ensure_conformance_client(&txn, spec, now).await?;
+        material_change |= ensure_web_platform_redirect_uri(&txn, client_id).await?;
+        material_change |= assign_all_built_in_oidc_scopes(&txn, client_id).await?;
+
+        if material_change {
+            audit::record(&txn, "client.update", "client", client_oid)
+                .await
+                .map_err(AppError::internal)?;
+        }
     }
 
     txn.commit().await.map_err(AppError::internal)?;
@@ -400,7 +411,7 @@ async fn ensure_conformance_client(
     db: &impl ConnectionTrait,
     spec: &ConformanceClientSpec,
     now: DateTime<Utc>,
-) -> Result<i64, AppError> {
+) -> Result<(i64, Uuid, bool), AppError> {
     let client_oid: Uuid = spec.oid.parse().expect("client OID literal is valid");
     let credential_oid: Uuid = spec
         .credential_oid
@@ -413,16 +424,18 @@ async fn ensure_conformance_client(
         .await
         .map_err(AppError::internal)?;
 
-    let client_id = if let Some(row) = existing_client {
+    let (client_id, mut material_change) = if let Some(row) = existing_client {
         let client_id = row.id;
+        let mut material_change = false;
         if !row.built_in {
             let mut active: client::ActiveModel = row.into();
             active.built_in = Set(true);
             active.update(db).await.map_err(AppError::internal)?;
+            material_change = true;
         }
-        client_id
+        (client_id, material_change)
     } else {
-        client::ActiveModel {
+        let client_id = client::ActiveModel {
             oid: Set(client_oid),
             protocol: Set("openid_connect".to_owned()),
             name: Set(spec.name.to_owned()),
@@ -436,13 +449,14 @@ async fn ensure_conformance_client(
         .insert(db)
         .await
         .map_err(AppError::internal)?
-        .id
+        .id;
+        (client_id, true)
     };
 
-    ensure_conformance_oidc_metadata(db, client_id, spec, now).await?;
+    material_change |= ensure_conformance_oidc_metadata(db, client_id, spec, now).await?;
     ensure_conformance_client_secret(db, client_id, credential_oid, spec.secret, now).await?;
 
-    Ok(client_id)
+    Ok((client_id, client_oid, material_change))
 }
 
 async fn ensure_conformance_oidc_metadata(
@@ -450,7 +464,7 @@ async fn ensure_conformance_oidc_metadata(
     client_id: i64,
     spec: &ConformanceClientSpec,
     now: DateTime<Utc>,
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     let values = conformance_oidc_metadata_values(spec);
 
     let existing = client_openid_connect::Entity::find()
@@ -484,8 +498,9 @@ async fn ensure_conformance_oidc_metadata(
                 Set(values.backchannel_logout_session_required);
             active.updated_at = Set(Some(now.into()));
             active.update(db).await.map_err(AppError::internal)?;
+            return Ok(true);
         }
-        return Ok(());
+        return Ok(false);
     }
 
     client_openid_connect::ActiveModel {
@@ -507,7 +522,7 @@ async fn ensure_conformance_oidc_metadata(
     .await
     .map_err(AppError::internal)?;
 
-    Ok(())
+    Ok(true)
 }
 
 fn conformance_oidc_metadata_values(spec: &ConformanceClientSpec) -> ConformanceOidcMetadataValues {
@@ -671,7 +686,7 @@ fn conformance_client_settings() -> Value {
 async fn ensure_web_platform_redirect_uri(
     db: &impl ConnectionTrait,
     client_id: i64,
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     let exists = client_openid_connect_platform::Entity::find()
         .filter(client_openid_connect_platform::Column::ClientId.eq(client_id))
         .filter(client_openid_connect_platform::Column::Platform.eq("web"))
@@ -681,7 +696,7 @@ async fn ensure_web_platform_redirect_uri(
         .is_some();
 
     if exists {
-        return Ok(());
+        return Ok(false);
     }
 
     client_openid_connect_platform::ActiveModel {
@@ -696,7 +711,7 @@ async fn ensure_web_platform_redirect_uri(
     .await
     .map_err(AppError::internal)?;
 
-    Ok(())
+    Ok(true)
 }
 
 /// Hash the test account password with the same Argon2id defaults the app uses,
@@ -718,20 +733,25 @@ fn hash_conformance_password(password: &str) -> Result<Value, AppError> {
     to_value(&password).map_err(AppError::internal)
 }
 
+/// Conformance clients receive the base OpenID Connect scope set only.
+/// Management scopes are excluded from this client scope ceiling.
 async fn assign_all_built_in_oidc_scopes(
     db: &impl ConnectionTrait,
     client_id: i64,
-) -> Result<(), AppError> {
-    let scopes = scope::Entity::find()
-        .filter(scope::Column::Protocol.eq(OPENID_CONNECT_PROTOCOL))
-        .all(db)
-        .await
-        .map_err(AppError::internal)?;
-
-    for scope in scopes {
+) -> Result<bool, AppError> {
+    let graphql_resource_oid = graphql_resource_oid(db).await?;
+    let names = BUILT_IN_OPENID_CONNECT_SCOPES
+        .iter()
+        .map(|scope| scope.code)
+        .collect::<Vec<_>>();
+    // Default scope names are exact codes or trusted selectors; the helper
+    // expands any selector against concrete catalog rows for this resource.
+    let scope_ids = resolve_builtin_scope_ids(db, &names, graphql_resource_oid).await?;
+    let mut changed = false;
+    for scope_id in scope_ids {
         let existing = client_scope::Entity::find()
             .filter(client_scope::Column::ClientId.eq(client_id))
-            .filter(client_scope::Column::ScopeId.eq(scope.id))
+            .filter(client_scope::Column::ScopeId.eq(scope_id))
             .one(db)
             .await
             .map_err(AppError::internal)?;
@@ -739,16 +759,17 @@ async fn assign_all_built_in_oidc_scopes(
         if existing.is_none() {
             client_scope::ActiveModel {
                 client_id: Set(client_id),
-                scope_id: Set(scope.id),
+                scope_id: Set(scope_id),
                 ..Default::default()
             }
             .insert(db)
             .await
             .map_err(AppError::internal)?;
+            changed = true;
         }
     }
 
-    Ok(())
+    Ok(changed)
 }
 
 #[cfg(test)]

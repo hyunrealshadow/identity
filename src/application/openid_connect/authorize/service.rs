@@ -17,6 +17,17 @@ pub struct AuthorizeService {
     pub(super) http_client: Client,
     pub(super) data_protector: Arc<dyn DataProtector>,
     pub(super) events: Arc<dyn EventSink>,
+    /// Live session validation for approval. Optional only for old unit
+    /// factories; production must supply it so an approval cannot mint a code
+    /// or front-channel token from a revoked, expired or mismatched session.
+    pub(super) session_repo: Option<Arc<dyn crate::domain::auth::repository::SessionRepository>>,
+    /// Optional until the P0-A management repository is wired. Management
+    /// requests fail closed when this is absent.
+    pub(super) management_authority_repo:
+        Option<Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>>,
+    /// Live resource-owned canonical scope state. Business authorization
+    /// requests fail closed when this is absent.
+    pub(super) rbac_authorization_repo: Option<Arc<dyn RbacAuthorizationRepository>>,
 }
 
 pub struct AuthorizeServiceDependencies {
@@ -53,6 +64,9 @@ impl AuthorizeService {
             http_client: deps.http_client,
             data_protector: deps.data_protector,
             events: Arc::new(NoopEventSink),
+            session_repo: None,
+            management_authority_repo: None,
+            rbac_authorization_repo: None,
         }
     }
 
@@ -62,22 +76,41 @@ impl AuthorizeService {
         self
     }
 
+    #[must_use]
+    pub fn with_management_authority_repository(
+        mut self,
+        repository: Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>,
+    ) -> Self {
+        self.management_authority_repo = Some(repository);
+        self
+    }
+
+    #[must_use]
+    pub fn with_rbac_authorization_repository(
+        mut self,
+        repository: Arc<dyn RbacAuthorizationRepository>,
+    ) -> Self {
+        self.rbac_authorization_repo = Some(repository);
+        self
+    }
+
     pub async fn scope_descriptions(
         &self,
         scope: &ScopeSet,
+        resources: &[String],
     ) -> Result<Vec<ScopeDescription>, AppError> {
         let repository = self
             .scope_catalog
             .as_ref()
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::LoadRequestFailed))?;
         let descriptions = repository
-            .find_by_names(&scope.names())
+            .find_by_names_for_resources(&scope.names(), resources)
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
         if scope
             .names()
             .iter()
-            .any(|name| !descriptions.iter().any(|item| item.name == *name))
+            .any(|name| !descriptions.iter().any(|item| item.code == *name))
         {
             return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
         }
@@ -88,6 +121,15 @@ impl AuthorizeService {
     #[must_use]
     pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
+        self
+    }
+
+    #[must_use]
+    pub fn with_session_repo(
+        mut self,
+        session_repo: Arc<dyn crate::domain::auth::repository::SessionRepository>,
+    ) -> Self {
+        self.session_repo = Some(session_repo);
         self
     }
 }

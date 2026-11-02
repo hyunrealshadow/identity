@@ -10,3 +10,4 @@ E10007 = The resource registry could not be read.
 E10008 = The pushed authorization request could not be stored or consumed.
 
 E10009 = The requested scope is not supported.
+E10010 = The time zone is not a valid IANA time zone identifier.

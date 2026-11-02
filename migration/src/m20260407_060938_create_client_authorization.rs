@@ -1,14 +1,16 @@
+use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::Func;
 use sea_orm_migration::{
     async_trait,
     prelude::{
-        ConnectionTrait, DbErr, DeriveIden, DeriveMigrationName, Expr, ForeignKey,
+        ConditionalStatement, DbErr, DeriveIden, DeriveMigrationName, Expr, ExprTrait, ForeignKey,
         ForeignKeyAction, Index, MigrationTrait, SchemaManager, Table,
     },
     schema::{
         big_integer, boolean, json_binary, pk_auto, string, timestamp_with_time_zone,
         timestamp_with_time_zone_null, uuid_uniq,
     },
-    sea_orm,
+    sea_orm::{self, sea_query::extension::postgres::PgExpr},
 };
 
 use crate::m20260306_031058_create_client::Client;
@@ -43,7 +45,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(ClientAuthorization::Id).big_integer())
                     .col(
                         uuid_uniq(ClientAuthorization::Oid)
-                            .default(Expr::cust("gen_random_uuid()")),
+                            .default(Func::cust(Alias::new("gen_random_uuid"))),
                     )
                     .col(big_integer(ClientAuthorization::ClientId))
                     .col(string(ClientAuthorization::Type))
@@ -102,77 +104,102 @@ impl MigrationTrait for Migration {
             )
             .await?;
         manager
-            .get_connection()
-            .execute_unprepared(
-                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_data_code_oid"
-                   ON "client_authorization" (("data"->>'authorization_code_oid'))
-                   WHERE "type" = 'access_token'"#,
+            .create_index(
+                Index::create()
+                    .name("idx_client_authorization_data_code_oid")
+                    .table(ClientAuthorization::Table)
+                    .col(
+                        Expr::col(ClientAuthorization::Data)
+                            .cast_json_field("authorization_code_oid"),
+                    )
+                    .and_where(Expr::col(ClientAuthorization::Type).eq("access_token"))
+                    .to_owned(),
             )
             .await?;
         manager
-            .get_connection()
-            .execute_unprepared(
-                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_session_oid"
-                   ON "client_authorization" (("data"->>'session_oid'))
-                   WHERE "type" IN ('authorization_code', 'access_token', 'refresh_token')
-                     AND "revoked_at" IS NULL"#,
+            .create_index(
+                Index::create()
+                    .name("idx_client_authorization_session_oid")
+                    .table(ClientAuthorization::Table)
+                    .col(Expr::col(ClientAuthorization::Data).cast_json_field("session_oid"))
+                    .and_where(Expr::col(ClientAuthorization::Type).is_in([
+                        "authorization_code",
+                        "access_token",
+                        "refresh_token",
+                    ]))
+                    .and_where(Expr::col(ClientAuthorization::RevokedAt).is_null())
+                    .to_owned(),
             )
             .await?;
-        for (name, field, type_) in [
+        for (name, field, type_, unique) in [
+            (
+                "idx_client_authorization_par_digest",
+                "request_uri_digest",
+                "pushed_authorization_request",
+                true,
+            ),
             (
                 "idx_client_authorization_device_code_digest",
                 "device_code_digest",
                 "device_authorization_request",
+                true,
             ),
             (
                 "idx_client_authorization_active_user_code",
                 "user_code",
                 "device_authorization_request",
+                true,
             ),
             (
                 "idx_client_authorization_device_authorization_user",
                 "user_oid",
                 "device_authorization",
+                false,
             ),
             (
                 "idx_client_authorization_refresh_token_rotated_from",
                 "rotated_from",
                 "refresh_token",
+                false,
             ),
             (
                 "idx_client_authorization_access_token_refresh_token_oid",
                 "refresh_token_oid",
                 "access_token",
+                false,
             ),
             (
                 "idx_client_authorization_access_token_device_authorization_oid",
                 "device_authorization_oid",
                 "access_token",
+                false,
             ),
         ] {
-            let unique = if matches!(field, "device_code_digest" | "user_code") {
-                "UNIQUE "
-            } else {
-                ""
-            };
-            let active = if field == "user_code" {
-                " AND \"is_expired\" = false AND \"completed_at\" IS NULL AND \"revoked_at\" IS NULL"
-            } else {
-                ""
-            };
-            manager
-                .get_connection()
-                .execute_unprepared(&format!(
-                    "CREATE {unique}INDEX IF NOT EXISTS \"{name}\" ON \"client_authorization\" ((\"data\"->>'{field}')) WHERE \"type\" = '{type_}'{active}"
-                ))
-                .await?;
+            let mut index = Index::create();
+            index
+                .name(name)
+                .table(ClientAuthorization::Table)
+                .col(Expr::col(ClientAuthorization::Data).cast_json_field(field))
+                .and_where(Expr::col(ClientAuthorization::Type).eq(type_));
+            if unique {
+                index.unique();
+            }
+            if field == "user_code" {
+                index
+                    .and_where(Expr::col(ClientAuthorization::IsExpired).eq(false))
+                    .and_where(Expr::col(ClientAuthorization::CompletedAt).is_null())
+                    .and_where(Expr::col(ClientAuthorization::RevokedAt).is_null());
+            }
+            manager.create_index(index).await?;
         }
         manager
-            .get_connection()
-            .execute_unprepared(
-                r#"CREATE INDEX IF NOT EXISTS "idx_client_authorization_expiration_pending"
-                   ON "client_authorization" ("expires_at")
-                   WHERE "is_expired" = false"#,
+            .create_index(
+                Index::create()
+                    .name("idx_client_authorization_expiration_pending")
+                    .table(ClientAuthorization::Table)
+                    .col(ClientAuthorization::ExpiresAt)
+                    .and_where(Expr::col(ClientAuthorization::IsExpired).eq(false))
+                    .to_owned(),
             )
             .await?;
         Ok(())
@@ -187,20 +214,19 @@ impl MigrationTrait for Migration {
             "idx_client_authorization_device_authorization_user",
             "idx_client_authorization_active_user_code",
             "idx_client_authorization_device_code_digest",
+            "idx_client_authorization_par_digest",
+            "idx_client_authorization_session_oid",
+            "idx_client_authorization_data_code_oid",
         ] {
             manager
-                .get_connection()
-                .execute_unprepared(&format!(r#"DROP INDEX IF EXISTS "{index}""#))
+                .drop_index(
+                    Index::drop()
+                        .name(index)
+                        .table(ClientAuthorization::Table)
+                        .to_owned(),
+                )
                 .await?;
         }
-        manager
-            .get_connection()
-            .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_authorization_session_oid""#)
-            .await?;
-        manager
-            .get_connection()
-            .execute_unprepared(r#"DROP INDEX IF EXISTS "idx_client_authorization_data_code_oid""#)
-            .await?;
         manager
             .drop_index(
                 Index::drop()

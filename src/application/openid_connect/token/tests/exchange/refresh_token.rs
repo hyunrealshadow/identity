@@ -49,6 +49,7 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),
@@ -124,6 +125,7 @@ async fn exchange_refresh_token_returns_new_access_token() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),
@@ -299,6 +301,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
         user_repo: Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
+                version: Uuid::new_v4(),
                 email: "es256-refresh@example.com".to_string(),
                 email_normalized: "es256-refresh@example.com".to_string(),
                 name: "ES256 Refresh".to_string(),
@@ -369,6 +372,7 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),
@@ -441,6 +445,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
         user_repo: Arc::new(InMemoryUserRepository {
             user: User {
                 oid: UserOid(user_oid),
+                version: Uuid::new_v4(),
                 email: "auth-time@example.com".to_string(),
                 email_normalized: "auth-time@example.com".to_string(),
                 name: "Auth Time".to_string(),
@@ -475,7 +480,14 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 updated_at: None,
             },
         }),
-        client_repo: Arc::new(InMemoryClientRepository),
+        client_repo: Arc::new(AssignedScopesClientRepository {
+            scopes: vec![
+                "openid".to_string(),
+                "profile".to_string(),
+                "offline_access".to_string(),
+                "password.change".to_string(),
+            ],
+        }),
         credential_repo: Arc::new(cred_repo_with(vec![OpenIdConnectCredential {
             oid: Uuid::new_v4(),
             client_oid: Uuid::nil(),
@@ -512,6 +524,7 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
                 auth_time: Some(original_auth_time),
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),
@@ -630,6 +643,7 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
                 auth_time: None,
                 redirect_uri: "https://client.example.com/callback".to_string(),
                 redirect_uri_was_supplied: true,
+                management: None,
                 claims: None,
             }),
             Utc::now() + Duration::minutes(10),

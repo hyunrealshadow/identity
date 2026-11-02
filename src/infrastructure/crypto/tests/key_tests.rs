@@ -179,9 +179,6 @@ fn generate_all_jwks_for_plain_rsa_key_publishes_signing_and_encryption_algs() {
     let algs: Vec<&str> = jwks.iter().map(|(alg, _)| alg.as_str()).collect();
 
     assert_eq!(algs, vec!["RS256", "RSA-OAEP", "RSA-OAEP-256"]);
-    assert!(!algs.contains(&"PS256"));
-    assert!(!algs.contains(&"PS384"));
-    assert!(!algs.contains(&"PS512"));
 }
 
 #[test]

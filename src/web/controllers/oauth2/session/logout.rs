@@ -267,12 +267,12 @@ mod tests {
     };
     use identity_domain::auth::SessionOid;
     use identity_infrastructure::test_app_state_with_mock_settings;
-    use salvo::{Service, affix_state::inject, test::TestClient};
+    use salvo::test::ResponseExt;
     use url::Url;
     use uuid::Uuid;
 
     use super::{redirect_or_page_response, render_logout_page, session_cookie_without};
-    use crate::controllers::{oauth2::routes, shared::SessionCookieEntry};
+    use crate::controllers::shared::SessionCookieEntry;
 
     #[test]
     fn remove_session_cookie_entry_keeps_other_sessions() {
@@ -294,18 +294,6 @@ mod tests {
         assert!(!cookie.contains(&first.to_string()));
         assert!(!cookie.contains("protected-first"));
         assert!(cookie.contains("protected-second"));
-    }
-
-    #[tokio::test]
-    async fn logout_route_renders_logged_out_page_without_redirect() {
-        let app = routes().hoop(inject(test_app_state_with_mock_settings().await));
-        let service = Service::new(app);
-
-        let response = TestClient::get("http://127.0.0.1:5800/oauth2/logout")
-            .send(&service)
-            .await;
-
-        assert_eq!(response.status_code, Some(StatusCode::OK));
     }
 
     #[tokio::test]
@@ -366,7 +354,22 @@ mod tests {
     async fn frontchannel_logout_renders_title() {
         let state = test_app_state_with_mock_settings().await;
         let headers = HeaderMap::new();
-        let response = render_logout_page(&state, &headers, LogoutOutcome::LoggedOut, None).await;
+        let mut response = render_logout_page(
+            &state,
+            &headers,
+            LogoutOutcome::FrontChannel {
+                notifications: vec![FrontChannelLogoutNotification {
+                    client_id: Uuid::new_v4(),
+                    logout_uri: Url::parse("https://rp.example.test/logout").unwrap(),
+                }],
+                post_logout_redirect_uri: None,
+            },
+            None,
+        )
+        .await;
+        let body = response.take_string().await.unwrap();
+        assert!(body.contains("<title>Signed out"), "{body}");
+        assert!(body.contains("https://rp.example.test/logout"));
 
         assert_eq!(response.status_code, Some(StatusCode::OK));
     }

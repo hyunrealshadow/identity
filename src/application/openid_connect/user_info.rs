@@ -32,10 +32,12 @@ use crate::{
         },
     },
     domain::{
-        auth::SessionOid,
+        auth::{SessionOid, SessionStatus, repository::SessionRepository},
+        authorization::ManagementAuthorityRepository,
         client_authorization::{
-            ClientAuthorizationData, ClientAuthorizationRepository, ClientAuthorizationType,
-            DeviceAuthorizationRepository,
+            AccessTokenPrincipal, BusinessAuthorizationSnapshotData, ClientAuthorizationData,
+            ClientAuthorizationRepository, ClientAuthorizationType, DeviceAuthorizationRepository,
+            ManagementAuthorizationSnapshotData,
         },
         key::KeyData,
         openid_connect::{
@@ -43,7 +45,15 @@ use crate::{
             ScopeSet,
             model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
         },
+        rbac::RbacAuthorizationRepository,
         user::{UserOid, repository::UserRepository},
+    },
+    openid_connect::{
+        management::{
+            ManagementLivePorts, has_management_claims, validate_management_authorization,
+            validate_signed_management_snapshot,
+        },
+        rbac as shared,
     },
 };
 
@@ -58,6 +68,33 @@ pub struct UserInfoService {
     /// device issued token belongs to. Optional for services that never see
     /// device tokens.
     device_repo: Option<Arc<dyn DeviceAuthorizationRepository>>,
+    /// Live browser sessions for human bearer validation. Optional only for
+    /// old unit factories; production must supply it so a token cannot outlive
+    /// a revoked, expired or mismatched session.
+    session_repo: Option<Arc<dyn SessionRepository>>,
+    /// Management ports. Management access tokens fail closed when a required
+    /// port is absent; pure self-service tokens do not use them.
+    management_authority_repo: Option<Arc<dyn ManagementAuthorityRepository>>,
+    /// Live business RBAC state. A business token fails closed when absent.
+    rbac_authorization_repo: Option<Arc<dyn RbacAuthorizationRepository>>,
+}
+
+/// Explicit principal returned to protocol consumers such as GraphQL. A
+/// machine token has `user_oid = None`, a client subject and no session.
+#[derive(Debug, Clone)]
+pub struct PrincipalClaims {
+    pub principal: AccessTokenPrincipal,
+    pub user_oid: Option<UserOid>,
+    pub client_oid: Uuid,
+    pub session_oid: Option<SessionOid>,
+    pub scope: ScopeSet,
+    pub claims: Option<ClaimsRequest>,
+    pub audience: Vec<String>,
+    pub auth_time: Option<i64>,
+    pub acr: Option<String>,
+    pub amr: Vec<String>,
+    pub management: Option<ManagementAuthorizationSnapshotData>,
+    pub business: Option<BusinessAuthorizationSnapshotData>,
 }
 
 pub struct TokenClaims {
@@ -91,6 +128,9 @@ impl UserInfoService {
             key_service,
             provider_service,
             device_repo: None,
+            session_repo: None,
+            management_authority_repo: None,
+            rbac_authorization_repo: None,
         }
     }
 
@@ -102,6 +142,30 @@ impl UserInfoService {
         device_repo: Arc<dyn DeviceAuthorizationRepository>,
     ) -> Self {
         self.device_repo = Some(device_repo);
+        self
+    }
+
+    #[must_use]
+    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
+        self.session_repo = Some(session_repo);
+        self
+    }
+
+    #[must_use]
+    pub fn with_management_authority_repository(
+        mut self,
+        repository: Arc<dyn ManagementAuthorityRepository>,
+    ) -> Self {
+        self.management_authority_repo = Some(repository);
+        self
+    }
+
+    #[must_use]
+    pub fn with_rbac_authorization_repository(
+        mut self,
+        repository: Arc<dyn RbacAuthorizationRepository>,
+    ) -> Self {
+        self.rbac_authorization_repo = Some(repository);
         self
     }
 
@@ -248,7 +312,50 @@ impl UserInfoService {
         Err(AppError::from_code(CommonErrorCode::InternalError))
     }
 
+    /// UserInfo-only validation. Machine tokens never satisfy it: the endpoint
+    /// requires a human principal plus `openid`.
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {
+        let validated = self.validate_principal_access_token(raw_token).await?;
+        if validated.principal != AccessTokenPrincipal::User {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        let user_oid = validated
+            .user_oid
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        if !validated.scope.openid {
+            return Err(AppError::from_code(
+                OpenIdConnectErrorCode::InsufficientScope,
+            ));
+        }
+        Ok(TokenClaims {
+            user_oid,
+            client_oid: validated.client_oid,
+            session_oid: validated.session_oid,
+            scope: validated.scope,
+            claims: validated.claims,
+            audience: validated.audience,
+            auth_time: validated.auth_time,
+            acr: validated.acr,
+            amr: validated.amr,
+        })
+    }
+
+    /// Common principal-aware bearer validation for resource servers such as
+    /// GraphQL. Pure self-service tokens keep their previous behavior; a
+    /// management token additionally proves its snapshot against live state.
+    /// Required management ports are fail-closed.
+    #[tracing::instrument(
+        skip_all,
+        name = "access_token.validate_principal",
+        fields(
+            principal = tracing::field::Empty,
+            management = tracing::field::Empty
+        )
+    )]
+    pub async fn validate_principal_access_token(
+        &self,
+        raw_token: &str,
+    ) -> Result<PrincipalClaims, AppError> {
         let header = jwt::decode_header(raw_token)
             .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
 
@@ -322,15 +429,11 @@ impl UserInfoService {
             .and_then(|v| v.as_str())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let user_oid = Uuid::parse_str(sub)
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-
         let token_use = payload
             .claim(JwtClaimNames::TOKEN_USE)
             .and_then(|v| v.as_str())
             .and_then(|value| value.parse::<TokenUse>().ok())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-
         if token_use != TokenUse::AccessToken {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
@@ -356,13 +459,98 @@ impl UserInfoService {
         else {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         };
-        if access_token_data.user_oid != user_oid.to_string() {
+
+        let principal = access_token_data.principal;
+        let user_oid = match principal {
+            AccessTokenPrincipal::User => {
+                let user = Uuid::parse_str(sub)
+                    .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                if access_token_data.user_oid.as_deref() != Some(sub) {
+                    return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+                }
+                Some(UserOid(user))
+            }
+            AccessTokenPrincipal::Client => {
+                let subject = Uuid::parse_str(sub)
+                    .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                if subject != access_token_record.client_oid
+                    || access_token_data.user_oid.is_some()
+                    || access_token_data.session_oid.is_some()
+                    || access_token_data.protected_session_id.is_some()
+                    || access_token_data.device_authorization_oid.is_some()
+                {
+                    return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+                }
+                None
+            }
+        };
+        tracing::Span::current().record("principal", principal.as_str());
+
+        // A signed principal claim is mandatory for new tokens but legacy
+        // tokens without it remain human tokens by serde default.
+        if let Some(signed_principal) = payload
+            .claim(JwtClaimNames::PRINCIPAL_KIND)
+            .and_then(|value| value.as_str())
+            && signed_principal != principal.as_str()
+        {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
-        // A device issued access token stays valid only while its relation
-        // does: revocation stops online validation immediately. Self contained
-        // JWTs held by resource servers outside this deployment keep working
-        // until they expire.
+
+        // Live client state applies to every token, not only management ones.
+        let live_client = self
+            .client_repo
+            .find_by_oid(access_token_record.client_oid)
+            .await
+            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
+            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+
+        let mut session_has_aal2 = None;
+        let device_linked = access_token_data.device_authorization_oid.is_some();
+        if let Some(user_oid) = user_oid {
+            // Disabled and locked users cannot keep using a human token.
+            let user = self
+                .user_repo
+                .find_by_oid(user_oid)
+                .await
+                .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
+                .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            if !user.enabled || user.locked {
+                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
+                    .with_param("reason", "user is disabled or locked"));
+            }
+
+            match access_token_data.session_oid {
+                Some(session_oid) => {
+                    if let Some(session_repo) = &self.session_repo {
+                        let session = session_repo
+                            .find_by_oid(session_oid)
+                            .await
+                            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
+                            .ok_or_else(|| {
+                                AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
+                            })?;
+                        let now = Utc::now();
+                        let active = session.revoked_at.is_none()
+                            && session.status == SessionStatus::ACTIVE
+                            && session.expires_at.is_none_or(|expiry| expiry > now)
+                            && session.user_oid.to_string() == sub;
+                        if !active {
+                            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
+                                .with_param("reason", "session is not active for the user"));
+                        }
+                        session_has_aal2 = Some(
+                            session.effective_acr(now) == Some(identity_domain::auth::ACR_AAL2),
+                        );
+                    }
+                }
+                None if !device_linked => {
+                    return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
+                        .with_param("reason", "human token requires a live session"));
+                }
+                None => {}
+            }
+        }
+
         if let Some(device_authorization_oid) = access_token_data
             .device_authorization_oid
             .as_deref()
@@ -389,11 +577,91 @@ impl UserInfoService {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 
-        if !scope.openid {
-            return Err(AppError::from_code(
-                OpenIdConnectErrorCode::InsufficientScope,
-            ));
+        let resource_audience = audience
+            .iter()
+            .filter(|uri| identity_domain::openid_connect::resource::valid_resource_uri(uri))
+            .cloned()
+            .collect::<Vec<_>>();
+        if scope.has_resource_permissions() && !resource_audience.is_empty() {
+            let selection = self
+                .provider_service
+                .select_resources(
+                    &resource_audience,
+                    &resource_audience,
+                    &access_token_data.scope,
+                )
+                .await
+                .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+            if ScopeSet::parse(&selection.scope).ok().as_ref() != Some(&scope) {
+                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            }
         }
+        let persisted_issuance = access_token_data.management.as_ref();
+        let persisted_management = shared::management_snapshot(persisted_issuance);
+        let persisted_business = shared::business_snapshot(persisted_issuance);
+        let machine_management =
+            principal == AccessTokenPrincipal::Client && scope.has_management_scopes();
+        if machine_management && persisted_business.is_none() {
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        let management = persisted_management.is_some()
+            || (principal == AccessTokenPrincipal::User && scope.has_management_scopes());
+        if management {
+            let persisted = persisted_management
+                .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            validate_signed_management_snapshot(persisted, &payload)?;
+            validate_management_authorization(
+                ManagementLivePorts {
+                    binding_repo: self.management_authority_repo.as_ref(),
+                    provider_service: &self.provider_service,
+                },
+                &live_client,
+                persisted,
+                &access_token_data.scope,
+                &scope,
+                principal,
+            )
+            .await?;
+        } else if has_management_claims(&payload) {
+            // Signed management claims without a persisted management snapshot
+            // are a tampering signal.
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+
+        let resource_is_rbac = if resource_audience.is_empty() {
+            false
+        } else {
+            self.provider_service
+                .has_rbac_resource(&resource_audience)
+                .await
+                .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
+        };
+        if let Some(persisted) = persisted_business {
+            shared::validate_signed_business_snapshot(persisted, &payload)?;
+            shared::validate_business_authorization(
+                shared::BusinessLivePorts {
+                    repository: self.rbac_authorization_repo.as_ref(),
+                    provider_service: &self.provider_service,
+                },
+                &live_client,
+                persisted,
+                &access_token_data.scope,
+                &scope,
+                principal,
+                user_oid,
+                &audience,
+            )
+            .await?;
+        } else if shared::has_business_claims(&payload) {
+            // Signed business claims without a persisted snapshot are a
+            // tampering signal.
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        } else if resource_is_rbac {
+            // A token for a resource that now uses RBAC must carry a business
+            // snapshot. This invalidates legacy tokens across a policy switch.
+            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+        }
+        tracing::Span::current().record("management", management);
 
         let claims = payload
             .claim("claims")
@@ -405,10 +673,17 @@ impl UserInfoService {
         let auth_time = payload
             .claim(JwtClaimNames::AUTH_TIME)
             .and_then(|value| value.as_i64());
-        let acr = payload
+        let mut acr = payload
             .claim(JwtClaimNames::ACR)
             .and_then(|value| value.as_str())
             .map(str::to_owned);
+        if acr.as_deref() == Some(identity_domain::auth::ACR_AAL2)
+            && (session_has_aal2 == Some(false)
+                || !auth_time
+                    .is_some_and(|time| (0..=3600).contains(&(Utc::now().timestamp() - time))))
+        {
+            acr = Some(identity_domain::auth::ACR_AAL1.to_owned());
+        }
         let amr = payload
             .claim(JwtClaimNames::AMR)
             .cloned()
@@ -417,8 +692,9 @@ impl UserInfoService {
             .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?
             .unwrap_or_default();
 
-        Ok(TokenClaims {
-            user_oid: UserOid::from(user_oid),
+        Ok(PrincipalClaims {
+            principal,
+            user_oid,
             client_oid: access_token_record.client_oid,
             session_oid: access_token_data.session_oid,
             scope,
@@ -427,6 +703,8 @@ impl UserInfoService {
             auth_time,
             acr,
             amr,
+            management: persisted_management.cloned(),
+            business: persisted_business.cloned(),
         })
     }
 
@@ -502,4 +780,143 @@ fn build_user_info_signer(
     alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
     asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes()).map_err(AppError::internal)
+}
+
+#[cfg(test)]
+mod tests {
+    use identity_domain::client_authorization::ManagementGrantKindData;
+    use josekit::jwt;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use crate::openid_connect::management::{
+        has_management_claims, signed_management_snapshot, validate_signed_management_snapshot,
+    };
+
+    use super::JwtClaimNames;
+
+    const GRANT_VERSION: &str = "22222222-2222-2222-2222-222222222222";
+    const POLICY_VERSION: &str = "33333333-3333-3333-3333-333333333333";
+    const CLIENT_POLICY_VERSION: &str = "44444444-4444-4444-4444-444444444444";
+
+    fn management_payload() -> jwt::JwtPayload {
+        let mut payload = jwt::JwtPayload::new();
+        payload
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_GRANT_KIND,
+                Some(json!("user_rbac")),
+            )
+            .unwrap();
+        payload
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_GRANT_OID,
+                Some(json!("11111111-1111-1111-1111-111111111111")),
+            )
+            .unwrap();
+        payload
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_GRANT_VERSION,
+                Some(json!(GRANT_VERSION)),
+            )
+            .unwrap();
+        payload
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_POLICY_VERSION,
+                Some(json!(POLICY_VERSION)),
+            )
+            .unwrap();
+        payload
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
+                Some(json!(CLIENT_POLICY_VERSION)),
+            )
+            .unwrap();
+        payload
+            .set_claim(JwtClaimNames::MANAGEMENT_ROLE, Some(json!(null)))
+            .unwrap();
+        payload
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_PERMISSIONS,
+                Some(json!(["management.user.read"])),
+            )
+            .unwrap();
+        payload
+    }
+
+    #[test]
+    fn absolute_management_claims_round_trip_through_the_validator_parser() {
+        let payload = management_payload();
+        let snapshot = signed_management_snapshot(&payload).unwrap().unwrap();
+        assert_eq!(snapshot.grant_kind, ManagementGrantKindData::UserRbac);
+        assert_eq!(
+            snapshot.grant_version,
+            Uuid::parse_str(GRANT_VERSION).unwrap()
+        );
+        assert_eq!(
+            snapshot.policy_version,
+            Uuid::parse_str(POLICY_VERSION).unwrap()
+        );
+        assert_eq!(
+            snapshot.client_policy_version,
+            Uuid::parse_str(CLIENT_POLICY_VERSION).unwrap()
+        );
+        assert_eq!(
+            snapshot.permissions,
+            vec!["management.user.read".to_owned()]
+        );
+        assert!(has_management_claims(&payload));
+    }
+
+    #[test]
+    fn signed_snapshot_must_match_oid_version_and_client_policy() {
+        let persisted = signed_management_snapshot(&management_payload())
+            .unwrap()
+            .unwrap();
+        validate_signed_management_snapshot(&persisted, &management_payload()).unwrap();
+
+        let mut changed_oid = management_payload();
+        changed_oid
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_GRANT_OID,
+                Some(json!("22222222-2222-2222-2222-222222222222")),
+            )
+            .unwrap();
+        assert!(validate_signed_management_snapshot(&persisted, &changed_oid).is_err());
+
+        let mut changed_version = management_payload();
+        changed_version
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_GRANT_VERSION,
+                Some(json!("55555555-5555-5555-5555-555555555555")),
+            )
+            .unwrap();
+        assert!(validate_signed_management_snapshot(&persisted, &changed_version).is_err());
+
+        let mut changed_client_policy = management_payload();
+        changed_client_policy
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
+                Some(json!("66666666-6666-6666-6666-666666666666")),
+            )
+            .unwrap();
+        assert!(validate_signed_management_snapshot(&persisted, &changed_client_policy).is_err());
+    }
+
+    #[test]
+    fn partial_management_claims_fail_closed() {
+        // JwtPayload has no remove; a new payload with one claim is enough.
+        let mut partial = jwt::JwtPayload::new();
+        partial
+            .set_claim(
+                JwtClaimNames::MANAGEMENT_GRANT_KIND,
+                Some(json!("administrator_binding")),
+            )
+            .unwrap();
+        assert!(signed_management_snapshot(&partial).is_err());
+        assert!(
+            signed_management_snapshot(&jwt::JwtPayload::new())
+                .unwrap()
+                .is_none()
+        );
+    }
 }

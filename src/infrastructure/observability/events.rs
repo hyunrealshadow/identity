@@ -187,7 +187,12 @@ enum RenderedValue {
     Boolean(bool),
 }
 
-fn render(event: BusinessEvent) -> RenderedEvent {
+fn render(mut event: BusinessEvent) -> RenderedEvent {
+    if let Some(correlation) = super::context::current_request_correlation() {
+        event
+            .attributes
+            .push(("request.id", EventValue::Text(correlation.request_id)));
+    }
     let mut bytes = event.name.len() + 32;
     if let Some(outcome) = event.outcome {
         bytes += outcome.len() + 8;
@@ -310,9 +315,13 @@ const fn severity_text(severity: EventSeverity) -> &'static str {
 #[cfg(test)]
 mod tests {
     use std::{
-        sync::{Arc, Mutex},
+        sync::{
+            Mutex,
+            atomic::{AtomicBool, Ordering},
+            mpsc::{self, Receiver, Sender, SyncSender},
+        },
         thread,
-        time::{Duration, Instant},
+        time::Duration,
     };
 
     use identity_application::observability::{
@@ -327,17 +336,26 @@ mod tests {
     use super::{EventPipeline, RenderedValue, render};
     use crate::config::EventsPipelineConfig;
 
-    #[derive(Clone, Debug, Default)]
-    struct CollectingExporter {
-        records: Arc<Mutex<Vec<String>>>,
+    #[derive(Debug)]
+    struct BlockingExporter {
+        entered: SyncSender<()>,
+        release: Mutex<Receiver<()>>,
+        records: Sender<String>,
+        first: AtomicBool,
     }
-
-    impl LogExporter for CollectingExporter {
+    impl LogExporter for BlockingExporter {
         async fn export(&self, batch: LogBatch<'_>) -> OTelSdkResult {
-            let mut records = self.records.lock().unwrap();
+            if self.first.swap(false, Ordering::SeqCst) {
+                self.entered.send(()).unwrap();
+                self.release
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap();
+            }
             for (record, _) in batch.iter() {
                 if let Some(name) = record.event_name() {
-                    records.push(name.to_owned());
+                    self.records.send(name.to_owned()).unwrap();
                 }
             }
             Ok(())
@@ -386,31 +404,54 @@ mod tests {
 
     #[test]
     fn full_queue_drops_instead_of_blocking() {
-        let exporter = CollectingExporter::default();
-        let records = Arc::clone(&exporter.records);
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::channel();
+        let (records_tx, records_rx) = mpsc::channel();
         let provider = SdkLoggerProvider::builder()
-            .with_simple_exporter(exporter)
+            .with_simple_exporter(BlockingExporter {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+                records: records_tx,
+                first: AtomicBool::new(true),
+            })
             .build();
-        let config = EventsPipelineConfig {
-            queue_capacity: 1,
-            queue_bytes: 1024 * 1024,
-        };
-        let pipeline = EventPipeline::start(&config, provider.logger("identity.events.test"));
-
-        // Emitting more than the queue can hold must return immediately.
-        for index in 0..100 {
-            pipeline.emit(
-                BusinessEvent::business("test.event")
-                    .attribute("index", EventValue::Integer(index)),
-            );
-        }
-
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while records.lock().unwrap().is_empty() && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(10));
-        }
-
-        // At least one record is eventually exported; later emits were dropped.
-        assert!(!records.lock().unwrap().is_empty());
+        let pipeline = EventPipeline::start(
+            &EventsPipelineConfig {
+                queue_capacity: 1,
+                queue_bytes: 1024 * 1024,
+            },
+            provider.logger("identity.events.test"),
+        );
+        pipeline.emit(BusinessEvent::business("test.first"));
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("worker must enter exporter");
+        pipeline.emit(BusinessEvent::business("test.queued"));
+        let (done_tx, done_rx) = mpsc::channel();
+        let emitter = pipeline.clone();
+        let worker = thread::spawn(move || {
+            emitter.emit(BusinessEvent::business("test.dropped"));
+            done_tx.send(()).unwrap();
+        });
+        let nonblocking = done_rx.recv_timeout(Duration::from_secs(2));
+        // Always release the exporter before asserting so a blocking regression cannot hang the suite.
+        release_tx.send(()).unwrap();
+        worker.join().unwrap();
+        nonblocking.expect("emitting into a full queue must not wait for the exporter");
+        assert_eq!(
+            records_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            "test.first"
+        );
+        assert_eq!(
+            records_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            "test.queued"
+        );
+        // A sentinel proves the worker has passed the rejected record, without a timing-based absence assertion.
+        pipeline.emit(BusinessEvent::business("test.sentinel"));
+        assert_eq!(
+            records_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            "test.sentinel"
+        );
+        pipeline.close();
     }
 }

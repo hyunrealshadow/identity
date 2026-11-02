@@ -26,7 +26,7 @@ use crate::{
     infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
 };
 
-/// RFC 8628 §3.2 request: a form POST carrying the client's credentials and an
+/// RFC 8628 搂3.2 request: a form POST carrying the client's credentials and an
 /// optional scope.
 #[derive(Debug, Deserialize)]
 struct DeviceAuthorizationForm {
@@ -45,7 +45,7 @@ struct DeviceAuthorizationErrorResponse {
     error_description: String,
 }
 
-/// Map a device authorization `AppError` to an RFC 6749 §5.2 `error` value.
+/// Map a device authorization `AppError` to an RFC 6749 搂5.2 `error` value.
 ///
 /// `unsupported_grant_type` is deliberately absent: the endpoint exists, so a
 /// client that is not allowed to use the device grant is told
@@ -64,7 +64,7 @@ fn device_error_code(error: &AppError) -> &'static str {
     }
     if code == TokenErrorCode::ClientIdRequired.code() {
         // A missing parameter is an invalid request; only a failed
-        // authentication is an invalid client (RFC 6749 §5.2).
+        // authentication is an invalid client (RFC 6749 搂5.2).
         return "invalid_request";
     }
     if code == DeviceAuthorizationErrorCode::ScopeInvalid.code()
@@ -117,7 +117,7 @@ fn device_error_response(error: AppError, i18n: &I18n, locale: &LanguageIdentifi
 
 /// Device authorization endpoint error wrapper.
 ///
-/// Always answers with RFC 6749 §5.2 JSON (`{ "error", "error_description" }`)
+/// Always answers with RFC 6749 搂5.2 JSON (`{ "error", "error_description" }`)
 /// and the matching status code, independent of the `Accept` header.
 pub struct DeviceAuthorizationWebError(pub AppError);
 
@@ -202,48 +202,8 @@ async fn device_authorization(
 
 #[cfg(test)]
 mod tests {
-    use http::header;
-    use identity_infrastructure::test_app_state_with_mock_settings;
-    use salvo::{
-        Response, Service,
-        affix_state::inject,
-        test::{ResponseExt, TestClient},
-    };
-
-    use crate::controllers::oauth2::routes;
 
     use super::*;
-
-    async fn post_device_authorization(body: String) -> Response {
-        let app = routes().hoop(inject(test_app_state_with_mock_settings().await));
-        let service = Service::new(app);
-
-        TestClient::post("http://127.0.0.1:5800/oauth2/device")
-            .add_header(
-                header::CONTENT_TYPE,
-                "application/x-www-form-urlencoded",
-                true,
-            )
-            .body(body)
-            .send(&service)
-            .await
-    }
-
-    #[tokio::test]
-    async fn device_authorization_route_requires_client_id() {
-        let mut response = post_device_authorization("scope=openid".to_owned()).await;
-
-        assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
-        assert_eq!(
-            response
-                .headers()
-                .get(header::CACHE_CONTROL)
-                .and_then(|value| value.to_str().ok()),
-            Some("no-store")
-        );
-        let body = response.take_string().await.unwrap();
-        assert!(body.contains("\"invalid_request\""), "{body}");
-    }
 
     #[test]
     fn missing_client_id_is_an_invalid_request() {

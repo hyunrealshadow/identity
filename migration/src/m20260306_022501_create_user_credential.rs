@@ -1,3 +1,5 @@
+use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::Func;
 use sea_orm_migration::{
     async_trait,
     prelude::{
@@ -38,7 +40,10 @@ impl MigrationTrait for Migration {
                     .table(UserCredential::Table)
                     .if_not_exists()
                     .col(pk_auto(UserCredential::Id).big_integer())
-                    .col(uuid_uniq(UserCredential::Oid).default(Expr::cust("gen_random_uuid()")))
+                    .col(
+                        uuid_uniq(UserCredential::Oid)
+                            .default(Func::cust(Alias::new("gen_random_uuid"))),
+                    )
                     .col(big_integer(UserCredential::UserId))
                     .col(string(UserCredential::Type))
                     .col(json_binary(UserCredential::Data))

@@ -144,14 +144,6 @@ async fn parse_protected_session_ids(
             });
             continue;
         }
-
-        #[cfg(test)]
-        if let Ok(session_oid) = Uuid::parse_str(&protected_session_id) {
-            entries.push(SessionCookieEntry {
-                session_oid: SessionOid(session_oid),
-                protected_session_id,
-            });
-        }
     }
     entries
 }
@@ -185,24 +177,11 @@ pub fn build_session_cookie_from_protected_ids(protected_ids: &[String]) -> Stri
 }
 
 pub async fn build_session_cookie(ctx: &AppState, oids: &[SessionOid]) -> Result<String, AppError> {
-    #[cfg(test)]
-    {
-        let _ = ctx;
-        let ids = oids
-            .iter()
-            .map(|oid| Uuid::from(*oid).to_string())
-            .collect::<Vec<_>>();
-        Ok(build_session_cookie_from_protected_ids(&ids))
+    let mut protected_ids = Vec::with_capacity(oids.len());
+    for oid in oids {
+        protected_ids.push(protect_session_id(ctx, *oid).await?);
     }
-
-    #[cfg(not(test))]
-    {
-        let mut protected_ids = Vec::with_capacity(oids.len());
-        for oid in oids {
-            protected_ids.push(protect_session_id(ctx, *oid).await?);
-        }
-        Ok(build_session_cookie_from_protected_ids(&protected_ids))
-    }
+    Ok(build_session_cookie_from_protected_ids(&protected_ids))
 }
 
 pub async fn build_selected_session_cookie(

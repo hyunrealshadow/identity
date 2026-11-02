@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     error::AppError,
-    setting::{LoginClientIdSetting, SettingsSource},
+    setting::{AppSettings, LoginClientIdSetting, SettingsSource},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,6 +15,7 @@ pub struct RuntimeConfigurationResponse {
     pub version: i64,
     pub oauth_client: OAuthClientRuntimeConfiguration,
     pub refresh_after: u64,
+    pub applications: AppSettings,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,6 +57,7 @@ impl LoginRuntimeService {
         else {
             return Ok(None);
         };
+        let applications = self.settings.snapshot().section::<AppSettings>();
         Ok(Some(RuntimeConfigurationResponse {
             version: 1,
             oauth_client: OAuthClientRuntimeConfiguration {
@@ -65,6 +67,7 @@ impl LoginRuntimeService {
                 expires_at: config.secret_expires_at,
             },
             refresh_after: 60,
+            applications,
         }))
     }
 

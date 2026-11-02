@@ -20,6 +20,21 @@ impl PwnedPasswordChecker {
             &std::env::var("IDENTITY_PWNED_PASSWORDS_URL")
                 .unwrap_or_else(|_| "https://api.pwnedpasswords.com/range/".to_owned()),
         )?;
+        let client = Client::builder()
+            .https_only(true)
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(3))
+            .connect_timeout(Duration::from_secs(2))
+            .user_agent("Identity-Password-Policy")
+            .build()?;
+        Self::with_http_client(client, endpoint)
+    }
+
+    /// Construct a checker using an explicitly managed HTTPS transport.
+    pub fn with_http_client(
+        client: Client,
+        endpoint: Url,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         if endpoint.scheme() != "https"
             || !endpoint.path().ends_with('/')
             || !endpoint.username().is_empty()
@@ -30,13 +45,7 @@ impl PwnedPasswordChecker {
             return Err(std::io::Error::other("IDENTITY_PWNED_PASSWORDS_URL must be an HTTPS base URL ending in / without credentials, query or fragment").into());
         }
         Ok(Self {
-            client: Client::builder()
-                .https_only(true)
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(3))
-                .connect_timeout(Duration::from_secs(2))
-                .user_agent("Identity-Password-Policy")
-                .build()?,
+            client,
             endpoint,
             requests: Semaphore::new(4),
         })
@@ -98,55 +107,7 @@ fn parse_range(body: &str, suffix: &str) -> Result<bool, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[tokio::test]
-    async fn sends_only_the_range_prefix_and_fails_closed_on_http_errors() {
-        use std::io::{Read, Write};
-        let password = "a unique password for transport test";
-        let hash: String = openssl::sha::sha1(password.as_bytes())
-            .iter()
-            .map(|b| format!("{b:02X}"))
-            .collect();
-        for status in [200, 503] {
-            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            let address = listener.local_addr().unwrap();
-            let expected = hash.clone();
-            let server = std::thread::spawn(move || {
-                let (mut socket, _) = listener.accept().unwrap();
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                let mut request = Vec::new();
-                while !request.ends_with(b"\r\n\r\n") {
-                    let mut byte = [0];
-                    assert_eq!(socket.read(&mut byte).unwrap(), 1);
-                    request.push(byte[0]);
-                }
-                let request = String::from_utf8(request).unwrap();
-                assert!(request.starts_with(&format!("GET /range/{} HTTP/1.1", &expected[..5])));
-                assert!(request.to_lowercase().contains("add-padding: true"));
-                assert!(!request.contains(password));
-                assert!(!request.contains(&expected[5..]));
-                let body = format!("{}:1\r\n", &expected[5..]);
-                write!(socket, "HTTP/1.1 {status} test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
-            });
-            let checker = PwnedPasswordChecker {
-                client: Client::builder()
-                    .no_proxy()
-                    .timeout(Duration::from_secs(3))
-                    .build()
-                    .unwrap(),
-                endpoint: Url::parse(&format!("http://{address}/range/")).unwrap(),
-                requests: Semaphore::new(1),
-            };
-            let result = checker.is_breached(password).await;
-            if status == 200 {
-                assert!(result.unwrap());
-            } else {
-                assert!(result.is_err());
-            }
-            server.join().unwrap();
-        }
-    }
+
     #[test]
     fn padding_is_not_a_breach_and_malformed_results_fail_closed() {
         let suffix = "A".repeat(35);

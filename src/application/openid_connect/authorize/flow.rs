@@ -1,5 +1,6 @@
 use super::{
     AuthorizeService, code_flow::AuthorizationCodeContext, implicit_flow::AuthenticationContext,
+    management::ApprovalAuthentication,
 };
 use crate::{
     error::{AppError, codes::authorize::AuthorizeErrorCode},
@@ -7,8 +8,9 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use identity_domain::{
-    auth::{ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, SessionOid},
+    auth::{ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, SessionOid, SessionStatus},
     openid_connect::AuthorizationRequestData,
+    user::UserOid,
 };
 use url::Url;
 use uuid::Uuid;
@@ -149,6 +151,64 @@ impl AuthorizeService {
         result
     }
 
+    /// Approval must use a live, matching session. When the optional port is
+    /// absent (old unit factories) the caller-provided context is retained;
+    /// production always supplies the repository. A live session's effective
+    /// ACR is used so an expired AAL2 window cannot be promoted again from
+    /// historical AMR.
+    async fn validated_approval_authentication(
+        &self,
+        session_oid: SessionOid,
+        user_oid: Uuid,
+        auth_time: Option<i64>,
+        acr: Option<String>,
+        amr: Vec<String>,
+    ) -> Result<(Option<i64>, Option<String>, Vec<String>), AppError> {
+        let Some(session_repo) = &self.session_repo else {
+            return Ok((auth_time, acr, amr));
+        };
+        let session = session_repo
+            .find_by_oid(session_oid)
+            .await
+            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
+            .ok_or_else(|| {
+                AppError::from_code(AuthorizeErrorCode::AuthzInteractionConflict)
+                    .with_param("reason", "approval session was not found")
+            })?;
+        let now = Utc::now();
+        let active = session.status == SessionStatus::ACTIVE
+            && session.revoked_at.is_none()
+            && session.expires_at.is_none_or(|expires_at| expires_at > now)
+            && session.user_oid == user_oid;
+        if !active {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::AuthzInteractionConflict)
+                    .with_param("reason", "approval session is not active for the user"),
+            );
+        }
+        Ok((
+            auth_time,
+            session.effective_acr(now).map(str::to_owned),
+            session.amr,
+        ))
+    }
+
+    async fn ensure_front_channel_user_enabled(&self, user_oid: Uuid) -> Result<(), AppError> {
+        let user = self
+            .user_repo
+            .find_by_oid(UserOid(user_oid))
+            .await
+            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
+            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound))?;
+        if !user.enabled || user.locked {
+            return Err(
+                AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound)
+                    .with_param("reason", "user is disabled or locked"),
+            );
+        }
+        Ok(())
+    }
+
     async fn approve_authorization_request_inner(
         &self,
         authorization_request_id: Uuid,
@@ -166,14 +226,41 @@ impl AuthorizeService {
             .load_stored_authorization_request(authorization_request_id)
             .await?;
         let request = stored.request;
+        let _client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+            AuthorizeErrorCode::StoredClientIdInvalid,
+        ))?;
+
+        let (auth_time, acr, amr) = self
+            .validated_approval_authentication(session_oid, user_oid, auth_time, acr, amr)
+            .await?;
+        let request = self
+            .clip_management_for_approval(
+                &request,
+                user_oid,
+                ApprovalAuthentication {
+                    acr: acr.as_deref(),
+                    amr: &amr,
+                },
+            )
+            .await?;
+        let rbac = self.clip_rbac_for_approval(&request, user_oid).await?;
+        let request = rbac.request;
+        let rbac_snapshot = rbac.snapshot;
         let protected_session_id = match protected_session_id {
             Some(protected_session_id) => protected_session_id,
             None => self.encrypt_session_id(session_oid).await?,
         };
 
         let response_type = request.response_type.clone();
+        if response_type.is_implicit() || response_type.uses_front_channel_response() {
+            self.ensure_front_channel_user_enabled(user_oid).await?;
+        }
 
         let redirect = if response_type.is_implicit() {
+            if rbac_snapshot.is_some() {
+                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", response_type.to_string()));
+            }
             self.approve_implicit_flow(
                 &request,
                 session_oid,
@@ -188,6 +275,10 @@ impl AuthorizeService {
             )
             .await?
         } else if response_type.uses_front_channel_response() {
+            if rbac_snapshot.is_some() {
+                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
+                    .with_param("response_type", response_type.to_string()));
+            }
             self.approve_hybrid_flow(
                 &request,
                 authorization_request_id,
@@ -215,6 +306,7 @@ impl AuthorizeService {
                         acr: acr.as_deref(),
                         amr: &amr,
                     },
+                    rbac_snapshot: rbac_snapshot.as_ref(),
                 },
             )
             .await?

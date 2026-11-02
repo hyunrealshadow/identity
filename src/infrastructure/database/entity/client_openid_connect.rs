@@ -69,6 +69,12 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::client_openid_connect_credential::Entity")]
+    Credentials,
+    #[sea_orm(has_many = "super::client_openid_connect_platform::Entity")]
+    Platforms,
+    #[sea_orm(has_many = "super::client_openid_connect_cors_origin::Entity")]
+    CorsOrigins,
     #[sea_orm(
         belongs_to = "super::client::Entity",
         from = "Column::ClientId",
@@ -86,3 +92,19 @@ impl Related<ClientEntity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Related<super::client_openid_connect_credential::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Credentials.def()
+    }
+}
+impl Related<super::client_openid_connect_platform::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Platforms.def()
+    }
+}
+impl Related<super::client_openid_connect_cors_origin::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::CorsOrigins.def()
+    }
+}
