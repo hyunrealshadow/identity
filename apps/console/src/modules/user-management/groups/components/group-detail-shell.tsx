@@ -1,3 +1,4 @@
+import { GroupDetailContext } from './group-detail-context'
 import { Button, Skeleton } from '@heroui/react'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
@@ -91,7 +92,9 @@ export function GroupDetailShell({ groupId }: { groupId: string }) {
         </div>
       </header>
       <GroupDetailTabs groupId={groupId} current={current} />
-      <Outlet />
+      <GroupDetailContext.Provider value={query}>
+        <Outlet />
+      </GroupDetailContext.Provider>
     </>
   )
 }

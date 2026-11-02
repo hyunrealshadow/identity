@@ -1,3 +1,4 @@
+import { RoleDetailContext } from './role-detail-context'
 import { Button, Skeleton } from '@heroui/react'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
@@ -94,7 +95,9 @@ export function RoleDetailShell({ roleId }: { roleId: string }) {
         </div>
       </header>
       <RoleDetailTabs roleId={roleId} current={current} />
-      <Outlet />
+      <RoleDetailContext.Provider value={query}>
+        <Outlet />
+      </RoleDetailContext.Provider>
     </>
   )
 }

@@ -1,3 +1,4 @@
+import { useRoleDetailContext } from '../components/role-detail-context'
 import {
   Alert,
   Button,
@@ -16,9 +17,7 @@ import { LocalizedTextField } from '#/components/localized-text-field'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
 import {
-  ConsoleRoleDocument,
   type ConsoleRoleQuery,
-  type ConsoleRoleQueryVariables,
   type RoleStateInput,
   type UpdateRoleInput,
 } from '#/gql/graphql'
@@ -51,7 +50,7 @@ import {
   roleIsBuiltIn,
   withRoleDisplayFields,
 } from '#/modules/user-management/roles/lib/role-localization'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import {
   rbacFieldErrors,
@@ -91,7 +90,7 @@ function roleMetadataChanged(
   return hasLocalizedDraftChanges(withRoleDisplayFields(role), draft)
 }
 
-export function RoleDetailPage({ roleId }: { roleId: string }) {
+export function RoleDetailPage() {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -100,16 +99,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const roleQuery = useConsoleQuery<
-    ConsoleRoleQuery,
-    ConsoleRoleQueryVariables
-  >(
-    ConsoleRoleDocument,
-    scope.rolesRead ? { id: roleId } : null,
-    'ConsoleRole',
-    scope.rolesRead,
-    'missing_role',
-  )
+  const roleQuery = useRoleDetailContext()
   const mutations = useRoleMutations()
   const [draft, setDraft] = useState<LocalizedDraft | null>(null)
   const [localErrors, setLocalErrors] = useState<
@@ -147,7 +137,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
         <RbacAccessRestricted
           title="rolesNoReadTitle"
           description="rolesNoReadDescription"
-          stepUp={scope.roleReadStepUp}
+
           onBack={() => void navigate({ to: '/roles' })}
           backLabel="backToRoles"
         />
@@ -371,7 +361,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
                 <h2 className="text-base font-semibold">
                   {t('roleSettingsTitle')}
                 </h2>
-                {!builtIn && scope.roleWriteReady ? (
+                {!builtIn && scope.rolesWrite ? (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -463,7 +453,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
                           onChange={(value) => change('names', value)}
                           isRequired
                           isDisabled={pending}
-                          isReadOnly={builtIn || !scope.roleWriteReady}
+                          isReadOnly={builtIn || !scope.rolesWrite}
                           maxLength={256}
                           error={
                             localErrors.metadata
@@ -491,7 +481,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
                           onChange={(value) => change('descriptions', value)}
                           multiline
                           isDisabled={pending}
-                          isReadOnly={builtIn || !scope.roleWriteReady}
+                          isReadOnly={builtIn || !scope.rolesWrite}
                           maxLength={1024}
                           error={
                             fieldErrors.description ?? fieldErrors.descriptions
@@ -504,7 +494,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
                         type="button"
                         isDisabled={
                           pending ||
-                          !scope.roleWriteReady ||
+                          !scope.rolesWrite ||
                           !versionReady ||
                           !metadataChanged
                         }
@@ -520,7 +510,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
                       <Button
                         type="button"
                         variant="secondary"
-                        isDisabled={pending || !scope.roleWriteReady}
+                        isDisabled={pending || !scope.rolesWrite}
                         onPress={() => {
                           initialized.current = undefined
                           setDraft(draftFromRole(readyRole))
@@ -542,7 +532,7 @@ export function RoleDetailPage({ roleId }: { roleId: string }) {
 
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {!builtIn && scope.roleWriteReady ? (
+              {!builtIn && scope.rolesWrite ? (
                 <RoleStateDialog
                   action={readyRole.enabled ? 'disable' : 'enable'}
                   role={readyRole}

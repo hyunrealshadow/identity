@@ -4,11 +4,9 @@ import { RoleDetailPage } from '#/modules/user-management/roles/pages/role-detai
 
 function RoleDetailRouteComponent() {
   const { roleId } = Route.useParams()
-  return <RoleDetailPage key={roleId} roleId={roleId} />
+  return <RoleDetailPage key={roleId} />
 }
 
-export const Route = createFileRoute(
-  '/_app/(user-management)/roles/$roleId/',
-)({
+export const Route = createFileRoute('/_app/(user-management)/roles/$roleId/')({
   component: RoleDetailRouteComponent,
 })

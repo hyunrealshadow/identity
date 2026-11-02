@@ -4,7 +4,7 @@ import { GroupDetailPage } from '#/modules/user-management/groups/pages/group-de
 
 function GroupDetailRouteComponent() {
   const { groupId } = Route.useParams()
-  return <GroupDetailPage key={groupId} groupId={groupId} />
+  return <GroupDetailPage key={groupId} />
 }
 
 export const Route = createFileRoute(

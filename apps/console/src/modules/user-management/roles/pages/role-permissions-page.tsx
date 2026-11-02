@@ -1,3 +1,4 @@
+import { useRoleDetailContext } from '../components/role-detail-context'
 import {
   Alert,
   Button,
@@ -16,12 +17,7 @@ import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { ErrorDetails } from '#/components/error-details'
 import { StepUpPanel } from '#/components/step-up-panel'
-import {
-  ConsoleRoleDocument,
-  type ConsoleRoleQuery,
-  type ConsoleRoleQueryVariables,
-  type SetRolePermissionsInput,
-} from '#/gql/graphql'
+import { type SetRolePermissionsInput } from '#/gql/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -47,7 +43,7 @@ import {
   type PermissionMembershipState,
   type StagedPermission,
 } from '#/modules/user-management/roles/lib/permission-selection'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import { type RbacFeedbackState as FeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
@@ -106,16 +102,7 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const roleQuery = useConsoleQuery<
-    ConsoleRoleQuery,
-    ConsoleRoleQueryVariables
-  >(
-    ConsoleRoleDocument,
-    scope.rolesRead ? { id: roleId } : null,
-    'ConsoleRole',
-    scope.rolesRead,
-    'missing_role',
-  )
+  const roleQuery = useRoleDetailContext()
   const membership = useRoleMembership(
     roleId,
     Boolean(scope.rolesRead && scope.permissionRead),
@@ -217,7 +204,7 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
   const localizedRole = role ? withRoleDisplayFields(role) : null
   const builtIn = localizedRole ? roleIsBuiltIn(localizedRole) : false
 
-  const canWrite = !builtIn && scope.roleWriteReady && Boolean(role?.version)
+  const canWrite = !builtIn && scope.rolesWrite && Boolean(role?.version)
   const resourceOptions = useMemo(
     () => [
       ...new Map([
@@ -269,7 +256,7 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
               ? 'rolesNoReadDescription'
               : 'rolePermissionsNoCatalogDescription'
           }
-          stepUp={!scope.rolesRead ? scope.roleReadStepUp : false}
+
           onBack={() => void navigate({ to: '/roles' })}
           backLabel="backToRoles"
         />
@@ -457,15 +444,6 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
             reloadPending={
               roleQuery.refreshing || membership.status === 'loading'
             }
-          />
-        ) : null}
-
-        {!builtIn && scope.roleWriteStepUp ? (
-          <StepUpPanel
-            stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-            hideDetails
-            description={t('rbacStepUpDescription')}
-            note={t('rolesPermissionsStepUpNote')}
           />
         ) : null}
 

@@ -1,3 +1,4 @@
+import { useGroupDetailContext } from '../components/group-detail-context'
 import {
   Alert,
   Button,
@@ -16,9 +17,7 @@ import { LocalizedTextField } from '#/components/localized-text-field'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
 import {
-  ConsoleGroupDocument,
   type ConsoleGroupQuery,
-  type ConsoleGroupQueryVariables,
   type GroupStateInput,
   type SetGroupEnabledInput,
   type UpdateGroupInput,
@@ -48,7 +47,7 @@ import {
   type GroupTextDraft,
 } from '#/modules/user-management/groups/lib/groups-draft'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import {
   rbacFieldErrors,
@@ -70,7 +69,7 @@ function restoreSettings(group: GroupNode, groupId: string): GroupTextDraft {
   return restoreGroupTextDraft(stored, group)
 }
 
-export function GroupDetailPage({ groupId }: { groupId: string }) {
+export function GroupDetailPage() {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -79,16 +78,7 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const groupQuery = useConsoleQuery<
-    ConsoleGroupQuery,
-    ConsoleGroupQueryVariables
-  >(
-    ConsoleGroupDocument,
-    scope.groupsRead ? { id: groupId } : null,
-    'ConsoleGroup',
-    scope.groupsRead,
-    'missing_group',
-  )
+  const groupQuery = useGroupDetailContext()
   const mutations = useGroupMutations()
   const [draft, setDraft] = useState<GroupTextDraft | null>(null)
   const [localErrors, setLocalErrors] = useState<
@@ -126,7 +116,7 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
         <RbacAccessRestricted
           title="groupsNoReadTitle"
           description="groupsNoReadDescription"
-          stepUp={scope.groupsReadStepUp}
+
           onBack={() => void navigate({ to: '/groups' })}
           backLabel="backToGroups"
         />
@@ -184,7 +174,7 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
   const readyGroup = group
   const readyDraft = draft
   const builtIn = readyGroup.builtIn
-  const editable = !builtIn && scope.groupsWriteReady
+  const editable = !builtIn && scope.groupsWrite
   const versionReady = Boolean(readyGroup.version)
   const nameChanged = namesChanged(readyGroup as GroupSource, readyDraft)
   const descriptionChanged = descriptionsChanged(
@@ -234,7 +224,7 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
   }
 
   async function submit() {
-    if (submitting.current || builtIn || !scope.groupsWriteReady) return
+    if (submitting.current || builtIn || !scope.groupsWrite) return
     const nextErrors: Partial<Record<LocalField, MessageKey>> = {}
     if (!hasGroupName(readyDraft)) {
       nextErrors.name = 'groupsNameRequired'
@@ -520,7 +510,7 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
 
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {!builtIn && scope.groupsWriteReady ? (
+              {!builtIn && scope.groupsWrite ? (
                 <>
                   <GroupStateDialog
                     action={readyGroup.enabled ? 'disable' : 'enable'}
