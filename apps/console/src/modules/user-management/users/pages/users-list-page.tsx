@@ -538,7 +538,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
     )
   }
 
-  if (!scope.hasAny && scope.readStepUp) {
+  if (!scope.hasAny && false) {
     return (
       <>
         {header}

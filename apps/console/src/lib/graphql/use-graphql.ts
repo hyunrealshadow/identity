@@ -1,7 +1,11 @@
-import { useCallback } from 'react'
+import { useCallback, useContext } from 'react'
 
-import { preflightOperation, type PreflightResult } from '@identity/graphql-access'
+import {
+  preflightOperation,
+  type PreflightResult,
+} from '@identity/graphql-access'
 
+import { RequestableAccessContext } from './access-context'
 import { useAuth } from '#/lib/auth/context'
 import { getAuthSession } from '#/lib/auth/session'
 import { useLocale } from '#/lib/i18n'
@@ -22,13 +26,15 @@ export type GraphQLRequest = <TData, TVariables>(
   operationName?: string,
 ) => Promise<GraphQLResult<TData>>
 
-type LocalFailureCode = 'insufficient_scope' | 'insufficient_user_authentication'
+type LocalFailureCode =
+  'insufficient_scope' | 'insufficient_user_authentication'
 
 function preflightStepUp(result: PreflightResult): GraphQLStepUp {
   const stepUp: GraphQLStepUp = { source: 'preflight', recoveryManaged: true }
   if (result.acrValues) stepUp.acrValues = result.acrValues
   if (result.maxAge !== undefined) stepUp.maxAge = result.maxAge
-  if (result.requiredScopes.length > 0) stepUp.requiredScopes = result.requiredScopes
+  if (result.requiredScopes.length > 0)
+    stepUp.requiredScopes = result.requiredScopes
   return stepUp
 }
 
@@ -68,6 +74,7 @@ function localFailure<TData>(
 
 export function useGraphQL(): GraphQLRequest {
   const config = useRuntimeConfig()
+  const requestable = useContext(RequestableAccessContext)
   const { locale, t } = useLocale()
   const { accessToken, requireReauthentication } = useAuth()
 
@@ -104,6 +111,34 @@ export function useGraphQL(): GraphQLRequest {
           decision = undefined
         }
 
+        // A stale SSO login may have clipped write scopes from this token. Only
+        // re-evaluate authentication when the same session's live snapshot says
+        // those scopes are requestable; do not convert a real denial into MFA.
+        if (
+          decision?.status === 'forbidden' &&
+          decision.requiredScopes.length &&
+          requestable?.session === session &&
+          decision.requiredScopes.every(
+            (scope) =>
+              session.grantedScopes.includes(scope) ||
+              requestable.scopes.includes(scope),
+          )
+        ) {
+          const eligible = preflightOperation(
+            graphqlDocumentText(document),
+            variables as unknown as Record<string, unknown> | undefined,
+            {
+              scopes: [...session.grantedScopes, ...requestable.scopes],
+              acr: session.claims.acr,
+              authTime: session.claims.auth_time,
+              user: true,
+              now: Math.floor(Date.now() / 1_000),
+            },
+            operationName,
+          )
+          if (eligible.status === 'reauthentication') decision = eligible
+        }
+
         if (decision?.status === 'forbidden') {
           const code: LocalFailureCode =
             decision.requiredScopes.length > 0
@@ -121,28 +156,51 @@ export function useGraphQL(): GraphQLRequest {
           const stepUp = preflightStepUp(decision)
           // Claims can still look usable after a credential was withdrawn.
           // Confirm live SESSION access without submitting the pending operation.
-          return executeGraphQL<{ effectivePermissions: { __typename: string } }, Record<string, never>>(
+          return executeGraphQL<
+            { effectivePermissions: { __typename: string } },
+            Record<string, never>
+          >(
             'query ConsoleAuthenticationCheck { effectivePermissions { __typename } }',
-            { graphqlUrl: config.graphqlUrl, accessToken: token, locale, variables: {} },
+            {
+              graphqlUrl: config.graphqlUrl,
+              accessToken: token,
+              locale,
+              variables: {},
+            },
           ).then((checked) => {
             if (getAuthSession() !== session) {
-              return localFailure<TData>('insufficient_user_authentication', t('stepUpDescription'), {
-                forbidden: false, stepUp,
-              })
+              return localFailure<TData>(
+                'insufficient_user_authentication',
+                t('stepUpDescription'),
+                {
+                  forbidden: false,
+                  stepUp,
+                },
+              )
             }
             if (checked.unauthorized) {
               void requireReauthentication(undefined, {
-                reason: 'unauthorized', requestId: checked.requestId, traceId: checked.traceId,
+                reason: 'unauthorized',
+                requestId: checked.requestId,
+                traceId: checked.traceId,
               })
             }
-            if (checked.failure || checked.errors.length || !checked.data?.effectivePermissions) {
+            if (
+              checked.failure ||
+              checked.errors.length ||
+              !checked.data?.effectivePermissions
+            ) {
               return { ...checked, data: null } as GraphQLResult<TData>
             }
             void requireReauthentication(stepUp, { reason: 'step_up' })
             return localFailure<TData>(
               'insufficient_user_authentication',
               t('stepUpDescription'),
-              { forbidden: false, stepUp, requiredScopes: decision.requiredScopes },
+              {
+                forbidden: false,
+                stepUp,
+                requiredScopes: decision.requiredScopes,
+              },
             )
           })
         }
@@ -179,6 +237,13 @@ export function useGraphQL(): GraphQLRequest {
         return result
       })
     },
-    [accessToken, config.graphqlUrl, locale, requireReauthentication, t],
+    [
+      accessToken,
+      config.graphqlUrl,
+      locale,
+      requireReauthentication,
+      requestable,
+      t,
+    ],
   )
 }

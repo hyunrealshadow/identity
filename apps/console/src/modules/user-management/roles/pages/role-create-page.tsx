@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
-import { StepUpPanel } from '#/components/step-up-panel'
+
 import type { CreateRoleInput } from '#/gql/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import {
@@ -78,36 +78,6 @@ export function RoleCreatePage() {
     />
   )
 
-  if (scope.roleWriteStepUp) {
-    return (
-      <>
-        {header}
-        <ConsoleWorkspaceGate>
-          <StepUpPanel
-            stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-            hideDetails
-            description={t('rbacStepUpDescription')}
-            note={t('rolesFormStepUpNote')}
-          />
-          <RoleCreateForm
-            draft={draft}
-            setDraft={setDraft}
-            localErrors={localErrors}
-            setLocalErrors={setLocalErrors}
-            fieldErrors={fieldErrors}
-            setFieldErrors={setFieldErrors}
-            feedback={feedback}
-            setFeedback={setFeedback}
-            pending={pending}
-            onCreate={() => undefined}
-            disabled
-            showWriteOnlyWarning={!scope.rolesRead}
-          />
-        </ConsoleWorkspaceGate>
-      </>
-    )
-  }
-
   if (created) {
     return (
       <>
@@ -177,7 +147,7 @@ export function RoleCreatePage() {
           <RbacAccessRestricted
             title="rolesCreateNoPermissionTitle"
             description="rolesCreateNoPermissionDescription"
-            stepUp={scope.roleWriteStepUp}
+
             onBack={() => void navigate({ to: '/roles' })}
             backLabel="backToRoles"
           />
@@ -196,7 +166,7 @@ export function RoleCreatePage() {
   }
 
   async function submit() {
-    if (submitting.current || !scope.roleWriteReady) return
+    if (submitting.current || !scope.rolesWrite) return
     if (!validate(draft)) return
     submitting.current = true
     setPending(true)
@@ -265,7 +235,7 @@ export function RoleCreatePage() {
           feedback={feedback}
           setFeedback={setFeedback}
           pending={pending}
-          disabled={!scope.roleWriteReady}
+          disabled={!scope.rolesWrite}
           showWriteOnlyWarning={!scope.rolesRead}
           onCreate={() => void submit()}
         />

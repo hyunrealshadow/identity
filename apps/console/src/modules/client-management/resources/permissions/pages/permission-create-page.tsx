@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
-import { StepUpPanel } from '#/components/step-up-panel'
+
 import { type CreateScopeInput } from '#/gql/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { localizedMetadata, type LocalizedValues } from '#/lib/localized-values'
@@ -150,32 +150,6 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
     )
   }
 
-  // Effective write scopes can disappear when recent authentication expires.
-  // Offer step-up before treating the missing write scope as a permanent
-  // permission decision. The saved draft stays intact and no write is replayed.
-  const requiresStepUp =
-    scope.permissionWriteStepUp ||
-    (scope.permissionWrite && !scope.permissionWriteReady)
-
-  if (requiresStepUp) {
-    return (
-      <>
-        {header}
-        <ConsoleWorkspaceGate>
-          <div className="space-y-4">
-            <StepUpPanel
-              stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-              hideDetails
-              description={t('rbacStepUpDescription')}
-              note={t('permissionsFormStepUpNote')}
-            />
-            {renderForm(true)}
-          </div>
-        </ConsoleWorkspaceGate>
-      </>
-    )
-  }
-
   if (!scope.permissionWrite) {
     return (
       <>
@@ -184,7 +158,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
           <RbacAccessRestricted
             title="permissionsCreateNoPermissionTitle"
             description="permissionsCreateNoPermissionDescription"
-            stepUp={false}
+
             onBack={() =>
               void navigate({
                 to: '/resources/$resourceId/permissions',
@@ -210,7 +184,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
   }
 
   async function submit() {
-    if (submitting.current || !scope.permissionWriteReady) return
+    if (submitting.current || !scope.permissionWrite) return
     if (!validate(draft)) return
     submitting.current = true
     setPending(true)

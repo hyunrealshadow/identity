@@ -196,13 +196,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                 ? 'groupsNoReadDescription'
                 : 'groupRolesNoReadDescription'
           }
-          stepUp={
-            missingRolesRead
-              ? scope.roleReadStepUp
-              : missingGroupsRead
-                ? scope.groupsReadStepUp
-                : scope.groupRolesReadStepUp
-          }
+
           onBack={() => void navigate({ to: '/roles' })}
           backLabel="backToRoles"
         />

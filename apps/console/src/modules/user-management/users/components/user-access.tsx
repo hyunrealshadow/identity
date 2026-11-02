@@ -1,7 +1,6 @@
 import { Button, Card } from '@heroui/react'
 import { Lock, Plus } from 'lucide-react'
 
-import { StepUpPanel } from '#/components/step-up-panel'
 import type { UserManagementScope } from '#/modules/user-management/users/lib/user-scope'
 import { useTranslator } from '#/lib/i18n'
 
@@ -19,15 +18,6 @@ export function UserReadRestricted({
 
   return (
     <div className="space-y-4">
-      {scope.readStepUp ? (
-        <StepUpPanel
-          stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-          hideDetails
-          description={t('usersStepUpDescription')}
-          note={t('usersStepUpNote')}
-        />
-      ) : null}
-
       <Card className="console-card border border-border">
         <Card.Content className="p-6 sm:p-8">
           <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
@@ -63,7 +53,6 @@ export function UserReadRestricted({
 }
 
 export function UserEditRestricted({
-  scope,
   onBack,
 }: {
   scope: UserManagementScope
@@ -73,14 +62,6 @@ export function UserEditRestricted({
 
   return (
     <div className="space-y-4">
-      {scope.writeStepUp ? (
-        <StepUpPanel
-          stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-          hideDetails
-          description={t('usersStepUpDescription')}
-          note={t('usersStepUpNote')}
-        />
-      ) : null}
       <Card className="console-card border border-border">
         <Card.Content className="p-6 sm:p-8">
           <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
@@ -104,7 +85,6 @@ export function UserEditRestricted({
 }
 
 export function UserCreateRestricted({
-  scope,
   onGoHome,
 }: {
   scope: UserManagementScope
@@ -114,14 +94,6 @@ export function UserCreateRestricted({
 
   return (
     <div className="space-y-4">
-      {scope.writeStepUp ? (
-        <StepUpPanel
-          stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-          hideDetails
-          description={t('usersStepUpDescription')}
-          note={t('usersStepUpNote')}
-        />
-      ) : null}
       <Card className="console-card border border-border">
         <Card.Content className="p-6 sm:p-8">
           <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">

@@ -255,7 +255,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
         <RbacAccessRestricted
           title="groupsNoReadTitle"
           description="groupsNoReadDescription"
-          stepUp={scope.groupsReadStepUp}
+
           onBack={() => void navigate({ to: '/' })}
           backLabel="goHome"
         />

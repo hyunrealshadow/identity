@@ -87,7 +87,7 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
           <RbacAccessRestricted
             title="forbiddenTitle"
             description="forbiddenDescription"
-            stepUp={scope.resourcesReadStepUp}
+
             onBack={() => void navigate({ to: '/' })}
             backLabel="goHome"
           />

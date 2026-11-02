@@ -311,18 +311,14 @@ export function UserDetailLayout({
                 icon={<Pencil className="size-4" />}
               />
             ) : null}
-            {!accessEnded &&
-            scope.state &&
-            !scope.writeStepUp &&
-            stateMenuUser ? (
+            {!accessEnded && scope.state && !false && stateMenuUser ? (
               <UserStateActions
                 user={stateMenuUser}
                 presentation="menu"
                 onCommitted={handleStateCommitted}
                 onReload={reloadAfterWrite}
               />
-            ) : loading &&
-              (workspaceLoading || (scope.state && !scope.writeStepUp)) ? (
+            ) : loading && (workspaceLoading || (scope.state && !false)) ? (
               <UserDetailActionSkeleton
                 label={t('usersMoreActions')}
                 icon={<Ellipsis className="size-4" />}
@@ -353,14 +349,6 @@ export function UserDetailLayout({
           </Alert>
         ) : null}
         {failure || children}
-        {!failure && !accessEnded && scope.writeStepUp ? (
-          <StepUpPanel
-            stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-            hideDetails
-            description={t('usersStepUpDescription')}
-            note={t('usersStepUpNote')}
-          />
-        ) : null}
       </div>
     </UserDetailContext>
   )

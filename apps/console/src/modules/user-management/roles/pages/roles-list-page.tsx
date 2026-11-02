@@ -250,7 +250,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
         <RbacAccessRestricted
           title="rolesNoReadTitle"
           description="rolesNoReadDescription"
-          stepUp={scope.roleReadStepUp}
+
           onBack={() => void navigate({ to: '/' })}
           backLabel="goHome"
         />

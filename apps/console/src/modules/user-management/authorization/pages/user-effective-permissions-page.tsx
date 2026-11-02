@@ -125,7 +125,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
           <RbacAccessRestricted
             title="usersNoReadTitle"
             description="userAuthorizationUsersReadDescription"
-            stepUp={scope.usersReadStepUp}
+
             onBack={() => void navigate({ to: '/users' })}
             backLabel="backToUsers"
           />
@@ -141,7 +141,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
           <RbacAccessRestricted
             title="userPermissionsNoReadTitle"
             description="userPermissionsNoReadDescription"
-            stepUp={scope.assignmentReadStepUp}
+
             onBack={() =>
               void navigate({ to: '/users/$userId', params: { userId } })
             }

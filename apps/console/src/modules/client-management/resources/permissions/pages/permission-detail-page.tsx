@@ -192,7 +192,7 @@ export function PermissionDetailPage({
           <RbacAccessRestricted
             title="permissionsNoReadTitle"
             description="permissionsNoReadWriteOnlyDescription"
-            stepUp={scope.permissionReadStepUp}
+
             onBack={() =>
               void navigate({
                 to: '/resources/$resourceId/permissions',
@@ -280,7 +280,7 @@ export function PermissionDetailPage({
     readyDraft,
   )
   const versionReady = Boolean(readyPermission.version)
-  const canWrite = !builtIn && scope.permissionWriteReady
+  const canWrite = !builtIn && scope.permissionWrite
   const resourceLabel =
     readyPermission.resource?.name ||
     readyPermission.resource?.uri ||
@@ -437,15 +437,6 @@ export function PermissionDetailPage({
             reloadPending={permissionQuery.refreshing}
             conflictTitleKey="permissionsConflictTitle"
             conflictDescriptionKey="permissionsConflictDescription"
-          />
-        ) : null}
-
-        {!builtIn && scope.permissionWriteStepUp ? (
-          <StepUpPanel
-            stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-            hideDetails
-            description={t('rbacStepUpDescription')}
-            note={t('permissionsFormStepUpNote')}
           />
         ) : null}
 

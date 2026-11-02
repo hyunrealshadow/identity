@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
-import { StepUpPanel } from '#/components/step-up-panel'
+
 import type { CreateGroupInput } from '#/gql/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
@@ -75,36 +75,6 @@ export function GroupCreatePage() {
     />
   )
 
-  if (scope.groupsWriteStepUp) {
-    return (
-      <>
-        {header}
-        <ConsoleWorkspaceGate>
-          <StepUpPanel
-            stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-            hideDetails
-            description={t('rbacStepUpDescription')}
-            note={t('groupsFormStepUpNote')}
-          />
-          <GroupCreateForm
-            draft={draft}
-            setDraft={setDraft}
-            localErrors={localErrors}
-            setLocalErrors={setLocalErrors}
-            fieldErrors={fieldErrors}
-            setFieldErrors={setFieldErrors}
-            feedback={feedback}
-            setFeedback={setFeedback}
-            pending={pending}
-            onCreate={() => undefined}
-            disabled
-            showWriteOnlyWarning={!scope.groupsRead}
-          />
-        </ConsoleWorkspaceGate>
-      </>
-    )
-  }
-
   if (created) {
     return (
       <>
@@ -166,7 +136,7 @@ export function GroupCreatePage() {
           <RbacAccessRestricted
             title="groupsCreateNoPermissionTitle"
             description="groupsCreateNoPermissionDescription"
-            stepUp={scope.groupsWriteStepUp}
+
             onBack={() => void navigate({ to: '/groups' })}
             backLabel="backToGroups"
           />
@@ -183,7 +153,7 @@ export function GroupCreatePage() {
   }
 
   async function submit() {
-    if (submitting.current || !scope.groupsWriteReady) return
+    if (submitting.current || !scope.groupsWrite) return
     if (!validate(draft)) return
     submitting.current = true
     setPending(true)
@@ -258,7 +228,7 @@ export function GroupCreatePage() {
           feedback={feedback}
           setFeedback={setFeedback}
           pending={pending}
-          disabled={!scope.groupsWriteReady}
+          disabled={!scope.groupsWrite}
           showWriteOnlyWarning={!scope.groupsRead}
           onCreate={() => void submit()}
         />

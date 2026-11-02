@@ -44,7 +44,6 @@ function scope(overrides: Partial<DashboardScope> = {}): DashboardScope {
     sessions: true,
     resources: true,
     hasAny: true,
-    stepUp: false,
     ...overrides,
   }
 }
@@ -122,17 +121,23 @@ describe('instance dashboard states', () => {
       />,
     )
 
+    expect(screen.getByRole('region', { name: 'Users' }).textContent).toContain(
+      '12',
+    )
     expect(
-      screen.getByRole('region', { name: 'Users' }).textContent,
-    ).toContain('12')
-    expect(screen.getByText('Some overview data could not be loaded')).toBeTruthy()
+      screen.getByText('Some overview data could not be loaded'),
+    ).toBeTruthy()
 
     const applications = screen.getByRole('region', { name: 'Applications' })
     expect(within(applications).getByText('Not available')).toBeTruthy()
-    expect(within(applications).getByText('applications unavailable')).toBeTruthy()
+    expect(
+      within(applications).getByText('applications unavailable'),
+    ).toBeTruthy()
     expect(within(applications).queryByText('0')).toBeNull()
 
-    await user.click(within(applications).getByRole('button', { name: 'Try again' }))
+    await user.click(
+      within(applications).getByRole('button', { name: 'Try again' }),
+    )
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 
@@ -140,6 +145,8 @@ describe('instance dashboard states', () => {
     renderWithLocale(<NoManagementAccess />, { locale: 'zh-CN' })
 
     expect(screen.getByText('你无权访问实例管理')).toBeTruthy()
-    expect(screen.getByText('如需更多权限，请联系能管理实例访问的用户')).toBeTruthy()
+    expect(
+      screen.getByText('如需更多权限，请联系能管理实例访问的用户'),
+    ).toBeTruthy()
   })
 })

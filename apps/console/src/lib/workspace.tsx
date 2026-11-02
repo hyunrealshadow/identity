@@ -21,6 +21,7 @@ import {
   type GraphQLIssue,
   type GraphQLStepUp,
 } from '#/lib/graphql/transport'
+import { RequestableAccessContext } from '#/lib/graphql/access-context'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 
 export type EffectivePermissions = ConsoleBootstrapQuery['effectivePermissions']
@@ -204,9 +205,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     ],
   )
 
+  const requestableAccess = useMemo(
+    () =>
+      loadedSession && current && data?.effectivePermissions
+        ? {
+            session: loadedSession,
+            scopes: data.effectivePermissions.requestableScopes,
+          }
+        : null,
+    [loadedSession, current, data],
+  )
   return (
     <WorkspaceContext.Provider value={value}>
-      {children}
+      <RequestableAccessContext.Provider value={requestableAccess}>
+        {children}
+      </RequestableAccessContext.Provider>
     </WorkspaceContext.Provider>
   )
 }

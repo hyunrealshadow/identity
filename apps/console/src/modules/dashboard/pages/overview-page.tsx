@@ -38,7 +38,9 @@ function LastUpdated({
       {exact ? (
         <p className="text-xs text-muted" aria-live="polite">
           <span>{t('dashboardLastUpdated')}</span>{' '}
-          <time dateTime={exact}>{formatDateTime(generatedAt, locale, timeZone)}</time>
+          <time dateTime={exact}>
+            {formatDateTime(generatedAt, locale, timeZone)}
+          </time>
         </p>
       ) : null}
       <Button
@@ -107,7 +109,9 @@ export function OverviewPage() {
           <AsyncState
             kind={workspace.forbidden ? 'forbidden' : 'error'}
             title={t(failureTitleKey(workspace.failure, workspace.forbidden))}
-            description={t(failureDescriptionKey(workspace.failure, workspace.forbidden))}
+            description={t(
+              failureDescriptionKey(workspace.failure, workspace.forbidden),
+            )}
             requestId={workspace.requestId}
             traceId={workspace.traceId}
             issues={workspace.errors}
@@ -124,7 +128,9 @@ export function OverviewPage() {
       <>
         {header}
         <AsyncState
-          kind={workspace.forbidden ? 'forbidden' : failed ? 'error' : 'partial'}
+          kind={
+            workspace.forbidden ? 'forbidden' : failed ? 'error' : 'partial'
+          }
           title={t(
             failed
               ? failureTitleKey(workspace.failure, workspace.forbidden)
@@ -144,14 +150,12 @@ export function OverviewPage() {
     )
   }
 
-  if ((scope.stepUp || workspace.stepUp) && !scope.hasAny) {
+  if (workspace.stepUp && !scope.hasAny) {
     return (
       <>
         {header}
         <StepUpPanel
-          stepUp={
-            workspace.stepUp ?? { source: 'graphql', acrValues: 'aal2' }
-          }
+          stepUp={workspace.stepUp}
           hideDetails
           description={t('dashboardStepUpDescription')}
           note={t('dashboardStepUpNote')}
@@ -176,7 +180,9 @@ export function OverviewPage() {
         <AsyncState
           kind={dashboard.forbidden ? 'forbidden' : 'error'}
           title={t(failureTitleKey(dashboard.failure, dashboard.forbidden))}
-          description={t(failureDescriptionKey(dashboard.failure, dashboard.forbidden))}
+          description={t(
+            failureDescriptionKey(dashboard.failure, dashboard.forbidden),
+          )}
           requestId={dashboard.requestId}
           traceId={dashboard.traceId}
           issues={dashboard.errors}

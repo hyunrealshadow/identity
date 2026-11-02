@@ -103,7 +103,7 @@ export function PermissionsListPage({
         <RbacAccessRestricted
           title="permissionsNoReadTitle"
           description="permissionsNoReadWriteOnlyDescription"
-          stepUp={scope.permissionReadStepUp}
+
           onBack={() => void navigate({ to: '/resources' })}
           backLabel="resourcesBack"
         />

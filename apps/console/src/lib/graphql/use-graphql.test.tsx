@@ -2,10 +2,16 @@ import { act, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthProvider, useAuth } from '#/lib/auth/context'
-import { clearAuthSession, setAuthSession, type AuthSession } from '#/lib/auth/session'
+import {
+  clearAuthSession,
+  setAuthSession,
+  type AuthSession,
+} from '#/lib/auth/session'
 import type { RuntimeConfig } from '#/lib/config'
 import { LocaleProvider } from '#/lib/i18n'
 import { RuntimeConfigProvider } from '#/lib/runtime-config'
+import { RequestableAccessContext } from '#/lib/graphql/access-context'
+import { getAuthSession } from '#/lib/auth/session'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
 
@@ -65,12 +71,18 @@ function Probe() {
   return null
 }
 
-function renderProbe() {
+function renderProbe(scopes: string[] = []) {
   return render(
     <RuntimeConfigProvider config={config}>
       <LocaleProvider>
         <AuthProvider>
-          <Probe />
+          <RequestableAccessContext.Provider
+            value={
+              scopes.length ? { session: getAuthSession()!, scopes } : null
+            }
+          >
+            <Probe />
+          </RequestableAccessContext.Provider>
         </AuthProvider>
       </LocaleProvider>
     </RuntimeConfigProvider>,
@@ -119,16 +131,22 @@ beforeEach(() => {
 describe('useGraphQL automatic reauthentication', () => {
   it('starts one redirect for concurrent step-up challenges without replaying a POST', async () => {
     setAuthSession(session())
-    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() =>
-      Promise.resolve(challengeResponse()),
-    )
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => Promise.resolve(challengeResponse()))
     vi.stubGlobal('fetch', fetchMock)
     renderProbe()
 
     let results: GraphQLResult<unknown>[] = []
     await act(async () => {
-      const first = requestApi?.('query Q { effectivePermissions { role } }', {})
-      const second = requestApi?.('query Q { effectivePermissions { role } }', {})
+      const first = requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
+      const second = requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
       results = await Promise.all([first!, second!])
     })
 
@@ -152,7 +170,10 @@ describe('useGraphQL automatic reauthentication', () => {
           errors: [
             {
               message: 'forbidden',
-              extensions: { kind: 'authorization_error', code: 'permission_denied' },
+              extensions: {
+                kind: 'authorization_error',
+                code: 'permission_denied',
+              },
             },
           ],
         }),
@@ -164,7 +185,10 @@ describe('useGraphQL automatic reauthentication', () => {
 
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
-      result = await requestApi?.('query Q { effectivePermissions { role } }', {})
+      result = await requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
     })
 
     expect(result?.forbidden).toBe(true)
@@ -182,7 +206,9 @@ describe('useGraphQL automatic reauthentication', () => {
       new Response(
         JSON.stringify({
           data: null,
-          errors: [{ message: 'expired', extensions: { code: 'unauthenticated' } }],
+          errors: [
+            { message: 'expired', extensions: { code: 'unauthenticated' } },
+          ],
         }),
         { status: 401, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -192,7 +218,10 @@ describe('useGraphQL automatic reauthentication', () => {
 
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
-      result = await requestApi?.('query Q { effectivePermissions { role } }', {})
+      result = await requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
     })
 
     expect(result?.unauthorized).toBe(true)
@@ -203,6 +232,46 @@ describe('useGraphQL automatic reauthentication', () => {
     expect(options.deferNavigation).toBeUndefined()
     expect(options.loginHint).toBeUndefined()
     expect(open).not.toHaveBeenCalled()
+  })
+
+  it('uses live eligibility to preflight a clipped write without replaying it', async () => {
+    setAuthSession(session())
+    mocks.preflightOperation
+      .mockReturnValueOnce({
+        status: 'forbidden',
+        requiredScopes: ['management.group.write'],
+      })
+      .mockReturnValue({
+        status: 'reauthentication',
+        requiredScopes: ['management.group.write'],
+        acrValues: 'aal2',
+        maxAge: 300,
+      })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            effectivePermissions: { __typename: 'EffectivePermissions' },
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderProbe(['management.group.write'])
+    let result: GraphQLResult<unknown> | undefined
+    await act(async () => {
+      result = await requestApi?.(
+        'mutation Write($input: CreateGroupInput!) { createGroup(input: $input) { groupId } }',
+        { input: { name: 'draft' } },
+      )
+    })
+    expect(result?.stepUp?.requiredScopes).toEqual(['management.group.write'])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).query,
+    ).toContain('ConsoleAuthenticationCheck')
+    expect(mocks.beginAuthorization).toHaveBeenCalledTimes(1)
   })
 
   it('blocks a write locally without fetching or starting reauthentication', async () => {
@@ -245,17 +314,33 @@ describe('useGraphQL automatic reauthentication', () => {
       acrValues: 'aal2',
       maxAge: 300,
     })
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ data: { effectivePermissions: { __typename: 'EffectivePermissions' } } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              effectivePermissions: { __typename: 'EffectivePermissions' },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
     vi.stubGlobal('fetch', fetchMock)
     renderProbe()
 
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
-      result = await requestApi?.('query Q { effectivePermissions { role } }', {})
+      result = await requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).query).toContain('query ConsoleAuthenticationCheck')
+    expect(
+      JSON.parse(fetchMock.mock.calls[0][1]!.body as string).query,
+    ).toContain('query ConsoleAuthenticationCheck')
     expect(mocks.beginAuthorization).toHaveBeenCalledTimes(1)
     expect(mocks.beginAuthorization.mock.calls[0][0].stepUp).toEqual({
       acrValues: 'aal2',
@@ -281,13 +366,18 @@ describe('useGraphQL automatic reauthentication', () => {
       status: 'unknown',
       requiredScopes: [],
     })
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(challengeResponse())
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(challengeResponse())
     vi.stubGlobal('fetch', fetchMock)
     renderProbe()
 
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
-      result = await requestApi?.('query Q { effectivePermissions { role } }', {})
+      result = await requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -298,7 +388,15 @@ describe('useGraphQL automatic reauthentication', () => {
   it('does not reopen recovery for a late response from a replaced session', async () => {
     setAuthSession(session())
     let respond!: (value: Response) => void
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { respond = resolve })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            respond = resolve
+          }),
+      ),
+    )
     renderProbe()
     const pending = requestApi!('query Q { effectivePermissions { role } }', {})
     const refreshed = session()
@@ -329,7 +427,10 @@ describe('useGraphQL automatic reauthentication', () => {
 
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
-      result = await requestApi?.('query Q { effectivePermissions { role } }', {})
+      result = await requestApi?.(
+        'query Q { effectivePermissions { role } }',
+        {},
+      )
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
