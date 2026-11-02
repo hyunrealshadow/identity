@@ -1,32 +1,22 @@
-import { TableRowActions } from '#/components/table-row-actions'
+import { AssignRolesDialog } from '../../roles/components/assign-user-roles-dialog'
+import { RelationPagination } from '../../components/relation-picker'
+
+import { RevokeBindingDialog } from '../../roles/components/revoke-user-role-dialog'
+
 import { DataTable } from '@identity/ui/data-table'
-import {
-  Alert,
-  Button,
-  Chip,
-  Modal,
-  Pagination,
-  Skeleton,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+import { Alert } from '@heroui/react'
 import { useNavigate } from '@tanstack/react-router'
-import { Search, ShieldPlus, XCircle } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ShieldPlus } from 'lucide-react'
+import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
 import {
-  ConsoleRolesDocument,
   ConsoleUserRolesDocument,
-  type ConsoleRolesQuery,
-  type ConsoleRolesQueryVariables,
   type ConsoleUserRolesQuery,
   type ConsoleUserRolesQueryVariables,
-  type RevokeUserRolesInput,
 } from '#/gql/graphql'
 import {
   failureDescriptionKey,
@@ -42,7 +32,6 @@ import {
   UserDetailActionSkeleton,
 } from '#/modules/user-management/users/components/user-detail-skeleton'
 import {
-  RbacMutationFeedback,
   RbacNoticeAlert,
   type RbacNotice,
 } from '#/modules/user-management/components/rbac-feedback'
@@ -50,43 +39,17 @@ import { ConsoleWorkspaceGate } from '#/modules/user-management/components/works
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { BindingStatusChip } from '#/modules/user-management/roles/components/role-status'
-import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
+
 import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
-import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
-import {
-  UserSelectField,
-  UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+
+type BindingStatus = 'any' | 'active' | 'revoked'
 
 const PAGE_SIZE = 10
-const ROLE_PICKER_PAGE_SIZE = 10
-
-interface AssignRolesDraft {
-  roleIds: string[]
-}
-
-function assignRolesDraftKey(userId: string): string {
-  return `identity.console.user-role-assign.${userId}`
-}
-
-function readAssignRolesDraft(userId: string): AssignRolesDraft | null {
-  const stored = readDraft<unknown>(assignRolesDraftKey(userId))
-  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
-    return null
-  }
-  const value = stored as Record<string, unknown>
-  if (!Array.isArray(value.roleIds)) return null
-  return {
-    roleIds: value.roleIds.filter((id): id is string => typeof id === 'string'),
-  }
-}
-
-type UserBinding = ConsoleUserRolesQuery['userRoles']['edges'][number]['node']
-type BindingStatus = 'any' | 'active' | 'revoked'
 
 export function UserRolesPage({ userId }: { userId: string }) {
   const t = useTranslator()
@@ -150,7 +113,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
           <RbacAccessRestricted
             title="usersNoReadTitle"
             description="userAuthorizationUsersReadDescription"
-            stepUp={scope.usersReadStepUp}
+
             onBack={() => void navigate({ to: '/users' })}
             backLabel="backToUsers"
           />
@@ -166,7 +129,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
           <RbacAccessRestricted
             title="userRolesNoReadTitle"
             description="userRolesNoReadDescription"
-            stepUp={scope.assignmentReadStepUp}
+
             onBack={() =>
               void navigate({ to: '/users/$userId', params: { userId } })
             }
@@ -228,14 +191,6 @@ export function UserRolesPage({ userId }: { userId: string }) {
               note={t('rbacStepUpNote')}
             />
           ) : null}
-          {scope.assignmentWriteStepUp ? (
-            <StepUpPanel
-              stepUp={{ source: 'graphql', acrValues: 'aal2' }}
-              hideDetails
-              description={t('rbacStepUpDescription')}
-              note={t('userRolesStepUpNote')}
-            />
-          ) : null}
 
           <section className="space-y-4">
             <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -272,7 +227,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                   />
                 </div>
                 {readyUser &&
-                scope.assignmentWriteReady &&
+                scope.assignmentsWrite &&
                 scope.rolesRead &&
                 connection ? (
                   <AssignRolesDialog
@@ -290,7 +245,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                     onReload={() => void bindings.refresh()}
                     reloadPending={bindings.refreshing}
                   />
-                ) : scope.assignmentWriteReady && scope.rolesRead ? (
+                ) : scope.assignmentsWrite && scope.rolesRead ? (
                   <UserDetailActionSkeleton
                     label={t('userRolesAssignAction')}
                     icon={<ShieldPlus className="size-4" />}
@@ -301,41 +256,20 @@ export function UserRolesPage({ userId }: { userId: string }) {
             <div className="min-w-0">{renderBindings()}</div>
             <footer className="border-t border-separator pt-4">
               {connection ? (
-                <Pagination aria-label={t('userRolesPagination')}>
-                  <Pagination.Summary>
-                    {t('rolesPageSummary', { count: connection.edges.length })}
-                  </Pagination.Summary>
-                  <Pagination.Content>
-                    <Pagination.Item>
-                      <Pagination.Previous
-                        isDisabled={!connection.pageInfo.hasPreviousPage}
-                        onPress={() => {
-                          if (connection.pageInfo.startCursor) {
-                            setBefore(connection.pageInfo.startCursor)
-                            setAfter(undefined)
-                          }
-                        }}
-                      >
-                        <Pagination.PreviousIcon />
-                        {t('previousPage')}
-                      </Pagination.Previous>
-                    </Pagination.Item>
-                    <Pagination.Item>
-                      <Pagination.Next
-                        isDisabled={!connection.pageInfo.hasNextPage}
-                        onPress={() => {
-                          if (connection.pageInfo.endCursor) {
-                            setAfter(connection.pageInfo.endCursor)
-                            setBefore(undefined)
-                          }
-                        }}
-                      >
-                        {t('nextPage')}
-                        <Pagination.NextIcon />
-                      </Pagination.Next>
-                    </Pagination.Item>
-                  </Pagination.Content>
-                </Pagination>
+                <RelationPagination
+                  connection={connection}
+                  variables={variables}
+                  after={after}
+                  before={before}
+                  onNavigate={(page) => {
+                    setAfter(page.after)
+                    setBefore(page.before)
+                  }}
+                  label={t('userRolesPagination')}
+                  isDisabled={
+                    bindings.refreshing || bindings.status !== 'ready'
+                  }
+                />
               ) : bindings.status === 'idle' ||
                 bindings.status === 'loading' ? (
                 <UserDetailPaginationSkeleton />
@@ -466,7 +400,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                 </DataTable.Cell>
                 <DataTable.Cell>
                   {node.enabled ? (
-                    scope.assignmentWriteReady ? (
+                    scope.assignmentsWrite ? (
                       <RevokeBindingDialog
                         binding={node}
                         onRevoked={() => {
@@ -498,517 +432,4 @@ export function UserRolesPage({ userId }: { userId: string }) {
       </div>
     )
   }
-}
-
-function AssignRolesDialog({
-  userId,
-  username,
-  expectedUserVersion,
-  onAssigned,
-  onReload,
-  reloadPending,
-}: {
-  userId: string
-  username: string
-  expectedUserVersion: string
-  onAssigned: () => void
-  onReload: () => void
-  reloadPending: boolean
-}) {
-  const t = useTranslator()
-  const { locale } = useLocale()
-  const state = useOverlayState()
-  const mutations = useRoleMutations()
-  const draftKey = assignRolesDraftKey(userId)
-  const [query, setQuery] = useState('')
-  const [appliedQuery, setAppliedQuery] = useState('')
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(readAssignRolesDraft(userId)?.roleIds ?? []),
-  )
-  const hasStoredSelection = useRef(Boolean(readAssignRolesDraft(userId)))
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  const submitting = useRef(false)
-  const opened = useRef(false)
-  const completed = useRef(false)
-
-  const variables = useMemo<ConsoleRolesQueryVariables | null>(
-    () =>
-      state.isOpen
-        ? {
-            filter: appliedQuery ? { query: appliedQuery } : {},
-            orderBy: 'NAME_ASC',
-            ...cursorPage(ROLE_PICKER_PAGE_SIZE, after, before),
-          }
-        : null,
-    [after, appliedQuery, before, state.isOpen],
-  )
-  const roles = useConsoleQuery<ConsoleRolesQuery, ConsoleRolesQueryVariables>(
-    ConsoleRolesDocument,
-    variables,
-    'ConsoleRoles',
-    Boolean(variables),
-    'missing_role_connection',
-  )
-
-  useEffect(() => {
-    if (state.isOpen) {
-      opened.current = true
-      return
-    }
-    if (!opened.current) return
-    if (!completed.current) clearDraft(draftKey)
-    setQuery('')
-    setAppliedQuery('')
-    setAfter(undefined)
-    setBefore(undefined)
-    setSelected(new Set())
-    hasStoredSelection.current = false
-    setFeedback(null)
-    setError(null)
-    setPending(false)
-    completed.current = false
-  }, [draftKey, state.isOpen])
-
-  useEffect(() => {
-    if (!state.isOpen || !hasStoredSelection.current) return
-    writeDraft(draftKey, {
-      roleIds: [...selected],
-    } satisfies AssignRolesDraft)
-  }, [draftKey, selected, state.isOpen])
-
-  async function submit() {
-    if (submitting.current) return
-    if (selected.size === 0) {
-      setError(t('userRolesSelectRoleRequired'))
-      return
-    }
-    if (!expectedUserVersion) {
-      setFeedback({
-        errors: [],
-        failure: {
-          kind: 'invalid_response',
-          code: 'missing_user_version',
-        },
-        forbidden: false,
-      })
-      return
-    }
-    submitting.current = true
-    setPending(true)
-    setFeedback(null)
-    setError(null)
-    try {
-      const result = await mutations.assignUserRoles({
-        userId,
-        roleIds: [...selected],
-        expectedUserVersion,
-      })
-      const payload = result.data?.assignUserRoles ?? null
-      if (!payload) {
-        setFeedback({
-          errors: result.errors,
-          failure: result.failure ?? {
-            kind: 'invalid_response',
-            code: 'missing_assign_user_roles_payload',
-            requestId: result.requestId,
-            traceId: result.traceId,
-          },
-          stepUp: result.stepUp,
-          requestId: result.requestId,
-          traceId: result.traceId,
-          forbidden: result.forbidden,
-        })
-        return
-      }
-      completed.current = true
-      clearDraft(draftKey)
-      state.close()
-      toast.success(t('userRolesAssignedToast'), {
-        description: t('userRolesAssignedCommitted', {
-          count: payload.createdCount,
-        }),
-      })
-      if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-      onAssigned()
-    } catch {
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'assign_user_roles_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      submitting.current = false
-      setPending(false)
-    }
-  }
-
-  const connection = roles.data?.roles ?? null
-  const edges = connection?.edges ?? []
-
-  return (
-    <>
-      <Button onPress={state.open}>
-        <ShieldPlus className="size-4" aria-hidden="true" />
-        {t('userRolesAssignAction')}
-      </Button>
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable={!pending}>
-          <Modal.Container size="lg">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger
-                    aria-label={t('close')}
-                    isDisabled={pending}
-                  />
-                  <Modal.Header>
-                    <Modal.Heading>{t('userRolesAssignTitle')}</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm leading-6 text-muted">
-                      {t('userRolesAssignDescription', { user: username })}
-                    </p>
-                    <form
-                      className="collection-filter-controls mt-4 flex items-end gap-2"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        setAppliedQuery(query.trim())
-                        setAfter(undefined)
-                        setBefore(undefined)
-                      }}
-                    >
-                      <UserTextField
-                        name="assign-role-search"
-                        label={t('userRolesSearchRoles')}
-                        value={query}
-                        onChange={setQuery}
-                        maxLength={256}
-                      />
-                      <Button type="submit">
-                        <Search className="size-4" aria-hidden="true" />
-                        {t('userRolesSearchAction')}
-                      </Button>
-                    </form>
-                    <div className="mt-4 max-h-72 overflow-y-auto rounded-field border border-border">
-                      {roles.status === 'error' ? (
-                        <div className="p-3">
-                          <AsyncState
-                            kind={roles.forbidden ? 'forbidden' : 'error'}
-                            compact
-                            title={t(
-                              failureTitleKey(roles.failure, roles.forbidden),
-                            )}
-                            description={t(
-                              failureDescriptionKey(
-                                roles.failure,
-                                roles.forbidden,
-                              ),
-                            )}
-                            requestId={roles.requestId}
-                            traceId={roles.traceId}
-                            issues={roles.errors}
-                            onRetry={() => void roles.refresh()}
-                          />
-                        </div>
-                      ) : roles.status !== 'ready' ? (
-                        <div
-                          className="space-y-2 p-3"
-                          role="status"
-                          aria-label={t('loading')}
-                        >
-                          <Skeleton className="h-12 w-full" />
-                          <Skeleton className="h-12 w-full" />
-                        </div>
-                      ) : edges.length === 0 ? (
-                        <p className="p-4 text-sm text-muted">
-                          {t('userRolesNoCandidates')}
-                        </p>
-                      ) : (
-                        <ul className="divide-y divide-separator">
-                          {edges.map(({ node }) => (
-                            <li key={node.id}>
-                              <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-surface-secondary">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 size-4"
-                                  checked={selected.has(node.id)}
-                                  onChange={() => {
-                                    hasStoredSelection.current = true
-                                    setSelected((current) => {
-                                      const next = new Set(current)
-                                      if (next.has(node.id))
-                                        next.delete(node.id)
-                                      else next.add(node.id)
-                                      return next
-                                    })
-                                  }}
-                                />
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-medium">
-                                    {resolveLocalizedText(node.names, locale) ??
-                                      node.name ??
-                                      node.name ??
-                                      node.id}
-                                  </span>
-                                  {!node.enabled ? (
-                                    <Chip
-                                      size="sm"
-                                      variant="soft"
-                                      color="default"
-                                      className="mt-1"
-                                    >
-                                      <Chip.Label>
-                                        {t('rolesDisabled')}
-                                      </Chip.Label>
-                                    </Chip>
-                                  ) : null}
-                                </span>
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    {connection ? (
-                      <div className="mt-2 flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          isDisabled={!connection.pageInfo.hasPreviousPage}
-                          onPress={() => {
-                            if (connection.pageInfo.startCursor) {
-                              setBefore(connection.pageInfo.startCursor)
-                              setAfter(undefined)
-                            }
-                          }}
-                        >
-                          {t('previousPage')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          isDisabled={!connection.pageInfo.hasNextPage}
-                          onPress={() => {
-                            if (connection.pageInfo.endCursor) {
-                              setAfter(connection.pageInfo.endCursor)
-                              setBefore(undefined)
-                            }
-                          }}
-                        >
-                          {t('nextPage')}
-                        </Button>
-                      </div>
-                    ) : null}
-                    {error ? (
-                      <p role="alert" className="mt-3 text-sm text-danger">
-                        {error}
-                      </p>
-                    ) : null}
-                    {feedback ? (
-                      <div className="mt-4">
-                        <RbacMutationFeedback
-                          feedback={feedback}
-                          onReload={() => {
-                            setFeedback(null)
-                            onReload()
-                          }}
-                          reloadPending={reloadPending}
-                        />
-                      </div>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button
-                      variant="secondary"
-                      isDisabled={pending}
-                      onPress={close}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button
-                      isDisabled={pending || selected.size === 0}
-                      onPress={() => void submit()}
-                    >
-                      {pending ? (
-                        <Spinner size="sm" aria-label={t('working')} />
-                      ) : null}
-                      {t('userRolesAssignConfirm')}
-                    </Button>
-                  </Modal.Footer>
-                </>
-              )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-    </>
-  )
-}
-
-function RevokeBindingDialog({
-  binding,
-  onRevoked,
-  onReload,
-  reloadPending,
-}: {
-  binding: UserBinding
-  onRevoked: () => void
-  onReload: () => void
-  reloadPending: boolean
-}) {
-  const t = useTranslator()
-  const { locale } = useLocale()
-  const state = useOverlayState()
-  const mutations = useRoleMutations()
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [pending, setPending] = useState(false)
-  const submitting = useRef(false)
-  const opened = useRef(false)
-
-  useEffect(() => {
-    if (state.isOpen) {
-      opened.current = true
-      return
-    }
-    if (!opened.current) return
-    setFeedback(null)
-    setPending(false)
-  }, [state.isOpen])
-
-  async function submit() {
-    if (submitting.current) return
-    submitting.current = true
-    setPending(true)
-    setFeedback(null)
-    const input: RevokeUserRolesInput = {
-      userId: binding.userId,
-      roleIds: [binding.roleId],
-      expectedUserVersion: binding.userVersion,
-    }
-    try {
-      const result = await mutations.revokeUserRoles(input)
-      const payload = result.data?.revokeUserRoles ?? null
-      if (!payload) {
-        setFeedback({
-          errors: result.errors,
-          failure: result.failure ?? {
-            kind: 'invalid_response',
-            code: 'missing_revoke_user_roles_payload',
-            requestId: result.requestId,
-            traceId: result.traceId,
-          },
-          stepUp: result.stepUp,
-          requestId: result.requestId,
-          traceId: result.traceId,
-          forbidden: result.forbidden,
-        })
-        return
-      }
-      state.close()
-      toast.success(t('userRolesRevokedToast'), {
-        description: t('userRolesRevokedCommitted', {
-          count: payload.revokedCount,
-        }),
-      })
-      if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-      onRevoked()
-    } catch {
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'revoke_user_roles_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      submitting.current = false
-      setPending(false)
-    }
-  }
-
-  return (
-    <>
-      <TableRowActions
-        subject={
-          binding.role
-            ? (resolveLocalizedText(binding.role.names, locale) ??
-              binding.role.name ??
-              binding.role.id)
-            : binding.roleId
-        }
-        actions={[
-          {
-            id: 'remove',
-            label: t('userRolesRevokeAction'),
-            onAction: state.open,
-            danger: true,
-            icon: <XCircle className="size-4" aria-hidden="true" />,
-          },
-        ]}
-      />
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable={!pending}>
-          <Modal.Container size="md">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger
-                    aria-label={t('close')}
-                    isDisabled={pending}
-                  />
-                  <Modal.Header>
-                    <Modal.Heading>{t('userRolesRevokeTitle')}</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm leading-6 text-muted">
-                      {t('userRolesRevokeDescription', {
-                        role: binding.role
-                          ? (resolveLocalizedText(binding.role.names, locale) ??
-                            binding.role.name ??
-                            binding.role.id)
-                          : binding.roleId,
-                      })}
-                    </p>
-                    {feedback ? (
-                      <div className="mt-4">
-                        <RbacMutationFeedback
-                          feedback={feedback}
-                          onReload={() => {
-                            setFeedback(null)
-                            onReload()
-                          }}
-                          reloadPending={reloadPending}
-                        />
-                      </div>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button
-                      variant="secondary"
-                      isDisabled={pending}
-                      onPress={close}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      isDisabled={pending}
-                      onPress={() => void submit()}
-                    >
-                      {pending ? (
-                        <Spinner size="sm" aria-label={t('working')} />
-                      ) : null}
-                      {t('userRolesRevokeConfirm')}
-                    </Button>
-                  </Modal.Footer>
-                </>
-              )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-    </>
-  )
 }
