@@ -1,3 +1,4 @@
+import { nextClientMutationId } from '#/lib/graphql/mutation-id'
 import { useMemo } from 'react'
 
 import {
@@ -21,18 +22,6 @@ import {
 import type { GraphQLResult } from '#/lib/graphql/transport'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 
-function nextClientMutationId(): string {
-  try {
-    const value = globalThis.crypto?.randomUUID?.()
-    if (value) return value
-  } catch {
-    // A blocked crypto implementation still gets a fresh opaque value.
-  }
-  return `console-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
-}
-
 export type GroupWriteResult =
   | GraphQLResult<ConsoleCreateGroupMutation>
   | GraphQLResult<ConsoleUpdateGroupMutation>
@@ -45,14 +34,20 @@ export function useGroupMutations() {
   return useMemo(
     () => ({
       create(input: CreateGroupInput) {
-        return request<ConsoleCreateGroupMutation, ConsoleCreateGroupMutationVariables>(
+        return request<
+          ConsoleCreateGroupMutation,
+          ConsoleCreateGroupMutationVariables
+        >(
           ConsoleCreateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleCreateGroup',
         )
       },
       update(input: UpdateGroupInput) {
-        return request<ConsoleUpdateGroupMutation, ConsoleUpdateGroupMutationVariables>(
+        return request<
+          ConsoleUpdateGroupMutation,
+          ConsoleUpdateGroupMutationVariables
+        >(
           ConsoleUpdateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleUpdateGroup',
@@ -69,7 +64,10 @@ export function useGroupMutations() {
         )
       },
       remove(input: GroupStateInput) {
-        return request<ConsoleDeleteGroupMutation, ConsoleDeleteGroupMutationVariables>(
+        return request<
+          ConsoleDeleteGroupMutation,
+          ConsoleDeleteGroupMutationVariables
+        >(
           ConsoleDeleteGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleDeleteGroup',

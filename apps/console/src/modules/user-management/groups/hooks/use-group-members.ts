@@ -1,3 +1,4 @@
+import { nextClientMutationId } from '#/lib/graphql/mutation-id'
 import { useMemo } from 'react'
 
 import {
@@ -17,18 +18,6 @@ import type { GraphQLResult } from '#/lib/graphql/transport'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
 
-function nextClientMutationId(): string {
-  try {
-    const value = globalThis.crypto?.randomUUID?.()
-    if (value) return value
-  } catch {
-    // A blocked crypto implementation still gets a fresh opaque value.
-  }
-  return `console-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
-}
-
 /**
  * Membership reads are bounded by the group query and the membership
  * connection guard. Passing null disables the request entirely.
@@ -36,7 +25,10 @@ function nextClientMutationId(): string {
 export function useGroupMembers(
   variables: ConsoleGroupMembersQueryVariables | null,
 ) {
-  return useConsoleQuery<ConsoleGroupMembersQuery, ConsoleGroupMembersQueryVariables>(
+  return useConsoleQuery<
+    ConsoleGroupMembersQuery,
+    ConsoleGroupMembersQueryVariables
+  >(
     ConsoleGroupMembersDocument,
     variables,
     'ConsoleGroupMembers',

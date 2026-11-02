@@ -1,3 +1,4 @@
+import { nextClientMutationId } from '#/lib/graphql/mutation-id'
 import { useMemo } from 'react'
 
 import {
@@ -24,22 +25,13 @@ import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
 const ROLE_LINK_SCAN_SIZE = 25
 const MAX_ROLE_LINK_PAGES = 40
 
-function nextClientMutationId(): string {
-  try {
-    const value = globalThis.crypto?.randomUUID?.()
-    if (value) return value
-  } catch {
-    // A blocked crypto implementation still gets a fresh opaque value.
-  }
-  return `console-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
-}
-
 export function useGroupRoles(
   variables: ConsoleGroupRolesQueryVariables | null,
 ) {
-  return useConsoleQuery<ConsoleGroupRolesQuery, ConsoleGroupRolesQueryVariables>(
+  return useConsoleQuery<
+    ConsoleGroupRolesQuery,
+    ConsoleGroupRolesQueryVariables
+  >(
     ConsoleGroupRolesDocument,
     variables,
     'ConsoleGroupRoles',
@@ -107,13 +99,12 @@ export function useGroupRoleMutations() {
             return {
               roleIds: [...ids],
               errors: result.errors,
-              failure:
-                result.failure ?? {
-                  kind: 'invalid_response',
-                  code: 'missing_group_role_snapshot',
-                  requestId: result.requestId,
-                  traceId: result.traceId,
-                },
+              failure: result.failure ?? {
+                kind: 'invalid_response',
+                code: 'missing_group_role_snapshot',
+                requestId: result.requestId,
+                traceId: result.traceId,
+              },
               requestId,
               traceId,
               stepUp: result.stepUp,

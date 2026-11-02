@@ -1,3 +1,4 @@
+import { nextClientMutationId } from '#/lib/graphql/mutation-id'
 import { useMemo } from 'react'
 
 import {
@@ -32,18 +33,6 @@ import {
 import type { GraphQLResult } from '#/lib/graphql/transport'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 
-function nextClientMutationId(): string {
-  try {
-    const value = globalThis.crypto?.randomUUID?.()
-    if (value) return value
-  } catch {
-    // A blocked crypto implementation still gets a fresh opaque value.
-  }
-  return `console-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
-}
-
 export type RoleWriteResult =
   | GraphQLResult<ConsoleCreateRoleMutation>
   | GraphQLResult<ConsoleUpdateRoleMutation>
@@ -59,28 +48,40 @@ export function useRoleMutations() {
   return useMemo(
     () => ({
       create(input: CreateRoleInput) {
-        return request<ConsoleCreateRoleMutation, ConsoleCreateRoleMutationVariables>(
+        return request<
+          ConsoleCreateRoleMutation,
+          ConsoleCreateRoleMutationVariables
+        >(
           ConsoleCreateRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleCreateRole',
         )
       },
       update(input: UpdateRoleInput) {
-        return request<ConsoleUpdateRoleMutation, ConsoleUpdateRoleMutationVariables>(
+        return request<
+          ConsoleUpdateRoleMutation,
+          ConsoleUpdateRoleMutationVariables
+        >(
           ConsoleUpdateRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleUpdateRole',
         )
       },
       enable(input: RoleStateInput) {
-        return request<ConsoleEnableRoleMutation, ConsoleEnableRoleMutationVariables>(
+        return request<
+          ConsoleEnableRoleMutation,
+          ConsoleEnableRoleMutationVariables
+        >(
           ConsoleEnableRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleEnableRole',
         )
       },
       disable(input: RoleStateInput) {
-        return request<ConsoleDisableRoleMutation, ConsoleDisableRoleMutationVariables>(
+        return request<
+          ConsoleDisableRoleMutation,
+          ConsoleDisableRoleMutationVariables
+        >(
           ConsoleDisableRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           'ConsoleDisableRole',

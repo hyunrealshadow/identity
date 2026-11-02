@@ -1,3 +1,4 @@
+import { nextClientMutationId } from '#/lib/graphql/mutation-id'
 import { useMemo } from 'react'
 
 import {
@@ -47,18 +48,6 @@ export type StateUserResult =
   | GraphQLResult<ConsoleDisableUserMutation>
   | GraphQLResult<ConsoleUnlockUserMutation>
 
-function nextClientMutationId(): string {
-  try {
-    const value = globalThis.crypto?.randomUUID?.()
-    if (value) return value
-  } catch {
-    // A blocked crypto implementation still gets a fresh opaque request value.
-  }
-  return `console-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
-}
-
 export interface UserMutations {
   create: (input: CreateUserInput) => Promise<CreateUserResult>
   update: (input: UpdateUserInput) => Promise<UpdateUserResult>
@@ -86,51 +75,46 @@ export function useUserMutations(): UserMutations {
         const variables: ConsoleCreateUserMutationVariables = {
           input: { ...input, clientMutationId: nextClientMutationId() },
         }
-        return request<ConsoleCreateUserMutation, ConsoleCreateUserMutationVariables>(
-          ConsoleCreateUserDocument,
-          variables,
-          'ConsoleCreateUser',
-        )
+        return request<
+          ConsoleCreateUserMutation,
+          ConsoleCreateUserMutationVariables
+        >(ConsoleCreateUserDocument, variables, 'ConsoleCreateUser')
       },
       update(input) {
         const variables: ConsoleUpdateUserMutationVariables = {
           input: { ...input, clientMutationId: nextClientMutationId() },
         }
-        return request<ConsoleUpdateUserMutation, ConsoleUpdateUserMutationVariables>(
-          ConsoleUpdateUserDocument,
-          variables,
-          'ConsoleUpdateUser',
-        )
+        return request<
+          ConsoleUpdateUserMutation,
+          ConsoleUpdateUserMutationVariables
+        >(ConsoleUpdateUserDocument, variables, 'ConsoleUpdateUser')
       },
       enable(input) {
         const variables: ConsoleEnableUserMutationVariables = {
           input: { ...input, clientMutationId: nextClientMutationId() },
         }
-        return request<ConsoleEnableUserMutation, ConsoleEnableUserMutationVariables>(
-          ConsoleEnableUserDocument,
-          variables,
-          'ConsoleEnableUser',
-        )
+        return request<
+          ConsoleEnableUserMutation,
+          ConsoleEnableUserMutationVariables
+        >(ConsoleEnableUserDocument, variables, 'ConsoleEnableUser')
       },
       disable(input) {
         const variables: ConsoleDisableUserMutationVariables = {
           input: { ...input, clientMutationId: nextClientMutationId() },
         }
-        return request<ConsoleDisableUserMutation, ConsoleDisableUserMutationVariables>(
-          ConsoleDisableUserDocument,
-          variables,
-          'ConsoleDisableUser',
-        )
+        return request<
+          ConsoleDisableUserMutation,
+          ConsoleDisableUserMutationVariables
+        >(ConsoleDisableUserDocument, variables, 'ConsoleDisableUser')
       },
       unlock(input) {
         const variables: ConsoleUnlockUserMutationVariables = {
           input: { ...input, clientMutationId: nextClientMutationId() },
         }
-        return request<ConsoleUnlockUserMutation, ConsoleUnlockUserMutationVariables>(
-          ConsoleUnlockUserDocument,
-          variables,
-          'ConsoleUnlockUser',
-        )
+        return request<
+          ConsoleUnlockUserMutation,
+          ConsoleUnlockUserMutationVariables
+        >(ConsoleUnlockUserDocument, variables, 'ConsoleUnlockUser')
       },
     }),
     [request],
