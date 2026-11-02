@@ -50,7 +50,6 @@ data:
     server:
       binding: 0.0.0.0
       port: {{ .Values.identity.service.publicPort }}
-      host: {{ .Values.identity.publicUrl | quote }}
       tls:
         {{- if .Values.identity.tls.enabled }}
         termination: direct
@@ -83,6 +82,21 @@ data:
             {{- if .Values.identity.workload.issuerToken.enabled }}
             token_file: /var/run/secrets/identity-issuer/token
             {{- end }}
+        {{- if .Values.console.enabled }}
+        console:
+          kubernetes_service_account:
+            enabled: true
+            audience: {{ .Values.identity.workload.audience | quote }}
+            namespace: {{ .Release.Namespace | quote }}
+            service_account: {{ include "identity.consoleServiceAccountName" . | quote }}
+            issuer: {{ .Values.identity.workload.issuer | quote }}
+            {{- if .Values.identity.workload.issuerCa.enabled }}
+            ca_file: /etc/identity/kubernetes/ca.crt
+            {{- end }}
+            {{- if .Values.identity.workload.issuerToken.enabled }}
+            token_file: /var/run/secrets/identity-issuer/token
+            {{- end }}
+        {{- end }}
     database:
       uri: {{ "{{ get_env(name=\"DATABASE_URL\") }}" }}
       enable_logging: false
@@ -103,7 +117,6 @@ data:
       server:
         binding: 0.0.0.0
         port: {{ .Values.identity.service.graphqlPort }}
-      allowed_origins:
-        - {{ .Values.login.publicUrl | quote }}
+      allowed_origins: []
     settings:
       refresh_interval_secs: 30

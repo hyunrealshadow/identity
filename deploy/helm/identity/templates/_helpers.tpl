@@ -44,3 +44,17 @@ app.kubernetes.io/component: login
 {{- required "login.serviceAccount.name is required when create=false" .Values.login.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "identity.consoleSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "identity.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: console
+{{- end }}
+
+{{- define "identity.consoleServiceAccountName" -}}
+{{- if .Values.console.serviceAccount.create }}
+{{- default (printf "%s-console" (include "identity.fullname" .)) .Values.console.serviceAccount.name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- required "console.serviceAccount.name is required when create=false" .Values.console.serviceAccount.name }}
+{{- end }}
+{{- end }}

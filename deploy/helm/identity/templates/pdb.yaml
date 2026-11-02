@@ -25,3 +25,18 @@ spec:
     matchLabels:
       {{- include "identity.loginSelectorLabels" . | nindent 6 }}
 {{- end }}
+
+{{- if and .Values.console.enabled .Values.podDisruptionBudget.enabled (gt (int .Values.console.replicaCount) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "identity.fullname" . }}-console
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "identity.consoleSelectorLabels" . | nindent 6 }}
+{{- end }}

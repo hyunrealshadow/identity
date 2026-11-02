@@ -1,6 +1,6 @@
 # Identity Helm chart
 
-This chart deploys replicated Identity and Login workloads. PostgreSQL and all
+This chart deploys replicated Identity, Login and Console workloads. PostgreSQL and all
 Secrets are intentionally external to the chart so uninstalling a release
 cannot remove identity data or deployment root credentials.
 
@@ -9,7 +9,7 @@ cannot remove identity data or deployment root credentials.
 - Kubernetes 1.25 or newer
 - Helm 3
 - PostgreSQL reachable from the Identity Pods
-- Identity and Login images pushed to a registry reachable by the cluster
+- Identity, Login and Console images pushed to a registry reachable by the cluster
 - An Identity TLS certificate trusted by Login when
   `identity.tls.enabled=true`
 - A Kubernetes ServiceAccount issuer with OIDC discovery and JWKS endpoints
@@ -19,11 +19,82 @@ cannot remove identity data or deployment root credentials.
 When Identity terminates TLS itself, its certificate must cover all names used
 by Login:
 
-- the public host from `identity.publicUrl`;
+- the public issuer host recorded during installation;
 - `<release>-server`;
 - `<release>-server-internal`;
 - the corresponding namespace-qualified service names if the resolver or TLS
   policy expands them.
+
+## Public application addresses and first installation
+
+Do not configure application `publicUrl` values in Helm. The installer records
+the public HTTPS issuer, Login and Console URLs in database settings. Workloads
+load them through Identity; Gateway hostnames and TLS certificates remain
+deployment configuration and do not update these settings automatically.
+
+After deployment, visit Login's `/install`. For a single hostname use, for example:
+
+- issuer: `https://identity.example.com`
+- Login: `https://identity.example.com`
+- Console: `https://identity.example.com/console/`
+
+The three installer fields are editable. The suggested same-host addresses are
+form defaults, not a restriction. Set routing hostnames first, then enter the
+matching public addresses in the installer:
+
+| Deployment | Issuer | Login | Console |
+| --- | --- | --- | --- |
+| Shared hostname | `https://identity.example.com` | `https://identity.example.com` | `https://identity.example.com/console/` |
+| Separate hostnames | `https://id.example.com` | `https://account.example.com` | `https://admin.example.com/console/` |
+
+For a shared hostname, use:
+
+```yaml
+gatewayApi:
+  enabled: true
+  identity:
+    hostnames: [identity.example.com]
+  login:
+    hostnames: [identity.example.com]
+  console:
+    hostnames: [] # Inherit Login hostnames.
+```
+
+For three separate hostnames, use:
+
+```yaml
+gatewayApi:
+  enabled: true
+  identity:
+    hostnames: [id.example.com]
+  login:
+    hostnames: [account.example.com]
+  console:
+    hostnames: [admin.example.com]
+```
+
+Console also uses `/console/` on its own hostname. To share only Login and
+Console, keep the separate Identity hostname and leave Console hostnames empty.
+Point the selected DNS names to the Gateway and configure its HTTPS listener
+and certificates to accept those names. Visit `/install` on the Login hostname.
+With externally managed routes, disable `gatewayApi.enabled` and forward the
+same paths and hosts using the platform's existing proxy configuration.
+
+Login is ready to serve installation before any runtime client exists. Console
+waits for the installed configuration and remains unready until it can serve it.
+Installation creates both built-in clients transactionally, preserving Console
+callback and logout paths. A rejected form can be corrected and resubmitted.
+Restart Console Pods after changing saved public addresses to refresh their
+local public configuration. Login refreshes its in-memory snapshot on demand.
+
+Console public addresses are not repeated in workload environment variables.
+Its optional routing hostname is configured above; public TLS belongs to the
+Gateway. Its Service uses
+HTTP port 8080 behind the HTTPS Gateway. It runs as non-root with a read-only
+root filesystem and writable `emptyDir` volumes for `/tmp` and runtime config.
+Readiness checks its loopback health listener with an exec probe. Its workload
+identity can fetch only Console configuration, not Login secrets or installation.
+Set `console.enabled=false` to omit the workload, identity, route and policy.
 
 ## Required Secrets
 
@@ -67,7 +138,6 @@ identity:
   image:
     repository: registry.example.com/identity
     tag: 1.0.0
-  publicUrl: https://identity.example.com
   tls:
     enabled: false
     trustedProxies:
@@ -81,9 +151,14 @@ login:
   image:
     repository: registry.example.com/identity-login
     tag: 1.0.0
-  publicUrl: https://account.example.com
   tls:
     enabled: false
+
+console:
+  enabled: true
+  image:
+    repository: registry.example.com/identity-console
+    tag: 1.0.0
 
 gatewayApi:
   enabled: true
@@ -105,8 +180,13 @@ The chart creates only application `HTTPRoute` resources. It deliberately does
 not create a cluster-level `Gateway` or `GatewayClass`; those own listener
 addresses and public TLS certificates and should normally be shared or managed
 by the platform operator. Set `gatewayApi.enabled=false` (the default) to create
-neither route. The Identity and Login route switches can also be disabled
-independently.
+no routes. Identity, Login and Console route switches can also be disabled
+independently. Console defaults to Login hostnames and matches `/console` with
+no rewrite; `gatewayApi.console.hostnames` may explicitly select another
+existing hostname. The image always serves `/console/`. When Identity and Login
+share a hostname, protocol paths (`/oauth2`, `/.well-known`, `/api/auth`, `/static`)
+and `/graphql` go to Identity; `/console` goes to Console; the remaining paths
+go to Login. The internal workload listener is never exposed by these routes.
 
 `identity.tls.enabled` and `login.tls.enabled` independently control whether
 each Pod terminates TLS. Their Services, named ports, and probes advertise and
@@ -120,8 +200,9 @@ internal endpoints.
 Identity always exposes four private Service ports: public protocol API
 (`5150`), internal workload API (`5151`), GraphQL (`5152`), and health
 (`8081`). Login uses those ClusterIP Service endpoints in both TLS modes. Only
-browser redirects use `identity.publicUrl`; Login never hairpins through the
-Gateway or public DNS name.
+browser redirects use the installed issuer setting; Login never hairpins through
+the Gateway or public DNS name. Console obtains its public configuration through
+the authenticated internal Service using a separate projected ServiceAccount token.
 
 When TLS is disabled, the public URL still must be HTTPS and the application
 accepts public traffic only when the upstream proxy reports
@@ -156,9 +237,9 @@ helm upgrade --install identity deploy/helm/identity \
 
 ## Kubernetes workload verification
 
-The chart creates separate Identity and Login ServiceAccounts with
-`automountServiceAccountToken: false`. Login receives only a short-lived token
-with the workload audience. Identity receives a separate short-lived token
+The chart creates separate Identity, Login and Console ServiceAccounts with
+`automountServiceAccountToken: false`. Login and Console each receive a short-lived
+token with the workload audience and their own subject. Identity receives a separate short-lived token
 whose audience is the Kubernetes issuer, used only to authenticate issuer
 discovery and JWKS requests. No custom Role or RoleBinding is needed: the
 default `system:service-account-issuer-discovery` binding grants ServiceAccounts
@@ -171,7 +252,8 @@ discovery and JWKS documents, then requires all of the following:
 - the configured audience;
 - an unexpired token;
 - the exact subject
-  `system:serviceaccount:<release namespace>:<Login ServiceAccount>`.
+  `system:serviceaccount:<release namespace>:<Login or Console ServiceAccount>`,
+  bound to that workload's allowed operations.
 
 Set `identity.workload.issuer` to the exact `iss` claim emitted by the cluster;
 managed Kubernetes issuers commonly differ from the chart default.

@@ -192,8 +192,6 @@ spec:
           securityContext:
             {{- toYaml .Values.login.securityContext | nindent 12 }}
           env:
-            - name: IDENTITY_API_URL
-              value: {{ .Values.identity.publicUrl | quote }}
             - name: IDENTITY_BACKCHANNEL_API_URL
               value: {{ printf "%s://%s-server:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.publicPort | quote }}
             - name: IDENTITY_BACKCHANNEL_GRAPHQL_URL
@@ -204,8 +202,6 @@ spec:
               value: {{ printf "%s://%s-server-internal:%v" (ternary "https" "http" .Values.identity.tls.enabled) (include "identity.fullname" .) .Values.identity.service.internalPort | quote }}
             - name: IDENTITY_INTERNAL_API_ALLOW_HTTP
               value: {{ ternary "false" "true" .Values.identity.tls.enabled | quote }}
-            - name: IDENTITY_PUBLIC_APP_URL
-              value: {{ .Values.login.publicUrl | quote }}
             - name: IDENTITY_LOGIN_SESSION_SECRET
               valueFrom:
                 secretKeyRef:

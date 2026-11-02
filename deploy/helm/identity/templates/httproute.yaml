@@ -30,9 +30,11 @@ spec:
         - name: {{ include "identity.fullname" . }}-server
           port: {{ .Values.identity.service.graphqlPort }}
     - matches:
+        {{- range list "/oauth2" "/.well-known" "/api/auth" "/static" }}
         - path:
             type: PathPrefix
-            value: /
+            value: {{ . }}
+        {{- end }}
       backendRefs:
         - name: {{ include "identity.fullname" . }}-server
           port: {{ .Values.identity.service.publicPort }}
@@ -71,4 +73,38 @@ spec:
       backendRefs:
         - name: {{ include "identity.fullname" . }}-login
           port: {{ .Values.login.service.port }}
+{{- end }}
+
+{{- if and .Values.console.enabled .Values.gatewayApi.enabled .Values.gatewayApi.console.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "identity.fullname" . }}-console
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+  {{- with .Values.gatewayApi.console.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    - name: {{ required "gatewayApi.parentRef.name is required" .Values.gatewayApi.parentRef.name }}
+      {{- with .Values.gatewayApi.parentRef.namespace }}
+      namespace: {{ . }}
+      {{- end }}
+      {{- with .Values.gatewayApi.parentRef.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+  hostnames:
+    {{- toYaml (default .Values.gatewayApi.login.hostnames .Values.gatewayApi.console.hostnames) | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /console
+      backendRefs:
+        - name: {{ include "identity.fullname" . }}-console
+          port: {{ .Values.console.service.port }}
 {{- end }}

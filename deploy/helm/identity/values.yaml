@@ -8,7 +8,6 @@ identity:
     repository: identity
     tag: latest
     pullPolicy: IfNotPresent
-  publicUrl: https://identity.example.com
   service:
     type: ClusterIP
     publicPort: 5150
@@ -93,7 +92,6 @@ login:
     repository: identity-login
     tag: latest
     pullPolicy: IfNotPresent
-  publicUrl: https://account.example.com
   service:
     type: ClusterIP
     port: 3000
@@ -138,6 +136,42 @@ login:
   affinity: {}
   extraEnv: []
 
+console:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: identity-console
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  internalCa:
+    existingSecret: identity-internal-ca
+    key: ca.crt
+  resources: {}
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
 gatewayApi:
   enabled: false
   parentRef:
@@ -154,6 +188,12 @@ gatewayApi:
     annotations: {}
     hostnames:
       - account.example.com
+
+  console:
+    enabled: true
+    annotations: {}
+    # Empty inherits Login hostnames: Console shares that host under /console.
+    hostnames: []
 
 networkPolicy:
   enabled: true

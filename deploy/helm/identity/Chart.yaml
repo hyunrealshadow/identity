@@ -1,7 +1,7 @@
 apiVersion: v2
 name: identity
-description: Identity protocol service and its built-in Login BFF
+description: Identity protocol service, Login BFF and management Console
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.25.0-0"

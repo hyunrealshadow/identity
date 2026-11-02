@@ -56,3 +56,23 @@ spec:
       appProtocol: {{ ternary "https" "http" .Values.login.tls.enabled }}
       port: {{ .Values.login.service.port }}
       targetPort: {{ ternary "https" "http" .Values.login.tls.enabled }}
+
+{{- if .Values.console.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "identity.fullname" . }}-console
+  labels:
+    {{- include "identity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+spec:
+  type: {{ .Values.console.service.type }}
+  selector:
+    {{- include "identity.consoleSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      appProtocol: http
+      port: {{ .Values.console.service.port }}
+      targetPort: http
+{{- end }}

@@ -1,8 +1,8 @@
 Identity release {{ include "identity.fullname" . }} has been installed.
 
-Public URLs:
-  Identity: {{ .Values.identity.publicUrl }}
-  Login: {{ .Values.login.publicUrl }}
+Public application addresses are entered on Login's /install page and stored
+in Identity settings. Console is served at /console/ on the Login hostname.
+Gateway hostnames and TLS remain deployment configuration.
 
 Service endpoints:
   Identity API: {{ ternary "https" "http" .Values.identity.tls.enabled }}://{{ include "identity.fullname" . }}-server:{{ .Values.identity.service.publicPort }}
@@ -33,3 +33,8 @@ Gateway API: {{ ternary "enabled" "disabled" .Values.gatewayApi.enabled }}
 Rollout status:
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-server -n {{ .Release.Namespace }}
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-login -n {{ .Release.Namespace }}
+
+{{- if .Values.console.enabled }}
+  Console subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.consoleServiceAccountName" . }}
+  kubectl rollout status deployment/{{ include "identity.fullname" . }}-console -n {{ .Release.Namespace }}
+{{- end }}
