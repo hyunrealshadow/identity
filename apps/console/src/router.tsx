@@ -9,6 +9,7 @@ export interface RouterContext {
 
 export function createAppRouter(config: RuntimeConfig) {
   return createRouter({
+    basepath: import.meta.env.BASE_URL,
     routeTree,
     context: { config },
     defaultPreload: 'intent',

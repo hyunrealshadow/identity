@@ -6,7 +6,7 @@ Installation stores issuer, login and console addresses independently in
 `app.domain`, `app.login_domain` and `app.console_domain`. The server uses them
 for first-party OAuth clients and allowed API origins. Local development uses
 `public/config.json`. The production image obtains these addresses from Identity
-at startup and writes `/run/identity-console/config.json`, served at `/config.json`
+at startup and writes `/run/identity-console/config.json`, served at `/console/config.json`
 with `Cache-Control: no-store`.
 
 ## Container
@@ -55,12 +55,17 @@ HTTPS and certificate verification are required for the internal fetch by
 default. For a trusted private HTTP listener, explicitly set
 `IDENTITY_INTERNAL_API_ALLOW_HTTP=true`. Startup retries transient failures for
 a bounded period, validates the response, and atomically replaces the local
-configuration before starting Nginx. Missing installation settings, rejected
-credentials, or invalid responses stop startup. There is no development-config
+configuration before starting Nginx. Before installation, a 404 waits and retries
+until settings exist, rereading projected credentials on each attempt. Rejected
+credentials or invalid responses stop startup. There is no development-config
 or stale-file fallback. Restart the container after changing application domains.
 
 The non-root runtime serves the SPA on HTTP port `8080`; terminate public HTTPS
 at your ingress or reverse proxy using the installed `app.console_domain`.
+The image and development server serve `/console/`, including assets, configuration
+and OAuth callbacks. Forward `/console` without stripping its prefix. Direct
+visits to nested routes return the SPA; missing assets remain 404. The Console
+may share the Login origin, with `/account` owned by Login.
 Route the public issuer's `/graphql` path to Identity's GraphQL listener. Health
 checks use the container-local `http://127.0.0.1:8081/health`. A read-only root
 filesystem is supported with writable `/tmp` and `/run/identity-console` mounts.

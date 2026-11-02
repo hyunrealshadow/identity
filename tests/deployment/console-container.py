@@ -23,15 +23,15 @@ def verify(image):
         "issuer": "https://identity.example/",
         "graphqlUrl": "https://identity.example/graphql",
         "clientId": "public-console",
-        "redirectUri": "https://console.example/callback",
-        "postLogoutRedirectUri": "https://console.example/signed-out",
+        "redirectUri": "https://login.example/console/callback",
+        "postLogoutRedirectUri": "https://login.example/console/signed-out",
         "accountUrl": "https://login.example/account",
         "scope": "openid profile email management.*",
         "displayName": 'Console "测试"',
         "environment": "test",
     }
     payload = config
-    transient_failures = 1
+    transient_failures = 2
 
     class Upstream(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -44,7 +44,7 @@ def verify(image):
                 return
             if transient_failures:
                 transient_failures -= 1
-                self.send_response(503)
+                self.send_response(404 if transient_failures == 1 else 503)
                 self.end_headers()
                 return
             body = json.dumps(payload).encode()
@@ -77,40 +77,49 @@ def verify(image):
                                "-p", "127.0.0.1::8080", image).stdout.strip()
             port = docker("port", container, "8080/tcp").stdout.strip().split(":")[-1]
             origin = f"http://127.0.0.1:{port}"
-            for _ in range(100):
+            for _ in range(150):
                 try:
-                    response = urllib.request.urlopen(origin + "/config.json", timeout=1)
+                    response = urllib.request.urlopen(origin + "/console/config.json", timeout=1)
                     break
                 except (OSError, urllib.error.URLError):
                     time.sleep(0.2)
             else:
                 raise AssertionError("Console did not start")
             assert json.load(response) == config
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, *args, **kwargs):
+                    return None
+            try:
+                urllib.request.build_opener(NoRedirect()).open(origin + "/console")
+                raise AssertionError("Expected Console slash redirect")
+            except urllib.error.HTTPError as redirect:
+                assert redirect.code == 308
+                assert redirect.headers["Location"] == "/console/"
             assert response.headers["Cache-Control"] == "no-store"
             assert response.headers["X-Frame-Options"] == "DENY"
             assert docker("exec", container, "id", "-u").stdout.strip() != "0"
             assert docker("exec", container, "curl", "--fail", "--silent",
                           "http://127.0.0.1:8081/health").stdout.strip() == "ok"
-            with urllib.request.urlopen(origin + "/users/example/roles") as response:
+            with urllib.request.urlopen(origin + "/console/users/example/roles") as response:
                 html = response.read().decode()
                 assert "<!doctype html" in html.lower()
                 assert response.headers["Cache-Control"] == "no-cache"
-            asset = re.search(r'(?:src|href)="(/assets/[^\"]+)"', html).group(1)
+            asset = re.search(r'(?:src|href)="(/console/assets/[^\"]+)"', html).group(1)
             with urllib.request.urlopen(origin + asset) as response:
                 assert "immutable" in response.headers["Cache-Control"]
             try:
-                urllib.request.urlopen(origin + "/assets/absent.js")
+                urllib.request.urlopen(origin + "/console/assets/absent.js")
                 raise AssertionError("Missing asset incorrectly returned the SPA document")
             except urllib.error.HTTPError as error:
                 assert error.code == 404
                 assert error.headers["Cache-Control"] == "no-store"
-            with urllib.request.urlopen(origin + "/callback?code=must-not-be-logged&state=private") as response:
+            with urllib.request.urlopen(origin + "/console/callback?code=must-not-be-logged&state=private") as response:
                 assert response.status == 200
             logs = docker("logs", container)
             assert token not in logs.stdout + logs.stderr
             assert "must-not-be-logged" not in logs.stdout + logs.stderr
             assert docker("exec", container, "sh", "-c",
-                          "test ! -e /usr/share/nginx/html/config.json").returncode == 0
+                          "test ! -e /usr/share/nginx/html/console/config.json").returncode == 0
             docker("stop", "--time", "3", container)
             docker("rm", container)
             container = None

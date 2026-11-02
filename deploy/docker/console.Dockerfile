@@ -17,7 +17,7 @@ RUN apk add --no-cache ca-certificates curl jq \
     && chown nginx:nginx /run/identity-console
 COPY deploy/docker/console/nginx.conf /etc/nginx/nginx.conf
 COPY --chmod=755 deploy/docker/console/entrypoint.sh /usr/local/bin/console-entrypoint
-COPY --from=builder /app/apps/console/dist/ /usr/share/nginx/html/
+COPY --from=builder /app/apps/console/dist/ /usr/share/nginx/html/console/
 USER nginx
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=60s \

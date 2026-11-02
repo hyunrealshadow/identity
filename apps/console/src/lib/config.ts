@@ -124,10 +124,11 @@ export function validateRuntimeConfig(value: unknown): RuntimeConfig {
   if (!sameOrigin(redirectUri) || !sameOrigin(postLogoutRedirectUri)) {
     throw new ConfigError('config_invalid_redirect')
   }
-  // The account center is a separate application. A same-origin account URL
-  // would send the operator back into this Console instead of the account
-  // area. When the browser origin is unavailable, there is nothing to compare.
-  if (typeof window !== 'undefined' && accountUrl.origin === window.location.origin) {
+  // Applications may share an origin, but account navigation must leave the
+  // Console's route prefix rather than loading the management SPA again.
+  const consoleBase = new URL('./', redirectUri)
+  if (accountUrl.origin === consoleBase.origin &&
+      (accountUrl.pathname + '/').startsWith(consoleBase.pathname)) {
     throw new ConfigError('config_invalid_account_url')
   }
   const clientId = requireNonEmpty(value.clientId, 512)
@@ -151,7 +152,7 @@ export async function loadRuntimeConfig(
 ): Promise<RuntimeConfig> {
   let response: Response
   try {
-    response = await fetchImpl(new URL('/config.json', window.location.origin), {
+    response = await fetchImpl(new URL(`${import.meta.env.BASE_URL}config.json`, window.location.origin), {
       cache: 'no-store',
       credentials: 'omit',
       headers: { Accept: 'application/json' },

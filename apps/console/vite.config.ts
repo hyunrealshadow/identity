@@ -9,6 +9,7 @@ const securityHeaders = {
 }
 
 export default defineConfig(({ command }) => ({
+  base: '/console/',
   appType: 'spa',
   plugins: [
     command === 'serve' && basicSsl(),

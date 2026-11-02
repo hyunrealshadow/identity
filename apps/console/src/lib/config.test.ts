@@ -49,6 +49,13 @@ describe('console runtime configuration', () => {
     )
   })
 
+  it('allows a same-origin account center outside the Console prefix', () => {
+    const value = { ...baseConfig(), redirectUri: `${origin}/console/callback`,
+      postLogoutRedirectUri: `${origin}/console/signed-out`, accountUrl: `${origin}/account` }
+    expect(validateRuntimeConfig(value).accountUrl).toBe(`${origin}/account`)
+    expect(configError({ ...value, accountUrl: `${origin}/console/account` })).toBe('config_invalid_account_url')
+  })
+
   it.each([
     ['credentials', 'https://user:secret@login.example.test/account'],
     ['a query string', 'https://login.example.test/account?returnTo=%2F'],

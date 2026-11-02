@@ -1,4 +1,4 @@
-const FALLBACK = '/'
+const FALLBACK = import.meta.env.BASE_URL
 
 function defaultOrigin(): string {
   return typeof window === 'undefined' ? 'http://localhost' : window.location.origin
@@ -8,7 +8,8 @@ function defaultOrigin(): string {
  * Accept only a same-origin path. Absolute same-origin http(s) URLs are
  * reduced to path/search/hash. Foreign origins, protocol-relative paths,
  * backslashes, credentials, control characters and non-http schemes are
- * rejected. A rejected value falls back to "/" and never leaves the origin.
+ * rejected. A rejected value falls back to the Console base path and never
+ * leaves the application's deployment prefix.
  */
 export function sanitizeReturnTo(
   value: unknown,
@@ -45,13 +46,14 @@ export function sanitizeReturnTo(
 
   if (!candidate.pathname.startsWith('/')) return fallback
   if (candidate.pathname.startsWith('//')) return fallback
+  if (!candidate.pathname.startsWith(FALLBACK)) return fallback
 
   const result = `${candidate.pathname}${candidate.search}${candidate.hash}`
   return result.startsWith('//') ? fallback : result
 }
 
 export function currentReturnTo(): string {
-  if (typeof window === 'undefined') return '/'
+  if (typeof window === 'undefined') return FALLBACK
   return sanitizeReturnTo(
     `${window.location.pathname}${window.location.search}${window.location.hash}`,
   )

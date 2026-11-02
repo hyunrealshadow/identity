@@ -895,13 +895,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const path = currentPath().replace(/\/+$/, '') || '/'
-    if (path === redirectPath(config.redirectUri) || path === '/signed-out') {
+    if (path === redirectPath(config.redirectUri) || path === redirectPath(config.postLogoutRedirectUri)) {
       setStatus('anonymous')
       return
     }
 
     void signIn({ returnTo: currentReturnTo() })
-  }, [applyAccountLocale, applyAccountTimeZone, config.redirectUri, signIn])
+  }, [applyAccountLocale, applyAccountTimeZone, config.redirectUri, config.postLogoutRedirectUri, signIn])
 
   useEffect(() => {
     if (status !== 'authenticated') return
@@ -956,7 +956,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEndSessionEndpoint(session.endSessionEndpoint)
         setStatus('authenticated')
         setSessionVersion((version) => version + 1)
-        return transaction.returnTo
+        return sanitizeReturnTo(transaction.returnTo)
       } catch (error) {
         const code = errorCodeOf(error, 'exchange_failed')
         setErrorCode(code)

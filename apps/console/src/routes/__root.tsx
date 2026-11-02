@@ -39,7 +39,7 @@ function NotFoundComponent() {
           {translate(locale, 'notFoundDescription')}
         </p>
         <a
-          href="/"
+          href={import.meta.env.BASE_URL}
           className="mt-5 inline-flex min-h-10 items-center rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
         >
           {translate(locale, 'backToDashboard')}
