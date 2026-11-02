@@ -412,7 +412,10 @@ fn installation_console_config(
             crate::database::seed::console::ConsoleClientSeedConfig::new(
                 &console_origin,
                 issuer.as_str(),
-                &format!("{console_origin}/callback"),
+                console_url
+                    .join("callback")
+                    .map_err(AppError::internal)?
+                    .as_str(),
             )
             .map(Some)
             .map_err(|_| AppError::from_code(InstallErrorCode::DomainInvalid))

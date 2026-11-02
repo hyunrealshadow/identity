@@ -11,8 +11,13 @@ export function applyApplicationOrigins(value: ApplicationOrigins | undefined) {
 }
 
 export function configuredApplicationOrigin(kind: keyof ApplicationOrigins) {
+  const value = configuredApplicationUrl(kind)
+  return value ? new URL(value).origin : undefined
+}
+
+export function configuredApplicationUrl(kind: keyof ApplicationOrigins) {
   const value = applications[kind]
-  return trustedHttpsOrigin(
+  return trustedHttpsUrl(
     kind === 'domain' && value && !value.includes('://')
       ? `https://${value}`
       : value,
@@ -20,6 +25,11 @@ export function configuredApplicationOrigin(kind: keyof ApplicationOrigins) {
 }
 
 export function trustedHttpsOrigin(value: unknown): string | undefined {
+  const url = trustedHttpsUrl(value)
+  return url ? new URL(url).origin : undefined
+}
+
+function trustedHttpsUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return
   try {
     const url = new URL(value)
@@ -32,7 +42,7 @@ export function trustedHttpsOrigin(value: unknown): string | undefined {
       url.hash
     )
       return
-    return url.origin
+    return url.toString()
   } catch {
     return
   }

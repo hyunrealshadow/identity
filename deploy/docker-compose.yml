@@ -26,8 +26,6 @@ services:
     environment:
       APP_ENV: production
       DATABASE_URL: postgres://identity:${POSTGRES_PASSWORD}@postgres:5432/identity
-      IDENTITY_PUBLIC_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
-      LOGIN_PUBLIC_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
     configs:
       - source: identity_config
         target: /app/config/production.yaml
@@ -66,11 +64,9 @@ services:
     image: ${LOGIN_IMAGE:-identity-login:local}
     restart: unless-stopped
     environment:
-      IDENTITY_API_URL: ${IDENTITY_PUBLIC_URL:-https://identity.localhost:5150}
       IDENTITY_BACKCHANNEL_API_URL: https://server:5150
       IDENTITY_BACKCHANNEL_GRAPHQL_URL: https://server:5152
       IDENTITY_INTERNAL_API_URL: https://server:5151
-      IDENTITY_PUBLIC_APP_URL: ${LOGIN_PUBLIC_URL:-https://identity.localhost:3000}
       IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
       IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
       OTEL_SERVICE_NAME: identity-login

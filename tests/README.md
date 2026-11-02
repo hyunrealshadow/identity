@@ -24,13 +24,22 @@ cargo test -p identity --features oidc-conformance --test http
 - `repository_behavior.rs`: query isolation, lifecycle checks, cursor pagination, settings and profile updates, and concurrent single-use redemption
 - `repository_security.rs`: password revocation, login concurrency, audit persistence, and transaction rollback
 - `common/`: a separate temporary schema for each database test, initialized through the normal migration entry point and cleaned up afterward, including on assertion failures
-- `support/`: shared fixtures for integration tests that do not require a database; temporary files are created under `.data/integration-tests/` and cleaned up automatically
+- `support/`: shared integration fixtures, including the production Login installer process; temporary files are created under `.data/integration-tests/` and cleaned up automatically
 
 Set `IDENTITY_TEST_DATABASE_URL` from `DATABASE_URL` in the repository-root `.env`, and set `IDENTITY_TEST_DATABASE_NAME` to the database name in that URL. Do not print connection credentials. The tests reject the production database `identity` and do not use or clear existing business schemas.
 
 ```powershell
 cargo test -p identity --test repository_behavior --test repository_security -- --ignored --test-threads=1
+# The installer uses its own temporary schema and preserves existing data.
+cargo test -p identity --test installation -- --ignored
 ```
+
+To also run the built production Login installer against that real service and
+temporary schema, first build Login and set `IDENTITY_TEST_LOGIN_NODE` to the
+absolute Node executable path. The same installation test then verifies the
+installer without public-address environment variables, Chinese field errors,
+correction and resubmission, and readiness after installation. It starts and
+stops its own local processes; it does not use a deployed Login instance.
 
 ## Console container verification
 

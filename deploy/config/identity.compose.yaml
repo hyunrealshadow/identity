@@ -17,7 +17,6 @@ observability:
 server:
   binding: 0.0.0.0
   port: 5150
-  host: {{ get_env(name="IDENTITY_PUBLIC_URL") }}
   tls:
     termination: direct
     auto_generate: false
@@ -56,8 +55,7 @@ graphql:
   server:
     binding: 0.0.0.0
     port: 5152
-  allowed_origins:
-    - {{ get_env(name="LOGIN_PUBLIC_URL") }}
+  allowed_origins: []
 
 settings:
   refresh_interval_secs: 30

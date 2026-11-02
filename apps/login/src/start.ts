@@ -11,7 +11,8 @@ const applicationRuntime = createMiddleware().server(async ({ next, pathname }) 
       const { loadRuntimeConfiguration } = await import('#/lib/runtime-config.server')
       await loadRuntimeConfiguration()
     } catch {
-      // Installation and recovery retain the configured bootstrap addresses.
+      // Installation has its own internal API and needs no public addresses.
+      // Protected flows fail closed if installed runtime configuration is absent.
     }
   }
   setResponseHeader('X-Frame-Options', 'DENY')

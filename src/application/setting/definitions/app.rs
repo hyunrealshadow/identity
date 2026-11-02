@@ -20,7 +20,7 @@ pub struct AppSettings {
     /// and device verification — which may live on a different host than the
     /// identity service itself, so its origin is recorded on its own.
     pub login_domain: Option<String>,
-    /// Exact origin of the management console.
+    /// Public base URL of the management console, including its deployment path.
     pub console_domain: Option<String>,
     /// Built-in OAuth client used by the login application.
     pub login_client_id: Option<Uuid>,
@@ -52,11 +52,8 @@ impl SettingDefinition for LoginDomainSetting {
     }
 }
 
-/// Origin of the management console, recorded during installation.
-///
-/// It is an exact HTTPS origin: no credentials, path, query or fragment. The
-/// console may live on a different host than both the issuer and the login
-/// application, so it is stored on its own.
+/// Public base URL of the management console, recorded during installation.
+/// The deployment path is retained; credentials, queries and fragments are forbidden.
 pub struct ConsoleDomainSetting;
 
 impl SettingDefinition for ConsoleDomainSetting {
@@ -78,12 +75,11 @@ impl SettingDefinition for ConsoleDomainSetting {
             || url.host_str().is_some_and(|host| host.contains('*'))
             || !url.username().is_empty()
             || url.password().is_some()
-            || url.path() != "/"
             || url.query().is_some()
             || url.fragment().is_some()
         {
             return Err(SettingValidationError::new(
-                "console origin must be an HTTPS origin without credentials, path, query or fragment",
+                "console address must use HTTPS without credentials, query or fragment",
             ));
         }
         Ok(())
@@ -140,12 +136,11 @@ mod tests {
     }
 
     #[test]
-    fn console_origin_validation_rejects_non_origin_urls() {
+    fn console_address_validation_allows_paths_but_rejects_unsafe_urls() {
         assert!(ConsoleDomainSetting::validate(&None).is_ok());
         for origin in [
             "http://console.example.com",
             "https://user:pass@console.example.com",
-            "https://console.example.com/path",
             "https://console.example.com?query=1",
             "https://console.example.com#fragment",
         ] {
@@ -155,7 +150,8 @@ mod tests {
             );
         }
         assert!(
-            ConsoleDomainSetting::validate(&Some("https://console.example.com".to_owned())).is_ok()
+            ConsoleDomainSetting::validate(&Some("https://login.example.com/console/".to_owned()))
+                .is_ok()
         );
     }
 }

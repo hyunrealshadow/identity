@@ -111,9 +111,7 @@ impl AppBuilder {
             .snapshot()
             .section::<InstallationSettings>()
             .initialized;
-        if installed
-            && let Some(config) = installed_console_seed_config(settings.as_ref(), &self.config)?
-        {
+        if installed && let Some(config) = installed_console_seed_config(settings.as_ref())? {
             seed::console::ensure_console_client(db, &config).await?;
         }
         ensure_install_startup_guard(db, settings.as_ref()).await?;
@@ -247,22 +245,17 @@ async fn is_installed(db: &DatabaseConnection) -> AppResult<bool> {
         .initialized)
 }
 
-/// When the installation recorded its own console origin, that value is the
-/// only source of the Console client configuration. Process configuration is
-/// used solely for an older installed database that has no `app.console_domain`
-/// yet.
+/// Installed Console client addresses come only from database settings.
 fn installed_console_seed_config(
     settings: &AppRuntimeSettings,
-    config: &AppConfig,
 ) -> AppResult<Option<seed::console::ConsoleClientSeedConfig>> {
     let snapshot = settings.store().snapshot();
-    let Some(origin) = snapshot.get::<ConsoleDomainSetting>() else {
-        return console_seed_config(config);
+    let Some(base) = snapshot.get::<ConsoleDomainSetting>() else {
+        return Ok(None);
     };
-    let origin = Url::parse(&origin)
-        .map_err(|error| Error::other(error.to_string()))?
-        .origin()
-        .ascii_serialization();
+    let base = Url::parse(&format!("{}/", base.trim_end_matches('/')))
+        .map_err(|error| Error::other(error.to_string()))?;
+    let origin = base.origin().ascii_serialization();
     let domain = snapshot
         .get::<DomainSetting>()
         .ok_or_else(|| Error::other("console requires the installed issuer domain"))?;
@@ -270,7 +263,7 @@ fn installed_console_seed_config(
     Ok(Some(seed::console::ConsoleClientSeedConfig::new(
         &origin,
         issuer.as_str(),
-        &format!("{origin}/callback"),
+        base.join("callback")?.as_str(),
     )?))
 }
 

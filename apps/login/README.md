@@ -24,10 +24,12 @@ requires the upstream proxy to report `X-Forwarded-Proto: https` or
 `NITRO_SSL_CERT_FILE` and `NITRO_SSL_KEY_FILE` to make the production process
 terminate TLS itself. Providing only one file is a startup error.
 
-Identity's browser-visible public URL is configured with `IDENTITY_API_URL`
-(default `https://localhost:5150`) and must use HTTPS. It constructs browser
-authorization redirects; it is not the default route for pod-to-pod or
-container-to-container traffic.
+Identity and Login public addresses come from database settings returned by the
+authenticated runtime-configuration API. Production does not read public-address
+environment variables. Browser authorization uses the installed issuer;
+pod-to-pod calls still use private backchannel endpoints. Before installation,
+Login serves `/install` using only its internal workload connection. The form
+records issuer, Login and Console addresses; a Console URL may include `/console/`.
 
 Server-side Login, consent, token, and GraphQL calls use
 `IDENTITY_BACKCHANNEL_API_URL` and `IDENTITY_BACKCHANNEL_GRAPHQL_URL`. Set both
@@ -70,7 +72,7 @@ across every replica — it only encrypts the session cookies, it is never
 rotated. Production and Kubernetes deployments inject
 `IDENTITY_INTERNAL_API_URL`, `IDENTITY_WORKLOAD_TOKEN_FILE` (projected
 ServiceAccount token or a mounted static token),
-`IDENTITY_LOGIN_SESSION_SECRET`, and `IDENTITY_PUBLIC_APP_URL`. These values
+and `IDENTITY_LOGIN_SESSION_SECRET`. These values
 are server-only and are never included in browser JavaScript.
 
 The health endpoints `/health/live` and `/health/ready` report process

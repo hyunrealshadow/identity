@@ -1,3 +1,4 @@
+import { applyApplicationOrigins } from './application-origins.server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const requestHeaders = vi.hoisted(() => ({ get: vi.fn() }))
@@ -19,6 +20,7 @@ import {
 afterEach(() => {
   requestHeaders.get.mockReset()
   delete process.env.IDENTITY_API_URL
+  applyApplicationOrigins(undefined)
   delete process.env.IDENTITY_BACKCHANNEL_API_URL
   delete process.env.IDENTITY_BACKCHANNEL_ALLOW_HTTP
   vi.unstubAllGlobals()
@@ -104,7 +106,7 @@ describe('OAuth return locations', () => {
 
 describe('RP-initiated logout', () => {
   it('redirects the browser to the public Identity logout endpoint', () => {
-    process.env.IDENTITY_API_URL = 'https://id.example.com'
+    applyApplicationOrigins({ domain: 'https://id.example.com' })
 
     expect(
       providerLogoutUrl(
@@ -118,7 +120,7 @@ describe('RP-initiated logout', () => {
   })
 
   it('still ends the provider session when the local ID token is missing', () => {
-    process.env.IDENTITY_API_URL = 'https://id.example.com'
+    applyApplicationOrigins({ domain: 'https://id.example.com' })
 
     expect(
       providerLogoutUrl('https://login.example.com', 'client-id').toString(),

@@ -105,7 +105,6 @@ generate a separate cookie sealing secret:
 ```sh
 export IDENTITY_WORKLOAD_TOKEN='paste-the-token-from-terminal-1'
 export IDENTITY_LOGIN_SESSION_SECRET="$(openssl rand -base64 32)"
-export IDENTITY_PUBLIC_APP_URL='https://localhost:3000'
 
 pnpm install --frozen-lockfile
 pnpm dev:login
@@ -156,13 +155,11 @@ only apply where the selected template uses them.
 
 | Variable | Purpose |
 | --- | --- |
-| `IDENTITY_API_URL` | Browser-visible Identity URL; defaults to `https://localhost:5150` |
 | `IDENTITY_BACKCHANNEL_API_URL` | Server-side protocol and interactive API calls |
 | `IDENTITY_BACKCHANNEL_GRAPHQL_URL` | Server-side GraphQL calls |
 | `IDENTITY_INTERNAL_API_URL` | Internal workload API; defaults to `https://localhost:5151` |
 | `IDENTITY_WORKLOAD_TOKEN_FILE` / `IDENTITY_WORKLOAD_TOKEN` | Workload credential file or inline development token |
 | `IDENTITY_LOGIN_SESSION_SECRET` | Cookie sealing secret shared across Login replicas |
-| `IDENTITY_PUBLIC_APP_URL` | Public HTTPS origin of Login |
 
 Identity automatically rotates the built-in Login OAuth credential. Configure
 the workload credential and a shared cookie sealing secret separately.

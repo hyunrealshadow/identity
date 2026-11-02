@@ -82,7 +82,7 @@ pub struct InstallationData {
     pub application_url: Url,
     /// Issuer origin derived from the installation domain.
     pub issuer: Option<Url>,
-    /// Console origin used to provision the protected Console client in the
+    /// Console base URL used to provision the protected Console client in the
     /// same transaction.
     pub console_url: Option<Url>,
     pub client_id: Uuid,
@@ -169,7 +169,7 @@ impl InstallService {
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
         let user_oid = Uuid::new_v4();
         let key_oid = Uuid::new_v4();
-        let console_domain = input.console_url.origin().ascii_serialization();
+        let console_domain = input.console_url.to_string();
         let settings = SettingChanges::default()
             .set::<DomainSetting>(&Some(input.domain))?
             .set::<LoginDomainSetting>(&login_app_domain(&input.application_url))?
@@ -295,25 +295,26 @@ fn normalize_issuer_url(domain: &str) -> Result<Url, AppError> {
     Ok(url)
 }
 
-/// The console origin is an exact HTTPS origin. Credentials, a path, a query
-/// or a fragment would make it something other than an origin.
+/// The console address includes its deployment path, but no credentials,
+/// query or fragment. A trailing slash keeps endpoint joins inside that path.
 fn normalize_console_url(value: &str) -> Result<Url, AppError> {
     if value.trim().is_empty() {
         return Err(AppError::from_code(InstallErrorCode::ConsoleUrlRequired));
     }
-    let url = Url::parse(value.trim())
+    let mut url = Url::parse(value.trim())
         .map_err(|_| AppError::from_code(InstallErrorCode::ConsoleUrlInvalid))?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || url.host_str().is_some_and(|host| host.contains('*'))
         || !url.username().is_empty()
         || url.password().is_some()
-        || url.path() != "/"
         || url.query().is_some()
         || url.fragment().is_some()
     {
         return Err(AppError::from_code(InstallErrorCode::ConsoleUrlInvalid));
     }
+    let path = format!("{}/", url.path().trim_end_matches('/'));
+    url.set_path(&path);
     Ok(url)
 }
 
@@ -388,7 +389,7 @@ fn normalize_email(email: &str) -> Result<String, AppError> {
 /// Origin of the login application, e.g. `https://login.example.com`.
 ///
 /// Only http(s) URLs have a usable origin; anything else leaves the setting
-/// empty and lets the configuration stay authoritative.
+/// empty; runtime application addresses are read from the installed settings.
 fn login_app_domain(application_url: &Url) -> Option<String> {
     matches!(application_url.scheme(), "http" | "https")
         .then(|| application_url.origin().ascii_serialization())
@@ -551,12 +552,11 @@ mod tests {
     }
 
     #[test]
-    fn install_validation_rejects_console_urls_that_are_not_exact_https_origins() {
+    fn install_validation_rejects_unsafe_console_addresses() {
         for console_url in [
             "http://console.example.com",
             "https://user@console.example.com",
             "https://user:pass@console.example.com",
-            "https://console.example.com/path",
             "https://console.example.com?query=1",
             "https://console.example.com#fragment",
         ] {

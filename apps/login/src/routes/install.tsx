@@ -1,6 +1,7 @@
 import { Alert, FieldError, Input, Label, TextField } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
@@ -49,7 +50,16 @@ const loadInstallPage = createServerFn({ method: 'GET' }).handler(async () => {
   const hasUnmappedFieldError = Object.keys(flash?.fields ?? {}).some(
     (field) => !visibleInstallFields.has(field),
   )
+  const url = new URL(getRequest().url)
+  url.protocol = 'https:'
+  const development = process.env.NODE_ENV === 'development'
   return {
+    // Draft defaults only: submitted addresses are validated and persisted by Identity.
+    defaults: {
+      domain: development ? 'https://localhost:5150' : url.origin,
+      application_url: development ? 'https://localhost:3000' : url.origin,
+      console_url: development ? 'https://localhost:3100/console/' : `${url.origin}/console/`,
+    },
     locale: requestLocale(),
     error:
       flash?.field || (flash?.fields && !hasUnmappedFieldError)
@@ -153,7 +163,7 @@ export const Route = createFileRoute('/install')({
 
 function InstallPage() {
   const search = Route.useSearch()
-  const { locale, error, fieldErrors, formValues } = Route.useLoaderData()
+  const { locale, error, fieldErrors, formValues, defaults } = Route.useLoaderData()
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
 
   return (
@@ -185,7 +195,7 @@ function InstallPage() {
           isRequired
           fullWidth
           name="domain"
-          defaultValue={formValues.domain ?? search.domain ?? 'https://localhost:5150'}
+          defaultValue={formValues.domain ?? search.domain ?? defaults.domain}
         >
           <Label>{t('installIdentityUrl')}</Label>
           <Input
@@ -200,7 +210,7 @@ function InstallPage() {
           isRequired
           fullWidth
           name="application_url"
-          defaultValue={formValues.application_url ?? search.application_url ?? 'https://localhost:3000'}
+          defaultValue={formValues.application_url ?? search.application_url ?? defaults.application_url}
         >
           <Label>{t('installApplicationUrl')}</Label>
           <Input
@@ -214,12 +224,12 @@ function InstallPage() {
           isRequired
           fullWidth
           name="console_url"
-          defaultValue={formValues.console_url ?? search.console_url ?? 'https://localhost:3100'}
+          defaultValue={formValues.console_url ?? search.console_url ?? defaults.console_url}
         >
           <Label>{t('installConsoleUrl')}</Label>
           <Input
             inputMode="url"
-            placeholder="https://console.example.com"
+            placeholder="https://login.example.com/console/"
           />
           <FieldError />
         </TextField>

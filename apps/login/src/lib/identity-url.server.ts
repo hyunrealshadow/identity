@@ -1,4 +1,4 @@
-import { configuredApplicationOrigin } from './application-origins.server'
+import { configuredApplicationUrl } from './application-origins.server'
 
 const DEFAULT_IDENTITY_URL = 'https://localhost:5150'
 
@@ -11,9 +11,12 @@ function configuredUrl(name: string, fallback: string, allowHttp: boolean) {
 }
 
 export function publicIdentityApiUrl() {
-  const installed = configuredApplicationOrigin('domain')
+  const installed = configuredApplicationUrl('domain')
   if (installed) return new URL(installed)
-  return configuredUrl('IDENTITY_API_URL', DEFAULT_IDENTITY_URL, false)
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Identity public address is unavailable until installation completes')
+  }
+  return new URL(DEFAULT_IDENTITY_URL)
 }
 
 export function backchannelIdentityApiUrl() {

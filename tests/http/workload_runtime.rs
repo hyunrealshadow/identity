@@ -40,7 +40,7 @@ async fn service(console_origin: Option<&str>) -> Service {
 
 #[tokio::test]
 async fn console_workload_fetches_only_its_public_configuration() {
-    let service = service(Some("https://console.example.com")).await;
+    let service = service(Some("https://login.example.com/console/")).await;
     let url = "http://localhost/internal/workloads/self/runtime-configuration";
     let mut response = TestClient::get(url)
         .add_header("Authorization", format!("Bearer {CONSOLE_TOKEN}"), true)
@@ -69,11 +69,11 @@ async fn console_workload_fetches_only_its_public_configuration() {
     );
     assert_eq!(
         config["redirectUri"],
-        "https://console.example.com/callback"
+        "https://login.example.com/console/callback"
     );
     assert_eq!(
         config["postLogoutRedirectUri"],
-        "https://console.example.com/signed-out"
+        "https://login.example.com/console/signed-out"
     );
     assert_eq!(config["accountUrl"], "https://login.example.com/account");
     assert!(config.get("oauth_client").is_none());

@@ -2,7 +2,7 @@ import { identityInternalJson } from './identity.server'
 import { emitEvent } from './observability.server'
 import {
   applyApplicationOrigins,
-  configuredApplicationOrigin,
+  configuredApplicationUrl,
   type ApplicationOrigins,
 } from './application-origins.server'
 
@@ -113,17 +113,16 @@ export function loadSessionSecret() {
 
 export function loadApplicationUrl() {
   const value =
-    configuredApplicationOrigin('login_domain') ??
-    process.env.IDENTITY_PUBLIC_APP_URL ??
-    (process.env.NODE_ENV === 'development'
+    configuredApplicationUrl('login_domain') ??
+    (process.env.NODE_ENV !== 'production'
       ? 'https://localhost:3000'
       : undefined)
   if (!value) {
-    throw new Error('IDENTITY_PUBLIC_APP_URL must be configured')
+    throw new Error('Login public address is unavailable until installation completes')
   }
   const url = new URL(value)
   if (url.protocol !== 'https:') {
-    throw new Error('IDENTITY_PUBLIC_APP_URL must use HTTPS')
+    throw new Error('Login public address must use HTTPS')
   }
   return url.toString()
 }

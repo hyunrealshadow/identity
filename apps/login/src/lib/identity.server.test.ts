@@ -179,10 +179,10 @@ describe('identityJson', () => {
   })
 
   it('refuses a plaintext Identity API endpoint', async () => {
-    process.env.IDENTITY_API_URL = 'http://identity.example.com'
+    process.env.IDENTITY_BACKCHANNEL_API_URL = 'http://identity.example.com'
 
     await expect(identityJson('/installation/status')).rejects.toThrow(
-      'IDENTITY_API_URL must use HTTPS',
+      'IDENTITY_BACKCHANNEL_API_URL must use HTTPS',
     )
   })
 

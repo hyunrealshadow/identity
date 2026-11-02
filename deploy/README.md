@@ -90,7 +90,8 @@ proxy connects to the Identity container. Set `IDENTITY_DIRECT_HTTP_CLIENT` to
 the Login container IP or its private Docker network CIDR. The former may
 supply forwarded HTTPS metadata; the latter may call the public and GraphQL
 listeners directly over HTTP. Do not use a public client address range. The
-external `IDENTITY_PUBLIC_URL` and `LOGIN_PUBLIC_URL` must remain HTTPS URLs.
+public issuer and Login addresses entered in `/install` must remain HTTPS URLs.
+These addresses are stored in database settings, not deployment environment variables.
 
 The override removes all application TLS certificate and CA mounts, switches
 every Login-to-Identity call to the private HTTP service ports, and changes its

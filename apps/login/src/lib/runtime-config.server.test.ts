@@ -16,6 +16,7 @@ const runtimeConfiguration = {
     expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
   },
   refresh_after: 60,
+  applications: { domain: 'https://issuer.example/', login_domain: 'https://login.example/' },
 }
 
 async function importModule() {
@@ -32,24 +33,14 @@ describe('login runtime configuration', () => {
     expect(loadApplicationUrl()).toBe('https://localhost:3000/')
   })
 
-  it('requires an explicit public application URL in production', async () => {
+  it('does not use an environment address before installation in production', async () => {
     vi.stubEnv('NODE_ENV', 'production')
-    vi.stubEnv('IDENTITY_PUBLIC_APP_URL', undefined)
+    vi.stubEnv('IDENTITY_PUBLIC_APP_URL', 'https://ignored.example')
 
     const { loadApplicationUrl } = await importModule()
 
     expect(() => loadApplicationUrl()).toThrow(
-      'IDENTITY_PUBLIC_APP_URL must be configured',
-    )
-  })
-
-  it('requires the public application URL to use HTTPS', async () => {
-    vi.stubEnv('IDENTITY_PUBLIC_APP_URL', 'http://login.example.test')
-
-    const { loadApplicationUrl } = await importModule()
-
-    expect(() => loadApplicationUrl()).toThrow(
-      'IDENTITY_PUBLIC_APP_URL must use HTTPS',
+      'Login public address is unavailable until installation completes',
     )
   })
 
@@ -69,8 +60,9 @@ describe('login runtime configuration', () => {
       )
     vi.stubGlobal('fetch', fetch)
 
-    const { loadOAuthClient } = await importModule()
+    const { loadOAuthClient, loadApplicationUrl } = await importModule()
     const client = await loadOAuthClient()
+    expect(loadApplicationUrl()).toBe('https://login.example/')
 
     expect(client).toEqual({
       client_id: runtimeConfiguration.oauth_client.client_id,
