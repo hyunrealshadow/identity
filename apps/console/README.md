@@ -4,7 +4,9 @@ Console is a static frontend. Business operations use the instance GraphQL API.
 
 Installation stores issuer, login and console addresses independently in
 `app.domain`, `app.login_domain` and `app.console_domain`. The server uses them
-for first-party OAuth clients and allowed API origins. Local development uses
+for first-party OAuth clients and allowed API origins. The installer accepts
+the Console HTTPS origin without a path and automatically stores its `/console/`
+base URL. Local development uses
 `public/config.json`. The production image obtains these addresses from Identity
 at startup and writes `/run/identity-console/config.json`, served at `/console/config.json`
 with `Cache-Control: no-store`.

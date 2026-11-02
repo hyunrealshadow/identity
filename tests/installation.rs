@@ -64,7 +64,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
         let install = json!({
             "username": "installverify-owner", "email": "invalid", "password": "Local!J7pV2zR9kM4xQ6s",
             "domain": "https://identity.example.test", "application_url": "https://identity.example.test",
-            "console_url": "https://identity.example.test/console", "key_algorithm": "ecdsa-p256",
+            "console_url": "https://identity.example.test", "key_algorithm": "ecdsa-p256",
         });
         if let Ok(node) = std::env::var("IDENTITY_TEST_LOGIN_NODE") {
             login_installer::verify(&node,

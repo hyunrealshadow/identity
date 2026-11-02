@@ -92,7 +92,9 @@ pub async fn verify(node: &str, app: Service, workload_token: &str, input: &Valu
         html.contains("安装 Identity"),
         "production installer did not render"
     );
-    assert!(html.contains(&format!("https://127.0.0.1:{port}/console/")));
+    assert!(html.contains(&format!("https://127.0.0.1:{port}")));
+    assert!(!html.contains(&format!("https://127.0.0.1:{port}/console/")));
+    assert!(html.contains("系统自动使用 /console/"));
     let post = |value: &Value| {
         let mut form = url::form_urlencoded::Serializer::new(String::new());
         for (key, value) in value.as_object().unwrap() {

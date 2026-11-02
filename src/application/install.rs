@@ -295,8 +295,8 @@ fn normalize_issuer_url(domain: &str) -> Result<Url, AppError> {
     Ok(url)
 }
 
-/// The console address includes its deployment path, but no credentials,
-/// query or fragment. A trailing slash keeps endpoint joins inside that path.
+/// Installation accepts an HTTPS origin. Console's deployment path is owned
+/// by the application and is never supplied by the installer.
 fn normalize_console_url(value: &str) -> Result<Url, AppError> {
     if value.trim().is_empty() {
         return Err(AppError::from_code(InstallErrorCode::ConsoleUrlRequired));
@@ -308,13 +308,13 @@ fn normalize_console_url(value: &str) -> Result<Url, AppError> {
         || url.host_str().is_some_and(|host| host.contains('*'))
         || !url.username().is_empty()
         || url.password().is_some()
+        || url.path() != "/"
         || url.query().is_some()
         || url.fragment().is_some()
     {
         return Err(AppError::from_code(InstallErrorCode::ConsoleUrlInvalid));
     }
-    let path = format!("{}/", url.path().trim_end_matches('/'));
-    url.set_path(&path);
+    url.set_path("/console/");
     Ok(url)
 }
 
@@ -530,7 +530,10 @@ mod tests {
 
         assert_eq!(input.issuer.as_str(), "https://identity.example.com/");
         assert_eq!(input.application_url.as_str(), "https://login.example.com/");
-        assert_eq!(input.console_url.as_str(), "https://console.example.com/");
+        assert_eq!(
+            input.console_url.as_str(),
+            "https://console.example.com/console/"
+        );
     }
 
     #[test]
@@ -557,6 +560,8 @@ mod tests {
             "http://console.example.com",
             "https://user@console.example.com",
             "https://user:pass@console.example.com",
+            "https://console.example.com/console/",
+            "https://console.example.com/custom-path",
             "https://console.example.com?query=1",
             "https://console.example.com#fragment",
         ] {

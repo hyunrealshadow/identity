@@ -198,6 +198,7 @@ const zhCN = {
   installIdentityUrl: '身份地址',
   installApplicationUrl: '登录地址',
   installConsoleUrl: '控制台地址',
+  installConsoleOriginDescription: '填写 HTTPS 来源，无需路径，系统自动使用 /console/',
   installAdminUsername: '管理员用户名',
   installAdminEmail: '管理员邮箱',
   installPassword: '密码',

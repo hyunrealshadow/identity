@@ -29,7 +29,8 @@ authenticated runtime-configuration API. Production does not read public-address
 environment variables. Browser authorization uses the installed issuer;
 pod-to-pod calls still use private backchannel endpoints. Before installation,
 Login serves `/install` using only its internal workload connection. The form
-records issuer, Login and Console addresses; a Console URL may include `/console/`.
+records issuer, Login and Console addresses. Enter the Console HTTPS origin
+without a path; Identity adds `/console/` and saves the resulting base URL.
 
 Server-side Login, consent, token, and GraphQL calls use
 `IDENTITY_BACKCHANNEL_API_URL` and `IDENTITY_BACKCHANNEL_GRAPHQL_URL`. Set both

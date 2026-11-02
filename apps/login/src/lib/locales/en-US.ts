@@ -196,6 +196,7 @@ const enUS = {
   installIdentityUrl: 'Identity URL',
   installApplicationUrl: 'Login URL',
   installConsoleUrl: 'Console URL',
+  installConsoleOriginDescription: 'Enter the HTTPS origin without a path. Console uses /console/ automatically.',
   installAdminUsername: 'Administrator username',
   installAdminEmail: 'Administrator email',
   installPassword: 'Password',

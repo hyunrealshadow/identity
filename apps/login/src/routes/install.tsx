@@ -1,4 +1,4 @@
-import { Alert, FieldError, Input, Label, TextField } from '@heroui/react'
+import { Alert, Description, FieldError, Input, Label, TextField } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
@@ -58,7 +58,7 @@ const loadInstallPage = createServerFn({ method: 'GET' }).handler(async () => {
     defaults: {
       domain: development ? 'https://localhost:5150' : url.origin,
       application_url: development ? 'https://localhost:3000' : url.origin,
-      console_url: development ? 'https://localhost:3100/console/' : `${url.origin}/console/`,
+      console_url: development ? 'https://localhost:3100' : url.origin,
     },
     locale: requestLocale(),
     error:
@@ -229,8 +229,9 @@ function InstallPage() {
           <Label>{t('installConsoleUrl')}</Label>
           <Input
             inputMode="url"
-            placeholder="https://login.example.com/console/"
+            placeholder="https://login.example.com"
           />
+          <Description>{t('installConsoleOriginDescription')}</Description>
           <FieldError />
         </TextField>
 

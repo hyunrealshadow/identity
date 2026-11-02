@@ -32,11 +32,12 @@ the public HTTPS issuer, Login and Console URLs in database settings. Workloads
 load them through Identity; Gateway hostnames and TLS certificates remain
 deployment configuration and do not update these settings automatically.
 
-After deployment, visit Login's `/install`. For a single hostname use, for example:
+After deployment, visit Login's `/install`. Enter HTTPS origins without deployment
+paths. For a single hostname use, for example:
 
 - issuer: `https://identity.example.com`
 - Login: `https://identity.example.com`
-- Console: `https://identity.example.com/console/`
+- Console: `https://identity.example.com`
 
 The three installer fields are editable. The suggested same-host addresses are
 form defaults, not a restriction. Set routing hostnames first, then enter the
@@ -44,8 +45,13 @@ matching public addresses in the installer:
 
 | Deployment | Issuer | Login | Console |
 | --- | --- | --- | --- |
-| Shared hostname | `https://identity.example.com` | `https://identity.example.com` | `https://identity.example.com/console/` |
-| Separate hostnames | `https://id.example.com` | `https://account.example.com` | `https://admin.example.com/console/` |
+| Shared hostname | `https://identity.example.com` | `https://identity.example.com` | `https://identity.example.com` |
+| Separate hostnames | `https://id.example.com` | `https://account.example.com` | `https://admin.example.com` |
+
+Identity automatically appends `/console/` to the Console origin and persists the
+complete base URL. Do not enter `/console/` in the installation field. Both
+`https://admin.example.com` and its root-slash form `https://admin.example.com/`
+are accepted; credentials, non-root paths, queries and fragments are rejected.
 
 For a shared hostname, use:
 
