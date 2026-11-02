@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile --filter console...
 COPY apps/console apps/console
 COPY packages/graphql-access packages/graphql-access
 COPY packages/ui packages/ui
-RUN pnpm --filter console build && rm apps/console/dist/config.json
+RUN pnpm --filter console build && rm -f apps/console/dist/config.json
 
 FROM nginx:stable-alpine
 RUN apk add --no-cache ca-certificates curl jq \

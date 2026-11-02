@@ -24,6 +24,8 @@ pub struct AppSettings {
     pub console_domain: Option<String>,
     /// Built-in OAuth client used by the login application.
     pub login_client_id: Option<Uuid>,
+    /// Public OAuth client provisioned for this installation's management console.
+    pub console_client_id: Option<Uuid>,
 }
 
 impl SettingSection for AppSettings {
@@ -97,6 +99,17 @@ impl SettingDefinition for LoginClientIdSetting {
     }
 }
 
+pub struct ConsoleClientIdSetting;
+
+impl SettingDefinition for ConsoleClientIdSetting {
+    type Value = Option<Uuid>;
+    const KEY: &'static str = "app.console_client_id";
+
+    fn default_value() -> Self::Value {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;
@@ -113,6 +126,7 @@ mod tests {
             domain: Some("identity.example.com".to_owned()),
             login_domain: Some("https://login.example.com".to_owned()),
             login_client_id: Some(Uuid::new_v4()),
+            console_client_id: Some(Uuid::new_v4()),
         };
         let installation = InstallationSettings {
             initialized: true,

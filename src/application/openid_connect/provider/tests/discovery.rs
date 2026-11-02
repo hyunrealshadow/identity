@@ -9,6 +9,7 @@ async fn normalizes_plain_domain_to_https_issuer() {
                 domain: Some("identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -31,6 +32,7 @@ async fn assembles_discovery_document_from_issuer_and_capabilities() {
                 domain: Some("https://identity.example.com/issuer1/".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -98,6 +100,7 @@ async fn discovery_advertises_registration_endpoint_when_enabled() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,

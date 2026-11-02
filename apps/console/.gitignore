@@ -3,3 +3,4 @@ coverage/
 .vite/
 .vite-temp/
 *.local
+public/config.json

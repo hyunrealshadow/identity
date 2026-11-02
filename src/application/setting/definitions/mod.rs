@@ -4,7 +4,8 @@ mod openid_connect;
 mod password;
 
 pub use app::{
-    AppSettings, ConsoleDomainSetting, DomainSetting, LoginClientIdSetting, LoginDomainSetting,
+    AppSettings, ConsoleClientIdSetting, ConsoleDomainSetting, DomainSetting, LoginClientIdSetting,
+    LoginDomainSetting,
 };
 pub use installation::InstallationSettings;
 pub use openid_connect::{

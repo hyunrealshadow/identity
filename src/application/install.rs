@@ -28,8 +28,8 @@ use crate::{
     key::runtime::RuntimeKeyRingProvider,
     observability::{BusinessEvent, EventValue, error_outcome, event_sink},
     setting::{
-        ConsoleDomainSetting, DomainSetting, InstallationSettings, LoginClientIdSetting,
-        LoginDomainSetting, SettingChanges,
+        ConsoleClientIdSetting, ConsoleDomainSetting, DomainSetting, InstallationSettings,
+        LoginClientIdSetting, LoginDomainSetting, SettingChanges,
     },
     user::model::Password,
 };
@@ -86,6 +86,7 @@ pub struct InstallationData {
     /// same transaction.
     pub console_url: Option<Url>,
     pub client_id: Uuid,
+    pub console_client_id: Uuid,
     pub client_secret: String,
     pub client_secret_lifetime: Duration,
     pub key_oid: Uuid,
@@ -164,6 +165,7 @@ impl InstallService {
         )?;
         key_data.certificate = Some(certificate);
         let client_id = Uuid::new_v4();
+        let console_client_id = Uuid::new_v4();
         let mut client_secret_bytes = [0_u8; 32];
         rng().fill(&mut client_secret_bytes);
         let client_secret = URL_SAFE_NO_PAD.encode(client_secret_bytes);
@@ -175,6 +177,7 @@ impl InstallService {
             .set::<LoginDomainSetting>(&login_app_domain(&input.application_url))?
             .set::<ConsoleDomainSetting>(&Some(console_domain))?
             .set::<LoginClientIdSetting>(&Some(client_id))?
+            .set::<ConsoleClientIdSetting>(&Some(console_client_id))?
             .set_section(&InstallationSettings {
                 initialized: true,
                 initialized_at: Some(Utc::now()),
@@ -190,6 +193,7 @@ impl InstallService {
                 issuer: Some(input.issuer),
                 console_url: Some(input.console_url),
                 client_id,
+                console_client_id,
                 client_secret: client_secret.clone(),
                 client_secret_lifetime: self.client_secret_lifetime,
                 key_oid,

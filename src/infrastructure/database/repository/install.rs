@@ -210,8 +210,12 @@ impl InstallRepository for InstallRepositoryImpl {
             self.console.as_ref(),
         )?;
         if let Some(config) = console_config {
-            crate::database::seed::console::ensure_console_client_in_transaction(&txn, &config)
-                .await?;
+            crate::database::seed::console::provision_console_client_in_transaction(
+                &txn,
+                &config,
+                data.console_client_id,
+            )
+            .await?;
         }
 
         let created_client = client::ActiveModel {

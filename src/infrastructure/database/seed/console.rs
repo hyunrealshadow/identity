@@ -34,14 +34,18 @@ use super::{
     scope::resolve_builtin_scope_ids,
 };
 use crate::{
-    application::error::AppError,
+    application::{
+        error::{AppError, codes::common::CommonErrorCode},
+        setting::ConsoleClientIdSetting,
+    },
     database::{
         audit,
         entity::{client, client_openid_connect, client_openid_connect_platform, client_scope},
+        repository::setting::read_setting,
     },
 };
 
-pub use identity_domain::client::built_in::{CONSOLE_CLIENT_NAME, CONSOLE_CLIENT_OID};
+pub use identity_domain::client::built_in::CONSOLE_CLIENT_NAME;
 pub const CONSOLE_CLIENT_PROTOCOL: &str = "openid_connect";
 
 /// Base scopes plus every trusted management catalog entry. This is an allowed
@@ -189,13 +193,57 @@ pub async fn ensure_console_client_in_transaction(
     db: &DatabaseTransaction,
     config: &ConsoleClientSeedConfig,
 ) -> Result<(), AppError> {
+    let oid = read_setting::<ConsoleClientIdSetting, _>(db)
+        .await?
+        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+    let existing = client::Entity::find()
+        .filter(client::Column::Oid.eq(oid))
+        .one(db)
+        .await
+        .map_err(AppError::internal)?
+        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+    if !existing.built_in || existing.protocol != CONSOLE_CLIENT_PROTOCOL {
+        return Err(AppError::from_code(CommonErrorCode::Forbidden));
+    }
+    configure_console_client(db, config, existing.id, oid, false).await
+}
+
+/// Called only by installation, inside its transaction and provisioning lock.
+pub async fn provision_console_client_in_transaction(
+    db: &DatabaseTransaction,
+    config: &ConsoleClientSeedConfig,
+    oid: Uuid,
+) -> Result<(), AppError> {
+    let client = client::ActiveModel {
+        oid: Set(oid),
+        protocol: Set(CONSOLE_CLIENT_PROTOCOL.to_owned()),
+        name: Set(CONSOLE_CLIENT_NAME.to_owned()),
+        names: Set(None),
+        description: Set(Some("Protected Identity console client".to_owned())),
+        built_in: Set(true),
+        created_at: Set(Utc::now().into()),
+        updated_at: Set(None),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .map_err(AppError::internal)?;
+    configure_console_client(db, config, client.id, oid, true).await
+}
+
+async fn configure_console_client(
+    db: &DatabaseTransaction,
+    config: &ConsoleClientSeedConfig,
+    client_id: i64,
+    console_oid: Uuid,
+    created: bool,
+) -> Result<(), AppError> {
     validate_catalog().map_err(AppError::internal)?;
     ensure_graphql_resource_coverage(db).await?;
     let graphql_resource_oid = graphql_resource_oid(db).await?;
     let now = Utc::now();
     let scope_names = console_scope_names();
     let scope_ids = ensure_scope_rows(db, &scope_names, graphql_resource_oid).await?;
-    let (client_id, console_oid, created) = ensure_client_row(db, now).await?;
     let mut material_change = created;
     material_change |= ensure_oidc_metadata(db, client_id, &config.redirect_uri, now).await?;
     material_change |= ensure_web_platform(db, client_id, &config.redirect_uri, now).await?;
@@ -233,47 +281,6 @@ async fn ensure_scope_rows(
     // Names may be exact concrete codes or trusted input selectors such as
     // `account.*` and `management.*`; only concrete rows are assigned.
     resolve_builtin_scope_ids(db, names, graphql_resource_oid).await
-}
-
-async fn ensure_client_row(
-    db: &impl ConnectionTrait,
-    now: DateTime<Utc>,
-) -> Result<(i64, Uuid, bool), AppError> {
-    let oid: Uuid = CONSOLE_CLIENT_OID
-        .parse()
-        .expect("console client OID is valid");
-    if let Some(existing) = client::Entity::find()
-        .filter(client::Column::Oid.eq(oid))
-        .one(db)
-        .await
-        .map_err(AppError::internal)?
-    {
-        if !existing.built_in || existing.protocol != CONSOLE_CLIENT_PROTOCOL {
-            return Err(AppError::from_code(
-                crate::application::error::codes::common::CommonErrorCode::Forbidden,
-            ));
-        }
-        return Ok((existing.id, oid, false));
-    }
-    Ok((
-        client::ActiveModel {
-            oid: Set(oid),
-            protocol: Set(CONSOLE_CLIENT_PROTOCOL.to_owned()),
-            name: Set(CONSOLE_CLIENT_NAME.to_owned()),
-            names: Set(None),
-            description: Set(Some("Protected Identity console client".to_owned())),
-            built_in: Set(true),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        }
-        .insert(db)
-        .await
-        .map_err(AppError::internal)?
-        .id,
-        oid,
-        true,
-    ))
 }
 
 async fn ensure_oidc_metadata(

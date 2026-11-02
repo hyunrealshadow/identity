@@ -9,6 +9,7 @@ async fn discovery_uses_rsa_key_repo_algorithm() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -59,6 +60,7 @@ async fn discovery_advertises_only_published_signing_algorithms() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -85,6 +87,7 @@ async fn discovery_uses_rsa_pss_key_repo_algorithm() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -116,6 +119,7 @@ async fn discovery_uses_ec_key_repo_algorithm() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -145,6 +149,7 @@ async fn discovery_uses_all_detected_key_repo_algorithms() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -185,6 +190,7 @@ async fn discovery_falls_back_to_capabilities_when_key_repo_has_no_detected_algo
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,
@@ -211,6 +217,7 @@ async fn discovery_maps_key_repo_errors() {
                 domain: Some("https://identity.example.com".to_owned()),
                 login_domain: None,
                 login_client_id: None,
+                console_client_id: None,
             })
             .with_section(&InstallationSettings {
                 initialized: true,

@@ -6,7 +6,9 @@ mod login_installer;
 use std::sync::Arc;
 
 use http::StatusCode;
-use identity_application::setting::{BreachedPasswordCheckEnabledSetting, SettingChanges};
+use identity_application::setting::{
+    BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, SettingChanges,
+};
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
     auth::workload::build_workload_authenticator,
@@ -14,7 +16,10 @@ use identity_infrastructure::{
         AppConfig, AppEnvironment, HealthChecksConfig, StaticTokenConfig, WorkloadConfig,
         WorkloadsConfig,
     },
-    database::{repository::setting::write_settings, seed},
+    database::{
+        repository::setting::{read_setting, write_settings},
+        seed,
+    },
     services::AppServices,
     settings::AppRuntimeSettings,
     web::tera::{build_i18n, build_tera},
@@ -31,6 +36,11 @@ use serde_json::{Value, json};
 async fn installation_persists_same_origin_console_path_and_bootstraps_both_workloads() {
     common::isolated(|db| async move {
         seed::run_all(&db).await.unwrap();
+        let console_seed = seed::console::ConsoleClientSeedConfig::new(
+            "https://identity.example.test", "https://identity.example.test",
+            "https://identity.example.test/console/callback").unwrap();
+        assert!(seed::console::ensure_console_client(&db, &console_seed).await.is_err(),
+            "startup must not provision a Console client before installation");
         // This test exercises local installation, not the external password service.
         write_settings(&db, SettingChanges::default()
             .set::<BreachedPasswordCheckEnabledSetting>(&false).unwrap()).await.unwrap();
@@ -91,6 +101,8 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
             .add_header("Authorization", format!("Bearer {console_token}"), true).send(&app).await;
         assert_eq!(response.status_code, Some(StatusCode::OK));
         let console: Value = response.take_json().await.unwrap();
+        let console_oid = read_setting::<ConsoleClientIdSetting, _>(&db).await.unwrap().unwrap();
+        assert_eq!(console["clientId"], console_oid.to_string());
         assert_eq!(console["redirectUri"], "https://identity.example.test/console/callback");
         assert_eq!(console["postLogoutRedirectUri"], "https://identity.example.test/console/signed-out");
         assert_eq!(console["accountUrl"], "https://identity.example.test/account");
@@ -101,14 +113,24 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
         let login: Value = response.take_json().await.unwrap();
         assert_eq!(login["applications"]["console_domain"], "https://identity.example.test/console/");
         assert!(login["oauth_client"]["client_secret"].as_str().is_some());
-        let client = db.query_one_raw(Statement::from_string(DbBackend::Postgres,
+        let client = db.query_one_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "SELECT o.post_logout_redirect_uris AS logout, p.redirect_uris AS redirects \
              FROM client c JOIN client_openid_connect o ON o.client_id=c.id \
              JOIN client_openid_connect_platform p ON p.client_id=c.id \
-             WHERE c.oid='00000000-0000-0000-0000-0000000000c0'".to_owned()))
+             WHERE c.oid=$1", [console_oid.into()]))
             .await.unwrap().unwrap();
         assert_eq!(client.try_get::<Value>("", "logout").unwrap(), json!(["https://identity.example.test/console/signed-out"]));
         assert!(client.try_get::<Value>("", "redirects").unwrap().to_string().contains("/console/callback"));
+        let count = db.query_one_raw(Statement::from_string(DbBackend::Postgres,
+            "SELECT count(*) AS total FROM client".to_owned())).await.unwrap().unwrap();
+        let before = count.try_get::<i64>("", "total").unwrap();
+        seed::console::ensure_console_client(&db, &console_seed).await.unwrap();
+        seed::console::ensure_console_client(&db, &console_seed).await.unwrap();
+        assert_eq!(read_setting::<ConsoleClientIdSetting, _>(&db).await.unwrap(), Some(console_oid));
+        let count = db.query_one_raw(Statement::from_string(DbBackend::Postgres,
+            "SELECT count(*) AS total FROM client".to_owned())).await.unwrap().unwrap();
+        assert_eq!(count.try_get::<i64>("", "total").unwrap(), before,
+            "startup must not create another Console client");
         // Reload from persisted rows, with no process public-address config.
         let reloaded = AppRuntimeSettings::from_db(db.clone()).await.unwrap();
         let restarted = AppServices::from_db(db.clone(), &reloaded).unwrap();

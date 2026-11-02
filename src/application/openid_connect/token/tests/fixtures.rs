@@ -157,6 +157,7 @@ pub(super) fn provider_service() -> Arc<OpenIdProviderService> {
                         domain: Some("https://identity.example.com".to_string()),
                         login_domain: None,
                         login_client_id: None,
+                        console_client_id: None,
                     })
                     .with_section(&InstallationSettings {
                         initialized: true,

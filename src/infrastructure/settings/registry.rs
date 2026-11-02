@@ -1,7 +1,7 @@
 use identity_application::setting::{
-    BreachedPasswordCheckEnabledSetting, ConsoleDomainSetting, DomainSetting, InstallationSettings,
-    LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting,
-    SettingRegistry,
+    BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
+    DomainSetting, InstallationSettings, LoginClientIdSetting, LoginDomainSetting,
+    OpenIdConnectSettings, PasswordHashSetting, SettingRegistry,
 };
 
 /// Settings persisted by this application, shared by the runtime loader and
@@ -14,6 +14,7 @@ pub(crate) fn setting_registry() -> SettingRegistry {
         .register::<LoginDomainSetting>()
         .register::<ConsoleDomainSetting>()
         .register::<LoginClientIdSetting>()
+        .register::<ConsoleClientIdSetting>()
         .register_section::<InstallationSettings>()
         .register_section::<OpenIdConnectSettings>()
 }

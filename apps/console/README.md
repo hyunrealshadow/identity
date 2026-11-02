@@ -6,10 +6,26 @@ Installation stores issuer, login and console addresses independently in
 `app.domain`, `app.login_domain` and `app.console_domain`. The server uses them
 for first-party OAuth clients and allowed API origins. The installer accepts
 the Console HTTPS origin without a path and automatically stores its `/console/`
-base URL. Local development uses
-`public/config.json`. The production image obtains these addresses from Identity
+base URL. Installation also creates a public Console client with a random UUID
+and stores it in `app.console_client_id`; startup only reconciles that existing
+client. The runtime endpoint reads its ID from settings, without a fixed fallback.
+Local development uses an ignored `public/config.json` fetched from the same
+authenticated workload endpoint. The production image obtains this configuration from Identity
 at startup and writes `/run/identity-console/config.json`, served at `/console/config.json`
 with `Cache-Control: no-store`.
+
+Before starting local development, fetch the public configuration using a Console
+workload credential (the internal address and credential stay in the local shell):
+
+```sh
+curl --fail --silent --show-error \
+  --header "Authorization: Bearer $IDENTITY_WORKLOAD_TOKEN" \
+  "${IDENTITY_INTERNAL_API_URL%/}/internal/workloads/self/runtime-configuration" \
+  --output apps/console/public/config.json
+```
+
+Use a trusted internal certificate, or supply its CA with `--cacert`. The fetched
+configuration contains public values only; it does not contain the workload token.
 
 ## Container
 

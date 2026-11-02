@@ -6,7 +6,10 @@ use std::{
 
 use identity_application::{
     install::{InstallInput, InstallService},
-    setting::{ConsoleDomainSetting, DomainSetting, InstallationSettings, SettingsSource},
+    setting::{
+        ConsoleClientIdSetting, ConsoleDomainSetting, DomainSetting, InstallationSettings,
+        SettingsSource,
+    },
 };
 use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
 use identity_infrastructure::{
@@ -250,6 +253,9 @@ fn installed_console_seed_config(
     settings: &AppRuntimeSettings,
 ) -> AppResult<Option<seed::console::ConsoleClientSeedConfig>> {
     let snapshot = settings.store().snapshot();
+    if snapshot.get::<ConsoleClientIdSetting>().is_none() {
+        return Ok(None);
+    }
     let Some(base) = snapshot.get::<ConsoleDomainSetting>() else {
         return Ok(None);
     };

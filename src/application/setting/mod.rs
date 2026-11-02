@@ -9,7 +9,7 @@ pub use binding::{SettingChanges, SettingRegistry, SettingsSnapshot, SettingsSou
 pub use definition::{SettingDefinition, SettingSection, SettingValidationError, SettingValue};
 pub use definitions::PushedAuthorizationSettings;
 pub use definitions::{
-    AppSettings, BreachedPasswordCheckEnabledSetting, ConsoleDomainSetting,
+    AppSettings, BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
     DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings, InstallationSettings,
     LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting,
 };
