@@ -1,5 +1,5 @@
 use crate::graphql::schema::access::access;
-use async_graphql::{Context, GuardExt, Object, Result};
+use async_graphql::{Context, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
     rbac::{

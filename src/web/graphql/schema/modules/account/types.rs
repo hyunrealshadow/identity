@@ -1,7 +1,5 @@
 use crate::graphql::schema::access::access;
-use async_graphql::{
-    Context, GuardExt, ID, InputObject, MaybeUndefined, Object, Result as GraphqlResult,
-};
+use async_graphql::{Context, ID, InputObject, MaybeUndefined, Object, Result as GraphqlResult};
 use chrono::{DateTime, Utc};
 use identity_domain::user::{User, UserTheme, repository::UserProfilePatch};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};

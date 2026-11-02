@@ -319,7 +319,7 @@ impl UserManagementService {
     ) -> Result<UserManagementRecord, AppError> {
         let reason = validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-        validate_expected_version(command.expected_version)?;
+
         let username = command
             .username
             .as_deref()
@@ -358,7 +358,7 @@ impl UserManagementService {
     ) -> Result<UserManagementRecord, AppError> {
         let reason = validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-        validate_expected_version(command.expected_version)?;
+
         let outcome = self
             .repository
             .set_user_enabled(
@@ -382,7 +382,7 @@ impl UserManagementService {
     ) -> Result<UserManagementRecord, AppError> {
         let reason = validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-        validate_expected_version(command.expected_version)?;
+
         let outcome = self
             .repository
             .unlock_user(UserStateTransaction {
@@ -465,11 +465,6 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
             ),
         );
     }
-    Ok(())
-}
-
-fn validate_expected_version(_value: uuid::Uuid) -> Result<(), AppError> {
-    // UUID scalar parsing already rejects malformed values at the API boundary.
     Ok(())
 }
 

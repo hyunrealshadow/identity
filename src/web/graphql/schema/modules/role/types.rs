@@ -1,7 +1,6 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{
-    Context, Enum, GuardExt, ID, InputObject, Object, Result as GraphqlResult,
-    connection::Connection,
+    Context, Enum, ID, InputObject, Object, Result as GraphqlResult, connection::Connection,
 };
 use chrono::{DateTime, Utc};
 use identity_application::{

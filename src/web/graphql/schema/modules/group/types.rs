@@ -792,13 +792,6 @@ pub(crate) fn decode_group_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<Grou
     decode_oid::<GroupGlobalId>(ctx, id).map(GroupOid)
 }
 
-pub(crate) fn decode_group_membership_oid(
-    ctx: &Context<'_>,
-    id: &ID,
-) -> GraphqlResult<GroupMembershipOid> {
-    decode_oid::<GroupMembershipGlobalId>(ctx, id).map(GroupMembershipOid)
-}
-
 pub(crate) fn decode_group_role_oid(
     ctx: &Context<'_>,
     id: &ID,

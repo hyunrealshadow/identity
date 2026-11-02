@@ -31,8 +31,6 @@ use crate::graphql::schema::{
 };
 
 const MAX_CURSOR_LENGTH: usize = 512;
-#[cfg(test)]
-const MAX_SCOPE_ASSIGNMENTS: usize = 1_000;
 
 /// Opaque, service-minted RBAC cursor.
 ///

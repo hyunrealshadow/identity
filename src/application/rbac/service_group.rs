@@ -313,7 +313,7 @@ impl GroupManagementService {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-            validate_expected_version(command.expected_version)?;
+
             if command.name.is_none()
                 && command.description.is_none()
                 && command.names.is_none()
@@ -386,7 +386,7 @@ impl GroupManagementService {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-            validate_expected_version(command.expected_version)?;
+
             self.repository
                 .set_group_enabled(
                     GroupStateTransaction {
@@ -414,7 +414,7 @@ impl GroupManagementService {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-            validate_expected_version(command.expected_version)?;
+
             self.repository
                 .delete_group(DeleteGroupTransaction {
                     group_oid: command.group_oid,
@@ -439,7 +439,7 @@ impl GroupManagementService {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-            validate_expected_version(command.expected_version)?;
+
             self.repository
                 .add_group_member(AddGroupMemberTransaction {
                     group_oid: command.group_oid,
@@ -465,7 +465,7 @@ impl GroupManagementService {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-            validate_expected_version(command.expected_version)?;
+
             self.repository
                 .remove_group_member(RemoveGroupMemberTransaction {
                     group_oid: command.group_oid,
@@ -491,7 +491,7 @@ impl GroupManagementService {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
-            validate_expected_version(command.expected_version)?;
+
             let role_oids = dedupe_limit_roles(command.role_oids)?;
             self.repository
                 .set_group_roles(SetGroupRolesTransaction {
@@ -547,11 +547,6 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
             .with_param("max", MAX_CLIENT_MUTATION_ID_LENGTH.to_string())
             .with_field("clientMutationId"));
     }
-    Ok(())
-}
-
-fn validate_expected_version(_value: uuid::Uuid) -> Result<(), AppError> {
-    // UUID scalar parsing already rejects malformed values at the API boundary.
     Ok(())
 }
 

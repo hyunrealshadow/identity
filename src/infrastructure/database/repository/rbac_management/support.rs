@@ -165,18 +165,6 @@ pub(crate) fn scope_descriptions(entries: &[LocalizedText]) -> Vec<ScopeDescript
         .collect()
 }
 
-pub(crate) fn parse_uuid(value: &str) -> Result<Uuid, RbacManagementRepositoryError> {
-    Uuid::parse_str(value).map_err(|_| corrupt())
-}
-
-pub(crate) fn assign_id(tie: i64) -> RbacTie {
-    RbacTie::Id(tie)
-}
-
-pub(crate) fn assign_oid(tie: Uuid) -> RbacTie {
-    RbacTie::Oid(tie)
-}
-
 /// Permanently withdraw users whose effective authority includes a scope.
 ///
 /// Scope enable/disable is a real authority change. The row's UUID version and
