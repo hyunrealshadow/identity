@@ -5,6 +5,14 @@ debug/
 *.pdb
 
 # Local / secret configs never belong in the image
+.data/
+**/.data/
+.env
+.env.*
+**/.env
+**/.env.*
+.agents/
+.codex/
 **/config/local.yaml
 **/config/*.local.yaml
 **/config/production.yaml

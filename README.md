@@ -172,6 +172,7 @@ the workload credential and a shared cookie sealing secret separately.
 - **Docker Compose:** [single-host deployment and upstream TLS](deploy/README.md).
 - **Kubernetes:** [Helm chart](deploy/helm/identity/README.md), with optional
   [Gateway API examples](deploy/kubernetes/README.md).
+- **Console image:** [runtime configuration and container deployment](apps/console/README.md#container).
 - **Login server:** [production transport and environment](apps/login/README.md#production-transport).
 
 Public URLs must use HTTPS. Identity can terminate TLS directly or trust a

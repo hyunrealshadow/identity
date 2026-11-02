@@ -31,3 +31,19 @@ Set `IDENTITY_TEST_DATABASE_URL` from `DATABASE_URL` in the repository-root `.en
 ```powershell
 cargo test -p identity --test repository_behavior --test repository_security -- --ignored --test-threads=1
 ```
+
+## Console container verification
+
+With Docker running, build and verify the production Console image:
+
+```sh
+docker build -f deploy/docker/console.Dockerfile -t identity-console:local .
+python3 tests/deployment/console-container.py identity-console:local
+```
+
+The check runs the actual image against a temporary local configuration server
+using generated test credentials. It covers startup retries, runtime JSON,
+read-only/non-root operation, SPA routing, caching, sanitized callback logs, and
+rejection of invalid configuration. It removes its containers and temporary
+credentials afterward and does not access a database or a deployed instance.
+The image publishing workflow runs it for each native platform image.
