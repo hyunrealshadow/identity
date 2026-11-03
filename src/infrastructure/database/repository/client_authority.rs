@@ -1,20 +1,23 @@
 //! Live scope authority for a client principal at the first-party resource.
 
 use identity_domain::{
-    authorization::{ClientScopeAuthority, ManagementScope, is_trusted_management_permission},
+    authorization::{
+        ClientScopeAuthority, ManagementScope, PolicyVersion, is_trusted_management_permission,
+    },
     client::model::ClientOid,
 };
 use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement};
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
+use crate::database::client_authorization_boundary;
+
 #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "load_client_scope_authority"))]
 pub(crate) async fn load_client_scope_authority<C: ConnectionTrait>(
     db: &C,
     client_oid: ClientOid,
 ) -> Result<Option<ClientScopeAuthority>, DbErr> {
-    let Some(client_id) =
-        crate::database::client_authorization_boundary::client_id_by_oid(db, client_oid).await?
+    let Some(client_id) = client_authorization_boundary::client_id_by_oid(db, client_oid).await?
     else {
         return Ok(None);
     };
@@ -39,8 +42,7 @@ pub(crate) async fn load_client_scope_authority<C: ConnectionTrait>(
         }
     }
     let (_, boundary) =
-        crate::database::client_authorization_boundary::client_boundary_fingerprint(db, client_id)
-            .await?;
+        client_authorization_boundary::client_boundary_fingerprint(db, client_id).await?;
     Ok(Some(ClientScopeAuthority {
         client_oid,
         permissions,
@@ -54,7 +56,7 @@ pub(crate) async fn load_client_scope_authority<C: ConnectionTrait>(
 pub(crate) async fn lock_live_client_boundary<C: ConnectionTrait>(
     db: &C,
     client_id: i64,
-) -> Result<(bool, identity_domain::authorization::PolicyVersion), DbErr> {
+) -> Result<(bool, PolicyVersion), DbErr> {
     db.query_one_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
         "SELECT id FROM client WHERE id = $1 FOR SHARE",
@@ -71,7 +73,6 @@ pub(crate) async fn lock_live_client_boundary<C: ConnectionTrait>(
         .await?
         .is_some();
     let (_, fingerprint) =
-        crate::database::client_authorization_boundary::client_boundary_fingerprint(db, client_id)
-            .await?;
+        client_authorization_boundary::client_boundary_fingerprint(db, client_id).await?;
     Ok((configured, fingerprint))
 }

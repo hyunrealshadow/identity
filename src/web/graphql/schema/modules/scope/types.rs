@@ -1,25 +1,36 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{Context, Enum, ID, InputObject, Object, Result as GraphqlResult};
 use chrono::{DateTime, Utc};
-use identity_application::authorization::ManagementTarget;
-use identity_application::rbac::{ScopeDescription, ScopeFilter as ApplicationFilter, ScopeRecord};
-use identity_domain::authorization::ManagementScope;
-use identity_domain::rbac::{ResourceOid, RoleOid};
+use identity_application::{
+    authorization::ManagementTarget,
+    rbac::{
+        ScopeDescription, ScopeFilter as ApplicationFilter, ScopeOid, ScopeOrder as RbacScopeOrder,
+        ScopeRecord,
+    },
+};
+use identity_domain::{
+    authorization::ManagementScope,
+    rbac::{ResourceOid, RoleOid},
+};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::super::{
     resource::{
+        integration,
         support::{RbacConnectionCursor, decode_oid, page_args},
-        types::ResourceNode,
+        types,
+        types::{ResourceGlobalId, ResourceNode},
     },
     role::{
         query::load_role_connection,
-        types::{RoleFilter, RoleNode, RoleOrder},
+        types::{RoleFilter, RoleGlobalId, RoleNode, RoleOrder},
     },
 };
-use crate::graphql::schema::management_guard::ManagementGuard;
-use crate::graphql::schema::{authorization::request_context, error::app_error};
+use crate::graphql::schema::{
+    authorization::request_context, connection::ConnectionTotal, error::app_error,
+    management_guard::ManagementGuard,
+};
 use async_graphql::connection::Connection;
 
 pub(crate) struct ScopeGlobalId;
@@ -28,7 +39,7 @@ impl GlobalIdType for ScopeGlobalId {
     const TYPE_NAME: &'static str = "Scope";
 }
 
-pub(crate) fn scope_global_id(oid: identity_application::rbac::ScopeOid) -> ID {
+pub(crate) fn scope_global_id(oid: ScopeOid) -> ID {
     GlobalId::<ScopeGlobalId>::new(oid.0).into()
 }
 
@@ -50,7 +61,7 @@ impl ScopeOrder {
     }
 }
 
-impl From<ScopeOrder> for identity_application::rbac::ScopeOrder {
+impl From<ScopeOrder> for RbacScopeOrder {
     fn from(order: ScopeOrder) -> Self {
         match order {
             ScopeOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -78,13 +89,13 @@ impl ScopeFilter {
         let resource_oid = self
             .resource_id
             .as_ref()
-            .map(|id| decode_oid::<super::super::resource::types::ResourceGlobalId>(ctx, id))
+            .map(|id| decode_oid::<ResourceGlobalId>(ctx, id))
             .transpose()?
             .map(ResourceOid);
         let role_oid = self
             .role_id
             .as_ref()
-            .map(|id| decode_oid::<super::super::role::types::RoleGlobalId>(ctx, id))
+            .map(|id| decode_oid::<RoleGlobalId>(ctx, id))
             .transpose()?
             .map(RoleOid);
         Ok(ApplicationFilter {
@@ -147,9 +158,7 @@ impl ScopeNode {
     /// Owning API resource id. `null` marks a protocol/identity scope.
     #[graphql(complexity = 0)]
     async fn resource_id(&self) -> Option<ID> {
-        self.record
-            .resource_oid
-            .map(super::super::resource::types::resource_global_id)
+        self.record.resource_oid.map(types::resource_global_id)
     }
 
     /// Stable machine token used in protocol requests and assignments.
@@ -223,7 +232,7 @@ impl ScopeNode {
             return Ok(None);
         };
         let request = request_context(ctx)?;
-        let resource = super::super::resource::integration::find_resource(request, oid)
+        let resource = integration::find_resource(request, oid)
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(resource.map(ResourceNode::new))
@@ -241,13 +250,7 @@ impl ScopeNode {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<
-        Connection<
-            RbacConnectionCursor,
-            RoleNode,
-            crate::graphql::schema::connection::ConnectionTotal,
-        >,
-    > {
+    ) -> GraphqlResult<Connection<RbacConnectionCursor, RoleNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         load_role_connection(
             ctx,
@@ -369,9 +372,6 @@ impl ScopePayload {
     }
 }
 
-pub(crate) fn decode_scope_oid(
-    ctx: &Context<'_>,
-    id: &ID,
-) -> GraphqlResult<identity_application::rbac::ScopeOid> {
-    decode_oid::<ScopeGlobalId>(ctx, id).map(identity_application::rbac::ScopeOid)
+pub(crate) fn decode_scope_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<ScopeOid> {
+    decode_oid::<ScopeGlobalId>(ctx, id).map(ScopeOid)
 }

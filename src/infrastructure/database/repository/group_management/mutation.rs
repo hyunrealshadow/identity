@@ -8,10 +8,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
-    AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupTransaction, GroupEntityKind,
-    GroupManagementRepositoryError, GroupMembershipMutationResult, GroupRoleMutationResult,
-    GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
-    UpdateGroupTransaction,
+    AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupResult, DeleteGroupTransaction,
+    GroupEntityKind, GroupManagementRepositoryError, GroupMembershipMutationResult, GroupRecord,
+    GroupRoleMutationResult, GroupStateTransaction, RemoveGroupMemberTransaction,
+    SetGroupRolesTransaction, UpdateGroupTransaction,
 };
 use identity_domain::{
     authorization::ManagementScope,
@@ -20,8 +20,9 @@ use identity_domain::{
     },
     user::UserOid,
 };
-use sea_orm::TransactionTrait;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, Statement, Value};
+use sea_orm::{
+    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, Statement, TransactionTrait, Value,
+};
 use uuid::Uuid;
 
 use super::{
@@ -209,7 +210,7 @@ impl GroupManagementRepositoryImpl {
     pub(crate) async fn group_create(
         &self,
         command: CreateGroupTransaction,
-    ) -> Result<identity_application::rbac::GroupRecord, GroupManagementRepositoryError> {
+    ) -> Result<GroupRecord, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
         let _actor_permissions =
@@ -265,7 +266,7 @@ impl GroupManagementRepositoryImpl {
     pub(crate) async fn group_update(
         &self,
         command: UpdateGroupTransaction,
-    ) -> Result<identity_application::rbac::GroupRecord, GroupManagementRepositoryError> {
+    ) -> Result<GroupRecord, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
         let _actor_permissions =
@@ -346,7 +347,7 @@ impl GroupManagementRepositoryImpl {
         &self,
         command: GroupStateTransaction,
         enabled: bool,
-    ) -> Result<identity_application::rbac::GroupRecord, GroupManagementRepositoryError> {
+    ) -> Result<GroupRecord, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
         let actor_permissions =
@@ -414,7 +415,7 @@ impl GroupManagementRepositoryImpl {
     pub(crate) async fn group_delete(
         &self,
         command: DeleteGroupTransaction,
-    ) -> Result<identity_application::rbac::DeleteGroupResult, GroupManagementRepositoryError> {
+    ) -> Result<DeleteGroupResult, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
         let _actor_permissions =
@@ -479,7 +480,7 @@ impl GroupManagementRepositoryImpl {
         )
         .await?;
         txn.commit().await.map_err(storage)?;
-        Ok(identity_application::rbac::DeleteGroupResult {
+        Ok(DeleteGroupResult {
             group_oid: command.group_oid,
             deleted: true,
         })

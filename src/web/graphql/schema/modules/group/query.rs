@@ -22,7 +22,10 @@ use super::{
     },
 };
 use crate::graphql::schema::{
+    RequestContext,
     authorization::request_context,
+    connection,
+    connection::ConnectionTotal,
     error::app_error,
     management_guard::ManagementGuard,
     modules::resource::support::{PageArgs, RbacConnectionCursor, page_args},
@@ -51,6 +54,7 @@ impl GroupQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn groups(
         &self,
         ctx: &Context<'_>,
@@ -60,13 +64,7 @@ impl GroupQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<
-        Connection<
-            RbacConnectionCursor,
-            GroupNode,
-            crate::graphql::schema::connection::ConnectionTotal,
-        >,
-    > {
+    ) -> Result<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         load_group_connection(
@@ -82,17 +80,11 @@ impl GroupQuery {
 
 pub(crate) async fn load_group_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     filter: GroupFilter,
     order: GroupOrder,
     page: PageArgs,
-) -> Result<
-    Connection<
-        RbacConnectionCursor,
-        GroupNode,
-        crate::graphql::schema::connection::ConnectionTotal,
-    >,
-> {
+) -> Result<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
     ensure_relationship_read_guards(ctx, &filter).await?;
     let filter = filter.into_application(ctx)?;
     let page = integration::list_groups(
@@ -103,7 +95,7 @@ pub(crate) async fn load_group_connection(
     )
     .await
     .map_err(|error| app_error(ctx, error))?;
-    let additional = crate::graphql::schema::connection::connection_total(ctx, async {
+    let additional = connection::connection_total(ctx, async {
         request
             .state
             .services()
@@ -150,7 +142,7 @@ async fn ensure_relationship_read_guards(ctx: &Context<'_>, filter: &GroupFilter
 
 pub(crate) async fn load_membership_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     group_oid: GroupOid,
     filter: GroupMembershipFilterInput,
     order: GroupMembershipOrder,
@@ -183,7 +175,7 @@ pub(crate) async fn load_membership_connection(
 
 pub(crate) async fn load_group_role_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     group_oid: GroupOid,
     filter: GroupRoleFilterInput,
     order: GroupRoleOrder,

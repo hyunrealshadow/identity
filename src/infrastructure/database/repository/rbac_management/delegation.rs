@@ -9,22 +9,26 @@
 use std::collections::BTreeSet;
 
 use chrono::Utc;
-use identity_application::authorization::{DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError};
-use identity_application::rbac::{RbacManagementRepositoryError, ScopeOid};
+use identity_application::{
+    authorization::{DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError},
+    rbac::{RbacManagementAuthority, RbacManagementRepositoryError, ScopeOid},
+};
 use identity_domain::{
     authorization::{ActorPrincipal, ManagementScope},
     openid_connect::API_RESOURCE,
+    rbac,
 };
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
 use uuid::Uuid;
 
 use super::support::{Binds, corrupt, storage};
+use crate::database::repository::authorization;
 
 /// Effective permission row IDs currently held by the actor through active
 /// direct bindings or active group paths.
 pub(crate) async fn actor_effective_permission_ids(
     txn: &DatabaseTransaction,
-    authority: &identity_application::rbac::RbacManagementAuthority,
+    authority: &RbacManagementAuthority,
 ) -> Result<BTreeSet<i64>, RbacManagementRepositoryError> {
     let user_oid = match &authority.actor.principal {
         ActorPrincipal::User { user_oid, .. } => *user_oid,
@@ -77,7 +81,7 @@ WHERE subject.oid = $1
 /// effective permission set. Removing authority is not gated by this ceiling.
 pub(crate) async fn ensure_delegable_permissions(
     txn: &DatabaseTransaction,
-    authority: &identity_application::rbac::RbacManagementAuthority,
+    authority: &RbacManagementAuthority,
     added_permission_ids: &BTreeSet<i64>,
 ) -> Result<(), RbacManagementRepositoryError> {
     if added_permission_ids.is_empty() {
@@ -95,33 +99,29 @@ pub(crate) async fn ensure_delegable_permissions(
     if authority
         .token_scopes
         .contains(&ManagementScope::PermissionDelegate)
+        && let ActorPrincipal::User { user_oid, .. } = &authority.actor.principal
     {
-        if let ActorPrincipal::User { user_oid, .. } = &authority.actor.principal {
-            let current =
-                crate::database::repository::authorization::load_user_permission_authority(
-                    txn, *user_oid,
-                )
-                .await
-                .map_err(storage)?;
-            if current.is_some_and(|current| {
-                current
-                    .permissions
-                    .contains(&ManagementScope::PermissionDelegate)
-            }) {
-                if !authority
-                    .actor
-                    .principal
-                    .human_authentication()
-                    .is_some_and(|authentication| {
-                        authentication.is_recent_aal2(Utc::now(), DEFAULT_RECENT_AAL2_TTL)
-                    })
-                {
-                    return Err(RbacManagementRepositoryError::Authorization(
-                        ManagementAuthorizationError::RecentAuthenticationRequired,
-                    ));
-                }
-                return Ok(());
+        let current = authorization::load_user_permission_authority(txn, *user_oid)
+            .await
+            .map_err(storage)?;
+        if current.is_some_and(|current| {
+            current
+                .permissions
+                .contains(&ManagementScope::PermissionDelegate)
+        }) {
+            if !authority
+                .actor
+                .principal
+                .human_authentication()
+                .is_some_and(|authentication| {
+                    authentication.is_recent_aal2(Utc::now(), DEFAULT_RECENT_AAL2_TTL)
+                })
+            {
+                return Err(RbacManagementRepositoryError::Authorization(
+                    ManagementAuthorizationError::RecentAuthenticationRequired,
+                ));
             }
+            return Ok(());
         }
     }
     let mut binds = Binds::new();
@@ -193,7 +193,7 @@ WHERE scope.oid IN ({placeholders})
             .map_err(storage)?;
         let oid = row.try_get::<Uuid>("", "oid").map_err(storage)?;
         let trusted = ManagementScope::from_name(&scope).is_some_and(|management_scope| {
-            identity_domain::rbac::built_in_permission_oid(management_scope).0 == oid
+            rbac::built_in_permission_oid(management_scope).0 == oid
         }) && resource_uri.as_deref() == Some(API_RESOURCE);
         if !trusted {
             return Err(

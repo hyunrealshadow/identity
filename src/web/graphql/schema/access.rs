@@ -118,7 +118,10 @@ pub(crate) fn access(policy: AccessPolicy) {}
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
+    use crate::graphql;
     use async_graphql::parser::{
         parse_schema,
         types::{TypeKind, TypeSystemDefinition},
@@ -126,8 +129,8 @@ mod tests {
 
     #[test]
     fn every_root_field_publishes_access_requirements() {
-        let document = parse_schema(crate::graphql::schema::schema_sdl()).unwrap();
-        let roots: std::collections::BTreeSet<_> = document
+        let document = parse_schema(graphql::schema_sdl()).unwrap();
+        let roots: BTreeSet<_> = document
             .definitions
             .iter()
             .filter_map(|definition| {
@@ -148,7 +151,7 @@ mod tests {
             !roots.is_empty(),
             "the executable schema must declare its operation roots"
         );
-        let mut visited = std::collections::BTreeSet::new();
+        let mut visited = BTreeSet::new();
         for definition in document.definitions {
             let TypeSystemDefinition::Type(definition) = definition else {
                 continue;
@@ -205,7 +208,7 @@ mod tests {
 
     #[test]
     fn nested_protected_fields_keep_their_requirements() {
-        let document = parse_schema(crate::graphql::schema::schema_sdl()).unwrap();
+        let document = parse_schema(graphql::schema_sdl()).unwrap();
         for (type_name, fields) in [
             (
                 "User",

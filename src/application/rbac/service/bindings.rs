@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 
 impl RbacManagementService {
@@ -54,7 +56,7 @@ impl RbacManagementService {
     ) -> Result<Vec<UserRoleBindingRecord>, AppError> {
         let binding_oids = binding_oids
             .into_iter()
-            .collect::<std::collections::BTreeSet<_>>()
+            .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
         if binding_oids.len() > MAX_BINDING_LOOKUPS {
@@ -86,10 +88,12 @@ impl RbacManagementService {
             CURSOR_KIND_BINDING,
             order.as_u8(),
             &fingerprint_input,
-            first,
-            after,
-            last,
-            before,
+            PageArguments {
+                first,
+                after,
+                last,
+                before,
+            },
         )
         .await?;
         let data = self
@@ -153,10 +157,12 @@ impl RbacManagementService {
             CURSOR_KIND_EFFECTIVE,
             order.as_u8(),
             &fingerprint_input,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self

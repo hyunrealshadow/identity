@@ -17,6 +17,8 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::request_context,
+    connection,
+    connection::ConnectionTotal,
     error::{app_error, coded_error},
     management_guard::ManagementGuard,
     modules::account::{UserGlobalId, UserNode},
@@ -45,6 +47,7 @@ impl UserManagementQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn users(
         &self,
         ctx: &Context<'_>,
@@ -54,13 +57,7 @@ impl UserManagementQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<
-        Connection<
-            UserConnectionCursor,
-            UserNode,
-            crate::graphql::schema::connection::ConnectionTotal,
-        >,
-    > {
+    ) -> Result<Connection<UserConnectionCursor, UserNode, ConnectionTotal>> {
         let request = request_context(ctx)?;
         let filter = filter.unwrap_or_default();
         let page = integration::list_users(
@@ -75,7 +72,7 @@ impl UserManagementQuery {
         .await
         .map_err(|error| app_error(ctx, error))?;
 
-        let additional = crate::graphql::schema::connection::connection_total(ctx, async {
+        let additional = connection::connection_total(ctx, async {
             integration::count_users(request, filter)
                 .await
                 .map_err(|error| app_error(ctx, error))

@@ -10,7 +10,10 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::database::{
-    entity::{client, client_authorization},
+    entity::{
+        client, client::Column as ClientColumn, client_authorization,
+        client_authorization::Column as ClientAuthorizationColumn,
+    },
     query::{json_text, jsonb_set},
 };
 
@@ -27,38 +30,33 @@ enum AuthorizationQuery {
 
 fn client_id(oid: Uuid) -> SelectStatement {
     Query::select()
-        .column(client::Column::Id)
+        .column(ClientColumn::Id)
         .from(client::Entity)
-        .and_where(Expr::col(client::Column::Oid).eq(oid))
+        .and_where(Expr::col(ClientColumn::Oid).eq(oid))
         .to_owned()
 }
 
 pub(super) fn expiration_batch() -> UpdateStatement {
     let due = Query::select()
-        .column(client_authorization::Column::Id)
+        .column(ClientAuthorizationColumn::Id)
         .from(client_authorization::Entity)
-        .and_where(Expr::col(client_authorization::Column::IsExpired).eq(false))
-        .and_where(
-            Expr::col(client_authorization::Column::ExpiresAt).lte(Expr::current_timestamp()),
-        )
-        .order_by(client_authorization::Column::ExpiresAt, Order::Asc)
+        .and_where(Expr::col(ClientAuthorizationColumn::IsExpired).eq(false))
+        .and_where(Expr::col(ClientAuthorizationColumn::ExpiresAt).lte(Expr::current_timestamp()))
+        .order_by(ClientAuthorizationColumn::ExpiresAt, Order::Asc)
         .limit(1000)
         .lock_with_behavior(LockType::Update, LockBehavior::SkipLocked)
         .to_owned();
     Query::update()
         .table(client_authorization::Entity)
-        .value(client_authorization::Column::IsExpired, true)
+        .value(ClientAuthorizationColumn::IsExpired, true)
         .value(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             Expr::current_timestamp(),
         )
         .from(AuthorizationQuery::Due)
         .and_where(
-            Expr::col((
-                client_authorization::Entity,
-                client_authorization::Column::Id,
-            ))
-            .equals((AuthorizationQuery::Due, client_authorization::Column::Id)),
+            Expr::col((client_authorization::Entity, ClientAuthorizationColumn::Id))
+                .equals((AuthorizationQuery::Due, ClientAuthorizationColumn::Id)),
         )
         .with_cte(
             CommonTableExpression::new()
@@ -72,49 +70,37 @@ pub(super) fn expiration_batch() -> UpdateStatement {
 pub(super) fn refresh_root(refresh_oid: Uuid, client_oid: Uuid) -> SelectStatement {
     let parent = Query::select()
         .columns([
-            (
-                AuthorizationQuery::Parent,
-                client_authorization::Column::Oid,
-            ),
-            (
-                AuthorizationQuery::Parent,
-                client_authorization::Column::Data,
-            ),
+            (AuthorizationQuery::Parent, ClientAuthorizationColumn::Oid),
+            (AuthorizationQuery::Parent, ClientAuthorizationColumn::Data),
         ])
         .from_as(client_authorization::Entity, AuthorizationQuery::Parent)
         .join(
             JoinType::InnerJoin,
             AuthorizationQuery::Ancestors,
-            Expr::col((
-                AuthorizationQuery::Parent,
-                client_authorization::Column::Oid,
-            ))
-            .cast_as("text")
-            .eq(json_text(
-                (
-                    AuthorizationQuery::Ancestors,
-                    client_authorization::Column::Data,
-                ),
-                "rotated_from",
-            )),
+            Expr::col((AuthorizationQuery::Parent, ClientAuthorizationColumn::Oid))
+                .cast_as("text")
+                .eq(json_text(
+                    (
+                        AuthorizationQuery::Ancestors,
+                        ClientAuthorizationColumn::Data,
+                    ),
+                    "rotated_from",
+                )),
         )
         .and_where(
-            Expr::col((
-                AuthorizationQuery::Parent,
-                client_authorization::Column::Type,
-            ))
-            .eq("refresh_token"),
+            Expr::col((AuthorizationQuery::Parent, ClientAuthorizationColumn::Type))
+                .eq("refresh_token"),
         )
         .to_owned();
     let ancestors = Query::select()
         .columns([
-            client_authorization::Column::Oid,
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Oid,
+            ClientAuthorizationColumn::Data,
         ])
         .from(client_authorization::Entity)
-        .and_where(Expr::col(client_authorization::Column::Oid).eq(refresh_oid))
-        .and_where(Expr::col(client_authorization::Column::ClientId).eq(client_id(client_oid)))
-        .and_where(Expr::col(client_authorization::Column::Type).eq("refresh_token"))
+        .and_where(Expr::col(ClientAuthorizationColumn::Oid).eq(refresh_oid))
+        .and_where(Expr::col(ClientAuthorizationColumn::ClientId).eq(client_id(client_oid)))
+        .and_where(Expr::col(ClientAuthorizationColumn::Type).eq("refresh_token"))
         .union(UnionType::All, parent)
         .to_owned();
     let with = WithClause::new()
@@ -128,11 +114,11 @@ pub(super) fn refresh_root(refresh_oid: Uuid, client_oid: Uuid) -> SelectStateme
         .to_owned();
     Query::select()
         .expr_as(
-            Expr::col(client_authorization::Column::Oid),
+            Expr::col(ClientAuthorizationColumn::Oid),
             AuthorizationQuery::RootOid,
         )
         .from(AuthorizationQuery::Ancestors)
-        .and_where(json_text(client_authorization::Column::Data, "rotated_from").is_null())
+        .and_where(json_text(ClientAuthorizationColumn::Data, "rotated_from").is_null())
         .limit(1)
         .with_cte(with)
         .to_owned()
@@ -141,7 +127,7 @@ pub(super) fn refresh_root(refresh_oid: Uuid, client_oid: Uuid) -> SelectStateme
 pub(super) fn refresh_compromised(root_oid: Uuid) -> SelectStatement {
     let flag = |field| {
         Expr::expr(Func::coalesce([
-            json_text(client_authorization::Column::Data, field),
+            json_text(ClientAuthorizationColumn::Data, field),
             Expr::value("false"),
         ]))
         .eq("true")
@@ -152,30 +138,30 @@ pub(super) fn refresh_compromised(root_oid: Uuid) -> SelectStatement {
             AuthorizationQuery::Compromised,
         )
         .from(client_authorization::Entity)
-        .and_where(Expr::col(client_authorization::Column::Oid).eq(root_oid))
+        .and_where(Expr::col(ClientAuthorizationColumn::Oid).eq(root_oid))
         .to_owned()
 }
 
 pub(super) fn authorization_data(oid: Uuid) -> SelectStatement {
     Query::select()
-        .column(client_authorization::Column::Data)
+        .column(ClientAuthorizationColumn::Data)
         .from(client_authorization::Entity)
-        .and_where(Expr::col(client_authorization::Column::Oid).eq(oid))
+        .and_where(Expr::col(ClientAuthorizationColumn::Oid).eq(oid))
         .to_owned()
 }
 
 pub(super) fn consume_par(digest: &str, client_oid: Uuid, now: DateTime<Utc>) -> UpdateStatement {
     Query::update()
         .table(client_authorization::Entity)
-        .value(client_authorization::Column::CompletedAt, now)
-        .value(client_authorization::Column::UpdatedAt, now)
-        .and_where(Expr::col(client_authorization::Column::Type).eq("pushed_authorization_request"))
-        .and_where(json_text(client_authorization::Column::Data, "request_uri_digest").eq(digest))
-        .and_where(Expr::col(client_authorization::Column::ClientId).eq(client_id(client_oid)))
-        .and_where(Expr::col(client_authorization::Column::ExpiresAt).gt(now))
-        .and_where(Expr::col(client_authorization::Column::CompletedAt).is_null())
-        .and_where(Expr::col(client_authorization::Column::RevokedAt).is_null())
-        .and_where(Expr::col(client_authorization::Column::IsExpired).eq(false))
+        .value(ClientAuthorizationColumn::CompletedAt, now)
+        .value(ClientAuthorizationColumn::UpdatedAt, now)
+        .and_where(Expr::col(ClientAuthorizationColumn::Type).eq("pushed_authorization_request"))
+        .and_where(json_text(ClientAuthorizationColumn::Data, "request_uri_digest").eq(digest))
+        .and_where(Expr::col(ClientAuthorizationColumn::ClientId).eq(client_id(client_oid)))
+        .and_where(Expr::col(ClientAuthorizationColumn::ExpiresAt).gt(now))
+        .and_where(Expr::col(ClientAuthorizationColumn::CompletedAt).is_null())
+        .and_where(Expr::col(ClientAuthorizationColumn::RevokedAt).is_null())
+        .and_where(Expr::col(ClientAuthorizationColumn::IsExpired).eq(false))
         .returning_all()
         .to_owned()
 }
@@ -184,15 +170,15 @@ pub(super) fn mark_refresh_flag(root_oid: Uuid, flag: &str, now: DateTime<Utc>) 
     Query::update()
         .table(client_authorization::Entity)
         .value(
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
             jsonb_set(
-                client_authorization::Column::Data,
+                ClientAuthorizationColumn::Data,
                 flag,
                 Expr::value(json!(true)),
             ),
         )
-        .value(client_authorization::Column::UpdatedAt, now)
-        .and_where(Expr::col(client_authorization::Column::Oid).eq(root_oid))
+        .value(ClientAuthorizationColumn::UpdatedAt, now)
+        .and_where(Expr::col(ClientAuthorizationColumn::Oid).eq(root_oid))
         .to_owned()
 }
 
@@ -204,36 +190,30 @@ pub(super) fn revoke_refresh_family(
     now: DateTime<Utc>,
 ) -> UpdateStatement {
     let children = Query::select()
-        .column((AuthorizationQuery::Child, client_authorization::Column::Oid))
+        .column((AuthorizationQuery::Child, ClientAuthorizationColumn::Oid))
         .from_as(client_authorization::Entity, AuthorizationQuery::Child)
         .join(
             JoinType::InnerJoin,
             AuthorizationQuery::Family,
             json_text(
-                (
-                    AuthorizationQuery::Child,
-                    client_authorization::Column::Data,
-                ),
+                (AuthorizationQuery::Child, ClientAuthorizationColumn::Data),
                 "rotated_from",
             )
             .eq(Expr::col((
                 AuthorizationQuery::Family,
-                client_authorization::Column::Oid,
+                ClientAuthorizationColumn::Oid,
             ))
             .cast_as("text")),
         )
         .and_where(
-            Expr::col((
-                AuthorizationQuery::Child,
-                client_authorization::Column::Type,
-            ))
-            .eq("refresh_token"),
+            Expr::col((AuthorizationQuery::Child, ClientAuthorizationColumn::Type))
+                .eq("refresh_token"),
         )
         .to_owned();
     let family = Query::select()
-        .column(client_authorization::Column::Oid)
+        .column(ClientAuthorizationColumn::Oid)
         .from(client_authorization::Entity)
-        .and_where(Expr::col(client_authorization::Column::Oid).eq(root_oid))
+        .and_where(Expr::col(ClientAuthorizationColumn::Oid).eq(root_oid))
         .union(UnionType::All, children)
         .to_owned();
     let with = WithClause::new()
@@ -246,43 +226,39 @@ pub(super) fn revoke_refresh_family(
         )
         .to_owned();
     let ids = Query::select()
-        .column(client_authorization::Column::Oid)
+        .column(ClientAuthorizationColumn::Oid)
         .from(AuthorizationQuery::Family)
         .to_owned();
     let text_ids = Query::select()
-        .expr(Expr::col(client_authorization::Column::Oid).cast_as("text"))
+        .expr(Expr::col(ClientAuthorizationColumn::Oid).cast_as("text"))
         .from(AuthorizationQuery::Family)
         .to_owned();
-    let mut links = Cond::any().add(
-        json_text(client_authorization::Column::Data, "refresh_token_oid").in_subquery(text_ids),
-    );
+    let mut links = Cond::any()
+        .add(json_text(ClientAuthorizationColumn::Data, "refresh_token_oid").in_subquery(text_ids));
     if !authorization_code_oid.is_empty() {
         links = links.add(
-            json_text(client_authorization::Column::Data, "authorization_code_oid")
+            json_text(ClientAuthorizationColumn::Data, "authorization_code_oid")
                 .eq(authorization_code_oid),
         );
     }
     if !device_authorization_oid.is_empty() {
         links = links.add(
-            json_text(
-                client_authorization::Column::Data,
-                "device_authorization_oid",
-            )
-            .eq(device_authorization_oid),
+            json_text(ClientAuthorizationColumn::Data, "device_authorization_oid")
+                .eq(device_authorization_oid),
         );
     }
     Query::update()
         .table(client_authorization::Entity)
-        .value(client_authorization::Column::RevokedAt, now)
-        .value(client_authorization::Column::UpdatedAt, now)
-        .and_where(Expr::col(client_authorization::Column::ClientId).eq(client_id(client_oid)))
-        .and_where(Expr::col(client_authorization::Column::RevokedAt).is_null())
+        .value(ClientAuthorizationColumn::RevokedAt, now)
+        .value(ClientAuthorizationColumn::UpdatedAt, now)
+        .and_where(Expr::col(ClientAuthorizationColumn::ClientId).eq(client_id(client_oid)))
+        .and_where(Expr::col(ClientAuthorizationColumn::RevokedAt).is_null())
         .cond_where(
             Cond::any()
-                .add(Expr::col(client_authorization::Column::Oid).in_subquery(ids))
+                .add(Expr::col(ClientAuthorizationColumn::Oid).in_subquery(ids))
                 .add(
                     Cond::all()
-                        .add(Expr::col(client_authorization::Column::Type).eq("access_token"))
+                        .add(Expr::col(ClientAuthorizationColumn::Type).eq("access_token"))
                         .add(links),
                 ),
         )
@@ -298,11 +274,11 @@ pub(super) fn revoke_token_for_client(
 ) -> UpdateStatement {
     Query::update()
         .table(client_authorization::Entity)
-        .value(client_authorization::Column::RevokedAt, now)
-        .value(client_authorization::Column::UpdatedAt, now)
+        .value(ClientAuthorizationColumn::RevokedAt, now)
+        .value(ClientAuthorizationColumn::UpdatedAt, now)
         .and_where(oid)
-        .and_where(Expr::col(client_authorization::Column::ClientId).eq(client_id(client_oid)))
-        .and_where(Expr::col(client_authorization::Column::Type).eq(kind))
-        .and_where(Expr::col(client_authorization::Column::RevokedAt).is_null())
+        .and_where(Expr::col(ClientAuthorizationColumn::ClientId).eq(client_id(client_oid)))
+        .and_where(Expr::col(ClientAuthorizationColumn::Type).eq(kind))
+        .and_where(Expr::col(ClientAuthorizationColumn::RevokedAt).is_null())
         .to_owned()
 }

@@ -13,7 +13,11 @@ use serde::Deserialize;
 use serde_json::{Value, from_value, json};
 use url::Url;
 
-use crate::database::entity::{client, client_openid_connect_credential};
+use crate::database::entity::{
+    client::{Column as ClientColumn, Entity as ClientEntity},
+    client_openid_connect_credential,
+    client_openid_connect_credential::Column as ClientOpenIdConnectCredentialColumn,
+};
 
 #[derive(Debug, Deserialize)]
 struct RawClientSecretData {
@@ -184,26 +188,26 @@ impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl
         client_oid: ClientOid,
         type_: OpenIdConnectCredentialType,
     ) -> Result<Vec<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError> {
-        let rows = client::Entity::find()
-            .filter(client::Column::Oid.eq(client_oid))
-            .filter(client::Column::Protocol.eq("openid_connect"))
+        let rows = ClientEntity::find()
+            .filter(ClientColumn::Oid.eq(client_oid))
+            .filter(ClientColumn::Protocol.eq("openid_connect"))
             .inner_join(client_openid_connect_credential::Entity)
-            .filter(client_openid_connect_credential::Column::Type.eq(type_.to_string()))
-            .filter(client_openid_connect_credential::Column::RevokedAt.is_null())
-            .filter(client_openid_connect_credential::Column::ExpiresAt.gt(Utc::now()))
-            .order_by_desc(client_openid_connect_credential::Column::CreatedAt)
+            .filter(ClientOpenIdConnectCredentialColumn::Type.eq(type_.to_string()))
+            .filter(ClientOpenIdConnectCredentialColumn::RevokedAt.is_null())
+            .filter(ClientOpenIdConnectCredentialColumn::ExpiresAt.gt(Utc::now()))
+            .order_by_desc(ClientOpenIdConnectCredentialColumn::CreatedAt)
             .select_only()
             .columns([
-                client_openid_connect_credential::Column::Id,
-                client_openid_connect_credential::Column::Oid,
-                client_openid_connect_credential::Column::ClientId,
-                client_openid_connect_credential::Column::Type,
-                client_openid_connect_credential::Column::Data,
-                client_openid_connect_credential::Column::Hint,
-                client_openid_connect_credential::Column::ExpiresAt,
-                client_openid_connect_credential::Column::RevokedAt,
-                client_openid_connect_credential::Column::CreatedAt,
-                client_openid_connect_credential::Column::UpdatedAt,
+                ClientOpenIdConnectCredentialColumn::Id,
+                ClientOpenIdConnectCredentialColumn::Oid,
+                ClientOpenIdConnectCredentialColumn::ClientId,
+                ClientOpenIdConnectCredentialColumn::Type,
+                ClientOpenIdConnectCredentialColumn::Data,
+                ClientOpenIdConnectCredentialColumn::Hint,
+                ClientOpenIdConnectCredentialColumn::ExpiresAt,
+                ClientOpenIdConnectCredentialColumn::RevokedAt,
+                ClientOpenIdConnectCredentialColumn::CreatedAt,
+                ClientOpenIdConnectCredentialColumn::UpdatedAt,
             ])
             .into_model::<client_openid_connect_credential::Model>()
             .all(&self.db)

@@ -26,20 +26,15 @@ pub struct ResourceFilter {
     pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ResourceOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
     NameAsc,
     NameDesc,
     UriAsc,
     UriDesc,
-}
-
-impl Default for ResourceOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl ResourceOrder {

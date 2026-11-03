@@ -7,7 +7,9 @@ use async_trait::async_trait;
 use identity_application::{error::AppError, setting::runtime::RefreshableSetting};
 use sea_orm::{DatabaseConnection, EntityTrait, QuerySelect};
 
-use crate::database::entity::client_openid_connect_cors_origin;
+use crate::database::entity::client_openid_connect_cors_origin::{
+    Column as ClientOpenIdConnectCorsOriginColumn, Entity as ClientOpenIdConnectCorsOriginEntity,
+};
 
 /// A global, read-only setting derived from per-client CORS origin rows.
 pub struct CachedCorsOrigins {
@@ -25,9 +27,9 @@ impl CachedCorsOrigins {
     }
 
     async fn load(db: &DatabaseConnection) -> Result<HashSet<String>, AppError> {
-        client_openid_connect_cors_origin::Entity::find()
+        ClientOpenIdConnectCorsOriginEntity::find()
             .select_only()
-            .column(client_openid_connect_cors_origin::Column::Origin)
+            .column(ClientOpenIdConnectCorsOriginColumn::Origin)
             .distinct()
             .into_tuple::<String>()
             .all(db)

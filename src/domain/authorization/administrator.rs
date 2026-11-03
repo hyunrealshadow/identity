@@ -12,9 +12,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    authorization::actor::ActorContext,
-    authorization::audit::{AuditSubject, AuditSubjectKind, AuthorizationAuditContext},
-    authorization::ids::{AdministratorBindingOid, AuthorizationVersion},
+    authorization::{
+        actor::{ActorContext, ActorPrincipal},
+        audit::{AuditSubject, AuditSubjectKind, AuthorizationAuditContext},
+        ids::{AdministratorBindingOid, AuthorizationVersion},
+    },
     user::UserOid,
 };
 
@@ -150,10 +152,10 @@ pub fn administrator_audit_context(
     reason: &GrantReason,
 ) -> AuthorizationAuditContext {
     let actor_subject = match &actor.principal {
-        crate::authorization::actor::ActorPrincipal::User { user_oid, .. } => {
+        ActorPrincipal::User { user_oid, .. } => {
             AuditSubject::new(AuditSubjectKind::User, user_oid.0)
         }
-        crate::authorization::actor::ActorPrincipal::Client { client_oid } => {
+        ActorPrincipal::Client { client_oid } => {
             AuditSubject::new(AuditSubjectKind::Client, *client_oid)
         }
     };

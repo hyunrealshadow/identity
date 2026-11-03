@@ -1,7 +1,9 @@
-use super::mapping::parse_stored_authorization_request;
-use super::query_error;
+use super::{mapping::parse_stored_authorization_request, query_error};
 use crate::database::entity::{
-    client_authorization, client_authorization::Entity as ClientAuthorizationEntity,
+    client_authorization,
+    client_authorization::{
+        Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+    },
 };
 use chrono::{DateTime, Utc};
 use identity_domain::{
@@ -21,19 +23,19 @@ pub(super) fn selection_update_condition(
     now: DateTime<Utc>,
 ) -> Condition {
     let mut condition = Condition::all()
-        .add(client_authorization::Column::Oid.eq(model.oid))
+        .add(ClientAuthorizationColumn::Oid.eq(model.oid))
         .add(
-            client_authorization::Column::Type
+            ClientAuthorizationColumn::Type
                 .eq(ClientAuthorizationType::AuthorizationRequest.to_string()),
         )
-        .add(client_authorization::Column::CompletedAt.is_null())
-        .add(client_authorization::Column::RevokedAt.is_null())
-        .add(client_authorization::Column::ExpiresAt.gt(now));
+        .add(ClientAuthorizationColumn::CompletedAt.is_null())
+        .add(ClientAuthorizationColumn::RevokedAt.is_null())
+        .add(ClientAuthorizationColumn::ExpiresAt.gt(now));
 
     condition = if let Some(updated_at) = model.updated_at {
-        condition.add(client_authorization::Column::UpdatedAt.eq(updated_at))
+        condition.add(ClientAuthorizationColumn::UpdatedAt.eq(updated_at))
     } else {
-        condition.add(client_authorization::Column::UpdatedAt.is_null())
+        condition.add(ClientAuthorizationColumn::UpdatedAt.is_null())
     };
 
     condition
@@ -49,7 +51,7 @@ pub(super) async fn update_authorization_request_selection(
     source: SelectionSource,
 ) -> Result<bool, ClientAuthorizationRepositoryError> {
     let Some(model) = ClientAuthorizationEntity::find()
-        .filter(client_authorization::Column::Oid.eq(oid))
+        .filter(ClientAuthorizationColumn::Oid.eq(oid))
         .one(db)
         .await
         .map_err(query_error(
@@ -83,11 +85,11 @@ pub(super) async fn update_authorization_request_selection(
     ))?;
     let result = ClientAuthorizationEntity::update_many()
         .col_expr(
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
             SimpleExpr::Value(stored_data.into()),
         )
         .col_expr(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             SimpleExpr::Value(Some(now).into()),
         )
         .filter(selection_update_condition(&model, now))
@@ -109,23 +111,23 @@ pub(super) async fn mark_authorization_request_completed(
     let now = Utc::now();
     let result = ClientAuthorizationEntity::update_many()
         .col_expr(
-            client_authorization::Column::CompletedAt,
+            ClientAuthorizationColumn::CompletedAt,
             SimpleExpr::Value(Some(completed_at).into()),
         )
         .col_expr(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             SimpleExpr::Value(Some(now).into()),
         )
         .filter(
             Condition::all()
-                .add(client_authorization::Column::Oid.eq(oid))
+                .add(ClientAuthorizationColumn::Oid.eq(oid))
                 .add(
-                    client_authorization::Column::Type
+                    ClientAuthorizationColumn::Type
                         .eq(ClientAuthorizationType::AuthorizationRequest.to_string()),
                 )
-                .add(client_authorization::Column::CompletedAt.is_null())
-                .add(client_authorization::Column::RevokedAt.is_null())
-                .add(client_authorization::Column::ExpiresAt.gt(now)),
+                .add(ClientAuthorizationColumn::CompletedAt.is_null())
+                .add(ClientAuthorizationColumn::RevokedAt.is_null())
+                .add(ClientAuthorizationColumn::ExpiresAt.gt(now)),
         )
         .exec(db)
         .await

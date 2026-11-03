@@ -1,5 +1,6 @@
 use async_graphql::{Enum, InputObject, Object};
 use identity_application::user::OtpAlgorithm;
+use identity_domain::user::MfaMethod;
 
 #[derive(async_graphql::SimpleObject)]
 pub(super) struct RecoveryCodeEnrollmentPayload {
@@ -11,7 +12,7 @@ pub(super) struct AccountSecurity {
     totp_enabled: bool,
     passkey_enabled: bool,
     recovery_codes_remaining: i32,
-    preferred_mfa_method: identity_domain::user::MfaMethod,
+    preferred_mfa_method: MfaMethod,
 }
 
 impl AccountSecurity {
@@ -19,7 +20,7 @@ impl AccountSecurity {
         totp_enabled: bool,
         passkey_enabled: bool,
         recovery_codes_remaining: i32,
-        preferred_mfa_method: identity_domain::user::MfaMethod,
+        preferred_mfa_method: MfaMethod,
     ) -> Self {
         Self {
             totp_enabled,

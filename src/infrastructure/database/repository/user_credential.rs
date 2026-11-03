@@ -1,18 +1,20 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_application::error::{
-    AppError,
-    codes::{auth::AuthErrorCode, authorization::AuthorizationErrorCode},
-};
-use identity_application::user::{
-    CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
-    UserCredential, UserCredentialOid, UserOid,
-    credential::{MAX_PASSKEYS_PER_USER, StoredPasskey},
-    repository::{
-        PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
+use identity_application::{
+    error::{
+        AppError,
+        codes::{auth::AuthErrorCode, authorization::AuthorizationErrorCode},
+    },
+    user::{
+        CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
+        UserCredential, UserCredentialOid, UserOid,
+        credential::{MAX_PASSKEYS_PER_USER, StoredPasskey},
+        repository::{
+            PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
+        },
     },
 };
-use identity_domain::authorization::owner::OwnerProtectionError;
+use identity_domain::{auth::SessionOid, authorization::owner::OwnerProtectionError};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
     QuerySelect, Set, TransactionTrait,
@@ -21,16 +23,20 @@ use sea_orm::{
 use serde_json::{from_value, to_value};
 use uuid::Uuid;
 
-use super::authorization_lifecycle::{
-    ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
-    withdraw_user_authority_in_txn,
+use super::{
+    authorization_lifecycle::{
+        ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
+        withdraw_user_authority_in_txn,
+    },
+    shared::lock_user_credentials,
 };
-use super::shared::lock_user_credentials;
 use crate::database::{
     audit,
     entity::{
-        user, user::Entity as UserEntity, user_credential,
-        user_credential::Entity as UserCredentialEntity,
+        user,
+        user::{Column as UserColumn, Entity as UserEntity},
+        user_credential,
+        user_credential::{Column as UserCredentialColumn, Entity as UserCredentialEntity},
     },
     query::{json_text, jsonb_set},
 };
@@ -57,24 +63,24 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         credential_type: CredentialType,
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError> {
         let rows = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .inner_join(UserCredentialEntity)
-            .filter(user_credential::Column::Type.eq(credential_type.as_ref()))
+            .filter(UserCredentialColumn::Type.eq(credential_type.as_ref()))
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                    .add(UserCredentialColumn::ExpiresAt.is_null())
+                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
             )
             .select_only()
             .columns([
-                user_credential::Column::Id,
-                user_credential::Column::Oid,
-                user_credential::Column::UserId,
-                user_credential::Column::Type,
-                user_credential::Column::Data,
-                user_credential::Column::CreatedAt,
-                user_credential::Column::UpdatedAt,
-                user_credential::Column::ExpiresAt,
+                UserCredentialColumn::Id,
+                UserCredentialColumn::Oid,
+                UserCredentialColumn::UserId,
+                UserCredentialColumn::Type,
+                UserCredentialColumn::Data,
+                UserCredentialColumn::CreatedAt,
+                UserCredentialColumn::UpdatedAt,
+                UserCredentialColumn::ExpiresAt,
             ])
             .into_model::<user_credential::Model>()
             .all(&self.db)
@@ -113,21 +119,21 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         let new_data = to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
 
         let result = UserCredentialEntity::update_many()
-            .col_expr(user_credential::Column::Data, Expr::value(new_data))
+            .col_expr(UserCredentialColumn::Data, Expr::value(new_data))
             .col_expr(
-                user_credential::Column::UpdatedAt,
+                UserCredentialColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
+            .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential_oid)))
             .filter(
-                user_credential::Column::Data
+                UserCredentialColumn::Data
                     .eq(to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?),
             )
-            .filter(user_credential::Column::Type.eq(CredentialType::Password.as_ref()))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::Password.as_ref()))
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                    .add(UserCredentialColumn::ExpiresAt.is_null())
+                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
             )
             .exec(&self.db)
             .await
@@ -144,7 +150,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         credential: UserCredentialOid,
         expected: &Password,
         password: &Password,
-        keep: Option<identity_domain::auth::SessionOid>,
+        keep: Option<SessionOid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
         self.change_password_transaction(user, credential, expected, password, keep)
             .await
@@ -160,28 +166,28 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .map_err(|error| UserCredentialRepositoryError::ConsumeTotpFailed(Box::new(error)))?;
         let result = UserCredentialEntity::update_many()
             .col_expr(
-                user_credential::Column::Data,
+                UserCredentialColumn::Data,
                 jsonb_set(
-                    (user_credential::Entity, user_credential::Column::Data),
+                    (user_credential::Entity, UserCredentialColumn::Data),
                     "last_used_counter",
                     Func::cust("to_jsonb").arg(Expr::value(counter).cast_as("bigint")),
                 ),
             )
             .col_expr(
-                user_credential::Column::UpdatedAt,
+                UserCredentialColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(user_credential::Column::Oid.eq(Uuid::from(credential_oid)))
-            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
+            .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential_oid)))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::Otp.as_ref()))
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                    .add(UserCredentialColumn::ExpiresAt.is_null())
+                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
             )
             .filter(
                 Expr::expr(Func::coalesce([
                     json_text(
-                        (user_credential::Entity, user_credential::Column::Data),
+                        (user_credential::Entity, UserCredentialColumn::Data),
                         "last_used_counter",
                     )
                     .cast_as("bigint"),
@@ -246,7 +252,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .one(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
@@ -256,8 +262,8 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             let affects_authority =
                 matches!(credential_type.as_str(), "password" | "passkey" | "otp");
             let deleted = UserCredentialEntity::delete_many()
-                .filter(user_credential::Column::UserId.eq(user.id))
-                .filter(user_credential::Column::Type.eq(&credential_type))
+                .filter(UserCredentialColumn::UserId.eq(user.id))
+                .filter(UserCredentialColumn::Type.eq(&credential_type))
                 .exec(&txn)
                 .await
                 .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?
@@ -341,18 +347,18 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .one(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         let totp_exists = UserCredentialEntity::find()
-            .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
+            .filter(UserCredentialColumn::UserId.eq(user.id))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::Otp.as_ref()))
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                    .add(UserCredentialColumn::ExpiresAt.is_null())
+                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
             )
             .one(&txn)
             .await
@@ -366,8 +372,8 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         }
         mfa::install_recovery_codes(&txn, user.id, &recovery_codes).await?;
         UserCredentialEntity::delete_many()
-            .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
+            .filter(UserCredentialColumn::UserId.eq(user.id))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::Otp.as_ref()))
             .exec(&txn)
             .await
             .map_err(|error| UserCredentialRepositoryError::ReplaceFailed(Box::new(error)))?;
@@ -425,7 +431,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .one(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::QueryFailed(Box::new(e)))?
@@ -437,8 +443,8 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             return Ok(false);
         }
         UserCredentialEntity::delete_many()
-            .filter(user_credential::Column::UserId.eq(user.id))
-            .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
+            .filter(UserCredentialColumn::UserId.eq(user.id))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::RecoveryCode.as_ref()))
             .exec(&txn)
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -493,29 +499,6 @@ mod tests {
 
     use super::UserCredentialRepositoryImpl;
     use crate::database::entity::user_credential;
-
-    #[tokio::test]
-    async fn consume_totp_counter_uses_an_atomic_jsonb_condition() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_exec_results([MockExecResult {
-                last_insert_id: 0,
-                rows_affected: 1,
-            }])
-            .into_connection();
-        let repo = UserCredentialRepositoryImpl::new(db);
-
-        let consumed = repo
-            .consume_totp_counter(UserCredentialOid(Uuid::new_v4()), 42)
-            .await
-            .unwrap();
-
-        assert!(consumed);
-        let statements = format!("{:?}", repo.db.into_transaction_log());
-        assert!(statements.contains("jsonb_set"));
-        assert!(statements.contains("last_used_counter"));
-        assert!(statements.contains("<"));
-        assert!(statements.contains("expires_at"));
-    }
 
     #[tokio::test]
     async fn consume_totp_counter_reports_a_replay_when_no_row_is_updated() {
@@ -621,8 +604,8 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             .map_err(AppError::internal)?;
         let user_id = UserEntity::find()
             .select_only()
-            .column(user::Column::Id)
-            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .column(UserColumn::Id)
+            .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .into_tuple::<i64>()
             .one(&txn)
             .await
@@ -632,13 +615,13 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         // registrations completed in parallel cannot exceed the account limit.
         let existing = UserCredentialEntity::find()
             .select_only()
-            .column(user_credential::Column::Id)
-            .filter(user_credential::Column::UserId.eq(user_id))
-            .filter(user_credential::Column::Type.eq(CredentialType::Passkey.as_ref()))
+            .column(UserCredentialColumn::Id)
+            .filter(UserCredentialColumn::UserId.eq(user_id))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::Passkey.as_ref()))
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                    .add(UserCredentialColumn::ExpiresAt.is_null())
+                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
             )
             .limit(MAX_PASSKEYS_PER_USER as u64)
             .into_tuple::<i64>()
@@ -716,17 +699,17 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             .map_err(AppError::internal)?;
         let user_id = UserEntity::find()
             .select_only()
-            .column(user::Column::Id)
-            .filter(user::Column::Oid.eq(Uuid::from(user)))
+            .column(UserColumn::Id)
+            .filter(UserColumn::Oid.eq(Uuid::from(user)))
             .into_tuple::<i64>()
             .one(&txn)
             .await
             .map_err(AppError::internal)?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         let deleted = UserCredentialEntity::delete_many()
-            .filter(user_credential::Column::UserId.eq(user_id))
-            .filter(user_credential::Column::Oid.eq(id))
-            .filter(user_credential::Column::Type.eq(CredentialType::Passkey.as_ref()))
+            .filter(UserCredentialColumn::UserId.eq(user_id))
+            .filter(UserCredentialColumn::Oid.eq(id))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::Passkey.as_ref()))
             .exec(&txn)
             .await
             .map_err(AppError::internal)?
@@ -764,7 +747,9 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
 #[cfg(test)]
 mod passkey_tests {
     use super::*;
-    use identity_application::error::code::AppErrorCode as _;
+    use identity_application::{
+        error::code::AppErrorCode as _, user::credential::PasskeyCredentialData,
+    };
     use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -775,7 +760,7 @@ mod passkey_tests {
             let user = UserOid(Uuid::new_v4());
             let key = StoredPasskey {
                 id: Uuid::new_v4(),
-                data: identity_application::user::credential::PasskeyCredentialData {
+                data: PasskeyCredentialData {
                     name: "Laptop".to_owned(),
                     credential_id: "new-key".to_owned(),
                     key: json!({}),

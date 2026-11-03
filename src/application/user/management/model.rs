@@ -16,7 +16,10 @@ use identity_domain::{
     },
     client::model::ClientOid,
     time_zone::TimeZone,
-    user::{UserManagementRecord, UserOid, UserTheme},
+    user::{
+        UserManagementRecord, UserOid, UserTheme,
+        repository::UserProfilePatch as RepositoryUserProfilePatch,
+    },
 };
 use uuid::Uuid;
 
@@ -170,18 +173,13 @@ pub struct UserFilter {
     pub created_before: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum UserOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
     UsernameAsc,
     UsernameDesc,
-}
-
-impl Default for UserOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl UserOrder {
@@ -245,7 +243,7 @@ pub type UserManagementMutationResult = UserManagementRecord;
 /// Parsed theme for the domain patch.
 pub(crate) fn parse_theme(
     value: Option<Option<String>>,
-) -> Result<Option<Option<UserTheme>>, crate::error::AppError> {
+) -> Result<Option<Option<UserTheme>>, AppError> {
     let Some(value) = value else {
         return Ok(None);
     };
@@ -257,14 +255,9 @@ pub(crate) fn parse_theme(
             .map(Some)
             .map(Some)
             .map_err(|_| {
-                crate::error::AppError::from_code(
-                    crate::error::codes::user_management::UserManagementErrorCode::ValidationFailed,
-                )
-                .with_field_error(
+                AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
                     "theme",
-                    crate::error::AppError::from_code(
-                        crate::error::codes::user_management::UserManagementErrorCode::InvalidTheme,
-                    ),
+                    AppError::from_code(UserManagementErrorCode::InvalidTheme),
                 )
             }),
     }
@@ -296,8 +289,8 @@ fn invalid_time_zone() -> AppError {
 /// Convert the management patch into the existing domain patch.
 pub(crate) fn domain_profile_patch(
     patch: &UserProfilePatch,
-) -> Result<identity_domain::user::repository::UserProfilePatch, AppError> {
-    Ok(identity_domain::user::repository::UserProfilePatch {
+) -> Result<RepositoryUserProfilePatch, AppError> {
+    Ok(RepositoryUserProfilePatch {
         given_name: patch.given_name.clone(),
         family_name: patch.family_name.clone(),
         middle_name: patch.middle_name.clone(),

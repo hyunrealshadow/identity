@@ -2,6 +2,8 @@ use crate::observability::NoopEventSink;
 
 use super::*;
 
+use identity_domain::authorization::ManagementAuthorityRepository;
+
 pub struct TokenService {
     pub(super) client_authentication: Arc<ClientAuthenticator>,
     pub(super) device_repo: Arc<dyn DeviceAuthorizationRepository>,
@@ -17,8 +19,7 @@ pub struct TokenService {
     pub(super) runtime_key_ring: Option<Arc<dyn RuntimeKeyRingProvider>>,
     pub(super) session_repo: Option<Arc<dyn SessionRepository>>,
     pub(super) events: Arc<dyn EventSink>,
-    pub(super) management_authority_repo:
-        Option<Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>>,
+    pub(super) management_authority_repo: Option<Arc<dyn ManagementAuthorityRepository>>,
     /// Live resource-owned canonical scope state. Issuance/exchange/refresh
     /// fails closed when this is absent.
     pub(super) rbac_authorization_repo: Option<Arc<dyn RbacAuthorizationRepository>>,
@@ -69,7 +70,7 @@ impl TokenService {
     #[must_use]
     pub fn with_management_authority_repository(
         mut self,
-        repository: Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>,
+        repository: Arc<dyn ManagementAuthorityRepository>,
     ) -> Self {
         self.management_authority_repo = Some(repository);
         self

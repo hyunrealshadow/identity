@@ -6,8 +6,11 @@ use chrono::{DateTime, Utc};
 use identity_application::{
     authorization::ManagementTarget,
     rbac::{
-        GroupMembershipMutationResult, GroupMembershipRecord, GroupRecord, GroupRoleBindingRecord,
-        GroupRoleMutationResult,
+        GroupFilter as RbacGroupFilter, GroupMembershipFilter as RbacGroupMembershipFilter,
+        GroupMembershipMutationResult, GroupMembershipOrder as RbacGroupMembershipOrder,
+        GroupMembershipRecord, GroupOrder as RbacGroupOrder, GroupRecord, GroupRoleBindingRecord,
+        GroupRoleFilter as RbacGroupRoleFilter, GroupRoleMutationResult,
+        GroupRoleOrder as RbacGroupRoleOrder,
     },
 };
 use identity_domain::{
@@ -31,7 +34,10 @@ use crate::graphql::schema::{
     modules::user::integration as user_integration,
 };
 
-use super::query;
+use super::{
+    super::role::{types, types::RoleGlobalId},
+    query,
+};
 
 pub(crate) struct GroupGlobalId;
 
@@ -81,7 +87,7 @@ impl GroupOrder {
     }
 }
 
-impl From<GroupOrder> for identity_application::rbac::GroupOrder {
+impl From<GroupOrder> for RbacGroupOrder {
     fn from(order: GroupOrder) -> Self {
         match order {
             GroupOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -104,7 +110,7 @@ impl GroupMembershipOrder {
     }
 }
 
-impl From<GroupMembershipOrder> for identity_application::rbac::GroupMembershipOrder {
+impl From<GroupMembershipOrder> for RbacGroupMembershipOrder {
     fn from(order: GroupMembershipOrder) -> Self {
         match order {
             GroupMembershipOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -131,7 +137,7 @@ impl GroupRoleOrder {
     }
 }
 
-impl From<GroupRoleOrder> for identity_application::rbac::GroupRoleOrder {
+impl From<GroupRoleOrder> for RbacGroupRoleOrder {
     fn from(order: GroupRoleOrder) -> Self {
         match order {
             GroupRoleOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -153,10 +159,7 @@ pub(crate) struct GroupFilter {
 }
 
 impl GroupFilter {
-    pub(crate) fn into_application(
-        self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<identity_application::rbac::GroupFilter> {
+    pub(crate) fn into_application(self, ctx: &Context<'_>) -> GraphqlResult<RbacGroupFilter> {
         let user_oid = self
             .user_id
             .as_ref()
@@ -168,7 +171,7 @@ impl GroupFilter {
             .as_ref()
             .map(|id| decode_role_oid_from_id(ctx, id))
             .transpose()?;
-        Ok(identity_application::rbac::GroupFilter {
+        Ok(RbacGroupFilter {
             query: self.query,
             enabled: self.enabled,
             built_in: self.built_in,
@@ -291,6 +294,7 @@ impl GroupNode {
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn members(
         &self,
         ctx: &Context<'_>,
@@ -319,6 +323,7 @@ impl GroupNode {
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn roles(
         &self,
         ctx: &Context<'_>,
@@ -353,14 +358,14 @@ impl GroupMembershipFilter {
     pub(crate) fn into_application(
         self,
         ctx: &Context<'_>,
-    ) -> GraphqlResult<identity_application::rbac::GroupMembershipFilter> {
+    ) -> GraphqlResult<RbacGroupMembershipFilter> {
         let user_oid = self
             .user_id
             .as_ref()
             .map(|id| decode_oid::<UserGlobalId>(ctx, id))
             .transpose()?
             .map(UserOid);
-        Ok(identity_application::rbac::GroupMembershipFilter {
+        Ok(RbacGroupMembershipFilter {
             enabled: self.enabled,
             user_oid,
         })
@@ -374,16 +379,13 @@ pub(crate) struct GroupRoleFilter {
 }
 
 impl GroupRoleFilter {
-    pub(crate) fn into_application(
-        self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<identity_application::rbac::GroupRoleFilter> {
+    pub(crate) fn into_application(self, ctx: &Context<'_>) -> GraphqlResult<RbacGroupRoleFilter> {
         let role_oid = self
             .role_id
             .as_ref()
             .map(|id| decode_role_oid_from_id(ctx, id))
             .transpose()?;
-        Ok(identity_application::rbac::GroupRoleFilter {
+        Ok(RbacGroupRoleFilter {
             enabled: self.enabled,
             role_oid,
         })
@@ -484,7 +486,7 @@ impl GroupRoleBindingNode {
     }
 
     async fn role_id(&self) -> ID {
-        super::super::role::types::role_global_id(self.record.role_oid)
+        types::role_global_id(self.record.role_oid)
     }
 
     #[graphql(
@@ -752,7 +754,7 @@ impl GroupRolesPayload {
             role_ids: result
                 .role_oids
                 .into_iter()
-                .map(super::super::role::types::role_global_id)
+                .map(types::role_global_id)
                 .collect(),
             added_count: i32::try_from(result.added_count).unwrap_or(i32::MAX),
             removed_count: i32::try_from(result.removed_count).unwrap_or(i32::MAX),
@@ -792,18 +794,10 @@ pub(crate) fn decode_group_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<Grou
     decode_oid::<GroupGlobalId>(ctx, id).map(GroupOid)
 }
 
-pub(crate) fn decode_group_role_oid(
-    ctx: &Context<'_>,
-    id: &ID,
-) -> GraphqlResult<GroupRoleBindingOid> {
-    decode_oid::<GroupRoleBindingGlobalId>(ctx, id).map(GroupRoleBindingOid)
-}
-
 pub(crate) fn decode_user_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<UserOid> {
     decode_oid::<UserGlobalId>(ctx, id).map(UserOid)
 }
 
 pub(crate) fn decode_role_oids(ctx: &Context<'_>, ids: &[ID]) -> GraphqlResult<Vec<RoleOid>> {
-    decode_oids::<super::super::role::types::RoleGlobalId>(ctx, ids)
-        .map(|ids| ids.into_iter().map(RoleOid).collect())
+    decode_oids::<RoleGlobalId>(ctx, ids).map(|ids| ids.into_iter().map(RoleOid).collect())
 }

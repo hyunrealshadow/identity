@@ -4,18 +4,23 @@ use identity_infrastructure::{
 };
 use openssl::{
     pkey::PKey,
+    sha,
     ssl::{SslAcceptor, SslMethod},
     x509::X509,
 };
+use reqwest::{Certificate, Client, redirect::Policy};
 use std::{
     io::{Read, Write},
+    net::TcpListener,
+    sync::Arc,
+    thread,
     time::Duration,
 };
 
 #[tokio::test]
 async fn sends_only_the_range_prefix_and_fails_closed_on_http_errors() {
     let password = "a unique password for transport test";
-    let hash: String = openssl::sha::sha1(password.as_bytes())
+    let hash: String = sha::sha1(password.as_bytes())
         .iter()
         .map(|b| format!("{b:02X}"))
         .collect();
@@ -26,13 +31,13 @@ async fn sends_only_the_range_prefix_and_fails_closed_on_http_errors() {
     tls.set_private_key(&PKey::private_key_from_pem(key.as_bytes()).unwrap())
         .unwrap();
     tls.check_private_key().unwrap();
-    let tls = std::sync::Arc::new(tls.build());
+    let tls = Arc::new(tls.build());
     for status in [200, 503] {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let expected = hash.clone();
         let tls = tls.clone();
-        let server = std::thread::spawn(move || {
+        let server = thread::spawn(move || {
             let (socket, _) = listener.accept().unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(3)))
@@ -60,11 +65,11 @@ async fn sends_only_the_range_prefix_and_fails_closed_on_http_errors() {
             )
             .unwrap();
         });
-        let client = reqwest::Client::builder()
+        let client = Client::builder()
             .https_only(true)
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(Policy::none())
             .timeout(Duration::from_secs(3))
-            .add_root_certificate(reqwest::Certificate::from_pem(cert.as_bytes()).unwrap())
+            .add_root_certificate(Certificate::from_pem(cert.as_bytes()).unwrap())
             .build()
             .unwrap();
         let checker = PwnedPasswordChecker::with_http_client(

@@ -4,25 +4,28 @@
 //! token issuance and resource projections. API scopes own `resource_id`;
 //! protocol/identity scopes leave it `NULL`.
 
+use std::collections::BTreeSet;
+
 use identity_application::rbac::{
-    CreateScopeTransaction, RbacEntityKind, RbacManagementRepositoryError, RbacPageData,
-    RbacProtectedKind, ScopeOid, ScopePageEntry, ScopeQuery, ScopeRecord, ScopeStateTransaction,
-    UpdateScopeTransaction,
+    CreateScopeTransaction, RbacDuplicateKind, RbacEntityKind, RbacManagementRepositoryError,
+    RbacPageData, RbacProtectedKind, ScopeDescription, ScopeFilter, ScopeOid, ScopeOrder,
+    ScopePageEntry, ScopeQuery, ScopeRecord, ScopeStateTransaction, UpdateScopeTransaction,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
 use identity_domain::{
     authorization::ManagementScope,
-    rbac::{LocalizedMetadata, ResourceOid},
+    rbac,
+    rbac::{LocalizedMetadata, LocalizedText, PermissionCode, ResourceOid},
 };
-use sea_orm::TransactionTrait;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
+use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement, TransactionTrait};
 use uuid::Uuid;
 
-use super::super::localized;
 use super::{
+    super::localized,
     RbacManagementRepositoryImpl,
     audit::append_semantic_audit,
     authority::recheck_authority,
+    delegation,
     support::{
         Binds, CursorComparison, corrupt, escape_like, keyset_condition, not_found,
         order_is_descending, page_flags, parse_localized_metadata, scope_descriptions, storage,
@@ -100,24 +103,21 @@ async fn load_scope_locked(
 }
 
 fn scope_metadata(
-    names: Vec<identity_application::rbac::ScopeDescription>,
-    descriptions: Vec<identity_application::rbac::ScopeDescription>,
+    names: Vec<ScopeDescription>,
+    descriptions: Vec<ScopeDescription>,
 ) -> Result<LocalizedMetadata, RbacManagementRepositoryError> {
     let names = names
         .into_iter()
-        .map(|entry| identity_domain::rbac::LocalizedText::new(entry.locale, entry.value))
+        .map(|entry| LocalizedText::new(entry.locale, entry.value))
         .collect();
     let descriptions = descriptions
         .into_iter()
-        .map(|entry| identity_domain::rbac::LocalizedText::new(entry.locale, entry.value))
+        .map(|entry| LocalizedText::new(entry.locale, entry.value))
         .collect();
     LocalizedMetadata::canonicalize(names, descriptions).map_err(|_| corrupt())
 }
 
-fn scope_filter_conditions(
-    filter: &identity_application::rbac::ScopeFilter,
-    binds: &mut Binds,
-) -> Vec<String> {
+fn scope_filter_conditions(filter: &ScopeFilter, binds: &mut Binds) -> Vec<String> {
     let mut conditions = vec!["1=1".to_owned()];
     if let Some(term) = &filter.query {
         let pattern = format!("%{}%", escape_like(term));
@@ -155,7 +155,7 @@ impl RbacManagementRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "scope.count"))]
     pub(crate) async fn scope_count(
         &self,
-        filter: identity_application::rbac::ScopeFilter,
+        filter: ScopeFilter,
     ) -> Result<u64, RbacManagementRepositoryError> {
         let mut binds = Binds::new();
         let conditions = scope_filter_conditions(&filter, &mut binds);
@@ -200,10 +200,8 @@ impl RbacManagementRepositoryImpl {
         let descending = order_is_descending(query.order.is_descending(), query.direction);
         let ascending = !query.order.is_descending();
         let column = match query.order {
-            identity_application::rbac::ScopeOrder::CreatedAtAsc
-            | identity_application::rbac::ScopeOrder::CreatedAtDesc => "s.created_at",
-            identity_application::rbac::ScopeOrder::CodeAsc
-            | identity_application::rbac::ScopeOrder::CodeDesc => "s.code",
+            ScopeOrder::CreatedAtAsc | ScopeOrder::CreatedAtDesc => "s.created_at",
+            ScopeOrder::CodeAsc | ScopeOrder::CodeDesc => "s.code",
         };
         let mut binds = Binds::new();
         let mut conditions = scope_filter_conditions(&query.filter, &mut binds);
@@ -255,13 +253,11 @@ impl RbacManagementRepositoryImpl {
             let id = row.try_get::<i64>("", "id").map_err(storage)?;
             let tie = RbacTie::Id(id);
             let sort_key = match query.order {
-                identity_application::rbac::ScopeOrder::CreatedAtAsc
-                | identity_application::rbac::ScopeOrder::CreatedAtDesc => RbacSortKey::CreatedAt {
+                ScopeOrder::CreatedAtAsc | ScopeOrder::CreatedAtDesc => RbacSortKey::CreatedAt {
                     created_at: record.created_at,
                     tie,
                 },
-                identity_application::rbac::ScopeOrder::CodeAsc
-                | identity_application::rbac::ScopeOrder::CodeDesc => RbacSortKey::Text {
+                ScopeOrder::CodeAsc | ScopeOrder::CodeDesc => RbacSortKey::Text {
                     value: record.code.clone(),
                     tie,
                 },
@@ -287,14 +283,13 @@ impl RbacManagementRepositoryImpl {
     ) -> Result<ScopeRecord, RbacManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         recheck_authority(&txn, &command.authority, ManagementScope::ScopesWrite, None).await?;
-        let code =
-            identity_domain::rbac::PermissionCode::parse(command.code.as_str()).map_err(|_| {
-                RbacManagementRepositoryError::InvalidPermissionCode {
-                    code: command.code.clone(),
-                }
-            })?;
+        let code = PermissionCode::parse(command.code.as_str()).map_err(|_| {
+            RbacManagementRepositoryError::InvalidPermissionCode {
+                code: command.code.clone(),
+            }
+        })?;
         let code = code.as_str().to_owned();
-        identity_domain::rbac::validate_business_scope_reference(&code).map_err(|_| {
+        rbac::validate_business_scope_reference(&code).map_err(|_| {
             RbacManagementRepositoryError::ScopeNotBusiness {
                 scope: code.clone(),
             }
@@ -335,7 +330,7 @@ impl RbacManagementRepositoryImpl {
             .map_err(storage)?;
         if row.is_none() {
             return Err(RbacManagementRepositoryError::Duplicate(
-                identity_application::rbac::RbacDuplicateKind::ScopeCode,
+                RbacDuplicateKind::ScopeCode,
             ));
         }
         append_semantic_audit(
@@ -447,10 +442,10 @@ impl RbacManagementRepositoryImpl {
             .ok_or_else(|| not_found(RbacEntityKind::Scope))?;
         let scope_id = scope_row.try_get::<i64>("", "id").map_err(storage)?;
         if enabled {
-            super::delegation::ensure_delegable_permissions(
+            delegation::ensure_delegable_permissions(
                 &txn,
                 &command.authority,
-                &std::collections::BTreeSet::from([scope_id]),
+                &BTreeSet::from([scope_id]),
             )
             .await?;
         }

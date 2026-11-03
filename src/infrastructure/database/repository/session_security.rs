@@ -1,9 +1,17 @@
 //! Serialize login completion with account-wide password replacement.
-use super::session::{SessionRepositoryImpl, session_to_domain};
-use super::shared::lock_user_credentials;
-use super::shared::{encode_nonnullable_expiry, lock_session};
-use crate::database::entity::{
-    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
+use super::{
+    super::entity::login::{Column as LoginColumn, Entity as LoginEntity},
+    challenge,
+    session::{SessionRepositoryImpl, session_to_domain},
+    shared::{encode_nonnullable_expiry, lock_session, lock_user_credentials},
+};
+use crate::database::{
+    audit,
+    entity::{
+        session,
+        session::{Column as SessionColumn, Entity as SessionEntity},
+        user::{Column as UserColumn, Entity as UserEntity},
+    },
 };
 use chrono::Utc;
 use identity_domain::auth::{
@@ -13,9 +21,9 @@ use identity_domain::auth::{
     repository::{CreateSessionInput, SessionRepositoryError},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, DbBackend, DbErr,
+    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, Statement, sea_query::Expr,
 };
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QuerySelect, Statement};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -24,8 +32,8 @@ pub(super) async fn lock_account_sessions(
     user_id: i64,
 ) -> Result<Vec<session::Model>, DbErr> {
     let sessions = SessionEntity::find()
-        .filter(session::Column::UserId.eq(user_id))
-        .order_by_asc(session::Column::Oid)
+        .filter(SessionColumn::UserId.eq(user_id))
+        .order_by_asc(SessionColumn::Oid)
         .all(txn)
         .await?;
     for session in &sessions {
@@ -34,8 +42,8 @@ pub(super) async fn lock_account_sessions(
     // Re-read after the locks: an independent logout may have committed while
     // we waited, including revocation of the session the caller wants to keep.
     SessionEntity::find()
-        .filter(session::Column::UserId.eq(user_id))
-        .order_by_asc(session::Column::Oid)
+        .filter(SessionColumn::UserId.eq(user_id))
+        .order_by_asc(SessionColumn::Oid)
         .all(txn)
         .await
 }
@@ -48,7 +56,7 @@ impl SessionRepositoryImpl {
         input: CreateSessionInput,
     ) -> Result<Session, SessionRepositoryError> {
         let fail = |e| SessionRepositoryError::CreateFailed(Box::new(e));
-        let txn = crate::database::audit::begin(&self.db, "session.complete_login")
+        let txn = audit::begin(&self.db, "session.complete_login")
             .await
             .map_err(fail)?;
         lock_user_credentials(&txn, input.user_oid.into())
@@ -57,15 +65,15 @@ impl SessionRepositoryImpl {
         if let Some(oid) = existing {
             lock_session(&txn, oid).await.map_err(fail)?;
         }
-        let login = super::super::entity::login::Entity::find()
-            .filter(super::super::entity::login::Column::Oid.eq(login_oid))
+        let login = LoginEntity::find()
+            .filter(LoginColumn::Oid.eq(login_oid))
             .lock_exclusive()
             .one(&txn)
             .await
             .map_err(fail)?
             .ok_or(SessionRepositoryError::SessionNotFound)?;
         let owner = UserEntity::find()
-            .filter(user::Column::Oid.eq(input.user_oid))
+            .filter(UserColumn::Oid.eq(input.user_oid))
             .one(&txn)
             .await
             .map_err(fail)?
@@ -84,8 +92,8 @@ impl SessionRepositoryImpl {
         if let Some(bound) = login.session_id {
             let matches = match existing {
                 Some(oid) => SessionEntity::find()
-                    .filter(session::Column::Oid.eq(oid.0))
-                    .filter(session::Column::Id.eq(bound))
+                    .filter(SessionColumn::Oid.eq(oid.0))
+                    .filter(SessionColumn::Id.eq(bound))
                     .one(&txn)
                     .await
                     .map_err(fail)?
@@ -100,23 +108,23 @@ impl SessionRepositoryImpl {
         let model = if let Some(oid) = existing {
             SessionEntity::update_many()
                 .col_expr(
-                    session::Column::ExpiresAt,
+                    SessionColumn::ExpiresAt,
                     Expr::value(encode_nonnullable_expiry(input.expires_at)),
                 )
-                .col_expr(session::Column::AuthenticatedAt, Expr::value(Some(now)))
-                .col_expr(session::Column::LastActiveAt, Expr::value(now))
-                .col_expr(session::Column::UpdatedAt, Expr::value(Some(now)))
-                .col_expr(session::Column::Acr, Expr::value(input.acr))
+                .col_expr(SessionColumn::AuthenticatedAt, Expr::value(Some(now)))
+                .col_expr(SessionColumn::LastActiveAt, Expr::value(now))
+                .col_expr(SessionColumn::UpdatedAt, Expr::value(Some(now)))
+                .col_expr(SessionColumn::Acr, Expr::value(input.acr))
                 .col_expr(
-                    session::Column::AcrExpiresAt,
+                    SessionColumn::AcrExpiresAt,
                     Expr::value(input.acr_expires_at.map(|v| v.fixed_offset())),
                 )
-                .col_expr(session::Column::Amr, Expr::value(json!(input.amr)))
-                .filter(session::Column::Oid.eq(oid.0))
-                .filter(session::Column::UserId.eq(owner.id))
-                .filter(session::Column::Status.eq("active"))
-                .filter(session::Column::RevokedAt.is_null())
-                .filter(session::Column::ExpiresAt.gt(now))
+                .col_expr(SessionColumn::Amr, Expr::value(json!(input.amr)))
+                .filter(SessionColumn::Oid.eq(oid.0))
+                .filter(SessionColumn::UserId.eq(owner.id))
+                .filter(SessionColumn::Status.eq("active"))
+                .filter(SessionColumn::RevokedAt.is_null())
+                .filter(SessionColumn::ExpiresAt.gt(now))
                 .exec_with_returning(&txn)
                 .await
                 .map_err(fail)?
@@ -153,10 +161,10 @@ impl SessionRepositoryImpl {
         txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "UPDATE login SET status = 'authenticated', session_id = $2, acr = $3, updated_at = now() WHERE oid = $1",
             [login_oid.into(), model.id.into(), model.acr.clone().into()])).await.map_err(fail)?;
-        crate::database::audit::record(&txn, "session.complete_login", "session", model.oid)
+        audit::record(&txn, "session.complete_login", "session", model.oid)
             .await
             .map_err(fail)?;
-        super::challenge::clear_for_binding(&txn, ChallengeBinding::Login(login_oid))
+        challenge::clear_for_binding(&txn, ChallengeBinding::Login(login_oid))
             .await
             .map_err(fail)?;
         txn.commit().await.map_err(fail)?;

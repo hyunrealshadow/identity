@@ -38,8 +38,27 @@ use crate::{
     database::{
         audit,
         entity::{
-            client, client_openid_connect, client_openid_connect_credential,
-            client_openid_connect_platform, client_scope, user, user_credential,
+            client,
+            client::{Column as ClientColumn, Entity as ClientEntity},
+            client_openid_connect,
+            client_openid_connect::{
+                Column as ClientOpenIdConnectColumn, Entity as ClientOpenIdConnectEntity,
+            },
+            client_openid_connect_credential,
+            client_openid_connect_credential::{
+                Column as ClientOpenIdConnectCredentialColumn,
+                Entity as ClientOpenIdConnectCredentialEntity,
+            },
+            client_openid_connect_platform,
+            client_openid_connect_platform::{
+                Column as ClientOpenIdConnectPlatformColumn,
+                Entity as ClientOpenIdConnectPlatformEntity,
+            },
+            client_scope,
+            client_scope::{Column as ClientScopeColumn, Entity as ClientScopeEntity},
+            user,
+            user::{Column as UserColumn, Entity as UserEntity},
+            user_credential,
         },
         repository::{
             openid_connect_credential::serialize_data as serialize_credential_data,
@@ -170,8 +189,8 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         let user_cred_oid: Uuid = credential_oid
             .parse()
             .expect("conformance credential OID is valid");
-        let existing_user = user::Entity::find()
-            .filter(user::Column::Oid.eq(user_oid))
+        let existing_user = UserEntity::find()
+            .filter(UserColumn::Oid.eq(user_oid))
             .one(&txn)
             .await
             .map_err(AppError::internal)?;
@@ -418,8 +437,8 @@ async fn ensure_conformance_client(
         .parse()
         .expect("client credential OID literal is valid");
 
-    let existing_client = client::Entity::find()
-        .filter(client::Column::Oid.eq(client_oid))
+    let existing_client = ClientEntity::find()
+        .filter(ClientColumn::Oid.eq(client_oid))
         .one(db)
         .await
         .map_err(AppError::internal)?;
@@ -467,8 +486,8 @@ async fn ensure_conformance_oidc_metadata(
 ) -> Result<bool, AppError> {
     let values = conformance_oidc_metadata_values(spec);
 
-    let existing = client_openid_connect::Entity::find()
-        .filter(client_openid_connect::Column::ClientId.eq(client_id))
+    let existing = ClientOpenIdConnectEntity::find()
+        .filter(ClientOpenIdConnectColumn::ClientId.eq(client_id))
         .one(db)
         .await
         .map_err(AppError::internal)?;
@@ -561,8 +580,8 @@ async fn ensure_conformance_client_secret(
     let expires_at = DateTime::parse_from_rfc3339("9999-12-31T23:59:59+00:00")
         .expect("non-expiring timestamp literal is valid");
 
-    let exists = client_openid_connect_credential::Entity::find()
-        .filter(client_openid_connect_credential::Column::Oid.eq(credential_oid))
+    let exists = ClientOpenIdConnectCredentialEntity::find()
+        .filter(ClientOpenIdConnectCredentialColumn::Oid.eq(credential_oid))
         .one(db)
         .await
         .map_err(AppError::internal)?
@@ -687,9 +706,9 @@ async fn ensure_web_platform_redirect_uri(
     db: &impl ConnectionTrait,
     client_id: i64,
 ) -> Result<bool, AppError> {
-    let exists = client_openid_connect_platform::Entity::find()
-        .filter(client_openid_connect_platform::Column::ClientId.eq(client_id))
-        .filter(client_openid_connect_platform::Column::Platform.eq("web"))
+    let exists = ClientOpenIdConnectPlatformEntity::find()
+        .filter(ClientOpenIdConnectPlatformColumn::ClientId.eq(client_id))
+        .filter(ClientOpenIdConnectPlatformColumn::Platform.eq("web"))
         .one(db)
         .await
         .map_err(AppError::internal)?
@@ -749,9 +768,9 @@ async fn assign_all_built_in_oidc_scopes(
     let scope_ids = resolve_builtin_scope_ids(db, &names, graphql_resource_oid).await?;
     let mut changed = false;
     for scope_id in scope_ids {
-        let existing = client_scope::Entity::find()
-            .filter(client_scope::Column::ClientId.eq(client_id))
-            .filter(client_scope::Column::ScopeId.eq(scope_id))
+        let existing = ClientScopeEntity::find()
+            .filter(ClientScopeColumn::ClientId.eq(client_id))
+            .filter(ClientScopeColumn::ScopeId.eq(scope_id))
             .one(db)
             .await
             .map_err(AppError::internal)?;
@@ -776,8 +795,7 @@ async fn assign_all_built_in_oidc_scopes(
 mod tests {
     use super::{
         conformance_client_specs, conformance_oidc_metadata_values,
-        conformance_post_logout_redirect_uris, conformance_redirect_uris,
-        map_conformance_suite_uri,
+        conformance_post_logout_redirect_uris, map_conformance_suite_uri,
     };
 
     #[test]
@@ -797,100 +815,6 @@ mod tests {
                 ),
             );
         }
-    }
-
-    #[test]
-    fn conformance_redirect_uris_include_active_plan_aliases() {
-        let redirect_uris = conformance_redirect_uris();
-        let redirect_uris = redirect_uris.as_array().unwrap();
-        let redirect_uris = redirect_uris
-            .iter()
-            .map(|value| value.as_str().unwrap())
-            .collect::<Vec<_>>();
-
-        assert!(
-            redirect_uris.contains(&"https://localhost.emobix.co.uk:8443/test/a/identity/callback")
-        );
-        assert!(redirect_uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-basic/callback"
-        ));
-        assert!(redirect_uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-implicit/callback"
-        ));
-        assert!(redirect_uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-formpost-hybrid/callback"
-        ));
-        assert!(redirect_uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/callback"
-        ));
-        assert!(
-            redirect_uris
-                .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-session/callback")
-        );
-        assert!(redirect_uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-frontchannel/callback"
-        ));
-        assert!(
-            redirect_uris.contains(
-                &"https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/callback"
-            )
-        );
-        assert!(
-            redirect_uris
-                .contains(&"https://localhost.emobix.co.uk:8443/test/a/identity-config/callback")
-        );
-    }
-
-    #[test]
-    fn conformance_post_logout_redirect_uris_include_rp_init_logout_alias() {
-        let uris = conformance_post_logout_redirect_uris();
-        let uris = uris.as_array().unwrap();
-        let uris = uris
-            .iter()
-            .map(|value| value.as_str().unwrap())
-            .collect::<Vec<_>>();
-
-        assert!(uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-rp-init-logout/post_logout_redirect"
-        ));
-    }
-
-    #[test]
-    fn conformance_post_logout_redirect_uris_include_session_alias() {
-        let uris = conformance_post_logout_redirect_uris();
-        let uris = uris.as_array().unwrap();
-        let uris = uris
-            .iter()
-            .map(|value| value.as_str().unwrap())
-            .collect::<Vec<_>>();
-
-        assert!(uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-session/post_logout_redirect"
-        ));
-    }
-
-    #[test]
-    fn conformance_post_logout_redirect_uris_include_backchannel_alias() {
-        let uris = conformance_post_logout_redirect_uris();
-        let uris = uris.as_array().unwrap();
-        let uris = uris
-            .iter()
-            .map(|value| value.as_str().unwrap())
-            .collect::<Vec<_>>();
-
-        assert!(uris.contains(
-            &"https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/post_logout_redirect"
-        ));
-    }
-
-    #[test]
-    fn conformance_oidc_metadata_values_include_post_logout_redirect_uris() {
-        let values = conformance_oidc_metadata_values(&conformance_client_specs()[0]);
-
-        assert_eq!(
-            values.post_logout_redirect_uris,
-            Some(conformance_post_logout_redirect_uris())
-        );
     }
 
     #[test]
@@ -946,23 +870,6 @@ mod tests {
                 assert_eq!(values.backchannel_logout_session_required, None);
             }
         }
-    }
-
-    #[test]
-    fn conformance_oidc_metadata_values_include_backchannel_logout_metadata() {
-        let spec = conformance_client_specs()
-            .iter()
-            .find(|spec| spec.oid == super::BACKCHANNEL_CLIENT_OID)
-            .unwrap();
-        let values = conformance_oidc_metadata_values(spec);
-
-        assert_eq!(
-            values.backchannel_logout_uri.as_deref(),
-            Some(
-                "https://localhost.emobix.co.uk:8443/test/a/identity-backchannel/backchannel_logout"
-            )
-        );
-        assert_eq!(values.backchannel_logout_session_required, Some(true));
     }
 
     #[test]

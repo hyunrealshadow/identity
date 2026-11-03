@@ -39,7 +39,9 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use super::localized::{self, LocalizedJsonError};
-use crate::database::authority_snapshot::user_authority_fingerprint;
+use crate::database::{
+    authority_snapshot::user_authority_fingerprint, client_authorization_boundary,
+};
 
 /// Read-only business RBAC adapter.
 pub struct RbacAuthorizationRepositoryImpl {
@@ -627,11 +629,10 @@ impl RbacAuthorizationRepository for RbacAuthorizationRepositoryImpl {
     ) -> Result<BTreeSet<String>, RbacAuthorizationError> {
         let txn = read_transaction(&self.db).await?;
         let result = async {
-            let client_id =
-                crate::database::client_authorization_boundary::client_id_by_oid(&txn, client)
-                    .await
-                    .map_err(storage)?
-                    .ok_or(RbacAuthorizationError::ResourceNotFound)?;
+            let client_id = client_authorization_boundary::client_id_by_oid(&txn, client)
+                .await
+                .map_err(storage)?
+                .ok_or(RbacAuthorizationError::ResourceNotFound)?;
             let present = txn
                 .query_one_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
@@ -643,13 +644,9 @@ impl RbacAuthorizationRepository for RbacAuthorizationRepositoryImpl {
             if present.is_none() {
                 return Err(RbacAuthorizationError::ResourceNotFound);
             }
-            crate::database::client_authorization_boundary::client_scope_codes(
-                &txn,
-                client_id,
-                resource_uri,
-            )
-            .await
-            .map_err(storage)
+            client_authorization_boundary::client_scope_codes(&txn, client_id, resource_uri)
+                .await
+                .map_err(storage)
         }
         .await;
         match result {

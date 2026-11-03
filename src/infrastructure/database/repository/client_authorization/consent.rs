@@ -1,12 +1,22 @@
 use super::{
-    mapping::parse_stored_authorization_request, request_interaction::selection_update_condition,
+    mapping::parse_stored_authorization_request, query_error, query_failed,
+    request_interaction::selection_update_condition,
 };
-use super::{query_error, query_failed};
-use crate::database::entity::{
-    client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity, resource, scope,
-    scope::Entity as ScopeEntity, user, user::Entity as UserEntity, user_client_consent,
-    user_client_consent::Entity as UserClientConsentEntity,
+use crate::database::{
+    audit,
+    entity::{
+        client::{Column as ClientColumn, Entity as ClientEntity},
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
+        resource::{Column as ResourceColumn, Entity as ResourceEntity},
+        scope::{Column as ScopeColumn, Entity as ScopeEntity},
+        user::{Column as UserColumn, Entity as UserEntity},
+        user_client_consent,
+        user_client_consent::{
+            Column as UserClientConsentColumn, Entity as UserClientConsentEntity,
+        },
+    },
 };
 use chrono::{DateTime, Utc};
 use identity_domain::{
@@ -42,18 +52,16 @@ fn scope_ownership(resources: &[String]) -> Condition {
     } else {
         resources.to_vec()
     };
-    Condition::any()
-        .add(scope::Column::ResourceId.is_null())
-        .add(
-            scope::Column::ResourceId.in_subquery(
-                resource::Entity::find()
-                    .select_only()
-                    .column(resource::Column::Oid)
-                    .filter(resource::Column::Uri.is_in(targets))
-                    .filter(resource::Column::Enabled.eq(true))
-                    .into_query(),
-            ),
-        )
+    Condition::any().add(ScopeColumn::ResourceId.is_null()).add(
+        ScopeColumn::ResourceId.in_subquery(
+            ResourceEntity::find()
+                .select_only()
+                .column(ResourceColumn::Oid)
+                .filter(ResourceColumn::Uri.is_in(targets))
+                .filter(ResourceColumn::Enabled.eq(true))
+                .into_query(),
+        ),
+    )
 }
 
 #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_authorization_request_consent"))]
@@ -64,7 +72,7 @@ pub(super) async fn record_authorization_request_consent(
     decided_at: DateTime<Utc>,
 ) -> Result<bool, ClientAuthorizationRepositoryError> {
     let Some(model) = ClientAuthorizationEntity::find()
-        .filter(client_authorization::Column::Oid.eq(oid))
+        .filter(ClientAuthorizationColumn::Oid.eq(oid))
         .one(db)
         .await
         .map_err(query_error(
@@ -122,11 +130,11 @@ pub(super) async fn record_authorization_request_consent(
     ))?;
     let result = ClientAuthorizationEntity::update_many()
         .col_expr(
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
             SimpleExpr::Value(stored_data.into()),
         )
         .col_expr(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             SimpleExpr::Value(Some(now).into()),
         )
         .filter(selection_update_condition(&model, now))
@@ -143,8 +151,8 @@ pub(super) async fn record_authorization_request_consent(
     if let Some((user_oid, requested_scope, resources)) = grant {
         let user_id = UserEntity::find()
             .select_only()
-            .column(user::Column::Id)
-            .filter(user::Column::Oid.eq(user_oid))
+            .column(UserColumn::Id)
+            .filter(UserColumn::Oid.eq(user_oid))
             .into_tuple::<i64>()
             .one(&transaction)
             .await
@@ -160,9 +168,9 @@ pub(super) async fn record_authorization_request_consent(
         let requested_scope_names = requested_scope.names();
         let mut scope_ids = ScopeEntity::find()
             .select_only()
-            .column(scope::Column::Id)
-            .filter(scope::Column::Code.is_in(requested_scope_names.iter().copied()))
-            .filter(scope::Column::Enabled.eq(true))
+            .column(ScopeColumn::Id)
+            .filter(ScopeColumn::Code.is_in(requested_scope_names.iter().copied()))
+            .filter(ScopeColumn::Enabled.eq(true))
             .filter(scope_ownership(&resources))
             .into_tuple::<i64>()
             .all(&transaction)
@@ -190,11 +198,11 @@ pub(super) async fn record_authorization_request_consent(
         UserClientConsentEntity::insert_many(grants)
             .on_conflict(
                 OnConflict::columns([
-                    user_client_consent::Column::UserId,
-                    user_client_consent::Column::ClientId,
-                    user_client_consent::Column::ScopeId,
+                    UserClientConsentColumn::UserId,
+                    UserClientConsentColumn::ClientId,
+                    UserClientConsentColumn::ScopeId,
                 ])
-                .update_column(user_client_consent::Column::ApprovedAt)
+                .update_column(UserClientConsentColumn::ApprovedAt)
                 .to_owned(),
             )
             .exec(&transaction)
@@ -204,7 +212,7 @@ pub(super) async fn record_authorization_request_consent(
             ))?;
     }
 
-    crate::database::audit::record(
+    audit::record(
         &transaction,
         if consent_state == ConsentState::Approved {
             "authorization.consent_approved"
@@ -233,7 +241,7 @@ pub(super) async fn has_user_consent(
     resources: &[String],
 ) -> Result<bool, ClientAuthorizationRepositoryError> {
     let Some(user) = UserEntity::find()
-        .filter(user::Column::Oid.eq(user_oid))
+        .filter(UserColumn::Oid.eq(user_oid))
         .one(db)
         .await
         .map_err(query_error("client_authorization.has_user_consent"))?
@@ -241,7 +249,7 @@ pub(super) async fn has_user_consent(
         return Ok(false);
     };
     let Some(client) = ClientEntity::find()
-        .filter(client::Column::Oid.eq(client_oid))
+        .filter(ClientColumn::Oid.eq(client_oid))
         .one(db)
         .await
         .map_err(query_error("client_authorization.has_user_consent"))?
@@ -251,9 +259,9 @@ pub(super) async fn has_user_consent(
     let requested_scope_names = requested_scope.names();
     let mut requested_scope_ids = ScopeEntity::find()
         .select_only()
-        .column(scope::Column::Id)
-        .filter(scope::Column::Code.is_in(requested_scope_names.iter().copied()))
-        .filter(scope::Column::Enabled.eq(true))
+        .column(ScopeColumn::Id)
+        .filter(ScopeColumn::Code.is_in(requested_scope_names.iter().copied()))
+        .filter(ScopeColumn::Enabled.eq(true))
         .filter(scope_ownership(resources))
         .into_tuple::<i64>()
         .all(db)
@@ -267,9 +275,9 @@ pub(super) async fn has_user_consent(
 
     let granted_scope_ids = UserClientConsentEntity::find()
         .select_only()
-        .column(user_client_consent::Column::ScopeId)
-        .filter(user_client_consent::Column::UserId.eq(user.id))
-        .filter(user_client_consent::Column::ClientId.eq(client.id))
+        .column(UserClientConsentColumn::ScopeId)
+        .filter(UserClientConsentColumn::UserId.eq(user.id))
+        .filter(UserClientConsentColumn::ClientId.eq(client.id))
         .into_tuple::<i64>()
         .all(db)
         .await
@@ -286,13 +294,13 @@ pub(super) async fn user_consented_scope_names(
 ) -> Result<Vec<String>, ClientAuthorizationRepositoryError> {
     UserClientConsentEntity::find()
         .select_only()
-        .column(scope::Column::Code)
+        .column(ScopeColumn::Code)
         .inner_join(UserEntity)
         .inner_join(ClientEntity)
         .inner_join(ScopeEntity)
-        .filter(user::Column::Oid.eq(user_oid))
-        .filter(client::Column::Oid.eq(client_oid))
-        .filter(scope::Column::Enabled.eq(true))
+        .filter(UserColumn::Oid.eq(user_oid))
+        .filter(ClientColumn::Oid.eq(client_oid))
+        .filter(ScopeColumn::Enabled.eq(true))
         .filter(scope_ownership(resources))
         .into_tuple::<String>()
         .all(db)

@@ -6,9 +6,11 @@
 
 use std::{error::Error, sync::OnceLock, time::Duration};
 
+use context::TraceTrustPolicy;
 use identity_application::observability::{install_event_sink, install_outbound_trace};
 use opentelemetry::{global::set_text_map_propagator, trace::TracerProvider};
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use outbound::OutboundTraceImpl;
 use tracing::warn;
 use tracing_subscriber::{
     EnvFilter, fmt::layer, layer::SubscriberExt, registry, util::SubscriberInitExt,
@@ -56,9 +58,9 @@ pub fn init(config: &AppConfig, environment: &AppEnvironment) -> ObservabilityRe
     pii::install(policy);
 
     set_text_map_propagator(TraceContextPropagator::new());
-    install_outbound_trace(outbound::OutboundTraceImpl::shared(
-        context::TraceTrustPolicy::new(observability.trace_context.clone()),
-    ));
+    install_outbound_trace(OutboundTraceImpl::shared(TraceTrustPolicy::new(
+        observability.trace_context.clone(),
+    )));
 
     let excluded_paths = excluded_trace_paths(config);
     let providers = pipeline::build_providers(

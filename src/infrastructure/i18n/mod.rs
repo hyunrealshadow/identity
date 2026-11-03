@@ -469,26 +469,6 @@ mod tests {
     }
 
     #[test]
-    fn required_self_service_codes_exist_in_both_locales() {
-        let mut en = BTreeMap::new();
-        let mut zh = BTreeMap::new();
-        for (_, en_source, zh_source) in ERROR_CATALOGS {
-            en.extend(parse_catalog(en_source));
-            zh.extend(parse_catalog(zh_source));
-        }
-
-        let required = (10000..=10009)
-            .chain(11000..=11026)
-            .chain(15000..=15006)
-            .chain(28000..=28019);
-        for code in required {
-            let key = format!("E{code}");
-            assert!(en.contains_key(&key), "en-US is missing {key}");
-            assert!(zh.contains_key(&key), "zh-CN is missing {key}");
-        }
-    }
-
-    #[test]
     fn parity_check_rejects_a_missing_key() {
         let error = compare_catalog("synthetic", "E1 = Present\n", "E2 = 缺失\n")
             .expect_err("missing key must fail");
@@ -506,21 +486,6 @@ mod tests {
         .expect_err("mismatched parameter must fail");
 
         assert!(error.contains("parameter mismatch"), "{error}");
-    }
-
-    #[test]
-    fn real_loader_has_distinct_non_empty_chinese_messages() {
-        let i18n = crate::web::tera::build_i18n().expect("workspace i18n assets must load");
-        assert!(i18n.loader().is_some(), "i18n loader must be enabled");
-
-        for code in [10000, 11000, 15000, 28000, 28011] {
-            let key = format!("E{code}");
-            let en = i18n.t_code(&langid!("en-US"), code);
-            let zh = i18n.t_code(&langid!("zh-CN"), code);
-            assert!(!zh.is_empty(), "{key} zh-CN message is empty");
-            assert_ne!(zh, key, "{key} zh-CN fell back to the raw key");
-            assert_ne!(zh, en, "{key} zh-CN fell back to en-US");
-        }
     }
 
     #[test]

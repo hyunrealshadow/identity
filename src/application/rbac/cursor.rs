@@ -161,16 +161,27 @@ pub(crate) async fn decode_cursor(
     }
 }
 
+/// Relay pagination arguments exactly as the caller supplied them.
+pub(crate) struct PageArguments {
+    pub first: Option<u32>,
+    pub after: Option<String>,
+    pub last: Option<u32>,
+    pub before: Option<String>,
+}
+
 pub(crate) async fn prepare_page<T: Serialize>(
     protector: &dyn DataProtector,
     kind: u8,
     order: u8,
     filter: &T,
-    first: Option<u32>,
-    after: Option<String>,
-    last: Option<u32>,
-    before: Option<String>,
+    page: PageArguments,
 ) -> Result<PreparedPage, AppError> {
+    let PageArguments {
+        first,
+        after,
+        last,
+        before,
+    } = page;
     if first.is_some() && last.is_some() {
         return Err(page_conflict());
     }

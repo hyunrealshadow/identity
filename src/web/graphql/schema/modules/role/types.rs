@@ -5,14 +5,22 @@ use async_graphql::{
 use chrono::{DateTime, Utc};
 use identity_application::{
     authorization::ManagementTarget,
-    rbac::{RoleRecord, ScopeOid},
+    rbac::{RoleFilter as RbacRoleFilter, RoleOrder as RbacRoleOrder, RoleRecord, ScopeOid},
 };
 use identity_domain::{authorization::ManagementScope, rbac::RoleOid};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::super::{
-    resource::support::{RbacConnectionCursor, decode_oid, page_args},
+    group::{
+        query,
+        types::{GroupFilter, GroupNode, GroupOrder, LocalizedTextInput, LocalizedTextNode},
+    },
+    localized, resource,
+    resource::{
+        support,
+        support::{RbacConnectionCursor, decode_oid, page_args},
+    },
     role::{
         binding::{UserRoleBindingConnectionFields, UserRoleBindingNode, UserRoleBindingOrder},
         query::{BindingTarget, load_binding_connection},
@@ -23,7 +31,9 @@ use super::super::{
         types::{ScopeFilter, ScopeGlobalId, ScopeOrder, decode_scope_oid},
     },
 };
-use crate::graphql::schema::{authorization::request_context, management_guard::ManagementGuard};
+use crate::graphql::schema::{
+    authorization::request_context, connection::ConnectionTotal, management_guard::ManagementGuard,
+};
 
 pub(crate) struct RoleGlobalId;
 
@@ -53,7 +63,7 @@ impl RoleOrder {
     }
 }
 
-impl From<RoleOrder> for identity_application::rbac::RoleOrder {
+impl From<RoleOrder> for RbacRoleOrder {
     fn from(order: RoleOrder) -> Self {
         match order {
             RoleOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -75,16 +85,13 @@ pub(crate) struct RoleFilter {
 }
 
 impl RoleFilter {
-    pub(crate) fn into_application(
-        self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<identity_application::rbac::RoleFilter> {
+    pub(crate) fn into_application(self, ctx: &Context<'_>) -> GraphqlResult<RbacRoleFilter> {
         let scope_oid = self
             .scope_id
             .as_ref()
             .map(|id| decode_scope_oid(ctx, id))
             .transpose()?;
-        Ok(identity_application::rbac::RoleFilter {
+        Ok(RbacRoleFilter {
             query: self.query,
             enabled: self.enabled,
             built_in: self.built_in,
@@ -127,12 +134,12 @@ impl RoleNode {
         self.record.built_in
     }
 
-    async fn names(&self) -> Vec<super::super::group::types::LocalizedTextNode> {
-        super::super::localized::names(&self.record.metadata())
+    async fn names(&self) -> Vec<LocalizedTextNode> {
+        localized::names(&self.record.metadata())
     }
 
-    async fn descriptions(&self) -> Vec<super::super::group::types::LocalizedTextNode> {
-        super::super::localized::descriptions(&self.record.metadata())
+    async fn descriptions(&self) -> Vec<LocalizedTextNode> {
+        localized::descriptions(&self.record.metadata())
     }
 
     async fn enabled(&self) -> bool {
@@ -157,30 +164,25 @@ impl RoleNode {
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn groups(
         &self,
         ctx: &Context<'_>,
-        filter: Option<super::super::group::types::GroupFilter>,
-        order_by: Option<super::super::group::types::GroupOrder>,
+        filter: Option<GroupFilter>,
+        order_by: Option<GroupOrder>,
         #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<
-        Connection<
-            super::super::resource::support::RbacConnectionCursor,
-            super::super::group::types::GroupNode,
-            crate::graphql::schema::connection::ConnectionTotal,
-        >,
-    > {
+    ) -> GraphqlResult<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
         let mut filter = filter.unwrap_or_default();
         filter.role_id = Some(self.id.clone());
-        let page = super::super::resource::support::page_args(ctx, first, after, last, before)?;
-        super::super::group::query::load_group_connection(
+        let page = support::page_args(ctx, first, after, last, before)?;
+        query::load_group_connection(
             ctx,
             request_context(ctx)?,
             filter,
-            order_by.unwrap_or_else(super::super::group::types::GroupOrder::default_order),
+            order_by.unwrap_or_else(GroupOrder::default_order),
             page,
         )
         .await
@@ -193,6 +195,7 @@ impl RoleNode {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ScopesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn permissions(
         &self,
         ctx: &Context<'_>,
@@ -222,6 +225,7 @@ impl RoleNode {
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn users(
         &self,
         ctx: &Context<'_>,
@@ -255,9 +259,9 @@ pub(crate) struct CreateRoleInput {
     #[graphql(default, validator(chars_max_length = 1024))]
     pub description: String,
     #[graphql(default, validator(max_items = 20))]
-    pub names: Vec<super::super::group::types::LocalizedTextInput>,
+    pub names: Vec<LocalizedTextInput>,
     #[graphql(default, validator(max_items = 20))]
-    pub descriptions: Vec<super::super::group::types::LocalizedTextInput>,
+    pub descriptions: Vec<LocalizedTextInput>,
     #[graphql(default, validator(chars_max_length = 1000))]
     pub reason: String,
     #[graphql(validator(chars_max_length = 255))]
@@ -272,9 +276,9 @@ pub(crate) struct UpdateRoleInput {
     pub description: Option<String>,
     pub id: ID,
     #[graphql(validator(max_items = 20))]
-    pub names: Option<Vec<super::super::group::types::LocalizedTextInput>>,
+    pub names: Option<Vec<LocalizedTextInput>>,
     #[graphql(validator(max_items = 20))]
-    pub descriptions: Option<Vec<super::super::group::types::LocalizedTextInput>>,
+    pub descriptions: Option<Vec<LocalizedTextInput>>,
     pub expected_version: Uuid,
     #[graphql(default, validator(chars_max_length = 1000))]
     pub reason: String,
@@ -350,6 +354,6 @@ pub(crate) fn decode_role_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<RoleO
 }
 
 pub(crate) fn decode_scope_ids(ctx: &Context<'_>, ids: &[ID]) -> GraphqlResult<Vec<ScopeOid>> {
-    super::super::resource::support::decode_oids::<ScopeGlobalId>(ctx, ids)
+    resource::support::decode_oids::<ScopeGlobalId>(ctx, ids)
         .map(|ids| ids.into_iter().map(ScopeOid).collect())
 }

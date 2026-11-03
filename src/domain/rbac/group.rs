@@ -11,6 +11,8 @@
 //! that holds the relevant group permission and stays within its delegation
 //! ceiling.
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -327,7 +329,7 @@ fn validate_text_entries(
     if entries.len() > MAX_GROUP_TEXT_ENTRIES {
         return Err(GroupValidationError::TooManyEntries);
     }
-    let mut seen = std::collections::BTreeSet::new();
+    let mut seen = BTreeSet::new();
     for entry in entries {
         let canonical =
             canonicalize_locale(&entry.locale).map_err(|_| GroupValidationError::InvalidLocale)?;
@@ -351,6 +353,26 @@ pub fn validate_locale(value: &str) -> Result<(), GroupValidationError> {
         .map_err(|_| GroupValidationError::InvalidLocale)
 }
 
+/// Validate independent fallback text; translated collections may be empty.
+pub fn validate_group_default(value: &str, name: bool) -> Result<String, GroupValidationError> {
+    let value = value.trim();
+    if name && value.is_empty() {
+        return Err(GroupValidationError::NameRequired);
+    }
+    let (max, error) = if name {
+        (MAX_GROUP_NAME_LENGTH, GroupValidationError::InvalidName)
+    } else {
+        (
+            MAX_GROUP_DESCRIPTION_LENGTH,
+            GroupValidationError::InvalidDescription,
+        )
+    };
+    if value.chars().count() > max {
+        return Err(error);
+    }
+    Ok(value.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -359,8 +381,10 @@ mod tests {
         Group, GroupMembership, GroupRoleBinding, GroupValidationError, LocalizedMetadata,
         LocalizedText, validate_group_metadata,
     };
-    use crate::rbac::ids::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid};
-    use crate::user::UserOid;
+    use crate::{
+        rbac::ids::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid},
+        user::UserOid,
+    };
     use uuid::Uuid;
 
     fn metadata(names: &[(&str, &str)], descriptions: &[(&str, &str)]) -> LocalizedMetadata {
@@ -482,24 +506,4 @@ mod tests {
 
         assert!(validate_group_metadata(&LocalizedMetadata::default()).is_ok());
     }
-}
-
-/// Validate independent fallback text; translated collections may be empty.
-pub fn validate_group_default(value: &str, name: bool) -> Result<String, GroupValidationError> {
-    let value = value.trim();
-    if name && value.is_empty() {
-        return Err(GroupValidationError::NameRequired);
-    }
-    let (max, error) = if name {
-        (MAX_GROUP_NAME_LENGTH, GroupValidationError::InvalidName)
-    } else {
-        (
-            MAX_GROUP_DESCRIPTION_LENGTH,
-            GroupValidationError::InvalidDescription,
-        )
-    };
-    if value.chars().count() > max {
-        return Err(error);
-    }
-    Ok(value.to_owned())
 }

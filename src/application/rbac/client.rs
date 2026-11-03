@@ -26,16 +26,11 @@ pub struct ClientScopeTargetFilter {
     pub query: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ClientScopeTargetOrder {
+    #[default]
     NameAsc,
     NameDesc,
-}
-
-impl Default for ClientScopeTargetOrder {
-    fn default() -> Self {
-        Self::NameAsc
-    }
 }
 
 impl ClientScopeTargetOrder {

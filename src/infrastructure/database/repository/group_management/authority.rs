@@ -15,13 +15,18 @@ use identity_application::{
     },
     rbac::{GroupEntityKind, GroupManagementRepositoryError, RbacManagementAuthority},
 };
-use identity_domain::authorization::{ActorPrincipal, ManagementScope, policy_fingerprint};
+use identity_domain::{
+    authorization::{ActorPrincipal, ManagementScope, policy_fingerprint},
+    user::UserOid,
+};
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
 use uuid::Uuid;
 
 use super::support::{Binds, corrupt, not_found, storage};
 
-use crate::database::repository::authorization::load_user_permission_authority;
+use crate::database::{
+    client_authorization_boundary, repository::authorization::load_user_permission_authority,
+};
 
 /// Lock the issuing client row and re-derive its live authorization boundary.
 ///
@@ -47,7 +52,7 @@ async fn recheck_issuing_client(
     };
     let client_id = client_row.try_get::<i64>("", "id").map_err(storage)?;
     let (_, fingerprint) =
-        crate::database::client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
+        client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
             .await
             .map_err(storage)?;
     if fingerprint != authority.client_policy_version {
@@ -219,7 +224,7 @@ pub(crate) fn ensure_delegation_subset(
 /// not only the management GraphQL resource.
 pub(crate) async fn actor_effective_permission_ids(
     txn: &DatabaseTransaction,
-    user_oid: identity_domain::user::UserOid,
+    user_oid: UserOid,
 ) -> Result<BTreeSet<i64>, GroupManagementRepositoryError> {
     let rows = txn
         .query_all_raw(Statement::from_sql_and_values(
@@ -314,7 +319,7 @@ pub(crate) async fn roles_permission_ids<C: ConnectionTrait>(
 
 pub(crate) async fn ensure_delegable_permission_ids(
     txn: &DatabaseTransaction,
-    user_oid: identity_domain::user::UserOid,
+    user_oid: UserOid,
     proposed: &BTreeSet<i64>,
     explicitly_delegable: bool,
 ) -> Result<(), GroupManagementRepositoryError> {
@@ -352,7 +357,7 @@ pub(crate) async fn ensure_delegable_permission_ids(
 pub(crate) fn require_actor_user(
     authority: &RbacManagementAuthority,
     scope: ManagementScope,
-) -> Result<identity_domain::user::UserOid, GroupManagementRepositoryError> {
+) -> Result<UserOid, GroupManagementRepositoryError> {
     actor_user_id(authority).ok_or(GroupManagementRepositoryError::Authorization(
         ManagementAuthorizationError::HumanOnlyCapability { scope },
     ))
@@ -360,7 +365,7 @@ pub(crate) fn require_actor_user(
 
 pub(crate) async fn lock_user_id<C: ConnectionTrait>(
     db: &C,
-    user_oid: identity_domain::user::UserOid,
+    user_oid: UserOid,
 ) -> Result<i64, GroupManagementRepositoryError> {
     let row = db
         .query_one_raw(Statement::from_sql_and_values(
@@ -375,9 +380,7 @@ pub(crate) async fn lock_user_id<C: ConnectionTrait>(
         .map_err(storage)
 }
 
-pub(crate) fn actor_user_id(
-    authority: &RbacManagementAuthority,
-) -> Option<identity_domain::user::UserOid> {
+pub(crate) fn actor_user_id(authority: &RbacManagementAuthority) -> Option<UserOid> {
     match &authority.actor.principal {
         ActorPrincipal::User { user_oid, .. } => Some(*user_oid),
         ActorPrincipal::Client { .. } => None,
@@ -393,14 +396,16 @@ mod tests {
         CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
         ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
     };
-    use identity_domain::authorization::{
-        ManagementScope,
-        actor::{ActorContext, HumanAuthenticationContext, RequestId},
-        authority::UserPermissionAuthority,
-        ids::{AuthorizationVersion, PolicyVersion},
-        snapshot::ManagementAuthorizationSnapshot,
+    use identity_domain::{
+        authorization::{
+            ManagementScope,
+            actor::{ActorContext, HumanAuthenticationContext, RequestId},
+            authority::UserPermissionAuthority,
+            ids::{AuthorizationVersion, PolicyVersion},
+            snapshot::ManagementAuthorizationSnapshot,
+        },
+        user::UserOid,
     };
-    use identity_domain::user::UserOid;
     use uuid::Uuid;
 
     use super::effective_delegation_permissions;

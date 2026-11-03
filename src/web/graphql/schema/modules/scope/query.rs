@@ -3,14 +3,15 @@ use async_graphql::{Context, ID, Object, Result};
 use identity_application::authorization::ManagementTarget;
 use identity_domain::authorization::ManagementScope;
 
-use super::super::resource::support::{PageArgs, RbacConnectionCursor, page_args};
 use super::{
+    super::resource::support::{PageArgs, RbacConnectionCursor, page_args},
     connection::{ScopeConnection, ScopeEdge},
     integration,
     types::{ScopeFilter, ScopeNode, ScopeOrder, decode_scope_oid},
 };
 use crate::graphql::schema::{
-    authorization::request_context, error::app_error, management_guard::ManagementGuard,
+    RequestContext, authorization::request_context, connection, error::app_error,
+    management_guard::ManagementGuard,
 };
 
 #[derive(Default)]
@@ -36,6 +37,7 @@ impl ScopeQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ScopesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn scopes(
         &self,
         ctx: &Context<'_>,
@@ -61,7 +63,7 @@ impl ScopeQuery {
 
 pub(crate) async fn load_scope_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     filter: ScopeFilter,
     order: ScopeOrder,
     page: PageArgs,
@@ -70,7 +72,7 @@ pub(crate) async fn load_scope_connection(
     let page = integration::list_scopes(request, filter.clone(), order.into(), page)
         .await
         .map_err(|error| app_error(ctx, error))?;
-    let additional = crate::graphql::schema::connection::connection_total(ctx, async {
+    let additional = connection::connection_total(ctx, async {
         request
             .state
             .services()

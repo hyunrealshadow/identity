@@ -1,5 +1,8 @@
 use chrono::Duration;
-use identity_domain::{auth::SessionOid, client_authorization::AccessTokenData};
+use identity_domain::{
+    auth::SessionOid,
+    client_authorization::{AccessTokenData, AccessTokenPrincipal},
+};
 use serde_json::json;
 
 use crate::{
@@ -35,7 +38,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
                 scope: "openid".to_owned(),
                 resources: Vec::new(),
                 user_oid: Some(user_oid.to_string()),
-                principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+                principal: AccessTokenPrincipal::User,
                 session_oid: Some(SessionOid::from(Uuid::new_v4())),
                 protected_session_id: None,
                 authorization_code_oid: None,
@@ -69,7 +72,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             audience: &client_id,
             client_id: &client_id,
             subject: &user_oid.to_string(),
-            principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+            principal: AccessTokenPrincipal::User,
             client: &client,
             user: None,
             protected_session_id: None,
@@ -206,7 +209,7 @@ async fn machine_access_token_introspects_with_the_client_subject() {
                 scope: "account.read".to_owned(),
                 resources: Vec::new(),
                 user_oid: None,
-                principal: identity_domain::client_authorization::AccessTokenPrincipal::Client,
+                principal: AccessTokenPrincipal::Client,
                 session_oid: None,
                 protected_session_id: None,
                 authorization_code_oid: None,
@@ -241,7 +244,7 @@ async fn machine_access_token_introspects_with_the_client_subject() {
             audience: "urn:identity:graphql",
             client_id: &client_id,
             subject: &client_id,
-            principal: identity_domain::client_authorization::AccessTokenPrincipal::Client,
+            principal: AccessTokenPrincipal::Client,
             client: &client,
             user: None,
             protected_session_id: None,

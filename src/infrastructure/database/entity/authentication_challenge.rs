@@ -1,6 +1,10 @@
 //! Shared persistence for short-lived authentication challenges.
 use sea_orm::entity::prelude::*;
 
+use super::{
+    login::Entity as LoginEntity, session::Entity as SessionEntity, user::Entity as UserEntity,
+};
+
 #[sea_orm::compact_model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "authentication_challenge")]
@@ -51,17 +55,17 @@ pub enum Relation {
     Session,
 }
 
-impl Related<super::user::Entity> for Entity {
+impl Related<UserEntity> for Entity {
     fn to() -> RelationDef {
         Relation::User.def()
     }
 }
-impl Related<super::login::Entity> for Entity {
+impl Related<LoginEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Login.def()
     }
 }
-impl Related<super::session::Entity> for Entity {
+impl Related<SessionEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Session.def()
     }

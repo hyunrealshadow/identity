@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use identity_domain::{authorization::catalog::ManagementScope, rbac::built_in_permission_oid};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait,
-    QueryFilter, Set, Statement, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr,
+    EntityTrait, QueryFilter, Set, Statement, TransactionTrait,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -17,7 +17,10 @@ use crate::{
     domain::openid_connect::{
         ApiScope, is_scope_pattern, model::claim::StandardScopes, scope_pattern_matches,
     },
-    infrastructure::database::entity::scope,
+    infrastructure::database::entity::{
+        scope,
+        scope::{Column as ScopeColumn, Entity as ScopeEntity},
+    },
 };
 
 pub struct BuiltInScopeDefinition {
@@ -133,10 +136,10 @@ pub(crate) async fn find_builtin_scope_id(
     code: &str,
     graphql_resource_oid: Uuid,
 ) -> Result<Option<i64>, AppError> {
-    let mut query = scope::Entity::find().filter(scope::Column::Code.eq(code));
+    let mut query = ScopeEntity::find().filter(ScopeColumn::Code.eq(code));
     query = match builtin_scope_resource_id(code, graphql_resource_oid) {
-        Some(resource_id) => query.filter(scope::Column::ResourceId.eq(resource_id)),
-        None => query.filter(scope::Column::ResourceId.is_null()),
+        Some(resource_id) => query.filter(ScopeColumn::ResourceId.eq(resource_id)),
+        None => query.filter(ScopeColumn::ResourceId.is_null()),
     };
     Ok(query
         .one(db)
@@ -156,7 +159,7 @@ fn trusted_concrete_scope_codes() -> impl Iterator<Item = &'static str> {
 }
 
 fn unresolved_scope_error(selector: &str) -> AppError {
-    AppError::internal(sea_orm::DbErr::Custom(format!(
+    AppError::internal(DbErr::Custom(format!(
         "trusted scope selector {selector} has no concrete definitions"
     )))
 }
@@ -178,7 +181,7 @@ pub(crate) async fn resolve_builtin_scope_ids<S: AsRef<str>>(
             }
             let mut matched = false;
             for code in trusted_concrete_scope_codes()
-                .filter(|candidate| scope_pattern_matches(selector, *candidate))
+                .filter(|candidate| scope_pattern_matches(selector, candidate))
             {
                 matched = true;
                 let id = find_builtin_scope_id(db, code, graphql_resource_oid)
@@ -427,13 +430,15 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
     for definition in BUILT_IN_OPENID_CONNECT_SCOPES {
         upsert_scope(
             &transaction,
-            builtin_scope_resource_id(definition.code, graphql_resource_oid),
-            None,
-            definition.code,
-            definition.name,
-            definition.name_zh_cn,
-            definition.description,
-            definition.description_zh_cn,
+            ScopeUpsert {
+                resource_id: builtin_scope_resource_id(definition.code, graphql_resource_oid),
+                canonical_oid: None,
+                code: definition.code,
+                name: definition.name,
+                name_zh_cn: definition.name_zh_cn,
+                description: definition.description,
+                description_zh_cn: definition.description_zh_cn,
+            },
         )
         .await?;
     }
@@ -441,13 +446,15 @@ pub async fn ensure_built_in_scopes(db: &DatabaseConnection) -> Result<(), AppEr
     for management_scope in ManagementScope::ALL {
         upsert_scope(
             &transaction,
-            Some(graphql_resource_oid),
-            Some(built_in_permission_oid(management_scope).0),
-            management_scope.name(),
-            management_name(management_scope),
-            management_name_zh_cn(management_scope),
-            management_scope.description(),
-            management_description_zh_cn(management_scope),
+            ScopeUpsert {
+                resource_id: Some(graphql_resource_oid),
+                canonical_oid: Some(built_in_permission_oid(management_scope).0),
+                code: management_scope.name(),
+                name: management_name(management_scope),
+                name_zh_cn: management_name_zh_cn(management_scope),
+                description: management_scope.description(),
+                description_zh_cn: management_description_zh_cn(management_scope),
+            },
         )
         .await?;
     }
@@ -503,22 +510,34 @@ fn built_in_identity_conflict() -> AppError {
     AppError::from_code(RbacErrorCode::BuiltInIdentityConflict)
 }
 
-async fn upsert_scope(
-    db: &impl ConnectionTrait,
+/// One built-in scope row as the seed expects it to be stored.
+struct ScopeUpsert<'a> {
     resource_id: Option<Uuid>,
+    /// Required stable `oid` when the scope has a canonical identity.
     canonical_oid: Option<Uuid>,
-    code: &str,
-    name: &str,
-    name_zh_cn: &str,
-    description: &str,
-    description_zh_cn: &str,
-) -> Result<(), AppError> {
+    code: &'a str,
+    name: &'a str,
+    name_zh_cn: &'a str,
+    description: &'a str,
+    description_zh_cn: &'a str,
+}
+
+async fn upsert_scope(db: &impl ConnectionTrait, row: ScopeUpsert<'_>) -> Result<(), AppError> {
+    let ScopeUpsert {
+        resource_id,
+        canonical_oid,
+        code,
+        name,
+        name_zh_cn,
+        description,
+        description_zh_cn,
+    } = row;
     let names = json!({"en-US":name,"zh-CN":name_zh_cn});
     let descriptions = json!({"en-US":description,"zh-CN":description_zh_cn});
-    let mut query = scope::Entity::find().filter(scope::Column::Code.eq(code));
+    let mut query = ScopeEntity::find().filter(ScopeColumn::Code.eq(code));
     query = match resource_id {
-        Some(resource_id) => query.filter(scope::Column::ResourceId.eq(resource_id)),
-        None => query.filter(scope::Column::ResourceId.is_null()),
+        Some(resource_id) => query.filter(ScopeColumn::ResourceId.eq(resource_id)),
+        None => query.filter(ScopeColumn::ResourceId.is_null()),
     };
     let existing = query.one(db).await.map_err(AppError::internal)?;
     if let Some(existing) = existing {

@@ -12,7 +12,12 @@ use serde_json::{from_value, to_value};
 use uuid::Uuid;
 
 use crate::database::{
-    entity::{key, key_jwk, key_jwk::Entity as KeyJwkEntity},
+    entity::{
+        key,
+        key::Column as KeyColumn,
+        key_jwk,
+        key_jwk::{Column as KeyJwkColumn, Entity as KeyJwkEntity},
+    },
     query::json_text,
 };
 
@@ -110,19 +115,19 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
     async fn list_active(&self) -> Result<Vec<KeyJwk>, KeyJwkRepositoryError> {
         KeyJwkEntity::find()
             .inner_join(key::Entity)
-            .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::ExpiresAt.gt(Utc::now()))
-            .order_by_desc(Expr::col((key::Entity, key::Column::CreatedAt)))
-            .order_by_desc(Expr::col((key::Entity, key::Column::Oid)))
+            .filter(KeyColumn::RevokedAt.is_null())
+            .filter(KeyColumn::ExpiresAt.gt(Utc::now()))
+            .order_by_desc(Expr::col((key::Entity, KeyColumn::CreatedAt)))
+            .order_by_desc(Expr::col((key::Entity, KeyColumn::Oid)))
             .order_by_asc(Expr::expr(
                 Expr::case(
-                    json_text((key_jwk::Entity, key_jwk::Column::Jwk), "use").eq("sig"),
+                    json_text((key_jwk::Entity, KeyJwkColumn::Jwk), "use").eq("sig"),
                     0,
                 )
                 .finally(1),
             ))
-            .order_by_asc(Expr::col((key_jwk::Entity, key_jwk::Column::Algorithm)))
-            .order_by_asc(Expr::col((key_jwk::Entity, key_jwk::Column::Oid)))
+            .order_by_asc(Expr::col((key_jwk::Entity, KeyJwkColumn::Algorithm)))
+            .order_by_asc(Expr::col((key_jwk::Entity, KeyJwkColumn::Oid)))
             .all(&self.db)
             .await
             .map_err(|e| KeyJwkRepositoryError::ListActiveFailed(Box::new(e)))?
@@ -139,10 +144,10 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
     ) -> Result<Option<KeyJwk>, KeyJwkRepositoryError> {
         KeyJwkEntity::find()
             .inner_join(key::Entity)
-            .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::ExpiresAt.gt(Utc::now()))
-            .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))
-            .filter(key_jwk::Column::Algorithm.eq(algorithm.as_str()))
+            .filter(KeyColumn::RevokedAt.is_null())
+            .filter(KeyColumn::ExpiresAt.gt(Utc::now()))
+            .filter(KeyJwkColumn::KeyOid.eq(Uuid::from(key_oid)))
+            .filter(KeyJwkColumn::Algorithm.eq(algorithm.as_str()))
             .one(&self.db)
             .await
             .map_err(|e| KeyJwkRepositoryError::ListByKeyFailed(Box::new(e)))?
@@ -152,8 +157,8 @@ impl KeyJwkRepository for KeyJwkRepositoryImpl {
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "delete_by_key_oid"))]
     async fn delete_by_key_oid(&self, key_oid: KeyOid) -> Result<(), KeyJwkRepositoryError> {
-        key_jwk::Entity::delete_many()
-            .filter(key_jwk::Column::KeyOid.eq(Uuid::from(key_oid)))
+        KeyJwkEntity::delete_many()
+            .filter(KeyJwkColumn::KeyOid.eq(Uuid::from(key_oid)))
             .exec(&self.db)
             .await
             .map_err(|e| KeyJwkRepositoryError::DeleteByKeyFailed(Box::new(e)))?;

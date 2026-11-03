@@ -1,6 +1,10 @@
+use std::result::Result as StdResult;
+
 use async_graphql::{Context, Error, ErrorExtensions, Guard, Result};
 use chrono::Utc;
-use identity_application::error::{AppError, params::ErrorParams};
+use identity_application::error::{
+    AppError, codes::graphql::GraphqlErrorCode, params::ErrorParams,
+};
 use identity_domain::{
     auth::{ACR_AAL2, acr_satisfies, authentication_is_fresh},
     authorization::AdministratorRole,
@@ -8,6 +12,7 @@ use identity_domain::{
 };
 
 use super::{
+    access::AccessPolicy,
     context::RequestContext,
     error::{self, app_error},
 };
@@ -16,7 +21,7 @@ pub(super) fn request_context<'a>(ctx: &'a Context<'_>) -> Result<&'a RequestCon
     ctx.data::<RequestContext>().map_err(|_| {
         error::coded_error(
             ctx,
-            identity_application::error::codes::graphql::GraphqlErrorCode::AuthenticationContextUnavailable,
+            GraphqlErrorCode::AuthenticationContextUnavailable,
             ErrorParams::new(),
         )
     })
@@ -43,7 +48,7 @@ pub(crate) trait EffectivePermissionsProvider: Send + Sync {
     async fn effective_permissions(
         &self,
         request: &RequestContext,
-    ) -> std::result::Result<EffectivePermissionsView, AppError>;
+    ) -> StdResult<EffectivePermissionsView, AppError>;
 }
 
 /// Requires a current user principal. The transport already rejects requests
@@ -63,8 +68,8 @@ pub(super) struct ScopeGuard {
 }
 
 impl ScopeGuard {
-    pub(crate) fn policy(scope: ApiScope) -> super::access::AccessPolicy {
-        super::access::AccessPolicy::scope(scope)
+    pub(crate) fn policy(scope: ApiScope) -> AccessPolicy {
+        AccessPolicy::scope(scope)
     }
 
     pub(super) const fn new(scope: ApiScope) -> Self {
@@ -80,11 +85,7 @@ impl Guard for ScopeGuard {
         }
         let scope = self.scope.name();
         let params = ErrorParams::new().insert("scope", scope);
-        let message = error::localized_message(
-            ctx,
-            identity_application::error::codes::graphql::GraphqlErrorCode::InsufficientScope,
-            &params,
-        );
+        let message = error::localized_message(ctx, GraphqlErrorCode::InsufficientScope, &params);
         let correlation = error::correlation(ctx);
         Err(Error::new(message).extend_with(|_, extensions| {
             extensions.set("kind", "authorization_error");
@@ -106,8 +107,8 @@ pub(super) struct RecentAuthenticationGuard {
 }
 
 impl RecentAuthenticationGuard {
-    pub(crate) fn policy(&self) -> super::access::AccessPolicy {
-        super::access::AccessPolicy::recent(self.required_acr == Some(ACR_AAL2))
+    pub(crate) fn policy(&self) -> AccessPolicy {
+        AccessPolicy::recent(self.required_acr == Some(ACR_AAL2))
     }
 
     pub(super) const fn new() -> Self {
@@ -149,11 +150,8 @@ impl Guard for RecentAuthenticationGuard {
         }
 
         let params = ErrorParams::new();
-        let message = error::localized_message(
-            ctx,
-            identity_application::error::codes::graphql::GraphqlErrorCode::RecentAuthenticationRequired,
-            &params,
-        );
+        let message =
+            error::localized_message(ctx, GraphqlErrorCode::RecentAuthenticationRequired, &params);
         let correlation = error::correlation(ctx);
         Err(Error::new(message).extend_with(|_, extensions| {
             extensions.set("kind", "authorization_error");

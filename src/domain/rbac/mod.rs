@@ -45,9 +45,9 @@ pub use metadata::{
 };
 pub use model::{
     EffectiveGroupSource, EffectivePermission, EffectivePermissionError, EffectivePermissionSource,
-    GroupRolePath, PermissionCode, RbacLifecycleError, RbacValidationError, ResourcePermission,
-    Role, RolePermission, UserRoleBinding, project_effective_permissions,
-    project_effective_permissions_with_groups, project_scope_names,
+    EffectivePermissionSources, GroupRolePath, PermissionCode, RbacLifecycleError,
+    RbacValidationError, ResourcePermission, Role, RolePermission, UserRoleBinding,
+    project_effective_permissions, project_scope_names,
 };
 pub use repository::{
     AuthorizationVersionRepository, EffectivePermissionRepository, RbacRepositoryError,

@@ -1,7 +1,9 @@
 //! Materialized CORS origins for OpenID Connect clients.
 
-use super::client::Entity as ClientEntity;
-use super::client_openid_connect::Entity as OidcClientEntity;
+use super::{
+    client::Entity as ClientEntity,
+    client_openid_connect::{Entity as OidcClientEntity, Relation as ClientOpenIdConnectRelation},
+};
 
 use sea_orm::entity::prelude::*;
 
@@ -43,7 +45,7 @@ impl Related<OidcClientEntity> for Entity {
 
 impl Related<ClientEntity> for Entity {
     fn to() -> RelationDef {
-        super::client_openid_connect::Relation::Client.def()
+        ClientOpenIdConnectRelation::Client.def()
     }
     fn via() -> Option<RelationDef> {
         Some(Relation::OpenIdConnectClient.def())

@@ -10,7 +10,7 @@ use std::{error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
 use identity_domain::{
-    rbac::{GroupOid, LocalizedText, RoleOid},
+    rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, LocalizedText, RoleOid},
     user::UserOid,
 };
 use uuid::Uuid;
@@ -18,11 +18,11 @@ use uuid::Uuid;
 use crate::authorization::ManagementAuthorizationError;
 
 use super::{
-    cursor::RbacSortKey,
+    cursor::{RbacPageDirection, RbacSortKey},
     group::{
-        DeleteGroupResult, GroupMembershipFilter, GroupMembershipOrder, GroupMembershipRecord,
-        GroupRecord, GroupRoleBindingRecord, GroupRoleFilter, GroupRoleMutationResult,
-        GroupRoleOrder,
+        DeleteGroupResult, GroupFilter, GroupMembershipFilter, GroupMembershipMutationResult,
+        GroupMembershipOrder, GroupMembershipRecord, GroupOrder, GroupRecord,
+        GroupRoleBindingRecord, GroupRoleFilter, GroupRoleMutationResult, GroupRoleOrder,
     },
     model::RbacManagementAuthority,
 };
@@ -99,9 +99,9 @@ pub struct GroupPageData<T> {
 
 #[derive(Debug, Clone)]
 pub struct GroupQuery {
-    pub filter: super::group::GroupFilter,
-    pub order: super::group::GroupOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub filter: GroupFilter,
+    pub order: GroupOrder,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -112,7 +112,7 @@ pub struct GroupMembershipQuery {
     pub group_oid: GroupOid,
     pub filter: GroupMembershipFilter,
     pub order: GroupMembershipOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -123,7 +123,7 @@ pub struct GroupRoleQuery {
     pub group_oid: GroupOid,
     pub filter: GroupRoleFilter,
     pub order: GroupRoleOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -199,7 +199,7 @@ pub struct SetGroupRolesTransaction {
 pub trait GroupManagementRepository: Send + Sync {
     async fn count_groups(
         &self,
-        filter: super::group::GroupFilter,
+        filter: GroupFilter,
     ) -> Result<u64, GroupManagementRepositoryError>;
 
     async fn list_groups(
@@ -214,12 +214,12 @@ pub trait GroupManagementRepository: Send + Sync {
 
     async fn find_group_membership(
         &self,
-        oid: identity_domain::rbac::GroupMembershipOid,
+        oid: GroupMembershipOid,
     ) -> Result<Option<GroupMembershipRecord>, GroupManagementRepositoryError>;
 
     async fn find_group_role_binding(
         &self,
-        oid: identity_domain::rbac::GroupRoleBindingOid,
+        oid: GroupRoleBindingOid,
     ) -> Result<Option<GroupRoleBindingRecord>, GroupManagementRepositoryError>;
 
     async fn list_group_memberships(
@@ -256,12 +256,12 @@ pub trait GroupManagementRepository: Send + Sync {
     async fn add_group_member(
         &self,
         command: AddGroupMemberTransaction,
-    ) -> Result<super::group::GroupMembershipMutationResult, GroupManagementRepositoryError>;
+    ) -> Result<GroupMembershipMutationResult, GroupManagementRepositoryError>;
 
     async fn remove_group_member(
         &self,
         command: RemoveGroupMemberTransaction,
-    ) -> Result<super::group::GroupMembershipMutationResult, GroupManagementRepositoryError>;
+    ) -> Result<GroupMembershipMutationResult, GroupManagementRepositoryError>;
 
     async fn set_group_roles(
         &self,

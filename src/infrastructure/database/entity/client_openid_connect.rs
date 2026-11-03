@@ -1,6 +1,11 @@
 //! Current SeaORM persistence entity.
 
-use super::client::Entity as ClientEntity;
+use super::{
+    client::Entity as ClientEntity,
+    client_openid_connect_cors_origin::Entity as ClientOpenIdConnectCorsOriginEntity,
+    client_openid_connect_credential::Entity as ClientOpenIdConnectCredentialEntity,
+    client_openid_connect_platform::Entity as ClientOpenIdConnectPlatformEntity,
+};
 
 use sea_orm::entity::prelude::*;
 
@@ -93,17 +98,17 @@ impl Related<ClientEntity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl Related<super::client_openid_connect_credential::Entity> for Entity {
+impl Related<ClientOpenIdConnectCredentialEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Credentials.def()
     }
 }
-impl Related<super::client_openid_connect_platform::Entity> for Entity {
+impl Related<ClientOpenIdConnectPlatformEntity> for Entity {
     fn to() -> RelationDef {
         Relation::Platforms.def()
     }
 }
-impl Related<super::client_openid_connect_cors_origin::Entity> for Entity {
+impl Related<ClientOpenIdConnectCorsOriginEntity> for Entity {
     fn to() -> RelationDef {
         Relation::CorsOrigins.def()
     }

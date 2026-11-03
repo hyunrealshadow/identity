@@ -4,7 +4,7 @@ use identity::{
     application::observability::{BusinessEvent, EventValue, event_sink},
     boot::{AppBuilder, AppResult, server},
     infrastructure::observability,
-    web,
+    web::router,
 };
 
 #[tokio::main]
@@ -23,8 +23,8 @@ async fn main() -> AppResult<()> {
         .build_services()?
         .build();
 
-    let app = web::router::app_router(state.clone(), &config);
-    let internal = web::router::internal_router(
+    let app = router::app_router(state.clone(), &config);
+    let internal = router::internal_router(
         state.clone(),
         &config,
         state.services().workload_authenticator().clone(),

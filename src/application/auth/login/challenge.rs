@@ -1,8 +1,8 @@
 use super::{ChallengeOutcome, LoginService, SessionContext};
-use crate::setting::PasswordHashSetting;
 use crate::{
     error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventValue, error_outcome},
+    setting::PasswordHashSetting,
     user::model::CredentialType,
 };
 use chrono::Utc;

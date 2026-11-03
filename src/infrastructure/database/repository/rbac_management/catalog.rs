@@ -1,6 +1,6 @@
 //! Scope-catalog resolution helpers shared by RBAC write paths.
 
-use identity_application::rbac::{RbacManagementRepositoryError, ScopeOid};
+use identity_application::rbac::{RbacEntityKind, RbacManagementRepositoryError, ScopeOid};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use uuid::Uuid;
 
@@ -55,7 +55,7 @@ pub(crate) async fn resolve_scopes<C: ConnectionTrait>(
     }
     if resolved.len() != scope_oids.len() {
         return Err(RbacManagementRepositoryError::NotFound(
-            identity_application::rbac::RbacEntityKind::Scope,
+            RbacEntityKind::Scope,
         ));
     }
     // Preserve caller order and reject duplicate OIDs.

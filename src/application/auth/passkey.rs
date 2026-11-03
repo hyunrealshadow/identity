@@ -1,7 +1,7 @@
 //! Account-bound Passkey use cases. Cryptographic verification and persistence are ports.
 use std::sync::Arc;
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use identity_domain::auth::challenge::{
     AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
 };
@@ -303,7 +303,7 @@ fn new_challenge(state: Value) -> AuthenticationChallenge {
     AuthenticationChallenge {
         id: Uuid::new_v4(),
         state,
-        expires_at: Utc::now() + chrono::Duration::minutes(5),
+        expires_at: Utc::now() + Duration::minutes(5),
     }
 }
 

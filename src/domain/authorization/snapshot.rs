@@ -7,7 +7,10 @@
 //! fingerprint differ. Record version UUIDs are optimistic-lock tokens only and
 //! never appear here.
 
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    fmt::{Debug as FmtDebug, Display, Formatter, Result as FmtResult},
+};
 
 use uuid::Uuid;
 
@@ -104,9 +107,9 @@ pub enum SnapshotValidationError {
     PermissionsMismatch,
 }
 
-impl std::fmt::Debug for SnapshotValidationError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, formatter)
+impl FmtDebug for SnapshotValidationError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, formatter)
     }
 }
 
@@ -175,7 +178,7 @@ pub fn administrator_snapshot_oid(
     snapshot: &ManagementAuthorizationSnapshot,
 ) -> Option<AdministratorBindingOid> {
     (snapshot.grant_kind == ManagementGrantKind::AdministratorBinding)
-        .then(|| AdministratorBindingOid(snapshot.grant_oid))
+        .then_some(AdministratorBindingOid(snapshot.grant_oid))
 }
 
 #[cfg(test)]
@@ -187,13 +190,15 @@ mod tests {
         ManagementAuthorizationSnapshot, SnapshotValidationError, validate_administrator_snapshot,
         validate_user_permission_snapshot,
     };
-    use crate::authorization::{
-        administrator::{AdministratorBinding, AdministratorRole, GrantMetadata, GrantReason},
-        authority::UserPermissionAuthority,
-        catalog::ManagementScope,
-        ids::{AdministratorBindingOid, AuthorizationVersion, PolicyVersion},
+    use crate::{
+        authorization::{
+            administrator::{AdministratorBinding, AdministratorRole, GrantMetadata, GrantReason},
+            authority::UserPermissionAuthority,
+            catalog::ManagementScope,
+            ids::{AdministratorBindingOid, AuthorizationVersion, PolicyVersion},
+        },
+        user::UserOid,
     };
-    use crate::user::UserOid;
 
     fn metadata() -> GrantMetadata {
         GrantMetadata {

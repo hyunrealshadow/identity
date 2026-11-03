@@ -36,7 +36,7 @@ use opentelemetry_sdk::{
 };
 use serde_json::{Map, Value as SerdeJsonValue, json};
 use tracing::{
-    Event, Subscriber,
+    Event, Level, Subscriber,
     field::{Field, Visit},
 };
 use tracing_opentelemetry::layer;
@@ -50,7 +50,10 @@ use tracing_subscriber::{
 };
 use uuid::Uuid;
 
-use super::metrics::{ExportPipeline, ExportSignal, global as metrics};
+use super::{
+    context,
+    metrics::{ExportPipeline, ExportSignal, global as metrics},
+};
 use crate::config::{
     AppEnvironment, DiagnosticsPipelineConfig, LogFormat, LoggerConfig, ObservabilityConfig,
     OtlpCompression, OtlpConfig,
@@ -71,7 +74,7 @@ struct RequestCorrelationProcessor;
 
 impl LogProcessor for RequestCorrelationProcessor {
     fn emit(&self, record: &mut SdkLogRecord, _: &opentelemetry::InstrumentationScope) {
-        if let Some(correlation) = super::context::current_request_correlation() {
+        if let Some(correlation) = context::current_request_correlation() {
             record.add_attribute("request.id", correlation.request_id);
         }
     }
@@ -197,7 +200,7 @@ pub(crate) fn init_subscriber(
             layer()
                 .with_tracer(tracer)
                 .with_filter(filter_fn(|metadata| {
-                    metadata.is_span() || *metadata.level() <= tracing::Level::WARN
+                    metadata.is_span() || *metadata.level() <= Level::WARN
                 })),
         )
         .with(

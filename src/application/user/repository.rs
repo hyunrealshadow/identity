@@ -1,8 +1,8 @@
-use std::error::Error as StdError;
+use std::{error::Error as StdError, io::Error as IoError};
 
-use crate::error::AppError;
-use crate::user::credential::StoredPasskey;
+use crate::{error::AppError, user::credential::StoredPasskey};
 use async_trait::async_trait;
+use identity_domain::auth::SessionOid;
 use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use uuid::Uuid;
@@ -84,13 +84,11 @@ pub trait UserCredentialRepository: Send + Sync {
         credential: UserCredentialOid,
         expected: &Password,
         password: &Password,
-        keep: Option<identity_domain::auth::SessionOid>,
+        keep: Option<SessionOid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
         let _ = (user, credential, expected, password, keep);
         Err(UserCredentialRepositoryError::UpdatePasswordFailed(
-            Box::new(std::io::Error::other(
-                "atomic password changes are not configured",
-            )),
+            Box::new(IoError::other("atomic password changes are not configured")),
         ))
     }
 

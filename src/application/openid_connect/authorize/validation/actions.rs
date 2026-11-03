@@ -13,7 +13,10 @@ use crate::{
         AppError,
         codes::{authorize::AuthorizeErrorCode, common::CommonErrorCode},
     },
-    openid_connect::authorize::{AuthorizationRequestParams, AuthorizeService},
+    openid_connect::{
+        authorize::{AuthorizationRequestParams, AuthorizeService},
+        management,
+    },
 };
 
 pub(super) struct LoadedAuthorizationClient {
@@ -198,8 +201,7 @@ impl AuthorizeService {
         self.provider_service
             .validate_client_resource_ceiling(client, &resources, &scope)
             .await?;
-        if management && !crate::openid_connect::management::is_single_graphql_resource(&resources)
-        {
+        if management && !management::is_single_graphql_resource(&resources) {
             return Err(
                 AppError::from_code(CommonErrorCode::InvalidTarget).with_param(
                     "resources",

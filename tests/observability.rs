@@ -5,10 +5,17 @@ use tokio::{
     net::TcpListener,
     spawn,
     sync::Mutex,
+    task, time,
     time::sleep,
 };
 
-use identity_infrastructure::config::{AppConfig, AppEnvironment};
+use identity_application::{
+    observability as identity_application_observability, observability::BusinessEvent,
+};
+use identity_infrastructure::{
+    config::{AppConfig, AppEnvironment},
+    observability,
+};
 
 #[derive(Clone, Debug, Default)]
 struct MockCollector {
@@ -98,16 +105,16 @@ async fn exports_spans_and_logs_to_the_configured_collector() {
     config.observability.otlp.endpoint = endpoint;
     config.observability.diagnostics.schedule_delay_ms = 10;
     // Initialization inside the async runtime and real export share the production entry point.
-    identity_infrastructure::observability::init(&config, &AppEnvironment::Development).unwrap();
-    assert!(identity_infrastructure::observability::is_initialized());
+    observability::init(&config, &AppEnvironment::Development).unwrap();
+    assert!(observability::is_initialized());
     let span = tracing::info_span!(target: "identity", "export.test.span");
     {
         let _entered = span.enter();
     }
     drop(span);
-    identity_application::observability::event_sink()
-        .emit(identity_application::observability::BusinessEvent::business("export.test.event"));
-    tokio::time::timeout(Duration::from_secs(5), async {
+    identity_application_observability::event_sink()
+        .emit(BusinessEvent::business("export.test.event"));
+    time::timeout(Duration::from_secs(5), async {
         loop {
             let requests = collector.requests.lock().await;
             let ready = ["/v1/traces", "/v1/logs"]
@@ -122,11 +129,9 @@ async fn exports_spans_and_logs_to_the_configured_collector() {
     })
     .await
     .expect("configured providers must export both signals");
-    tokio::task::spawn_blocking(|| {
-        identity_infrastructure::observability::shutdown(Duration::from_secs(2))
-    })
-    .await
-    .unwrap();
+    task::spawn_blocking(|| observability::shutdown(Duration::from_secs(2)))
+        .await
+        .unwrap();
     let requests = collector.requests.lock().await.clone();
     let paths: Vec<&str> = requests.iter().map(|(path, _)| path.as_str()).collect();
     assert!(paths.contains(&"/v1/traces"), "requests: {paths:?}");

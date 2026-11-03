@@ -1,8 +1,12 @@
 use super::{query_error, query_failed};
-use crate::database::entity::{
-    client_authorization, client_authorization::Entity as ClientAuthorizationEntity,
-};
 use crate::database::{
+    audit,
+    entity::{
+        client_authorization,
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
+    },
     query::{advisory_transaction_lock, json_text},
     repository::client_authorization_query as query,
 };
@@ -80,34 +84,34 @@ pub(super) async fn revoke_access_tokens_for_authorization_code(
     ))?;
     let changed = ClientAuthorizationEntity::update_many()
         .col_expr(
-            client_authorization::Column::RevokedAt,
+            ClientAuthorizationColumn::RevokedAt,
             Expr::cust("COALESCE(revoked_at, CURRENT_TIMESTAMP)"),
         )
         .col_expr(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             SimpleExpr::Value(now.into()),
         )
         // A replay withdraws the code and all descendants, including consumed
         // refresh parents that another exchange may already be processing.
         .col_expr(
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
             Expr::cust("jsonb_set(data, '{_authority_withdrawn}', 'true'::jsonb, true)"),
         )
         .filter(
             Condition::all()
-                .add(client_authorization::Column::Type.is_in([
+                .add(ClientAuthorizationColumn::Type.is_in([
                     ClientAuthorizationType::AuthorizationCode.to_string(),
                     ClientAuthorizationType::AccessToken.to_string(),
                     ClientAuthorizationType::RefreshToken.to_string(),
                 ]))
                 .add(
                     Condition::any()
-                        .add(client_authorization::Column::Oid.eq(authorization_code_oid))
+                        .add(ClientAuthorizationColumn::Oid.eq(authorization_code_oid))
                         .add(
                             json_text(
                                 (
                                     client_authorization::Entity,
-                                    client_authorization::Column::Data,
+                                    ClientAuthorizationColumn::Data,
                                 ),
                                 "authorization_code_oid",
                             )
@@ -122,7 +126,7 @@ pub(super) async fn revoke_access_tokens_for_authorization_code(
         ))?;
 
     if changed.rows_affected > 0 {
-        crate::database::audit::record(
+        audit::record(
             &transaction,
             "authorization.code_access_revoked",
             "client_authorization",
@@ -152,19 +156,19 @@ pub(super) async fn revoke_if_active(
         .map_err(query_error("client_authorization.revoke_if_active"))?;
     let result = ClientAuthorizationEntity::update_many()
         .col_expr(
-            client_authorization::Column::RevokedAt,
+            ClientAuthorizationColumn::RevokedAt,
             SimpleExpr::Value(Some(now).into()),
         )
         .col_expr(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             SimpleExpr::Value(Some(now).into()),
         )
         .filter(
             Condition::all()
-                .add(client_authorization::Column::Oid.eq(oid))
-                .add(client_authorization::Column::Type.eq(type_.to_string()))
-                .add(client_authorization::Column::RevokedAt.is_null())
-                .add(client_authorization::Column::ExpiresAt.gt(now)),
+                .add(ClientAuthorizationColumn::Oid.eq(oid))
+                .add(ClientAuthorizationColumn::Type.eq(type_.to_string()))
+                .add(ClientAuthorizationColumn::RevokedAt.is_null())
+                .add(ClientAuthorizationColumn::ExpiresAt.gt(now)),
         )
         .exec(&transaction)
         .await
@@ -172,7 +176,7 @@ pub(super) async fn revoke_if_active(
 
     let changed = result.rows_affected == 1;
     if changed {
-        crate::database::audit::record(
+        audit::record(
             &transaction,
             "authorization.revoked",
             "client_authorization",
@@ -238,7 +242,7 @@ pub(super) async fn revoke_refresh_token_family(
     if !device_authorization_oid.is_empty() {
         transaction
             .execute(&query::revoke_token_for_client(
-                Expr::col(client_authorization::Column::Oid)
+                Expr::col(ClientAuthorizationColumn::Oid)
                     .cast_as("text")
                     .eq(device_authorization_oid),
                 client_oid,
@@ -250,7 +254,7 @@ pub(super) async fn revoke_refresh_token_family(
                 "client_authorization.revoke_refresh_token_family",
             ))?;
     }
-    crate::database::audit::record(
+    audit::record(
         &transaction,
         "authorization.refresh_replay_revoked",
         "client_authorization",
@@ -278,7 +282,7 @@ pub(super) async fn revoke_access_token_for_client(
     ))?;
     let result = transaction
         .execute(&query::revoke_token_for_client(
-            Expr::col(client_authorization::Column::Oid).eq(access_oid),
+            Expr::col(ClientAuthorizationColumn::Oid).eq(access_oid),
             client_oid,
             "access_token",
             now,
@@ -288,7 +292,7 @@ pub(super) async fn revoke_access_token_for_client(
             "client_authorization.revoke_access_token_for_client",
         ))?;
     if result.rows_affected() > 0 {
-        crate::database::audit::record(
+        audit::record(
             &transaction,
             "authorization.access_revoked",
             "client_authorization",
@@ -355,7 +359,7 @@ pub(super) async fn revoke_refresh_grant_for_client(
     if !device_authorization_oid.is_empty() {
         transaction
             .execute(&query::revoke_token_for_client(
-                Expr::col(client_authorization::Column::Oid)
+                Expr::col(ClientAuthorizationColumn::Oid)
                     .cast_as("text")
                     .eq(device_authorization_oid),
                 client_oid,
@@ -367,7 +371,7 @@ pub(super) async fn revoke_refresh_grant_for_client(
                 "client_authorization.revoke_refresh_grant_for_client",
             ))?;
     }
-    crate::database::audit::record(
+    audit::record(
         &transaction,
         "authorization.refresh_grant_revoked",
         "client_authorization",

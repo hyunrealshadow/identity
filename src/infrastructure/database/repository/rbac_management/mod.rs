@@ -17,15 +17,22 @@ mod support;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
-    AssignUserRolesTransaction, ClientScopeQuery, ClientScopeSetResult, ClientScopeTargetQuery,
-    CreateResourceTransaction, CreateRoleTransaction, CreateScopeTransaction,
-    EffectivePermissionPageData, EffectivePermissionQuery, RbacManagementRepository,
-    RbacManagementRepositoryError, RbacPageData, ResourcePageEntry, ResourceQuery,
-    ResourceStateTransaction, RevokeUserRolesTransaction, RolePageEntry, RoleQuery, RoleRecord,
-    RoleStateTransaction, ScopePageEntry, ScopeQuery, ScopeRecord, ScopeStateTransaction,
-    SetClientScopesTransaction, SetRolePermissionsTransaction, UpdateResourceTransaction,
-    UpdateRoleTransaction, UpdateScopeTransaction, UserRoleBindingMutationResult,
-    UserRoleBindingPageData, UserRoleBindingQuery,
+    ApiResourceRecord, AssignUserRolesTransaction, ClientScopeQuery, ClientScopeSetResult,
+    ClientScopeTargetPageEntry, ClientScopeTargetQuery, CreateResourceTransaction,
+    CreateRoleTransaction, CreateScopeTransaction, EffectivePermissionPageData,
+    EffectivePermissionQuery, RbacManagementRepository, RbacManagementRepositoryError,
+    RbacPageData, ResourcePageEntry, ResourceQuery, ResourceStateTransaction,
+    RevokeUserRolesTransaction, RoleFilter, RolePageEntry, RoleQuery, RoleRecord,
+    RoleStateTransaction, ScopeFilter, ScopeOid, ScopePageEntry, ScopeQuery, ScopeRecord,
+    ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
+    UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction,
+    UserRoleBindingMutationResult, UserRoleBindingPageData, UserRoleBindingQuery,
+    UserRoleBindingRecord,
+};
+use identity_domain::{
+    client::model::ClientOid,
+    rbac::{ResourceOid, RoleOid, UserRoleBindingOid},
+    user::UserOid,
 };
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
@@ -43,21 +50,18 @@ impl RbacManagementRepositoryImpl {
 
 #[async_trait]
 impl RbacManagementRepository for RbacManagementRepositoryImpl {
-    async fn count_roles(
-        &self,
-        filter: identity_application::rbac::RoleFilter,
-    ) -> Result<u64, RbacManagementRepositoryError> {
+    async fn count_roles(&self, filter: RoleFilter) -> Result<u64, RbacManagementRepositoryError> {
         self.role_count(filter).await
     }
     async fn count_scopes(
         &self,
-        filter: identity_application::rbac::ScopeFilter,
+        filter: ScopeFilter,
     ) -> Result<u64, RbacManagementRepositoryError> {
         self.scope_count(filter).await
     }
     async fn count_client_scopes(
         &self,
-        client_oid: identity_domain::client::model::ClientOid,
+        client_oid: ClientOid,
     ) -> Result<u64, RbacManagementRepositoryError> {
         self.client_scope_count(client_oid).await
     }
@@ -71,23 +75,22 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
 
     async fn find_resource(
         &self,
-        oid: identity_domain::rbac::ResourceOid,
-    ) -> Result<Option<identity_application::rbac::ApiResourceRecord>, RbacManagementRepositoryError>
-    {
+        oid: ResourceOid,
+    ) -> Result<Option<ApiResourceRecord>, RbacManagementRepositoryError> {
         self.resource_find(oid).await
     }
 
     async fn create_resource(
         &self,
         command: CreateResourceTransaction,
-    ) -> Result<identity_application::rbac::ApiResourceRecord, RbacManagementRepositoryError> {
+    ) -> Result<ApiResourceRecord, RbacManagementRepositoryError> {
         self.resource_create(command).await
     }
 
     async fn update_resource(
         &self,
         command: UpdateResourceTransaction,
-    ) -> Result<identity_application::rbac::ApiResourceRecord, RbacManagementRepositoryError> {
+    ) -> Result<ApiResourceRecord, RbacManagementRepositoryError> {
         self.resource_update(command).await
     }
 
@@ -95,7 +98,7 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         &self,
         command: ResourceStateTransaction,
         enabled: bool,
-    ) -> Result<identity_application::rbac::ApiResourceRecord, RbacManagementRepositoryError> {
+    ) -> Result<ApiResourceRecord, RbacManagementRepositoryError> {
         self.resource_set_enabled(command, enabled).await
     }
 
@@ -108,23 +111,22 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
 
     async fn find_scope(
         &self,
-        oid: identity_application::rbac::ScopeOid,
-    ) -> Result<Option<identity_application::rbac::ScopeRecord>, RbacManagementRepositoryError>
-    {
+        oid: ScopeOid,
+    ) -> Result<Option<ScopeRecord>, RbacManagementRepositoryError> {
         self.scope_find(oid).await
     }
 
     async fn create_scope(
         &self,
         command: CreateScopeTransaction,
-    ) -> Result<identity_application::rbac::ScopeRecord, RbacManagementRepositoryError> {
+    ) -> Result<ScopeRecord, RbacManagementRepositoryError> {
         self.scope_create(command).await
     }
 
     async fn update_scope(
         &self,
         command: UpdateScopeTransaction,
-    ) -> Result<identity_application::rbac::ScopeRecord, RbacManagementRepositoryError> {
+    ) -> Result<ScopeRecord, RbacManagementRepositoryError> {
         self.scope_update(command).await
     }
 
@@ -145,7 +147,7 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
 
     async fn find_role(
         &self,
-        oid: identity_domain::rbac::RoleOid,
+        oid: RoleOid,
     ) -> Result<Option<RoleRecord>, RbacManagementRepositoryError> {
         self.role_find(oid).await
     }
@@ -188,23 +190,22 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
 
     async fn find_user_version(
         &self,
-        user_oid: identity_domain::user::UserOid,
+        user_oid: UserOid,
     ) -> Result<Uuid, RbacManagementRepositoryError> {
         self.user_version(user_oid).await
     }
 
     async fn find_user_role_bindings(
         &self,
-        binding_oids: Vec<identity_domain::rbac::UserRoleBindingOid>,
-    ) -> Result<Vec<identity_application::rbac::UserRoleBindingRecord>, RbacManagementRepositoryError>
-    {
+        binding_oids: Vec<UserRoleBindingOid>,
+    ) -> Result<Vec<UserRoleBindingRecord>, RbacManagementRepositoryError> {
         self.bindings_by_oids(&binding_oids).await
     }
 
     async fn count_effective_permissions(
         &self,
-        user_oid: identity_domain::user::UserOid,
-        resource_oid: identity_domain::rbac::ResourceOid,
+        user_oid: UserOid,
+        resource_oid: ResourceOid,
     ) -> Result<u64, RbacManagementRepositoryError> {
         self.effective_count(user_oid, resource_oid).await
     }
@@ -233,10 +234,7 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
     async fn list_client_scope_targets(
         &self,
         query: ClientScopeTargetQuery,
-    ) -> Result<
-        RbacPageData<identity_application::rbac::ClientScopeTargetPageEntry>,
-        RbacManagementRepositoryError,
-    > {
+    ) -> Result<RbacPageData<ClientScopeTargetPageEntry>, RbacManagementRepositoryError> {
         self.client_target_list(query).await
     }
 

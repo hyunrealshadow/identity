@@ -15,7 +15,10 @@ use uuid::Uuid;
 use super::authorization_lifecycle::{renew_user_version_in_txn, sync_user_authority_in_txn};
 use crate::database::{
     audit,
-    entity::{user, user::Entity as UserEntity},
+    entity::{
+        user,
+        user::{Column as UserColumn, Entity as UserEntity},
+    },
 };
 
 pub(crate) fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
@@ -115,11 +118,11 @@ impl UserRepositoryImpl {
         mut patch: UserProfilePatch,
     ) -> Result<Option<User>, UserRepositoryError> {
         // Serialize preference patches with profile/theme changes to preserve all JSON keys.
-        let txn = crate::database::audit::begin(&self.db, "account.update_profile")
+        let txn = audit::begin(&self.db, "account.update_profile")
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(oid)))
             .lock_exclusive()
             .one(&txn)
             .await
@@ -187,11 +190,11 @@ impl UserRepositoryImpl {
         oid: UserOid,
         update: UserIdentifierUpdate,
     ) -> Result<Option<User>, UserRepositoryError> {
-        let txn = crate::database::audit::begin(&self.db, "account.update_identifier")
+        let txn = audit::begin(&self.db, "account.update_identifier")
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(oid)))
             .lock_exclusive()
             .one(&txn)
             .await
@@ -206,7 +209,7 @@ impl UserRepositoryImpl {
                 if normalized != &model.name_normalized
                     && Self::identifier_exists(
                         &txn,
-                        user::Column::NameNormalized,
+                        UserColumn::NameNormalized,
                         normalized,
                         model.id,
                     )
@@ -221,7 +224,7 @@ impl UserRepositoryImpl {
                 if normalized != &model.email_normalized
                     && Self::identifier_exists(
                         &txn,
-                        user::Column::EmailNormalized,
+                        UserColumn::EmailNormalized,
                         normalized,
                         model.id,
                     )
@@ -261,7 +264,7 @@ impl UserRepositoryImpl {
                     UserIdentifierUpdate::Username { normalized, .. }
                         if Self::identifier_exists(
                             &self.db,
-                            user::Column::NameNormalized,
+                            UserColumn::NameNormalized,
                             normalized,
                             model.id,
                         )
@@ -272,7 +275,7 @@ impl UserRepositoryImpl {
                     UserIdentifierUpdate::Email { normalized, .. }
                         if Self::identifier_exists(
                             &self.db,
-                            user::Column::EmailNormalized,
+                            UserColumn::EmailNormalized,
                             normalized,
                             model.id,
                         )
@@ -296,7 +299,7 @@ impl UserRepositoryImpl {
     ) -> Result<bool, UserRepositoryError> {
         UserEntity::find()
             .filter(column.eq(normalized))
-            .filter(user::Column::Id.ne(except_id))
+            .filter(UserColumn::Id.ne(except_id))
             .one(connection)
             .await
             .map(|user| user.is_some())
@@ -313,8 +316,8 @@ impl UserRepository for UserRepositoryImpl {
         let model = UserEntity::find()
             .filter(
                 Condition::any()
-                    .add(user::Column::EmailNormalized.eq(&normalized))
-                    .add(user::Column::NameNormalized.eq(&normalized)),
+                    .add(UserColumn::EmailNormalized.eq(&normalized))
+                    .add(UserColumn::NameNormalized.eq(&normalized)),
             )
             .one(&self.db)
             .await
@@ -328,7 +331,7 @@ impl UserRepository for UserRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(&self, oid: UserOid) -> Result<Option<User>, UserRepositoryError> {
         let model = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
             .map_err(|e| UserRepositoryError::QueryFailed(Box::new(e)))?;
@@ -344,17 +347,16 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<i32, UserRepositoryError> {
         let oid = Uuid::from(user_oid);
         let now = Utc::now().fixed_offset();
-        let transaction =
-            crate::database::audit::begin(&self.db, "account.increment_failed_attempts")
-                .await
-                .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
+        let transaction = audit::begin(&self.db, "account.increment_failed_attempts")
+            .await
+            .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
         let updated = UserEntity::update_many()
             .col_expr(
-                user::Column::FailedAttempts,
-                Expr::col(user::Column::FailedAttempts).add(1),
+                UserColumn::FailedAttempts,
+                Expr::col(UserColumn::FailedAttempts).add(1),
             )
-            .col_expr(user::Column::UpdatedAt, Expr::value(Some(now)))
-            .filter(user::Column::Oid.eq(oid))
+            .col_expr(UserColumn::UpdatedAt, Expr::value(Some(now)))
+            .filter(UserColumn::Oid.eq(oid))
             .exec_with_returning(&transaction)
             .await
             .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?
@@ -366,13 +368,13 @@ impl UserRepository for UserRepositoryImpl {
 
         if attempts >= lock_threshold {
             let locked = UserEntity::update_many()
-                .col_expr(user::Column::Locked, Expr::value(true))
+                .col_expr(UserColumn::Locked, Expr::value(true))
                 .col_expr(
-                    user::Column::LockedUntil,
+                    UserColumn::LockedUntil,
                     Expr::value(Some(lock_until.fixed_offset())),
                 )
-                .col_expr(user::Column::UpdatedAt, Expr::value(Some(now)))
-                .filter(user::Column::Oid.eq(oid))
+                .col_expr(UserColumn::UpdatedAt, Expr::value(Some(now)))
+                .filter(UserColumn::Oid.eq(oid))
                 .exec_with_returning(&transaction)
                 .await
                 .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?
@@ -420,8 +422,8 @@ impl UserRepository for UserRepositoryImpl {
             .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;
         let current = UserEntity::find()
             .select_only()
-            .columns([user::Column::Id, user::Column::Locked])
-            .filter(user::Column::Oid.eq(oid))
+            .columns([UserColumn::Id, UserColumn::Locked])
+            .filter(UserColumn::Oid.eq(oid))
             .lock_exclusive()
             .into_tuple::<(i64, bool)>()
             .one(&transaction)
@@ -435,14 +437,14 @@ impl UserRepository for UserRepositoryImpl {
             return Ok(());
         };
         UserEntity::update_many()
-            .col_expr(user::Column::FailedAttempts, Expr::value(0i32))
-            .col_expr(user::Column::Locked, Expr::value(false))
+            .col_expr(UserColumn::FailedAttempts, Expr::value(0i32))
+            .col_expr(UserColumn::Locked, Expr::value(false))
             .col_expr(
-                user::Column::LockedUntil,
+                UserColumn::LockedUntil,
                 Expr::value(Option::<DateTime<FixedOffset>>::None),
             )
-            .col_expr(user::Column::UpdatedAt, Expr::value(Some(now)))
-            .filter(user::Column::Oid.eq(oid))
+            .col_expr(UserColumn::UpdatedAt, Expr::value(Some(now)))
+            .filter(UserColumn::Oid.eq(oid))
             .exec(&transaction)
             .await
             .map_err(|e| UserRepositoryError::ResetFailedAttempts(Box::new(e)))?;
@@ -488,7 +490,7 @@ impl UserRepository for UserRepositoryImpl {
 mod tests {
 
     use chrono::Utc;
-    use identity_domain::user::UserTheme;
+    use identity_domain::user::{MfaMethod, UserTheme, repository::UserRepositoryError};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -520,17 +522,17 @@ mod tests {
         let mut model = user_model();
         assert_eq!(
             to_domain(model.clone()).unwrap().preferred_mfa_method,
-            identity_domain::user::MfaMethod::Passkey
+            MfaMethod::Passkey
         );
         model.preferences["preferred_mfa_method"] = json!("otp");
         assert_eq!(
             to_domain(model.clone()).unwrap().preferred_mfa_method,
-            identity_domain::user::MfaMethod::Otp
+            MfaMethod::Otp
         );
         model.preferences["preferred_mfa_method"] = json!("unsupported");
         assert!(matches!(
             to_domain(model),
-            Err(identity_domain::user::repository::UserRepositoryError::InvalidStoredMfaPreference)
+            Err(UserRepositoryError::InvalidStoredMfaPreference)
         ));
     }
 

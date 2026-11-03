@@ -1,11 +1,9 @@
 use super::*;
+use crate::rbac::scope::{ScopeFilter, ScopeRecord};
 
 impl RbacManagementService {
     #[tracing::instrument(skip_all, name = "rbac.scope.find")]
-    pub async fn find_scope(
-        &self,
-        oid: ScopeOid,
-    ) -> Result<Option<crate::rbac::scope::ScopeRecord>, AppError> {
+    pub async fn find_scope(&self, oid: ScopeOid) -> Result<Option<ScopeRecord>, AppError> {
         self.repository
             .find_scope(oid)
             .await
@@ -13,10 +11,7 @@ impl RbacManagementService {
     }
 
     #[tracing::instrument(skip_all, name = "rbac.scope.count")]
-    pub async fn count_scopes(
-        &self,
-        filter: crate::rbac::scope::ScopeFilter,
-    ) -> Result<u64, AppError> {
+    pub async fn count_scopes(&self, filter: ScopeFilter) -> Result<u64, AppError> {
         self.repository
             .count_scopes(normalize_scope_filter(filter)?)
             .await
@@ -32,10 +27,12 @@ impl RbacManagementService {
             CURSOR_KIND_SCOPE,
             order.as_u8(),
             &filter,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self
@@ -77,7 +74,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: CreateScopeCommand,
-    ) -> Result<crate::rbac::scope::ScopeRecord, AppError> {
+    ) -> Result<ScopeRecord, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
@@ -113,7 +110,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: UpdateScopeCommand,
-    ) -> Result<crate::rbac::scope::ScopeRecord, AppError> {
+    ) -> Result<ScopeRecord, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
@@ -166,7 +163,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: ScopeStateCommand,
-    ) -> Result<crate::rbac::scope::ScopeRecord, AppError> {
+    ) -> Result<ScopeRecord, AppError> {
         self.set_scope_enabled(authority, command, true).await
     }
 
@@ -175,7 +172,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: ScopeStateCommand,
-    ) -> Result<crate::rbac::scope::ScopeRecord, AppError> {
+    ) -> Result<ScopeRecord, AppError> {
         self.set_scope_enabled(authority, command, false).await
     }
 
@@ -184,7 +181,7 @@ impl RbacManagementService {
         authority: &RbacManagementAuthority,
         command: ScopeStateCommand,
         enabled: bool,
-    ) -> Result<crate::rbac::scope::ScopeRecord, AppError> {
+    ) -> Result<ScopeRecord, AppError> {
         let action = if enabled {
             "rbac.scope.enable"
         } else {

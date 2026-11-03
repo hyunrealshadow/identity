@@ -17,6 +17,8 @@ use url::Url;
 use crate::openid_connect::{
     dto::scoped_standard_claims,
     jose::{asymmetric_signer_from_pem, front_channel_hash},
+    rbac,
+    rbac::RBAC_CLAIM,
 };
 
 use super::*;
@@ -173,10 +175,10 @@ impl TokenService {
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         if let Some(business) = input.business {
-            let claim = crate::openid_connect::rbac::signed_business_claim(business)
+            let claim = rbac::signed_business_claim(business)
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::SignAccessTokenFailed))?;
             payload
-                .set_claim(crate::openid_connect::rbac::RBAC_CLAIM, Some(claim))
+                .set_claim(RBAC_CLAIM, Some(claim))
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         if let Some(auth_time) = input.auth_time {

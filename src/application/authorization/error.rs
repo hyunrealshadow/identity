@@ -5,7 +5,7 @@
 
 use identity_domain::authorization::{
     administrator::GrantReasonError,
-    catalog::{ManagementCatalogError, ManagementScopeError},
+    catalog::{HumanAuthenticationRequirement, ManagementCatalogError, ManagementScopeError},
     owner::OwnerProtectionError,
     repository::ManagementRepositoryError,
     snapshot::SnapshotValidationError,
@@ -63,14 +63,12 @@ impl From<ManagementAuthorizationError> for AppError {
                 AppError::from_code(Code::MissingHumanAuthentication)
                     .with_param("required_authentication", required.as_str())
             }
-            Error::RecentAuthenticationRequired => AppError::from_code(
-                Code::MissingHumanAuthentication,
-            )
-            .with_param(
-                "required_authentication",
-                identity_domain::authorization::catalog::HumanAuthenticationRequirement::RecentAal2
-                    .as_str(),
-            ),
+            Error::RecentAuthenticationRequired => {
+                AppError::from_code(Code::MissingHumanAuthentication).with_param(
+                    "required_authentication",
+                    HumanAuthenticationRequirement::RecentAal2.as_str(),
+                )
+            }
             Error::TargetForbidden => AppError::from_code(Code::TargetForbidden),
             Error::InvalidTarget => AppError::from_code(Code::InvalidTarget),
             Error::InvalidTokenScope { scope } => {

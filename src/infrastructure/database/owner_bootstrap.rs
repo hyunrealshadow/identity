@@ -15,10 +15,14 @@ use identity_domain::{
     user::UserOid,
 };
 use sea_orm::{
-    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, Statement,
-    TransactionTrait,
+    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
+    TransactionTrait, Value,
 };
 use uuid::Uuid;
+
+use crate::observability::context;
+
+use super::{repository, repository::authorization_lifecycle};
 
 #[tracing::instrument(
     skip_all,
@@ -32,11 +36,11 @@ pub async fn bootstrap_owner(
     request_id: RequestId,
 ) -> Result<Uuid, AppError> {
     let transaction = db.begin().await.map_err(AppError::internal)?;
-    super::repository::authorization_lifecycle::lock_owner_lifecycle(&transaction)
+    authorization_lifecycle::lock_owner_lifecycle(&transaction)
         .await
         .map_err(AppError::internal)?;
     let installed =
-        super::repository::setting::read_section::<InstallationSettings, _>(&transaction).await?;
+        repository::setting::read_section::<InstallationSettings, _>(&transaction).await?;
     if !installed.initialized {
         return Err(AppError::from_code(Code::InvalidTarget));
     }
@@ -59,12 +63,9 @@ pub async fn bootstrap_owner(
     // instance with no remaining usable full-capability user. Group membership
     // count, display names and role keys never decide this.
     let snapshot =
-        super::repository::authorization_lifecycle::recoverable_authorization_snapshot_in_txn(
-            &transaction,
-            user,
-        )
-        .await
-        .map_err(AppError::internal)?;
+        authorization_lifecycle::recoverable_authorization_snapshot_in_txn(&transaction, user)
+            .await
+            .map_err(AppError::internal)?;
     if snapshot.target_is_active_owner || snapshot.other_active_owner_count > 0 {
         return Err(AppError::from_code(Code::VersionConflict)
             .with_param("current_version", target_version.to_string()));
@@ -97,7 +98,7 @@ pub async fn bootstrap_owner(
     let user_id = record
         .try_get::<i64>("", "user_id")
         .map_err(AppError::internal)?;
-    super::repository::authorization_lifecycle::renew_user_version_in_txn(&transaction, user_id)
+    authorization_lifecycle::renew_user_version_in_txn(&transaction, user_id)
         .await
         .map_err(AppError::internal)?;
     record_group_membership_audit(
@@ -126,7 +127,7 @@ async fn built_in_group_id(
         .await
         .map_err(AppError::internal)?
         .ok_or_else(|| {
-            AppError::map_source(Code::RbacPolicyUnavailable)(sea_orm::DbErr::Custom(
+            AppError::map_source(Code::RbacPolicyUnavailable)(DbErr::Custom(
                 "a trusted built-in group is missing; run the RBAC seed first".to_owned(),
             ))
         })?;
@@ -141,8 +142,8 @@ pub(crate) async fn record_group_membership_audit(
     reason: &str,
     request_id: &RequestId,
 ) -> Result<(), AppError> {
-    let trace_id = crate::observability::context::current_request_correlation()
-        .and_then(|correlation| correlation.trace_id);
+    let trace_id =
+        context::current_request_correlation().and_then(|correlation| correlation.trace_id);
     transaction
         .execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
@@ -163,7 +164,7 @@ INSERT INTO security_audit (
                 action.into(),
                 reason.to_owned().into(),
                 request_id.as_str().to_owned().into(),
-                sea_orm::Value::String(trace_id),
+                Value::String(trace_id),
             ],
         ))
         .await

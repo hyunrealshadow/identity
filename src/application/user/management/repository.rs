@@ -7,13 +7,13 @@
 
 use std::error::Error as StdError;
 
-use crate::authorization::ManagementAuthorizationError;
+use crate::{authorization::ManagementAuthorizationError, user::Password};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use identity_domain::user::{UserManagementRecord, UserOid, repository::UserProfilePatch};
 use uuid::Uuid;
 
-use super::model::{UserManagementAuthority, UserOrder};
+use super::model::{UserFilter, UserManagementAuthority, UserOrder};
 
 /// Validated identifier pair. `value` preserves operator input; the normalized
 /// value is authoritative for uniqueness and lookup.
@@ -40,7 +40,7 @@ pub enum UserPageDirection {
 /// lower-cased and length-checked.
 #[derive(Debug, Clone)]
 pub struct UserManagementQuery {
-    pub filter: super::model::UserFilter,
+    pub filter: UserFilter,
     pub order: UserOrder,
     pub direction: UserPageDirection,
     pub after: Option<UserSortKey>,
@@ -72,7 +72,7 @@ pub struct CreateUserTransaction {
     pub username_normalized: String,
     pub email: String,
     pub email_normalized: String,
-    pub password: crate::user::Password,
+    pub password: Password,
     pub profile: UserProfilePatch,
     pub reason: String,
     pub authority: UserManagementAuthority,
@@ -102,7 +102,7 @@ pub struct UserStateTransaction {
 /// Business outcomes that are not infrastructure errors.
 #[derive(Debug, Clone)]
 pub enum UserManagementMutationOutcome {
-    Success(UserManagementRecord),
+    Success(Box<UserManagementRecord>),
     UserNotFound,
     VersionConflict { current_version: Uuid },
     LastOwnerProtected,
@@ -124,10 +124,7 @@ pub enum UserManagementRepositoryError {
 
 #[async_trait]
 pub trait UserManagementRepository: Send + Sync {
-    async fn count_users(
-        &self,
-        filter: super::model::UserFilter,
-    ) -> Result<u64, UserManagementRepositoryError>;
+    async fn count_users(&self, filter: UserFilter) -> Result<u64, UserManagementRepositoryError>;
 
     async fn list_users(
         &self,

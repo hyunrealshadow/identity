@@ -8,7 +8,7 @@
 //! `management.` prefix is never treated as a known scope, and ownership of one
 //! scope never grants another scope.
 
-use std::fmt;
+use std::{collections::HashSet, fmt, str::FromStr};
 
 use crate::{authorization::ids::PolicyVersion, rbac::deterministic_oid};
 
@@ -41,7 +41,7 @@ impl AdministratorRole {
 #[error("unknown administrator role")]
 pub struct ParseAdministratorRoleError;
 
-impl std::str::FromStr for AdministratorRole {
+impl FromStr for AdministratorRole {
     type Err = ParseAdministratorRoleError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
@@ -853,8 +853,8 @@ pub enum ManagementCatalogError {
 /// Validate catalog coverage, explicit role membership, M2M boundaries and
 /// reserved naming. Seeds/tests call this before writing catalog rows.
 pub fn validate_catalog() -> Result<(), ManagementCatalogError> {
-    let mut names = std::collections::HashSet::new();
-    let mut scopes = std::collections::HashSet::new();
+    let mut names = HashSet::new();
+    let mut scopes = HashSet::new();
 
     for definition in &MANAGEMENT_SCOPES {
         if !scopes.insert(definition.scope) {
@@ -886,12 +886,10 @@ pub fn validate_catalog() -> Result<(), ManagementCatalogError> {
         {
             return Err(ManagementCatalogError::NonMonotonicRole(definition.name));
         }
-        if definition.m2m_allowed() {
-            if definition.scope.is_human_only() {
-                return Err(ManagementCatalogError::HumanOnlyMachineScope(
-                    definition.name,
-                ));
-            }
+        if definition.m2m_allowed() && definition.scope.is_human_only() {
+            return Err(ManagementCatalogError::HumanOnlyMachineScope(
+                definition.name,
+            ));
         }
     }
 

@@ -13,13 +13,14 @@ mod support;
 use async_trait::async_trait;
 use identity_application::rbac::{
     AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupResult, DeleteGroupTransaction,
-    GroupManagementRepository, GroupManagementRepositoryError, GroupMembershipMutationResult,
-    GroupMembershipPageEntry, GroupMembershipQuery, GroupPageData, GroupPageEntry, GroupQuery,
-    GroupRecord, GroupRoleMutationResult, GroupRolePageEntry, GroupRoleQuery,
+    GroupFilter, GroupManagementRepository, GroupManagementRepositoryError,
+    GroupMembershipMutationResult, GroupMembershipPageEntry, GroupMembershipQuery,
+    GroupMembershipRecord, GroupPageData, GroupPageEntry, GroupQuery, GroupRecord,
+    GroupRoleBindingRecord, GroupRoleMutationResult, GroupRolePageEntry, GroupRoleQuery,
     GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
     UpdateGroupTransaction,
 };
-use identity_domain::rbac::GroupOid;
+use identity_domain::rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid};
 use sea_orm::DatabaseConnection;
 
 pub struct GroupManagementRepositoryImpl {
@@ -37,7 +38,7 @@ impl GroupManagementRepositoryImpl {
 impl GroupManagementRepository for GroupManagementRepositoryImpl {
     async fn count_groups(
         &self,
-        filter: identity_application::rbac::GroupFilter,
+        filter: GroupFilter,
     ) -> Result<u64, GroupManagementRepositoryError> {
         self.group_count(filter).await
     }
@@ -58,21 +59,15 @@ impl GroupManagementRepository for GroupManagementRepositoryImpl {
 
     async fn find_group_membership(
         &self,
-        oid: identity_domain::rbac::GroupMembershipOid,
-    ) -> Result<
-        Option<identity_application::rbac::GroupMembershipRecord>,
-        GroupManagementRepositoryError,
-    > {
+        oid: GroupMembershipOid,
+    ) -> Result<Option<GroupMembershipRecord>, GroupManagementRepositoryError> {
         self.membership_find(oid).await
     }
 
     async fn find_group_role_binding(
         &self,
-        oid: identity_domain::rbac::GroupRoleBindingOid,
-    ) -> Result<
-        Option<identity_application::rbac::GroupRoleBindingRecord>,
-        GroupManagementRepositoryError,
-    > {
+        oid: GroupRoleBindingOid,
+    ) -> Result<Option<GroupRoleBindingRecord>, GroupManagementRepositoryError> {
         self.group_role_find(oid).await
     }
 

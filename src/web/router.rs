@@ -9,13 +9,16 @@ use identity_infrastructure::{
 use salvo::{Router, affix_state::inject, serve_static::StaticDir};
 
 use super::{
-    controllers,
+    controllers::{auth, install, oauth2, observability, well_known, workload_runtime},
     middleware::{
         RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
         TraceContextMiddleware, require_login_workload, security_headers_middleware,
     },
 };
 use crate::{controllers::response::handle_404, graphql, health};
+
+#[cfg(feature = "oidc-conformance")]
+use super::controllers::conformance;
 
 pub fn app_router(state: AppState, config: &AppConfig) -> Router {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
@@ -45,13 +48,13 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
         );
 
     router = router
-        .push(controllers::oauth2::routes())
-        .push(controllers::auth::routes())
-        .push(controllers::well_known::routes());
+        .push(oauth2::routes())
+        .push(auth::routes())
+        .push(well_known::routes());
 
     #[cfg(feature = "oidc-conformance")]
     if state.context().is_conformance() {
-        router = router.push(controllers::conformance::routes());
+        router = router.push(conformance::routes());
     }
 
     if config.health.enable && shared_health_listener {
@@ -73,18 +76,18 @@ pub fn internal_router(
 ) -> Router {
     let mut login = Router::new()
         .hoop(require_login_workload)
-        .push(controllers::install::status_routes())
-        .push(controllers::install::routes());
+        .push(install::status_routes())
+        .push(install::routes());
     if config.observability.self_metrics.enable {
         login = login.push(
             Router::with_path(internal_relative_route(
                 &config.observability.self_metrics.route,
             ))
-            .get(controllers::observability::observability_metrics),
+            .get(observability::observability_metrics),
         );
     }
     let internal = Router::with_path("internal")
-        .push(controllers::workload_runtime::routes())
+        .push(workload_runtime::routes())
         .push(login);
 
     Router::new()

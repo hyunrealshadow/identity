@@ -1,4 +1,5 @@
 use super::*;
+use identity_domain::{authorization::ManagementScope, rbac};
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 use std::collections::BTreeMap;
 
@@ -55,19 +56,18 @@ async fn mfa_removal_is_locked_and_clears_recovery_codes_only_after_the_last_met
                     ("id".to_owned(), Value::from(2i64)),
                     ("oid".to_owned(), Value::from(recovery_user)),
                 ])]);
-                let permissions =
-                    identity_domain::authorization::ManagementScope::ALL
-                        .into_iter()
-                        .map(|scope| {
-                            serde_json::json!({
-                                "permission_oid": identity_domain::rbac::built_in_permission_oid(scope).0,
-                                "permission_code": scope.name(),
-                                "scope_code": scope.name(),
-                                "permission_enabled": true,
-                                "permission_built_in": true,
-                            })
+                let permissions = ManagementScope::ALL
+                    .into_iter()
+                    .map(|scope| {
+                        serde_json::json!({
+                            "permission_oid": rbac::built_in_permission_oid(scope).0,
+                            "permission_code": scope.name(),
+                            "scope_code": scope.name(),
+                            "permission_enabled": true,
+                            "permission_built_in": true,
                         })
-                        .collect::<Vec<_>>();
+                    })
+                    .collect::<Vec<_>>();
                 query_results.push(vec![BTreeMap::from([(
                     "permissions".to_owned(),
                     Value::from(serde_json::json!(permissions)),

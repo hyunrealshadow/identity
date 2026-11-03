@@ -1,4 +1,5 @@
 use super::*;
+use crate::auth::passkey::tests;
 
 #[tokio::test]
 async fn passkey_completes_mfa_without_password_and_protects_password_fallback() {
@@ -8,7 +9,7 @@ async fn passkey_completes_mfa_without_password_and_protects_password_fallback()
         let mut login = test_login(user.oid.into(), 0);
         login.status = LoginStatus::IDENTIFIER_VERIFIED;
         let login_oid = login.oid;
-        let (passkeys, sign) = crate::auth::passkey::tests::enrolled_passkey(user_oid).await;
+        let (passkeys, sign) = tests::enrolled_passkey(user_oid).await;
         let mut service = sign_in_service(user, vec![login], false).with_passkeys(passkeys);
         if password_first {
             // Password alone must not create or renew any session.

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use identity_application::{
     auth::{
         challenge::ChallengeRepository,
@@ -40,7 +40,7 @@ impl PasskeyCredentialRepository for MemoryRepo {
         &self,
         user: UserOid,
         key: StoredPasskey,
-        _recovery_codes: Vec<identity_application::user::RecoveryCodeCredentialData>,
+        _recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<(), AppError> {
         let mut keys = self.keys.lock().unwrap();
         if keys
@@ -118,7 +118,10 @@ impl ChallengeRepository for MemoryRepo {
 
 use super::WebAuthnAuthenticator;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use identity_application::setting::{LoginDomainSetting, SettingsSnapshot};
+use identity_application::{
+    setting::{LoginDomainSetting, SettingsSnapshot},
+    user::RecoveryCodeCredentialData,
+};
 use openssl::{
     bn::BigNumContext,
     ec::{EcGroup, EcKey, PointConversionForm},
@@ -473,7 +476,7 @@ async fn rejects_origin_uv_signature_counter_and_expired_challenges() {
         .unwrap()
         .get_mut(&options.challenge_id)
         .unwrap()
-        .2 = Utc::now() - chrono::Duration::seconds(1);
+        .2 = Utc::now() - Duration::seconds(1);
     assert!(
         service
             .authenticate(

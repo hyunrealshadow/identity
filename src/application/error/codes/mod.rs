@@ -20,6 +20,16 @@ pub mod user_management;
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        account::AccountErrorCode, auth::AuthErrorCode, authorization::AuthorizationErrorCode,
+        authorize::AuthorizeErrorCode, authorize_http::AuthorizeHttpErrorCode,
+        common::CommonErrorCode, data_protection::DataProtectionErrorCode,
+        device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
+        graphql_transport::GraphqlTransportErrorCode, group::GroupErrorCode,
+        install::InstallErrorCode, key::KeyErrorCode, openid_connect::OpenIdConnectErrorCode,
+        provider::ProviderErrorCode, rbac::RbacErrorCode, registration::RegistrationErrorCode,
+        token::TokenErrorCode, user_management::UserManagementErrorCode,
+    };
     use crate::error::code::AppErrorCode;
     use std::{collections::HashSet, ops::RangeInclusive};
     use strum::IntoEnumIterator;
@@ -40,24 +50,24 @@ mod tests {
             assert!(nonempty, "empty error registry");
         }
         let mut seen = HashSet::new();
-        check::<super::common::CommonErrorCode>(&mut seen, 10000..=10099);
-        check::<super::auth::AuthErrorCode>(&mut seen, 11000..=11099);
-        check::<super::key::KeyErrorCode>(&mut seen, 12000..=12099);
-        check::<super::install::InstallErrorCode>(&mut seen, 13000..=13099);
-        check::<super::data_protection::DataProtectionErrorCode>(&mut seen, 14000..=14099);
-        check::<super::account::AccountErrorCode>(&mut seen, 15000..=15099);
-        check::<super::user_management::UserManagementErrorCode>(&mut seen, 16000..=16099);
-        check::<super::rbac::RbacErrorCode>(&mut seen, 17000..=17099);
-        check::<super::group::GroupErrorCode>(&mut seen, 19000..=19099);
-        check::<super::provider::ProviderErrorCode>(&mut seen, 20000..=20099);
-        check::<super::openid_connect::OpenIdConnectErrorCode>(&mut seen, 21000..=21099);
-        check::<super::authorize_http::AuthorizeHttpErrorCode>(&mut seen, 22000..=22099);
-        check::<super::authorize::AuthorizeErrorCode>(&mut seen, 23000..=23099);
-        check::<super::token::TokenErrorCode>(&mut seen, 24000..=24099);
-        check::<super::registration::RegistrationErrorCode>(&mut seen, 25000..=25099);
-        check::<super::device::DeviceAuthorizationErrorCode>(&mut seen, 26000..=26099);
-        check::<super::authorization::AuthorizationErrorCode>(&mut seen, 27000..=27099);
-        check::<super::graphql_transport::GraphqlTransportErrorCode>(&mut seen, 28100..=28199);
-        check::<super::graphql::GraphqlErrorCode>(&mut seen, 28000..=28099);
+        check::<CommonErrorCode>(&mut seen, 10000..=10099);
+        check::<AuthErrorCode>(&mut seen, 11000..=11099);
+        check::<KeyErrorCode>(&mut seen, 12000..=12099);
+        check::<InstallErrorCode>(&mut seen, 13000..=13099);
+        check::<DataProtectionErrorCode>(&mut seen, 14000..=14099);
+        check::<AccountErrorCode>(&mut seen, 15000..=15099);
+        check::<UserManagementErrorCode>(&mut seen, 16000..=16099);
+        check::<RbacErrorCode>(&mut seen, 17000..=17099);
+        check::<GroupErrorCode>(&mut seen, 19000..=19099);
+        check::<ProviderErrorCode>(&mut seen, 20000..=20099);
+        check::<OpenIdConnectErrorCode>(&mut seen, 21000..=21099);
+        check::<AuthorizeHttpErrorCode>(&mut seen, 22000..=22099);
+        check::<AuthorizeErrorCode>(&mut seen, 23000..=23099);
+        check::<TokenErrorCode>(&mut seen, 24000..=24099);
+        check::<RegistrationErrorCode>(&mut seen, 25000..=25099);
+        check::<DeviceAuthorizationErrorCode>(&mut seen, 26000..=26099);
+        check::<AuthorizationErrorCode>(&mut seen, 27000..=27099);
+        check::<GraphqlTransportErrorCode>(&mut seen, 28100..=28199);
+        check::<GraphqlErrorCode>(&mut seen, 28000..=28099);
     }
 }

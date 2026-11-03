@@ -1,5 +1,7 @@
 //! Shared async-graphql guard for forthcoming functional management fields.
-use super::{authorization::request_context, error::app_error};
+use std::collections::BTreeSet;
+
+use super::{access::AccessPolicy, authorization::request_context, error::app_error};
 use async_graphql::{Context, ErrorExtensions, Guard, Result};
 use chrono::Utc;
 use identity_application::{
@@ -21,8 +23,8 @@ pub(crate) struct ManagementGuard {
 }
 
 impl ManagementGuard {
-    pub(crate) fn policy(required: ManagementScope) -> super::access::AccessPolicy {
-        super::access::AccessPolicy::management(required)
+    pub(crate) fn policy(required: ManagementScope) -> AccessPolicy {
+        AccessPolicy::management(required)
     }
 
     pub(crate) const fn new(required: ManagementScope, target: ManagementTarget) -> Self {
@@ -76,7 +78,7 @@ impl Guard for ManagementGuard {
             .scope
             .management_scopes()
             .into_iter()
-            .collect::<std::collections::BTreeSet<_>>();
+            .collect::<BTreeSet<_>>();
         evaluate_management_authority(&ManagementAuthorizationRequest {
             actor: &request.actor,
             token_scopes: &scopes,

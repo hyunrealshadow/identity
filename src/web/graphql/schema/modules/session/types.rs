@@ -137,7 +137,7 @@ impl RevokeOtherSessionsPayload {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use identity_domain::auth::{SessionStatus, model::Session};
+    use identity_domain::auth::{SessionOid, SessionStatus, model::Session};
     use identity_infrastructure::graphql::id::GlobalId;
     use uuid::Uuid;
 
@@ -145,7 +145,7 @@ mod tests {
 
     fn session(oid: Uuid) -> Session {
         Session {
-            oid: identity_domain::auth::SessionOid(oid),
+            oid: SessionOid(oid),
             user_oid: Uuid::new_v4(),
             status: SessionStatus::Active,
             device_name: None,

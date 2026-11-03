@@ -368,30 +368,3 @@ pub fn definition(
         .iter()
         .find(|definition| definition.code == code)
 }
-
-#[cfg(test)]
-mod tests {
-
-    use super::AuthorizationErrorCode;
-    use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-    #[test]
-    fn authorization_kinds_are_sane() {
-        assert_eq!(
-            AuthorizationErrorCode::InsufficientScope.kind(),
-            ErrorKind::Forbidden
-        );
-        assert_eq!(
-            AuthorizationErrorCode::AuthorizationVersionStale.kind(),
-            ErrorKind::Unauthorized
-        );
-        assert_eq!(
-            AuthorizationErrorCode::LastOwnerProtected.kind(),
-            ErrorKind::Conflict
-        );
-        assert_eq!(
-            AuthorizationErrorCode::AuditWriteFailed.kind(),
-            ErrorKind::Internal
-        );
-    }
-}

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use identity_domain::{
     openid_connect::{
-        API_RESOURCE, ResourceScopeCoverage, ScopeSet,
+        API_RESOURCE, OpenIdConnectClient, ResourceScopeCoverage, ScopeSet,
         resource::{OAuthResource, valid_resource_uri},
     },
     rbac::{ACCOUNT_SELF_SERVICE_SCOPES, RbacAuthorizationError, STANDARD_OIDC_SCOPES},
@@ -200,7 +200,7 @@ impl OpenIdProviderService {
     /// scope must belong to the client's rows for the target that owns it.
     pub async fn validate_client_resource_ceiling(
         &self,
-        client: &identity_domain::openid_connect::OpenIdConnectClient,
+        client: &OpenIdConnectClient,
         resources: &[String],
         scope: &ScopeSet,
     ) -> Result<(), AppError> {

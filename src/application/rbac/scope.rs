@@ -42,18 +42,13 @@ pub struct ScopeFilter {
     pub api_only: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ScopeOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
     CodeAsc,
     CodeDesc,
-}
-
-impl Default for ScopeOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl ScopeOrder {

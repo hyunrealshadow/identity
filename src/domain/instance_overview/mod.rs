@@ -4,7 +4,7 @@
 //! repository port that produces them. It has no SQL, HTTP or GraphQL types so
 //! the application and adapters can share the same bounded semantics.
 
-use std::error::Error as StdError;
+use std::{array, error::Error as StdError};
 
 use async_trait::async_trait;
 use chrono::{
@@ -61,7 +61,7 @@ impl NewUserWindow {
     /// the local calendar day containing [`Self::end`].
     #[must_use]
     pub fn bucket_dates(&self) -> [NaiveDate; REGISTRATION_WINDOW_DAYS] {
-        std::array::from_fn(|offset| self.start_date + Days::new(offset as u64))
+        array::from_fn(|offset| self.start_date + Days::new(offset as u64))
     }
 }
 
@@ -178,19 +178,19 @@ pub trait InstanceOverviewRepository: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
+    use chrono::{DateTime, Duration, NaiveDate, Utc};
 
     use super::{NewUserWindow, REGISTRATION_WINDOW_DAYS, first_valid_local_instant};
     use crate::time_zone::TimeZone;
 
     fn at(rfc3339: &str) -> chrono::DateTime<Utc> {
-        chrono::DateTime::parse_from_rfc3339(rfc3339)
+        DateTime::parse_from_rfc3339(rfc3339)
             .unwrap()
             .with_timezone(&Utc)
     }
 
     fn date(year: i32, month: u32, day: u32) -> chrono::NaiveDate {
-        chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap()
+        NaiveDate::from_ymd_opt(year, month, day).unwrap()
     }
 
     #[test]

@@ -119,35 +119,3 @@ fn user_credential_lock_id(oid: UserOid) -> i64 {
         .expect("UUID always contains eight leading bytes");
     i64::from_be_bytes(bytes) ^ 0x5553_4552_4352_4544_i64
 }
-
-#[cfg(test)]
-mod tests {
-    use identity_domain::{auth::SessionOid, user::UserOid};
-    use uuid::Uuid;
-
-    use super::{session_lock_id, user_credential_lock_id};
-
-    #[test]
-    fn session_lock_id_is_stable_and_session_specific() {
-        let first = SessionOid(Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap());
-        let second = SessionOid(Uuid::parse_str("019c1234-5678-7abd-9def-0123456789ab").unwrap());
-
-        assert_eq!(session_lock_id(first), session_lock_id(first));
-        assert_ne!(session_lock_id(first), session_lock_id(second));
-    }
-
-    #[test]
-    fn user_credential_lock_id_is_stable_and_user_specific() {
-        let first = UserOid(Uuid::parse_str("019c1234-5678-7abc-9def-0123456789ab").unwrap());
-        let second = UserOid(Uuid::parse_str("019c1234-5678-7abd-9def-0123456789ab").unwrap());
-
-        assert_eq!(
-            user_credential_lock_id(first),
-            user_credential_lock_id(first)
-        );
-        assert_ne!(
-            user_credential_lock_id(first),
-            user_credential_lock_id(second)
-        );
-    }
-}

@@ -9,7 +9,9 @@ use async_graphql::{Context, Error, Guard, Result, Value};
 use identity_application::authorization::ManagementTarget;
 use identity_domain::{authorization::ManagementScope, openid_connect::ApiScope, user::UserOid};
 
-use crate::graphql::schema::{authorization::request_context, management_guard::ManagementGuard};
+use crate::graphql::schema::{
+    RequestContext, authorization::request_context, management_guard::ManagementGuard,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UserReadAccess {
@@ -28,7 +30,7 @@ pub(crate) async fn ensure_user_management_read(ctx: &Context<'_>, target: UserO
     .await
 }
 
-fn has_management_users_read(request: &crate::graphql::schema::RequestContext) -> bool {
+fn has_management_users_read(request: &RequestContext) -> bool {
     request
         .claims
         .scope

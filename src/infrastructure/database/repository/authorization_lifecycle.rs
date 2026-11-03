@@ -17,8 +17,11 @@
 //! credential. Role keys, display names and built-in group membership are never
 //! consulted.
 
+use std::collections::BTreeSet;
+
 use identity_domain::{
     authorization::{
+        ManagementScope,
         authority::{UserPermissionAuthority, full_management_permissions},
         ids::AuthorizationVersion,
         recovery::OwnerAccessSnapshot,
@@ -31,7 +34,11 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use crate::database::{entity::user, query::advisory_transaction_lock};
+use crate::database::{
+    entity::user::{Column as UserColumn, Entity as UserEntity},
+    query::advisory_transaction_lock,
+    repository::authorization,
+};
 
 pub(crate) const OWNER_LIFECYCLE_LOCK_ID: i64 = 0x4F57_4E45_524C_0001;
 
@@ -219,8 +226,7 @@ WHERE (
 
 /// The exact capability a recoverable authorization administrator must hold.
 #[must_use]
-pub(crate) fn target_permissions()
--> std::collections::BTreeSet<identity_domain::authorization::ManagementScope> {
+pub(crate) fn target_permissions() -> BTreeSet<ManagementScope> {
     full_management_permissions()
 }
 
@@ -251,11 +257,7 @@ pub(crate) async fn ensure_recoverable_authorization_administrator(
         .await?;
     for row in rows {
         let oid = row.try_get::<Uuid>("", "oid")?;
-        let authority = crate::database::repository::authorization::load_user_permission_authority(
-            txn,
-            identity_domain::user::UserOid(oid),
-        )
-        .await?;
+        let authority = authorization::load_user_permission_authority(txn, UserOid(oid)).await?;
         if authority
             .as_ref()
             .is_some_and(is_recoverable_full_authority)
@@ -277,8 +279,8 @@ pub(crate) async fn recoverable_authorization_snapshot_in_txn(
     txn: &DatabaseTransaction,
     target: UserOid,
 ) -> Result<OwnerAccessSnapshot, DbErr> {
-    let target_row = user::Entity::find()
-        .filter(user::Column::Oid.eq(target.0))
+    let target_row = UserEntity::find()
+        .filter(UserColumn::Oid.eq(target.0))
         .one(txn)
         .await?
         .ok_or_else(|| DbErr::Custom("recoverable authorization target is missing".to_owned()))?;
@@ -300,10 +302,9 @@ SELECT EXISTS (
         .and_then(|row| row.try_get::<bool>("", "present").ok())
         .unwrap_or(false);
 
-    let target_is_active_owner =
-        crate::database::repository::authorization::load_user_permission_authority(txn, target)
-            .await?
-            .is_some_and(|authority| authority.has_full_management_permissions());
+    let target_is_active_owner = authorization::load_user_permission_authority(txn, target)
+        .await?
+        .is_some_and(|authority| authority.has_full_management_permissions());
 
     let rows = txn
         .query_all_raw(Statement::from_sql_and_values(
@@ -319,11 +320,7 @@ SELECT EXISTS (
         if oid == target.0 {
             continue;
         }
-        let authority = crate::database::repository::authorization::load_user_permission_authority(
-            txn,
-            UserOid(oid),
-        )
-        .await?;
+        let authority = authorization::load_user_permission_authority(txn, UserOid(oid)).await?;
         if authority
             .as_ref()
             .is_some_and(|authority| authority.has_full_management_permissions())

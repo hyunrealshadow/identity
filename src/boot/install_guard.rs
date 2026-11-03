@@ -1,4 +1,4 @@
-use std::{error::Error, io};
+use std::{error::Error, io::Error as IoError};
 
 use identity_application::setting::{InstallationSettings, SettingsSource};
 use identity_infrastructure::settings::AppRuntimeSettings;
@@ -35,7 +35,7 @@ pub async fn ensure_install_startup_guard(
         return Ok(());
     }
 
-    Err(Box::new(io::Error::other(
+    Err(Box::new(IoError::other(
         "installation is in progress on another pod; refusing startup",
     )))
 }
@@ -51,9 +51,9 @@ async fn try_acquire_install_lock(db: &DatabaseConnection) -> AppResult<bool> {
     let row = db
         .query_one(&statement)
         .await?
-        .ok_or_else(|| io::Error::other("failed to query installation lock state"))?;
+        .ok_or_else(|| IoError::other("failed to query installation lock state"))?;
 
     row.try_get("", "acquired").map_err(|error| {
-        Box::new(io::Error::other(error.to_string())) as Box<dyn Error + Send + Sync>
+        Box::new(IoError::other(error.to_string())) as Box<dyn Error + Send + Sync>
     })
 }

@@ -1,4 +1,4 @@
-use http::{StatusCode, header};
+use http::{StatusCode, header::HeaderName};
 use identity_infrastructure::web::tera::render_view;
 use salvo::{Depot, Request, Response, handler, handler::HoopedHandler};
 use serde_json::to_string;
@@ -64,7 +64,7 @@ async fn check_session_iframe(
     }
 
     res.headers_mut().insert(
-        header::HeaderName::from_static("content-security-policy"),
+        HeaderName::from_static("content-security-policy"),
         inline_script_csp_header_value(&nonce),
     );
     Ok(())

@@ -230,13 +230,14 @@ pub(crate) async fn client_id_by_oid<C: ConnectionTrait>(
 #[cfg(test)]
 mod tests {
     use identity_domain::authorization::policy_fingerprint;
+    use uuid::Uuid;
 
     #[test]
     fn policy_fingerprint_is_not_a_record_version_and_is_stable() {
         let first = policy_fingerprint();
         let second = policy_fingerprint();
         assert_eq!(first, second);
-        assert_ne!(first.as_uuid(), uuid::Uuid::nil());
+        assert_ne!(first.as_uuid(), Uuid::nil());
         assert_eq!(first.as_uuid().get_version_num(), 8);
     }
 }

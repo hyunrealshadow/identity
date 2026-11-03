@@ -1,11 +1,13 @@
 //! Transaction-scoped authoritative management authority recheck.
 
 use chrono::Utc;
-use identity_application::authorization::{
-    CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
-    ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
+use identity_application::{
+    authorization::{
+        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
+        ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
+    },
+    rbac::{RbacManagementAuthority, RbacManagementRepositoryError},
 };
-use identity_application::rbac::{RbacManagementAuthority, RbacManagementRepositoryError};
 use identity_domain::{
     authorization::{ActorPrincipal, ManagementScope, policy_fingerprint},
     user::UserOid,
@@ -14,7 +16,12 @@ use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
 use uuid::Uuid;
 
 use super::support::storage;
-use crate::database::repository::authorization::load_user_permission_authority;
+use crate::database::{
+    client_authorization_boundary,
+    repository::{
+        authorization, authorization::load_user_permission_authority, authorization_lifecycle,
+    },
+};
 
 pub(crate) async fn user_id_by_oid<C: ConnectionTrait>(
     db: &C,
@@ -58,11 +65,7 @@ pub(crate) async fn load_current_authority(
             Ok(authority.map(CurrentManagementAuthority::UserPermissions))
         }
         ActorPrincipal::Client { client_oid } => {
-            let authority =
-                crate::database::repository::authorization::load_client_scope_authority(
-                    txn,
-                    *client_oid,
-                )
+            let authority = authorization::load_client_scope_authority(txn, *client_oid)
                 .await
                 .map_err(storage)?;
             Ok(authority.map(CurrentManagementAuthority::ClientScopes))
@@ -109,7 +112,7 @@ async fn recheck_issuing_client(
     };
     let client_id = client_row.try_get::<i64>("", "id").map_err(storage)?;
     let (_, fingerprint) =
-        crate::database::client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
+        client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
             .await
             .map_err(storage)?;
     if fingerprint != authority.client_policy_version {
@@ -127,7 +130,7 @@ pub(crate) async fn recheck_authority(
     required: ManagementScope,
     target_user: Option<UserOid>,
 ) -> Result<CurrentManagementAuthority, RbacManagementRepositoryError> {
-    crate::database::repository::authorization_lifecycle::lock_owner_lifecycle(txn)
+    authorization_lifecycle::lock_owner_lifecycle(txn)
         .await
         .map_err(storage)?;
     recheck_issuing_client(txn, authority).await?;
@@ -154,25 +157,4 @@ pub(crate) async fn recheck_authority(
     current.ok_or(RbacManagementRepositoryError::Authorization(
         ManagementAuthorizationError::NoCurrentGrant,
     ))
-}
-
-/// Sensitive policy switch: the exact required permission plus recent human
-/// AAL2. There is deliberately no role/group membership gate; a custom role
-/// containing the trusted permission works exactly like a built-in preset.
-pub(crate) async fn recheck_owner_recent(
-    txn: &DatabaseTransaction,
-    authority: &RbacManagementAuthority,
-    required: ManagementScope,
-) -> Result<(), RbacManagementRepositoryError> {
-    recheck_authority(txn, authority, required, None).await?;
-    let authentication = authority.actor.principal.human_authentication().ok_or(
-        RbacManagementRepositoryError::Authorization(ManagementAuthorizationError::TargetForbidden),
-    )?;
-    let recent = authentication.is_recent_aal2(Utc::now(), DEFAULT_RECENT_AAL2_TTL);
-    if !recent {
-        return Err(RbacManagementRepositoryError::Authorization(
-            ManagementAuthorizationError::RecentAuthenticationRequired,
-        ));
-    }
-    Ok(())
 }

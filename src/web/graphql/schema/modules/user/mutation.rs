@@ -3,6 +3,7 @@ use async_graphql::{Context, Guard, MaybeUndefined, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
     error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
+    user::management::UpdateUserCommand,
 };
 use identity_domain::{authorization::ManagementScope, user::UserOid};
 
@@ -97,13 +98,15 @@ impl UserManagementMutation {
         .await?;
         let user = integration::update_user(
             request,
-            user,
-            username,
-            email,
-            profile,
-            expected_version,
-            reason,
-            client_mutation_id.clone(),
+            UpdateUserCommand {
+                user_oid: user,
+                username,
+                email,
+                profile,
+                expected_version,
+                reason,
+                client_mutation_id: client_mutation_id.clone(),
+            },
         )
         .await
         .map_err(|error| app_error(ctx, error))?;

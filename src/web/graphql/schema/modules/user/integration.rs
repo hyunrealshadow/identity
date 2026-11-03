@@ -22,7 +22,10 @@ use identity_application::{
 };
 use identity_domain::user::{User, UserOid};
 
-use super::types::{UserFilter, UserOrder};
+use super::{
+    super::resource::support,
+    types::{UserFilter, UserOrder},
+};
 use crate::graphql::schema::RequestContext;
 
 pub(super) struct UserPage {
@@ -37,7 +40,7 @@ pub(super) struct UserPageItem {
 }
 
 async fn authority(request: &RequestContext) -> Result<UserManagementAuthority, AppError> {
-    let authority = super::super::resource::support::request_authority(request).await?;
+    let authority = support::request_authority(request).await?;
     Ok(UserManagementAuthority::new(
         authority.actor,
         authority.token_scopes,
@@ -160,31 +163,14 @@ pub(super) async fn create_user(
 
 pub(super) async fn update_user(
     request: &RequestContext,
-    user: UserOid,
-    username: Option<String>,
-    email: Option<String>,
-    profile: UserProfilePatch,
-    expected_version: uuid::Uuid,
-    reason: String,
-    client_mutation_id: Option<String>,
+    command: UpdateUserCommand,
 ) -> Result<User, AppError> {
     let authority = authority(request).await?;
     let record = request
         .state
         .services()
         .user_management()
-        .update_user(
-            &authority,
-            UpdateUserCommand {
-                user_oid: user,
-                username,
-                email,
-                profile,
-                expected_version,
-                reason,
-                client_mutation_id,
-            },
-        )
+        .update_user(&authority, command)
         .await?;
     Ok(record_parts(record))
 }

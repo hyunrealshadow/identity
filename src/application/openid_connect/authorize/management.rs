@@ -6,7 +6,10 @@
 //! only the exact clipped management scope.
 
 use crate::{
-    error::{AppError, codes::authorize::AuthorizeErrorCode},
+    error::{
+        AppError,
+        codes::{authorize::AuthorizeErrorCode, common::CommonErrorCode},
+    },
     observability::{BusinessEvent, EventValue},
     openid_connect::management::{
         allowed_human_management_scopes, clipped_scope, human_authentication_is_aal2,
@@ -15,8 +18,10 @@ use crate::{
 };
 use identity_domain::{
     client_authorization::ManagementAuthorizationSnapshotData,
-    openid_connect::{CodeChallengeMethod, ResponseType, ScopeSet},
+    openid_connect::{AuthorizationRequestData, CodeChallengeMethod, ResponseType, ScopeSet},
+    user::UserOid,
 };
+use tracing::Span;
 use uuid::Uuid;
 
 use super::AuthorizeService;
@@ -40,10 +45,10 @@ impl AuthorizeService {
     )]
     pub(super) async fn clip_management_for_approval(
         &self,
-        request: &identity_domain::openid_connect::AuthorizationRequestData,
+        request: &AuthorizationRequestData,
         user_oid: Uuid,
         authentication: ApprovalAuthentication<'_>,
-    ) -> Result<identity_domain::openid_connect::AuthorizationRequestData, AppError> {
+    ) -> Result<AuthorizationRequestData, AppError> {
         let requested_scope = ScopeSet::parse(&request.scope)
             .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
         if !requested_scope.has_management_scopes() {
@@ -65,13 +70,12 @@ impl AuthorizeService {
             );
         }
         if !is_single_graphql_resource(&request.resources) {
-            return Err(AppError::from_code(
-                crate::error::codes::common::CommonErrorCode::InvalidTarget,
-            )
-            .with_param(
-                "resources",
-                "management requires the single GraphQL resource",
-            ));
+            return Err(
+                AppError::from_code(CommonErrorCode::InvalidTarget).with_param(
+                    "resources",
+                    "management requires the single GraphQL resource",
+                ),
+            );
         }
         if request.code_challenge.as_deref().is_none_or(str::is_empty)
             || request.code_challenge_method != Some(CodeChallengeMethod::S256)
@@ -106,7 +110,7 @@ impl AuthorizeService {
                 .with_param("reason", "management authority support unavailable")
         })?;
         let authority = binding_repo
-            .find_user_permission_authority(identity_domain::user::UserOid(user_oid))
+            .find_user_permission_authority(UserOid(user_oid))
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
 
@@ -120,11 +124,11 @@ impl AuthorizeService {
 
         if granted.is_empty() {
             clipped_request.management = None;
-            tracing::Span::current().record(
+            Span::current().record(
                 "management_requested",
                 requested_scope.management_scopes().len() as i64,
             );
-            tracing::Span::current().record("management_granted", 0_i64);
+            Span::current().record("management_granted", 0_i64);
             self.events.emit(
                 BusinessEvent::audit("authorization.management.clipped")
                     .outcome("empty")
@@ -160,11 +164,11 @@ impl AuthorizeService {
         );
         clipped_request.management = Some(data);
 
-        tracing::Span::current().record(
+        Span::current().record(
             "management_requested",
             requested_scope.management_scopes().len() as i64,
         );
-        tracing::Span::current().record("management_granted", granted.len() as i64);
+        Span::current().record("management_granted", granted.len() as i64);
         self.events.emit(
             BusinessEvent::audit("authorization.management.clipped")
                 .outcome("granted")

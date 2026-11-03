@@ -1,4 +1,5 @@
 use super::*;
+use crate::auth::password_policy::BreachedPasswordChecker;
 
 fn password_change_service() -> (LoginService, UserUserOid) {
     let user = test_user();
@@ -44,7 +45,7 @@ fn password_change_service() -> (LoginService, UserUserOid) {
 
 struct Breaches(bool);
 #[async_trait]
-impl crate::auth::password_policy::BreachedPasswordChecker for Breaches {
+impl BreachedPasswordChecker for Breaches {
     async fn is_breached(&self, _: &str) -> Result<bool, AppError> {
         Ok(self.0)
     }

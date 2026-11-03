@@ -3,8 +3,12 @@ use async_graphql::{
     Context, Enum, ID, InputObject, MaybeUndefined, Object, Result as GraphqlResult,
 };
 use chrono::{DateTime, Utc};
-use identity_application::authorization::ManagementTarget;
-use identity_application::rbac::{ApiResourceRecord, ResourceFilter as ApplicationFilter};
+use identity_application::{
+    authorization::ManagementTarget,
+    rbac::{
+        ApiResourceRecord, ResourceFilter as ApplicationFilter, ResourceOrder as RbacResourceOrder,
+    },
+};
 use identity_domain::{authorization::ManagementScope, rbac::ResourceOid};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
@@ -51,7 +55,7 @@ impl ResourceOrder {
     }
 }
 
-impl From<ResourceOrder> for identity_application::rbac::ResourceOrder {
+impl From<ResourceOrder> for RbacResourceOrder {
     fn from(order: ResourceOrder) -> Self {
         match order {
             ResourceOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -91,10 +95,6 @@ impl ResourceNode {
             id: resource_global_id(record.oid),
             record,
         }
-    }
-
-    pub(crate) fn oid(&self) -> ResourceOid {
-        self.record.oid
     }
 }
 
@@ -141,6 +141,7 @@ impl ResourceNode {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ScopesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn permissions(
         &self,
         ctx: &Context<'_>,

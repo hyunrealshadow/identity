@@ -1,11 +1,13 @@
+use std::collections::BTreeSet;
+
 use super::*;
+
+use crate::rbac::role::{RoleFilter, RoleRecord};
+use identity_domain::rbac::LocalizedMetadata;
 
 impl RbacManagementService {
     #[tracing::instrument(skip_all, name = "rbac.role.count")]
-    pub async fn count_roles(
-        &self,
-        filter: crate::rbac::role::RoleFilter,
-    ) -> Result<u64, AppError> {
+    pub async fn count_roles(&self, filter: RoleFilter) -> Result<u64, AppError> {
         self.repository
             .count_roles(normalize_role_filter(filter)?)
             .await
@@ -13,10 +15,7 @@ impl RbacManagementService {
     }
 
     #[tracing::instrument(skip_all, name = "rbac.role.find")]
-    pub async fn find_role(
-        &self,
-        oid: RoleOid,
-    ) -> Result<Option<crate::rbac::role::RoleRecord>, AppError> {
+    pub async fn find_role(&self, oid: RoleOid) -> Result<Option<RoleRecord>, AppError> {
         self.repository
             .find_role(oid)
             .await
@@ -32,10 +31,12 @@ impl RbacManagementService {
             CURSOR_KIND_ROLE,
             order.as_u8(),
             &filter,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self
@@ -77,17 +78,16 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: CreateRoleCommand,
-    ) -> Result<crate::rbac::role::RoleRecord, AppError> {
+    ) -> Result<RoleRecord, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let metadata = match command.metadata {
-                Some(metadata) => identity_domain::rbac::LocalizedMetadata::canonicalize(
-                    metadata.names,
-                    metadata.descriptions,
-                )
-                .map_err(map_localized_metadata_error)?,
-                None => identity_domain::rbac::LocalizedMetadata::default(),
+                Some(metadata) => {
+                    LocalizedMetadata::canonicalize(metadata.names, metadata.descriptions)
+                        .map_err(map_localized_metadata_error)?
+                }
+                None => LocalizedMetadata::default(),
             };
             let name = validate_role_name(&command.name)?;
             let description = validate_role_description(&command.description)?;
@@ -115,7 +115,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: UpdateRoleCommand,
-    ) -> Result<crate::rbac::role::RoleRecord, AppError> {
+    ) -> Result<RoleRecord, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
@@ -166,7 +166,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: RoleStateCommand,
-    ) -> Result<crate::rbac::role::RoleRecord, AppError> {
+    ) -> Result<RoleRecord, AppError> {
         self.set_role_enabled(authority, command, true).await
     }
 
@@ -175,7 +175,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: RoleStateCommand,
-    ) -> Result<crate::rbac::role::RoleRecord, AppError> {
+    ) -> Result<RoleRecord, AppError> {
         self.set_role_enabled(authority, command, false).await
     }
 
@@ -184,7 +184,7 @@ impl RbacManagementService {
         authority: &RbacManagementAuthority,
         command: RoleStateCommand,
         enabled: bool,
-    ) -> Result<crate::rbac::role::RoleRecord, AppError> {
+    ) -> Result<RoleRecord, AppError> {
         let action = if enabled {
             "rbac.role.enable"
         } else {
@@ -219,7 +219,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: SetRolePermissionsCommand,
-    ) -> Result<crate::rbac::role::RoleRecord, AppError> {
+    ) -> Result<RoleRecord, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
@@ -234,7 +234,7 @@ impl RbacManagementService {
             let scope_oids = command
                 .scope_oids
                 .into_iter()
-                .collect::<std::collections::BTreeSet<_>>()
+                .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect::<Vec<_>>();
             let record = self

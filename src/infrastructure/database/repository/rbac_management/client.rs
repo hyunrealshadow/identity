@@ -4,15 +4,16 @@
 //! protocol/identity assignments (`resource_id IS NULL`) are preserved. Built-in
 //! definitions may be referenced but never edited here.
 
+use std::collections::BTreeSet;
+
 use identity_application::rbac::{
     ClientScopeQuery, ClientScopeSetResult, ClientScopeTargetPageEntry, ClientScopeTargetQuery,
     ClientScopeTargetRecord, RbacEntityKind, RbacManagementRepositoryError, RbacPageData,
-    RbacProtectedKind, ScopePageEntry, SetClientScopesTransaction,
+    RbacProtectedKind, ScopeOrder, ScopePageEntry, SetClientScopesTransaction,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
-use identity_domain::authorization::ManagementScope;
-use sea_orm::TransactionTrait;
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
+use identity_domain::{authorization::ManagementScope, client::model::ClientOid};
+use sea_orm::{ConnectionTrait, DbBackend, Statement, TransactionTrait};
 use uuid::Uuid;
 
 use super::{
@@ -20,12 +21,14 @@ use super::{
     audit::append_semantic_audit,
     authority::recheck_authority,
     catalog::{ensure_assignable_api_scope, resolve_scopes},
+    delegation,
     scope::scope_from_row,
     support::{
         Binds, CursorComparison, corrupt, escape_like, keyset_condition, not_found,
         order_is_descending, page_flags, storage,
     },
 };
+use crate::database::client_authorization_boundary;
 
 const CLIENT_TARGET_SELECT: &str = "SELECT c.id, c.oid, c.name, c.built_in, \
             count(cs.id)::bigint AS allowed_scope_count, \
@@ -42,11 +45,11 @@ impl RbacManagementRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "client_scope.count"))]
     pub(crate) async fn client_scope_count(
         &self,
-        client_oid: identity_domain::client::model::ClientOid,
+        client_oid: ClientOid,
     ) -> Result<u64, RbacManagementRepositoryError> {
         let row = self.db.query_one_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             format!("SELECT count(*)::bigint AS total_count FROM ({CLIENT_SCOPE_SELECT} WHERE c.oid = $1) counted"),
-            [Uuid::from(client_oid).into()])).await.map_err(storage)?.ok_or_else(corrupt)?;
+            [client_oid.into()])).await.map_err(storage)?.ok_or_else(corrupt)?;
         let value = row.try_get::<i64>("", "total_count").map_err(storage)?;
         u64::try_from(value).map_err(|_| corrupt())
     }
@@ -148,13 +151,11 @@ impl RbacManagementRepositoryImpl {
         let descending = order_is_descending(query.order.is_descending(), query.direction);
         let ascending = !query.order.is_descending();
         let column = match query.order {
-            identity_application::rbac::ScopeOrder::CreatedAtAsc
-            | identity_application::rbac::ScopeOrder::CreatedAtDesc => "s.created_at",
-            identity_application::rbac::ScopeOrder::CodeAsc
-            | identity_application::rbac::ScopeOrder::CodeDesc => "s.code",
+            ScopeOrder::CreatedAtAsc | ScopeOrder::CreatedAtDesc => "s.created_at",
+            ScopeOrder::CodeAsc | ScopeOrder::CodeDesc => "s.code",
         };
         let mut binds = Binds::new();
-        let client_placeholder = binds.push(Uuid::from(query.client_oid));
+        let client_placeholder = binds.push(query.client_oid);
         let mut conditions = vec![format!("c.oid = {client_placeholder}")];
         if let Some(after) = &query.after {
             conditions.push(keyset_condition(
@@ -204,13 +205,11 @@ impl RbacManagementRepositoryImpl {
             let record = scope_from_row(&row)?;
             let tie = RbacTie::Id(id);
             let sort_key = match query.order {
-                identity_application::rbac::ScopeOrder::CreatedAtAsc
-                | identity_application::rbac::ScopeOrder::CreatedAtDesc => RbacSortKey::CreatedAt {
+                ScopeOrder::CreatedAtAsc | ScopeOrder::CreatedAtDesc => RbacSortKey::CreatedAt {
                     created_at: record.created_at,
                     tie,
                 },
-                identity_application::rbac::ScopeOrder::CodeAsc
-                | identity_application::rbac::ScopeOrder::CodeDesc => RbacSortKey::Text {
+                ScopeOrder::CodeAsc | ScopeOrder::CodeDesc => RbacSortKey::Text {
                     value: record.code.clone(),
                     tie,
                 },
@@ -281,14 +280,11 @@ impl RbacManagementRepositoryImpl {
         // Only API-scope assignments are replaced. Protocol/identity rows
         // (`resource_id IS NULL`) are a separate assignment class and survive
         // both non-empty and empty API replacements.
-        let mut current_ids = std::collections::BTreeSet::new();
+        let mut current_ids = BTreeSet::new();
         for row in current_rows {
             current_ids.insert(row.try_get::<i64>("", "id").map_err(storage)?);
         }
-        let requested_ids = scopes
-            .iter()
-            .map(|scope| scope.id)
-            .collect::<std::collections::BTreeSet<_>>();
+        let requested_ids = scopes.iter().map(|scope| scope.id).collect::<BTreeSet<_>>();
         if current_ids == requested_ids {
             txn.commit().await.map_err(storage)?;
             return Ok(ClientScopeSetResult {
@@ -300,8 +296,8 @@ impl RbacManagementRepositoryImpl {
         let added = requested_ids
             .difference(&current_ids)
             .copied()
-            .collect::<std::collections::BTreeSet<_>>();
-        super::delegation::ensure_delegable_permissions(&txn, &command.authority, &added).await?;
+            .collect::<BTreeSet<_>>();
+        delegation::ensure_delegable_permissions(&txn, &command.authority, &added).await?;
         if !current_ids.is_empty() {
             let mut binds = Binds::new();
             let client = binds.push(client_id);
@@ -343,11 +339,9 @@ impl RbacManagementRepositoryImpl {
         let version = updated.try_get::<Uuid>("", "version").map_err(storage)?;
         // Scope replacement is a real client boundary change. Withdraw every
         // prior artifact, including consumed code/RT parents, permanently.
-        crate::database::client_authorization_boundary::withdraw_client_authorizations(
-            &txn, client_id,
-        )
-        .await
-        .map_err(storage)?;
+        client_authorization_boundary::withdraw_client_authorizations(&txn, client_id)
+            .await
+            .map_err(storage)?;
         append_semantic_audit(
             &txn,
             &command.authority,

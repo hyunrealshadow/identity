@@ -2,11 +2,14 @@
 
 use super::{
     client_authorization::Entity as ClientAuthorizationEntity,
-    client_openid_connect::Entity as ClientOpenidConnectEntity,
+    client_openid_connect::{
+        Entity as ClientOpenidConnectEntity, Relation as ClientOpenidConnectRelation,
+    },
     client_openid_connect_cors_origin::Entity as ClientOpenidConnectCorsOriginEntity,
     client_openid_connect_credential::Entity as ClientOpenidConnectCredentialEntity,
     client_openid_connect_platform::Entity as ClientOpenidConnectPlatformEntity,
-    client_scope::Entity as ClientScopeEntity, login::Entity as LoginEntity,
+    client_scope::Entity as ClientScopeEntity,
+    login::Entity as LoginEntity,
     user_client_consent::Entity as UserClientConsentEntity,
 };
 
@@ -65,7 +68,7 @@ impl Related<ClientOpenidConnectEntity> for Entity {
 
 impl Related<ClientOpenidConnectCorsOriginEntity> for Entity {
     fn to() -> RelationDef {
-        super::client_openid_connect::Relation::CorsOrigins.def()
+        ClientOpenidConnectRelation::CorsOrigins.def()
     }
     fn via() -> Option<RelationDef> {
         Some(Relation::ClientOpenIdConnect.def())
@@ -74,7 +77,7 @@ impl Related<ClientOpenidConnectCorsOriginEntity> for Entity {
 
 impl Related<ClientOpenidConnectCredentialEntity> for Entity {
     fn to() -> RelationDef {
-        super::client_openid_connect::Relation::Credentials.def()
+        ClientOpenidConnectRelation::Credentials.def()
     }
     fn via() -> Option<RelationDef> {
         Some(Relation::ClientOpenIdConnect.def())
@@ -83,7 +86,7 @@ impl Related<ClientOpenidConnectCredentialEntity> for Entity {
 
 impl Related<ClientOpenidConnectPlatformEntity> for Entity {
     fn to() -> RelationDef {
-        super::client_openid_connect::Relation::Platforms.def()
+        ClientOpenidConnectRelation::Platforms.def()
     }
     fn via() -> Option<RelationDef> {
         Some(Relation::ClientOpenIdConnect.def())

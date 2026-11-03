@@ -38,6 +38,7 @@ impl ResourceQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ResourcesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn resources(
         &self,
         ctx: &Context<'_>,

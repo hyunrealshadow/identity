@@ -14,19 +14,23 @@ use identity_application::{
 use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
-    auth::{password::PasswordHasherImpl, workload::build_workload_authenticator},
+    auth::{
+        breached_password::PwnedPasswordChecker, password::PasswordHasherImpl,
+        workload::build_workload_authenticator,
+    },
     config::{AppConfig, AppEnvironment, InstallConfig},
     crypto::{certificate_generator::CertificateGeneratorImpl, key::AsymmetricKeyGeneratorImpl},
     database,
     database::{
         repository::{install::InstallRepositoryImpl, setting::read_section},
         seed,
+        seed::{console, console::ConsoleClientSeedConfig},
     },
     i18n::{I18n, init_error_i18n},
     observability,
     services::AppServices,
     settings::AppRuntimeSettings,
-    web,
+    web::tera as web_tera,
 };
 use sea_orm::DatabaseConnection;
 use tera::Tera;
@@ -90,14 +94,14 @@ impl AppBuilder {
     /// Side-effect: stores the I18n instance in a global `OnceLock` for
     /// `AppError` -> HTTP response conversion.
     pub fn init_i18n_and_templates(mut self) -> AppResult<Self> {
-        let i18n = web::tera::build_i18n()?;
+        let i18n = web_tera::build_i18n()?;
         if self.config.console.enabled && i18n.loader().is_none() {
             return Err(
                 Error::other("console management requires both backend error locales").into(),
             );
         }
         init_error_i18n(i18n.clone());
-        let tera = web::tera::build_tera(i18n.loader())?;
+        let tera = web_tera::build_tera(i18n.loader())?;
         self.i18n = Some(i18n);
         self.tera = Some(tera);
         Ok(self)
@@ -115,7 +119,7 @@ impl AppBuilder {
             .section::<InstallationSettings>()
             .initialized;
         if installed && let Some(config) = installed_console_seed_config(settings.as_ref())? {
-            seed::console::ensure_console_client(db, &config).await?;
+            console::ensure_console_client(db, &config).await?;
         }
         ensure_install_startup_guard(db, settings.as_ref()).await?;
 
@@ -251,7 +255,7 @@ async fn is_installed(db: &DatabaseConnection) -> AppResult<bool> {
 /// Installed Console client addresses come only from database settings.
 fn installed_console_seed_config(
     settings: &AppRuntimeSettings,
-) -> AppResult<Option<seed::console::ConsoleClientSeedConfig>> {
+) -> AppResult<Option<ConsoleClientSeedConfig>> {
     let snapshot = settings.store().snapshot();
     if snapshot.get::<ConsoleClientIdSetting>().is_none() {
         return Ok(None);
@@ -266,7 +270,7 @@ fn installed_console_seed_config(
         .get::<DomainSetting>()
         .ok_or_else(|| Error::other("console requires the installed issuer domain"))?;
     let issuer = issuer_from_domain(&domain)?;
-    Ok(Some(seed::console::ConsoleClientSeedConfig::new(
+    Ok(Some(ConsoleClientSeedConfig::new(
         &origin,
         issuer.as_str(),
         base.join("callback")?.as_str(),
@@ -283,9 +287,7 @@ fn issuer_from_domain(domain: &str) -> AppResult<Url> {
     Ok(url)
 }
 
-fn console_seed_config(
-    config: &AppConfig,
-) -> AppResult<Option<seed::console::ConsoleClientSeedConfig>> {
+fn console_seed_config(config: &AppConfig) -> AppResult<Option<ConsoleClientSeedConfig>> {
     let Some(origin) = config.console.validated_origin().map_err(Error::other)? else {
         return Ok(None);
     };
@@ -294,7 +296,7 @@ fn console_seed_config(
         .host
         .as_deref()
         .ok_or_else(|| Error::other("console requires the configured issuer"))?;
-    Ok(Some(seed::console::ConsoleClientSeedConfig::new(
+    Ok(Some(ConsoleClientSeedConfig::new(
         &origin,
         issuer,
         &format!("{origin}/callback"),
@@ -306,9 +308,7 @@ fn build_install_service(
     db: DatabaseConnection,
 ) -> AppResult<InstallService> {
     Ok(InstallService {
-        breach_checker: Arc::new(
-            identity_infrastructure::auth::breached_password::PwnedPasswordChecker::new()?,
-        ),
+        breach_checker: Arc::new(PwnedPasswordChecker::new()?),
         password_hasher: Arc::new(PasswordHasherImpl::new()),
         settings: settings.store(),
         key_generator: Arc::new(AsymmetricKeyGeneratorImpl),

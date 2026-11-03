@@ -3,24 +3,26 @@
 //! A resource is an authorization boundary only. It stores no accepted-scope
 //! JSON and no separate policy row; owned scope rows are the single catalog.
 
+use std::collections::BTreeSet;
+
 use identity_application::rbac::{
-    ApiResourceRecord, CreateResourceTransaction, RbacEntityKind, RbacManagementRepositoryError,
-    RbacPageData, ResourcePageEntry, ResourceQuery, ResourceStateTransaction,
-    UpdateResourceTransaction,
+    ApiResourceRecord, CreateResourceTransaction, RbacDuplicateKind, RbacEntityKind,
+    RbacManagementRepositoryError, RbacPageData, RbacProtectedKind, ResourceOrder,
+    ResourcePageEntry, ResourceQuery, ResourceStateTransaction, UpdateResourceTransaction,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
 use identity_domain::{
     authorization::ManagementScope, openid_connect::API_RESOURCE, rbac::ResourceOid,
 };
-use sea_orm::TransactionTrait;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
+use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement, TransactionTrait};
 use uuid::Uuid;
 
-use super::super::oauth_resource::withdraw_resource_authorization_artifacts;
 use super::{
+    super::oauth_resource::withdraw_resource_authorization_artifacts,
     RbacManagementRepositoryImpl,
     audit::append_semantic_audit,
     authority::recheck_authority,
+    delegation,
     support::{
         Binds, CursorComparison, escape_like, keyset_condition, not_found, order_is_descending,
         page_flags, parse_scope_names, storage, utc, withdraw_users_affected_by_resource,
@@ -91,7 +93,7 @@ async fn load_resource_locked(
 fn ensure_not_reserved(record: &ApiResourceRecord) -> Result<(), RbacManagementRepositoryError> {
     if record.uri == API_RESOURCE {
         return Err(RbacManagementRepositoryError::Protected(
-            identity_application::rbac::RbacProtectedKind::ReservedResource,
+            RbacProtectedKind::ReservedResource,
         ));
     }
     Ok(())
@@ -105,7 +107,7 @@ impl RbacManagementRepositoryImpl {
         let row = self
             .db
             .query_one_raw(Statement::from_sql_and_values(
-                sea_orm::DbBackend::Postgres,
+                DbBackend::Postgres,
                 format!("{RESOURCE_SELECT} WHERE r.oid = $1"),
                 [Uuid::from(oid).into()],
             ))
@@ -121,12 +123,9 @@ impl RbacManagementRepositoryImpl {
         let descending = order_is_descending(query.order.is_descending(), query.direction);
         let ascending = !query.order.is_descending();
         let column = match query.order {
-            identity_application::rbac::ResourceOrder::CreatedAtAsc
-            | identity_application::rbac::ResourceOrder::CreatedAtDesc => "r.created_at",
-            identity_application::rbac::ResourceOrder::NameAsc
-            | identity_application::rbac::ResourceOrder::NameDesc => "r.name",
-            identity_application::rbac::ResourceOrder::UriAsc
-            | identity_application::rbac::ResourceOrder::UriDesc => "r.uri",
+            ResourceOrder::CreatedAtAsc | ResourceOrder::CreatedAtDesc => "r.created_at",
+            ResourceOrder::NameAsc | ResourceOrder::NameDesc => "r.name",
+            ResourceOrder::UriAsc | ResourceOrder::UriDesc => "r.uri",
         };
         let mut binds = Binds::new();
         let mut conditions = vec!["1=1".to_owned()];
@@ -186,20 +185,17 @@ impl RbacManagementRepositoryImpl {
             let record = resource_from_row(&row)?;
             let tie = RbacTie::Oid(Uuid::from(record.oid));
             let sort_key = match query.order {
-                identity_application::rbac::ResourceOrder::CreatedAtAsc
-                | identity_application::rbac::ResourceOrder::CreatedAtDesc => {
+                ResourceOrder::CreatedAtAsc | ResourceOrder::CreatedAtDesc => {
                     RbacSortKey::CreatedAt {
                         created_at: record.created_at,
                         tie,
                     }
                 }
-                identity_application::rbac::ResourceOrder::NameAsc
-                | identity_application::rbac::ResourceOrder::NameDesc => RbacSortKey::Text {
+                ResourceOrder::NameAsc | ResourceOrder::NameDesc => RbacSortKey::Text {
                     value: record.name.clone(),
                     tie,
                 },
-                identity_application::rbac::ResourceOrder::UriAsc
-                | identity_application::rbac::ResourceOrder::UriDesc => RbacSortKey::Text {
+                ResourceOrder::UriAsc | ResourceOrder::UriDesc => RbacSortKey::Text {
                     value: record.uri.clone(),
                     tie,
                 },
@@ -233,7 +229,7 @@ impl RbacManagementRepositoryImpl {
         .await?;
         if command.uri == API_RESOURCE {
             return Err(RbacManagementRepositoryError::Protected(
-                identity_application::rbac::RbacProtectedKind::ReservedResource,
+                RbacProtectedKind::ReservedResource,
             ));
         }
         let row = txn
@@ -252,7 +248,7 @@ impl RbacManagementRepositoryImpl {
             .map_err(storage)?;
         if row.is_none() {
             return Err(RbacManagementRepositoryError::Duplicate(
-                identity_application::rbac::RbacDuplicateKind::ResourceUri,
+                RbacDuplicateKind::ResourceUri,
             ));
         }
         append_semantic_audit(
@@ -349,9 +345,8 @@ impl RbacManagementRepositoryImpl {
             let scope_ids = rows
                 .into_iter()
                 .map(|row| row.try_get::<i64>("", "id").map_err(storage))
-                .collect::<Result<std::collections::BTreeSet<_>, _>>()?;
-            super::delegation::ensure_delegable_permissions(&txn, &command.authority, &scope_ids)
-                .await?;
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            delegation::ensure_delegable_permissions(&txn, &command.authority, &scope_ids).await?;
         }
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,

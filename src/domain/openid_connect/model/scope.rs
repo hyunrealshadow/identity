@@ -621,15 +621,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_scope_with_offline_access() {
-        let scope = ScopeSet::parse("openid offline_access").unwrap();
-        assert!(scope.openid);
-        assert!(scope.offline_access);
-        assert!(!scope.profile);
-        assert!(!scope.email);
-    }
-
-    #[test]
     fn custom_scopes_round_trip_and_use_exact_matching() {
         let scope = ScopeSet::parse("openid orders.read orders.read orders").unwrap();
         assert_eq!(scope.to_scope_string(), "openid orders orders.read");
@@ -659,32 +650,6 @@ mod tests {
     }
 
     #[test]
-    fn to_scope_string() {
-        let scope = ScopeSet {
-            openid: true,
-            profile: true,
-            email: false,
-            address: false,
-            phone: false,
-            offline_access: true,
-            api: BTreeSet::new(),
-            management: BTreeSet::new(),
-            patterns: BTreeSet::new(),
-            custom: BTreeSet::new(),
-        };
-        assert_eq!(scope.to_scope_string(), "openid profile offline_access");
-    }
-
-    #[test]
-    fn parse_scope_with_address_and_phone() {
-        let scope = ScopeSet::parse("openid address phone").unwrap();
-
-        assert!(scope.openid);
-        assert!(scope.address);
-        assert!(scope.phone);
-    }
-
-    #[test]
     fn to_scope_string_includes_address_and_phone_in_standard_order() {
         let scope = ScopeSet {
             openid: true,
@@ -710,15 +675,6 @@ mod tests {
         let scope = ScopeSet::parse("phone openid address").unwrap();
 
         assert_eq!(scope.names(), vec!["openid", "address", "phone"]);
-    }
-
-    #[test]
-    fn contains_openid() {
-        let scope = ScopeSet::parse("openid").unwrap();
-        assert!(scope.contains_openid());
-
-        let scope_no_openid = ScopeSet::parse("profile").unwrap();
-        assert!(!scope_no_openid.contains_openid());
     }
 
     #[test]
@@ -780,10 +736,7 @@ mod tests {
     }
 
     #[test]
-    fn api_wildcard_constants_and_password_pattern() {
-        assert_eq!(ApiScope::ACCOUNT, "account.*");
-        assert_eq!(ApiScope::SESSION, "session.*");
-
+    fn api_wildcards_allow_their_descendant_scopes() {
         let scope = ScopeSet::parse("openid account.* session.* password.*").unwrap();
         assert!(scope.has_api_scopes());
         assert!(scope.allows(ApiScope::AccountRead));

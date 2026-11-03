@@ -1,4 +1,4 @@
-use http::{HeaderMap, HeaderValue, StatusCode, header};
+use http::{HeaderMap, HeaderValue, StatusCode, header::HeaderName};
 use identity_application::openid_connect::logout::{
     FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogoutRequest,
 };
@@ -118,10 +118,9 @@ pub(super) async fn render_logout_page(
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     if let Some(csp) = csp {
-        response.headers_mut().insert(
-            header::HeaderName::from_static("content-security-policy"),
-            csp,
-        );
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("content-security-policy"), csp);
     }
     if let Some(cookie) = set_cookie {
         append_set_cookie(&mut response, &cookie);
@@ -261,7 +260,7 @@ async fn respond(depot: &mut Depot, req: &mut Request) -> WebResult {
 
 #[cfg(test)]
 mod tests {
-    use http::{HeaderMap, StatusCode, header};
+    use http::{HeaderMap, StatusCode, header, header::HeaderName};
     use identity_application::openid_connect::logout::{
         FrontChannelLogoutNotification, LogoutOutcome,
     };
@@ -341,7 +340,7 @@ mod tests {
 
         let csp = response
             .headers()
-            .get(header::HeaderName::from_static("content-security-policy"))
+            .get(HeaderName::from_static("content-security-policy"))
             .unwrap()
             .to_str()
             .unwrap();

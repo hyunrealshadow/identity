@@ -1,5 +1,7 @@
+use identity_infrastructure::database;
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbBackend, Statement};
-use std::future::Future;
+use std::{env, future::Future, panic};
+use url::Url;
 use uuid::Uuid;
 
 async fn sql(db: &DatabaseConnection, sql: &str) {
@@ -18,11 +20,10 @@ where
     F: FnOnce(DatabaseConnection) -> Fut + Send + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    let raw =
-        std::env::var("IDENTITY_TEST_DATABASE_URL").expect("explicit test database URL required");
-    let mut url = url::Url::parse(&raw).unwrap();
+    let raw = env::var("IDENTITY_TEST_DATABASE_URL").expect("explicit test database URL required");
+    let mut url = Url::parse(&raw).unwrap();
     let expected =
-        std::env::var("IDENTITY_TEST_DATABASE_NAME").expect("explicit test database name required");
+        env::var("IDENTITY_TEST_DATABASE_NAME").expect("explicit test database name required");
     assert_eq!(url.path().trim_start_matches('/'), expected);
     assert_ne!(expected, "identity", "production database is forbidden");
     assert!(
@@ -47,9 +48,7 @@ where
             actual, expected_schema,
             "migration and fixtures must stay inside the test schema"
         );
-        identity_infrastructure::database::migrate(&task_db)
-            .await
-            .unwrap();
+        database::migrate(&task_db).await.unwrap();
         case(task_db).await;
     })
     .await;
@@ -57,6 +56,6 @@ where
     sql(&admin, &format!("DROP SCHEMA {schema} CASCADE")).await;
     admin.close().await.unwrap();
     if let Err(error) = outcome {
-        std::panic::resume_unwind(error.into_panic());
+        panic::resume_unwind(error.into_panic());
     }
 }

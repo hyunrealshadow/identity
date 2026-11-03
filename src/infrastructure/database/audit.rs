@@ -3,6 +3,8 @@
 //! Request actor state is task-local, never PostgreSQL session configuration.
 //! Anonymous protocol transitions retain an unknown actor rather than treating
 //! the target account as the caller. No credential or token data is recorded.
+use std::future::Future;
+
 use identity_domain::authorization::{ActorContext, ActorPrincipal};
 use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
@@ -10,11 +12,13 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
+use crate::observability::context;
+
 tokio::task_local! {
     static ACTOR: ActorContext;
 }
 
-pub async fn with_actor<F: std::future::Future>(actor: ActorContext, future: F) -> F::Output {
+pub async fn with_actor<F: Future>(actor: ActorContext, future: F) -> F::Output {
     ACTOR.scope(actor, future).await
 }
 
@@ -35,7 +39,7 @@ pub async fn record(
     target_oid: Uuid,
 ) -> Result<(), DbErr> {
     let actor = ACTOR.try_with(Clone::clone).ok();
-    let correlation = crate::observability::context::current_request_correlation();
+    let correlation = context::current_request_correlation();
     let (kind, oid) = match actor.as_ref().map(|actor| &actor.principal) {
         Some(ActorPrincipal::User { user_oid, .. }) => ("user", Some(Uuid::from(*user_oid))),
         Some(ActorPrincipal::Client { client_oid }) => ("client", Some(*client_oid)),

@@ -1,7 +1,7 @@
 use std::{net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
-use http::{HeaderValue, StatusCode, header};
+use http::{HeaderValue, StatusCode, header, header::HeaderName};
 use identity_domain::openid_connect::{
     AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
 };
@@ -13,6 +13,7 @@ use opentelemetry::trace::Status;
 use salvo::{Depot, FlowCtrl, Handler, Request, Response, handler};
 use tracing::{Instrument, field::Empty, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use uuid::Uuid;
 
 use crate::{
     application::error::{AppError, codes::common::CommonErrorCode},
@@ -130,7 +131,7 @@ impl Handler for RequestIdMiddleware {
                 self.policy.trusts_request_id(req.remote_addr().ip()) && valid_request_id(value)
             })
             .map(str::to_owned)
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
         let correlation = RequestCorrelation {
             request_id: request_id.clone(),
             trace_id: None,
@@ -176,7 +177,7 @@ impl Handler for TraceContextMiddleware {
                     .and_then(|value| value.to_str().ok())
                     .filter(|value| self.policy.trusts_request_id(peer) && valid_request_id(value))
                     .map(str::to_owned)
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+                    .unwrap_or_else(|| Uuid::new_v4().to_string())
             });
         // Only a verified workload identity counts as trust; the authenticated
         // subject of a user-facing request does not.
@@ -424,7 +425,7 @@ pub async fn security_headers_middleware(
         headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
     }
     headers.insert(
-        header::HeaderName::from_static("x-xss-protection"),
+        HeaderName::from_static("x-xss-protection"),
         HeaderValue::from_static("0"),
     );
     headers.insert(
@@ -432,7 +433,7 @@ pub async fn security_headers_middleware(
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
     headers
-        .entry(header::HeaderName::from_static("content-security-policy"))
+        .entry(HeaderName::from_static("content-security-policy"))
         .or_insert(HeaderValue::from_static("default-src 'self'"));
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
@@ -453,7 +454,8 @@ mod tests {
         AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
     };
     use identity_infrastructure::{
-        config::TraceContextConfig, observability::context::TraceTrustPolicy,
+        config::TraceContextConfig,
+        observability::{context, context::TraceTrustPolicy},
     };
     use ipnet::IpNet;
     use opentelemetry::trace::{SpanId, TraceId, TracerProvider};
@@ -463,11 +465,13 @@ mod tests {
     };
     use salvo::{
         Response, Router, Service, handler,
+        prelude::Json,
         test::{ResponseExt, TestClient},
     };
-    use tracing::subscriber::set_default;
+    use tracing::subscriber::{NoSubscriber, set_default};
     use tracing_opentelemetry::layer;
     use tracing_subscriber::{layer::SubscriberExt, registry};
+    use uuid::Uuid;
 
     use super::{
         RequireUpstreamHttps, RequireWorkload, TraceContextMiddleware, resolve_client_ip,
@@ -681,10 +685,9 @@ mod tests {
     #[handler]
     async fn correlation_echo(depot: &mut salvo::Depot, res: &mut Response) {
         let correlation = depot.get_typed::<super::RequestCorrelation>().unwrap();
-        let current =
-            identity_infrastructure::observability::context::current_request_correlation().unwrap();
+        let current = context::current_request_correlation().unwrap();
         assert_eq!(current.request_id, correlation.request_id);
-        res.render(salvo::prelude::Json(
+        res.render(Json(
             serde_json::json!({"requestId": correlation.request_id}),
         ));
     }
@@ -721,7 +724,7 @@ mod tests {
             *request.remote_addr_mut() = "127.0.0.1:41000".parse::<SocketAddr>().unwrap().into();
             let mut response = service
                 .handle(request)
-                .with_subscriber(tracing::subscriber::NoSubscriber::default())
+                .with_subscriber(NoSubscriber::default())
                 .await;
             let id = response
                 .headers()
@@ -732,7 +735,7 @@ mod tests {
                 .to_owned();
             assert_eq!(id == incoming, accepted);
             if !accepted {
-                assert!(uuid::Uuid::parse_str(&id).is_ok());
+                assert!(Uuid::parse_str(&id).is_ok());
             }
             assert!(response.headers().get("x-trace-id").is_none());
             let body: serde_json::Value =

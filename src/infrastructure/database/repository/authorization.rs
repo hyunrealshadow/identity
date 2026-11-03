@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 use async_trait::async_trait;
 use identity_domain::{
     authorization::{
+        ManagementGrantKind,
         audit::{
             AuditSubjectKind, AuthorizationAuditContext, AuthorizationAuditError,
             AuthorizationAuditJournal, AuthorizationAuditStorageError,
@@ -25,6 +26,7 @@ use identity_domain::{
         policy_fingerprint,
         recovery::{OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort},
         repository::{ManagementAuthorityRepository, ManagementRepositoryError},
+        snapshot,
         snapshot::ManagementAuthorizationSnapshot,
     },
     client::model::ClientOid,
@@ -34,6 +36,7 @@ use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
     TransactionTrait, Value,
 };
+use serde_json::Value as SerdeJsonValue;
 use uuid::Uuid;
 
 use super::authorization_lifecycle::recoverable_authorization_snapshot_in_txn;
@@ -148,18 +151,18 @@ GROUP BY u.id
     for permission in permission_rows {
         if !permission
             .get("permission_enabled")
-            .and_then(serde_json::Value::as_bool)
+            .and_then(SerdeJsonValue::as_bool)
             .unwrap_or(false)
             || !permission
                 .get("permission_built_in")
-                .and_then(serde_json::Value::as_bool)
+                .and_then(SerdeJsonValue::as_bool)
                 .unwrap_or(false)
         {
             continue;
         }
         let Some(scope_code) = permission
             .get("scope_code")
-            .and_then(serde_json::Value::as_str)
+            .and_then(SerdeJsonValue::as_str)
         else {
             continue;
         };
@@ -168,14 +171,14 @@ GROUP BY u.id
         };
         let Some(permission_oid) = permission
             .get("permission_oid")
-            .and_then(serde_json::Value::as_str)
+            .and_then(SerdeJsonValue::as_str)
             .and_then(|value| Uuid::parse_str(value).ok())
         else {
             continue;
         };
         let Some(permission_code) = permission
             .get("permission_code")
-            .and_then(serde_json::Value::as_str)
+            .and_then(SerdeJsonValue::as_str)
         else {
             continue;
         };
@@ -301,7 +304,7 @@ impl ManagementAuthorityRepository for AuthorizationRepositoryImpl {
         snapshot: &ManagementAuthorizationSnapshot,
     ) -> Result<(), ManagementRepositoryError> {
         match snapshot.grant_kind {
-            identity_domain::authorization::ManagementGrantKind::UserRbac => {
+            ManagementGrantKind::UserRbac => {
                 // Effective permissions, the derived authority fingerprint and
                 // the policy version must all come from one repeatable-read
                 // view; otherwise an old permission set could be paired with a
@@ -316,14 +319,12 @@ impl ManagementAuthorityRepository for AuthorizationRepositoryImpl {
                 let current =
                     load_user_permission_authority(&txn, UserOid(snapshot.grant_oid)).await;
                 let result = match current {
-                    Ok(current) => {
-                        identity_domain::authorization::snapshot::validate_user_permission_snapshot(
-                            snapshot,
-                            current.as_ref(),
-                            policy_fingerprint(),
-                        )
-                        .map_err(|_| ManagementRepositoryError::StaleSnapshot)
-                    }
+                    Ok(current) => snapshot::validate_user_permission_snapshot(
+                        snapshot,
+                        current.as_ref(),
+                        policy_fingerprint(),
+                    )
+                    .map_err(|_| ManagementRepositoryError::StaleSnapshot),
                     Err(error) => Err(storage(error)),
                 };
                 match result {
@@ -339,7 +340,7 @@ impl ManagementAuthorityRepository for AuthorizationRepositoryImpl {
             }
             // Retired binding snapshots never validate through the current
             // human authority port.
-            identity_domain::authorization::ManagementGrantKind::AdministratorBinding => {
+            ManagementGrantKind::AdministratorBinding => {
                 Err(ManagementRepositoryError::StaleSnapshot)
             }
         }
@@ -385,8 +386,9 @@ impl AuthorizationAuditJournal for AuthorizationRepositoryImpl {
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::authorization::audit::{
-        AuditSubject, AuditSubjectKind, AuthorizationAuditContext,
+    use identity_domain::authorization::{
+        RequestId,
+        audit::{AuditSubject, AuditSubjectKind, AuthorizationAuditContext},
     };
     use uuid::Uuid;
 
@@ -399,7 +401,7 @@ mod tests {
             "rbac.user.roles.assign",
             AuditSubject::new(AuditSubjectKind::Role, Uuid::new_v4()),
             "test",
-            identity_domain::authorization::RequestId::new("request-1").unwrap(),
+            RequestId::new("request-1").unwrap(),
             None,
         );
         let client = AuthorizationAuditContext::new(
@@ -407,7 +409,7 @@ mod tests {
             "client.scope.set",
             AuditSubject::new(AuditSubjectKind::Permission, Uuid::new_v4()),
             "test",
-            identity_domain::authorization::RequestId::new("request-2").unwrap(),
+            RequestId::new("request-2").unwrap(),
             None,
         );
         assert_eq!(audit_actor_type(&user), "user");

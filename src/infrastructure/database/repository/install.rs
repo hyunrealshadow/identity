@@ -1,16 +1,22 @@
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
-use identity_domain::user::normalization::{normalize_email, normalize_username};
+use identity_domain::{
+    authorization::{RequestId, catalog::AdministratorRole},
+    rbac as identity_domain_rbac,
+    rbac::GroupMembershipOid,
+    user::normalization::{normalize_email, normalize_username},
+};
 use rand::{RngExt, rng};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QuerySelect, QueryTrait, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbBackend,
+    EntityTrait, QueryFilter, QuerySelect, QueryTrait, Set, Statement, TransactionTrait,
 };
 use serde_json::{json, to_value};
 use url::Url;
 use uuid::Uuid;
 
+use super::authorization_lifecycle;
 use crate::{
     application::{
         error::{
@@ -22,7 +28,11 @@ use crate::{
         setting::InstallationSettings,
         user::CredentialType,
     },
-    database::query::advisory_transaction_lock,
+    database::{
+        owner_bootstrap,
+        query::advisory_transaction_lock,
+        seed::{console, console::ConsoleClientSeedConfig, rbac},
+    },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
         openid_connect::{
@@ -35,7 +45,14 @@ use crate::{
         database::{
             entity::{
                 client, client_openid_connect, client_openid_connect_credential,
-                client_openid_connect_platform, client_scope, key, key_jwk, resource, scope, user,
+                client_openid_connect_platform, client_scope,
+                client_scope::Entity as ClientScopeEntity,
+                key, key_jwk,
+                key_jwk::Entity as KeyJwkEntity,
+                resource::{Column as ResourceColumn, Entity as ResourceEntity},
+                scope::{Column as ScopeColumn, Entity as ScopeEntity},
+                user,
+                user::{Column as UserColumn, Entity as UserEntity},
                 user_credential,
             },
             repository::{
@@ -44,13 +61,14 @@ use crate::{
             },
         },
     },
+    observability::context,
 };
 
 pub struct InstallRepositoryImpl {
     db: DatabaseConnection,
     /// Startup/process configuration, used only when the installation input
     /// itself does not carry a console origin.
-    console: Option<crate::database::seed::console::ConsoleClientSeedConfig>,
+    console: Option<ConsoleClientSeedConfig>,
 }
 
 // Deliberately distinct from the process-lifetime startup guard lock.
@@ -62,10 +80,7 @@ impl InstallRepositoryImpl {
         Self { db, console: None }
     }
 
-    pub fn with_console_client_config(
-        mut self,
-        config: Option<crate::database::seed::console::ConsoleClientSeedConfig>,
-    ) -> Self {
+    pub fn with_console_client_config(mut self, config: Option<ConsoleClientSeedConfig>) -> Self {
         self.console = config;
         self
     }
@@ -97,8 +112,8 @@ impl InstallRepository for InstallRepositoryImpl {
             return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
         }
 
-        if user::Entity::find()
-            .filter(user::Column::NameNormalized.eq(&normalized_username))
+        if UserEntity::find()
+            .filter(UserColumn::NameNormalized.eq(&normalized_username))
             .one(&txn)
             .await
             .map_err(AppError::internal)?
@@ -107,8 +122,8 @@ impl InstallRepository for InstallRepositoryImpl {
             return Err(AppError::from_code(InstallErrorCode::UsernameExists));
         }
 
-        if user::Entity::find()
-            .filter(user::Column::EmailNormalized.eq(&normalized_email))
+        if UserEntity::find()
+            .filter(UserColumn::EmailNormalized.eq(&normalized_email))
             .one(&txn)
             .await
             .map_err(AppError::internal)?
@@ -151,17 +166,15 @@ impl InstallRepository for InstallRepositoryImpl {
         // membership references them. The startup seed normally already ran;
         // this idempotent call makes the ordering explicit inside the same
         // installation transaction and cannot adopt a same-name custom object.
-        crate::database::seed::rbac::ensure_built_in_rbac(&txn).await?;
+        rbac::ensure_built_in_rbac(&txn).await?;
 
         // The first owner is the user explicitly created by this installation.
         // The membership is written in the same transaction as its credential
         // and initial settings, so a failed installation leaves neither behind.
-        let owner_group_oid = identity_domain::rbac::built_in_group_oid(
-            identity_domain::authorization::catalog::AdministratorRole::Owner,
-        );
+        let owner_group_oid = identity_domain_rbac::built_in_group_oid(AdministratorRole::Owner);
         let owner_group = txn
-            .query_one_raw(sea_orm::Statement::from_sql_and_values(
-                sea_orm::DbBackend::Postgres,
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
                 "SELECT id FROM user_group WHERE oid = $1 AND built_in = true AND enabled = true",
                 [owner_group_oid.0.into()],
             ))
@@ -171,9 +184,9 @@ impl InstallRepository for InstallRepositoryImpl {
         let owner_group_id = owner_group
             .try_get::<i64>("", "id")
             .map_err(AppError::internal)?;
-        let membership_oid = identity_domain::rbac::GroupMembershipOid::new();
-        txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Postgres,
+        let membership_oid = GroupMembershipOid::new();
+        txn.execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
             "INSERT INTO group_membership(oid, group_id, user_id, granted_by_user_id, reason, \
                 enabled, version, created_at) \
              VALUES($1, $2, $3, NULL, 'initial_installation', true, gen_random_uuid(), now())",
@@ -185,16 +198,16 @@ impl InstallRepository for InstallRepositoryImpl {
         ))
         .await
         .map_err(AppError::internal)?;
-        super::authorization_lifecycle::renew_user_version_in_txn(&txn, created_user.id)
+        authorization_lifecycle::renew_user_version_in_txn(&txn, created_user.id)
             .await
             .map_err(AppError::internal)?;
-        let request_id = identity_domain::authorization::RequestId::new(
-            crate::observability::context::current_request_correlation()
+        let request_id = RequestId::new(
+            context::current_request_correlation()
                 .map(|context| context.request_id)
                 .unwrap_or_else(|| Uuid::new_v4().to_string()),
         )
         .expect("generated or validated request ID");
-        crate::database::owner_bootstrap::record_group_membership_audit(
+        owner_bootstrap::record_group_membership_audit(
             &txn,
             "rbac.group_membership.install",
             membership_oid.0,
@@ -210,12 +223,8 @@ impl InstallRepository for InstallRepositoryImpl {
             self.console.as_ref(),
         )?;
         if let Some(config) = console_config {
-            crate::database::seed::console::provision_console_client_in_transaction(
-                &txn,
-                &config,
-                data.console_client_id,
-            )
-            .await?;
+            console::provision_console_client_in_transaction(&txn, &config, data.console_client_id)
+                .await?;
         }
 
         let created_client = client::ActiveModel {
@@ -282,22 +291,20 @@ impl InstallRepository for InstallRepositoryImpl {
             "session.revoke",
             "password.change",
         ];
-        let assigned_scopes = scope::Entity::find()
-            .filter(scope::Column::Code.is_in(assigned_scope_names))
-            .filter(scope::Column::BuiltIn.eq(true))
-            .filter(scope::Column::Enabled.eq(true))
+        let assigned_scopes = ScopeEntity::find()
+            .filter(ScopeColumn::Code.is_in(assigned_scope_names))
+            .filter(ScopeColumn::BuiltIn.eq(true))
+            .filter(ScopeColumn::Enabled.eq(true))
             .filter(
-                Condition::any()
-                    .add(scope::Column::ResourceId.is_null())
-                    .add(
-                        scope::Column::ResourceId.in_subquery(
-                            resource::Entity::find()
-                                .select_only()
-                                .column(resource::Column::Oid)
-                                .filter(resource::Column::Uri.eq(API_RESOURCE))
-                                .into_query(),
-                        ),
+                Condition::any().add(ScopeColumn::ResourceId.is_null()).add(
+                    ScopeColumn::ResourceId.in_subquery(
+                        ResourceEntity::find()
+                            .select_only()
+                            .column(ResourceColumn::Oid)
+                            .filter(ResourceColumn::Uri.eq(API_RESOURCE))
+                            .into_query(),
                     ),
+                ),
             )
             .all(&txn)
             .await
@@ -305,7 +312,7 @@ impl InstallRepository for InstallRepositoryImpl {
         if assigned_scopes.len() != assigned_scope_names.len() {
             return Err(AppError::from_code(CommonErrorCode::InternalError));
         }
-        client_scope::Entity::insert_many(assigned_scopes.into_iter().map(|scope| {
+        ClientScopeEntity::insert_many(assigned_scopes.into_iter().map(|scope| {
             client_scope::ActiveModel {
                 client_id: Set(created_client.id),
                 scope_id: Set(scope.id),
@@ -371,7 +378,7 @@ impl InstallRepository for InstallRepositoryImpl {
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(AppError::internal)?;
-        key_jwk::Entity::insert_many(jwk_models)
+        KeyJwkEntity::insert_many(jwk_models)
             .exec(&txn)
             .await
             .map_err(AppError::internal)?;
@@ -408,12 +415,12 @@ impl InstallRepository for InstallRepositoryImpl {
 fn installation_console_config(
     console_url: Option<&Url>,
     issuer: Option<&Url>,
-    fallback: Option<&crate::database::seed::console::ConsoleClientSeedConfig>,
-) -> Result<Option<crate::database::seed::console::ConsoleClientSeedConfig>, AppError> {
+    fallback: Option<&ConsoleClientSeedConfig>,
+) -> Result<Option<ConsoleClientSeedConfig>, AppError> {
     match (console_url, issuer) {
         (Some(console_url), Some(issuer)) => {
             let console_origin = console_url.origin().ascii_serialization();
-            crate::database::seed::console::ConsoleClientSeedConfig::new(
+            ConsoleClientSeedConfig::new(
                 &console_origin,
                 issuer.as_str(),
                 console_url
@@ -455,9 +462,8 @@ mod tests {
         INSTALL_TRANSACTION_LOCK_ID, acquire_install_transaction_lock, built_in_callback_url,
         built_in_logout_url, installation_console_config,
     };
-    use crate::{
-        database::query::advisory_transaction_lock,
-        database::seed::console::ConsoleClientSeedConfig,
+    use crate::database::{
+        query::advisory_transaction_lock, seed::console::ConsoleClientSeedConfig,
     };
 
     #[test]

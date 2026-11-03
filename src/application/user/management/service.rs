@@ -557,7 +557,7 @@ fn map_mutation_outcome(
     outcome: UserManagementMutationOutcome,
 ) -> Result<UserManagementRecord, AppError> {
     match outcome {
-        UserManagementMutationOutcome::Success(record) => Ok(record),
+        UserManagementMutationOutcome::Success(record) => Ok(*record),
         UserManagementMutationOutcome::UserNotFound => {
             Err(AppError::from_code(UserManagementErrorCode::UserNotFound))
         }
@@ -597,33 +597,41 @@ fn map_repository_error(error: UserManagementRepositoryError) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{collections::BTreeSet, sync::Arc};
 
     use async_trait::async_trait;
+    use chrono::{Duration, Utc};
     use identity_domain::{
         authorization::{ActorContext, HumanAuthenticationContext, PolicyVersion, RequestId},
         user::{UserManagementRecord, UserOid, UserTheme},
     };
+    use uuid::Uuid;
 
     use super::{
-        UserManagementService, normalize_filter, validate_reason, validate_username_field,
+        super::model, UserManagementService, normalize_filter, validate_reason,
+        validate_username_field,
     };
     use crate::{
-        auth::password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
+        auth::{
+            password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
+            password_policy::BreachedPasswordChecker,
+        },
         data_protection::DataProtector,
         domain::data_protection::DataProtectionError,
-        error::kind::ErrorKind,
+        error::{AppError, kind::ErrorKind},
         setting::{SettingsSnapshot, SettingsSource},
-        user::Password,
-        user::management::{
-            model::{
-                UserFilter, UserManagementAuthority, UserPageRequest, UserProfilePatch,
-                UserStateCommand,
-            },
-            repository::{
-                CreateUserTransaction, UpdateUserTransaction, UserManagementMutationOutcome,
-                UserManagementPageData, UserManagementQuery, UserManagementRepository,
-                UserManagementRepositoryError, UserStateTransaction,
+        user::{
+            Password,
+            management::{
+                model::{
+                    UserFilter, UserManagementAuthority, UserPageRequest, UserProfilePatch,
+                    UserStateCommand,
+                },
+                repository::{
+                    CreateUserTransaction, UpdateUserTransaction, UserManagementMutationOutcome,
+                    UserManagementPageData, UserManagementQuery, UserManagementRepository,
+                    UserManagementRepositoryError, UserStateTransaction,
+                },
             },
         },
     };
@@ -749,8 +757,8 @@ mod tests {
     struct NeverBreached;
 
     #[async_trait]
-    impl crate::auth::password_policy::BreachedPasswordChecker for NeverBreached {
-        async fn is_breached(&self, _: &str) -> Result<bool, crate::error::AppError> {
+    impl BreachedPasswordChecker for NeverBreached {
+        async fn is_breached(&self, _: &str) -> Result<bool, AppError> {
             Ok(false)
         }
     }
@@ -770,15 +778,15 @@ mod tests {
     fn authority() -> UserManagementAuthority {
         UserManagementAuthority::new(
             ActorContext::for_user(
-                UserOid(uuid::Uuid::new_v4()),
+                UserOid(Uuid::new_v4()),
                 HumanAuthenticationContext::aal2(None),
                 RequestId::new("request-1").unwrap(),
                 None,
             ),
-            std::collections::BTreeSet::new(),
+            BTreeSet::new(),
             None,
-            uuid::Uuid::new_v4(),
-            PolicyVersion::from_uuid(uuid::Uuid::new_v4()),
+            Uuid::new_v4(),
+            PolicyVersion::from_uuid(Uuid::new_v4()),
         )
     }
 
@@ -815,8 +823,8 @@ mod tests {
         assert_eq!(normalized.username.as_deref(), Some("alice"));
 
         let reversed = UserFilter {
-            created_from: Some(chrono::Utc::now()),
-            created_before: Some(chrono::Utc::now() - chrono::Duration::seconds(1)),
+            created_from: Some(Utc::now()),
+            created_before: Some(Utc::now() - Duration::seconds(1)),
             ..Default::default()
         };
         assert_eq!(normalize_filter(reversed).unwrap_err().code(), 16015);
@@ -825,14 +833,14 @@ mod tests {
     #[tokio::test]
     async fn a_stale_version_becomes_a_localized_conflict() {
         let service = service(UserManagementMutationOutcome::VersionConflict {
-            current_version: uuid::Uuid::new_v4(),
+            current_version: Uuid::new_v4(),
         });
         let error = service
             .unlock_user(
                 &authority(),
                 UserStateCommand {
-                    user_oid: UserOid(uuid::Uuid::new_v4()),
-                    expected_version: uuid::Uuid::new_v4(),
+                    user_oid: UserOid(Uuid::new_v4()),
+                    expected_version: Uuid::new_v4(),
                     reason: "unlock".to_owned(),
                     client_mutation_id: None,
                 },
@@ -860,17 +868,17 @@ mod tests {
 
     #[test]
     fn profile_theme_validation_accepts_supported_values_and_rejects_unknown_values() {
-        let parsed = super::super::model::parse_theme(Some(Some("dark".to_owned()))).unwrap();
+        let parsed = model::parse_theme(Some(Some("dark".to_owned()))).unwrap();
         assert_eq!(parsed.flatten().map(UserTheme::as_str), Some("dark"));
-        assert!(super::super::model::parse_theme(Some(Some("sepia".to_owned()))).is_err());
-        assert!(super::super::model::domain_profile_patch(&UserProfilePatch::default()).is_ok());
+        assert!(model::parse_theme(Some(Some("sepia".to_owned()))).is_err());
+        assert!(model::domain_profile_patch(&UserProfilePatch::default()).is_ok());
     }
 
     trait ChildCode {
         fn children_code(&self) -> Option<u32>;
     }
 
-    impl ChildCode for crate::error::AppError {
+    impl ChildCode for AppError {
         fn children_code(&self) -> Option<u32> {
             self.validation()
                 .and_then(|details| details.fields().first())

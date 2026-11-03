@@ -1,8 +1,13 @@
 use async_graphql::{Error, ErrorExtensions, Result};
-use identity_application::error::{code::AppErrorCode, codes::graphql::GraphqlErrorCode};
-use identity_application::openid_connect::user_info::PrincipalClaims;
-use identity_domain::user::User;
-use identity_domain::{client_authorization::AccessTokenPrincipal, user::UserOid};
+use identity_application::{
+    error::{code::AppErrorCode, codes::graphql::GraphqlErrorCode},
+    openid_connect::user_info::PrincipalClaims,
+};
+use identity_domain::{
+    authorization::ActorContext,
+    client_authorization::AccessTokenPrincipal,
+    user::{User, UserOid},
+};
 use identity_infrastructure::AppState;
 use unic_langid::LanguageIdentifier;
 
@@ -17,7 +22,7 @@ pub struct RequestContext {
     /// into GraphQL response and field-error extensions by the transport and by
     /// the schema error helpers.
     pub correlation: RequestCorrelation,
-    pub actor: identity_domain::authorization::ActorContext,
+    pub actor: ActorContext,
 }
 
 impl RequestContext {

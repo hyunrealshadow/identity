@@ -61,12 +61,20 @@ mod tests {
     };
     use http::HeaderMap;
     use identity_application::observability::OutboundTrace;
-    use opentelemetry::trace::{TraceContextExt, TracerProvider};
+    use opentelemetry::{
+        global,
+        trace::{TraceContextExt, TracerProvider},
+    };
     use opentelemetry_sdk::{
         error::OTelSdkResult,
+        propagation::TraceContextPropagator,
         trace::{SdkTracerProvider, SpanData, SpanExporter},
     };
-    use std::sync::{Arc, Mutex};
+    use std::{
+        collections::BTreeMap,
+        sync::{Arc, Mutex},
+    };
+    use tracing::subscriber;
     use tracing_opentelemetry::OpenTelemetrySpanExt;
     use tracing_subscriber::prelude::*;
 
@@ -94,7 +102,7 @@ mod tests {
             .build();
         let subscriber = tracing_subscriber::registry()
             .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("outbound-test")));
-        tracing::subscriber::with_default(subscriber, || {
+        subscriber::with_default(subscriber, || {
             let span = policy(Vec::new()).client_span(
                 "POST",
                 &"https://rp.example.com/logout?token=secret"
@@ -111,7 +119,7 @@ mod tests {
             "tracing must actually export the client span"
         );
         assert_eq!(spans[0].name, "http.client");
-        let attributes: std::collections::BTreeMap<_, _> = spans[0]
+        let attributes: BTreeMap<_, _> = spans[0]
             .attributes
             .iter()
             .map(|a| (a.key.as_str(), a.value.to_string()))
@@ -139,16 +147,14 @@ mod tests {
     #[test]
     fn injection_is_origin_scoped() {
         // Match normal observability bootstrap: a tracer alone does not install W3C propagation.
-        opentelemetry::global::set_text_map_propagator(
-            opentelemetry_sdk::propagation::TraceContextPropagator::new(),
-        );
+        global::set_text_map_propagator(TraceContextPropagator::new());
         let provider = SdkTracerProvider::builder()
             .with_simple_exporter(Exporter::default())
             .build();
         let subscriber = tracing_subscriber::registry()
             .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("outbound-test")));
         let trace = policy(vec!["https://login.internal:8443".to_owned()]);
-        tracing::subscriber::with_default(subscriber, || {
+        subscriber::with_default(subscriber, || {
             let span = tracing::info_span!("request");
             let _entered = span.enter();
             let context = span.context();

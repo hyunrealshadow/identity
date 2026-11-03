@@ -83,16 +83,11 @@ pub struct GroupFilter {
     pub role_oid: Option<RoleOid>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GroupOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
-}
-
-impl Default for GroupOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl GroupOrder {
@@ -139,16 +134,11 @@ pub struct GroupMembershipFilter {
     pub user_oid: Option<UserOid>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GroupMembershipOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
-}
-
-impl Default for GroupMembershipOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl GroupMembershipOrder {
@@ -195,18 +185,13 @@ pub struct GroupRoleFilter {
     pub role_oid: Option<RoleOid>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GroupRoleOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
     RoleNameAsc,
     RoleNameDesc,
-}
-
-impl Default for GroupRoleOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl GroupRoleOrder {

@@ -6,6 +6,7 @@ use url::Url;
 
 use crate::{
     error::AppError,
+    openid_connect::provider,
     setting::{AppSettings, InstallationSettings, SettingsSource},
 };
 
@@ -45,7 +46,7 @@ impl ConsoleRuntimeService {
         else {
             return Ok(None);
         };
-        let issuer = crate::openid_connect::provider::normalize_issuer(
+        let issuer = provider::normalize_issuer(
             &snapshot.section::<InstallationSettings>(),
             app.domain.as_deref(),
         )?;

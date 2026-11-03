@@ -1,5 +1,7 @@
 //! Recoverability facts collected within the authorization-changing transaction.
 
+use std::error::Error;
+
 use crate::user::UserOid;
 
 /// Snapshot of owner recovery facts. Collection must happen inside the same
@@ -36,5 +38,5 @@ pub trait OwnerRecoverabilityPort: Send + Sync {
 #[derive(Debug, thiserror::Error)]
 pub enum OwnerRecoverabilityError {
     #[error("failed to read owner recovery facts")]
-    Storage(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
+    Storage(#[source] Box<dyn Error + Send + Sync + 'static>),
 }

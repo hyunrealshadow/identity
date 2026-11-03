@@ -15,16 +15,16 @@ use identity_domain::{authorization::ManagementScope, client::model::ClientOid};
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
-use super::super::resource::support::{
-    RbacConnectionCursor, decode_oid, decode_oids, normalize_reason, page_args,
-};
 use super::{
+    super::resource::support::{
+        RbacConnectionCursor, decode_oid, decode_oids, normalize_reason, page_args,
+    },
     connection::{ScopeConnection, ScopeEdge},
-    integration,
+    integration, types,
     types::{ScopeGlobalId, ScopeNode, ScopeOrder},
 };
 use crate::graphql::schema::{
-    authorization::request_context, error::app_error, management_guard::ManagementGuard,
+    authorization::request_context, connection, error::app_error, management_guard::ManagementGuard,
 };
 
 pub(crate) struct ClientGlobalId;
@@ -116,6 +116,7 @@ impl ClientScopeQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn client_scope_targets(
         &self,
         ctx: &Context<'_>,
@@ -153,6 +154,7 @@ impl ClientScopeQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn client_scopes(
         &self,
         ctx: &Context<'_>,
@@ -174,7 +176,7 @@ impl ClientScopeQuery {
         )
         .await
         .map_err(|error| app_error(ctx, error))?;
-        let additional = crate::graphql::schema::connection::connection_total(ctx, async {
+        let additional = connection::connection_total(ctx, async {
             request
                 .state
                 .services()
@@ -283,7 +285,7 @@ impl ClientScopeMutation {
             scope_ids: result
                 .scope_oids
                 .into_iter()
-                .map(super::types::scope_global_id)
+                .map(types::scope_global_id)
                 .collect(),
             client_mutation_id,
         })

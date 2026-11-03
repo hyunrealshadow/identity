@@ -1,4 +1,5 @@
 use super::*;
+use crate::graphql::schema::limits::ResponseAliasLimit;
 use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
 use chrono::Utc;
 use identity_application::rbac::{ScopeDescription, ScopeOid, ScopeRecord};
@@ -55,7 +56,7 @@ async fn a_full_localized_page_fits_without_relaxing_nested_query_costs() {
         EmptySubscription,
     )
     .limit_complexity(300)
-    .extension(crate::graphql::schema::limits::ResponseAliasLimit(300))
+    .extension(ResponseAliasLimit(300))
     .finish();
     let response = schema.execute("{ scopes(first: 100) { totalCount pageInfo { hasNextPage hasPreviousPage startCursor endCursor } edges { cursor node { id code name names { locale value } description descriptions { locale value } builtIn enabled version createdAt updatedAt } } } }").await;
     assert!(response.errors.is_empty(), "{:?}", response.errors);

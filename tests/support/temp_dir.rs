@@ -4,6 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use uuid::Uuid;
+
 pub struct TempDir {
     path: PathBuf,
     base: PathBuf,
@@ -23,7 +25,7 @@ impl TempDir {
         fs::create_dir_all(&base).unwrap();
         let base = base.canonicalize().unwrap();
         assert!(base.starts_with(&workspace));
-        let path = base.join(format!("{label}-{}", uuid::Uuid::new_v4()));
+        let path = base.join(format!("{label}-{}", Uuid::new_v4()));
         fs::create_dir_all(&path).unwrap();
         let path = path.canonicalize().unwrap();
         assert_eq!(path.parent(), Some(base.as_path()));

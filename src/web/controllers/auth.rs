@@ -22,7 +22,7 @@ use super::{
 };
 use crate::{
     application::{
-        auth::login::ChallengeOutcome,
+        auth::{login, login::ChallengeOutcome},
         error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
     },
@@ -184,13 +184,9 @@ async fn login_status(
     } else {
         None
     };
-    let preferred_credential_type = crate::application::auth::login::preferred_credential_type(
-        &login,
-        &credential_types,
-        mfa_preference,
-    );
-    let credential_types =
-        crate::application::auth::login::challenge_credential_types(&login, &credential_types);
+    let preferred_credential_type =
+        login::preferred_credential_type(&login, &credential_types, mfa_preference);
+    let credential_types = login::challenge_credential_types(&login, &credential_types);
     let challenge_uri = if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
             || requires_reauthentication)
@@ -467,11 +463,8 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 )
                 .await?;
             let credentials = ctx.services().login().credential_types(user.oid).await?;
-            let next_method = crate::application::auth::login::preferred_credential_type(
-                &pending,
-                &credentials,
-                user.preferred_mfa_method,
-            );
+            let next_method =
+                login::preferred_credential_type(&pending, &credentials, user.preferred_mfa_method);
             render_json(
                 res,
                 StatusCode::OK,

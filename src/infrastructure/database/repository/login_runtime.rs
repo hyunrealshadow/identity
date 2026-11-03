@@ -16,7 +16,15 @@ use uuid::Uuid;
 
 use super::openid_connect_credential::serialize_data;
 use crate::database::{
-    entity::{client, client_openid_connect_credential},
+    entity::{
+        client,
+        client::{Column as ClientColumn, Entity as ClientEntity},
+        client_openid_connect_credential,
+        client_openid_connect_credential::{
+            Column as ClientOpenIdConnectCredentialColumn,
+            Entity as ClientOpenIdConnectCredentialEntity,
+        },
+    },
     query::advisory_transaction_lock,
 };
 
@@ -56,10 +64,10 @@ async fn builtin_login_client<C: ConnectionTrait>(
     db: &C,
     client_oid: Uuid,
 ) -> Result<Option<client::Model>, LoginRuntimeRepositoryError> {
-    client::Entity::find()
-        .filter(client::Column::Oid.eq(client_oid))
-        .filter(client::Column::BuiltIn.eq(true))
-        .filter(client::Column::Protocol.eq("openid_connect"))
+    ClientEntity::find()
+        .filter(ClientColumn::Oid.eq(client_oid))
+        .filter(ClientColumn::BuiltIn.eq(true))
+        .filter(ClientColumn::Protocol.eq("openid_connect"))
         .one(db)
         .await
         .map_err(query_error)
@@ -71,17 +79,17 @@ async fn latest_secret<C: ConnectionTrait>(
     active_only: bool,
     now: DateTime<Utc>,
 ) -> Result<Option<client_openid_connect_credential::Model>, LoginRuntimeRepositoryError> {
-    let mut query = client_openid_connect_credential::Entity::find()
-        .filter(client_openid_connect_credential::Column::ClientId.eq(client_id))
+    let mut query = ClientOpenIdConnectCredentialEntity::find()
+        .filter(ClientOpenIdConnectCredentialColumn::ClientId.eq(client_id))
         .filter(
-            client_openid_connect_credential::Column::Type
+            ClientOpenIdConnectCredentialColumn::Type
                 .eq(OpenIdConnectCredentialType::ClientSecret.to_string()),
         )
-        .filter(client_openid_connect_credential::Column::RevokedAt.is_null())
-        .order_by_desc(client_openid_connect_credential::Column::CreatedAt)
-        .order_by_desc(client_openid_connect_credential::Column::Id);
+        .filter(ClientOpenIdConnectCredentialColumn::RevokedAt.is_null())
+        .order_by_desc(ClientOpenIdConnectCredentialColumn::CreatedAt)
+        .order_by_desc(ClientOpenIdConnectCredentialColumn::Id);
     if active_only {
-        query = query.filter(client_openid_connect_credential::Column::ExpiresAt.gt(now));
+        query = query.filter(ClientOpenIdConnectCredentialColumn::ExpiresAt.gt(now));
     }
     query.one(db).await.map_err(query_error)
 }
@@ -107,10 +115,10 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         else {
             return Ok(None);
         };
-        let generation = client_openid_connect_credential::Entity::find()
-            .filter(client_openid_connect_credential::Column::ClientId.eq(client.id))
+        let generation = ClientOpenIdConnectCredentialEntity::find()
+            .filter(ClientOpenIdConnectCredentialColumn::ClientId.eq(client.id))
             .filter(
-                client_openid_connect_credential::Column::Type
+                ClientOpenIdConnectCredentialColumn::Type
                     .eq(OpenIdConnectCredentialType::ClientSecret.to_string()),
             )
             .all(&self.db)
@@ -135,8 +143,8 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
         txn.execute(&advisory_transaction_lock(684395120247316901_i64))
             .await
             .map_err(query_error)?;
-        let clients = client::Entity::find()
-            .filter(client::Column::BuiltIn.eq(true))
+        let clients = ClientEntity::find()
+            .filter(ClientColumn::BuiltIn.eq(true))
             .all(&txn)
             .await
             .map_err(query_error)?;
@@ -179,16 +187,16 @@ impl LoginRuntimeRepository for LoginRuntimeRepositoryImpl {
                 now,
                 policy.retire_after,
             ) {
-                client_openid_connect_credential::Entity::update_many()
+                ClientOpenIdConnectCredentialEntity::update_many()
                     .col_expr(
-                        client_openid_connect_credential::Column::ExpiresAt,
+                        ClientOpenIdConnectCredentialColumn::ExpiresAt,
                         Expr::value(retiring.fixed_offset()),
                     )
                     .col_expr(
-                        client_openid_connect_credential::Column::UpdatedAt,
+                        ClientOpenIdConnectCredentialColumn::UpdatedAt,
                         Expr::value(Some(now.fixed_offset())),
                     )
-                    .filter(client_openid_connect_credential::Column::Id.eq(current.id))
+                    .filter(ClientOpenIdConnectCredentialColumn::Id.eq(current.id))
                     .exec(&txn)
                     .await
                     .map_err(query_error)?;

@@ -4,14 +4,18 @@ use std::{
 };
 
 use chrono::Utc;
-use identity_domain::key::{
-    JwaSigningAlgorithm, JweContentEncryption, JwkAlgorithm, JwsAlgorithm, Key,
+use identity_domain::{
+    auth::{ACR_AAL1, ACR_AAL2},
+    key::{JwaSigningAlgorithm, JweContentEncryption, JwkAlgorithm, JwsAlgorithm, Key},
+    openid_connect::resource,
 };
 use josekit::{
     jws::{JwsHeader, JwsSigner},
     jwt,
+    jwt::JwtPayload,
 };
 use serde_json::{from_value, to_string, to_value};
+use tracing::Span;
 use uuid::Uuid;
 
 use super::client_encryption::select_client_encryption_jwk;
@@ -484,7 +488,7 @@ impl UserInfoService {
                 None
             }
         };
-        tracing::Span::current().record("principal", principal.as_str());
+        Span::current().record("principal", principal.as_str());
 
         // A signed principal claim is mandatory for new tokens but legacy
         // tokens without it remain human tokens by serde default.
@@ -538,9 +542,7 @@ impl UserInfoService {
                             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
                                 .with_param("reason", "session is not active for the user"));
                         }
-                        session_has_aal2 = Some(
-                            session.effective_acr(now) == Some(identity_domain::auth::ACR_AAL2),
-                        );
+                        session_has_aal2 = Some(session.effective_acr(now) == Some(ACR_AAL2));
                     }
                 }
                 None if !device_linked => {
@@ -579,7 +581,7 @@ impl UserInfoService {
 
         let resource_audience = audience
             .iter()
-            .filter(|uri| identity_domain::openid_connect::resource::valid_resource_uri(uri))
+            .filter(|uri| resource::valid_resource_uri(uri))
             .cloned()
             .collect::<Vec<_>>();
         if scope.has_resource_permissions() && !resource_audience.is_empty() {
@@ -643,13 +645,15 @@ impl UserInfoService {
                     repository: self.rbac_authorization_repo.as_ref(),
                     provider_service: &self.provider_service,
                 },
-                &live_client,
-                persisted,
-                &access_token_data.scope,
-                &scope,
-                principal,
-                user_oid,
-                &audience,
+                shared::BusinessTokenAuthorization {
+                    live_client: &live_client,
+                    persisted,
+                    persisted_scope: &access_token_data.scope,
+                    scope: &scope,
+                    principal,
+                    subject_user_oid: user_oid,
+                    audience: &audience,
+                },
             )
             .await?;
         } else if shared::has_business_claims(&payload) {
@@ -661,7 +665,7 @@ impl UserInfoService {
             // snapshot. This invalidates legacy tokens across a policy switch.
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
-        tracing::Span::current().record("management", management);
+        Span::current().record("management", management);
 
         let claims = payload
             .claim("claims")
@@ -677,12 +681,12 @@ impl UserInfoService {
             .claim(JwtClaimNames::ACR)
             .and_then(|value| value.as_str())
             .map(str::to_owned);
-        if acr.as_deref() == Some(identity_domain::auth::ACR_AAL2)
+        if acr.as_deref() == Some(ACR_AAL2)
             && (session_has_aal2 == Some(false)
                 || !auth_time
                     .is_some_and(|time| (0..=3600).contains(&(Utc::now().timestamp() - time))))
         {
-            acr = Some(identity_domain::auth::ACR_AAL1.to_owned());
+            acr = Some(ACR_AAL1.to_owned());
         }
         let amr = payload
             .claim(JwtClaimNames::AMR)
@@ -766,7 +770,7 @@ fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppErro
     let object = value
         .as_object()
         .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
-    let mut payload = jwt::JwtPayload::new();
+    let mut payload = JwtPayload::new();
     for (name, value) in object {
         payload
             .set_claim(name, Some(value.clone()))
@@ -785,7 +789,7 @@ fn build_user_info_signer(
 #[cfg(test)]
 mod tests {
     use identity_domain::client_authorization::ManagementGrantKindData;
-    use josekit::jwt;
+    use josekit::{jwt, jwt::JwtPayload};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -800,7 +804,7 @@ mod tests {
     const CLIENT_POLICY_VERSION: &str = "44444444-4444-4444-4444-444444444444";
 
     fn management_payload() -> jwt::JwtPayload {
-        let mut payload = jwt::JwtPayload::new();
+        let mut payload = JwtPayload::new();
         payload
             .set_claim(
                 JwtClaimNames::MANAGEMENT_GRANT_KIND,
@@ -905,7 +909,7 @@ mod tests {
     #[test]
     fn partial_management_claims_fail_closed() {
         // JwtPayload has no remove; a new payload with one claim is enough.
-        let mut partial = jwt::JwtPayload::new();
+        let mut partial = JwtPayload::new();
         partial
             .set_claim(
                 JwtClaimNames::MANAGEMENT_GRANT_KIND,
@@ -914,7 +918,7 @@ mod tests {
             .unwrap();
         assert!(signed_management_snapshot(&partial).is_err());
         assert!(
-            signed_management_snapshot(&jwt::JwtPayload::new())
+            signed_management_snapshot(&JwtPayload::new())
                 .unwrap()
                 .is_none()
         );

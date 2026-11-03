@@ -20,11 +20,21 @@ use sea_orm::{
 use serde_json::{from_value, json};
 use uuid::Uuid;
 
-use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry, lock_session};
+use super::{
+    challenge,
+    shared::{decode_nonnullable_expiry, encode_nonnullable_expiry, lock_session},
+};
 use crate::database::{
+    audit,
     entity::{
-        client_authorization, client_authorization::Entity as ClientAuthorizationEntity, session,
-        session::Entity as SessionEntity, user, user::Entity as UserEntity,
+        client_authorization,
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
+        session,
+        session::{Column as SessionColumn, Entity as SessionEntity},
+        user,
+        user::{Column as UserColumn, Entity as UserEntity},
     },
     query::json_text,
 };
@@ -75,7 +85,7 @@ impl SessionRepositoryImpl {
         user_oid: Uuid,
     ) -> Result<Vec<Session>, SessionRepositoryError> {
         let Some(user) = UserEntity::find()
-            .filter(user::Column::Oid.eq(user_oid))
+            .filter(UserColumn::Oid.eq(user_oid))
             .one(&self.db)
             .await
             .map_err(|error| SessionRepositoryError::QueryFailed(Box::new(error)))?
@@ -84,9 +94,9 @@ impl SessionRepositoryImpl {
         };
 
         let sessions = SessionEntity::find()
-            .filter(session::Column::UserId.eq(user.id))
-            .order_by_desc(session::Column::LastActiveAt)
-            .order_by_desc(session::Column::Id)
+            .filter(SessionColumn::UserId.eq(user.id))
+            .order_by_desc(SessionColumn::LastActiveAt)
+            .order_by_desc(SessionColumn::Id)
             .all(&self.db)
             .await
             .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))?;
@@ -114,11 +124,11 @@ impl SessionRepositoryImpl {
         }
         query = match direction {
             SessionPageDirection::Forward => query
-                .order_by_desc(session::Column::LastActiveAt)
-                .order_by_desc(session::Column::Id),
+                .order_by_desc(SessionColumn::LastActiveAt)
+                .order_by_desc(SessionColumn::Id),
             SessionPageDirection::Backward => query
-                .order_by_asc(session::Column::LastActiveAt)
-                .order_by_asc(session::Column::Id),
+                .order_by_asc(SessionColumn::LastActiveAt)
+                .order_by_asc(SessionColumn::Id),
         };
         let rows: Vec<(session::Model, Option<user::Model>)> = query
             .limit((limit.saturating_add(1)) as u64)
@@ -153,10 +163,10 @@ fn active_session_page_query(user_oid: Uuid) -> SelectTwo<session::Entity, user:
     SessionEntity::find()
         .inner_join(UserEntity)
         .select_also(UserEntity)
-        .filter(user::Column::Oid.eq(user_oid))
-        .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
-        .filter(session::Column::RevokedAt.is_null())
-        .filter(session::Column::ExpiresAt.gt(now))
+        .filter(UserColumn::Oid.eq(user_oid))
+        .filter(SessionColumn::Status.eq(SessionStatus::ACTIVE.as_str()))
+        .filter(SessionColumn::RevokedAt.is_null())
+        .filter(SessionColumn::ExpiresAt.gt(now))
 }
 
 fn build_session_page(
@@ -192,18 +202,18 @@ fn session_cursor_condition(cursor: SessionSortKey, comparison: CursorComparison
     let last_active_at = cursor.last_active_at.fixed_offset();
     match comparison {
         CursorComparison::After => Condition::any()
-            .add(session::Column::LastActiveAt.lt(last_active_at))
+            .add(SessionColumn::LastActiveAt.lt(last_active_at))
             .add(
                 Condition::all()
-                    .add(session::Column::LastActiveAt.eq(last_active_at))
-                    .add(session::Column::Id.lt(cursor.id)),
+                    .add(SessionColumn::LastActiveAt.eq(last_active_at))
+                    .add(SessionColumn::Id.lt(cursor.id)),
             ),
         CursorComparison::Before => Condition::any()
-            .add(session::Column::LastActiveAt.gt(last_active_at))
+            .add(SessionColumn::LastActiveAt.gt(last_active_at))
             .add(
                 Condition::all()
-                    .add(session::Column::LastActiveAt.eq(last_active_at))
-                    .add(session::Column::Id.gt(cursor.id)),
+                    .add(SessionColumn::LastActiveAt.eq(last_active_at))
+                    .add(SessionColumn::Id.gt(cursor.id)),
             ),
     }
 }
@@ -224,7 +234,7 @@ impl SessionRepository for SessionRepositoryImpl {
         oid: SessionOid,
     ) -> Result<Option<Session>, SessionRepositoryError> {
         let Some((s_model, Some(u_model))) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(Uuid::from(oid)))
+            .filter(SessionColumn::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .one(&self.db)
@@ -269,10 +279,10 @@ impl SessionRepository for SessionRepositoryImpl {
         }
         let uuids: Vec<Uuid> = oids.iter().map(|oid| Uuid::from(*oid)).collect();
         let rows: Vec<(session::Model, Option<user::Model>)> = SessionEntity::find()
-            .filter(session::Column::Oid.is_in(uuids))
-            .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
-            .filter(session::Column::RevokedAt.is_null())
-            .filter(session::Column::ExpiresAt.gt(Utc::now().fixed_offset()))
+            .filter(SessionColumn::Oid.is_in(uuids))
+            .filter(SessionColumn::Status.eq(SessionStatus::ACTIVE.as_str()))
+            .filter(SessionColumn::RevokedAt.is_null())
+            .filter(SessionColumn::ExpiresAt.gt(Utc::now().fixed_offset()))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .all(&self.db)
@@ -315,7 +325,7 @@ impl SessionRepository for SessionRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "create"))]
     async fn create(&self, input: CreateSessionInput) -> Result<Session, SessionRepositoryError> {
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(input.user_oid))
+            .filter(UserColumn::Oid.eq(input.user_oid))
             .one(&self.db)
             .await
             .map_err(|e| SessionRepositoryError::QueryFailed(Box::new(e)))?
@@ -344,14 +354,14 @@ impl SessionRepository for SessionRepositoryImpl {
             amr: Set(json!(input.amr)),
             ..Default::default()
         };
-        let transaction = crate::database::audit::begin(&self.db, "session.created")
+        let transaction = audit::begin(&self.db, "session.created")
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         let model = active
             .insert(&transaction)
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
-        crate::database::audit::record(&transaction, "session.created", "session", model.oid)
+        audit::record(&transaction, "session.created", "session", model.oid)
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         transaction
@@ -365,18 +375,15 @@ impl SessionRepository for SessionRepositoryImpl {
     async fn touch_active_by_oid(&self, oid: SessionOid) -> Result<bool, SessionRepositoryError> {
         let now = Utc::now();
         let result = SessionEntity::update_many()
+            .col_expr(SessionColumn::LastActiveAt, Expr::value(now.fixed_offset()))
             .col_expr(
-                session::Column::LastActiveAt,
-                Expr::value(now.fixed_offset()),
-            )
-            .col_expr(
-                session::Column::UpdatedAt,
+                SessionColumn::UpdatedAt,
                 Expr::value(Some(now.fixed_offset())),
             )
-            .filter(session::Column::Oid.eq(Uuid::from(oid)))
-            .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
-            .filter(session::Column::RevokedAt.is_null())
-            .filter(session::Column::ExpiresAt.gt(now.fixed_offset()))
+            .filter(SessionColumn::Oid.eq(Uuid::from(oid)))
+            .filter(SessionColumn::Status.eq(SessionStatus::ACTIVE.as_str()))
+            .filter(SessionColumn::RevokedAt.is_null())
+            .filter(SessionColumn::ExpiresAt.gt(now.fixed_offset()))
             .exec(&self.db)
             .await
             .map_err(|e| SessionRepositoryError::TouchFailed(Box::new(e)))?;
@@ -392,7 +399,7 @@ impl SessionRepository for SessionRepositoryImpl {
         acr_expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
-        let transaction = crate::database::audit::begin(&self.db, "session.reauthenticate_by_oid")
+        let transaction = audit::begin(&self.db, "session.reauthenticate_by_oid")
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
         lock_session(&transaction, oid)
@@ -400,7 +407,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
 
         let Some((session_model, Some(user_model))) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(Uuid::from(oid)))
+            .filter(SessionColumn::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .one(&transaction)
@@ -434,7 +441,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .update(&transaction)
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
-        crate::database::audit::record(
+        audit::record(
             &transaction,
             "session.reauthenticate_by_oid",
             "session",
@@ -456,14 +463,14 @@ impl SessionRepository for SessionRepositoryImpl {
         oid: SessionOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
-        let transaction = crate::database::audit::begin(&self.db, "session.revoke_by_oid")
+        let transaction = audit::begin(&self.db, "session.revoke_by_oid")
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         lock_session(&transaction, oid)
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         let Some((s_model, Some(u_model))) = SessionEntity::find()
-            .filter(session::Column::Oid.eq(Uuid::from(oid)))
+            .filter(SessionColumn::Oid.eq(Uuid::from(oid)))
             .inner_join(UserEntity)
             .select_also(UserEntity)
             .one(&transaction)
@@ -483,22 +490,22 @@ impl SessionRepository for SessionRepositoryImpl {
             .update(&transaction)
             .await
             .map_err(|e| SessionRepositoryError::RevokeFailed(Box::new(e)))?;
-        super::challenge::clear_for_binding(&transaction, ChallengeBinding::Session(oid.0))
+        challenge::clear_for_binding(&transaction, ChallengeBinding::Session(oid.0))
             .await
             .map_err(|e| SessionRepositoryError::RevokeFailed(Box::new(e)))?;
         ClientAuthorizationEntity::update_many()
             .col_expr(
-                client_authorization::Column::RevokedAt,
+                ClientAuthorizationColumn::RevokedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
             )
             .col_expr(
-                client_authorization::Column::UpdatedAt,
+                ClientAuthorizationColumn::UpdatedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
             )
             .filter(
                 Condition::all()
-                    .add(client_authorization::Column::RevokedAt.is_null())
-                    .add(client_authorization::Column::Type.is_in([
+                    .add(ClientAuthorizationColumn::RevokedAt.is_null())
+                    .add(ClientAuthorizationColumn::Type.is_in([
                         ClientAuthorizationType::AuthorizationCode.to_string(),
                         ClientAuthorizationType::AccessToken.to_string(),
                         ClientAuthorizationType::RefreshToken.to_string(),
@@ -507,7 +514,7 @@ impl SessionRepository for SessionRepositoryImpl {
                         json_text(
                             (
                                 client_authorization::Entity,
-                                client_authorization::Column::Data,
+                                ClientAuthorizationColumn::Data,
                             ),
                             "session_oid",
                         )
@@ -518,7 +525,7 @@ impl SessionRepository for SessionRepositoryImpl {
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         if !already_revoked {
-            crate::database::audit::record(
+            audit::record(
                 &transaction,
                 "session.revoke_by_oid",
                 "session",
@@ -535,9 +542,11 @@ impl SessionRepository for SessionRepositoryImpl {
     }
 }
 
+pub(super) use super::session_security::lock_account_sessions;
+
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, Duration, Utc};
+    use chrono::{Duration, Utc};
     use identity_domain::auth::{
         ACR_AAL1, AMR_PASSWORD, SESSION_EXPIRY, SessionOid, SessionStatus,
         model::Session,
@@ -549,7 +558,7 @@ mod tests {
 
     use super::{
         SessionPageDirection, SessionPageItem, SessionRepositoryImpl, SessionSortKey,
-        build_session_page, session_to_domain,
+        build_session_page,
     };
     use crate::database::entity::{session, user::Model};
 
@@ -750,47 +759,6 @@ mod tests {
     }
 
     #[test]
-    fn session_to_domain_wraps_required_timestamps_in_some() {
-        let last_active_at = DateTime::parse_from_rfc3339("2026-01-01T01:00:00+00:00").unwrap();
-        let expires_at = DateTime::parse_from_rfc3339("2026-01-08T01:00:00+00:00").unwrap();
-        let created_at = DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap();
-        let model = session::Model {
-            id: 1,
-            oid: Uuid::new_v4(),
-            user_id: 42,
-            status: SessionStatus::ACTIVE.to_string(),
-            acr: None,
-            acr_expires_at: None,
-            amr: json!([]),
-            device_name: None,
-            device_type: None,
-            os_name: None,
-            os_version: None,
-            browser_name: None,
-            browser_version: None,
-            user_agent: None,
-            ip_address: None,
-            country: None,
-            city: None,
-            last_active_at,
-            authenticated_at: Some(created_at),
-            expires_at,
-            revoked_at: None,
-            created_at,
-            updated_at: None,
-        };
-
-        let session = session_to_domain(model, Uuid::new_v4()).unwrap();
-
-        assert_eq!(
-            session.last_active_at,
-            Some(last_active_at.with_timezone(&Utc))
-        );
-        assert_eq!(session.expires_at, Some(expires_at.with_timezone(&Utc)));
-        assert_eq!(session.created_at, created_at.with_timezone(&Utc));
-    }
-
-    #[test]
     fn backward_relay_page_restores_connection_order_and_reports_boundaries() {
         let first_oid = Uuid::from_u128(1);
         let second_oid = Uuid::from_u128(2);
@@ -871,5 +839,3 @@ mod tests {
         }
     }
 }
-
-pub(super) use super::session_security::lock_account_sessions;

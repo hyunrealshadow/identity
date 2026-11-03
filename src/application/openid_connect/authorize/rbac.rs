@@ -18,6 +18,7 @@ use identity_domain::{
     },
     user::UserOid,
 };
+use tracing::Span;
 use uuid::Uuid;
 
 use crate::{
@@ -197,8 +198,8 @@ impl AuthorizeService {
         clipped_request.scope = shared::clip_scope(&requested, &granted);
         let snapshot_data = build_approval_snapshot(&state, user_oid, &effective, &granted)?;
 
-        tracing::Span::current().record("business_requested", requested_count);
-        tracing::Span::current().record("business_granted", granted.len() as i64);
+        Span::current().record("business_requested", requested_count);
+        Span::current().record("business_granted", granted.len() as i64);
         self.events.emit(
             BusinessEvent::audit("authorization.rbac.clipped")
                 .outcome(if granted.is_empty() {
@@ -332,7 +333,9 @@ mod tests {
 
     use identity_domain::{
         authorization::ids::AuthorizationVersion,
-        rbac::{RbacAuthorizationState, RbacResourceState, validate_business_snapshot},
+        rbac::{
+            RbacAuthorizationState, RbacResourceState, ResourceOid, validate_business_snapshot,
+        },
         user::UserOid,
     };
     use uuid::Uuid;
@@ -349,7 +352,7 @@ mod tests {
     ) -> RbacAuthorizationState {
         RbacAuthorizationState {
             resource: RbacResourceState {
-                resource_oid: identity_domain::rbac::ResourceOid::new(),
+                resource_oid: ResourceOid::new(),
                 resource_uri: "https://api.example.test".to_owned(),
                 policy_version,
                 enabled: true,

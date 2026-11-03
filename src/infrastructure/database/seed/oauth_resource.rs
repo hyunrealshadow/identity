@@ -7,7 +7,7 @@
 use async_trait::async_trait;
 use identity_domain::openid_connect::API_RESOURCE;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbErr, EntityTrait,
     QueryFilter, Set, TransactionTrait, sea_query::OnConflict,
 };
 use uuid::Uuid;
@@ -15,7 +15,10 @@ use uuid::Uuid;
 use super::Seed;
 use crate::{
     application::error::{AppError, codes::authorization::AuthorizationErrorCode},
-    database::entity::resource,
+    database::entity::{
+        resource,
+        resource::{Column as ResourceColumn, Entity as ResourceEntity},
+    },
 };
 
 pub struct OAuthResourceDefaultsSeed;
@@ -40,7 +43,7 @@ impl Seed for OAuthResourceDefaultsSeed {
 pub async fn ensure_graphql_resource_coverage(
     transaction: &DatabaseTransaction,
 ) -> Result<(), AppError> {
-    resource::Entity::insert(resource::ActiveModel {
+    ResourceEntity::insert(resource::ActiveModel {
         oid: Set(Uuid::new_v4()),
         uri: Set(API_RESOURCE.to_owned()),
         name: Set("Identity GraphQL API".to_owned()),
@@ -48,7 +51,7 @@ pub async fn ensure_graphql_resource_coverage(
         ..Default::default()
     })
     .on_conflict(
-        OnConflict::column(resource::Column::Uri)
+        OnConflict::column(ResourceColumn::Uri)
             .do_nothing()
             .to_owned(),
     )
@@ -61,17 +64,15 @@ pub async fn ensure_graphql_resource_coverage(
 /// Resolve the reserved GraphQL resource by URI. This is the authoritative
 /// owner for built-in API scopes and management RBAC associations.
 pub async fn graphql_resource_oid(db: &impl ConnectionTrait) -> Result<Uuid, AppError> {
-    resource::Entity::find()
-        .filter(resource::Column::Uri.eq(API_RESOURCE))
+    ResourceEntity::find()
+        .filter(ResourceColumn::Uri.eq(API_RESOURCE))
         .one(db)
         .await
         .map_err(AppError::internal)?
         .map(|row| row.oid)
         .ok_or_else(|| {
             AppError::map_source(AuthorizationErrorCode::RbacPolicyUnavailable)(
-                sea_orm::DbErr::RecordNotFound(
-                    "the reserved GraphQL API resource is missing".to_owned(),
-                ),
+                DbErr::RecordNotFound("the reserved GraphQL API resource is missing".to_owned()),
             )
         })
 }

@@ -6,8 +6,10 @@ use chrono::{DateTime, Utc};
 use identity_application::{
     authorization::ManagementTarget,
     rbac::{
-        EffectiveGroupPermissionSourceRecord, EffectivePermissionRecord,
-        EffectivePermissionSourceRecord, UserRoleBindingMutationResult, UserRoleBindingRecord,
+        EffectiveGroupPermissionSourceRecord,
+        EffectivePermissionOrder as RbacEffectivePermissionOrder, EffectivePermissionRecord,
+        EffectivePermissionSourceRecord, ScopeOid, UserRoleBindingMutationResult,
+        UserRoleBindingOrder as RbacUserRoleBindingOrder, UserRoleBindingRecord,
     },
 };
 use identity_domain::{
@@ -17,10 +19,15 @@ use identity_domain::{
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
-use super::super::{
-    account::{UserGlobalId, UserNode},
-    resource::support::decode_oid,
-    role::{integration, types::RoleNode},
+use super::{
+    super::{
+        account::{UserGlobalId, UserNode},
+        group::{integration as group_integration, types as group_types, types::GroupNode},
+        resource::{support::decode_oid, types as resource_types},
+        role::{integration, types::RoleNode},
+        scope::types as scope_types,
+    },
+    types,
 };
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
@@ -60,7 +67,7 @@ impl UserRoleBindingOrder {
     }
 }
 
-impl From<UserRoleBindingOrder> for identity_application::rbac::UserRoleBindingOrder {
+impl From<UserRoleBindingOrder> for RbacUserRoleBindingOrder {
     fn from(order: UserRoleBindingOrder) -> Self {
         match order {
             UserRoleBindingOrder::CreatedAtAsc => Self::CreatedAtAsc,
@@ -83,7 +90,7 @@ impl EffectivePermissionOrder {
     }
 }
 
-impl From<EffectivePermissionOrder> for identity_application::rbac::EffectivePermissionOrder {
+impl From<EffectivePermissionOrder> for RbacEffectivePermissionOrder {
     fn from(order: EffectivePermissionOrder) -> Self {
         match order {
             EffectivePermissionOrder::CodeAsc => Self::CodeAsc,
@@ -175,7 +182,7 @@ impl UserRoleBindingNode {
     }
 
     async fn role_id(&self) -> ID {
-        super::types::role_global_id(self.record.role_oid)
+        types::role_global_id(self.record.role_oid)
     }
 
     #[graphql(
@@ -242,7 +249,7 @@ impl EffectivePermissionSourceNode {
 
     #[graphql(complexity = 0)]
     async fn role_id(&self) -> ID {
-        super::types::role_global_id(self.record.role_oid)
+        types::role_global_id(self.record.role_oid)
     }
 }
 
@@ -264,39 +271,33 @@ impl From<EffectiveGroupPermissionSourceRecord> for EffectiveGroupPermissionSour
 impl EffectiveGroupPermissionSourceNode {
     #[graphql(complexity = 0)]
     async fn group_id(&self) -> ID {
-        super::super::group::types::group_global_id(self.record.group_oid)
+        group_types::group_global_id(self.record.group_oid)
     }
 
     #[graphql(complexity = 0)]
     async fn membership_id(&self) -> ID {
-        super::super::group::types::membership_global_id(self.record.membership_oid)
+        group_types::membership_global_id(self.record.membership_oid)
     }
 
     #[graphql(complexity = 0)]
     async fn group_role_binding_id(&self) -> ID {
-        super::super::group::types::group_role_global_id(self.record.group_role_binding_oid)
+        group_types::group_role_global_id(self.record.group_role_binding_oid)
     }
 
     #[graphql(complexity = 0)]
     async fn role_id(&self) -> ID {
-        super::types::role_global_id(self.record.role_oid)
+        types::role_global_id(self.record.role_oid)
     }
 
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead))
     )]
-    async fn group(
-        &self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<Option<super::super::group::types::GroupNode>> {
-        let record = super::super::group::integration::find_group(
-            request_context(ctx)?,
-            self.record.group_oid,
-        )
-        .await
-        .map_err(|error| app_error(ctx, error))?;
-        Ok(record.map(super::super::group::types::GroupNode::new))
+    async fn group(&self, ctx: &Context<'_>) -> GraphqlResult<Option<GroupNode>> {
+        let record = group_integration::find_group(request_context(ctx)?, self.record.group_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(record.map(GroupNode::new))
     }
 }
 
@@ -311,14 +312,12 @@ impl EffectivePermissionNode {
     /// Canonical `Scope` identity; the field name retains authorization meaning.
     #[graphql(complexity = 0)]
     async fn permission_id(&self) -> ID {
-        super::super::scope::types::scope_global_id(identity_application::rbac::ScopeOid(
-            self.record.permission_oid.0,
-        ))
+        scope_types::scope_global_id(ScopeOid(self.record.permission_oid.0))
     }
 
     #[graphql(complexity = 0)]
     async fn resource_id(&self) -> ID {
-        super::super::resource::types::resource_global_id(self.record.resource_oid)
+        resource_types::resource_global_id(self.record.resource_oid)
     }
 
     #[graphql(complexity = 0)]

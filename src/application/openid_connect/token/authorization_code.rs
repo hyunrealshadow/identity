@@ -1,5 +1,7 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
+    auth,
+    auth::ACR_AAL2,
     client_authorization::{
         AccessTokenPrincipal, ClientAuthenticationMode, ManagementGrantKindData,
     },
@@ -14,7 +16,7 @@ use super::{
 use crate::{
     domain::auth::SessionStatus,
     observability::{BusinessEvent, EventValue},
-    openid_connect::rbac as shared,
+    openid_connect::{management, rbac as shared},
 };
 
 use super::*;
@@ -170,7 +172,7 @@ impl TokenService {
             if code_scope.contains_offline_access() {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
             }
-            if !crate::openid_connect::management::is_single_graphql_resource(&data.resources) {
+            if !management::is_single_graphql_resource(&data.resources) {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
             }
             if data.code_challenge.as_deref().is_none_or(str::is_empty)
@@ -265,9 +267,9 @@ impl TokenService {
             (data.acr.clone(), data.amr.clone())
         };
         if management
-            && !session_acr.as_deref().is_some_and(|acr| {
-                identity_domain::auth::acr_satisfies(acr, identity_domain::auth::ACR_AAL2)
-            })
+            && !session_acr
+                .as_deref()
+                .is_some_and(|acr| auth::acr_satisfies(acr, ACR_AAL2))
         {
             return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
         }
@@ -344,7 +346,7 @@ impl TokenService {
             // single GraphQL audience.
             let selected = ScopeSet::parse(&selection.scope)
                 .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;
-            if !crate::openid_connect::management::is_single_graphql_resource(&selection.resources)
+            if !management::is_single_graphql_resource(&selection.resources)
                 || selected.management_scopes() != code_scope.management_scopes()
             {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid)
@@ -371,15 +373,18 @@ impl TokenService {
                     repository: self.rbac_authorization_repo.as_ref(),
                     provider_service: &self.provider_service,
                 },
-                &authenticated_client,
-                snapshot_data,
-                &selection.scope,
-                &selected,
-                AccessTokenPrincipal::User,
-                Some(UserOid(Uuid::parse_str(&data.user_oid).map_err(
-                    AppError::map_source(TokenErrorCode::StoredUserOidInvalid),
-                )?)),
-                &selection.resources,
+                shared::BusinessTokenAuthorization {
+                    live_client: &authenticated_client,
+                    persisted: snapshot_data,
+                    persisted_scope: &selection.scope,
+                    scope: &selected,
+                    principal: AccessTokenPrincipal::User,
+                    subject_user_oid: Some(UserOid(
+                        Uuid::parse_str(&data.user_oid)
+                            .map_err(AppError::map_source(TokenErrorCode::StoredUserOidInvalid))?,
+                    )),
+                    audience: &selection.resources,
+                },
             )
             .await
             .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;

@@ -3,12 +3,15 @@ use async_graphql::{Context, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
     error::{AppError, codes::rbac::RbacErrorCode},
-    rbac::{CreateScopeCommand, ScopeStateCommand, UpdateScopeCommand},
+    rbac::{CreateScopeCommand, ScopeDescription, ScopeStateCommand, UpdateScopeCommand},
 };
 use identity_domain::{authorization::ManagementScope, rbac::ResourceOid};
 
-use super::super::resource::support::{decode_oid, normalize_reason};
 use super::{
+    super::resource::{
+        support::{decode_oid, normalize_reason},
+        types::ResourceGlobalId,
+    },
     integration,
     types::{
         CreateScopeInput, ScopeDescriptionInput, ScopePayload, ScopeStateInput, UpdateScopeInput,
@@ -43,8 +46,7 @@ impl ScopeMutation {
             reason,
             client_mutation_id,
         } = input;
-        let resource_oid =
-            decode_oid::<super::super::resource::types::ResourceGlobalId>(ctx, &resource_id)?;
+        let resource_oid = decode_oid::<ResourceGlobalId>(ctx, &resource_id)?;
         check_localized(ctx, &names, &descriptions)?;
         let reason = normalize_reason(ctx, &reason)?;
         let request = request_context(ctx)?;
@@ -188,8 +190,6 @@ fn check_optional_localized(
     Ok(())
 }
 
-fn map_descriptions(
-    descriptions: Vec<ScopeDescriptionInput>,
-) -> Vec<identity_application::rbac::ScopeDescription> {
+fn map_descriptions(descriptions: Vec<ScopeDescriptionInput>) -> Vec<ScopeDescription> {
     descriptions.into_iter().map(Into::into).collect()
 }

@@ -1,9 +1,13 @@
 //! Rules for newly chosen passwords. Existing passwords remain usable.
-use crate::error::{
-    AppError,
-    codes::{auth::AuthErrorCode, common::CommonErrorCode},
+use crate::{
+    error::{
+        AppError,
+        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+    },
+    setting::{BreachedPasswordCheckEnabledSetting, SettingsSnapshot},
 };
 use async_trait::async_trait;
+use tracing::Span;
 
 pub const MIN_PASSWORD_CHARACTERS: usize = 12;
 pub const MAX_PASSWORD_CHARACTERS: usize = 1024;
@@ -26,12 +30,12 @@ impl BreachedPasswordChecker for UnavailableBreachChecker {
 #[tracing::instrument(skip_all, name = "password.breach_check", fields(enabled))]
 pub async fn validate_breached_password(
     checker: &dyn BreachedPasswordChecker,
-    settings: &crate::setting::SettingsSnapshot,
+    settings: &SettingsSnapshot,
     password: &str,
     field: &str,
 ) -> Result<(), AppError> {
-    let enabled = settings.get::<crate::setting::BreachedPasswordCheckEnabledSetting>();
-    tracing::Span::current().record("enabled", enabled);
+    let enabled = settings.get::<BreachedPasswordCheckEnabledSetting>();
+    Span::current().record("enabled", enabled);
     if enabled && checker.is_breached(password).await? {
         return Err(password_error(AuthErrorCode::PasswordBreached, field));
     }
@@ -118,6 +122,7 @@ fn edit_distance(left: &str, right: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::setting::{BreachedPasswordCheckEnabledSetting, SettingsSnapshot};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct UnavailableCountingChecker(AtomicUsize);
@@ -133,8 +138,8 @@ mod tests {
     #[tokio::test]
     async fn disabled_breach_check_never_contacts_the_dependency() {
         let checker = UnavailableCountingChecker(AtomicUsize::new(0));
-        let settings = crate::setting::SettingsSnapshot::default()
-            .with::<crate::setting::BreachedPasswordCheckEnabledSetting>(false);
+        let settings =
+            SettingsSnapshot::default().with::<BreachedPasswordCheckEnabledSetting>(false);
         validate_breached_password(&checker, &settings, "test-only password", "password")
             .await
             .unwrap();
@@ -146,7 +151,7 @@ mod tests {
         let checker = UnavailableCountingChecker(AtomicUsize::new(0));
         let error = validate_breached_password(
             &checker,
-            &crate::setting::SettingsSnapshot::default(),
+            &SettingsSnapshot::default(),
             "test-only password",
             "password",
         )

@@ -1,8 +1,9 @@
-use std::sync::Arc;
+use std::{error::Error as StdError, sync::Arc};
 
 use identity_application::{
     auth::{
-        account::AccountService, login::LoginService, mfa::MfaService, session::SessionService,
+        account::AccountService, login::LoginService, mfa::MfaService, passkey::PasskeyService,
+        session::SessionService,
     },
     console::ConsoleRuntimeService,
     data_protection::{DataProtector, DataProtectorImpl},
@@ -26,17 +27,22 @@ use identity_application::{
     rbac::{GroupManagementService, RbacManagementService},
     user::management::UserManagementService,
 };
-use identity_domain::openid_connect::{
-    BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
-    OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, WorkloadAuthenticator,
+use identity_domain::{
+    openid_connect::{
+        BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
+        OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, WorkloadAuthenticator,
+    },
+    rbac::RbacAuthorizationRepository,
 };
-type Error = Box<dyn std::error::Error + Send + Sync>;
+type Error = Box<dyn StdError + Send + Sync>;
 use sea_orm::DatabaseConnection;
 
 use super::settings::AppRuntimeSettings;
 use crate::{
     auth::{
-        otp::TotpVerifierImpl, password::PasswordHasherImpl, workload::build_workload_authenticator,
+        breached_password::PwnedPasswordChecker, otp::TotpVerifierImpl,
+        passkey::WebAuthnAuthenticator, password::PasswordHasherImpl,
+        workload::build_workload_authenticator,
     },
     config::WorkloadsConfig,
     crypto::{
@@ -45,21 +51,25 @@ use crate::{
         key_jwk::KeyJwkGeneratorImpl, key_rotation::KeyRotationMaterialGeneratorImpl,
         signing_algorithm::SigningAlgorithmDetectorImpl,
     },
-    database::repository::{
-        challenge::ChallengeRepositoryImpl,
-        client_authorization::ClientAuthorizationRepositoryImpl,
-        device_authorization::DeviceAuthorizationRepositoryImpl,
-        group_management::GroupManagementRepositoryImpl, install::InstallRepositoryImpl,
-        instance_overview::InstanceOverviewRepositoryImpl, key::KeyRepositoryImpl,
-        key_jwk::KeyJwkRepositoryImpl, key_rotation::KeyRotationRepositoryImpl,
-        login::LoginRepositoryImpl, login_runtime::LoginRuntimeRepositoryImpl,
-        oauth_resource::OAuthResourceRepositoryImpl,
-        openid_connect::OpenIdConnectClientRepositoryImpl,
-        openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
-        rbac_management::RbacManagementRepositoryImpl, scope_catalog::ScopeCatalogRepositoryImpl,
-        session::SessionRepositoryImpl, user::UserRepositoryImpl,
-        user_credential::UserCredentialRepositoryImpl,
-        user_management::UserManagementRepositoryImpl,
+    database::{
+        repository::{
+            authorization::AuthorizationRepositoryImpl, challenge::ChallengeRepositoryImpl,
+            client_authorization::ClientAuthorizationRepositoryImpl,
+            device_authorization::DeviceAuthorizationRepositoryImpl,
+            group_management::GroupManagementRepositoryImpl, install::InstallRepositoryImpl,
+            instance_overview::InstanceOverviewRepositoryImpl, key::KeyRepositoryImpl,
+            key_jwk::KeyJwkRepositoryImpl, key_rotation::KeyRotationRepositoryImpl,
+            login::LoginRepositoryImpl, login_runtime::LoginRuntimeRepositoryImpl,
+            oauth_resource::OAuthResourceRepositoryImpl,
+            openid_connect::OpenIdConnectClientRepositoryImpl,
+            openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
+            rbac_authorization::RbacAuthorizationRepositoryImpl,
+            rbac_management::RbacManagementRepositoryImpl,
+            scope_catalog::ScopeCatalogRepositoryImpl, session::SessionRepositoryImpl,
+            user::UserRepositoryImpl, user_credential::UserCredentialRepositoryImpl,
+            user_management::UserManagementRepositoryImpl,
+        },
+        seed::console::ConsoleClientSeedConfig,
     },
     observability::events::sink,
     openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
@@ -91,9 +101,9 @@ pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
 
 pub type AppDeviceAuthorizationService = DeviceAuthorizationService;
 pub struct AppServices {
-    authorization: Arc<crate::database::repository::authorization::AuthorizationRepositoryImpl>,
+    authorization: Arc<AuthorizationRepositoryImpl>,
     login: AppLoginService,
-    passkey: Arc<identity_application::auth::passkey::PasskeyService>,
+    passkey: Arc<PasskeyService>,
     account: AppAccountService,
     session: AppSessionService,
     mfa: AppMfaService,
@@ -157,25 +167,19 @@ impl AppServices {
         let totp = Arc::new(TotpVerifierImpl);
 
         let events = sink();
-        let authorization = Arc::new(
-            crate::database::repository::authorization::AuthorizationRepositoryImpl::new(
-                db.clone(),
-            ),
-        );
-        let breach_checker = Arc::new(crate::auth::breached_password::PwnedPasswordChecker::new()?);
+        let authorization = Arc::new(AuthorizationRepositoryImpl::new(db.clone()));
+        let breach_checker = Arc::new(PwnedPasswordChecker::new()?);
         let passkey = Arc::new(
-            identity_application::auth::passkey::PasskeyService::new(
+            PasskeyService::new(
                 user_credential_repo.clone(),
                 Arc::new(ChallengeRepositoryImpl::new(db.clone())),
-                Arc::new(crate::auth::passkey::WebAuthnAuthenticator::new(
-                    settings.store(),
-                )),
+                Arc::new(WebAuthnAuthenticator::new(settings.store())),
             )
             .with_events(Arc::clone(&events)),
         );
 
-        let rbac_authorization_repo: Arc<dyn identity_domain::rbac::RbacAuthorizationRepository> =
-            Arc::new(crate::database::repository::rbac_authorization::RbacAuthorizationRepositoryImpl::new(db.clone()));
+        let rbac_authorization_repo: Arc<dyn RbacAuthorizationRepository> =
+            Arc::new(RbacAuthorizationRepositoryImpl::new(db.clone()));
 
         let client_authorization_repo =
             Arc::new(ClientAuthorizationRepositoryImpl::new(db.clone()));
@@ -412,7 +416,7 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn passkey(&self) -> &identity_application::auth::passkey::PasskeyService {
+    pub fn passkey(&self) -> &PasskeyService {
         &self.passkey
     }
 
@@ -549,16 +553,14 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn authorization(
-        &self,
-    ) -> &Arc<crate::database::repository::authorization::AuthorizationRepositoryImpl> {
+    pub fn authorization(&self) -> &Arc<AuthorizationRepositoryImpl> {
         &self.authorization
     }
 
     pub fn with_console_installation(
         mut self,
         db: DatabaseConnection,
-        config: Option<crate::database::seed::console::ConsoleClientSeedConfig>,
+        config: Option<ConsoleClientSeedConfig>,
     ) -> Self {
         self.install.repository =
             Arc::new(InstallRepositoryImpl::new(db).with_console_client_config(config));

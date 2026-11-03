@@ -22,13 +22,19 @@ use identity_domain::{
     },
 };
 use sea_orm::{
-    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, Statement,
+    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
     TransactionTrait,
 };
 use uuid::Uuid;
 
 use super::{Seed, oauth_resource};
-use crate::application::error::{AppError, codes::rbac::RbacErrorCode};
+use crate::{
+    application::error::{AppError, codes::rbac::RbacErrorCode},
+    database::{
+        audit,
+        repository::{authorization_lifecycle, localized},
+    },
+};
 
 pub struct UnifiedRbacSeed;
 
@@ -72,7 +78,7 @@ impl Seed for UnifiedRbacSeed {
     fields(db.system = "postgresql", db.operation = "ensure_built_in_rbac")
 )]
 pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(), AppError> {
-    crate::database::repository::authorization_lifecycle::lock_owner_lifecycle(transaction)
+    authorization_lifecycle::lock_owner_lifecycle(transaction)
         .await
         .map_err(AppError::internal)?;
     validate_catalog().map_err(AppError::internal)?;
@@ -105,7 +111,7 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
 }
 
 fn internal(message: &'static str) -> AppError {
-    AppError::internal(sea_orm::DbErr::Custom(message.to_owned()))
+    AppError::internal(DbErr::Custom(message.to_owned()))
 }
 
 fn identity_conflict() -> AppError {
@@ -181,7 +187,7 @@ fn group_metadata(role: AdministratorRole) -> Result<LocalizedMetadata, AppError
 }
 
 fn text_map(entries: &[LocalizedText]) -> serde_json::Value {
-    crate::database::repository::localized::encode_text(entries)
+    localized::encode_text(entries)
 }
 
 fn metadata_values(
@@ -349,7 +355,7 @@ async fn ensure_role_permissions(
         .await
         .map_err(AppError::internal)?;
     advance_users_affected_by_role(transaction, role_id).await?;
-    crate::database::audit::record(
+    audit::record(
         transaction,
         "rbac.role.permissions.reconcile",
         "role",
@@ -394,12 +400,9 @@ ORDER BY user_id
         let user_id = row
             .try_get::<i64>("", "user_id")
             .map_err(AppError::internal)?;
-        crate::database::repository::authorization_lifecycle::withdraw_user_authority_in_txn(
-            transaction,
-            user_id,
-        )
-        .await
-        .map_err(AppError::internal)?;
+        authorization_lifecycle::withdraw_user_authority_in_txn(transaction, user_id)
+            .await
+            .map_err(AppError::internal)?;
     }
     Ok(())
 }
@@ -540,14 +543,11 @@ ORDER BY user_id
             let user_id = row
                 .try_get::<i64>("", "user_id")
                 .map_err(AppError::internal)?;
-            crate::database::repository::authorization_lifecycle::withdraw_user_authority_in_txn(
-                transaction,
-                user_id,
-            )
-            .await
-            .map_err(AppError::internal)?;
+            authorization_lifecycle::withdraw_user_authority_in_txn(transaction, user_id)
+                .await
+                .map_err(AppError::internal)?;
         }
-        crate::database::audit::record(
+        audit::record(
             transaction,
             "rbac.group.roles.reconcile",
             "user_group",

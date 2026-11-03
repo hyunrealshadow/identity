@@ -229,7 +229,7 @@ async fn consent_test_state_for(
         updated_at: None,
     };
     let client_model = client::Model {
-        version: uuid::Uuid::new_v4(),
+        version: Uuid::new_v4(),
         id: 17,
         oid: client_oid,
         protocol: "openid_connect".to_owned(),

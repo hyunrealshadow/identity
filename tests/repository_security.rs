@@ -1,7 +1,8 @@
 //! PostgreSQL credential revocation and transactional audit verification.
 mod common;
+use chrono::{Duration as ChronoDuration, Utc};
 use identity_application::user::{
-    CredentialType,
+    CredentialData, CredentialType,
     model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
     repository::UserCredentialRepository,
 };
@@ -13,13 +14,16 @@ use identity_domain::{
     authorization::{ActorContext, HumanAuthenticationContext, RequestId},
     user::UserOid,
 };
-use identity_infrastructure::database::repository::user::UserRepositoryImpl;
-use identity_infrastructure::database::repository::{
-    login::LoginRepositoryImpl, session::SessionRepositoryImpl,
-    user_credential::UserCredentialRepositoryImpl,
+use identity_infrastructure::database::{
+    audit,
+    repository::{
+        login::LoginRepositoryImpl, session::SessionRepositoryImpl, shared,
+        user::UserRepositoryImpl, user_credential::UserCredentialRepositoryImpl,
+    },
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement, TransactionTrait};
 use std::{sync::Arc, time::Duration};
+use tokio::time;
 use uuid::Uuid;
 
 async fn sql(db: &DatabaseConnection, query: &str) {
@@ -129,9 +133,9 @@ fn input(user_oid: Uuid) -> CreateSessionInput {
         browser_version: None,
         user_agent: None,
         ip_address: None,
-        expires_at: Some(chrono::Utc::now() + chrono::Duration::days(7)),
+        expires_at: Some(Utc::now() + ChronoDuration::days(7)),
         acr: Some("aal1".into()),
-        acr_expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(5)),
+        acr_expires_at: Some(Utc::now() + ChronoDuration::minutes(5)),
         amr: vec!["pwd".into()],
     }
 }
@@ -217,13 +221,13 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         RequestId::new(reauth_request_id.clone()).unwrap(),
         None,
     );
-    let reauthenticated = identity_infrastructure::database::audit::with_actor(
+    let reauthenticated = audit::with_actor(
         actor,
         sessions.reauthenticate_by_oid(
             direct.oid,
             user,
             "aal2",
-            chrono::Utc::now() + chrono::Duration::hours(1),
+            Utc::now() + ChronoDuration::hours(1),
             &["pwd".to_owned()],
         ),
     )
@@ -243,7 +247,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     );
 
     let revoked = sessions
-        .revoke_by_oid(direct.oid, chrono::Utc::now())
+        .revoke_by_oid(direct.oid, Utc::now())
         .await
         .unwrap();
     assert!(revoked.is_some());
@@ -255,7 +259,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     // Re-revoking the same session is a no-op for the journal.
     assert!(
         sessions
-            .revoke_by_oid(direct.oid, chrono::Utc::now())
+            .revoke_by_oid(direct.oid, Utc::now())
             .await
             .unwrap()
             .is_some()
@@ -343,7 +347,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         RequestId::new(audit_failure_request.clone()).unwrap(),
         None,
     );
-    let audit_failed = identity_infrastructure::database::audit::with_actor(
+    let audit_failed = audit::with_actor(
         actor,
         repo.change_password_and_revoke(
             user.into(),
@@ -364,7 +368,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         .await
         .unwrap();
     assert!(
-        matches!(&unchanged[0].data, identity_application::user::CredentialData::Password(p) if serde_json::to_value(p).unwrap() == serde_json::to_value(&old).unwrap())
+        matches!(&unchanged[0].data, CredentialData::Password(p) if serde_json::to_value(p).unwrap() == serde_json::to_value(&old).unwrap())
     );
     sql(
         &db,
@@ -390,7 +394,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         RequestId::new(late_failure_request.clone()).unwrap(),
         None,
     );
-    let late_failed = identity_infrastructure::database::audit::with_actor(
+    let late_failed = audit::with_actor(
         actor,
         repo.change_password_and_revoke(
             user.into(),
@@ -408,7 +412,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         .unwrap();
     assert_eq!(
         serde_json::to_value(&stored[0].data).unwrap(),
-        serde_json::to_value(identity_application::user::CredentialData::Password(
+        serde_json::to_value(CredentialData::Password(
             old.clone()
         ))
         .unwrap()
@@ -425,7 +429,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
 
     // Queue password replacement before login completion on the same account lock.
     let blocker = db.begin().await.unwrap();
-    identity_infrastructure::database::repository::shared::lock_user_credentials(&blocker, user.into())
+    shared::lock_user_credentials(&blocker, user.into())
         .await
         .unwrap();
     let change = tokio::spawn({
@@ -443,7 +447,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
             .await
         }
     });
-    tokio::time::timeout(Duration::from_secs(5), async {
+    time::timeout(Duration::from_secs(5), async {
         loop {
             if scalar(
                 &db,
@@ -454,7 +458,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
@@ -469,7 +473,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     });
     blocker.commit().await.unwrap();
     assert_eq!(
-        tokio::time::timeout(Duration::from_secs(10), change)
+        time::timeout(Duration::from_secs(10), change)
             .await
             .unwrap()
             .unwrap()
@@ -477,7 +481,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         2
     );
     assert!(
-        tokio::time::timeout(Duration::from_secs(10), complete)
+        time::timeout(Duration::from_secs(10), complete)
             .await
             .unwrap()
             .unwrap()
@@ -530,7 +534,7 @@ async fn profile_audit_survives_dropped_events_and_rolls_back_with_the_write() {
         RequestId::new(request_id.clone()).unwrap(),
         None,
     );
-    identity_infrastructure::database::audit::with_actor(
+    audit::with_actor(
         actor,
         service.update_profile(
             UserOid(oid),
@@ -558,7 +562,7 @@ async fn profile_audit_survives_dropped_events_and_rolls_back_with_the_write() {
         RequestId::new(failed_id).unwrap(),
         None,
     );
-    let result = identity_infrastructure::database::audit::with_actor(
+    let result = audit::with_actor(
         actor,
         service.update_profile(
             UserOid(oid),

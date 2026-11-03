@@ -24,7 +24,10 @@ use super::{
     types::{RoleFilter, RoleNode, RoleOrder, decode_role_oid},
 };
 use crate::graphql::schema::{
+    RequestContext,
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
+    connection,
+    connection::ConnectionTotal,
     error::app_error,
     management_guard::ManagementGuard,
     modules::resource::{
@@ -56,6 +59,7 @@ impl RoleQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn roles(
         &self,
         ctx: &Context<'_>,
@@ -65,13 +69,7 @@ impl RoleQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<
-        Connection<
-            RbacConnectionCursor,
-            RoleNode,
-            crate::graphql::schema::connection::ConnectionTotal,
-        >,
-    > {
+    ) -> Result<Connection<RbacConnectionCursor, RoleNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         load_role_connection(
@@ -89,6 +87,7 @@ impl RoleQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn user_roles(
         &self,
         ctx: &Context<'_>,
@@ -121,6 +120,7 @@ impl RoleQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn role_users(
         &self,
         ctx: &Context<'_>,
@@ -153,6 +153,7 @@ impl RoleQuery {
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn user_permissions(
         &self,
         ctx: &Context<'_>,
@@ -187,6 +188,7 @@ impl RoleQuery {
         directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn account_permissions(
         &self,
         ctx: &Context<'_>,
@@ -215,18 +217,16 @@ impl RoleQuery {
 
 pub(crate) async fn load_role_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     filter: RoleFilter,
     order: RoleOrder,
     page: PageArgs,
-) -> Result<
-    Connection<RbacConnectionCursor, RoleNode, crate::graphql::schema::connection::ConnectionTotal>,
-> {
+) -> Result<Connection<RbacConnectionCursor, RoleNode, ConnectionTotal>> {
     let filter = filter.into_application(ctx)?;
     let page = integration::list_roles(request, filter.clone(), order.into(), page)
         .await
         .map_err(|error| app_error(ctx, error))?;
-    let additional = crate::graphql::schema::connection::connection_total(ctx, async {
+    let additional = connection::connection_total(ctx, async {
         request
             .state
             .services()
@@ -254,7 +254,7 @@ pub(crate) enum BindingTarget {
 
 pub(crate) async fn load_binding_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     target: BindingTarget,
     enabled: Option<bool>,
     order: UserRoleBindingOrder,
@@ -312,7 +312,7 @@ pub(crate) async fn load_binding_connection(
 
 pub(crate) async fn load_effective_permission_connection(
     ctx: &Context<'_>,
-    request: &crate::graphql::schema::RequestContext,
+    request: &RequestContext,
     user_oid: UserOid,
     resource_oid: ResourceOid,
     order: EffectivePermissionOrder,
@@ -332,7 +332,7 @@ pub(crate) async fn load_effective_permission_connection(
     )
     .await
     .map_err(|error| app_error(ctx, error))?;
-    let total = crate::graphql::schema::connection::connection_total(ctx, async {
+    let total = connection::connection_total(ctx, async {
         request
             .state
             .services()

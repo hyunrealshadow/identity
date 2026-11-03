@@ -1,4 +1,5 @@
 use super::*;
+use crate::auth::login;
 
 #[test]
 fn bound_mfa_challenge_excludes_password_and_keeps_enrolled_second_factors() {
@@ -129,18 +130,18 @@ fn passkey_requires_identifier_verified_and_unexpired_login() {
         LoginStatus::EXPIRED,
     ] {
         login.status = status;
-        assert!(crate::auth::login::validate_passkey_login(&login).is_err());
+        assert!(login::validate_passkey_login(&login).is_err());
     }
     login.status = LoginStatus::MFA_REQUIRED;
-    assert!(crate::auth::login::validate_passkey_login(&login).is_ok());
+    assert!(login::validate_passkey_login(&login).is_ok());
     login.status = LoginStatus::IDENTIFIER_VERIFIED;
-    assert!(crate::auth::login::validate_passkey_login(&login).is_ok());
+    assert!(login::validate_passkey_login(&login).is_ok());
     login.user_oid = None;
-    assert!(crate::auth::login::validate_passkey_login(&login).is_err());
+    assert!(login::validate_passkey_login(&login).is_err());
     login.user_oid = Some(Uuid::new_v4());
     login.expires_at = Utc::now() - Duration::seconds(1);
-    assert!(crate::auth::login::validate_passkey_login(&login).is_err());
+    assert!(login::validate_passkey_login(&login).is_err());
     login.expires_at = Utc::now() + Duration::minutes(1);
     login.failed_attempts = MAX_FAILED_ATTEMPTS;
-    assert!(crate::auth::login::validate_passkey_login(&login).is_err());
+    assert!(login::validate_passkey_login(&login).is_err());
 }

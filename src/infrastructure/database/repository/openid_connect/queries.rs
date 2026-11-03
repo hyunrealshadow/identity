@@ -1,10 +1,16 @@
 use super::mapping::{to_client, to_metadata, to_platform};
 use crate::database::entity::{
-    client, client::Entity as ClientEntity, client_openid_connect,
-    client_openid_connect::Entity as OpenIdConnectClientEntity, client_openid_connect_platform,
-    client_openid_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
-    client_scope::Entity as ClientScopeEntity, login, login::Entity as LoginEntity, scope,
-    scope::Entity as ScopeEntity, session, session::Entity as SessionEntity,
+    client::{Column as ClientColumn, Entity as ClientEntity},
+    client_openid_connect::{
+        Column as ClientOpenIdConnectColumn, Entity as OpenIdConnectClientEntity,
+    },
+    client_openid_connect_platform::{
+        Column as ClientOpenIdConnectPlatformColumn, Entity as ClientOpenIdConnectPlatformEntity,
+    },
+    client_scope::{Column as ClientScopeColumn, Entity as ClientScopeEntity},
+    login::{Column as LoginColumn, Entity as LoginEntity},
+    scope::{Column as ScopeColumn, Entity as ScopeEntity},
+    session::{Column as SessionColumn, Entity as SessionEntity},
 };
 use async_trait::async_trait;
 use identity_domain::{
@@ -36,8 +42,8 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         oid: ClientOid,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let row = ClientEntity::find()
-            .filter(client::Column::Oid.eq(oid))
-            .filter(client::Column::Protocol.eq("openid_connect"))
+            .filter(ClientColumn::Oid.eq(oid))
+            .filter(ClientColumn::Protocol.eq("openid_connect"))
             .find_also_related(OpenIdConnectClientEntity)
             .one(&self.db)
             .await
@@ -53,7 +59,7 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
 
         let client_id = client_model.id;
         let platform_models = ClientOpenIdConnectPlatformEntity::find()
-            .filter(client_openid_connect_platform::Column::ClientId.eq(client_id))
+            .filter(ClientOpenIdConnectPlatformColumn::ClientId.eq(client_id))
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -64,9 +70,9 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
 
         let assigned_scopes = ScopeEntity::find()
             .inner_join(ClientScopeEntity)
-            .filter(client_scope::Column::ClientId.eq(client_id))
+            .filter(ClientScopeColumn::ClientId.eq(client_id))
             .select_only()
-            .column(scope::Column::Code)
+            .column(ScopeColumn::Code)
             .into_tuple::<String>()
             .all(&self.db)
             .await
@@ -113,9 +119,9 @@ impl OpenIdConnectClientRepositoryImpl {
     ) -> Result<Vec<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let client_ids = LoginEntity::find()
             .inner_join(SessionEntity)
-            .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
+            .filter(SessionColumn::Oid.eq(Uuid::from(session_oid)))
             .select_only()
-            .column(login::Column::ClientId)
+            .column(LoginColumn::ClientId)
             .distinct()
             .into_tuple::<i64>()
             .all(&self.db)
@@ -127,16 +133,12 @@ impl OpenIdConnectClientRepositoryImpl {
         }
 
         let channel_filter = match channel {
-            LogoutChannel::Front => {
-                client_openid_connect::Column::FrontchannelLogoutUri.is_not_null()
-            }
-            LogoutChannel::Back => {
-                client_openid_connect::Column::BackchannelLogoutUri.is_not_null()
-            }
+            LogoutChannel::Front => ClientOpenIdConnectColumn::FrontchannelLogoutUri.is_not_null(),
+            LogoutChannel::Back => ClientOpenIdConnectColumn::BackchannelLogoutUri.is_not_null(),
         };
         let mut client_rows = ClientEntity::find()
-            .filter(client::Column::Id.is_in(client_ids.clone()))
-            .filter(client::Column::Protocol.eq("openid_connect"))
+            .filter(ClientColumn::Id.is_in(client_ids.clone()))
+            .filter(ClientColumn::Protocol.eq("openid_connect"))
             .find_also_related(OpenIdConnectClientEntity)
             .filter(channel_filter)
             .all(&self.db)
@@ -154,9 +156,7 @@ impl OpenIdConnectClientRepositoryImpl {
             .collect::<Vec<_>>();
 
         let platform_models = ClientOpenIdConnectPlatformEntity::find()
-            .filter(
-                client_openid_connect_platform::Column::ClientId.is_in(matched_client_ids.clone()),
-            )
+            .filter(ClientOpenIdConnectPlatformColumn::ClientId.is_in(matched_client_ids.clone()))
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -170,10 +170,10 @@ impl OpenIdConnectClientRepositoryImpl {
 
         let scope_rows = ClientScopeEntity::find()
             .inner_join(ScopeEntity)
-            .filter(client_scope::Column::ClientId.is_in(matched_client_ids))
+            .filter(ClientScopeColumn::ClientId.is_in(matched_client_ids))
             .select_only()
-            .column(client_scope::Column::ClientId)
-            .column(scope::Column::Code)
+            .column(ClientScopeColumn::ClientId)
+            .column(ScopeColumn::Code)
             .into_tuple::<(i64, String)>()
             .all(&self.db)
             .await

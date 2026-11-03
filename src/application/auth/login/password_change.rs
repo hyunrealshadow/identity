@@ -1,4 +1,4 @@
-use super::{LoginService, PasswordChangeOutcome};
+use super::{super::password_policy, LoginService, PasswordChangeOutcome};
 use crate::{
     auth::password::{VerifyResult, run_password_hashing},
     error::{
@@ -8,7 +8,7 @@ use crate::{
     observability::{BusinessEvent, EventValue},
     setting::PasswordHashSetting,
     user::{
-        UserOid,
+        Password, UserCredentialOid, UserOid,
         model::{CredentialData, CredentialType},
     },
 };
@@ -21,21 +21,14 @@ impl LoginService {
         &self,
         user_oid: UserOid,
         new_password: &str,
-    ) -> Result<
-        (
-            crate::user::UserCredentialOid,
-            crate::user::Password,
-            crate::user::Password,
-        ),
-        AppError,
-    > {
+    ) -> Result<(UserCredentialOid, Password, Password), AppError> {
         let user = self.get_user(user_oid).await?;
-        super::super::password_policy::validate_password(
+        password_policy::validate_password(
             new_password,
             &[&user.name, &user.email],
             "newPassword",
         )?;
-        super::super::password_policy::validate_breached_password(
+        password_policy::validate_breached_password(
             self.breach_checker.as_ref(),
             &self.settings.snapshot(),
             new_password,

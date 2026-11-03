@@ -12,6 +12,7 @@ use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::{Host, Url};
 use uuid::Uuid;
 
+use super::scope;
 use crate::{
     client::model::{Client, ClientProtocol},
     key::{JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm},
@@ -393,7 +394,7 @@ impl OpenIdConnectClient {
     pub fn has_assigned_scope(&self, scope_name: &str) -> bool {
         self.assigned_scopes
             .iter()
-            .any(|assigned| super::scope::scope_pattern_matches(assigned, scope_name))
+            .any(|assigned| scope::scope_pattern_matches(assigned, scope_name))
     }
 
     /// Whether this client's registration permits the given grant type.

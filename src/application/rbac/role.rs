@@ -42,18 +42,13 @@ pub struct RoleFilter {
     pub scope_oid: Option<ScopeOid>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum RoleOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
     NameAsc,
     NameDesc,
-}
-
-impl Default for RoleOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl RoleOrder {

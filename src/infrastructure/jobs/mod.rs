@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use apalis_sql::{postgres::PostgresStorage, sqlx};
+use apalis_sql::{postgres::PostgresStorage, sqlx, sqlx::postgres::PgPoolOptions};
 
 use crate::{config::AppConfig, state::AppState};
 
@@ -13,7 +13,7 @@ pub async fn spawn_background_workers(
 ) -> Result<(), sqlx::Error> {
     // Apalis SQL 0.7 uses SQLx 0.8 while SeaORM 2 uses SQLx 0.9, so the
     // backends connect to the same database through separate pools.
-    let pool = sqlx::postgres::PgPoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_millis(config.database.connect_timeout))
         .connect(&config.database.uri)

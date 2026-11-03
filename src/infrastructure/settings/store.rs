@@ -12,7 +12,7 @@ use identity_application::{
 use sea_orm::{DatabaseConnection, EntityTrait};
 use tokio::sync::Mutex;
 
-use crate::database::entity::setting;
+use crate::database::entity::setting::Entity as SettingEntity;
 
 /// The registered settings of the `setting` table, decoded into one snapshot
 /// shared by all consumers.
@@ -57,7 +57,7 @@ async fn load(
     registry: &SettingRegistry,
     previous: Option<&SettingsSnapshot>,
 ) -> Result<SettingsSnapshot, AppError> {
-    let rows = setting::Entity::find()
+    let rows = SettingEntity::find()
         .all(db)
         .await
         .map_err(AppError::internal)?;
@@ -107,6 +107,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::database::entity::setting;
 
     fn row<S: SettingDefinition>(id: i32, value: Value) -> setting::Model {
         row_at(id, S::KEY, value)

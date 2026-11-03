@@ -3,9 +3,13 @@ use async_graphql::{
 };
 use chrono::{DateTime, Utc};
 use identity_application::user::management::UserProfilePatch;
+use identity_domain::user::User;
 use uuid::Uuid;
 
-use super::access::ensure_user_management_read;
+use super::{
+    super::{account, account::UserNode},
+    access::ensure_user_management_read,
+};
 
 /// Stable user-management ordering. Explicit SDL names keep consumers and the
 /// persisted cursor contract independent from Rust identifier conventions.
@@ -116,8 +120,8 @@ fn patch_value(value: MaybeUndefined<String>) -> Option<Option<String>> {
 
 async fn payload_user<'a>(
     ctx: &Context<'_>,
-    user: &'a Option<super::super::account::UserNode>,
-) -> GraphqlResult<Option<&'a super::super::account::UserNode>> {
+    user: &'a Option<UserNode>,
+) -> GraphqlResult<Option<&'a UserNode>> {
     let Some(user) = user.as_ref() else {
         return Ok(None);
     };
@@ -200,20 +204,17 @@ pub(super) struct InvalidNullIdentifier;
 pub(super) struct CreateUserPayload {
     user_id: ID,
     version: Uuid,
-    user: Option<super::super::account::UserNode>,
+    user: Option<UserNode>,
     client_mutation_id: Option<String>,
 }
 
 impl CreateUserPayload {
-    pub(super) fn new(
-        user: identity_domain::user::User,
-        client_mutation_id: Option<String>,
-    ) -> Self {
+    pub(super) fn new(user: User, client_mutation_id: Option<String>) -> Self {
         let version = user.version;
         Self {
-            user_id: super::super::account::user_global_id(&user),
+            user_id: account::user_global_id(&user),
             version,
-            user: Some(super::super::account::UserNode::managed(user)),
+            user: Some(UserNode::managed(user)),
             client_mutation_id,
         }
     }
@@ -229,10 +230,7 @@ impl CreateUserPayload {
         self.version
     }
 
-    async fn user(
-        &self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<Option<&super::super::account::UserNode>> {
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.user).await
     }
 
@@ -244,20 +242,17 @@ impl CreateUserPayload {
 pub(super) struct UpdateUserPayload {
     user_id: ID,
     version: Uuid,
-    user: Option<super::super::account::UserNode>,
+    user: Option<UserNode>,
     client_mutation_id: Option<String>,
 }
 
 impl UpdateUserPayload {
-    pub(super) fn new(
-        user: identity_domain::user::User,
-        client_mutation_id: Option<String>,
-    ) -> Self {
+    pub(super) fn new(user: User, client_mutation_id: Option<String>) -> Self {
         let version = user.version;
         Self {
-            user_id: super::super::account::user_global_id(&user),
+            user_id: account::user_global_id(&user),
             version,
-            user: Some(super::super::account::UserNode::managed(user)),
+            user: Some(UserNode::managed(user)),
             client_mutation_id,
         }
     }
@@ -273,10 +268,7 @@ impl UpdateUserPayload {
         self.version
     }
 
-    async fn user(
-        &self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<Option<&super::super::account::UserNode>> {
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.user).await
     }
 
@@ -288,20 +280,17 @@ impl UpdateUserPayload {
 pub(super) struct UserStatePayload {
     user_id: ID,
     version: Uuid,
-    user: Option<super::super::account::UserNode>,
+    user: Option<UserNode>,
     client_mutation_id: Option<String>,
 }
 
 impl UserStatePayload {
-    pub(super) fn new(
-        user: identity_domain::user::User,
-        client_mutation_id: Option<String>,
-    ) -> Self {
+    pub(super) fn new(user: User, client_mutation_id: Option<String>) -> Self {
         let version = user.version;
         Self {
-            user_id: super::super::account::user_global_id(&user),
+            user_id: account::user_global_id(&user),
             version,
-            user: Some(super::super::account::UserNode::managed(user)),
+            user: Some(UserNode::managed(user)),
             client_mutation_id,
         }
     }
@@ -317,10 +306,7 @@ impl UserStatePayload {
         self.version
     }
 
-    async fn user(
-        &self,
-        ctx: &Context<'_>,
-    ) -> GraphqlResult<Option<&super::super::account::UserNode>> {
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.user).await
     }
 

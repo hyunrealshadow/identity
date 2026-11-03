@@ -1,5 +1,7 @@
 use chrono::Duration;
-use identity_domain::client_authorization::{AccessTokenData, ClientAuthenticationMode};
+use identity_domain::client_authorization::{
+    AccessTokenData, AccessTokenPrincipal, ClientAuthenticationMode,
+};
 
 use crate::{
     error::{code::AppErrorCode, codes::token::TokenErrorCode},
@@ -183,7 +185,7 @@ async fn signed_access_token_revokes_only_its_record() {
                 scope: "openid".to_owned(),
                 resources: Vec::new(),
                 user_oid: Some(user_oid.to_string()),
-                principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+                principal: AccessTokenPrincipal::User,
                 session_oid: None,
                 protected_session_id: None,
                 authorization_code_oid: None,
@@ -217,7 +219,7 @@ async fn signed_access_token_revokes_only_its_record() {
             audience: &client_id,
             client_id: &client_id,
             subject: &user_oid.to_string(),
-            principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+            principal: AccessTokenPrincipal::User,
             client: &client,
             user: None,
             protected_session_id: None,

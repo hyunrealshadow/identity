@@ -1,14 +1,16 @@
 //! Read and page queries for groups, memberships and group roles.
 
 use identity_application::rbac::{
-    GroupEntityKind, GroupManagementRepositoryError, GroupMembershipPageEntry,
+    GroupEntityKind, GroupFilter, GroupManagementRepositoryError, GroupMembershipPageEntry,
     GroupMembershipQuery, GroupMembershipRecord, GroupOrder, GroupPageData, GroupPageEntry,
     GroupQuery, GroupRecord, GroupRoleBindingRecord, GroupRoleOrder, GroupRolePageEntry,
     GroupRoleQuery,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
-use identity_domain::rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid};
-use identity_domain::user::UserOid;
+use identity_domain::{
+    rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid},
+    user::UserOid,
+};
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
 use uuid::Uuid;
 
@@ -224,10 +226,7 @@ pub(crate) async fn group_id_by_oid_locked<C: ConnectionTrait>(
         .map_err(storage)
 }
 
-fn group_filter_conditions(
-    filter: &identity_application::rbac::GroupFilter,
-    binds: &mut Binds,
-) -> Vec<String> {
+fn group_filter_conditions(filter: &GroupFilter, binds: &mut Binds) -> Vec<String> {
     let mut conditions = vec!["ug.deleted_at IS NULL".to_owned()];
     if let Some(term) = &filter.query {
         let pattern = format!("%{}%", escape_like(term));
@@ -266,7 +265,7 @@ impl GroupManagementRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "group.count"))]
     pub(crate) async fn group_count(
         &self,
-        filter: identity_application::rbac::GroupFilter,
+        filter: GroupFilter,
     ) -> Result<u64, GroupManagementRepositoryError> {
         let mut binds = Binds::new();
         let conditions = group_filter_conditions(&filter, &mut binds);

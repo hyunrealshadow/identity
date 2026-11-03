@@ -11,7 +11,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         mpsc::{RecvTimeoutError, SyncSender, TrySendError, sync_channel},
     },
-    thread,
+    thread::Builder,
     time::{Duration, SystemTime},
 };
 
@@ -27,6 +27,7 @@ use opentelemetry_sdk::logs::SdkLoggerProvider;
 use tracing::warn;
 
 use super::{
+    context,
     metrics::global as metrics,
     pii::{Pii, REDACTED},
 };
@@ -78,7 +79,7 @@ impl EventPipeline {
         let drop_notice = Arc::new(AtomicBool::new(false));
         let worker_closed = Arc::clone(&closed);
 
-        thread::Builder::new()
+        Builder::new()
             .name("identity.observability.events".to_owned())
             .spawn(move || {
                 loop {
@@ -188,7 +189,7 @@ enum RenderedValue {
 }
 
 fn render(mut event: BusinessEvent) -> RenderedEvent {
-    if let Some(correlation) = super::context::current_request_correlation() {
+    if let Some(correlation) = context::current_request_correlation() {
         event
             .attributes
             .push(("request.id", EventValue::Text(correlation.request_id)));

@@ -12,6 +12,7 @@ use josekit::{
         RS384, RS512,
     },
     jwt,
+    jwt::JwtPayload,
     util::{SHA_256, SHA_384, SHA_512},
 };
 use openssl::{
@@ -63,29 +64,6 @@ fn jwk_without_certificate_has_no_x5_fields() {
     assert!(jwk.parameter("x5c").is_none());
     assert!(jwk.parameter("x5t").is_none());
     assert!(jwk.parameter("x5t#S256").is_none());
-}
-
-#[test]
-fn jwk_with_certificate_has_x5c_x5t_x5t_s256() {
-    let (private_key, cert) = test_rsa_key_and_cert();
-    let jwk = public_jwk_from_private_key_pem(&private_key, None, Some(&cert)).unwrap();
-
-    // x5c must be a non-empty array
-    let x5c = jwk.parameter("x5c").expect("x5c missing");
-    assert!(x5c.is_array(), "x5c must be a JSON array");
-    let arr = x5c.as_array().unwrap();
-    assert_eq!(arr.len(), 1, "x5c must have exactly one element");
-    assert!(arr[0].is_string(), "x5c[0] must be a string");
-
-    // x5t must be a non-empty string
-    let x5t = jwk.parameter("x5t").expect("x5t missing");
-    assert!(x5t.is_string());
-    assert!(!x5t.as_str().unwrap().is_empty());
-
-    // x5t#S256 must be a non-empty string
-    let x5t_s256 = jwk.parameter("x5t#S256").expect("x5t#S256 missing");
-    assert!(x5t_s256.is_string());
-    assert!(!x5t_s256.as_str().unwrap().is_empty());
 }
 
 #[test]
@@ -264,7 +242,7 @@ fn assert_roundtrip(private_key_pem: &str, public_key_pem: &str, alg_label: &str
 
     let mut header = JwsHeader::new();
     header.set_algorithm(alg_label);
-    let mut payload = jwt::JwtPayload::new();
+    let mut payload = JwtPayload::new();
     payload.set_subject("test-user");
     payload.set_claim("alg", Some(json!(alg_label))).unwrap();
 

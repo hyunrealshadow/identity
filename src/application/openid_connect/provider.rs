@@ -7,7 +7,7 @@ use crate::{
     setting::{OpenIdConnectSettings, PushedAuthorizationSettings, SettingsSource},
 };
 use identity_domain::{
-    authorization::{PolicyVersion, catalog::ManagementScope},
+    authorization::{PolicyVersion, catalog, catalog::ManagementScope},
     client::model::ClientOid,
     key::{KeyJwkRepository, repository::KeyRepository},
     openid_connect::{
@@ -125,14 +125,13 @@ impl OpenIdProviderService {
         client: &OpenIdConnectClient,
         resource_uri: &str,
     ) -> Result<BTreeSet<String>, AppError> {
-        if let Some(repo) = &self.resource_repo {
-            if let Some(codes) = repo
+        if let Some(repo) = &self.resource_repo
+            && let Some(codes) = repo
                 .client_scope_codes(client.client().oid, resource_uri)
                 .await
                 .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
-            {
-                return Ok(codes.into_iter().collect());
-            }
+        {
+            return Ok(codes.into_iter().collect());
         }
         Ok(client.assigned_scopes().iter().cloned().collect())
     }
@@ -144,14 +143,13 @@ impl OpenIdProviderService {
         &self,
         client: &OpenIdConnectClient,
     ) -> Result<PolicyVersion, AppError> {
-        if let Some(repo) = &self.resource_repo {
-            if let Some(fingerprint) = repo
+        if let Some(repo) = &self.resource_repo
+            && let Some(fingerprint) = repo
                 .client_authority_fingerprint(client.client().oid)
                 .await
                 .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
-            {
-                return Ok(fingerprint);
-            }
+        {
+            return Ok(fingerprint);
         }
         let mut scopes = client.assigned_scopes().to_vec();
         scopes.sort();
@@ -227,10 +225,10 @@ impl OpenIdProviderService {
         }
         supported.retain(|name| {
             !is_scope_pattern(name)
-                && (!identity_domain::authorization::catalog::is_reserved_management_name(name)
+                && (!catalog::is_reserved_management_name(name)
                     || ManagementScope::from_name(name).is_some())
         });
-        let mut resolved = std::collections::BTreeSet::new();
+        let mut resolved = BTreeSet::new();
         for requested in scope.split(' ').filter(|name| !name.is_empty()) {
             let matches = supported
                 .iter()

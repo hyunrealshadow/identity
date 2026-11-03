@@ -1,3 +1,5 @@
+use identity_domain::auth::SessionOid;
+use identity_web::controllers::shared;
 use serde_json::from_str;
 
 use super::*;
@@ -195,12 +197,9 @@ pub(super) async fn device_code_check_does_not_choose_an_account() {
 #[tokio::test]
 pub(super) async fn device_decision_is_recorded_against_the_bound_login() {
     let (state, protected_login_id, session_oid) = device_decision_test_state().await;
-    let protected_session_id = identity_web::controllers::shared::protect_session_id(
-        &state,
-        identity_domain::auth::SessionOid(session_oid),
-    )
-    .await
-    .unwrap();
+    let protected_session_id = shared::protect_session_id(&state, SessionOid(session_oid))
+        .await
+        .unwrap();
     let db = state.resources().db().clone();
     let service = Service::new(app_router(state, &consent_test_config()));
 

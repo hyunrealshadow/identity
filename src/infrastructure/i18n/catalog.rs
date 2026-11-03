@@ -18,6 +18,8 @@ use identity_application::error::{
 use std::{fs, path::Path};
 use unic_langid::LanguageIdentifier;
 
+use crate::web::tera as web_tera;
+
 #[derive(Debug, Clone)]
 pub struct PublicErrorDefinition {
     pub code: u32,
@@ -137,7 +139,7 @@ fn validate_sources(
         .parse::<LanguageIdentifier>()
         .map_err(|_| "invalid catalog locale".to_owned())?;
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
-    crate::web::tera::register_list_function(&mut bundle);
+    web_tera::register_list_function(&mut bundle);
     bundle.set_use_isolating(false);
     for source in sources {
         let resource = FluentResource::try_new(source.clone())
@@ -222,6 +224,8 @@ pub fn validate_error_catalogs(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::RangeInclusive;
+
     use super::*;
     #[test]
     fn both_real_locales_cover_public_errors_and_required_parameters_without_fallback() {
@@ -239,7 +243,7 @@ mod tests {
 
         fn covered<E: AppErrorCode + IntoEnumIterator>(
             inventory: &[PublicErrorDefinition],
-            range: std::ops::RangeInclusive<u32>,
+            range: RangeInclusive<u32>,
         ) {
             for code in E::iter() {
                 assert!(range.contains(&code.code()));

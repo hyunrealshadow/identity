@@ -11,7 +11,10 @@ use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use url::Url;
 use uuid::Uuid;
 
-use crate::openid_connect::{GrantType, ScopeSet};
+use crate::{
+    client_authorization::ManagementAuthorizationSnapshotData,
+    openid_connect::{GrantType, ScopeSet},
+};
 
 macro_rules! impl_string_serde {
     ($type:ty) => {
@@ -396,7 +399,7 @@ pub struct AuthorizationRequestData {
     /// Management authorization snapshot clipped at approval. Legacy requests
     /// omit it; the authorization code/token snapshot is authoritative.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub management: Option<crate::client_authorization::ManagementAuthorizationSnapshotData>,
+    pub management: Option<ManagementAuthorizationSnapshotData>,
 }
 
 impl From<&AuthorizationRequest> for AuthorizationRequestData {

@@ -4,15 +4,20 @@
 //! use cases. It does not depend on SeaORM, HTTP or GraphQL. Adapters load the
 //! current binding/grant and policy version, then pass them here.
 
-use std::{collections::BTreeSet, time::Duration};
+use std::{
+    collections::BTreeSet,
+    fmt::{Debug as FmtDebug, Display, Formatter, Result as FmtResult},
+    time::Duration,
+};
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use identity_domain::{
     authorization::{
-        actor::{ActorContext, ActorPrincipal},
+        actor::{ActorContext, ActorPrincipal, HumanAuthenticationContext},
         authority::{ClientScopeAuthority, UserPermissionAuthority},
+        catalog,
         catalog::{AdministratorRole, HumanAuthenticationRequirement, ManagementScope},
         ids::{AuthorizationVersion, PolicyVersion},
         snapshot::{
@@ -196,9 +201,9 @@ pub enum ManagementAuthorizationError {
     TokenScopeNotAuthorized,
 }
 
-impl std::fmt::Debug for ManagementAuthorizationError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, formatter)
+impl FmtDebug for ManagementAuthorizationError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, formatter)
     }
 }
 
@@ -211,7 +216,7 @@ pub fn parse_token_management_scopes<'a>(
     for name in names {
         if let Some(scope) = ManagementScope::from_name(name) {
             scopes.insert(scope);
-        } else if identity_domain::authorization::catalog::is_reserved_management_name(name) {
+        } else if catalog::is_reserved_management_name(name) {
             return Err(ManagementAuthorizationError::InvalidTokenScope {
                 scope: name.to_owned(),
             });
@@ -305,10 +310,10 @@ pub fn evaluate_management_authority(
             if request.target.is_instance_owner && request.required.is_owner_target_sensitive() {
                 return Err(ManagementAuthorizationError::TargetForbidden);
             }
-            if let Some(issued) = request.credential_client_boundary {
-                if issued != authority.boundary {
-                    return Err(ManagementAuthorizationError::ClientScopeBoundaryMismatch);
-                }
+            if let Some(issued) = request.credential_client_boundary
+                && issued != authority.boundary
+            {
+                return Err(ManagementAuthorizationError::ClientScopeBoundaryMismatch);
             }
             // Machine principals never claim human AAL2. Eligibility is the
             // catalog's explicit machine allowance plus the live ceiling.
@@ -362,7 +367,7 @@ fn map_snapshot_error(error: SnapshotValidationError) -> ManagementAuthorization
 }
 
 fn enforce_human_authentication(
-    authentication: identity_domain::authorization::actor::HumanAuthenticationContext,
+    authentication: HumanAuthenticationContext,
     required: HumanAuthenticationRequirement,
     now: DateTime<Utc>,
     recent_ttl: Duration,
@@ -378,7 +383,7 @@ fn enforce_human_authentication(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::{collections::BTreeSet, time::Duration};
 
     use chrono::{TimeZone, Utc};
     use uuid::Uuid;
@@ -432,7 +437,7 @@ mod tests {
             credential_client_boundary: None,
             current_policy_version: snapshot.policy_version,
             now,
-            recent_aal2_ttl: std::time::Duration::from_secs(300),
+            recent_aal2_ttl: Duration::from_secs(300),
         }
     }
 
@@ -539,7 +544,7 @@ mod tests {
             credential_client_boundary: Some(boundary),
             current_policy_version: PolicyVersion::new(),
             now: at(1_000),
-            recent_aal2_ttl: std::time::Duration::from_secs(300),
+            recent_aal2_ttl: Duration::from_secs(300),
         };
         let decision = evaluate_management_authority(&request).unwrap();
         assert_eq!(decision.grant_oid, client_oid);

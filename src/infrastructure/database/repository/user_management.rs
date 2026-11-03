@@ -15,25 +15,26 @@ use identity_application::{
         ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
     },
     user::management::{
-        CreateUserTransaction, UpdateUserTransaction, UserManagementAuthority,
+        CreateUserTransaction, UpdateUserTransaction, UserFilter, UserManagementAuthority,
         UserManagementMutationOutcome, UserManagementPageData, UserManagementPageEntry,
         UserManagementQuery, UserManagementRepository, UserManagementRepositoryError,
-        UserPageDirection, UserSortKey, UserStateTransaction,
+        UserOrder as ManagementUserOrder, UserPageDirection, UserSortKey, UserStateTransaction,
     },
 };
 use identity_domain::{
-    authorization::policy_fingerprint,
+    authorization::{ActorPrincipal, ManagementScope, policy_fingerprint},
     user::{UserManagementRecord, UserOid, repository::UserRepositoryError},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection,
-    DatabaseTransaction, DbErr, EntityTrait, Order, QueryFilter, QueryOrder, QuerySelect, Set,
-    TransactionTrait, Value as SeaValue,
+    DatabaseTransaction, DbBackend, DbErr, EntityTrait, Order, QueryFilter, QueryOrder,
+    QuerySelect, Set, Statement, TransactionTrait, Value as SeaValue,
 };
 use serde_json::{json, to_value};
 use uuid::Uuid;
 
 use super::{
+    authorization,
     authorization::load_user_permission_authority,
     authorization_lifecycle::{
         ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
@@ -43,7 +44,14 @@ use super::{
     shared::lock_user_credentials,
     user::{to_domain, update_theme_preference},
 };
-use crate::database::entity::{user, user::Entity as UserEntity, user_credential};
+use crate::database::{
+    client_authorization_boundary,
+    entity::{
+        user,
+        user::{Column as UserColumn, Entity as UserEntity},
+        user_credential,
+    },
+};
 
 pub struct UserManagementRepositoryImpl {
     db: DatabaseConnection,
@@ -70,8 +78,8 @@ async fn user_id_by_oid<C: ConnectionTrait>(
 ) -> Result<Option<i64>, UserManagementRepositoryError> {
     UserEntity::find()
         .select_only()
-        .column(user::Column::Id)
-        .filter(user::Column::Oid.eq(Uuid::from(oid)))
+        .column(UserColumn::Id)
+        .filter(UserColumn::Oid.eq(Uuid::from(oid)))
         .into_tuple::<i64>()
         .one(db)
         .await
@@ -83,8 +91,8 @@ async fn stored_user_version<C: ConnectionTrait>(
     user_id: i64,
 ) -> Result<Uuid, UserManagementRepositoryError> {
     let row = db
-        .query_one_raw(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Postgres,
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
             "SELECT version FROM \"user\" WHERE id = $1",
             [user_id.into()],
         ))
@@ -113,7 +121,7 @@ async fn identifier_exists<C: ConnectionTrait>(
 ) -> Result<bool, UserManagementRepositoryError> {
     let mut query = UserEntity::find().filter(column.eq(normalized));
     if let Some(exclude) = except_id {
-        query = query.filter(user::Column::Id.ne(exclude));
+        query = query.filter(UserColumn::Id.ne(exclude));
     }
     query
         .one(db)
@@ -134,13 +142,13 @@ async fn current_authority(
     authority: &UserManagementAuthority,
 ) -> Result<Option<CurrentManagementAuthority>, UserManagementRepositoryError> {
     match &authority.actor.principal {
-        identity_domain::authorization::ActorPrincipal::User { user_oid, .. } => {
+        ActorPrincipal::User { user_oid, .. } => {
             let Some(user_id) = user_id_by_oid(txn, *user_oid).await? else {
                 return Ok(None);
             };
             let _ = txn
-                .query_one_raw(sea_orm::Statement::from_sql_and_values(
-                    sea_orm::DbBackend::Postgres,
+                .query_one_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
                     "SELECT id FROM \"user\" WHERE id = $1 FOR UPDATE",
                     [user_id.into()],
                 ))
@@ -151,8 +159,8 @@ async fn current_authority(
                 .map_err(|error| UserManagementRepositoryError::Storage(Box::new(error)))?;
             Ok(authority.map(CurrentManagementAuthority::UserPermissions))
         }
-        identity_domain::authorization::ActorPrincipal::Client { client_oid } => {
-            super::authorization::load_client_scope_authority(txn, *client_oid)
+        ActorPrincipal::Client { client_oid } => {
+            authorization::load_client_scope_authority(txn, *client_oid)
                 .await
                 .map_err(storage)
                 .map(|current| current.map(CurrentManagementAuthority::ClientScopes))
@@ -183,8 +191,8 @@ async fn recheck_issuing_client(
     authority: &UserManagementAuthority,
 ) -> Result<(), UserManagementRepositoryError> {
     let client_row = txn
-        .query_one_raw(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Postgres,
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
             "SELECT id FROM client WHERE oid = $1 FOR UPDATE",
             [authority.client_oid.into()],
         ))
@@ -199,7 +207,7 @@ async fn recheck_issuing_client(
     // Compare the exact live client scope boundary; there is no management
     // enable switch or independent machine grant.
     let (_, fingerprint) =
-        crate::database::client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
+        client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
             .await
             .map_err(storage)?;
     if fingerprint != authority.client_policy_version {
@@ -214,7 +222,7 @@ async fn recheck_issuing_client(
 async fn recheck_authority(
     txn: &DatabaseTransaction,
     authority: &UserManagementAuthority,
-    required: identity_domain::authorization::ManagementScope,
+    required: ManagementScope,
     target_user: Option<UserOid>,
 ) -> Result<(), UserManagementRepositoryError> {
     // Global serialization first, then the issuing client/policy, then the
@@ -252,20 +260,16 @@ async fn append_semantic_audit(
     reason: &str,
 ) -> Result<(), UserManagementRepositoryError> {
     let (actor_type, actor_oid) = match &authority.actor.principal {
-        identity_domain::authorization::ActorPrincipal::User { user_oid, .. } => {
-            ("user", Uuid::from(*user_oid))
-        }
-        identity_domain::authorization::ActorPrincipal::Client { client_oid } => {
-            ("client", Uuid::from(*client_oid))
-        }
+        ActorPrincipal::User { user_oid, .. } => ("user", Uuid::from(*user_oid)),
+        ActorPrincipal::Client { client_oid } => ("client", (*client_oid)),
     };
     let trace_id = authority
         .actor
         .trace_id
         .as_ref()
         .map(|trace| trace.as_str().to_owned());
-    txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DbBackend::Postgres,
+    txn.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
         r#"
 INSERT INTO security_audit (
     resource_type, resource_oid, subject_oid, operation, status,
@@ -302,15 +306,15 @@ fn record_from_model(
 fn cursor_condition(
     cursor: &UserSortKey,
     comparison: CursorComparison,
-    order: identity_application::user::management::UserOrder,
+    order: ManagementUserOrder,
 ) -> Condition {
     use identity_application::user::management::UserOrder;
     match (cursor, order) {
         (UserSortKey::CreatedAt { created_at, id }, UserOrder::CreatedAtAsc) => {
-            created_at_condition(user::Column::CreatedAt, *created_at, *id, comparison, true)
+            created_at_condition(UserColumn::CreatedAt, *created_at, *id, comparison, true)
         }
         (UserSortKey::CreatedAt { created_at, id }, UserOrder::CreatedAtDesc) => {
-            created_at_condition(user::Column::CreatedAt, *created_at, *id, comparison, false)
+            created_at_condition(UserColumn::CreatedAt, *created_at, *id, comparison, false)
         }
         (
             UserSortKey::Username {
@@ -319,7 +323,7 @@ fn cursor_condition(
             },
             UserOrder::UsernameAsc,
         ) => name_condition(
-            user::Column::NameNormalized,
+            UserColumn::NameNormalized,
             name_normalized,
             *id,
             comparison,
@@ -332,13 +336,13 @@ fn cursor_condition(
             },
             UserOrder::UsernameDesc,
         ) => name_condition(
-            user::Column::NameNormalized,
+            UserColumn::NameNormalized,
             name_normalized,
             *id,
             comparison,
             false,
         ),
-        _ => Condition::all().add(user::Column::Id.eq(-1_i64)),
+        _ => Condition::all().add(UserColumn::Id.eq(-1_i64)),
     }
 }
 
@@ -357,27 +361,25 @@ fn created_at_condition(
 ) -> Condition {
     let value = created_at.fixed_offset();
     match comparison {
-        CursorComparison::After if ascending => Condition::any().add(column.gt(value.clone())).add(
+        CursorComparison::After if ascending => Condition::any().add(column.gt(value)).add(
             Condition::all()
-                .add(column.eq(value.clone()))
-                .add(user::Column::Id.gt(id)),
+                .add(column.eq(value))
+                .add(UserColumn::Id.gt(id)),
         ),
-        CursorComparison::After => Condition::any().add(column.lt(value.clone())).add(
+        CursorComparison::After => Condition::any().add(column.lt(value)).add(
             Condition::all()
-                .add(column.eq(value.clone()))
-                .add(user::Column::Id.lt(id)),
+                .add(column.eq(value))
+                .add(UserColumn::Id.lt(id)),
         ),
-        CursorComparison::Before if ascending => {
-            Condition::any().add(column.lt(value.clone())).add(
-                Condition::all()
-                    .add(column.eq(value.clone()))
-                    .add(user::Column::Id.lt(id)),
-            )
-        }
-        CursorComparison::Before => Condition::any().add(column.gt(value.clone())).add(
+        CursorComparison::Before if ascending => Condition::any().add(column.lt(value)).add(
             Condition::all()
-                .add(column.eq(value.clone()))
-                .add(user::Column::Id.gt(id)),
+                .add(column.eq(value))
+                .add(UserColumn::Id.lt(id)),
+        ),
+        CursorComparison::Before => Condition::any().add(column.gt(value)).add(
+            Condition::all()
+                .add(column.eq(value))
+                .add(UserColumn::Id.gt(id)),
         ),
     }
 }
@@ -394,24 +396,24 @@ fn name_condition(
         CursorComparison::After if ascending => Condition::any().add(column.gt(value.clone())).add(
             Condition::all()
                 .add(column.eq(value))
-                .add(user::Column::Id.gt(id)),
+                .add(UserColumn::Id.gt(id)),
         ),
         CursorComparison::After => Condition::any().add(column.lt(value.clone())).add(
             Condition::all()
                 .add(column.eq(value))
-                .add(user::Column::Id.lt(id)),
+                .add(UserColumn::Id.lt(id)),
         ),
         CursorComparison::Before if ascending => {
             Condition::any().add(column.lt(value.clone())).add(
                 Condition::all()
                     .add(column.eq(value))
-                    .add(user::Column::Id.lt(id)),
+                    .add(UserColumn::Id.lt(id)),
             )
         }
         CursorComparison::Before => Condition::any().add(column.gt(value.clone())).add(
             Condition::all()
                 .add(column.eq(value))
-                .add(user::Column::Id.gt(id)),
+                .add(UserColumn::Id.gt(id)),
         ),
     }
 }
@@ -427,32 +429,32 @@ async fn invalidate_access_in_txn(
         .map_err(storage)?;
     lock_account_sessions(txn, user_id).await.map_err(storage)?;
     // Sessions and pending login flows.
-    txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DbBackend::Postgres,
+    txn.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
         "UPDATE session SET status = 'revoked', revoked_at = now(), updated_at = now() \
          WHERE user_id = $1 AND status = 'active' AND revoked_at IS NULL",
         [user_id.into()],
     ))
     .await
     .map_err(storage)?;
-    txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DbBackend::Postgres,
+    txn.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
         "UPDATE login SET status = 'failed', updated_at = now() \
          WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required')",
         [user_id.into()],
     ))
     .await
     .map_err(storage)?;
-    txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DbBackend::Postgres,
+    txn.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
         "DELETE FROM authentication_challenge WHERE user_id = $1",
         [user_id.into()],
     ))
     .await
     .map_err(storage)?;
     // Device requests and selected device authorizations carry the user OID.
-    txn.execute_raw(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DbBackend::Postgres,
+    txn.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
         "UPDATE client_authorization SET revoked_at = now(), updated_at = now() \
          WHERE type = 'device_authorization' AND revoked_at IS NULL AND data->>'user_oid' = $1",
         [Uuid::from(user_oid).to_string().into()],
@@ -466,35 +468,33 @@ async fn invalidate_access_in_txn(
     Ok(())
 }
 
-fn filtered_users(
-    filter: &identity_application::user::management::UserFilter,
-) -> sea_orm::Select<UserEntity> {
+fn filtered_users(filter: &UserFilter) -> sea_orm::Select<UserEntity> {
     let mut select = UserEntity::find();
     if let Some(term) = &filter.query {
         let pattern = format!("%{}%", escape_like(term));
         select = select.filter(
             Condition::any()
-                .add(user::Column::NameNormalized.like(pattern.clone()))
-                .add(user::Column::EmailNormalized.like(pattern)),
+                .add(UserColumn::NameNormalized.like(pattern.clone()))
+                .add(UserColumn::EmailNormalized.like(pattern)),
         );
     }
     if let Some(username) = &filter.username {
-        select = select.filter(user::Column::NameNormalized.eq(username));
+        select = select.filter(UserColumn::NameNormalized.eq(username));
     }
     if let Some(email) = &filter.email {
-        select = select.filter(user::Column::EmailNormalized.eq(email));
+        select = select.filter(UserColumn::EmailNormalized.eq(email));
     }
     if let Some(enabled) = filter.enabled {
-        select = select.filter(user::Column::Enabled.eq(enabled));
+        select = select.filter(UserColumn::Enabled.eq(enabled));
     }
     if let Some(locked) = filter.locked {
-        select = select.filter(user::Column::Locked.eq(locked));
+        select = select.filter(UserColumn::Locked.eq(locked));
     }
     if let Some(from) = filter.created_from {
-        select = select.filter(user::Column::CreatedAt.gte(from.fixed_offset()));
+        select = select.filter(UserColumn::CreatedAt.gte(from.fixed_offset()));
     }
     if let Some(before) = filter.created_before {
-        select = select.filter(user::Column::CreatedAt.lt(before.fixed_offset()));
+        select = select.filter(UserColumn::CreatedAt.lt(before.fixed_offset()));
     }
     select
 }
@@ -502,10 +502,7 @@ fn filtered_users(
 #[async_trait]
 impl UserManagementRepository for UserManagementRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.count"))]
-    async fn count_users(
-        &self,
-        filter: identity_application::user::management::UserFilter,
-    ) -> Result<u64, UserManagementRepositoryError> {
+    async fn count_users(&self, filter: UserFilter) -> Result<u64, UserManagementRepositoryError> {
         use sea_orm::PaginatorTrait;
         filtered_users(&filter)
             .count(&self.db)
@@ -544,14 +541,12 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             (Order::Asc, Order::Asc, Order::Asc)
         };
         select = match query.order {
-            identity_application::user::management::UserOrder::CreatedAtAsc
-            | identity_application::user::management::UserOrder::CreatedAtDesc => select
-                .order_by(user::Column::CreatedAt, created_order)
-                .order_by(user::Column::Id, id_order),
-            identity_application::user::management::UserOrder::UsernameAsc
-            | identity_application::user::management::UserOrder::UsernameDesc => select
-                .order_by(user::Column::NameNormalized, name_order)
-                .order_by(user::Column::Id, id_order),
+            ManagementUserOrder::CreatedAtAsc | ManagementUserOrder::CreatedAtDesc => select
+                .order_by(UserColumn::CreatedAt, created_order)
+                .order_by(UserColumn::Id, id_order),
+            ManagementUserOrder::UsernameAsc | ManagementUserOrder::UsernameDesc => select
+                .order_by(UserColumn::NameNormalized, name_order)
+                .order_by(UserColumn::Id, id_order),
         };
         let rows = select
             .limit((query.limit.saturating_add(1)) as u64)
@@ -568,15 +563,13 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let mut items = Vec::with_capacity(rows.len());
         for model in rows {
             let sort_key = match query.order {
-                identity_application::user::management::UserOrder::CreatedAtAsc
-                | identity_application::user::management::UserOrder::CreatedAtDesc => {
+                ManagementUserOrder::CreatedAtAsc | ManagementUserOrder::CreatedAtDesc => {
                     UserSortKey::CreatedAt {
                         created_at: model.created_at.with_timezone(&Utc),
                         id: model.id,
                     }
                 }
-                identity_application::user::management::UserOrder::UsernameAsc
-                | identity_application::user::management::UserOrder::UsernameDesc => {
+                ManagementUserOrder::UsernameAsc | ManagementUserOrder::UsernameDesc => {
                     UserSortKey::Username {
                         name_normalized: model.name_normalized.clone(),
                         id: model.id,
@@ -605,7 +598,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         user_oid: UserOid,
     ) -> Result<Option<UserManagementRecord>, UserManagementRepositoryError> {
         let model = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .one(&self.db)
             .await
             .map_err(storage)?;
@@ -621,16 +614,10 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         command: CreateUserTransaction,
     ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
-        recheck_authority(
-            &txn,
-            &command.authority,
-            identity_domain::authorization::ManagementScope::UsersCreate,
-            None,
-        )
-        .await?;
+        recheck_authority(&txn, &command.authority, ManagementScope::UsersCreate, None).await?;
         if identifier_exists(
             &txn,
-            user::Column::NameNormalized,
+            UserColumn::NameNormalized,
             &command.username_normalized,
             None,
         )
@@ -640,7 +627,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         }
         if identifier_exists(
             &txn,
-            user::Column::EmailNormalized,
+            UserColumn::EmailNormalized,
             &command.email_normalized,
             None,
         )
@@ -704,7 +691,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 let _ = txn.rollback().await;
                 if identifier_exists(
                     &self.db,
-                    user::Column::NameNormalized,
+                    UserColumn::NameNormalized,
                     &command.username_normalized,
                     None,
                 )
@@ -714,7 +701,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 }
                 if identifier_exists(
                     &self.db,
-                    user::Column::EmailNormalized,
+                    UserColumn::EmailNormalized,
                     &command.email_normalized,
                     None,
                 )
@@ -752,7 +739,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let user = to_domain(model).map_err(map_domain_user)?;
         let record = UserManagementRecord::new(user);
         txn.commit().await.map_err(storage)?;
-        Ok(UserManagementMutationOutcome::Success(record))
+        Ok(UserManagementMutationOutcome::Success(Box::new(record)))
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.update"))]
@@ -771,7 +758,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             .await
             .map_err(storage)?;
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(command.user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(command.user_oid)))
             .lock_exclusive()
             .one(&txn)
             .await
@@ -782,7 +769,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            identity_domain::authorization::ManagementScope::UsersUpdate,
+            ManagementScope::UsersUpdate,
             Some(command.user_oid),
         )
         .await?;
@@ -794,7 +781,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         if let Some(username) = &command.username
             && identifier_exists(
                 &txn,
-                user::Column::NameNormalized,
+                UserColumn::NameNormalized,
                 &username.normalized,
                 Some(model.id),
             )
@@ -805,7 +792,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         if let Some(email) = &command.email
             && identifier_exists(
                 &txn,
-                user::Column::EmailNormalized,
+                UserColumn::EmailNormalized,
                 &email.normalized,
                 Some(model.id),
             )
@@ -829,7 +816,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         }
         let mut preferences = model.preferences.clone();
         let mut preferences_changed = false;
-        if let Some(theme) = command.profile.theme.clone() {
+        if let Some(theme) = command.profile.theme {
             update_theme_preference(&mut preferences, theme);
             preferences_changed = true;
         }
@@ -873,7 +860,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 if let Some(username) = &command.username
                     && identifier_exists(
                         &self.db,
-                        user::Column::NameNormalized,
+                        UserColumn::NameNormalized,
                         &username.normalized,
                         Some(model.id),
                     )
@@ -884,7 +871,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 if let Some(email) = &command.email
                     && identifier_exists(
                         &self.db,
-                        user::Column::EmailNormalized,
+                        UserColumn::EmailNormalized,
                         &email.normalized,
                         Some(model.id),
                     )
@@ -911,7 +898,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let user = to_domain(updated).map_err(map_domain_user)?;
         let record = UserManagementRecord::new(user);
         txn.commit().await.map_err(storage)?;
-        Ok(UserManagementMutationOutcome::Success(record))
+        Ok(UserManagementMutationOutcome::Success(Box::new(record)))
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.state"))]
@@ -930,7 +917,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             .await
             .map_err(storage)?;
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(command.user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(command.user_oid)))
             .lock_exclusive()
             .one(&txn)
             .await
@@ -941,7 +928,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            identity_domain::authorization::ManagementScope::UsersState,
+            ManagementScope::UsersState,
             Some(command.user_oid),
         )
         .await?;
@@ -972,7 +959,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             let user = to_domain(model).map_err(map_domain_user)?;
             let record = UserManagementRecord::new(user);
             txn.commit().await.map_err(storage)?;
-            return Ok(UserManagementMutationOutcome::Success(record));
+            return Ok(UserManagementMutationOutcome::Success(Box::new(record)));
         }
 
         let mut active: user::ActiveModel = model.clone().into();
@@ -1008,7 +995,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let user = to_domain(updated).map_err(map_domain_user)?;
         let record = UserManagementRecord::new(user);
         txn.commit().await.map_err(storage)?;
-        Ok(UserManagementMutationOutcome::Success(record))
+        Ok(UserManagementMutationOutcome::Success(Box::new(record)))
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.unlock"))]
@@ -1026,7 +1013,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             .await
             .map_err(storage)?;
         let Some(model) = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(command.user_oid)))
+            .filter(UserColumn::Oid.eq(Uuid::from(command.user_oid)))
             .lock_exclusive()
             .one(&txn)
             .await
@@ -1037,7 +1024,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            identity_domain::authorization::ManagementScope::UsersState,
+            ManagementScope::UsersState,
             Some(command.user_oid),
         )
         .await?;
@@ -1063,7 +1050,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             let user = to_domain(model).map_err(map_domain_user)?;
             let record = UserManagementRecord::new(user);
             txn.commit().await.map_err(storage)?;
-            return Ok(UserManagementMutationOutcome::Success(record));
+            return Ok(UserManagementMutationOutcome::Success(Box::new(record)));
         }
 
         let mut active: user::ActiveModel = model.clone().into();
@@ -1087,7 +1074,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let user = to_domain(updated).map_err(map_domain_user)?;
         let record = UserManagementRecord::new(user);
         txn.commit().await.map_err(storage)?;
-        Ok(UserManagementMutationOutcome::Success(record))
+        Ok(UserManagementMutationOutcome::Success(Box::new(record)))
     }
 }
 

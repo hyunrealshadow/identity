@@ -35,16 +35,11 @@ pub struct EffectivePermissionRecord {
     pub group_sources: Vec<EffectiveGroupPermissionSourceRecord>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum EffectivePermissionOrder {
+    #[default]
     CodeAsc,
     CodeDesc,
-}
-
-impl Default for EffectivePermissionOrder {
-    fn default() -> Self {
-        Self::CodeAsc
-    }
 }
 
 impl EffectivePermissionOrder {
@@ -111,16 +106,11 @@ pub struct UserRoleBindingRecord {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum UserRoleBindingOrder {
     CreatedAtAsc,
+    #[default]
     CreatedAtDesc,
-}
-
-impl Default for UserRoleBindingOrder {
-    fn default() -> Self {
-        Self::CreatedAtDesc
-    }
 }
 
 impl UserRoleBindingOrder {

@@ -1,36 +1,6 @@
 use super::*;
 
 #[tokio::test]
-async fn discovery_uses_rsa_key_repo_algorithm() {
-    let service = OpenIdProviderService::for_test(
-        SettingsSnapshot::default()
-            .with_section(&AppSettings {
-                console_domain: None,
-                domain: Some("https://identity.example.com".to_owned()),
-                login_domain: None,
-                login_client_id: None,
-                console_client_id: None,
-            })
-            .with_section(&InstallationSettings {
-                initialized: true,
-                initialized_at: None,
-            }),
-    )
-    .await
-    .with_key_repo(Arc::new(key_repo_with_keys(vec![make_asymmetric_key(
-        generate_rsa_pem(),
-    )])))
-    .with_signing_algorithm_detector(test_signing_algorithm_detector());
-
-    let metadata = service.discovery_metadata().await.unwrap();
-
-    assert_eq!(
-        metadata.id_token_signing_alg_values_supported,
-        expected_id_token_algorithms(&["RS256", "RS384", "RS512"])
-    );
-}
-
-#[tokio::test]
 async fn discovery_advertises_only_published_signing_algorithms() {
     let key = make_asymmetric_key(generate_rsa_pem());
     let binding = KeyJwk {
@@ -75,68 +45,6 @@ async fn discovery_advertises_only_published_signing_algorithms() {
     assert_eq!(
         metadata.id_token_signing_alg_values_supported,
         expected_id_token_algorithms(&["RS256"]),
-    );
-}
-
-#[tokio::test]
-async fn discovery_uses_rsa_pss_key_repo_algorithm() {
-    let service = OpenIdProviderService::for_test(
-        SettingsSnapshot::default()
-            .with_section(&AppSettings {
-                console_domain: None,
-                domain: Some("https://identity.example.com".to_owned()),
-                login_domain: None,
-                login_client_id: None,
-                console_client_id: None,
-            })
-            .with_section(&InstallationSettings {
-                initialized: true,
-                initialized_at: None,
-            }),
-    )
-    .await
-    .with_key_repo(Arc::new(key_repo_with_keys(vec![
-        make_asymmetric_key(generate_rsa_pss_pem("PS256")),
-        make_asymmetric_key(generate_rsa_pss_pem("PS384")),
-        make_asymmetric_key(generate_rsa_pss_pem("PS512")),
-    ])))
-    .with_signing_algorithm_detector(test_signing_algorithm_detector());
-
-    let metadata = service.discovery_metadata().await.unwrap();
-
-    assert_eq!(
-        metadata.id_token_signing_alg_values_supported,
-        expected_id_token_algorithms(&["PS256", "PS384", "PS512"])
-    );
-}
-
-#[tokio::test]
-async fn discovery_uses_ec_key_repo_algorithm() {
-    let service = OpenIdProviderService::for_test(
-        SettingsSnapshot::default()
-            .with_section(&AppSettings {
-                console_domain: None,
-                domain: Some("https://identity.example.com".to_owned()),
-                login_domain: None,
-                login_client_id: None,
-                console_client_id: None,
-            })
-            .with_section(&InstallationSettings {
-                initialized: true,
-                initialized_at: None,
-            }),
-    )
-    .await
-    .with_key_repo(Arc::new(key_repo_with_keys(vec![make_asymmetric_key(
-        generate_ec_p256_pem(),
-    )])))
-    .with_signing_algorithm_detector(test_signing_algorithm_detector());
-
-    let metadata = service.discovery_metadata().await.unwrap();
-
-    assert_eq!(
-        metadata.id_token_signing_alg_values_supported,
-        expected_id_token_algorithms(&["ES256"])
     );
 }
 

@@ -11,6 +11,7 @@ use crate::{
     authorization::{
         authority::{ClientScopeAuthority, UserPermissionAuthority},
         ids::{AuthorizationVersion, PolicyVersion},
+        snapshot,
         snapshot::{ManagementAuthorizationSnapshot, ManagementGrantKind},
     },
     client::model::ClientOid,
@@ -63,12 +64,8 @@ pub trait ManagementAuthorityRepository: Send + Sync {
                     .find_user_permission_authority(UserOid(snapshot.grant_oid))
                     .await?;
                 let policy = self.current_policy_version().await?;
-                crate::authorization::snapshot::validate_user_permission_snapshot(
-                    snapshot,
-                    current.as_ref(),
-                    policy,
-                )
-                .map_err(|_| ManagementRepositoryError::StaleSnapshot)
+                snapshot::validate_user_permission_snapshot(snapshot, current.as_ref(), policy)
+                    .map_err(|_| ManagementRepositoryError::StaleSnapshot)
             }
             // The retired binding kind stays decodable but never validates.
             ManagementGrantKind::AdministratorBinding => {

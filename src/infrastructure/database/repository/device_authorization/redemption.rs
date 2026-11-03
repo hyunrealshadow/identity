@@ -5,18 +5,29 @@ use super::{
     parse_device_request, query_failed, transition_failed,
 };
 use crate::database::{
-    entity::{client_authorization, client_authorization::Entity as ClientAuthorizationEntity},
-    repository::shared::lock_resource_rows,
+    audit, authority_snapshot,
+    entity::{
+        client_authorization,
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
+    },
+    repository::{authorization_lifecycle, client_authority, shared::lock_resource_rows},
 };
 use chrono::{DateTime, Utc};
-use identity_domain::client_authorization::{
-    ClientAuthorizationData, DeviceAuthorizationRepositoryError, DeviceConsumeOutcome,
-    PreparedAuthorizationRecord,
+use identity_domain::{
+    authorization::{AuthorizationVersion, PolicyVersion},
+    client_authorization::{
+        ClientAuthorizationData, DeviceAuthorizationRepositoryError, DeviceConsumeOutcome,
+        PreparedAuthorizationRecord,
+    },
+    user::UserOid,
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     QuerySelect, Set, TransactionTrait, sea_query::SimpleExpr,
 };
+use serde_json::Value;
 use uuid::Uuid;
 
 async fn insert_record<C: ConnectionTrait>(
@@ -24,8 +35,8 @@ async fn insert_record<C: ConnectionTrait>(
     client_id: i64,
     record: &PreparedAuthorizationRecord,
     now: DateTime<Utc>,
-    client_fingerprint: identity_domain::authorization::PolicyVersion,
-    authority_fingerprint: identity_domain::authorization::AuthorizationVersion,
+    client_fingerprint: PolicyVersion,
+    authority_fingerprint: AuthorizationVersion,
 ) -> Result<(), DeviceAuthorizationRepositoryError> {
     let type_ = record.data.authorization_type();
     let mut data = DeviceAuthorizationRepositoryImpl::write_data(&record.data)?;
@@ -68,7 +79,7 @@ pub(super) async fn consume_device_request_with_tokens(
     now: DateTime<Utc>,
 ) -> Result<DeviceConsumeOutcome, DeviceAuthorizationRepositoryError> {
     let transaction = db.begin().await.map_err(query_failed)?;
-    crate::database::repository::authorization_lifecycle::lock_authorization_issuance(&transaction)
+    authorization_lifecycle::lock_authorization_issuance(&transaction)
         .await
         .map_err(query_failed)?;
     // Prepared records already carry the exact target selection used for the
@@ -135,8 +146,8 @@ pub(super) async fn consume_device_request_with_tokens(
     // revocation only ever locks the relation, so the lock order stays
     // consistent and cannot deadlock.
     let Some(relation) = ClientAuthorizationEntity::find()
-        .filter(client_authorization::Column::Oid.eq(relation_oid))
-        .filter(client_authorization::Column::Type.eq(device_authorization_type()))
+        .filter(ClientAuthorizationColumn::Oid.eq(relation_oid))
+        .filter(ClientAuthorizationColumn::Type.eq(device_authorization_type()))
         .lock_exclusive()
         .one(&transaction)
         .await
@@ -150,17 +161,17 @@ pub(super) async fn consume_device_request_with_tokens(
     let issued_client_fingerprint = relation
         .data
         .get("_issuance_client_fingerprint")
-        .and_then(serde_json::Value::as_str)
+        .and_then(Value::as_str)
         .and_then(|value| Uuid::parse_str(value).ok());
     let issued_authority_fingerprint = relation
         .data
         .get("_issuance_authority_fingerprint")
-        .and_then(serde_json::Value::as_str)
+        .and_then(Value::as_str)
         .and_then(|value| Uuid::parse_str(value).ok());
     if relation
         .data
         .get("_authority_withdrawn")
-        .and_then(serde_json::Value::as_bool)
+        .and_then(Value::as_bool)
         .unwrap_or(false)
     {
         return Ok(DeviceConsumeOutcome::AuthorizationRevoked);
@@ -170,41 +181,36 @@ pub(super) async fn consume_device_request_with_tokens(
     let data = super::request_data_with_markers(&model.data, &request)?;
     ClientAuthorizationEntity::update_many()
         .col_expr(
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
             SimpleExpr::Value(data.into()),
         )
         .col_expr(
-            client_authorization::Column::CompletedAt,
+            ClientAuthorizationColumn::CompletedAt,
             SimpleExpr::Value(Some(now).into()),
         )
         .col_expr(
-            client_authorization::Column::UpdatedAt,
+            ClientAuthorizationColumn::UpdatedAt,
             SimpleExpr::Value(Some(now).into()),
         )
-        .filter(client_authorization::Column::Oid.eq(request_oid))
+        .filter(ClientAuthorizationColumn::Oid.eq(request_oid))
         .exec(&transaction)
         .await
         .map_err(query_failed)?;
 
     let (client_enabled, client_fingerprint) =
-        crate::database::repository::client_authority::lock_live_client_boundary(
-            &transaction,
-            model.client_id,
-        )
-        .await
-        .map_err(query_failed)?;
+        client_authority::lock_live_client_boundary(&transaction, model.client_id)
+            .await
+            .map_err(query_failed)?;
     if !client_enabled || issued_client_fingerprint != Some(client_fingerprint.as_uuid()) {
         return Ok(DeviceConsumeOutcome::AuthorizationRevoked);
     }
     // Recompute after all inactive-user/device/client guards. A semantic
     // authority change between approval and redemption means the approved
     // grant is no longer the authority it was approved for.
-    let authority_fingerprint = crate::database::authority_snapshot::user_authority_fingerprint(
-        &transaction,
-        identity_domain::user::UserOid(user_oid),
-    )
-    .await
-    .map_err(query_failed)?;
+    let authority_fingerprint =
+        authority_snapshot::user_authority_fingerprint(&transaction, UserOid(user_oid))
+            .await
+            .map_err(query_failed)?;
     if issued_authority_fingerprint != Some(authority_fingerprint.as_uuid()) {
         return Ok(DeviceConsumeOutcome::AuthorizationRevoked);
     }
@@ -219,7 +225,7 @@ pub(super) async fn consume_device_request_with_tokens(
         )
         .await?;
     }
-    crate::database::audit::record(
+    audit::record(
         &transaction,
         "device_authorization.consumed",
         "device_authorization",

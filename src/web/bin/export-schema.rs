@@ -1,5 +1,11 @@
+use identity_web::graphql;
+
+use identity_infrastructure::i18n::catalog;
+
+use std::env;
+
 fn main() {
-    if std::env::args().nth(1).as_deref() == Some("--management-catalog") {
+    if env::args().nth(1).as_deref() == Some("--management-catalog") {
         use identity_domain::authorization::{AdministratorRole, ManagementScope};
         let catalog = ManagementScope::ALL.into_iter().map(|scope| {
             let definition = scope.definition();
@@ -16,8 +22,8 @@ fn main() {
         );
         return;
     }
-    if std::env::args().nth(1).as_deref() == Some("--error-catalog") {
-        let inventory = identity_infrastructure::i18n::catalog::public_error_inventory()
+    if env::args().nth(1).as_deref() == Some("--error-catalog") {
+        let inventory = catalog::public_error_inventory()
             .into_iter()
             .map(|definition| {
                 serde_json::json!({
@@ -33,5 +39,5 @@ fn main() {
         );
         return;
     }
-    print!("{}", identity_web::graphql::schema_sdl());
+    print!("{}", graphql::schema_sdl());
 }

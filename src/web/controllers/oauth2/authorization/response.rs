@@ -1,4 +1,4 @@
-use http::{HeaderMap, StatusCode, header};
+use http::{HeaderMap, StatusCode, header::HeaderName};
 use identity_domain::openid_connect::{AuthorizationRequestData, ResponseType, ScopeSet};
 use salvo::{Depot, Request, Response, Writer, async_trait};
 use url::{Url, form_urlencoded::parse};
@@ -25,7 +25,7 @@ use crate::{
     domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, OAuthErrorResponse, ResponseMode,
     },
-    infrastructure::{i18n::resolve_locale_from_headers, web},
+    infrastructure::{i18n::resolve_locale_from_headers, web::tera as web_tera},
     web::views::oauth2::{ErrorPageData, FormPostField, FormPostPageData},
 };
 
@@ -136,12 +136,12 @@ fn render_form_post_page(
     };
 
     let mut response = Response::new();
-    match web::tera::render_view(ctx, headers, "oauth2/form_post.html", data) {
+    match web_tera::render_view(ctx, headers, "oauth2/form_post.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
     response.headers_mut().insert(
-        header::HeaderName::from_static("content-security-policy"),
+        HeaderName::from_static("content-security-policy"),
         inline_script_csp_header_value(&nonce),
     );
     response
@@ -195,7 +195,7 @@ pub fn render_authorize_error_page(
     };
 
     let mut response = Response::new();
-    match web::tera::render_view(ctx, headers, "error.html", data) {
+    match web_tera::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(&mut response, status, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }

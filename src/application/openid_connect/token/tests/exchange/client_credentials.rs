@@ -7,8 +7,10 @@ use crate::{
     observability::EventValue,
 };
 
-use crate::openid_connect::token::tests::fixtures::*;
-use crate::openid_connect::token::tests::*;
+use crate::openid_connect::{
+    tests::fixtures::scope_catalog::TestScopeCatalog,
+    token::tests::{fixtures::*, *},
+};
 
 fn request(scope: &str) -> ClientCredentialsGrantParams {
     ClientCredentialsGrantParams {
@@ -31,11 +33,7 @@ fn with_business_resource(mut service: TokenService) -> TokenService {
     let provider = Arc::try_unwrap(provider_service())
         .ok()
         .unwrap()
-        .with_scope_catalog(Arc::new(
-            crate::openid_connect::tests::fixtures::scope_catalog::TestScopeCatalog(vec![
-                "orders.read".to_owned(),
-            ]),
-        ))
+        .with_scope_catalog(Arc::new(TestScopeCatalog(vec!["orders.read".to_owned()])))
         .with_resource_repo(Arc::new(
             TestOAuthResources::new(vec![oauth_resource("urn:orders", &["orders.read"])])
                 .with_client_ceiling(Uuid::nil(), "urn:orders", &["orders.read"]),

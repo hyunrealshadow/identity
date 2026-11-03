@@ -8,7 +8,7 @@ use crate::{
     },
     error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
     user::{
-        UserOid,
+        RecoveryCodeCredentialData, UserOid,
         credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData},
         repository::PasskeyCredentialRepository,
     },
@@ -31,7 +31,7 @@ type Challenge = (ChallengeContext, Value, DateTime<Utc>);
 struct MemoryRepo {
     keys: Mutex<HashMap<UserOid, Vec<StoredPasskey>>>,
     challenges: Mutex<HashMap<Uuid, Challenge>>,
-    registration_recovery_codes: Mutex<Vec<crate::user::RecoveryCodeCredentialData>>,
+    registration_recovery_codes: Mutex<Vec<RecoveryCodeCredentialData>>,
 }
 #[async_trait]
 impl PasskeyCredentialRepository for MemoryRepo {
@@ -48,7 +48,7 @@ impl PasskeyCredentialRepository for MemoryRepo {
         &self,
         user: UserOid,
         key: StoredPasskey,
-        recovery_codes: Vec<crate::user::RecoveryCodeCredentialData>,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<(), AppError> {
         let mut keys = self.keys.lock().unwrap();
         if keys
@@ -321,7 +321,7 @@ async fn registration_binds_the_prepared_recovery_batch_to_its_one_time_ceremony
             user,
             session,
             "owner",
-            vec![crate::user::RecoveryCodeCredentialData {
+            vec![RecoveryCodeCredentialData {
                 hash: "prepared-batch".to_owned(),
             }],
         )

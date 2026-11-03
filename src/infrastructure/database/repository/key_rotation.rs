@@ -16,7 +16,11 @@ use uuid::Uuid;
 
 use super::key::to_domain;
 use crate::database::{
-    entity::{key, key_jwk},
+    entity::{
+        key,
+        key::{Column as KeyColumn, Entity as KeyEntity},
+        key_jwk,
+    },
     query::advisory_transaction_lock,
 };
 
@@ -37,14 +41,14 @@ fn internal(error: impl Error + Send + Sync + 'static) -> AppError {
 #[async_trait]
 impl KeyRotationRepository for KeyRotationRepositoryImpl {
     async fn list_due(&self, now: DateTime<Utc>) -> Result<Vec<Key>, AppError> {
-        key::Entity::find()
-            .filter(key::Column::Type.is_in([
+        KeyEntity::find()
+            .filter(KeyColumn::Type.is_in([
                 KeyType::Asymmetric.to_string(),
                 KeyType::Symmetric.to_string(),
             ]))
-            .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::RotatedAt.is_null())
-            .filter(key::Column::CreatedAt.lte(now - KEY_ROTATION_AGE))
+            .filter(KeyColumn::RevokedAt.is_null())
+            .filter(KeyColumn::RotatedAt.is_null())
+            .filter(KeyColumn::CreatedAt.lte(now - KEY_ROTATION_AGE))
             .all(&self.db)
             .await
             .map_err(internal)?
@@ -64,8 +68,8 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
             .await
             .map_err(internal)?;
 
-        let previous = key::Entity::find()
-            .filter(key::Column::Oid.eq(Uuid::from(previous_oid)))
+        let previous = KeyEntity::find()
+            .filter(KeyColumn::Oid.eq(Uuid::from(previous_oid)))
             .one(&txn)
             .await
             .map_err(internal)?;
@@ -119,17 +123,11 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
         // Asymmetric predecessors remain available for signature verification.
         // Symmetric predecessors remain loaded for decryption even after expiry.
         let retiring_expiry = previous.expires_at.min((now + Duration::days(30)).into());
-        key::Entity::update_many()
-            .col_expr(
-                key::Column::RotatedAt,
-                Expr::value(Some(now.fixed_offset())),
-            )
-            .col_expr(key::Column::ExpiresAt, Expr::value(retiring_expiry))
-            .col_expr(
-                key::Column::UpdatedAt,
-                Expr::value(Some(now.fixed_offset())),
-            )
-            .filter(key::Column::Id.eq(previous.id))
+        KeyEntity::update_many()
+            .col_expr(KeyColumn::RotatedAt, Expr::value(Some(now.fixed_offset())))
+            .col_expr(KeyColumn::ExpiresAt, Expr::value(retiring_expiry))
+            .col_expr(KeyColumn::UpdatedAt, Expr::value(Some(now.fixed_offset())))
+            .filter(KeyColumn::Id.eq(previous.id))
             .exec(&txn)
             .await
             .map_err(internal)?;

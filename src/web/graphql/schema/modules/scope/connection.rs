@@ -1,5 +1,4 @@
-use super::super::resource::support::RbacConnectionCursor;
-use super::types::ScopeNode;
+use super::{super::resource::support::RbacConnectionCursor, types::ScopeNode};
 use async_graphql::{
     Object,
     connection::{CursorType, PageInfo},

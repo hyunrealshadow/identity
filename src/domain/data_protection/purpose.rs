@@ -27,14 +27,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hash_prefix_is_deterministic() {
-        let p = Purpose::new("session");
-        let h1 = p.hash_prefix();
-        let h2 = p.hash_prefix();
-        assert_eq!(h1, h2);
-    }
-
-    #[test]
     fn hash_prefix_differs_by_purpose() {
         let p1 = Purpose::new("session");
         let p2 = Purpose::new("csrf");

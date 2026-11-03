@@ -2,8 +2,12 @@
 use super::*;
 use identity_domain::auth::SessionOid;
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
+use user::Column as UserColumn;
+use user_credential::Column as UserCredentialColumn;
+use uuid::Uuid as UuidUuid;
 
-use super::super::authorization_lifecycle::withdraw_user_authority_in_txn;
+use super::super::{authorization_lifecycle::withdraw_user_authority_in_txn, session};
+use crate::database::audit as database_audit;
 
 impl UserCredentialRepositoryImpl {
     pub(super) async fn change_password_transaction(
@@ -15,57 +19,57 @@ impl UserCredentialRepositoryImpl {
         keep: Option<SessionOid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
         let fail = |error| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(error));
-        let txn = crate::database::audit::begin(&self.db, "security.change_password_transaction")
+        let txn = database_audit::begin(&self.db, "security.change_password_transaction")
             .await
             .map_err(fail)?;
         lock_user_credentials(&txn, user).await.map_err(fail)?;
         let owner = UserEntity::find()
-            .filter(user::Column::Oid.eq(Uuid::from(user)))
+            .filter(UserColumn::Oid.eq(Uuid::from(user)))
             .one(&txn)
             .await
             .map_err(fail)?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
         // Match token issuance's session advisory locks before touching grants.
-        let sessions = super::super::session::lock_account_sessions(&txn, owner.id)
+        let sessions = session::lock_account_sessions(&txn, owner.id)
             .await
             .map_err(fail)?;
-        if let Some(keep) = keep {
-            if !sessions.iter().any(|s| {
+        if let Some(keep) = keep
+            && !sessions.iter().any(|s| {
                 s.oid == keep.0
                     && s.status == "active"
                     && s.revoked_at.is_none()
                     && s.expires_at > Utc::now().fixed_offset()
-            }) {
-                return Err(UserCredentialRepositoryError::CredentialNotFound);
-            }
+            })
+        {
+            return Err(UserCredentialRepositoryError::CredentialNotFound);
         }
         // A semantic password replacement receives a new stable credential OID
         // in the same transaction. Credential usage-only paths keep their OID.
         // The authority fingerprint hashes this OID, never password material.
-        let replacement_oid = uuid::Uuid::new_v4();
+        let replacement_oid = UuidUuid::new_v4();
         let changed = UserCredentialEntity::update_many()
-            .col_expr(user_credential::Column::Oid, Expr::value(replacement_oid))
+            .col_expr(UserCredentialColumn::Oid, Expr::value(replacement_oid))
             .col_expr(
-                user_credential::Column::Data,
+                UserCredentialColumn::Data,
                 Expr::value(
                     to_value(password).map_err(UserCredentialRepositoryError::Serialization)?,
                 ),
             )
             .col_expr(
-                user_credential::Column::UpdatedAt,
+                UserCredentialColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(user_credential::Column::Oid.eq(Uuid::from(credential)))
-            .filter(user_credential::Column::UserId.eq(owner.id))
-            .filter(user_credential::Column::Type.eq("password"))
+            .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential)))
+            .filter(UserCredentialColumn::UserId.eq(owner.id))
+            .filter(UserCredentialColumn::Type.eq("password"))
             .filter(
-                user_credential::Column::Data
+                UserCredentialColumn::Data
                     .eq(to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?),
             )
             .filter(
                 Condition::any()
-                    .add(user_credential::Column::ExpiresAt.is_null())
-                    .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                    .add(UserCredentialColumn::ExpiresAt.is_null())
+                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
             )
             .exec(&txn)
             .await

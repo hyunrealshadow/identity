@@ -53,7 +53,7 @@ fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
 
 fn client_row(oid: Uuid) -> client::Model {
     client::Model {
-        version: uuid::Uuid::new_v4(),
+        version: Uuid::new_v4(),
         id: 1,
         oid,
         protocol: "openid_connect".into(),

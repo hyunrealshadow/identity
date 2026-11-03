@@ -271,6 +271,7 @@ mod tests {
             authority::UserPermissionAuthority, catalog::ManagementScope, ids::AuthorizationVersion,
         },
         openid_connect::ScopeSet,
+        user::UserOid,
     };
 
     use super::{
@@ -282,7 +283,7 @@ mod tests {
         permissions: impl IntoIterator<Item = ManagementScope>,
     ) -> UserPermissionAuthority {
         UserPermissionAuthority::new(
-            identity_domain::user::UserOid(Uuid::new_v4()),
+            UserOid(Uuid::new_v4()),
             AuthorizationVersion::new(),
             permissions,
         )

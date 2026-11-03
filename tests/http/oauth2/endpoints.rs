@@ -1,4 +1,7 @@
-use http::{StatusCode, header, header::CONTENT_TYPE};
+use http::{
+    StatusCode, header,
+    header::{CONTENT_TYPE, HeaderName},
+};
 use identity_infrastructure::{test_app_state_with_cors_origin, test_app_state_with_mock_settings};
 use identity_web::controllers::oauth2::routes;
 use salvo::{
@@ -71,7 +74,7 @@ async fn check_session_iframe_renders_post_message_script() {
     assert!(
         response
             .headers()
-            .get(header::HeaderName::from_static("content-security-policy"))
+            .get(HeaderName::from_static("content-security-policy"))
             .and_then(|value| value.to_str().ok())
             .is_some_and(|v| v.contains("script-src 'nonce-")),
         "CSP header should use nonce-based script-src"

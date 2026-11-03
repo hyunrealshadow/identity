@@ -6,7 +6,7 @@ use identity_application::{
     rbac::{
         ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter,
         ClientScopeTargetOrder as ApplicationClientTargetOrder, ClientScopeTargetPage,
-        ClientScopeTargetPageRequest, CreateScopeCommand, ScopeFilter,
+        ClientScopeTargetPageRequest, CreateScopeCommand, ScopeFilter, ScopeOid,
         ScopeOrder as ApplicationScopeOrder, ScopePage, ScopePageRequest, ScopeRecord,
         ScopeStateCommand, SetClientScopesCommand, UpdateScopeCommand,
     },
@@ -18,7 +18,7 @@ use crate::graphql::schema::RequestContext;
 
 pub(crate) async fn find_scope(
     request: &RequestContext,
-    oid: identity_application::rbac::ScopeOid,
+    oid: ScopeOid,
 ) -> Result<Option<ScopeRecord>, AppError> {
     request
         .state

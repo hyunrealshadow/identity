@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use async_trait::async_trait;
+use rbac::UnifiedRbacSeed;
 use sea_orm::DatabaseConnection;
 use tracing::info;
 
@@ -32,7 +33,7 @@ pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
         // built-in API scope is inserted.
         Box::new(oauth_resource::OAuthResourceDefaultsSeed),
         Box::new(scope::BuiltInScopeSeed),
-        Box::new(rbac::UnifiedRbacSeed::new()),
+        Box::new(UnifiedRbacSeed::new()),
         #[cfg(feature = "oidc-conformance")]
         Box::new(conformance::ConformanceSeed),
     ];

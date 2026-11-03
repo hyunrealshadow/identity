@@ -4,8 +4,9 @@ use identity_application::{
     auth::password_policy::BreachedPasswordChecker,
     error::{AppError, codes::auth::AuthErrorCode},
 };
-use reqwest::{Client, Url};
-use std::time::Duration;
+use openssl::sha;
+use reqwest::{Client, StatusCode, Url, redirect::Policy};
+use std::{env, error::Error, io::Error as IoError, str, time::Duration};
 use tokio::sync::Semaphore;
 
 pub struct PwnedPasswordChecker {
@@ -15,14 +16,14 @@ pub struct PwnedPasswordChecker {
 }
 
 impl PwnedPasswordChecker {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
         let endpoint = Url::parse(
-            &std::env::var("IDENTITY_PWNED_PASSWORDS_URL")
+            &env::var("IDENTITY_PWNED_PASSWORDS_URL")
                 .unwrap_or_else(|_| "https://api.pwnedpasswords.com/range/".to_owned()),
         )?;
         let client = Client::builder()
             .https_only(true)
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(Policy::none())
             .timeout(Duration::from_secs(3))
             .connect_timeout(Duration::from_secs(2))
             .user_agent("Identity-Password-Policy")
@@ -34,7 +35,7 @@ impl PwnedPasswordChecker {
     pub fn with_http_client(
         client: Client,
         endpoint: Url,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         if endpoint.scheme() != "https"
             || !endpoint.path().ends_with('/')
             || !endpoint.username().is_empty()
@@ -42,7 +43,7 @@ impl PwnedPasswordChecker {
             || endpoint.query().is_some()
             || endpoint.fragment().is_some()
         {
-            return Err(std::io::Error::other("IDENTITY_PWNED_PASSWORDS_URL must be an HTTPS base URL ending in / without credentials, query or fragment").into());
+            return Err(IoError::other("IDENTITY_PWNED_PASSWORDS_URL must be an HTTPS base URL ending in / without credentials, query or fragment").into());
         }
         Ok(Self {
             client,
@@ -61,7 +62,7 @@ impl BreachedPasswordChecker for PwnedPasswordChecker {
     async fn is_breached(&self, password: &str) -> Result<bool, AppError> {
         let _permit = self.requests.try_acquire().map_err(|_| unavailable())?;
         // SHA-1 is used only for range lookup, never for password storage.
-        let digest = openssl::sha::sha1(password.as_bytes());
+        let digest = sha::sha1(password.as_bytes());
         let hash: String = digest.iter().map(|byte| format!("{byte:02X}")).collect();
         let url = self.endpoint.join(&hash[..5]).map_err(|_| unavailable())?;
         let mut response = self
@@ -71,7 +72,7 @@ impl BreachedPasswordChecker for PwnedPasswordChecker {
             .send()
             .await
             .map_err(|_| unavailable())?;
-        if response.status() != reqwest::StatusCode::OK {
+        if response.status() != StatusCode::OK {
             return Err(unavailable());
         }
         let mut body = Vec::new();
@@ -81,7 +82,7 @@ impl BreachedPasswordChecker for PwnedPasswordChecker {
             }
             body.extend_from_slice(&chunk);
         }
-        let body = std::str::from_utf8(&body).map_err(|_| unavailable())?;
+        let body = str::from_utf8(&body).map_err(|_| unavailable())?;
         parse_range(body, &hash[5..])
     }
 }

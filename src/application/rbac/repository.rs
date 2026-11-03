@@ -21,15 +21,18 @@ use identity_domain::{
 
 use super::{
     binding::{
-        EffectivePermissionOrder, EffectivePermissionRecord, UserRoleBindingOrder,
-        UserRoleBindingRecord,
+        EffectivePermissionOrder, EffectivePermissionRecord, UserRoleBindingMutationResult,
+        UserRoleBindingOrder, UserRoleBindingRecord,
     },
-    client::{ClientScopeTargetOrder, ClientScopeTargetRecord},
-    cursor::RbacSortKey,
-    model::{ScopeDescription, ScopeOid},
-    resource::{ApiResourceRecord, ResourceOrder},
-    role::{RoleOrder, RoleRecord},
-    scope::{ScopeOrder, ScopeRecord},
+    client::{
+        ClientScopeSetResult, ClientScopeTargetFilter, ClientScopeTargetOrder,
+        ClientScopeTargetRecord,
+    },
+    cursor::{RbacPageDirection, RbacSortKey},
+    model::{RbacManagementAuthority, ScopeDescription, ScopeOid},
+    resource::{ApiResourceRecord, ResourceFilter, ResourceOrder},
+    role::{RoleFilter, RoleOrder, RoleRecord},
+    scope::{ScopeFilter, ScopeOrder, ScopeRecord},
 };
 
 #[derive(Debug, Clone)]
@@ -97,9 +100,9 @@ pub struct ClientScopeTargetPageEntry {
 
 #[derive(Debug, Clone)]
 pub struct ResourceQuery {
-    pub filter: super::resource::ResourceFilter,
+    pub filter: ResourceFilter,
     pub order: ResourceOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -107,9 +110,9 @@ pub struct ResourceQuery {
 
 #[derive(Debug, Clone)]
 pub struct ScopeQuery {
-    pub filter: super::scope::ScopeFilter,
+    pub filter: ScopeFilter,
     pub order: ScopeOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -117,9 +120,9 @@ pub struct ScopeQuery {
 
 #[derive(Debug, Clone)]
 pub struct RoleQuery {
-    pub filter: super::role::RoleFilter,
+    pub filter: RoleFilter,
     pub order: RoleOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -131,7 +134,7 @@ pub struct UserRoleBindingQuery {
     pub role_oid: Option<RoleOid>,
     pub enabled: Option<bool>,
     pub order: UserRoleBindingOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -142,7 +145,7 @@ pub struct EffectivePermissionQuery {
     pub user_oid: UserOid,
     pub resource_oid: ResourceOid,
     pub order: EffectivePermissionOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -150,9 +153,9 @@ pub struct EffectivePermissionQuery {
 
 #[derive(Debug, Clone)]
 pub struct ClientScopeTargetQuery {
-    pub filter: super::client::ClientScopeTargetFilter,
+    pub filter: ClientScopeTargetFilter,
     pub order: ClientScopeTargetOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -162,7 +165,7 @@ pub struct ClientScopeTargetQuery {
 pub struct ClientScopeQuery {
     pub client_oid: ClientOid,
     pub order: ScopeOrder,
-    pub direction: super::cursor::RbacPageDirection,
+    pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
     pub limit: usize,
@@ -174,7 +177,7 @@ pub struct CreateResourceTransaction {
     pub uri: String,
     pub name: String,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -183,7 +186,7 @@ pub struct UpdateResourceTransaction {
     pub name: Option<String>,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -191,7 +194,7 @@ pub struct ResourceStateTransaction {
     pub resource_oid: ResourceOid,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -204,7 +207,7 @@ pub struct CreateScopeTransaction {
     pub description: String,
     pub descriptions: Vec<ScopeDescription>,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -216,7 +219,7 @@ pub struct UpdateScopeTransaction {
     pub descriptions: Option<Vec<ScopeDescription>>,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -224,7 +227,7 @@ pub struct ScopeStateTransaction {
     pub scope_oid: ScopeOid,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -234,7 +237,7 @@ pub struct CreateRoleTransaction {
     pub description: String,
     pub metadata: LocalizedMetadata,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -249,7 +252,7 @@ pub struct UpdateRoleTransaction {
     pub descriptions: Option<Vec<LocalizedText>>,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -257,7 +260,7 @@ pub struct RoleStateTransaction {
     pub role_oid: RoleOid,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -266,7 +269,7 @@ pub struct SetRolePermissionsTransaction {
     pub scope_oids: Vec<ScopeOid>,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -275,7 +278,7 @@ pub struct AssignUserRolesTransaction {
     pub role_oids: Vec<RoleOid>,
     pub expected_user_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -284,7 +287,7 @@ pub struct RevokeUserRolesTransaction {
     pub role_oids: Vec<RoleOid>,
     pub expected_user_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Clone)]
@@ -293,7 +296,7 @@ pub struct SetClientScopesTransaction {
     pub scope_oids: Vec<ScopeOid>,
     pub expected_version: Uuid,
     pub reason: String,
-    pub authority: super::model::RbacManagementAuthority,
+    pub authority: RbacManagementAuthority,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -369,14 +372,9 @@ pub enum RbacManagementRepositoryError {
 
 #[async_trait]
 pub trait RbacManagementRepository: Send + Sync {
-    async fn count_roles(
-        &self,
-        filter: super::role::RoleFilter,
-    ) -> Result<u64, RbacManagementRepositoryError>;
-    async fn count_scopes(
-        &self,
-        filter: super::scope::ScopeFilter,
-    ) -> Result<u64, RbacManagementRepositoryError>;
+    async fn count_roles(&self, filter: RoleFilter) -> Result<u64, RbacManagementRepositoryError>;
+    async fn count_scopes(&self, filter: ScopeFilter)
+    -> Result<u64, RbacManagementRepositoryError>;
     async fn count_client_scopes(
         &self,
         client_oid: ClientOid,
@@ -505,12 +503,12 @@ pub trait RbacManagementRepository: Send + Sync {
     async fn assign_user_roles(
         &self,
         command: AssignUserRolesTransaction,
-    ) -> Result<super::binding::UserRoleBindingMutationResult, RbacManagementRepositoryError>;
+    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError>;
 
     async fn revoke_user_roles(
         &self,
         command: RevokeUserRolesTransaction,
-    ) -> Result<super::binding::UserRoleBindingMutationResult, RbacManagementRepositoryError>;
+    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError>;
 
     async fn list_client_scope_targets(
         &self,
@@ -525,7 +523,7 @@ pub trait RbacManagementRepository: Send + Sync {
     async fn set_client_scopes(
         &self,
         command: SetClientScopesTransaction,
-    ) -> Result<super::client::ClientScopeSetResult, RbacManagementRepositoryError>;
+    ) -> Result<ClientScopeSetResult, RbacManagementRepositoryError>;
 }
 
 /// Convenience alias used by the composition root and adapters.

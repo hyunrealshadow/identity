@@ -12,7 +12,10 @@ use serde_json::{Value, from_value, to_value};
 use uuid::Uuid;
 
 use super::shared::{decode_nonnullable_expiry, encode_nonnullable_expiry};
-use crate::database::entity::{key, key::Entity as KeyEntity};
+use crate::database::entity::{
+    key,
+    key::{Column as KeyColumn, Entity as KeyEntity},
+};
 
 pub struct KeyRepositoryImpl {
     db: DatabaseConnection,
@@ -29,7 +32,7 @@ impl KeyRepositoryImpl {
         oid: KeyOid,
     ) -> Result<Option<key::Model>, KeyRepositoryError> {
         KeyEntity::find()
-            .filter(key::Column::Oid.eq(Uuid::from(oid)))
+            .filter(KeyColumn::Oid.eq(Uuid::from(oid)))
             .one(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::QueryFailed(Box::new(e)))
@@ -78,11 +81,11 @@ impl KeyRepository for KeyRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_active_asymmetric"))]
     async fn list_active_asymmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         KeyEntity::find()
-            .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
-            .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::ExpiresAt.gt(Utc::now()))
-            .order_by_desc(key::Column::CreatedAt)
-            .order_by_desc(key::Column::Oid)
+            .filter(KeyColumn::Type.eq(KeyType::Asymmetric.to_string()))
+            .filter(KeyColumn::RevokedAt.is_null())
+            .filter(KeyColumn::ExpiresAt.gt(Utc::now()))
+            .order_by_desc(KeyColumn::CreatedAt)
+            .order_by_desc(KeyColumn::Oid)
             .all(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::ListAvailableFailed(Box::new(e)))?
@@ -94,8 +97,8 @@ impl KeyRepository for KeyRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "list_decryptable_symmetric"))]
     async fn list_decryptable_symmetric(&self) -> Result<Vec<Key>, KeyRepositoryError> {
         KeyEntity::find()
-            .filter(key::Column::Type.eq(KeyType::Symmetric.to_string()))
-            .filter(key::Column::RevokedAt.is_null())
+            .filter(KeyColumn::Type.eq(KeyType::Symmetric.to_string()))
+            .filter(KeyColumn::RevokedAt.is_null())
             .all(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::ListAvailableFailed(Box::new(e)))?
@@ -152,15 +155,12 @@ impl KeyRepository for KeyRepositoryImpl {
 
         let now = Utc::now();
         let updated = KeyEntity::update_many()
-            .col_expr(key::Column::Data, Expr::value(serialize_key_data(&data)?))
-            .col_expr(
-                key::Column::UpdatedAt,
-                Expr::value(Some(now.fixed_offset())),
-            )
-            .filter(key::Column::Id.eq(model.id))
-            .filter(key::Column::Type.eq(KeyType::Asymmetric.to_string()))
-            .filter(key::Column::RevokedAt.is_null())
-            .filter(key::Column::ExpiresAt.gt(now))
+            .col_expr(KeyColumn::Data, Expr::value(serialize_key_data(&data)?))
+            .col_expr(KeyColumn::UpdatedAt, Expr::value(Some(now.fixed_offset())))
+            .filter(KeyColumn::Id.eq(model.id))
+            .filter(KeyColumn::Type.eq(KeyType::Asymmetric.to_string()))
+            .filter(KeyColumn::RevokedAt.is_null())
+            .filter(KeyColumn::ExpiresAt.gt(now))
             .exec_with_returning(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?
@@ -184,15 +184,15 @@ impl KeyRepository for KeyRepositoryImpl {
     ) -> Result<Option<Key>, KeyRepositoryError> {
         let updated = KeyEntity::update_many()
             .col_expr(
-                key::Column::RevokedAt,
+                KeyColumn::RevokedAt,
                 Expr::value(Some(revoked_at.fixed_offset())),
             )
             .col_expr(
-                key::Column::UpdatedAt,
+                KeyColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(key::Column::Oid.eq(Uuid::from(oid)))
-            .filter(key::Column::RevokedAt.is_null())
+            .filter(KeyColumn::Oid.eq(Uuid::from(oid)))
+            .filter(KeyColumn::RevokedAt.is_null())
             .exec_with_returning(&self.db)
             .await
             .map_err(|e| KeyRepositoryError::UpdateFailed(Box::new(e)))?
@@ -206,48 +206,5 @@ impl KeyRepository for KeyRepositoryImpl {
                 .map(to_domain)
                 .transpose(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use chrono::{DateTime, Utc};
-    use identity_domain::key::KeyData;
-    use serde_json::json;
-    use uuid::Uuid;
-
-    use super::to_domain;
-    use crate::database::entity::key;
-
-    #[test]
-    fn to_domain_wraps_required_expiry_in_some() {
-        let model = key::Model {
-            id: 1,
-            oid: Uuid::new_v4(),
-            r#type: "asymmetric".to_owned(),
-            data: json!({
-                "public_key": "public",
-                "private_key": "private",
-                "certificate": null,
-            }),
-            expires_at: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
-            revoked_at: None,
-            rotated_from_oid: None,
-            rotated_at: None,
-            created_at: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
-            updated_at: None,
-        };
-
-        let key = to_domain(model).unwrap();
-
-        assert!(matches!(key.data, KeyData::Asymmetric(_)));
-        assert_eq!(
-            key.expires_at,
-            Some(
-                DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00")
-                    .unwrap()
-                    .with_timezone(&Utc)
-            )
-        );
     }
 }

@@ -1,13 +1,35 @@
 use super::OpenIdConnectClientRepositoryImpl;
 use crate::database::{
+    audit, client_authorization_boundary,
     entity::{
-        client, client::Entity as ClientEntity, client_authorization,
-        client_authorization::Entity as ClientAuthorizationEntity, client_openid_connect,
-        client_openid_connect::Entity as OpenIdConnectClientEntity,
-        client_openid_connect_cors_origin, client_openid_connect_credential,
+        client,
+        client::{Column as ClientColumn, Entity as ClientEntity},
+        client_authorization,
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
+        client_openid_connect,
+        client_openid_connect::{
+            Column as ClientOpenIdConnectColumn, Entity as OpenIdConnectClientEntity,
+        },
+        client_openid_connect_cors_origin,
+        client_openid_connect_cors_origin::{
+            Column as ClientOpenIdConnectCorsOriginColumn,
+            Entity as ClientOpenIdConnectCorsOriginEntity,
+        },
+        client_openid_connect_credential,
+        client_openid_connect_credential::{
+            Column as ClientOpenIdConnectCredentialColumn,
+            Entity as ClientOpenIdConnectCredentialEntity,
+        },
         client_openid_connect_platform,
-        client_openid_connect_platform::Entity as ClientOpenIdConnectPlatformEntity, client_scope,
-        resource, scope, scope::Entity as ScopeEntity,
+        client_openid_connect_platform::{
+            Column as ClientOpenIdConnectPlatformColumn,
+            Entity as ClientOpenIdConnectPlatformEntity,
+        },
+        client_scope,
+        resource::{Column as ResourceColumn, Entity as ResourceEntity},
+        scope::{Column as ScopeColumn, Entity as ScopeEntity},
     },
     repository::{
         openid_connect_credential::serialize_data as serialize_credential_data,
@@ -17,13 +39,14 @@ use crate::database::{
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use identity_domain::{
+    authorization::catalog,
     client::model::ClientOid,
     client_authorization::ClientAuthorizationType,
     openid_connect::{
-        OpenIdConnectClient, OpenIdConnectClientPlatform, OpenIdConnectClientRegistration,
-        OpenIdConnectClientRegistrationRepository, OpenIdConnectClientRepository,
-        OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
-        OpenIdConnectCredentialData,
+        API_RESOURCE, OpenIdConnectClient, OpenIdConnectClientPlatform,
+        OpenIdConnectClientRegistration, OpenIdConnectClientRegistrationRepository,
+        OpenIdConnectClientRepository, OpenIdConnectClientRepositoryError,
+        OpenIdConnectClientSettings, OpenIdConnectCredentialData,
     },
 };
 use sea_orm::{
@@ -95,14 +118,17 @@ impl OpenIdConnectClientRepositoryImpl {
         self.db
             .transaction::<_, _, DbErr>(|txn| {
                 Box::pin(async move {
-                    if update_auth.is_none() && registration.assigned_scopes.iter().any(|scope| {
-                        identity_domain::authorization::catalog::is_reserved_management_name(scope)
-                    }) {
+                    if update_auth.is_none()
+                        && registration
+                            .assigned_scopes
+                            .iter()
+                            .any(|scope| catalog::is_reserved_management_name(scope))
+                    {
                         return Err(DbErr::Custom("registration_invalid_scope".into()));
                     }
                     let existing = if let Some((token, secret)) = &update_auth {
                         let existing = ClientEntity::find()
-                            .filter(client::Column::Oid.eq(client_oid))
+                            .filter(ClientColumn::Oid.eq(client_oid))
                             .lock_exclusive()
                             .one(txn)
                             .await?
@@ -112,12 +138,12 @@ impl OpenIdConnectClientRepositoryImpl {
                         }
                         let rows =
                             ClientAuthorizationEntity::find()
-                                .filter(client_authorization::Column::ClientId.eq(existing.id))
-                                .filter(client_authorization::Column::Type.eq(
+                                .filter(ClientAuthorizationColumn::ClientId.eq(existing.id))
+                                .filter(ClientAuthorizationColumn::Type.eq(
                                     ClientAuthorizationType::RegistrationAccessToken.to_string(),
                                 ))
-                                .filter(client_authorization::Column::RevokedAt.is_null())
-                                .filter(client_authorization::Column::ExpiresAt.gt(now))
+                                .filter(ClientAuthorizationColumn::RevokedAt.is_null())
+                                .filter(ClientAuthorizationColumn::ExpiresAt.gt(now))
                                 .all(txn)
                                 .await?;
                         let valid = rows.iter().any(|row| {
@@ -135,19 +161,15 @@ impl OpenIdConnectClientRepositoryImpl {
                             return Err(DbErr::Custom("registration_invalid_token".into()));
                         }
                         if let Some(secret) = secret {
-                            let rows = client_openid_connect_credential::Entity::find()
+                            let rows = ClientOpenIdConnectCredentialEntity::find()
                                 .filter(
-                                    client_openid_connect_credential::Column::ClientId
-                                        .eq(existing.id),
+                                    ClientOpenIdConnectCredentialColumn::ClientId.eq(existing.id),
                                 )
                                 .filter(
-                                    client_openid_connect_credential::Column::Type
-                                        .eq("client_secret"),
+                                    ClientOpenIdConnectCredentialColumn::Type.eq("client_secret"),
                                 )
-                                .filter(
-                                    client_openid_connect_credential::Column::RevokedAt.is_null(),
-                                )
-                                .filter(client_openid_connect_credential::Column::ExpiresAt.gt(now))
+                                .filter(ClientOpenIdConnectCredentialColumn::RevokedAt.is_null())
+                                .filter(ClientOpenIdConnectCredentialColumn::ExpiresAt.gt(now))
                                 .all(txn)
                                 .await?;
                             let valid = rows.iter().any(|row| {
@@ -165,7 +187,7 @@ impl OpenIdConnectClientRepositoryImpl {
                             }
                         }
                         let metadata = OpenIdConnectClientEntity::find()
-                            .filter(client_openid_connect::Column::ClientId.eq(existing.id))
+                            .filter(ClientOpenIdConnectColumn::ClientId.eq(existing.id))
                             .lock_exclusive()
                             .one(txn)
                             .await?
@@ -175,12 +197,11 @@ impl OpenIdConnectClientRepositoryImpl {
                         None
                     };
                     let mut existing_credentials = if let Some((client_model, _)) = &existing {
-                        client_openid_connect_credential::Entity::find()
+                        ClientOpenIdConnectCredentialEntity::find()
                             .filter(
-                                client_openid_connect_credential::Column::ClientId
-                                    .eq(client_model.id),
+                                ClientOpenIdConnectCredentialColumn::ClientId.eq(client_model.id),
                             )
-                            .order_by_asc(client_openid_connect_credential::Column::Id)
+                            .order_by_asc(ClientOpenIdConnectCredentialColumn::Id)
                             .all(txn)
                             .await?
                     } else {
@@ -190,7 +211,7 @@ impl OpenIdConnectClientRepositoryImpl {
                     // writes. Display-only edits must not advance it.
                     let before_fingerprint = if let Some((client_model, _)) = &existing {
                         Some(
-                            crate::database::client_authorization_boundary::client_boundary_fingerprint(
+                            client_authorization_boundary::client_boundary_fingerprint(
                                 txn,
                                 client_model.id,
                             )
@@ -220,8 +241,6 @@ impl OpenIdConnectClientRepositoryImpl {
                     } else {
                         client_model.insert(txn).await?
                     };
-                    if existing.is_none() {
-                    }
 
                     let metadata = registration.metadata;
                     let settings = to_value(metadata.settings)
@@ -313,7 +332,6 @@ impl OpenIdConnectClientRepositoryImpl {
                             Some(_) => Set(Some(now.into())),
                             None => Set(None),
                         },
-                        ..Default::default()
                     };
                     if existing_metadata.is_some() {
                         metadata_model.update(txn).await?;
@@ -323,16 +341,12 @@ impl OpenIdConnectClientRepositoryImpl {
 
                     if existing.is_some() {
                         ClientOpenIdConnectPlatformEntity::delete_many()
-                            .filter(
-                                client_openid_connect_platform::Column::ClientId
-                                    .eq(client_model.id),
-                            )
+                            .filter(ClientOpenIdConnectPlatformColumn::ClientId.eq(client_model.id))
                             .exec(txn)
                             .await?;
-                        client_openid_connect_cors_origin::Entity::delete_many()
+                        ClientOpenIdConnectCorsOriginEntity::delete_many()
                             .filter(
-                                client_openid_connect_cors_origin::Column::ClientId
-                                    .eq(client_model.id),
+                                ClientOpenIdConnectCorsOriginColumn::ClientId.eq(client_model.id),
                             )
                             .exec(txn)
                             .await?;
@@ -352,7 +366,7 @@ impl OpenIdConnectClientRepositoryImpl {
                     }
 
                     if !cors_origins.is_empty() {
-                        client_openid_connect_cors_origin::Entity::insert_many(
+                        ClientOpenIdConnectCorsOriginEntity::insert_many(
                             cors_origins.into_iter().map(|origin| {
                                 client_openid_connect_cors_origin::ActiveModel {
                                     client_id: Set(client_model.id),
@@ -370,21 +384,32 @@ impl OpenIdConnectClientRepositoryImpl {
                     if existing.is_none() && !registration.assigned_scopes.is_empty() {
                         let scope_models = ScopeEntity::find()
                             .filter(
-                                scope::Column::Code
+                                ScopeColumn::Code
                                     .is_in(registration.assigned_scopes.iter().cloned()),
                             )
-                            .filter(scope::Column::Enabled.eq(true))
-                            .filter(scope::Column::BuiltIn.eq(true))
-                            .filter(Condition::any()
-                                .add(scope::Column::ResourceId.is_null())
-                                .add(Condition::all()
-                                    .add(scope::Column::Code.is_in([
-                                        "account.read", "account.update", "session.read", "session.revoke", "password.change",
-                                    ]))
-                                    .add(scope::Column::ResourceId.in_subquery(resource::Entity::find()
-                                        .select_only().column(resource::Column::Oid)
-                                        .filter(resource::Column::Uri.eq(identity_domain::openid_connect::API_RESOURCE))
-                                        .into_query()))))
+                            .filter(ScopeColumn::Enabled.eq(true))
+                            .filter(ScopeColumn::BuiltIn.eq(true))
+                            .filter(
+                                Condition::any().add(ScopeColumn::ResourceId.is_null()).add(
+                                    Condition::all()
+                                        .add(ScopeColumn::Code.is_in([
+                                            "account.read",
+                                            "account.update",
+                                            "session.read",
+                                            "session.revoke",
+                                            "password.change",
+                                        ]))
+                                        .add(
+                                            ScopeColumn::ResourceId.in_subquery(
+                                                ResourceEntity::find()
+                                                    .select_only()
+                                                    .column(ResourceColumn::Oid)
+                                                    .filter(ResourceColumn::Uri.eq(API_RESOURCE))
+                                                    .into_query(),
+                                            ),
+                                        ),
+                                ),
+                            )
                             .all(txn)
                             .await?;
                         let expected = registration
@@ -453,8 +478,8 @@ impl OpenIdConnectClientRepositoryImpl {
                             .into_iter()
                             .map(|credential| credential.id)
                             .collect::<Vec<_>>();
-                        client_openid_connect_credential::Entity::delete_many()
-                            .filter(client_openid_connect_credential::Column::Id.is_in(removed_ids))
+                        ClientOpenIdConnectCredentialEntity::delete_many()
+                            .filter(ClientOpenIdConnectCredentialColumn::Id.is_in(removed_ids))
                             .exec(txn)
                             .await?;
                     }
@@ -488,15 +513,18 @@ impl OpenIdConnectClientRepositoryImpl {
                     if let (Some(before), Some((target, _))) =
                         (before_fingerprint, existing.as_ref())
                     {
-                        let after = crate::database::client_authorization_boundary::client_boundary_fingerprint(
+                        let after = client_authorization_boundary::client_boundary_fingerprint(
                             txn, target.id,
                         )
                         .await?;
                         if after.1 != before.1 {
-                            crate::database::client_authorization_boundary::withdraw_on_boundary_change(txn, target.id).await?;
+                            client_authorization_boundary::withdraw_on_boundary_change(
+                                txn, target.id,
+                            )
+                            .await?;
                         }
                     }
-                    crate::database::audit::record(
+                    audit::record(
                         txn,
                         if update_auth.is_some() {
                             "client.registration.update"
@@ -566,8 +594,8 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         token: &str,
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let Some(client_model) = ClientEntity::find()
-            .filter(client::Column::Oid.eq(client_oid))
-            .filter(client::Column::Protocol.eq("openid_connect"))
+            .filter(ClientColumn::Oid.eq(client_oid))
+            .filter(ClientColumn::Protocol.eq("openid_connect"))
             .one(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
@@ -576,13 +604,13 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         };
 
         let auth_rows = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::ClientId.eq(client_model.id))
+            .filter(ClientAuthorizationColumn::ClientId.eq(client_model.id))
             .filter(
-                client_authorization::Column::Type
+                ClientAuthorizationColumn::Type
                     .eq(ClientAuthorizationType::RegistrationAccessToken.to_string()),
             )
-            .filter(client_authorization::Column::RevokedAt.is_null())
-            .filter(client_authorization::Column::ExpiresAt.gt(Utc::now()))
+            .filter(ClientAuthorizationColumn::RevokedAt.is_null())
+            .filter(ClientAuthorizationColumn::ExpiresAt.gt(Utc::now()))
             .all(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -609,8 +637,8 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         client_oid: ClientOid,
     ) -> Result<(), OpenIdConnectClientRepositoryError> {
         let Some(client_model) = ClientEntity::find()
-            .filter(client::Column::Oid.eq(client_oid))
-            .filter(client::Column::Protocol.eq("openid_connect"))
+            .filter(ClientColumn::Oid.eq(client_oid))
+            .filter(ClientColumn::Protocol.eq("openid_connect"))
             .one(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?
@@ -624,8 +652,8 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
         let result = ClientEntity::delete_many()
-            .filter(client::Column::Id.eq(client_model.id))
-            .filter(client::Column::BuiltIn.eq(false))
+            .filter(ClientColumn::Id.eq(client_model.id))
+            .filter(ClientColumn::BuiltIn.eq(false))
             .exec(&txn)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
@@ -634,7 +662,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             return Err(OpenIdConnectClientRepositoryError::BuiltInClient);
         }
 
-        crate::database::audit::record(&txn, "client.registration.delete", "client", client_oid)
+        audit::record(&txn, "client.registration.delete", "client", client_oid)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
         txn.commit()

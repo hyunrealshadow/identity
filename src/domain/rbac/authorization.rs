@@ -25,8 +25,9 @@ use crate::{
     rbac::{
         ids::{ResourceOid, RoleOid},
         model::{
-            EffectivePermission, EffectivePermissionError, GroupRolePath, ResourcePermission, Role,
-            RolePermission, UserRoleBinding, project_effective_permissions_with_groups,
+            EffectivePermission, EffectivePermissionError, EffectivePermissionSources,
+            GroupRolePath, ResourcePermission, Role, RolePermission, UserRoleBinding,
+            project_effective_permissions,
         },
         snapshot::{BindingSnapshotError, UserAuthorizationSnapshot, UserRoleBindingSnapshot},
     },
@@ -256,17 +257,17 @@ pub fn effective_permissions(
     state: &RbacAuthorizationState,
 ) -> Result<Vec<EffectivePermission>, EffectivePermissionError> {
     match (state.user_oid, state.user_authorization_version) {
-        (Some(user), Some(version)) => project_effective_permissions_with_groups(
-            user,
-            state.resource.resource_oid,
-            version,
-            version,
-            &state.bindings,
-            &state.group_paths,
-            &state.roles,
-            &state.memberships,
-            &state.resource.permissions,
-        ),
+        (Some(user), Some(version)) => project_effective_permissions(EffectivePermissionSources {
+            user_oid: user,
+            requested_resource: state.resource.resource_oid,
+            expected_authorization_version: version,
+            current_authorization_version: version,
+            bindings: &state.bindings,
+            group_paths: &state.group_paths,
+            roles: &state.roles,
+            memberships: &state.memberships,
+            permissions: &state.resource.permissions,
+        }),
         (None, _) => Ok(state
             .resource
             .permissions

@@ -12,7 +12,10 @@ use sea_orm::{
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::database::entity::setting;
+use crate::database::entity::{
+    setting,
+    setting::{Column as SettingColumn, Entity as SettingEntity},
+};
 
 /// The stored value of `S`, or its declared default when it has no row.
 ///
@@ -23,8 +26,8 @@ where
     S: SettingDefinition,
     C: ConnectionTrait,
 {
-    let row = setting::Entity::find()
-        .filter(setting::Column::Key.eq(S::KEY))
+    let row = SettingEntity::find()
+        .filter(SettingColumn::Key.eq(S::KEY))
         .one(db)
         .await
         .map_err(AppError::internal)?;
@@ -40,8 +43,8 @@ where
     T: SettingSection,
     C: ConnectionTrait,
 {
-    let rows = setting::Entity::find()
-        .filter(setting::Column::Key.starts_with(format!("{}.", T::PREFIX)))
+    let rows = SettingEntity::find()
+        .filter(SettingColumn::Key.starts_with(format!("{}.", T::PREFIX)))
         .all(db)
         .await
         .map_err(AppError::internal)?;
@@ -63,9 +66,9 @@ where
     insert_rows(
         db,
         changes,
-        OnConflict::column(setting::Column::Key)
-            .update_column(setting::Column::Value)
-            .value(setting::Column::UpdatedAt, Expr::current_timestamp())
+        OnConflict::column(SettingColumn::Key)
+            .update_column(SettingColumn::Value)
+            .value(SettingColumn::UpdatedAt, Expr::current_timestamp())
             .to_owned(),
     )
     .await
@@ -86,7 +89,7 @@ where
     insert_rows(
         db,
         values,
-        OnConflict::column(setting::Column::Key)
+        OnConflict::column(SettingColumn::Key)
             .do_nothing()
             .to_owned(),
     )
@@ -117,7 +120,7 @@ where
         return Ok(());
     }
 
-    setting::Entity::insert_many(rows)
+    SettingEntity::insert_many(rows)
         .on_conflict(on_conflict)
         .exec_without_returning(db)
         .await

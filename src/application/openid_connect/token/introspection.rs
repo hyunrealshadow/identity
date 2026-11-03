@@ -291,13 +291,15 @@ impl TokenService {
                     repository: self.rbac_authorization_repo.as_ref(),
                     provider_service: &self.provider_service,
                 },
-                &live_client,
-                persisted,
-                scope,
-                &scope_set,
-                principal,
-                user_oid.map(UserOid),
-                &audience,
+                shared::BusinessTokenAuthorization {
+                    live_client: &live_client,
+                    persisted,
+                    persisted_scope: scope,
+                    scope: &scope_set,
+                    principal,
+                    subject_user_oid: user_oid.map(UserOid),
+                    audience: &audience,
+                },
             )
             .await
             .is_err()

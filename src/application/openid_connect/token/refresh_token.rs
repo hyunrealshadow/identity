@@ -276,15 +276,19 @@ impl TokenService {
                     repository: self.rbac_authorization_repo.as_ref(),
                     provider_service: &self.provider_service,
                 },
-                &authenticated_client,
-                snapshot_data,
-                &selection.scope,
-                &selected,
-                AccessTokenPrincipal::User,
-                Some(UserOid(Uuid::parse_str(&refresh_data.user_oid).map_err(
-                    AppError::map_source(TokenErrorCode::RefreshTokenSubInvalid),
-                )?)),
-                &selection.resources,
+                shared::BusinessTokenAuthorization {
+                    live_client: &authenticated_client,
+                    persisted: snapshot_data,
+                    persisted_scope: &selection.scope,
+                    scope: &selected,
+                    principal: AccessTokenPrincipal::User,
+                    subject_user_oid: Some(UserOid(
+                        Uuid::parse_str(&refresh_data.user_oid).map_err(AppError::map_source(
+                            TokenErrorCode::RefreshTokenSubInvalid,
+                        ))?,
+                    )),
+                    audience: &selection.resources,
+                },
             )
             .await
             .map_err(AppError::map_source(TokenErrorCode::RefreshTokenInvalid))?;

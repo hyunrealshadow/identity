@@ -21,7 +21,11 @@ use crate::{
         },
         setting::{PasswordHashSetting, SettingsSource, runtime::RefreshableSetting},
     },
-    auth::password::{PasswordHasher, run_password_hashing},
+    auth::{
+        password::{PasswordHasher, run_password_hashing},
+        password_policy,
+        password_policy::BreachedPasswordChecker,
+    },
     domain::key::{
         AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm, generator::AsymmetricKeyGenerator,
     },
@@ -53,7 +57,7 @@ pub trait InstallSettings: SettingsSource + RefreshableSetting {}
 impl<T> InstallSettings for T where T: SettingsSource + RefreshableSetting + ?Sized {}
 
 pub struct InstallService {
-    pub breach_checker: Arc<dyn crate::auth::password_policy::BreachedPasswordChecker>,
+    pub breach_checker: Arc<dyn BreachedPasswordChecker>,
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub settings: Arc<dyn InstallSettings>,
     pub key_generator: Arc<dyn AsymmetricKeyGenerator>,
@@ -137,12 +141,12 @@ impl InstallService {
         }
 
         let input = validate_install_input(input)?;
-        crate::auth::password_policy::validate_password(
+        password_policy::validate_password(
             &input.password,
             &[&input.username, &input.email],
             "password",
         )?;
-        crate::auth::password_policy::validate_breached_password(
+        password_policy::validate_breached_password(
             self.breach_checker.as_ref(),
             &self.settings.snapshot(),
             &input.password,

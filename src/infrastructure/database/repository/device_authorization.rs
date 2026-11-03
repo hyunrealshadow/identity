@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use identity_domain::{
     auth::SessionOid,
+    authorization::PolicyVersion,
     client::model::ClientOid,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationData, ClientAuthorizationRepositoryError,
@@ -20,21 +21,28 @@ use identity_domain::{
     },
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr,
-    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbBackend,
+    DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, Statement, TransactionTrait,
     sea_query::{ExprTrait, SimpleExpr},
 };
 use serde_json::{Value, from_value, to_value};
 use uuid::Uuid;
 
-use super::client_authorization::{serialize_data, to_domain};
+use super::{
+    authorization_lifecycle,
+    client_authorization::{serialize_data, to_domain},
+};
 use crate::database::{
+    audit,
     entity::{
-        client, client::Entity as ClientEntity, client_authorization,
-        client_authorization::Entity as ClientAuthorizationEntity,
+        client::{Column as ClientColumn, Entity as ClientEntity},
+        client_authorization,
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
     },
     query::json_text,
-    repository::shared::lock_resource_rows,
+    repository::{client_authority, shared, shared::lock_resource_rows},
 };
 
 mod redemption;
@@ -66,7 +74,7 @@ fn json_field_equals(field: &str, value: &str) -> SimpleExpr {
     json_text(
         (
             client_authorization::Entity,
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
         ),
         field,
     )
@@ -77,7 +85,7 @@ fn json_field_is_null(field: &str) -> SimpleExpr {
     json_text(
         (
             client_authorization::Entity,
-            client_authorization::Column::Data,
+            ClientAuthorizationColumn::Data,
         ),
         field,
     )
@@ -160,7 +168,7 @@ impl DeviceAuthorizationRepositoryImpl {
         // Acquire policy before authorization rows: disabling a client locks
         // its policy before revoking those rows in the same transaction.
         let Some(candidate) = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Oid.eq(oid))
+            .filter(ClientAuthorizationColumn::Oid.eq(oid))
             .one(transaction)
             .await
             .map_err(query_failed)?
@@ -169,7 +177,7 @@ impl DeviceAuthorizationRepositoryImpl {
         };
         Self::lock_live_client(transaction, candidate.client_id).await?;
         ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Oid.eq(oid))
+            .filter(ClientAuthorizationColumn::Oid.eq(oid))
             .lock_exclusive()
             .one(transaction)
             .await
@@ -179,15 +187,11 @@ impl DeviceAuthorizationRepositoryImpl {
     async fn lock_live_client<C: ConnectionTrait>(
         transaction: &C,
         client_id: i64,
-    ) -> Result<identity_domain::authorization::PolicyVersion, DeviceAuthorizationRepositoryError>
-    {
+    ) -> Result<PolicyVersion, DeviceAuthorizationRepositoryError> {
         let (enabled, fingerprint) =
-            crate::database::repository::client_authority::lock_live_client_boundary(
-                transaction,
-                client_id,
-            )
-            .await
-            .map_err(query_failed)?;
+            client_authority::lock_live_client_boundary(transaction, client_id)
+                .await
+                .map_err(query_failed)?;
         if !enabled {
             return Err(query_failed(DbErr::RecordNotFound(
                 "client is inactive".into(),
@@ -203,11 +207,11 @@ impl DeviceAuthorizationRepositoryImpl {
         transaction: &C,
         user: Uuid,
     ) -> Result<(), DeviceAuthorizationRepositoryError> {
-        crate::database::repository::shared::lock_user_credentials(transaction, user.into())
+        shared::lock_user_credentials(transaction, user.into())
             .await
             .map_err(query_failed)?;
-        let row = transaction.query_one_raw(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Postgres,
+        let row = transaction.query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
             "SELECT u.enabled AND NOT u.locked AS active FROM \"user\" u WHERE u.oid=$1 FOR SHARE OF u",
             [user.into()])).await.map_err(query_failed)?
             .ok_or_else(|| query_failed(DbErr::RecordNotFound("user is inactive".into())))?;
@@ -225,8 +229,8 @@ impl DeviceAuthorizationRepositoryImpl {
         type_: String,
     ) -> Result<Option<ClientAuthorization>, DeviceAuthorizationRepositoryError> {
         let Some((model, Some(client_model))) = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Oid.eq(oid))
-            .filter(client_authorization::Column::Type.eq(type_))
+            .filter(ClientAuthorizationColumn::Oid.eq(oid))
+            .filter(ClientAuthorizationColumn::Type.eq(type_))
             .inner_join(ClientEntity)
             .select_also(ClientEntity)
             .one(&self.db)
@@ -250,7 +254,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         expires_at: DateTime<Utc>,
     ) -> Result<ClientAuthorization, DeviceAuthorizationRepositoryError> {
         let transaction = self.db.begin().await.map_err(query_failed)?;
-        super::authorization_lifecycle::lock_authorization_issuance(&transaction)
+        authorization_lifecycle::lock_authorization_issuance(&transaction)
             .await
             .map_err(query_failed)?;
         // The request row will carry the actual target resources. Serialize
@@ -260,7 +264,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             .await
             .map_err(query_failed)?;
         let client_model = ClientEntity::find()
-            .filter(client::Column::Oid.eq(client_oid))
+            .filter(ClientColumn::Oid.eq(client_oid))
             .one(&transaction)
             .await
             .map_err(query_failed)?
@@ -277,19 +281,19 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         // owners across instances.
         ClientAuthorizationEntity::update_many()
             .col_expr(
-                client_authorization::Column::IsExpired,
+                ClientAuthorizationColumn::IsExpired,
                 SimpleExpr::Value(true.into()),
             )
             .col_expr(
-                client_authorization::Column::UpdatedAt,
+                ClientAuthorizationColumn::UpdatedAt,
                 SimpleExpr::Value(Some(now).into()),
             )
-            .filter(client_authorization::Column::Type.eq(device_request_type()))
+            .filter(ClientAuthorizationColumn::Type.eq(device_request_type()))
             .filter(json_field_equals("user_code", &data.user_code))
-            .filter(client_authorization::Column::ExpiresAt.lte(now))
-            .filter(client_authorization::Column::IsExpired.eq(false))
-            .filter(client_authorization::Column::CompletedAt.is_null())
-            .filter(client_authorization::Column::RevokedAt.is_null())
+            .filter(ClientAuthorizationColumn::ExpiresAt.lte(now))
+            .filter(ClientAuthorizationColumn::IsExpired.eq(false))
+            .filter(ClientAuthorizationColumn::CompletedAt.is_null())
+            .filter(ClientAuthorizationColumn::RevokedAt.is_null())
             .exec(&transaction)
             .await
             .map_err(query_failed)?;
@@ -319,7 +323,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
                 query_failed(error)
             }
         })?;
-        crate::database::audit::record(
+        audit::record(
             &transaction,
             "device_authorization.requested",
             "device_authorization_request",
@@ -346,7 +350,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         digest: &str,
     ) -> Result<Option<ClientAuthorization>, DeviceAuthorizationRepositoryError> {
         let Some((model, Some(client_model))) = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Type.eq(device_request_type()))
+            .filter(ClientAuthorizationColumn::Type.eq(device_request_type()))
             .filter(json_field_equals("device_code_digest", digest))
             .inner_join(ClientEntity)
             .select_also(ClientEntity)
@@ -366,16 +370,16 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         user_code: &str,
     ) -> Result<Option<ClientAuthorization>, DeviceAuthorizationRepositoryError> {
         let Some((model, Some(client_model))) = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Type.eq(device_request_type()))
-            .filter(client_authorization::Column::CompletedAt.is_null())
-            .filter(client_authorization::Column::RevokedAt.is_null())
-            .filter(client_authorization::Column::IsExpired.eq(false))
-            .filter(client_authorization::Column::ExpiresAt.gt(Utc::now()))
+            .filter(ClientAuthorizationColumn::Type.eq(device_request_type()))
+            .filter(ClientAuthorizationColumn::CompletedAt.is_null())
+            .filter(ClientAuthorizationColumn::RevokedAt.is_null())
+            .filter(ClientAuthorizationColumn::IsExpired.eq(false))
+            .filter(ClientAuthorizationColumn::ExpiresAt.gt(Utc::now()))
             // A claimed code is semantically consumed: only an unclaimed
             // request can still be answered with the code it advertises.
             .filter(json_field_is_null("claimed_login_oid"))
             .filter(json_field_equals("user_code", user_code))
-            .order_by_desc(client_authorization::Column::CreatedAt)
+            .order_by_desc(ClientAuthorizationColumn::CreatedAt)
             .inner_join(ClientEntity)
             .select_also(ClientEntity)
             .one(&self.db)
@@ -405,25 +409,25 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         let transaction = self.db.begin().await.map_err(query_failed)?;
         let result = ClientAuthorizationEntity::update_many()
             .col_expr(
-                client_authorization::Column::RevokedAt,
+                ClientAuthorizationColumn::RevokedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
             )
             .col_expr(
-                client_authorization::Column::UpdatedAt,
+                ClientAuthorizationColumn::UpdatedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
             )
             .filter(
                 Condition::all()
-                    .add(client_authorization::Column::Oid.eq(device_authorization_oid))
-                    .add(client_authorization::Column::Type.eq(device_authorization_type()))
-                    .add(client_authorization::Column::RevokedAt.is_null()),
+                    .add(ClientAuthorizationColumn::Oid.eq(device_authorization_oid))
+                    .add(ClientAuthorizationColumn::Type.eq(device_authorization_type()))
+                    .add(ClientAuthorizationColumn::RevokedAt.is_null()),
             )
             .exec(&transaction)
             .await
             .map_err(query_failed)?;
         let revoked = result.rows_affected == 1;
         if revoked {
-            crate::database::audit::record(
+            audit::record(
                 &transaction,
                 "device_authorization.revoked",
                 "device_authorization",
@@ -446,24 +450,24 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         let transaction = self.db.begin().await.map_err(query_failed)?;
         let revoked = ClientAuthorizationEntity::update_many()
             .col_expr(
-                client_authorization::Column::RevokedAt,
+                ClientAuthorizationColumn::RevokedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
             )
             .col_expr(
-                client_authorization::Column::UpdatedAt,
+                ClientAuthorizationColumn::UpdatedAt,
                 SimpleExpr::Value(Some(revoked_at).into()),
             )
             .filter(
                 Condition::all()
-                    .add(client_authorization::Column::Type.eq(device_authorization_type()))
-                    .add(client_authorization::Column::RevokedAt.is_null())
+                    .add(ClientAuthorizationColumn::Type.eq(device_authorization_type()))
+                    .add(ClientAuthorizationColumn::RevokedAt.is_null())
                     .add(json_field_equals("user_oid", &user_oid.to_string())),
             )
             .exec_with_returning(&transaction)
             .await
             .map_err(query_failed)?;
         for relation in &revoked {
-            crate::database::audit::record(
+            audit::record(
                 &transaction,
                 "device_authorization.revoked",
                 "device_authorization",

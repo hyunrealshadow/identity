@@ -1,5 +1,7 @@
 use super::*;
 
+use identity_domain::openid_connect::{API_RESOURCE, resource};
+
 impl RbacManagementService {
     #[tracing::instrument(skip_all, name = "rbac.resource.find")]
     pub async fn find_resource(
@@ -24,10 +26,12 @@ impl RbacManagementService {
             CURSOR_KIND_RESOURCE,
             order.as_u8(),
             &filter,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self
@@ -74,12 +78,12 @@ impl RbacManagementService {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let uri = command.uri.trim().to_owned();
-            if !identity_domain::openid_connect::resource::valid_resource_uri(&uri) {
+            if !resource::valid_resource_uri(&uri) {
                 return Err(AppError::from_code(RbacErrorCode::InvalidResourceUri)
                     .with_param("uri", uri)
                     .with_field("uri"));
             }
-            if uri == identity_domain::openid_connect::API_RESOURCE {
+            if uri == API_RESOURCE {
                 return Err(
                     AppError::from_code(RbacErrorCode::ReservedResourceProtected)
                         .with_param("resource", uri)

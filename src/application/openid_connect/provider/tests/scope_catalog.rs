@@ -3,7 +3,7 @@ use crate::{
 };
 
 use super::*;
-use identity_domain::authorization::catalog::ManagementScope;
+use identity_domain::{authorization::catalog::ManagementScope, openid_connect::ApiScope};
 
 #[tokio::test]
 async fn discovery_and_validation_use_catalog_instead_of_static_capabilities() {
@@ -61,8 +61,8 @@ async fn wildcard_requests_expand_known_names_at_any_depth_without_crossing_boun
         .await
         .unwrap();
     assert!(!scopes.has_patterns());
-    assert!(scopes.allows(identity_domain::openid_connect::ApiScope::AccountRead));
-    assert!(scopes.allows(identity_domain::openid_connect::ApiScope::AccountUpdate));
+    assert!(scopes.allows(ApiScope::AccountRead));
+    assert!(scopes.allows(ApiScope::AccountUpdate));
     assert!(scopes.matches("orders.read"));
     assert!(scopes.matches("orders.item.read"));
     assert!(!scopes.matches("orders2.read"));

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_graphql::{
     Request as GraphqlRequest, Response as AsyncGraphqlResponse, Value,
@@ -19,17 +19,23 @@ use tracing::{Instrument, error, info_span};
 use url::form_urlencoded::parse;
 
 use self::schema::{ApiSchema, RESOURCE_AUDIENCE, RequestContext, build_schema};
-use crate::middleware::RequestCorrelation;
 use crate::{
     controllers::response::{accepts_html, app_state, insert_no_store_headers},
     infrastructure::i18n::resolve_locale_from_headers,
-    middleware::security_headers_middleware,
+    middleware::{RequestCorrelation, security_headers_middleware},
 };
-use identity_application::error::{
-    AppError, code::AppErrorCode,
-    codes::graphql_transport::GraphqlTransportErrorCode as TransportError,
+use chrono::DateTime;
+use identity_application::{
+    error::{
+        AppError, code::AppErrorCode,
+        codes::graphql_transport::GraphqlTransportErrorCode as TransportError,
+    },
+    setting::application_origins,
 };
-use identity_infrastructure::i18n::error_i18n;
+use identity_domain::auth::ACR_AAL2;
+use identity_infrastructure::{database::audit, i18n::error_i18n};
+use observability::RequestObservation;
+use schema::authorization::EffectivePermissionsProvider;
 use unic_langid::LanguageIdentifier;
 
 mod observability;
@@ -80,7 +86,7 @@ async fn graphql_options(depot: &mut Depot, req: &mut Request, res: &mut Respons
 
 #[handler]
 async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Response) {
-    let mut observation = observability::RequestObservation::new();
+    let mut observation = RequestObservation::new();
     set_graphql_response_headers(res);
     let locale = resolve_locale_from_headers(req.headers());
     let correlation = depot
@@ -217,8 +223,8 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     let actor = if let Some(user_oid) = claims.user_oid {
         let auth_time = claims
             .auth_time
-            .and_then(|time| chrono::DateTime::from_timestamp(time, 0));
-        let authentication = if claims.acr.as_deref() == Some(identity_domain::auth::ACR_AAL2) {
+            .and_then(|time| DateTime::from_timestamp(time, 0));
+        let authentication = if claims.acr.as_deref() == Some(ACR_AAL2) {
             HumanAuthenticationContext::aal2(auth_time)
         } else {
             HumanAuthenticationContext::aal1(auth_time)
@@ -255,10 +261,8 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             actor: actor.clone(),
         })
         .data(config.max_page_size)
-        .data(std::sync::Arc::new(permissions::LiveEffectivePermissions)
-            as std::sync::Arc<
-                dyn schema::authorization::EffectivePermissionsProvider,
-            >);
+        .data(Arc::new(permissions::LiveEffectivePermissions)
+            as Arc<dyn EffectivePermissionsProvider>);
     let operation_span = info_span!(
         "graphql.operation",
         graphql.operation.type = %operation_type,
@@ -266,10 +270,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     );
     let mut response = match timeout(
         Duration::from_secs(config.timeout_secs),
-        identity_infrastructure::database::audit::with_actor(
-            actor,
-            schema.execute(request).instrument(operation_span),
-        ),
+        audit::with_actor(actor, schema.execute(request).instrument(operation_span)),
     )
     .await
     {
@@ -397,7 +398,7 @@ fn apply_cors(req: &Request, res: &mut Response, config: &GraphqlConfig, depot: 
     };
     let installed_origin = app_state(depot).ok().is_some_and(|state| {
         use identity_application::setting::{AppSettings, SettingsSource};
-        identity_application::setting::application_origins::trusted_application_origins(
+        application_origins::trusted_application_origins(
             &state.settings().store().snapshot().section::<AppSettings>(),
         )
         .iter()

@@ -5,13 +5,13 @@ use identity_application::{
     rbac::{
         AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult,
         GroupFilter, GroupMembershipMutationResult, GroupMembershipPage,
-        GroupMembershipPageRequest, GroupOrder as ApplicationGroupOrder, GroupPage,
-        GroupPageRequest, GroupRecord, GroupRoleMutationResult, GroupRolePage,
-        GroupRolePageRequest, GroupStateCommand, RemoveGroupMemberCommand, SetGroupRolesCommand,
-        UpdateGroupCommand,
+        GroupMembershipPageRequest, GroupMembershipRecord, GroupOrder as ApplicationGroupOrder,
+        GroupPage, GroupPageRequest, GroupRecord, GroupRoleBindingRecord, GroupRoleMutationResult,
+        GroupRolePage, GroupRolePageRequest, GroupStateCommand, RemoveGroupMemberCommand,
+        SetGroupRolesCommand, UpdateGroupCommand,
     },
 };
-use identity_domain::rbac::GroupOid;
+use identity_domain::rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid};
 
 use super::super::resource::support::{PageArgs, request_authority};
 use crate::graphql::schema::RequestContext;
@@ -30,8 +30,8 @@ pub(crate) async fn find_group(
 
 pub(crate) async fn find_group_membership(
     request: &RequestContext,
-    oid: identity_domain::rbac::GroupMembershipOid,
-) -> Result<Option<identity_application::rbac::GroupMembershipRecord>, AppError> {
+    oid: GroupMembershipOid,
+) -> Result<Option<GroupMembershipRecord>, AppError> {
     request
         .state
         .services()
@@ -42,8 +42,8 @@ pub(crate) async fn find_group_membership(
 
 pub(crate) async fn find_group_role_binding(
     request: &RequestContext,
-    oid: identity_domain::rbac::GroupRoleBindingOid,
-) -> Result<Option<identity_application::rbac::GroupRoleBindingRecord>, AppError> {
+    oid: GroupRoleBindingOid,
+) -> Result<Option<GroupRoleBindingRecord>, AppError> {
     request
         .state
         .services()

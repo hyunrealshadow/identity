@@ -1,5 +1,9 @@
 //! Login interaction orchestration and public authentication use cases.
 
+use super::{
+    passkey::PasskeyService,
+    password_policy::{BreachedPasswordChecker, UnavailableBreachChecker},
+};
 use crate::{
     auth::{password::PasswordHasher, totp::TotpVerifier},
     error::{AppError, codes::auth::AuthErrorCode},
@@ -14,11 +18,11 @@ use crate::{
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        LOCK_DURATION, LoginStatus, MAX_FAILED_ATTEMPTS, SessionOid,
+        ACR_AAL2, LOCK_DURATION, LoginStatus, MAX_FAILED_ATTEMPTS, SessionOid,
         model::{Login, Session},
         repository::{LoginRepository, SessionRepository},
     },
-    user::repository::UserRepository,
+    user::{MfaMethod as UserMfaMethod, repository::UserRepository},
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -88,16 +92,13 @@ pub struct LoginService {
     totp_verifier: Arc<dyn TotpVerifier>,
     settings: Arc<dyn SettingsSource>,
     events: Arc<dyn EventSink>,
-    passkeys: Option<Arc<super::passkey::PasskeyService>>,
-    breach_checker: Arc<dyn super::password_policy::BreachedPasswordChecker>,
+    passkeys: Option<Arc<PasskeyService>>,
+    breach_checker: Arc<dyn BreachedPasswordChecker>,
 }
 
 impl LoginService {
     #[must_use]
-    pub fn with_breach_checker(
-        mut self,
-        checker: Arc<dyn super::password_policy::BreachedPasswordChecker>,
-    ) -> Self {
+    pub fn with_breach_checker(mut self, checker: Arc<dyn BreachedPasswordChecker>) -> Self {
         self.breach_checker = checker;
         self
     }
@@ -119,7 +120,7 @@ impl LoginService {
             password_hasher,
             totp_verifier,
             settings,
-            breach_checker: Arc::new(super::password_policy::UnavailableBreachChecker),
+            breach_checker: Arc::new(UnavailableBreachChecker),
             passkeys: None,
             events: Arc::new(NoopEventSink),
         }
@@ -133,7 +134,7 @@ impl LoginService {
     }
 
     #[must_use]
-    pub fn with_passkeys(mut self, passkeys: Arc<super::passkey::PasskeyService>) -> Self {
+    pub fn with_passkeys(mut self, passkeys: Arc<PasskeyService>) -> Self {
         self.passkeys = Some(passkeys);
         self
     }
@@ -160,7 +161,7 @@ impl LoginService {
             return Ok(login);
         };
         let credentials = self.credential_types(user_oid.into()).await?;
-        if login.requested_acr.as_deref() == Some(identity_domain::auth::ACR_AAL2)
+        if login.requested_acr.as_deref() == Some(ACR_AAL2)
             || credentials
                 .iter()
                 .any(|kind| *kind != CredentialType::Password)
@@ -199,10 +200,10 @@ impl LoginService {
                 credential_types.push(credential_type);
             }
         }
-        if let Some(passkeys) = &self.passkeys {
-            if !passkeys.list(user_oid).await?.is_empty() {
-                credential_types.push(CredentialType::Passkey);
-            }
+        if let Some(passkeys) = &self.passkeys
+            && !passkeys.list(user_oid).await?.is_empty()
+        {
+            credential_types.push(CredentialType::Passkey);
         }
         Ok(credential_types)
     }
@@ -310,7 +311,7 @@ fn failed_attempt_lock_until() -> DateTime<Utc> {
 pub fn preferred_credential_type(
     login: &Login,
     credentials: &[CredentialType],
-    preference: identity_domain::user::MfaMethod,
+    preference: UserMfaMethod,
 ) -> Option<CredentialType> {
     use identity_domain::user::MfaMethod;
     let has = |kind| credentials.contains(&kind);

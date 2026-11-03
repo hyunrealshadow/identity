@@ -5,6 +5,7 @@ mod temp_dir;
 use std::{env, fs, path::PathBuf, process::Command};
 
 use identity_infrastructure::config::{AppConfig, AppEnvironment, TlsTermination};
+use temp_dir::TempDir;
 
 struct WorkingDirectory(PathBuf);
 
@@ -18,7 +19,7 @@ impl Drop for WorkingDirectory {
 #[ignore = "requires Helm installed; no database or cluster access"]
 fn rendered_helm_configuration_loads_without_a_public_host() {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let temporary = temp_dir::TempDir::new("helm-configuration");
+    let temporary = TempDir::new("helm-configuration");
     let _restore = WorkingDirectory(env::current_dir().unwrap());
     let configuration = temporary.join("config");
     fs::create_dir(&configuration).unwrap();

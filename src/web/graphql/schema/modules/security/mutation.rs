@@ -1,7 +1,11 @@
 use crate::graphql::schema::access::{AccessPolicy, access};
 use async_graphql::{Context, Object, Result};
 use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
-use identity_domain::openid_connect::ApiScope;
+use identity_domain::{
+    openid_connect::ApiScope,
+    user::{MfaMethod, repository::UserProfilePatch},
+};
+use uuid::Uuid;
 
 use super::types::{
     BeginTotpEnrollmentPayload, ChangePasswordInput, ChangePasswordPayload,
@@ -68,10 +72,10 @@ impl SecurityMutation {
             .account()
             .update_profile(
                 request.user_oid()?,
-                identity_domain::user::repository::UserProfilePatch {
+                UserProfilePatch {
                     preferred_mfa_method: Some(match method {
-                        PreferredMfaMethod::Passkey => identity_domain::user::MfaMethod::Passkey,
-                        PreferredMfaMethod::Otp => identity_domain::user::MfaMethod::Otp,
+                        PreferredMfaMethod::Passkey => MfaMethod::Passkey,
+                        PreferredMfaMethod::Otp => MfaMethod::Otp,
                     }),
                     ..Default::default()
                 },
@@ -149,7 +153,7 @@ impl SecurityMutation {
                 ErrorParams::new(),
             )
         })?;
-        let challenge = uuid::Uuid::parse_str(&challenge_id).map_err(|_| {
+        let challenge = Uuid::parse_str(&challenge_id).map_err(|_| {
             coded_error(
                 ctx,
                 GraphqlErrorCode::InvalidPasskeyChallenge,
@@ -183,7 +187,7 @@ impl SecurityMutation {
         #[graphql(validator(chars_max_length = 128))] id: String,
     ) -> Result<bool> {
         let request = request_context(ctx)?;
-        let id = uuid::Uuid::parse_str(&id).map_err(|_| {
+        let id = Uuid::parse_str(&id).map_err(|_| {
             coded_error(ctx, GraphqlErrorCode::InvalidPasskeyId, ErrorParams::new())
         })?;
         request

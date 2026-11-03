@@ -1,5 +1,5 @@
 use opentelemetry::{
-    KeyValue,
+    KeyValue, global,
     metrics::{Counter, Histogram},
 };
 use std::{sync::OnceLock, time::Instant};
@@ -31,7 +31,7 @@ impl RequestObservation {
 impl Drop for RequestObservation {
     fn drop(&mut self) {
         let instruments = INSTRUMENTS.get_or_init(|| {
-            let meter = opentelemetry::global::meter("identity.graphql");
+            let meter = global::meter("identity.graphql");
             Instruments {
                 requests: meter.u64_counter("identity.graphql.requests").build(),
                 duration: meter

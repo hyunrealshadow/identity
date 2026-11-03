@@ -1,12 +1,15 @@
 use std::{backtrace::Backtrace, error::Error as StdError};
 
 use async_graphql::{Context, Error, ErrorExtensionValues, ErrorExtensions, Value};
-use identity_application::error::{
-    AppError, ErrorDiagnostics,
-    code::AppErrorCode,
-    codes::{authorization::AuthorizationErrorCode, graphql::GraphqlErrorCode},
-    kind::ErrorKind,
-    params::ErrorParams,
+use identity_application::{
+    authorization::DEFAULT_RECENT_AAL2_TTL,
+    error::{
+        AppError, ErrorDiagnostics,
+        code::AppErrorCode,
+        codes::{authorization::AuthorizationErrorCode, graphql::GraphqlErrorCode},
+        kind::ErrorKind,
+        params::ErrorParams,
+    },
 };
 use serde_json::{Value as SerdeJsonValue, json};
 use tracing::error;
@@ -227,10 +230,7 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
             extensions.set("code", "insufficient_user_authentication");
             extensions.set("acr_values", "aal2");
             if error.params().get("required_authentication") == Some("recent_aal2") {
-                extensions.set(
-                    "max_age",
-                    identity_application::authorization::DEFAULT_RECENT_AAL2_TTL.as_secs(),
-                );
+                extensions.set("max_age", DEFAULT_RECENT_AAL2_TTL.as_secs());
             }
         }
         extensions.set(

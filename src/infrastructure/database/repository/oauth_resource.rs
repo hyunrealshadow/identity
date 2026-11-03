@@ -13,6 +13,8 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
+use crate::database::client_authorization_boundary;
+
 /// Permanently withdraw every authorization artifact whose target is exactly
 /// this resource.
 ///
@@ -141,12 +143,10 @@ impl OAuthResourceRepository for OAuthResourceRepositoryImpl {
         client: ClientOid,
         resource_uri: &str,
     ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
-        let Some(client_id) = crate::database::client_authorization_boundary::client_id_by_oid(
-            self.db.as_ref(),
-            client,
-        )
-        .await
-        .map_err(storage_error)?
+        let Some(client_id) =
+            client_authorization_boundary::client_id_by_oid(self.db.as_ref(), client)
+                .await
+                .map_err(storage_error)?
         else {
             return Err(OAuthResourceRepositoryError("client not found".to_owned()));
         };
@@ -158,14 +158,10 @@ impl OAuthResourceRepository for OAuthResourceRepositoryImpl {
                 "resource not found".to_owned(),
             ));
         }
-        crate::database::client_authorization_boundary::client_scope_codes(
-            self.db.as_ref(),
-            client_id,
-            resource_uri,
-        )
-        .await
-        .map(Some)
-        .map_err(storage_error)
+        client_authorization_boundary::client_scope_codes(self.db.as_ref(), client_id, resource_uri)
+            .await
+            .map(Some)
+            .map_err(storage_error)
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "oauth_resource.client_protocol_scopes"))]
@@ -196,22 +192,17 @@ impl OAuthResourceRepository for OAuthResourceRepositoryImpl {
         &self,
         client: ClientOid,
     ) -> Result<Option<PolicyVersion>, OAuthResourceRepositoryError> {
-        let Some(client_id) = crate::database::client_authorization_boundary::client_id_by_oid(
-            self.db.as_ref(),
-            client,
-        )
-        .await
-        .map_err(storage_error)?
+        let Some(client_id) =
+            client_authorization_boundary::client_id_by_oid(self.db.as_ref(), client)
+                .await
+                .map_err(storage_error)?
         else {
             return Err(OAuthResourceRepositoryError("client not found".to_owned()));
         };
         let (_, fingerprint) =
-            crate::database::client_authorization_boundary::client_boundary_fingerprint(
-                self.db.as_ref(),
-                client_id,
-            )
-            .await
-            .map_err(storage_error)?;
+            client_authorization_boundary::client_boundary_fingerprint(self.db.as_ref(), client_id)
+                .await
+                .map_err(storage_error)?;
         Ok(Some(fingerprint))
     }
 }

@@ -2,7 +2,10 @@ use super::{
     ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until,
     validate_passkey_login,
 };
-use crate::error::{AppError, codes::auth::AuthErrorCode};
+use crate::{
+    auth::passkey::PasskeyOptions,
+    error::{AppError, codes::auth::AuthErrorCode},
+};
 use identity_domain::auth::{
     ACR_AAL2, AMR_MFA, AMR_PASSWORD, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS,
     model::Login,
@@ -11,10 +14,7 @@ use uuid::Uuid;
 
 impl LoginService {
     /// Account-bound challenges are unavailable until identifier verification.
-    pub async fn passkey_options(
-        &self,
-        login_oid: Uuid,
-    ) -> Result<crate::auth::passkey::PasskeyOptions, AppError> {
+    pub async fn passkey_options(&self, login_oid: Uuid) -> Result<PasskeyOptions, AppError> {
         let login = self.prepare_challenge(login_oid).await?;
         validate_passkey_login(&login)?;
         let user = self

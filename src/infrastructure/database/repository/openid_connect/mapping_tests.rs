@@ -2,10 +2,7 @@ use chrono::Utc;
 use identity_domain::openid_connect::OpenIdConnectClientRepositoryError;
 use serde_json::json;
 
-use super::mapping::{
-    deserialize_optional_string_vec, parse_optional_url, parse_optional_urls, to_metadata,
-    to_platform,
-};
+use super::mapping::{parse_optional_urls, to_metadata, to_platform};
 use super::registration::cors_origins_for_client;
 use crate::{
     domain::openid_connect::{
@@ -41,18 +38,6 @@ fn materialized_cors_origins_follow_client_settings_and_redirects() {
         cors_origins_for_client(&settings, &platforms),
         ["http://localhost:3000", "https://rp.example.com"]
     );
-}
-
-#[test]
-fn parses_json_array_to_optional_vec() {
-    let values = deserialize_optional_string_vec(Some(&json!(["a", "b"]))).unwrap();
-    assert_eq!(values, Some(vec!["a".to_string(), "b".to_string()]));
-}
-
-#[test]
-fn parses_url_field() {
-    let url = parse_optional_url(Some("https://example.com/callback")).unwrap();
-    assert_eq!(url.unwrap().as_str(), "https://example.com/callback");
 }
 
 #[test]

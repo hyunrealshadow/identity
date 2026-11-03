@@ -3,23 +3,24 @@
 use std::collections::BTreeSet;
 
 use identity_application::rbac::{
-    CreateRoleTransaction, RbacEntityKind, RbacManagementRepositoryError, RbacPageData, RoleFilter,
-    RolePageEntry, RoleQuery, RoleRecord, RoleStateTransaction, SetRolePermissionsTransaction,
-    UpdateRoleTransaction,
+    CreateRoleTransaction, RbacEntityKind, RbacManagementRepositoryError, RbacPageData,
+    RbacProtectedKind, RoleFilter, RoleOrder, RolePageEntry, RoleQuery, RoleRecord,
+    RoleStateTransaction, SetRolePermissionsTransaction, UpdateRoleTransaction,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
 use identity_domain::{
     authorization::ManagementScope,
     rbac::{LocalizedMetadata, RoleOid, RolePermissionOid},
 };
-use sea_orm::TransactionTrait;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
+use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement, TransactionTrait};
 use uuid::Uuid;
 
 use super::{
+    super::authorization_lifecycle,
     RbacManagementRepositoryImpl,
     audit::append_semantic_audit,
     authority::recheck_authority,
+    delegation,
     support::{
         Binds, CursorComparison, corrupt, escape_like, keyset_condition, metadata_json, not_found,
         order_is_descending, page_flags, parse_localized_metadata, storage, utc,
@@ -111,7 +112,7 @@ ORDER BY user_id
         .map_err(storage)?;
     for row in rows {
         let user_id = row.try_get::<i64>("", "user_id").map_err(storage)?;
-        super::super::authorization_lifecycle::withdraw_user_authority_in_txn(txn, user_id)
+        authorization_lifecycle::withdraw_user_authority_in_txn(txn, user_id)
             .await
             .map_err(storage)?;
     }
@@ -155,7 +156,7 @@ impl RbacManagementRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "role.count"))]
     pub(crate) async fn role_count(
         &self,
-        filter: identity_application::rbac::RoleFilter,
+        filter: RoleFilter,
     ) -> Result<u64, RbacManagementRepositoryError> {
         let mut binds = Binds::new();
         let conditions = role_filter_conditions(&filter, &mut binds);
@@ -200,10 +201,8 @@ impl RbacManagementRepositoryImpl {
         let descending = order_is_descending(query.order.is_descending(), query.direction);
         let ascending = !query.order.is_descending();
         let column = match query.order {
-            identity_application::rbac::RoleOrder::CreatedAtAsc
-            | identity_application::rbac::RoleOrder::CreatedAtDesc => "r.created_at",
-            identity_application::rbac::RoleOrder::NameAsc
-            | identity_application::rbac::RoleOrder::NameDesc => "r.name",
+            RoleOrder::CreatedAtAsc | RoleOrder::CreatedAtDesc => "r.created_at",
+            RoleOrder::NameAsc | RoleOrder::NameDesc => "r.name",
         };
         let mut binds = Binds::new();
         let mut conditions = role_filter_conditions(&query.filter, &mut binds);
@@ -255,13 +254,11 @@ impl RbacManagementRepositoryImpl {
             let record = role_from_row(&row)?;
             let tie = RbacTie::Id(id);
             let sort_key = match query.order {
-                identity_application::rbac::RoleOrder::CreatedAtAsc
-                | identity_application::rbac::RoleOrder::CreatedAtDesc => RbacSortKey::CreatedAt {
+                RoleOrder::CreatedAtAsc | RoleOrder::CreatedAtDesc => RbacSortKey::CreatedAt {
                     created_at: record.created_at,
                     tie,
                 },
-                identity_application::rbac::RoleOrder::NameAsc
-                | identity_application::rbac::RoleOrder::NameDesc => RbacSortKey::Text {
+                RoleOrder::NameAsc | RoleOrder::NameDesc => RbacSortKey::Text {
                     value: record.name.clone(),
                     tie,
                 },
@@ -330,7 +327,7 @@ impl RbacManagementRepositoryImpl {
         let current = load_role(&txn, command.role_oid, true).await?;
         if current.built_in {
             return Err(RbacManagementRepositoryError::Protected(
-                identity_application::rbac::RbacProtectedKind::BuiltInRole,
+                RbacProtectedKind::BuiltInRole,
             ));
         }
         if current.version != command.expected_version {
@@ -402,7 +399,7 @@ impl RbacManagementRepositoryImpl {
         let current = load_role(&txn, command.role_oid, true).await?;
         if current.built_in {
             return Err(RbacManagementRepositoryError::Protected(
-                identity_application::rbac::RbacProtectedKind::BuiltInRole,
+                RbacProtectedKind::BuiltInRole,
             ));
         }
         if current.version != command.expected_version {
@@ -438,8 +435,7 @@ impl RbacManagementRepositoryImpl {
             for row in rows {
                 scopes.insert(row.try_get::<i64>("", "scope_id").map_err(storage)?);
             }
-            super::delegation::ensure_delegable_permissions(&txn, &command.authority, &scopes)
-                .await?;
+            delegation::ensure_delegable_permissions(&txn, &command.authority, &scopes).await?;
         }
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
@@ -477,7 +473,7 @@ impl RbacManagementRepositoryImpl {
         let current = load_role(&txn, command.role_oid, true).await?;
         if current.built_in {
             return Err(RbacManagementRepositoryError::Protected(
-                identity_application::rbac::RbacProtectedKind::BuiltInRole,
+                RbacProtectedKind::BuiltInRole,
             ));
         }
         if current.version != command.expected_version {
@@ -533,8 +529,7 @@ impl RbacManagementRepositoryImpl {
                 requested_ids.insert(row.try_get::<i64>("", "id").map_err(storage)?);
             }
         }
-        super::delegation::validate_built_in_permission_references(&txn, &command.scope_oids)
-            .await?;
+        delegation::validate_built_in_permission_references(&txn, &command.scope_oids).await?;
         let current_rows = txn
             .query_all_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
@@ -552,7 +547,7 @@ impl RbacManagementRepositoryImpl {
             return Ok(current);
         }
         let added: BTreeSet<i64> = requested_ids.difference(&current_ids).copied().collect();
-        super::delegation::ensure_delegable_permissions(&txn, &command.authority, &added).await?;
+        delegation::ensure_delegable_permissions(&txn, &command.authority, &added).await?;
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "DELETE FROM role_permission WHERE role_id = $1",

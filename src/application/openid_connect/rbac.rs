@@ -12,6 +12,7 @@ use identity_domain::{
     authorization::catalog::is_management_scope_name,
     client_authorization::{
         AccessTokenPrincipal, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
+        ManagementAuthorizationSnapshotData,
     },
     openid_connect::{OpenIdConnectClient, ScopeSet},
     rbac::{
@@ -20,6 +21,7 @@ use identity_domain::{
     },
     user::UserOid,
 };
+
 use josekit::jwt;
 use serde_json::{Value, from_value, to_value};
 
@@ -42,7 +44,7 @@ pub(crate) fn business_snapshot(
 #[must_use]
 pub(crate) fn management_snapshot(
     snapshot: Option<&AuthorizationSnapshotData>,
-) -> Option<&identity_domain::client_authorization::ManagementAuthorizationSnapshotData> {
+) -> Option<&ManagementAuthorizationSnapshotData> {
     snapshot.and_then(AuthorizationSnapshotData::as_management)
 }
 
@@ -139,18 +141,32 @@ pub(crate) struct BusinessLivePorts<'a> {
     pub provider_service: &'a Arc<OpenIdProviderService>,
 }
 
+/// The token-side facts checked against live business authorization.
+pub(crate) struct BusinessTokenAuthorization<'a> {
+    pub live_client: &'a OpenIdConnectClient,
+    pub persisted: &'a BusinessAuthorizationSnapshotData,
+    pub persisted_scope: &'a str,
+    pub scope: &'a ScopeSet,
+    pub principal: AccessTokenPrincipal,
+    pub subject_user_oid: Option<UserOid>,
+    pub audience: &'a [String],
+}
+
 /// Live validation used by UserInfo, GraphQL bearer validation and token
 /// introspection. Missing ports fail closed for a business snapshot.
 pub(crate) async fn validate_business_authorization(
     ports: BusinessLivePorts<'_>,
-    live_client: &OpenIdConnectClient,
-    persisted: &BusinessAuthorizationSnapshotData,
-    persisted_scope: &str,
-    scope: &ScopeSet,
-    principal: AccessTokenPrincipal,
-    subject_user_oid: Option<UserOid>,
-    audience: &[String],
+    token: BusinessTokenAuthorization<'_>,
 ) -> Result<(), AppError> {
+    let BusinessTokenAuthorization {
+        live_client,
+        persisted,
+        persisted_scope,
+        scope,
+        principal,
+        subject_user_oid,
+        audience,
+    } = token;
     let invalid = || AppError::from_code(OpenIdConnectErrorCode::InvalidToken);
     if principal == AccessTokenPrincipal::User && has_non_business_authorization_scope(scope) {
         return Err(invalid());
@@ -237,8 +253,9 @@ mod tests {
         },
         openid_connect::ScopeSet,
     };
-    use josekit::jwt;
+    use josekit::jwt::JwtPayload;
     use serde_json::{Value, json};
+    use uuid::Uuid;
 
     use super::{
         RBAC_CLAIM, business_scope_names, clip_scope, has_business_claims,
@@ -249,9 +266,9 @@ mod tests {
         BusinessAuthorizationSnapshotData {
             resource_oid: "11111111-1111-1111-1111-111111111111".to_owned(),
             resource_uri: "https://api.example.test".to_owned(),
-            policy_version: uuid::Uuid::new_v4(),
+            policy_version: Uuid::new_v4(),
             user_oid: Some("22222222-2222-2222-2222-222222222222".to_owned()),
-            user_authorization_version: Some(uuid::Uuid::new_v4()),
+            user_authorization_version: Some(Uuid::new_v4()),
             bindings: vec![BusinessBindingSnapshotData {
                 binding_oid: "33333333-3333-3333-3333-333333333333".to_owned(),
                 role_oid: "44444444-4444-4444-4444-444444444444".to_owned(),
@@ -279,14 +296,14 @@ mod tests {
     #[test]
     fn signed_business_claim_round_trips_and_rejects_tampering() {
         let data = snapshot();
-        let mut payload = jwt::JwtPayload::new();
+        let mut payload = JwtPayload::new();
         payload.set_claim(RBAC_CLAIM, Some(json!(data))).unwrap();
         assert!(has_business_claims(&payload));
         let signed = signed_business_snapshot(&payload).unwrap().unwrap();
         assert_eq!(signed, data);
         validate_signed_business_snapshot(&data, &payload).unwrap();
 
-        let mut changed = jwt::JwtPayload::new();
+        let mut changed = JwtPayload::new();
         changed
             .set_claim(RBAC_CLAIM, Some(Value::Object(Default::default())))
             .unwrap();

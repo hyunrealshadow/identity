@@ -283,6 +283,7 @@ mod tests {
             "https://127.0.0.1/jwks.json",
             "https://10.0.0.5/jwks.json",
             "https://172.16.0.5/jwks.json",
+            "https://172.31.255.255/jwks.json",
             "https://192.168.1.5/jwks.json",
             "https://169.254.1.5/jwks.json",
             "https://100.64.0.1/jwks.json",

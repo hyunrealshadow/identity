@@ -12,10 +12,19 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
-use crate::database::entity::{
-    client, client::Entity as ClientEntity, client_authorization,
-    client_authorization::Entity as ClientAuthorizationEntity, login, login::Entity as LoginEntity,
-    session, session::Entity as SessionEntity, user, user::Entity as UserEntity,
+use super::{challenge, shared};
+use crate::database::{
+    audit,
+    entity::{
+        client::{Column as ClientColumn, Entity as ClientEntity},
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+        },
+        login,
+        login::{Column as LoginColumn, Entity as LoginEntity},
+        session::{Column as SessionColumn, Entity as SessionEntity},
+        user::{Column as UserColumn, Entity as UserEntity},
+    },
 };
 
 fn to_domain(
@@ -59,7 +68,7 @@ impl LoginRepository for LoginRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_by_oid"))]
     async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Login>, LoginRepositoryError> {
         let Some(model) = LoginEntity::find()
-            .filter(login::Column::Oid.eq(oid))
+            .filter(LoginColumn::Oid.eq(oid))
             .one(&self.db)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
@@ -115,14 +124,14 @@ impl LoginRepository for LoginRepositoryImpl {
         requested_acr: Option<&str>,
     ) -> Result<Login, LoginRepositoryError> {
         let client = ClientEntity::find()
-            .filter(client::Column::Oid.eq(client_oid))
+            .filter(ClientColumn::Oid.eq(client_oid))
             .one(&self.db)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let client_authorization_model = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Oid.eq(client_authorization_oid))
+            .filter(ClientAuthorizationColumn::Oid.eq(client_authorization_oid))
             .one(&self.db)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
@@ -152,7 +161,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .insert(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
-        crate::database::audit::record(&transaction, "login.created", "login", model.oid)
+        audit::record(&transaction, "login.created", "login", model.oid)
             .await
             .map_err(|e| LoginRepositoryError::CreateFailed(Box::new(e)))?;
         transaction
@@ -173,11 +182,11 @@ impl LoginRepository for LoginRepositoryImpl {
             .begin()
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
-        super::shared::lock_user_credentials(&txn, user_oid.into())
+        shared::lock_user_credentials(&txn, user_oid.into())
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let user = UserEntity::find()
-            .filter(user::Column::Oid.eq(user_oid))
+            .filter(UserColumn::Oid.eq(user_oid))
             .one(&txn)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
@@ -185,18 +194,18 @@ impl LoginRepository for LoginRepositoryImpl {
 
         let now = Utc::now();
         let model = LoginEntity::update_many()
-            .col_expr(login::Column::UserId, Expr::value(Some(user.id)))
+            .col_expr(LoginColumn::UserId, Expr::value(Some(user.id)))
             .col_expr(
-                login::Column::Status,
+                LoginColumn::Status,
                 Expr::value(LoginStatus::IDENTIFIER_VERIFIED.as_str()),
             )
             .col_expr(
-                login::Column::UpdatedAt,
+                LoginColumn::UpdatedAt,
                 Expr::value(Some(now.fixed_offset())),
             )
-            .filter(login::Column::Oid.eq(login_oid))
-            .filter(login::Column::Status.eq(LoginStatus::CREATED.as_str()))
-            .filter(login::Column::UserId.is_null())
+            .filter(LoginColumn::Oid.eq(login_oid))
+            .filter(LoginColumn::Status.eq(LoginStatus::CREATED.as_str()))
+            .filter(LoginColumn::UserId.is_null())
             .exec_with_returning(&txn)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?
@@ -217,7 +226,7 @@ impl LoginRepository for LoginRepositoryImpl {
                 .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
                 .ok_or(LoginRepositoryError::LoginNotFound)?;
 
-        crate::database::audit::record(&txn, "login.identifier_verified", "login", model.oid)
+        audit::record(&txn, "login.identifier_verified", "login", model.oid)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         txn.commit()
@@ -241,7 +250,7 @@ impl LoginRepository for LoginRepositoryImpl {
         acr: Option<&str>,
     ) -> Result<(), LoginRepositoryError> {
         let model = LoginEntity::find()
-            .filter(login::Column::Oid.eq(login_oid))
+            .filter(LoginColumn::Oid.eq(login_oid))
             .one(&self.db)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
@@ -261,11 +270,11 @@ impl LoginRepository for LoginRepositoryImpl {
                 .ok_or(LoginRepositoryError::InvalidTransition)?;
             let now = Utc::now();
             let session = SessionEntity::find()
-                .filter(session::Column::Oid.eq(Uuid::from(s_oid)))
-                .filter(session::Column::UserId.eq(user_id))
-                .filter(session::Column::Status.eq(SessionStatus::ACTIVE.as_str()))
-                .filter(session::Column::RevokedAt.is_null())
-                .filter(session::Column::ExpiresAt.gt(now))
+                .filter(SessionColumn::Oid.eq(Uuid::from(s_oid)))
+                .filter(SessionColumn::UserId.eq(user_id))
+                .filter(SessionColumn::Status.eq(SessionStatus::ACTIVE.as_str()))
+                .filter(SessionColumn::RevokedAt.is_null())
+                .filter(SessionColumn::ExpiresAt.gt(now))
                 .one(&self.db)
                 .await
                 .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
@@ -306,18 +315,18 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let previous_status = model.status;
         let mut update = LoginEntity::update_many()
-            .col_expr(login::Column::Status, Expr::value(status.as_str()))
+            .col_expr(LoginColumn::Status, Expr::value(status.as_str()))
             .col_expr(
-                login::Column::UpdatedAt,
+                LoginColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(login::Column::Oid.eq(login_oid))
-            .filter(login::Column::Status.eq(previous_status));
+            .filter(LoginColumn::Oid.eq(login_oid))
+            .filter(LoginColumn::Status.eq(previous_status));
         if let Some(sid) = session_id {
-            update = update.col_expr(login::Column::SessionId, Expr::value(Some(sid)));
+            update = update.col_expr(LoginColumn::SessionId, Expr::value(Some(sid)));
         }
         if let Some(a) = acr {
-            update = update.col_expr(login::Column::Acr, Expr::value(Some(a.to_owned())));
+            update = update.col_expr(LoginColumn::Acr, Expr::value(Some(a.to_owned())));
         }
         let result = update
             .exec(&transaction)
@@ -326,11 +335,11 @@ impl LoginRepository for LoginRepositoryImpl {
         if result.rows_affected != 1 {
             return Err(LoginRepositoryError::InvalidTransition);
         }
-        super::challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
+        challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         if let Some(action) = audit_action {
-            crate::database::audit::record(&transaction, action, "login", login_oid)
+            audit::record(&transaction, action, "login", login_oid)
                 .await
                 .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         }
@@ -350,15 +359,15 @@ impl LoginRepository for LoginRepositoryImpl {
         let now = Utc::now().fixed_offset();
         let mut update = LoginEntity::update_many()
             .col_expr(
-                login::Column::FailedAttempts,
-                Expr::col(login::Column::FailedAttempts).add(1),
+                LoginColumn::FailedAttempts,
+                Expr::col(LoginColumn::FailedAttempts).add(1),
             )
-            .col_expr(login::Column::UpdatedAt, Expr::value(Some(now)))
-            .filter(login::Column::Oid.eq(login_oid));
+            .col_expr(LoginColumn::UpdatedAt, Expr::value(Some(now)))
+            .filter(LoginColumn::Oid.eq(login_oid));
 
         if let Some(reason) = failure_reason {
             update = update.col_expr(
-                login::Column::FailureReason,
+                LoginColumn::FailureReason,
                 Expr::value(Option::<String>::Some(reason.as_str().to_owned())),
             );
         }
@@ -375,7 +384,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .into_iter()
             .next()
             .ok_or(LoginRepositoryError::LoginNotFound)?;
-        crate::database::audit::record(&transaction, "login.failed_attempt", "login", login_oid)
+        audit::record(&transaction, "login.failed_attempt", "login", login_oid)
             .await
             .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
         transaction
@@ -394,23 +403,23 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let result = LoginEntity::update_many()
             .col_expr(
-                login::Column::Status,
+                LoginColumn::Status,
                 Expr::value(LoginStatus::CREATED.as_str()),
             )
-            .col_expr(login::Column::UserId, Expr::value(Option::<i64>::None))
-            .col_expr(login::Column::SessionId, Expr::value(Option::<i64>::None))
-            .col_expr(login::Column::Acr, Expr::value(Option::<String>::None))
+            .col_expr(LoginColumn::UserId, Expr::value(Option::<i64>::None))
+            .col_expr(LoginColumn::SessionId, Expr::value(Option::<i64>::None))
+            .col_expr(LoginColumn::Acr, Expr::value(Option::<String>::None))
             .col_expr(
-                login::Column::FailureReason,
+                LoginColumn::FailureReason,
                 Expr::value(Option::<String>::None),
             )
-            .col_expr(login::Column::FailedAttempts, Expr::value(0))
+            .col_expr(LoginColumn::FailedAttempts, Expr::value(0))
             .col_expr(
-                login::Column::UpdatedAt,
+                LoginColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(login::Column::Oid.eq(login_oid))
-            .filter(login::Column::Status.is_in([
+            .filter(LoginColumn::Oid.eq(login_oid))
+            .filter(LoginColumn::Status.is_in([
                 LoginStatus::IDENTIFIER_VERIFIED.as_str(),
                 LoginStatus::MFA_REQUIRED.as_str(),
             ]))
@@ -421,10 +430,10 @@ impl LoginRepository for LoginRepositoryImpl {
         if result.rows_affected != 1 {
             return Err(LoginRepositoryError::InvalidTransition);
         }
-        super::challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
+        challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
-        crate::database::audit::record(&transaction, "login.identity_reset", "login", login_oid)
+        audit::record(&transaction, "login.identity_reset", "login", login_oid)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         transaction
@@ -446,19 +455,19 @@ impl LoginRepository for LoginRepositoryImpl {
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         let session = SessionEntity::find()
-            .filter(session::Column::Oid.eq(Uuid::from(session_oid)))
+            .filter(SessionColumn::Oid.eq(Uuid::from(session_oid)))
             .one(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
             .ok_or(LoginRepositoryError::SessionNotFound)?;
 
         let result = LoginEntity::update_many()
-            .col_expr(login::Column::SessionId, Expr::value(Some(session.id)))
+            .col_expr(LoginColumn::SessionId, Expr::value(Some(session.id)))
             .col_expr(
-                login::Column::UpdatedAt,
+                LoginColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),
             )
-            .filter(login::Column::Oid.eq(login_oid))
+            .filter(LoginColumn::Oid.eq(login_oid))
             .exec(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
@@ -466,7 +475,7 @@ impl LoginRepository for LoginRepositoryImpl {
         if result.rows_affected == 0 {
             return Err(LoginRepositoryError::LoginNotFound);
         }
-        crate::database::audit::record(&transaction, "login.session_bound", "login", login_oid)
+        audit::record(&transaction, "login.session_bound", "login", login_oid)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         transaction
@@ -486,15 +495,15 @@ impl LoginRepository for LoginRepositoryImpl {
             .await
             .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
         let result = LoginEntity::update_many()
-            .col_expr(login::Column::FailedAttempts, Expr::value(0))
-            .col_expr(login::Column::UpdatedAt, Expr::value(Some(now)))
-            .filter(login::Column::Oid.eq(login_oid))
-            .filter(login::Column::FailedAttempts.ne(0_i32))
+            .col_expr(LoginColumn::FailedAttempts, Expr::value(0))
+            .col_expr(LoginColumn::UpdatedAt, Expr::value(Some(now)))
+            .filter(LoginColumn::Oid.eq(login_oid))
+            .filter(LoginColumn::FailedAttempts.ne(0_i32))
             .exec(&transaction)
             .await
             .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
         if result.rows_affected == 1 {
-            crate::database::audit::record(
+            audit::record(
                 &transaction,
                 "login.failed_attempts_reset",
                 "login",

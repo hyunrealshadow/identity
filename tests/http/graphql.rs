@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     sync::Arc,
     time::{Duration as TimeDuration, SystemTime},
 };
@@ -23,7 +24,11 @@ use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
     config::{AppEnvironment, GraphqlConfig, HealthChecksConfig},
     crypto::key::AsymmetricKeyGeneratorImpl,
-    database::entity::{client, client_authorization, key, setting, user},
+    database::entity::{
+        client, client_authorization, client_openid_connect::Model as ClientOpenIdConnectModel,
+        client_openid_connect_platform::Model as ClientOpenIdConnectPlatformModel, key,
+        resource::Model as ResourceModel, session::Model as SessionModel, setting, user,
+    },
     graphql::id::{GlobalId, GlobalIdType},
     services::AppServices,
     settings::AppRuntimeSettings,
@@ -38,11 +43,14 @@ use salvo::{
     Response, Service,
     test::{ResponseExt, TestClient},
 };
-use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
+use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value as SeaOrmValue};
 use serde_json::{Value, json, to_value};
 use uuid::Uuid;
 
-use identity_domain::openid_connect::API_RESOURCE as RESOURCE_AUDIENCE;
+use identity_domain::{
+    client_authorization::AccessTokenPrincipal,
+    openid_connect::{API_RESOURCE as RESOURCE_AUDIENCE, ScopeSet},
+};
 use identity_web::graphql::router;
 
 struct UserGlobalId;
@@ -428,7 +436,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         updated_at: None,
     };
     let client_model = client::Model {
-        version: uuid::Uuid::new_v4(),
+        version: Uuid::new_v4(),
         id: 2,
         oid: client_oid,
         protocol: "openid_connect".to_owned(),
@@ -446,7 +454,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         client_id: client_model.id,
         r#type: ClientAuthorizationType::AccessToken.to_string(),
         data: to_value(AccessTokenData {
-            principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+            principal: AccessTokenPrincipal::User,
             management: None,
             scope: options.scope.to_owned(),
             resources: Vec::new(),
@@ -478,9 +486,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
             "session.revoke",
             "password.change",
         ]
-        .map(|name| {
-            std::collections::BTreeMap::from([("code".to_owned(), sea_orm::Value::from(name))])
-        })
+        .map(|name| BTreeMap::from([("code".to_owned(), SeaOrmValue::from(name))]))
     };
     let metadata = test_metadata(client_model.id, now);
     let session = test_session(session_oid, user_model.id, now);
@@ -488,24 +494,20 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
     // the authority identity is the derived semantic fingerprint read by a
     // separate dependency query, never the user record's optimistic-lock
     // version.
-    let user_permission_authority_row = || {
-        std::collections::BTreeMap::from([(
-            "permissions".to_owned(),
-            sea_orm::Value::from(json!([])),
-        )])
-    };
+    let user_permission_authority_row =
+        || BTreeMap::from([("permissions".to_owned(), SeaOrmValue::from(json!([])))]);
     // `user_authority_fingerprint` reads `{kind, payload}` dependency rows from
     // the same transaction. An ordinary user always has its subject row.
     let user_authority_fingerprint_rows = || {
-        [std::collections::BTreeMap::from([
-            ("kind".to_owned(), sea_orm::Value::from("subject")),
+        [BTreeMap::from([
+            ("kind".to_owned(), SeaOrmValue::from("subject")),
             (
                 "payload".to_owned(),
-                sea_orm::Value::from(json!([user_oid, true, false, null])),
+                SeaOrmValue::from(json!([user_oid, true, false, null])),
             ),
         ])]
     };
-    let resource_row = || identity_infrastructure::database::entity::resource::Model {
+    let resource_row = || ResourceModel {
         oid: Uuid::new_v4(),
         uri: RESOURCE_AUDIENCE.to_owned(),
         name: "GraphQL".to_owned(),
@@ -515,16 +517,13 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         updated_at: None,
     };
     let rbac_resource_state_row = || {
-        std::collections::BTreeMap::from([
-            (
-                "resource_oid".to_owned(),
-                sea_orm::Value::from(Uuid::new_v4()),
-            ),
+        BTreeMap::from([
+            ("resource_oid".to_owned(), SeaOrmValue::from(Uuid::new_v4())),
             (
                 "resource_uri".to_owned(),
-                sea_orm::Value::from(options.audience.to_owned()),
+                SeaOrmValue::from(options.audience.to_owned()),
             ),
-            ("resource_enabled".to_owned(), sea_orm::Value::from(true)),
+            ("resource_enabled".to_owned(), SeaOrmValue::from(true)),
         ])
     };
     // Startup reads settings, CORS origins and the symmetric/asymmetric key
@@ -541,13 +540,11 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         .append_query_results([vec![key_model]])
         .append_query_results([[(access_token_model, client_model.clone())]])
         .append_query_results([[(client_model.clone(), Some(metadata))]])
-        .append_query_results([Vec::<
-            identity_infrastructure::database::entity::client_openid_connect_platform::Model,
-        >::new()])
+        .append_query_results([Vec::<ClientOpenIdConnectPlatformModel>::new()])
         .append_query_results([scope_rows()])
         .append_query_results([[user_model.clone()]])
         .append_query_results([[(session, Some(user_model.clone()))]]);
-    let db = if identity_domain::openid_connect::ScopeSet::parse(options.scope)
+    let db = if ScopeSet::parse(options.scope)
         .unwrap()
         .has_resource_permissions()
     {
@@ -566,9 +563,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
             // scope is rejected.
             db.append_exec_results([MockExecResult::default()])
                 .append_query_results([[rbac_resource_state_row()]])
-                .append_query_results([
-                    Vec::<std::collections::BTreeMap<String, sea_orm::Value>>::new(),
-                ])
+                .append_query_results([Vec::<BTreeMap<String, sea_orm::Value>>::new()])
         }
     } else {
         db
@@ -766,13 +761,10 @@ fn test_user(oid: Uuid, version: Uuid, now: DateTime<Utc>) -> user::Model {
     }
 }
 
-fn test_metadata(
-    client_id: i64,
-    now: DateTime<Utc>,
-) -> identity_infrastructure::database::entity::client_openid_connect::Model {
-    identity_infrastructure::database::entity::client_openid_connect::Model {
+fn test_metadata(client_id: i64, now: DateTime<Utc>) -> ClientOpenIdConnectModel {
+    ClientOpenIdConnectModel {
         id: 8,
-        client_id: client_id,
+        client_id,
         post_logout_redirect_uris: None,
         frontchannel_logout_uri: None,
         frontchannel_logout_session_required: None,
@@ -809,15 +801,11 @@ fn test_metadata(
     }
 }
 
-fn test_session(
-    oid: Uuid,
-    user_id: i64,
-    now: DateTime<Utc>,
-) -> identity_infrastructure::database::entity::session::Model {
-    identity_infrastructure::database::entity::session::Model {
+fn test_session(oid: Uuid, user_id: i64, now: DateTime<Utc>) -> SessionModel {
+    SessionModel {
         id: 9,
-        oid: oid,
-        user_id: user_id,
+        oid,
+        user_id,
         status: "active".to_owned(),
         acr: None,
         acr_expires_at: None,

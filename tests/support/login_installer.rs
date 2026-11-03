@@ -1,15 +1,18 @@
 use std::{
+    net::TcpListener as NetTcpListener,
     process::{Child, Command, Stdio},
     time::Duration,
 };
 
-use reqwest::Client;
-use salvo::Service;
+use reqwest::{Client, redirect::Policy};
+use salvo::{Server, Service, conn::tcp::TcpAcceptor};
 use serde_json::Value;
+use tokio::{net::TcpListener, task::JoinHandle, time};
+use url::form_urlencoded::Serializer;
 
 struct Processes {
     login: Child,
-    server: tokio::task::JoinHandle<()>,
+    server: JoinHandle<()>,
 }
 
 impl Drop for Processes {
@@ -22,13 +25,13 @@ impl Drop for Processes {
 
 /// Exercise the built Login BFF against the real installation service and database.
 pub async fn verify(node: &str, app: Service, workload_token: &str, input: &Value) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let internal = format!("http://{}", listener.local_addr().unwrap());
-    let acceptor = salvo::conn::tcp::TcpAcceptor::try_from(listener).unwrap();
+    let acceptor = TcpAcceptor::try_from(listener).unwrap();
     let server = tokio::spawn(async move {
-        salvo::Server::new(acceptor).serve(app).await;
+        Server::new(acceptor).serve(app).await;
     });
-    let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let reservation = NetTcpListener::bind("127.0.0.1:0").unwrap();
     let port = reservation.local_addr().unwrap().port();
     drop(reservation);
     let login = Command::new(node)
@@ -57,7 +60,7 @@ pub async fn verify(node: &str, app: Service, workload_token: &str, input: &Valu
         .unwrap();
     let _processes = Processes { login, server };
     let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(Policy::none())
         .timeout(Duration::from_secs(10))
         .build()
         .unwrap();
@@ -73,7 +76,7 @@ pub async fn verify(node: &str, app: Service, workload_token: &str, input: &Valu
             ready = true;
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        time::sleep(Duration::from_millis(100)).await;
     }
     assert!(
         ready,
@@ -96,7 +99,7 @@ pub async fn verify(node: &str, app: Service, workload_token: &str, input: &Valu
     assert!(!html.contains(&format!("https://127.0.0.1:{port}/console/")));
     assert!(html.contains("系统自动使用 /console/"));
     let post = |value: &Value| {
-        let mut form = url::form_urlencoded::Serializer::new(String::new());
+        let mut form = Serializer::new(String::new());
         for (key, value) in value.as_object().unwrap() {
             form.append_pair(key, value.as_str().unwrap());
         }

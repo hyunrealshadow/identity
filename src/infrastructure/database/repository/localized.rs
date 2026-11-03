@@ -23,12 +23,6 @@ pub(crate) enum LocalizedJsonError {
     Metadata(#[from] LocalizedTextError),
 }
 
-impl LocalizedJsonError {
-    pub(crate) fn is_corrupt(&self) -> bool {
-        matches!(self, Self::NotObject | Self::Metadata(_))
-    }
-}
-
 fn parse_entries(value: Value) -> Result<Vec<LocalizedText>, LocalizedJsonError> {
     let object = value.as_object().ok_or(LocalizedJsonError::NotObject)?;
     let mut entries = Vec::with_capacity(object.len());

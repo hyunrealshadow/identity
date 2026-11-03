@@ -10,7 +10,10 @@ use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, Statement,
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
-use super::super::localized::{self, LocalizedJsonError};
+use super::super::{
+    authorization_lifecycle,
+    localized::{self, LocalizedJsonError},
+};
 
 pub(crate) fn storage(error: DbErr) -> RbacManagementRepositoryError {
     RbacManagementRepositoryError::Storage(Box::new(error))
@@ -209,7 +212,7 @@ ORDER BY user_id
         .map_err(storage)?;
     for row in rows {
         let user_id = row.try_get::<i64>("", "user_id").map_err(storage)?;
-        super::super::authorization_lifecycle::withdraw_user_authority_in_txn(txn, user_id)
+        authorization_lifecycle::withdraw_user_authority_in_txn(txn, user_id)
             .await
             .map_err(storage)?;
     }
@@ -259,7 +262,7 @@ ORDER BY user_id
         .map_err(storage)?;
     for row in rows {
         let user_id = row.try_get::<i64>("", "user_id").map_err(storage)?;
-        super::super::authorization_lifecycle::withdraw_user_authority_in_txn(txn, user_id)
+        authorization_lifecycle::withdraw_user_authority_in_txn(txn, user_id)
             .await
             .map_err(storage)?;
     }

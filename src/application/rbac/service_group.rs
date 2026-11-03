@@ -5,22 +5,27 @@
 //! protects the last recoverable administrator and writes the semantic audit
 //! fact before commit. Every write accepts an optional reason annotation
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
-use identity_domain::rbac::{
-    GroupValidationError, LocalizedMetadata, LocalizedTextError, RoleOid,
-    group::MAX_GROUP_REASON_LENGTH, validate_group_descriptions, validate_group_names,
+use identity_domain::{
+    rbac,
+    rbac::{
+        GroupMembershipOid, GroupOid, GroupRoleBindingOid, GroupValidationError, LocalizedMetadata,
+        LocalizedTextError, RoleOid, group, group::MAX_GROUP_REASON_LENGTH,
+        validate_group_descriptions, validate_group_names,
+    },
 };
 
+use super::group::GroupFilter as GroupGroupFilter;
 use crate::{
     data_protection::DataProtector,
     error::{
         AppError,
         codes::{authorization::AuthorizationErrorCode, group::GroupErrorCode},
     },
-    observability::{BusinessEvent, EventSink, NoopEventSink, error_outcome},
+    observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
-        cursor::{encode_cursor, prepare_page},
+        cursor::{PageArguments, encode_cursor, prepare_page},
         group::{
             AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult,
             GroupFilter, GroupMembershipMutationResult, GroupMembershipPage,
@@ -74,10 +79,7 @@ impl GroupManagementService {
     // ------------------------------------------------------------------
 
     #[tracing::instrument(skip_all, name = "rbac.group.find")]
-    pub async fn find_group(
-        &self,
-        oid: identity_domain::rbac::GroupOid,
-    ) -> Result<Option<GroupRecord>, AppError> {
+    pub async fn find_group(&self, oid: GroupOid) -> Result<Option<GroupRecord>, AppError> {
         self.repository
             .find_group(oid)
             .await
@@ -87,7 +89,7 @@ impl GroupManagementService {
     #[tracing::instrument(skip_all, name = "rbac.group.membership.find")]
     pub async fn find_group_membership(
         &self,
-        oid: identity_domain::rbac::GroupMembershipOid,
+        oid: GroupMembershipOid,
     ) -> Result<Option<GroupMembershipRecord>, AppError> {
         self.repository
             .find_group_membership(oid)
@@ -98,7 +100,7 @@ impl GroupManagementService {
     #[tracing::instrument(skip_all, name = "rbac.group.role_binding.find")]
     pub async fn find_group_role_binding(
         &self,
-        oid: identity_domain::rbac::GroupRoleBindingOid,
+        oid: GroupRoleBindingOid,
     ) -> Result<Option<GroupRoleBindingRecord>, AppError> {
         self.repository
             .find_group_role_binding(oid)
@@ -107,7 +109,7 @@ impl GroupManagementService {
     }
 
     #[tracing::instrument(skip_all, name = "rbac.group.count")]
-    pub async fn count_groups(&self, filter: super::group::GroupFilter) -> Result<u64, AppError> {
+    pub async fn count_groups(&self, filter: GroupGroupFilter) -> Result<u64, AppError> {
         self.repository
             .count_groups(normalize_group_filter(filter)?)
             .await
@@ -123,10 +125,12 @@ impl GroupManagementService {
             CURSOR_KIND_GROUP,
             order.as_u8(),
             &filter,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self
@@ -166,7 +170,7 @@ impl GroupManagementService {
     #[tracing::instrument(skip_all, name = "rbac.group.memberships.list")]
     pub async fn list_group_memberships(
         &self,
-        group_oid: identity_domain::rbac::GroupOid,
+        group_oid: GroupOid,
         request: GroupMembershipPageRequest,
     ) -> Result<GroupMembershipPage, AppError> {
         let order = request.order;
@@ -176,10 +180,12 @@ impl GroupManagementService {
             CURSOR_KIND_GROUP_MEMBERSHIP,
             order.as_u8(),
             &fingerprint,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self
@@ -220,7 +226,7 @@ impl GroupManagementService {
     #[tracing::instrument(skip_all, name = "rbac.group.roles.list")]
     pub async fn list_group_roles(
         &self,
-        group_oid: identity_domain::rbac::GroupOid,
+        group_oid: GroupOid,
         request: GroupRolePageRequest,
     ) -> Result<GroupRolePage, AppError> {
         let order = request.order;
@@ -230,10 +236,12 @@ impl GroupManagementService {
             CURSOR_KIND_GROUP_ROLE,
             order.as_u8(),
             &fingerprint,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
         .await?;
         let data = self
@@ -288,7 +296,7 @@ impl GroupManagementService {
                 .map_err(map_localized_error)?;
             self.repository
                 .create_group(CreateGroupTransaction {
-                    group_oid: identity_domain::rbac::GroupOid::new(),
+                    group_oid: GroupOid::new(),
                     name: validate_default_text(&command.name, true)?,
                     description: validate_default_text(&command.description, false)?,
                     names: metadata.names,
@@ -517,10 +525,10 @@ impl GroupManagementService {
             }
             Err(error) => {
                 let (outcome, reason) = error_outcome(error);
-                event = event.outcome(outcome).reason(reason).attribute(
-                    "error_code",
-                    crate::observability::EventValue::Integer(i64::from(error.code())),
-                );
+                event = event
+                    .outcome(outcome)
+                    .reason(reason)
+                    .attribute("error_code", EventValue::Integer(i64::from(error.code())));
             }
         }
         self.events.emit(event);
@@ -535,7 +543,7 @@ impl GroupManagementService {
 /// mutation. Blank input becomes an empty reason; only over-long supplied text
 /// is rejected.
 fn validate_reason(reason: &str) -> Result<String, AppError> {
-    identity_domain::rbac::validate_group_reason(reason).map_err(map_validation)
+    rbac::validate_group_reason(reason).map_err(map_validation)
 }
 
 fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
@@ -584,7 +592,7 @@ fn dedupe_limit_roles(role_oids: Vec<RoleOid>) -> Result<Vec<RoleOid>, AppError>
     }
     Ok(role_oids
         .into_iter()
-        .collect::<std::collections::BTreeSet<_>>()
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect())
 }
@@ -698,7 +706,7 @@ fn not_found_code(kind: GroupEntityKind) -> GroupErrorCode {
 }
 
 fn validate_default_text(value: &str, name: bool) -> Result<String, AppError> {
-    identity_domain::rbac::group::validate_group_default(value, name).map_err(|error| {
+    group::validate_group_default(value, name).map_err(|error| {
         map_validation(error).with_field(if name { "name" } else { "description" })
     })
 }

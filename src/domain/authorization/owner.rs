@@ -6,6 +6,8 @@
 //! Counting only enabled bindings is insufficient; a user without a usable
 //! credential path is not a recoverable owner.
 
+use std::time::Duration;
+
 use crate::authorization::{
     actor::{ActorContext, ActorPrincipal},
     catalog::ManagementScope,
@@ -88,7 +90,7 @@ pub fn owner_target_context(
     actor_is_owner: bool,
     required_scope: ManagementScope,
     now: chrono::DateTime<chrono::Utc>,
-    recent_ttl: std::time::Duration,
+    recent_ttl: Duration,
 ) -> OwnerTargetContext {
     let (actor_is_machine, actor_has_recent_aal2) = match &actor.principal {
         ActorPrincipal::User { authentication, .. } => {
@@ -106,6 +108,8 @@ pub fn owner_target_context(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use chrono::{TimeZone, Utc};
     use uuid::Uuid;
 
@@ -113,9 +117,12 @@ mod tests {
         OwnerLifecycleContext, OwnerProtectionError, OwnerTargetContext,
         ensure_owner_target_allowed, ensure_usable_owner_survives, owner_target_context,
     };
-    use crate::authorization::{
-        actor::{ActorContext, HumanAuthenticationContext, RequestId},
-        catalog::ManagementScope,
+    use crate::{
+        authorization::{
+            actor::{ActorContext, HumanAuthenticationContext, RequestId},
+            catalog::ManagementScope,
+        },
+        user::UserOid,
     };
 
     #[test]
@@ -225,7 +232,7 @@ mod tests {
             true,
             ManagementScope::AdministratorsWrite,
             Utc.timestamp_opt(1_000, 0).single().unwrap(),
-            std::time::Duration::from_secs(300),
+            Duration::from_secs(300),
         );
         assert!(context.actor_is_machine);
         assert!(!context.actor_has_recent_aal2);
@@ -234,7 +241,7 @@ mod tests {
     #[test]
     fn reader_scope_on_owner_is_not_treated_as_high_risk() {
         let actor = ActorContext::for_user(
-            crate::user::UserOid(Uuid::new_v4()),
+            UserOid(Uuid::new_v4()),
             HumanAuthenticationContext::aal2(None),
             RequestId::new("request-1").unwrap(),
             None,
@@ -245,7 +252,7 @@ mod tests {
             false,
             ManagementScope::UsersRead,
             Utc.timestamp_opt(1_000, 0).single().unwrap(),
-            std::time::Duration::from_secs(300),
+            Duration::from_secs(300),
         );
         assert!(!context.target_is_owner);
         assert!(ensure_owner_target_allowed(context).is_ok());

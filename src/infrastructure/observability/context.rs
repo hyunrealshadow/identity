@@ -6,7 +6,7 @@
 //! settings. Untrusted but valid contexts become span links, invalid contexts
 //! are ignored (and their `tracestate` is dropped).
 
-use std::net::IpAddr;
+use std::{future::Future, net::IpAddr};
 
 use http::{
     HeaderMap,
@@ -20,6 +20,7 @@ use opentelemetry::{
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
+use uuid::Uuid;
 
 use crate::config::TraceContextConfig;
 
@@ -36,7 +37,7 @@ impl RequestCorrelation {
     #[must_use]
     pub fn fresh() -> Self {
         Self {
-            request_id: uuid::Uuid::new_v4().to_string(),
+            request_id: Uuid::new_v4().to_string(),
             trace_id: None,
         }
     }
@@ -47,7 +48,7 @@ tokio::task_local! {
 }
 
 /// Task-local scope survives await points without holding a thread-local guard.
-pub async fn with_request_correlation<F: std::future::Future>(
+pub async fn with_request_correlation<F: Future>(
     correlation: RequestCorrelation,
     future: F,
 ) -> F::Output {

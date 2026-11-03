@@ -14,7 +14,7 @@ use crate::{
     boot::AppState,
     infrastructure::{
         i18n::{I18n, error_i18n, resolve_locale_from_headers},
-        web,
+        web::tera as web_tera,
     },
     web::views::{
         auth::{BusinessErrorResponse, FieldErrorDetail},
@@ -346,7 +346,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
         details: Vec::new(),
     };
 
-    match web::tera::render_view(ctx, headers, "error.html", data) {
+    match web_tera::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(res, status, body),
         Err(e) => {
             error!(error = %e, "render_error_page: template render failed");
@@ -417,7 +417,7 @@ pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response
             details: Vec::new(),
         };
 
-        match web::tera::render_view(&ctx, req.headers(), "error.html", data) {
+        match web_tera::render_view(&ctx, req.headers(), "error.html", data) {
             Ok(body) => {
                 render_html(res, status, body);
                 return;
@@ -509,7 +509,11 @@ mod tests {
         assert!(internal.contains("error_operation=\"client_authorization.lock_refresh_family\""));
         assert!(internal.contains("stacktrace="));
         assert!(!internal.contains("error_file=") && !internal.contains("app_error_line="));
-        assert!(!internal.contains("source_chain") && !internal.contains(" -> "));
+        // Backtrace frames may print function types such as `fn() -> T`, so
+        // only the structured fields before the stack trace are checked for a
+        // flattened source chain.
+        let (fields, _) = internal.split_once("stacktrace=").unwrap();
+        assert!(!fields.contains("source_chain") && !fields.contains(" -> "));
         let rejection = output
             .lines()
             .find(|line| line.contains("rejection-test"))

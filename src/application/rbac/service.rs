@@ -5,12 +5,16 @@
 //! repository, which re-loads authoritative state and re-evaluates policy
 //! inside the mutation transaction.
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use super::model::MAX_SCOPE_ASSIGNMENTS;
 
 use identity_domain::{
-    rbac::{PermissionCode, RbacValidationError, ResourceOid, RoleOid, UserRoleBindingOid},
+    rbac,
+    rbac::{
+        LocalizedMetadata, LocalizedText, LocalizedTextError, PermissionCode, RbacValidationError,
+        ResourceOid, RoleOid, UserRoleBindingOid, boundary::BusinessScopeBoundaryError,
+    },
     user::UserOid,
 };
 
@@ -36,7 +40,7 @@ use crate::{
         cursor::{
             CURSOR_KIND_BINDING, CURSOR_KIND_CLIENT_SCOPE, CURSOR_KIND_CLIENT_TARGET,
             CURSOR_KIND_EFFECTIVE, CURSOR_KIND_RESOURCE, CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE,
-            encode_cursor, prepare_page,
+            PageArguments, encode_cursor, prepare_page,
         },
         model::{
             MAX_BINDING_LOOKUPS, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_DESCRIPTION_LENGTH,
@@ -180,10 +184,10 @@ fn validate_scope_names(names: Vec<ScopeDescription>) -> Result<Vec<ScopeDescrip
             .with_param("max", MAX_DESCRIPTION_LOCALES.to_string())
             .with_field("names"));
     }
-    let mut seen = std::collections::BTreeSet::new();
+    let mut seen = BTreeSet::new();
     let mut result = Vec::with_capacity(names.len());
     for name in names {
-        let locale = identity_domain::rbac::canonicalize_locale(&name.locale).map_err(|_| {
+        let locale = rbac::canonicalize_locale(&name.locale).map_err(|_| {
             AppError::from_code(RbacErrorCode::InvalidDescriptionLocale)
                 .with_param("max", "35")
                 .with_field("names.locale")
@@ -227,19 +231,15 @@ fn validate_role_description(value: &str) -> Result<String, AppError> {
 }
 
 /// Canonicalize an optional names replacement; an empty list clears translations.
-fn canonicalize_role_names(
-    names: Vec<identity_domain::rbac::LocalizedText>,
-) -> Result<Vec<identity_domain::rbac::LocalizedText>, AppError> {
-    identity_domain::rbac::LocalizedMetadata::canonicalize_names(names)
-        .map_err(map_localized_metadata_error)
+fn canonicalize_role_names(names: Vec<LocalizedText>) -> Result<Vec<LocalizedText>, AppError> {
+    LocalizedMetadata::canonicalize_names(names).map_err(map_localized_metadata_error)
 }
 
 /// Canonicalize a supplied descriptions patch independently from names.
 fn canonicalize_role_descriptions(
-    descriptions: Vec<identity_domain::rbac::LocalizedText>,
-) -> Result<Vec<identity_domain::rbac::LocalizedText>, AppError> {
-    identity_domain::rbac::LocalizedMetadata::canonicalize_descriptions(descriptions)
-        .map_err(map_localized_metadata_error)
+    descriptions: Vec<LocalizedText>,
+) -> Result<Vec<LocalizedText>, AppError> {
+    LocalizedMetadata::canonicalize_descriptions(descriptions).map_err(map_localized_metadata_error)
 }
 
 fn validate_bounded_description(
@@ -266,12 +266,11 @@ fn validate_descriptions(
     }
     let mut result = Vec::with_capacity(descriptions.len());
     for description in descriptions {
-        let locale =
-            identity_domain::rbac::canonicalize_locale(&description.locale).map_err(|_| {
-                AppError::from_code(RbacErrorCode::InvalidDescriptionLocale)
-                    .with_param("max", "35")
-                    .with_field("descriptions.locale")
-            })?;
+        let locale = rbac::canonicalize_locale(&description.locale).map_err(|_| {
+            AppError::from_code(RbacErrorCode::InvalidDescriptionLocale)
+                .with_param("max", "35")
+                .with_field("descriptions.locale")
+        })?;
         let value = validate_scope_description(&description.value, "descriptions.value")?;
         result.push(ScopeDescription { locale, value });
     }
@@ -290,7 +289,7 @@ fn validate_role_name(value: &str) -> Result<String, AppError> {
 
 fn validate_new_scope_code(value: &str) -> Result<String, AppError> {
     let value = value.trim();
-    if let Err(error) = identity_domain::rbac::validate_business_scope_reference(value) {
+    if let Err(error) = rbac::validate_business_scope_reference(value) {
         return Err(map_business_scope_error(error, "code"));
     }
     // The same row is later projected as a ResourcePermission, whose machine
@@ -313,7 +312,7 @@ fn dedupe_limit_roles(role_oids: Vec<RoleOid>) -> Result<Vec<RoleOid>, AppError>
     }
     Ok(role_oids
         .into_iter()
-        .collect::<std::collections::BTreeSet<_>>()
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect())
 }
@@ -361,7 +360,7 @@ fn normalize_filter_text(
     Ok(Some(value.to_owned()))
 }
 
-fn map_localized_metadata_error(error: identity_domain::rbac::LocalizedTextError) -> AppError {
+fn map_localized_metadata_error(error: LocalizedTextError) -> AppError {
     use identity_domain::rbac::LocalizedTextError as Error;
     match error {
         Error::InvalidLocale { locale } => {
@@ -391,10 +390,7 @@ fn map_localized_metadata_error(error: identity_domain::rbac::LocalizedTextError
     }
 }
 
-fn map_business_scope_error(
-    error: identity_domain::rbac::boundary::BusinessScopeBoundaryError,
-    field: &'static str,
-) -> AppError {
+fn map_business_scope_error(error: BusinessScopeBoundaryError, field: &'static str) -> AppError {
     use identity_domain::rbac::boundary::BusinessScopeBoundaryError as Error;
     match error {
         Error::ManagementScopeReserved => {

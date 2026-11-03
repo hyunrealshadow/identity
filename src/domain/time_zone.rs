@@ -84,11 +84,13 @@ impl fmt::Display for TimeZone {
 mod tests {
     use super::{TimeZone, TimeZoneError};
 
+    use chrono_tz::Tz;
+
     #[test]
     fn parses_valid_iana_identifiers() {
         let zone = TimeZone::parse("Europe/Paris").unwrap();
         assert_eq!(zone.name(), "Europe/Paris");
-        assert_eq!(zone.as_tz(), chrono_tz::Tz::Europe__Paris);
+        assert_eq!(zone.as_tz(), Tz::Europe__Paris);
     }
 
     #[test]

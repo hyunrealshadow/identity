@@ -1,6 +1,8 @@
-use crate::observability::NoopEventSink;
+use crate::{domain::auth::repository::SessionRepository, observability::NoopEventSink};
 
 use super::*;
+
+use identity_domain::authorization::ManagementAuthorityRepository;
 
 #[derive(Clone)]
 pub struct AuthorizeService {
@@ -20,11 +22,10 @@ pub struct AuthorizeService {
     /// Live session validation for approval. Optional only for old unit
     /// factories; production must supply it so an approval cannot mint a code
     /// or front-channel token from a revoked, expired or mismatched session.
-    pub(super) session_repo: Option<Arc<dyn crate::domain::auth::repository::SessionRepository>>,
+    pub(super) session_repo: Option<Arc<dyn SessionRepository>>,
     /// Optional until the P0-A management repository is wired. Management
     /// requests fail closed when this is absent.
-    pub(super) management_authority_repo:
-        Option<Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>>,
+    pub(super) management_authority_repo: Option<Arc<dyn ManagementAuthorityRepository>>,
     /// Live resource-owned canonical scope state. Business authorization
     /// requests fail closed when this is absent.
     pub(super) rbac_authorization_repo: Option<Arc<dyn RbacAuthorizationRepository>>,
@@ -79,7 +80,7 @@ impl AuthorizeService {
     #[must_use]
     pub fn with_management_authority_repository(
         mut self,
-        repository: Arc<dyn identity_domain::authorization::ManagementAuthorityRepository>,
+        repository: Arc<dyn ManagementAuthorityRepository>,
     ) -> Self {
         self.management_authority_repo = Some(repository);
         self
@@ -125,10 +126,7 @@ impl AuthorizeService {
     }
 
     #[must_use]
-    pub fn with_session_repo(
-        mut self,
-        session_repo: Arc<dyn crate::domain::auth::repository::SessionRepository>,
-    ) -> Self {
+    pub fn with_session_repo(mut self, session_repo: Arc<dyn SessionRepository>) -> Self {
         self.session_repo = Some(session_repo);
         self
     }

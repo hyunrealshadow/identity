@@ -28,12 +28,3 @@ pub fn build_schema(max_depth: usize, max_complexity: usize) -> ApiSchema {
     .extension(limits::ResponseAliasLimit(max_complexity))
     .finish()
 }
-
-/// Export the full executable schema without the removed `viewer` wrapper.
-///
-/// The binary can re-export this from `web::graphql` when SDL export is needed;
-/// parent owns that root visibility.
-#[must_use]
-pub fn schema_sdl() -> String {
-    build_schema(12, 300).sdl()
-}

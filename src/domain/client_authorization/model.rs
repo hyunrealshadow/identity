@@ -19,9 +19,8 @@ use crate::{
         AuthorizationRequestData, ClaimsRequest, CodeChallengeMethod,
         model::authorization_request::AuthorizationRequestParams,
     },
-    rbac::RoleAuthorizationSnapshot,
     rbac::{
-        BusinessAuthorizationSnapshot,
+        BusinessAuthorizationSnapshot, RoleAuthorizationSnapshot,
         ids::{ResourceOid, RoleOid, UserRoleBindingOid},
         snapshot::UserRoleBindingSnapshot,
     },
@@ -235,7 +234,7 @@ impl ManagementAuthorizationSnapshotData {
     ) -> Result<ManagementAuthorizationSnapshot, ManagementSnapshotDataError> {
         let grant_oid = Uuid::parse_str(&self.grant_oid)
             .map_err(|_| ManagementSnapshotDataError::InvalidGrantOid)?;
-        let mut permissions = std::collections::BTreeSet::new();
+        let mut permissions = BTreeSet::new();
         for name in &self.permissions {
             let scope = ManagementScope::parse(name)
                 .map_err(|_| ManagementSnapshotDataError::InvalidPermission(name.clone()))?;
@@ -386,7 +385,7 @@ impl BusinessAuthorizationSnapshotData {
             (None, None) => None,
         };
 
-        let mut binding_oids = std::collections::BTreeSet::new();
+        let mut binding_oids = BTreeSet::new();
         let mut bindings = Vec::with_capacity(self.bindings.len());
         for binding in &self.bindings {
             let binding_oid = UserRoleBindingOid(
@@ -408,7 +407,7 @@ impl BusinessAuthorizationSnapshotData {
             });
         }
 
-        let mut role_oids = std::collections::BTreeSet::new();
+        let mut role_oids = BTreeSet::new();
         let mut roles = Vec::with_capacity(self.roles.len());
         for role in &self.roles {
             let role_oid = RoleOid(
@@ -714,6 +713,13 @@ pub struct ClientAuthorization {
 #[cfg(test)]
 mod tests {
     use super::SelectionSource::{AccountPicker, Auto, FreshLogin, Reauthentication};
+    use crate::{authorization::snapshot::ManagementGrantKind, user::UserOid};
+
+    use super::{
+        AccessTokenPrincipal, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
+        ManagementAuthorizationSnapshotData, ManagementGrantKindData,
+    };
+    use uuid::Uuid;
 
     #[test]
     fn legacy_access_tokens_default_to_a_human_principal_and_no_management() {
@@ -723,7 +729,7 @@ mod tests {
             "authorization_code_oid": null
         });
         let data: super::AccessTokenData = serde_json::from_value(legacy).unwrap();
-        assert_eq!(data.principal, super::AccessTokenPrincipal::User);
+        assert_eq!(data.principal, AccessTokenPrincipal::User);
         assert_eq!(
             data.user_oid.as_deref(),
             Some("11111111-1111-1111-1111-111111111111")
@@ -737,7 +743,7 @@ mod tests {
             scope: "management.audit.read".to_owned(),
             resources: Vec::new(),
             user_oid: None,
-            principal: super::AccessTokenPrincipal::Client,
+            principal: AccessTokenPrincipal::Client,
             session_oid: None,
             protected_session_id: None,
             authorization_code_oid: None,
@@ -754,15 +760,15 @@ mod tests {
     #[test]
     fn authorization_snapshot_data_preserves_management_and_business_wire_shapes() {
         let management = super::ManagementAuthorizationSnapshotData {
-            grant_kind: super::ManagementGrantKindData::UserRbac,
+            grant_kind: ManagementGrantKindData::UserRbac,
             grant_oid: "11111111-1111-1111-1111-111111111111".to_owned(),
-            grant_version: uuid::Uuid::new_v4(),
-            policy_version: uuid::Uuid::new_v4(),
+            grant_version: Uuid::new_v4(),
+            policy_version: Uuid::new_v4(),
             role: None,
             permissions: vec!["management.user.read".to_owned()],
-            client_policy_version: uuid::Uuid::new_v4(),
+            client_policy_version: Uuid::new_v4(),
         };
-        let management_wrapped = super::AuthorizationSnapshotData::Management(management.clone());
+        let management_wrapped = AuthorizationSnapshotData::Management(management.clone());
         assert_eq!(
             serde_json::to_value(&management_wrapped).unwrap(),
             serde_json::to_value(&management).unwrap()
@@ -777,28 +783,28 @@ mod tests {
         let business = super::BusinessAuthorizationSnapshotData {
             resource_oid: "22222222-2222-2222-2222-222222222222".to_owned(),
             resource_uri: "https://api.example.test".to_owned(),
-            policy_version: uuid::Uuid::new_v4(),
+            policy_version: Uuid::new_v4(),
             user_oid: None,
             user_authorization_version: None,
             bindings: Vec::new(),
             roles: Vec::new(),
         };
-        let business_wrapped = super::AuthorizationSnapshotData::Business(business.clone());
+        let business_wrapped = AuthorizationSnapshotData::Business(business.clone());
         let encoded = serde_json::to_value(&business_wrapped).unwrap();
         assert_eq!(encoded, serde_json::to_value(&business).unwrap());
         assert_eq!(
             serde_json::from_value::<super::AuthorizationSnapshotData>(encoded).unwrap(),
-            super::AuthorizationSnapshotData::Business(business)
+            AuthorizationSnapshotData::Business(business)
         );
     }
 
     #[test]
     fn business_snapshot_nested_identities_do_not_carry_record_versions() {
-        let authority_fingerprint = uuid::Uuid::new_v4();
+        let authority_fingerprint = Uuid::new_v4();
         let data = super::BusinessAuthorizationSnapshotData {
             resource_oid: "22222222-2222-2222-2222-222222222222".to_owned(),
             resource_uri: "https://api.example.test".to_owned(),
-            policy_version: uuid::Uuid::new_v4(),
+            policy_version: Uuid::new_v4(),
             user_oid: Some("11111111-1111-1111-1111-111111111111".to_owned()),
             user_authorization_version: Some(authority_fingerprint),
             bindings: vec![super::BusinessBindingSnapshotData {
@@ -812,7 +818,7 @@ mod tests {
 
         let snapshot = data.to_snapshot().unwrap();
         assert_eq!(
-            super::BusinessAuthorizationSnapshotData::from_snapshot(&snapshot),
+            BusinessAuthorizationSnapshotData::from_snapshot(&snapshot),
             data
         );
 
@@ -831,13 +837,13 @@ mod tests {
             AuthorizationVersion, ManagementScope, PolicyVersion, UserPermissionAuthority,
         };
         let authority = UserPermissionAuthority::new(
-            crate::user::UserOid(uuid::Uuid::new_v4()),
+            UserOid(Uuid::new_v4()),
             AuthorizationVersion::fresh(),
             [ManagementScope::UsersRead, ManagementScope::AuditRead],
         );
         let policy = PolicyVersion::new();
         let client_policy = PolicyVersion::new();
-        let data = super::ManagementAuthorizationSnapshotData::for_user_permission_authority(
+        let data = ManagementAuthorizationSnapshotData::for_user_permission_authority(
             &authority,
             policy,
             client_policy,
@@ -861,9 +867,8 @@ mod tests {
             catalog::ManagementScope,
             ids::{AuthorizationVersion, PolicyVersion},
         };
-        use uuid::Uuid;
 
-        let user = crate::user::UserOid(uuid::Uuid::new_v4());
+        let user = UserOid(Uuid::new_v4());
         let grant_version = AuthorizationVersion::new();
         let authority = UserPermissionAuthority::new(
             user,
@@ -871,12 +876,12 @@ mod tests {
             [ManagementScope::UsersRead, ManagementScope::GroupsWrite],
         );
         let client_policy = PolicyVersion::new();
-        let data = super::ManagementAuthorizationSnapshotData::for_user_permission_authority(
+        let data = ManagementAuthorizationSnapshotData::for_user_permission_authority(
             &authority,
             PolicyVersion::new(),
             client_policy,
         );
-        assert_eq!(data.grant_kind, super::ManagementGrantKindData::UserRbac);
+        assert_eq!(data.grant_kind, ManagementGrantKindData::UserRbac);
         assert_eq!(data.grant_oid, user.0.to_string());
         assert_eq!(data.grant_version, grant_version.as_uuid());
         assert_eq!(data.role, None);
@@ -886,10 +891,7 @@ mod tests {
         assert_eq!(encoded["grant_kind"], serde_json::json!("user_rbac"));
         let snapshot = data.to_snapshot().unwrap();
         assert_eq!(snapshot.permissions.len(), 2);
-        assert_eq!(
-            snapshot.grant_kind,
-            crate::authorization::snapshot::ManagementGrantKind::UserRbac
-        );
+        assert_eq!(snapshot.grant_kind, ManagementGrantKind::UserRbac);
     }
 
     #[test]

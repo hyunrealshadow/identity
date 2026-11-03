@@ -277,6 +277,8 @@ pub enum ActorContextError {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use chrono::{TimeZone, Utc};
     use uuid::Uuid;
 
@@ -315,7 +317,7 @@ mod tests {
     #[test]
     fn recent_aal2_requires_aal2_and_a_fresh_past_auth_time() {
         let now = at(1_000);
-        let ttl = std::time::Duration::from_secs(30);
+        let ttl = Duration::from_secs(30);
         assert!(HumanAuthenticationContext::aal2(Some(at(990))).is_recent_aal2(now, ttl));
         assert!(!HumanAuthenticationContext::aal2(Some(at(900))).is_recent_aal2(now, ttl));
         assert!(!HumanAuthenticationContext::aal1(Some(at(999))).is_recent_aal2(now, ttl));

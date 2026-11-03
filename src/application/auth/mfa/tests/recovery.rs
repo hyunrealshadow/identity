@@ -1,6 +1,10 @@
 use super::*;
-use crate::error::{code::AppErrorCode, codes::auth::AuthErrorCode};
-use crate::user::credential::PasskeyCredentialData;
+use crate::{
+    error::{code::AppErrorCode, codes::auth::AuthErrorCode},
+    user::credential::PasskeyCredentialData,
+};
+
+use chrono::{Duration, Utc};
 
 fn fixture() -> (MfaService, Arc<TestCredentialRepo>, UserOid) {
     let repo = Arc::new(TestCredentialRepo::default());
@@ -81,8 +85,7 @@ async fn recovery_enrollment_rejects_expired_or_invalid_tokens() {
             .unwrap(),
     )
     .unwrap();
-    pending["expires_at"] =
-        serde_json::json!((chrono::Utc::now() - chrono::Duration::minutes(1)).to_rfc3339());
+    pending["expires_at"] = serde_json::json!((Utc::now() - Duration::minutes(1)).to_rfc3339());
     let expired = STANDARD.encode(serde_json::to_vec(&pending).unwrap());
     for token in [&*expired, "not a protected payload"] {
         assert_eq!(

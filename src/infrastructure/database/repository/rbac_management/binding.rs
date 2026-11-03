@@ -1,6 +1,6 @@
 //! User-role binding persistence and effective-permission projection.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
     AssignUserRolesTransaction, EffectiveGroupPermissionSourceRecord, EffectivePermissionPageData,
@@ -12,20 +12,25 @@ use identity_application::rbac::{
 };
 use identity_domain::{
     authorization::{ActorPrincipal, ManagementScope},
+    openid_connect::API_RESOURCE,
+    rbac,
     rbac::{
         GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, ResourcePermissionOid,
         RoleOid, UserRoleBindingOid,
     },
     user::UserOid,
 };
-use sea_orm::TransactionTrait;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement, Value};
+use sea_orm::{
+    ConnectionTrait, DatabaseTransaction, DbBackend, Statement, TransactionTrait, Value,
+};
 use uuid::Uuid;
 
 use super::{
+    super::authorization_lifecycle,
     RbacManagementRepositoryImpl,
     audit::append_semantic_audit,
     authority::{recheck_authority, user_id_by_oid},
+    delegation,
     support::{
         Binds, CursorComparison, corrupt, keyset_condition, not_found, order_is_descending,
         page_flags, storage, utc,
@@ -164,7 +169,7 @@ fn effective_permission_conditions(
         let trusted = ManagementScope::ALL
             .into_iter()
             .map(|scope| {
-                let oid = binds.push(identity_domain::rbac::built_in_permission_oid(scope).0);
+                let oid = binds.push(rbac::built_in_permission_oid(scope).0);
                 let name = binds.push(scope.name().to_owned());
                 format!("(s.oid = {oid} AND s.code = {name})")
             })
@@ -349,8 +354,8 @@ impl RbacManagementRepositoryImpl {
             txn.commit().await.map_err(storage)?;
             return Ok(0);
         }
-        let management_resource = resource.try_get::<String>("", "uri").map_err(storage)?
-            == identity_domain::openid_connect::API_RESOURCE;
+        let management_resource =
+            resource.try_get::<String>("", "uri").map_err(storage)? == API_RESOURCE;
         let mut binds = Binds::new();
         let conditions =
             effective_permission_conditions(user_id, resource_oid, management_resource, &mut binds);
@@ -376,7 +381,7 @@ impl RbacManagementRepositoryImpl {
         &self,
         query: EffectivePermissionQuery,
     ) -> Result<EffectivePermissionPageData, RbacManagementRepositoryError> {
-        let mut txn = self.db.begin().await.map_err(storage)?;
+        let txn = self.db.begin().await.map_err(storage)?;
         let Some(user_id) = user_id_by_oid(&txn, query.user_oid).await? else {
             return Err(not_found(RbacEntityKind::User));
         };
@@ -390,8 +395,8 @@ impl RbacManagementRepositoryImpl {
             .await
             .map_err(storage)?
             .ok_or_else(|| not_found(RbacEntityKind::Resource))?;
-        let management_resource = resource_row.try_get::<String>("", "uri").map_err(storage)?
-            == identity_domain::openid_connect::API_RESOURCE;
+        let management_resource =
+            resource_row.try_get::<String>("", "uri").map_err(storage)? == API_RESOURCE;
         let enabled = resource_row
             .try_get::<bool>("", "enabled")
             .map_err(storage)?;
@@ -655,7 +660,7 @@ impl RbacManagementRepositoryImpl {
         // Delegation ceiling is evaluated against the actor's authority before
         // this transaction adds any binding.
         if roles.iter().any(|role| !existing.contains_key(&role.id)) {
-            let mut added_ids = std::collections::BTreeSet::new();
+            let mut added_ids = BTreeSet::new();
             let mut binds = Binds::new();
             let placeholders = roles
                 .iter()
@@ -676,8 +681,7 @@ impl RbacManagementRepositoryImpl {
             for row in rows {
                 added_ids.insert(row.try_get::<i64>("", "scope_id").map_err(storage)?);
             }
-            super::delegation::ensure_delegable_permissions(&txn, &command.authority, &added_ids)
-                .await?;
+            delegation::ensure_delegable_permissions(&txn, &command.authority, &added_ids).await?;
         }
         let actor_user_id = match &command.authority.actor.principal {
             ActorPrincipal::User { user_oid, .. } => user_id_by_oid(&txn, *user_oid).await?,
@@ -714,7 +718,7 @@ impl RbacManagementRepositoryImpl {
         } else {
             // A real direct-grant change rotates the CAS token and permanently
             // withdraws every existing subject credential.
-            super::super::authorization_lifecycle::withdraw_user_authority_in_txn(&txn, user_id)
+            authorization_lifecycle::withdraw_user_authority_in_txn(&txn, user_id)
                 .await
                 .map_err(storage)?
                 .as_uuid()
@@ -814,7 +818,7 @@ impl RbacManagementRepositoryImpl {
             // Revoking a direct grant is a permanent boundary: running CAS plus
             // durable withdrawal prevents a remove/re-add cycle from reviving
             // old codes, refresh tokens or access tokens.
-            super::super::authorization_lifecycle::withdraw_user_authority_in_txn(&txn, user_id)
+            authorization_lifecycle::withdraw_user_authority_in_txn(&txn, user_id)
                 .await
                 .map_err(storage)?
                 .as_uuid()

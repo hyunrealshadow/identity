@@ -11,7 +11,7 @@
 
 use std::collections::BTreeSet;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use uuid::Uuid;
 
 use crate::{
@@ -151,12 +151,12 @@ where
     let mut permissions = BTreeSet::new();
     for name in names {
         let scope = ManagementScope::from_name(&name).ok_or_else(|| {
-            serde::de::Error::custom(format!(
+            Error::custom(format!(
                 "management permission is not a trusted catalog scope: {name}"
             ))
         })?;
         if !permissions.insert(scope) {
-            return Err(serde::de::Error::custom(format!(
+            return Err(Error::custom(format!(
                 "duplicate management permission: {name}"
             )));
         }

@@ -1,6 +1,10 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 use chrono::{Duration, Utc};
+use identity_domain::{
+    openid_connect::{API_RESOURCE, model::scope},
+    rbac::{ACCOUNT_SELF_SERVICE_SCOPES, STANDARD_OIDC_SCOPES},
+};
 use url::Url;
 use uuid::Uuid;
 
@@ -44,8 +48,7 @@ const CLIENT_SECRET_LIFETIME_DAYS: i64 = 365;
 /// Scopes a public client may self-declare at registration. API/business and
 /// management scopes require a trusted management scope-assignment write.
 fn is_publicly_registerable_scope(name: &str) -> bool {
-    identity_domain::rbac::STANDARD_OIDC_SCOPES.contains(&name)
-        || identity_domain::rbac::ACCOUNT_SELF_SERVICE_SCOPES.contains(&name)
+    STANDARD_OIDC_SCOPES.contains(&name) || ACCOUNT_SELF_SERVICE_SCOPES.contains(&name)
 }
 
 fn auth_method_uses_client_secret(method: TokenEndpointAuthMethod) -> bool {
@@ -90,10 +93,9 @@ pub(super) fn choose_effective_jwks(
     if prepared_uri == active_uri
         && prepared_public_keys == active_public_keys
         && prepared_jwks == active_jwks
+        && let Some(active) = active
     {
-        if let Some(active) = active {
-            return active.clone();
-        }
+        return active.clone();
     }
     prepared
 }
@@ -450,18 +452,14 @@ impl DynamicClientRegistrationService {
         }
         let available = if let Some(catalog) = &self.scope_catalog {
             catalog
-                .list_names_for_resources(&[
-                    identity_domain::openid_connect::API_RESOURCE.to_owned()
-                ])
+                .list_names_for_resources(&[API_RESOURCE.to_owned()])
                 .await
                 .map_err(AppError::internal)?
         } else {
-            identity_domain::rbac::STANDARD_OIDC_SCOPES
+            STANDARD_OIDC_SCOPES
                 .iter()
-                .chain(identity_domain::rbac::ACCOUNT_SELF_SERVICE_SCOPES.iter())
-                .filter(|code| {
-                    !identity_domain::openid_connect::model::scope::is_scope_pattern(code)
-                })
+                .chain(ACCOUNT_SELF_SERVICE_SCOPES.iter())
+                .filter(|code| !scope::is_scope_pattern(code))
                 .map(|code| (*code).to_owned())
                 .collect()
         };
@@ -470,10 +468,8 @@ impl DynamicClientRegistrationService {
             let mut found = false;
             for code in &available {
                 if is_publicly_registerable_scope(code)
-                    && !identity_domain::openid_connect::model::scope::is_scope_pattern(code)
-                    && identity_domain::openid_connect::model::scope::scope_pattern_matches(
-                        requested, code,
-                    )
+                    && !scope::is_scope_pattern(code)
+                    && scope::scope_pattern_matches(requested, code)
                 {
                     concrete.insert(code.clone());
                     found = true;
@@ -761,19 +757,17 @@ impl DynamicClientRegistrationService {
                 credential,
                 OpenIdConnectCredentialData::ClientJsonWebKeySet { .. }
             )
-        }) {
-            if let Some(active) = self.active_client_jwks(client_oid).await? {
-                if let Some(index) = registration.credentials.iter().position(|credential| {
-                    matches!(
-                        credential,
-                        OpenIdConnectCredentialData::ClientJsonWebKeySet { .. }
-                    )
-                }) {
-                    let prepared = registration.credentials.remove(index);
-                    let effective = choose_effective_jwks(prepared, Some(&active));
-                    registration.credentials.insert(index, effective);
-                }
-            }
+        }) && let Some(active) = self.active_client_jwks(client_oid).await?
+            && let Some(index) = registration.credentials.iter().position(|credential| {
+                matches!(
+                    credential,
+                    OpenIdConnectCredentialData::ClientJsonWebKeySet { .. }
+                )
+            })
+        {
+            let prepared = registration.credentials.remove(index);
+            let effective = choose_effective_jwks(prepared, Some(&active));
+            registration.credentials.insert(index, effective);
         }
 
         // RFC 7592 replaces metadata; it does not by itself rotate credentials.

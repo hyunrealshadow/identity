@@ -172,7 +172,7 @@ impl From<InstanceOverviewRepositoryError> for AppError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{io::Error, sync::Arc};
 
     use async_trait::async_trait;
     use chrono::{DateTime, NaiveDate, Utc};
@@ -198,7 +198,7 @@ mod tests {
             match &self.users {
                 Ok(counts) => Ok(counts.clone()),
                 Err(_) => Err(InstanceOverviewRepositoryError::QueryFailed(Box::new(
-                    std::io::Error::other("storage unavailable"),
+                    Error::other("storage unavailable"),
                 ))),
             }
         }
@@ -234,7 +234,7 @@ mod tests {
     }
 
     fn at(rfc3339: &str) -> DateTime<Utc> {
-        chrono::DateTime::parse_from_rfc3339(rfc3339)
+        DateTime::parse_from_rfc3339(rfc3339)
             .unwrap()
             .with_timezone(&Utc)
     }

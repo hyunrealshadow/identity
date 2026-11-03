@@ -2,8 +2,10 @@
 
 use identity_application::rbac::{RbacManagementAuthority, RbacManagementRepositoryError};
 use identity_domain::authorization::ActorPrincipal;
-use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement, Value};
+use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, Statement, Value};
 use uuid::Uuid;
+
+use crate::database::repository::authorization_lifecycle;
 
 pub(crate) async fn append_semantic_audit(
     txn: &DatabaseTransaction,
@@ -13,10 +15,14 @@ pub(crate) async fn append_semantic_audit(
     target_oid: Uuid,
     reason: &str,
 ) -> Result<(), RbacManagementRepositoryError> {
-    crate::database::repository::authorization_lifecycle::ensure_recoverable_authorization_administrator(txn)
-        .await.map_err(|error| match &error {
-            sea_orm::DbErr::Custom(message) if message == "no recoverable authorization administrator remains" =>
-                RbacManagementRepositoryError::LastRecoverableAdministrator,
+    authorization_lifecycle::ensure_recoverable_authorization_administrator(txn)
+        .await
+        .map_err(|error| match &error {
+            DbErr::Custom(message)
+                if message == "no recoverable authorization administrator remains" =>
+            {
+                RbacManagementRepositoryError::LastRecoverableAdministrator
+            }
             _ => RbacManagementRepositoryError::Storage(Box::new(error)),
         })?;
     let (actor_type, actor_oid) = match &authority.actor.principal {

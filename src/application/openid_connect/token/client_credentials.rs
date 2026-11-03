@@ -1,10 +1,11 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
     client_authorization::{
-        AccessTokenPrincipal, AuthorizationSnapshotData, ClientAuthenticationMode,
+        AccessTokenPrincipal, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
+        ClientAuthenticationMode,
     },
     openid_connect::{API_RESOURCE, ScopeSet},
-    rbac::BusinessAuthorizationSnapshot,
+    rbac::{BusinessAuthorizationSnapshot, STANDARD_OIDC_SCOPES},
 };
 
 use super::{exchange::issuance_result, signing::SignAccessTokenInput};
@@ -144,7 +145,7 @@ impl TokenService {
             // snapshot: a scope accepted during target resolution must still
             // map to an enabled scope owned by this resource.
             for name in selected.names() {
-                if identity_domain::rbac::STANDARD_OIDC_SCOPES.contains(&name) {
+                if STANDARD_OIDC_SCOPES.contains(&name) {
                     continue;
                 }
                 if resource.enabled_permission_for_scope(name).is_none() {
@@ -154,7 +155,7 @@ impl TokenService {
                 }
             }
             Some(AuthorizationSnapshotData::Business(
-                identity_domain::client_authorization::BusinessAuthorizationSnapshotData::from_snapshot(
+                BusinessAuthorizationSnapshotData::from_snapshot(
                     &BusinessAuthorizationSnapshot::for_machine(&resource),
                 ),
             ))

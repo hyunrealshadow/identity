@@ -452,52 +452,46 @@ pub enum EffectivePermissionError {
     DuplicateScopeReference,
 }
 
-/// Compute effective permissions for one user and one target resource.
+/// The authoritative snapshot one effective-permission projection reads.
 ///
 /// The caller passes the user authorization version it verified and the
-/// authoritative current version. Bindings from another user, disabled or
-/// revoked bindings, disabled roles and disabled permissions are excluded.
+/// authoritative current version. Group paths must come from active
+/// memberships, enabled built-in/custom groups and active group-role relations
+/// loaded in the same snapshot.
+#[derive(Debug, Clone, Copy)]
+pub struct EffectivePermissionSources<'a> {
+    pub user_oid: UserOid,
+    pub requested_resource: ResourceOid,
+    pub expected_authorization_version: AuthorizationVersion,
+    pub current_authorization_version: AuthorizationVersion,
+    pub bindings: &'a [UserRoleBinding],
+    pub group_paths: &'a [GroupRolePath],
+    pub roles: &'a [Role],
+    pub memberships: &'a [RolePermission],
+    pub permissions: &'a [ResourcePermission],
+}
+
+/// Compute the union of direct bindings and real active group paths for one
+/// user and one target resource.
+///
+/// Bindings from another user, disabled or revoked bindings, disabled roles
+/// and disabled permissions are excluded. Group provenance is returned
+/// separately from direct bindings; no synthetic `UserRoleBinding` is created
+/// for it.
 pub fn project_effective_permissions(
-    user_oid: UserOid,
-    requested_resource: ResourceOid,
-    expected_authorization_version: AuthorizationVersion,
-    current_authorization_version: AuthorizationVersion,
-    bindings: &[UserRoleBinding],
-    roles: &[Role],
-    memberships: &[RolePermission],
-    permissions: &[ResourcePermission],
+    sources: EffectivePermissionSources<'_>,
 ) -> Result<Vec<EffectivePermission>, EffectivePermissionError> {
-    project_effective_permissions_with_groups(
+    let EffectivePermissionSources {
         user_oid,
         requested_resource,
         expected_authorization_version,
         current_authorization_version,
         bindings,
-        &[],
+        group_paths,
         roles,
         memberships,
         permissions,
-    )
-}
-
-/// Compute the union of direct bindings and real active group paths.
-///
-/// Group paths must come from active memberships, enabled built-in/custom
-/// groups and active group-role relations loaded in the same authoritative
-/// snapshot. Their provenance is returned separately from direct bindings; no
-/// synthetic `UserRoleBinding` is created for them.
-#[allow(clippy::too_many_arguments)]
-pub fn project_effective_permissions_with_groups(
-    user_oid: UserOid,
-    requested_resource: ResourceOid,
-    expected_authorization_version: AuthorizationVersion,
-    current_authorization_version: AuthorizationVersion,
-    bindings: &[UserRoleBinding],
-    group_paths: &[GroupRolePath],
-    roles: &[Role],
-    memberships: &[RolePermission],
-    permissions: &[ResourcePermission],
-) -> Result<Vec<EffectivePermission>, EffectivePermissionError> {
+    } = sources;
     if expected_authorization_version != current_authorization_version {
         return Err(EffectivePermissionError::StaleAuthorizationVersion);
     }
@@ -689,17 +683,23 @@ pub enum RbacLifecycleError {
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use chrono::{TimeZone, Utc};
     use uuid::Uuid;
 
     use super::{
-        EffectivePermissionError, PermissionCode, ResourcePermission, Role, RolePermission,
-        UserRoleBinding, project_effective_permissions, project_scope_names,
+        EffectivePermissionError, EffectivePermissionSources, PermissionCode, RbacLifecycleError,
+        RbacValidationError, ResourcePermission, Role, RolePermission, UserRoleBinding,
+        project_effective_permissions, project_scope_names,
     };
     use crate::{
         authorization::ids::AuthorizationVersion,
-        rbac::ids::{
-            ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleBindingOid,
+        rbac::{
+            LocalizedMetadata,
+            ids::{
+                ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleBindingOid,
+            },
         },
         user::UserOid,
     };
@@ -763,16 +763,17 @@ mod tests {
             },
         ];
         let version = binding.version;
-        let effective = project_effective_permissions(
-            binding.user_oid,
-            commerce,
-            version,
-            version,
-            std::slice::from_ref(&binding),
-            std::slice::from_ref(&role),
-            &memberships,
-            &[commerce_permission, support_permission],
-        )
+        let effective = project_effective_permissions(EffectivePermissionSources {
+            user_oid: binding.user_oid,
+            requested_resource: commerce,
+            expected_authorization_version: version,
+            current_authorization_version: version,
+            bindings: slice::from_ref(&binding),
+            group_paths: &[],
+            roles: slice::from_ref(&role),
+            memberships: &memberships,
+            permissions: &[commerce_permission, support_permission],
+        })
         .unwrap();
         assert_eq!(effective.len(), 1);
         assert_eq!(effective[0].code, "orders.read");
@@ -802,31 +803,33 @@ mod tests {
         };
 
         let version = binding.version;
-        let effective = project_effective_permissions(
-            user,
-            resource,
-            version,
-            version,
-            std::slice::from_ref(&binding),
-            std::slice::from_ref(&role),
-            std::slice::from_ref(&membership),
-            std::slice::from_ref(&permission),
-        )
+        let effective = project_effective_permissions(EffectivePermissionSources {
+            user_oid: user,
+            requested_resource: resource,
+            expected_authorization_version: version,
+            current_authorization_version: version,
+            bindings: slice::from_ref(&binding),
+            group_paths: &[],
+            roles: slice::from_ref(&role),
+            memberships: slice::from_ref(&membership),
+            permissions: slice::from_ref(&permission),
+        })
         .unwrap();
         assert_eq!(effective.len(), 1);
 
         binding.revoke(at()).unwrap();
         assert!(
-            project_effective_permissions(
-                user,
-                resource,
-                binding.version,
-                binding.version,
-                std::slice::from_ref(&binding),
-                std::slice::from_ref(&role),
-                std::slice::from_ref(&membership),
-                std::slice::from_ref(&permission),
-            )
+            project_effective_permissions(EffectivePermissionSources {
+                user_oid: user,
+                requested_resource: resource,
+                expected_authorization_version: binding.version,
+                current_authorization_version: binding.version,
+                bindings: slice::from_ref(&binding),
+                group_paths: &[],
+                roles: slice::from_ref(&role),
+                memberships: slice::from_ref(&membership),
+                permissions: slice::from_ref(&permission)
+            })
             .unwrap()
             .is_empty()
         );
@@ -842,16 +845,17 @@ mod tests {
         .unwrap();
         role.set_enabled(false, at()).unwrap();
         assert!(
-            project_effective_permissions(
-                user,
-                resource,
-                binding.version,
-                binding.version,
-                std::slice::from_ref(&binding),
-                std::slice::from_ref(&role),
-                std::slice::from_ref(&membership),
-                std::slice::from_ref(&permission),
-            )
+            project_effective_permissions(EffectivePermissionSources {
+                user_oid: user,
+                requested_resource: resource,
+                expected_authorization_version: binding.version,
+                current_authorization_version: binding.version,
+                bindings: slice::from_ref(&binding),
+                group_paths: &[],
+                roles: slice::from_ref(&role),
+                memberships: slice::from_ref(&membership),
+                permissions: slice::from_ref(&permission)
+            })
             .unwrap()
             .is_empty()
         );
@@ -867,16 +871,17 @@ mod tests {
         };
         binding.role_oid = role.oid;
         assert!(
-            project_effective_permissions(
-                user,
-                resource,
-                binding.version,
-                binding.version,
-                std::slice::from_ref(&binding),
-                std::slice::from_ref(&role),
-                std::slice::from_ref(&membership),
-                std::slice::from_ref(&permission),
-            )
+            project_effective_permissions(EffectivePermissionSources {
+                user_oid: user,
+                requested_resource: resource,
+                expected_authorization_version: binding.version,
+                current_authorization_version: binding.version,
+                bindings: slice::from_ref(&binding),
+                group_paths: &[],
+                roles: slice::from_ref(&role),
+                memberships: slice::from_ref(&membership),
+                permissions: slice::from_ref(&permission)
+            })
             .unwrap()
             .is_empty()
         );
@@ -922,16 +927,17 @@ mod tests {
             },
         ];
         let version = binding_a.version;
-        let effective = project_effective_permissions(
-            user,
-            resource,
-            version,
-            version,
-            &[binding_a, binding_b],
-            &[role_a, role_b],
-            &memberships,
-            std::slice::from_ref(&permission),
-        )
+        let effective = project_effective_permissions(EffectivePermissionSources {
+            user_oid: user,
+            requested_resource: resource,
+            expected_authorization_version: version,
+            current_authorization_version: version,
+            bindings: &[binding_a, binding_b],
+            group_paths: &[],
+            roles: &[role_a, role_b],
+            memberships: &memberships,
+            permissions: slice::from_ref(&permission),
+        })
         .unwrap();
         assert_eq!(effective.len(), 1);
         assert_eq!(effective[0].sources.len(), 2);
@@ -947,24 +953,18 @@ mod tests {
             .unwrap()
             .trusted_built_in();
         assert!(matches!(
-            built_in.set_metadata(
-                crate::rbac::LocalizedMetadata::single("en-US", "Owner", ""),
-                at()
-            ),
-            Err(super::RbacValidationError::BuiltInDefinition)
+            built_in.set_metadata(LocalizedMetadata::single("en-US", "Owner", ""), at()),
+            Err(RbacValidationError::BuiltInDefinition)
         ));
         assert!(matches!(
             built_in.set_enabled(false, at()),
-            Err(super::RbacLifecycleError::BuiltInProtected)
+            Err(RbacLifecycleError::BuiltInProtected)
         ));
 
         let mut custom = Role::new(RoleOid::new(), "Owner", "", at()).unwrap();
         let version = custom.version;
         custom
-            .set_metadata(
-                crate::rbac::LocalizedMetadata::single("en-US", "Custom owner", ""),
-                at(),
-            )
+            .set_metadata(LocalizedMetadata::single("en-US", "Custom owner", ""), at())
             .expect("custom role with a built-in-looking name stays editable");
         assert_ne!(custom.version, version);
         assert!(!custom.built_in);
@@ -979,16 +979,17 @@ mod tests {
         let user = UserOid(Uuid::new_v4());
         let resource = ResourceOid::new();
         assert_eq!(
-            project_effective_permissions(
-                user,
-                resource,
-                AuthorizationVersion::new(),
-                AuthorizationVersion::new(),
-                &[],
-                &[],
-                &[],
-                &[],
-            ),
+            project_effective_permissions(EffectivePermissionSources {
+                user_oid: user,
+                requested_resource: resource,
+                expected_authorization_version: AuthorizationVersion::new(),
+                current_authorization_version: AuthorizationVersion::new(),
+                bindings: &[],
+                group_paths: &[],
+                roles: &[],
+                memberships: &[],
+                permissions: &[]
+            }),
             Err(EffectivePermissionError::StaleAuthorizationVersion)
         );
     }

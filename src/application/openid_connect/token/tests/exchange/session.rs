@@ -14,8 +14,6 @@ use crate::openid_connect::{
     token::tests::{fixtures::*, *},
 };
 
-use super::*;
-
 fn session(
     session_oid: SessionOid,
     user_oid: Uuid,

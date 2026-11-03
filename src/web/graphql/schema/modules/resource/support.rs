@@ -5,9 +5,9 @@
 //! one place prevents one root from silently accepting a different page shape or
 //! authority snapshot than its siblings.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, result::Result as StdResult};
 
-use async_graphql::{Context, Error, ID, Result, connection::CursorType};
+use async_graphql::{Context, ID, Result, connection::CursorType};
 use identity_application::{
     error::{
         AppError,
@@ -48,7 +48,7 @@ impl RbacConnectionCursor {
 impl CursorType for RbacConnectionCursor {
     type Error = InvalidCursor;
 
-    fn decode_cursor(value: &str) -> std::result::Result<Self, Self::Error> {
+    fn decode_cursor(value: &str) -> StdResult<Self, Self::Error> {
         if value.is_empty()
             || value.len() > MAX_CURSOR_LENGTH
             || !value
@@ -112,18 +112,6 @@ pub(crate) fn decode_oids<T: GlobalIdType>(ctx: &Context<'_>, ids: &[ID]) -> Res
     ids.iter().map(|id| decode_oid::<T>(ctx, id)).collect()
 }
 
-pub(crate) fn invalid_global_id(ctx: &Context<'_>) -> Error {
-    coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new())
-}
-
-pub(crate) fn validation_error(
-    ctx: &Context<'_>,
-    code: RbacErrorCode,
-    field: &'static str,
-) -> Error {
-    app_error(ctx, AppError::from_code(code).with_field(field))
-}
-
 /// Normalize an optional audit annotation and bound voluntarily supplied text.
 /// The service repeats this validation for non-GraphQL callers.
 pub(crate) fn normalize_reason(ctx: &Context<'_>, reason: &str) -> Result<String> {
@@ -148,7 +136,7 @@ pub(crate) fn normalize_reason(ctx: &Context<'_>, reason: &str) -> Result<String
 /// of these values come from caller input.
 pub(crate) async fn request_authority(
     request: &RequestContext,
-) -> std::result::Result<RbacManagementAuthority, AppError> {
+) -> StdResult<RbacManagementAuthority, AppError> {
     let token_scopes = request
         .claims
         .scope

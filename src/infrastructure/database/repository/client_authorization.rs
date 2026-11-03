@@ -1,11 +1,16 @@
+use super::authorization_lifecycle;
 use crate::database::{
     authority_snapshot::user_authority_fingerprint,
     entity::{
-        client::Entity as ClientEntity, client_authorization,
-        client_authorization::Entity as ClientAuthorizationEntity,
+        client::Entity as ClientEntity,
+        client_authorization,
+        client_authorization::{
+            Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
+            Model as ClientAuthorizationModel,
+        },
     },
     repository::{
-        client_authorization_query as query,
+        client_authority, client_authorization_query as query,
         shared::{lock_resource_rows, lock_session, lock_user_credentials},
     },
 };
@@ -27,7 +32,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr,
     EntityTrait, FromQueryResult, QueryFilter, Set, Statement, TransactionTrait,
 };
-use serde_json::from_value;
+use serde_json::{Value, from_value};
 use std::error::Error;
 use uuid::Uuid;
 
@@ -39,6 +44,8 @@ mod token_revocation;
 /// Internal reasons why the authoritative live state rejects issuance. These
 /// are mapped by callers to stable protocol/`AppError` codes and never expose
 /// SQL or subject details.
+// Each variant names the live object that is no longer usable.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 enum LiveAuthorizationState {
     #[error("client management policy is unavailable or disabled")]
@@ -146,7 +153,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
         client_oid: Uuid,
         now: DateTime<Utc>,
     ) -> Result<Option<PushedAuthorizationRequestData>, ClientAuthorizationRepositoryError> {
-        let row = client_authorization::Model::find_by_statement(
+        let row = ClientAuthorizationModel::find_by_statement(
             DatabaseBackend::Postgres.build(&query::consume_par(digest, client_oid, now)),
         )
         .one(&self.db)
@@ -189,7 +196,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             .begin()
             .await
             .map_err(query_error("client_authorization.create"))?;
-        super::authorization_lifecycle::lock_authorization_issuance(&transaction)
+        authorization_lifecycle::lock_authorization_issuance(&transaction)
             .await
             .map_err(query_error("client_authorization.create"))?;
         // Resource target rows follow the shared lifecycle lock, in URI order and
@@ -292,12 +299,9 @@ FOR SHARE OF s
         // Both the client and its protocol registration must still exist.
         // Derive semantic authority under those share locks, held through INSERT.
         let (client_configured, client_fingerprint) =
-            crate::database::repository::client_authority::lock_live_client_boundary(
-                &transaction,
-                client_id,
-            )
-            .await
-            .map_err(query_error("client_authorization.create"))?;
+            client_authority::lock_live_client_boundary(&transaction, client_id)
+                .await
+                .map_err(query_error("client_authorization.create"))?;
         if !client_configured {
             return Err(query_failed(
                 "client_authorization.create",
@@ -380,11 +384,11 @@ FOR SHARE OF s
             // fallback or record-version alias.
             let original_client_fingerprint = original
                 .get("_issuance_client_fingerprint")
-                .and_then(serde_json::Value::as_str)
+                .and_then(Value::as_str)
                 .and_then(|value| Uuid::parse_str(value).ok());
             let original_authority_fingerprint = original
                 .get("_issuance_authority_fingerprint")
-                .and_then(serde_json::Value::as_str)
+                .and_then(Value::as_str)
                 .and_then(|value| Uuid::parse_str(value).ok());
             let version_matches = original_client_fingerprint == Some(client_fingerprint.as_uuid())
                 && match authority_fingerprint {
@@ -444,7 +448,7 @@ FOR SHARE OF s
         oid: Uuid,
     ) -> Result<Option<ClientAuthorization>, ClientAuthorizationRepositoryError> {
         let Some((request_model, Some(client_model))) = ClientAuthorizationEntity::find()
-            .filter(client_authorization::Column::Oid.eq(oid))
+            .filter(ClientAuthorizationColumn::Oid.eq(oid))
             .inner_join(ClientEntity)
             .select_also(ClientEntity)
             .one(&self.db)
@@ -568,8 +572,11 @@ mod tests {
     use std::backtrace::BacktraceStatus;
 
     use identity_application::error::ErrorDiagnostics;
-    use identity_domain::client_authorization::{
-        AccessTokenData, AccessTokenPrincipal, AuthorizationCodeData, ClientAuthorizationData,
+    use identity_domain::{
+        auth::SessionOid,
+        client_authorization::{
+            AccessTokenData, AccessTokenPrincipal, AuthorizationCodeData, ClientAuthorizationData,
+        },
     };
     use sea_orm::DbErr;
     use uuid::Uuid;
@@ -613,7 +620,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             user_oid: subject.to_string(),
-            session_oid: identity_domain::auth::SessionOid(Uuid::new_v4()),
+            session_oid: SessionOid(Uuid::new_v4()),
             protected_session_id: None,
             acr: None,
             amr: Vec::new(),

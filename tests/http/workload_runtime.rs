@@ -3,11 +3,14 @@ use identity_infrastructure::{
     auth::workload::build_workload_authenticator,
     config::{AppConfig, StaticTokenConfig, WorkloadConfig, WorkloadsConfig},
 };
+use identity_web::router;
 use salvo::{
     Service,
     test::{ResponseExt, TestClient},
 };
 use serde_json::{Value, json};
+
+use super::metadata;
 
 const LOGIN_TOKEN: &str = "login-test-workload-credential-0123456789";
 const CONSOLE_TOKEN: &str = "console-test-workload-credential-0123456789";
@@ -24,18 +27,14 @@ fn credentials(token: &str) -> WorkloadConfig {
 }
 
 async fn service(console_origin: Option<&str>) -> Service {
-    let state = super::metadata::runtime_state(console_origin).await;
+    let state = metadata::runtime_state(console_origin).await;
     let config: AppConfig = serde_json::from_value(json!({})).unwrap();
     let authenticator = build_workload_authenticator(&WorkloadsConfig {
         login: credentials(LOGIN_TOKEN),
         console: credentials(CONSOLE_TOKEN),
     })
     .unwrap();
-    Service::new(identity_web::router::internal_router(
-        state,
-        &config,
-        authenticator,
-    ))
+    Service::new(router::internal_router(state, &config, authenticator))
 }
 
 #[tokio::test]

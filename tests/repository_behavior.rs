@@ -29,14 +29,17 @@ use identity_domain::{
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 use uuid::Uuid;
 
-use identity_infrastructure::database::repository::{
-    client_authorization::ClientAuthorizationRepositoryImpl,
-    device_authorization::DeviceAuthorizationRepositoryImpl,
-    openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
-    rbac_management::RbacManagementRepositoryImpl,
-    session::SessionRepositoryImpl,
-    setting::{read_setting, write_settings},
-    user::UserRepositoryImpl,
+use identity_infrastructure::database::{
+    repository,
+    repository::{
+        client_authorization::ClientAuthorizationRepositoryImpl,
+        device_authorization::DeviceAuthorizationRepositoryImpl,
+        openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
+        rbac_management::RbacManagementRepositoryImpl,
+        session::SessionRepositoryImpl,
+        setting::{read_setting, write_settings},
+        user::UserRepositoryImpl,
+    },
 };
 
 async fn sql(db: &DatabaseConnection, sql: &str) {
@@ -58,7 +61,7 @@ async fn postgres_device_token_set_is_committed_once_under_concurrent_redemption
         let (_, app) = client(&db, "device-app").await;
         let relation = Uuid::new_v4();
         let repo = DeviceAuthorizationRepositoryImpl::new(db.clone());
-        let request = repo.create_device_request(app.into(), serde_json::from_value(serde_json::json!({
+        let request = repo.create_device_request(app, serde_json::from_value(serde_json::json!({
             "scope": "openid offline_access", "device_code_digest": "device-digest", "user_code": "ABCDEFGH",
             "user_code_display": "ABCD-EFGH", "interval_seconds": 5, "status": "pending",
         })).unwrap(), Utc::now()+Duration::minutes(5)).await.unwrap();
@@ -163,25 +166,25 @@ async fn postgres_consent_isolated_by_user_client_and_resource() {
         .await;
         let repo = ClientAuthorizationRepositoryImpl::new(db);
         let mut actual = repo
-            .user_consented_scope_names(alice, app.into(), &["urn:test:api".into()])
+            .user_consented_scope_names(alice, app, &["urn:test:api".into()])
             .await
             .unwrap();
         actual.sort();
         assert_eq!(actual, ["openid", "read"]);
         assert_eq!(
-            repo.user_consented_scope_names(alice, app.into(), &["urn:other".into()])
+            repo.user_consented_scope_names(alice, app, &["urn:other".into()])
                 .await
                 .unwrap(),
             ["openid"]
         );
         assert_eq!(
-            repo.user_consented_scope_names(bob, app.into(), &[])
+            repo.user_consented_scope_names(bob, app, &[])
                 .await
                 .unwrap(),
             ["email"]
         );
         assert_eq!(
-            repo.user_consented_scope_names(alice, other_app.into(), &[])
+            repo.user_consented_scope_names(alice, other_app, &[])
                 .await
                 .unwrap(),
             ["email"]
@@ -211,9 +214,9 @@ async fn postgres_credential_lookup_excludes_unusable_and_orders_newest() {
             if secret=="older" || secret=="newer" { expected.insert(0, oid); }
         }
         let repo = OpenIdConnectCredentialRepositoryImpl::new(db);
-        let found = repo.find_active_by_client_oid_and_type(app.into(), OpenIdConnectCredentialType::ClientSecret).await.unwrap();
+        let found = repo.find_active_by_client_oid_and_type(app, OpenIdConnectCredentialType::ClientSecret).await.unwrap();
         assert_eq!(found.iter().map(|v|v.oid).collect::<Vec<_>>(), expected);
-        let other = repo.find_active_by_client_oid_and_type(other_app.into(), OpenIdConnectCredentialType::ClientSecret).await.unwrap();
+        let other = repo.find_active_by_client_oid_and_type(other_app, OpenIdConnectCredentialType::ClientSecret).await.unwrap();
         assert_eq!(other.len(),1);
         assert!(!expected.contains(&other[0].oid));
     }).await;
@@ -297,12 +300,9 @@ async fn postgres_settings_upsert_preserves_distinct_keys_without_duplicates() {
                 read_setting::<LoginDomainSetting, _>(&db).await.unwrap(),
                 Some(domain.to_owned())
             );
-            let actual = identity_infrastructure::database::repository::setting::read_section::<
-                OpenIdConnectSettings,
-                _,
-            >(&db)
-            .await
-            .unwrap();
+            let actual = repository::setting::read_section::<OpenIdConnectSettings, _>(&db)
+                .await
+                .unwrap();
             assert_eq!(actual.dynamic_registration.enabled, enabled);
         }
         let count: i64 = row(&db, "SELECT count(*)::bigint n FROM setting")
@@ -418,7 +418,7 @@ async fn postgres_collection_totals_match_filters_without_page_limits_or_join_du
         let (app_id, app_oid) = client(&db, "count-app").await;
         let (other_app_id, other_app_oid) = client(&db, "count-other-app").await;
         sql(&db, &format!("INSERT INTO client_scope(client_id,scope_id) VALUES({app_id},1),({app_id},2),({other_app_id},1)")).await;
-        assert_eq!(rbac.count_client_scopes(app_oid.into()).await.unwrap(), 2);
-        assert_eq!(rbac.count_client_scopes(other_app_oid.into()).await.unwrap(), 1);
+        assert_eq!(rbac.count_client_scopes(app_oid).await.unwrap(), 2);
+        assert_eq!(rbac.count_client_scopes(other_app_oid).await.unwrap(), 1);
     }).await;
 }

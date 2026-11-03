@@ -37,6 +37,7 @@ mod tests {
     use chrono::Utc;
     use uuid::Uuid;
 
+    use super::UserManagementRecord;
     use crate::user::{MfaMethod, User, UserOid};
 
     #[test]
@@ -78,7 +79,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: None,
         };
-        let record = super::UserManagementRecord::new(user.clone());
+        let record = UserManagementRecord::new(user.clone());
         assert_eq!(record.oid(), user.oid);
         assert_eq!(record.version(), version);
         assert_eq!(record.user.name, "user");

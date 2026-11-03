@@ -22,7 +22,7 @@ use identity_domain::{
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
-    EntityTrait, QueryFilter, Set, TransactionTrait,
+    DbBackend, EntityTrait, QueryFilter, Set, Statement, TransactionTrait, Value,
 };
 use serde_json::json;
 use url::Url;
@@ -40,7 +40,21 @@ use crate::{
     },
     database::{
         audit,
-        entity::{client, client_openid_connect, client_openid_connect_platform, client_scope},
+        entity::{
+            client,
+            client::{Column as ClientColumn, Entity as ClientEntity},
+            client_openid_connect,
+            client_openid_connect::{
+                Column as ClientOpenIdConnectColumn, Entity as ClientOpenIdConnectEntity,
+            },
+            client_openid_connect_platform,
+            client_openid_connect_platform::{
+                Column as ClientOpenIdConnectPlatformColumn,
+                Entity as ClientOpenIdConnectPlatformEntity,
+            },
+            client_scope,
+            client_scope::{Column as ClientScopeColumn, Entity as ClientScopeEntity},
+        },
         repository::setting::read_setting,
     },
 };
@@ -196,8 +210,8 @@ pub async fn ensure_console_client_in_transaction(
     let oid = read_setting::<ConsoleClientIdSetting, _>(db)
         .await?
         .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
-    let existing = client::Entity::find()
-        .filter(client::Column::Oid.eq(oid))
+    let existing = ClientEntity::find()
+        .filter(ClientColumn::Oid.eq(oid))
         .one(db)
         .await
         .map_err(AppError::internal)?
@@ -256,10 +270,10 @@ async fn configure_console_client(
     // CORS origins are derived only from the explicitly configured Console origin.
     let origin = config.origin.origin().ascii_serialization();
     let cors = db
-        .execute_raw(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Postgres,
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
             "INSERT INTO client_openid_connect_cors_origin(client_id,origin) VALUES($1,$2) ON CONFLICT(client_id,origin) DO NOTHING",
-            [sea_orm::Value::from(client_id), sea_orm::Value::from(origin)],
+            [Value::from(client_id), Value::from(origin)],
         ))
         .await
         .map_err(AppError::internal)?;
@@ -308,8 +322,8 @@ async fn ensure_oidc_metadata(
     let response_types = json!(["code"]);
     let token_endpoint_auth_methods = json!(["none"]);
 
-    let existing = client_openid_connect::Entity::find()
-        .filter(client_openid_connect::Column::ClientId.eq(client_id))
+    let existing = ClientOpenIdConnectEntity::find()
+        .filter(ClientOpenIdConnectColumn::ClientId.eq(client_id))
         .one(db)
         .await
         .map_err(AppError::internal)?;
@@ -356,9 +370,9 @@ async fn ensure_web_platform(
     now: DateTime<Utc>,
 ) -> Result<bool, AppError> {
     let redirect_uris = json!([redirect_uri.as_str()]);
-    let existing = client_openid_connect_platform::Entity::find()
-        .filter(client_openid_connect_platform::Column::ClientId.eq(client_id))
-        .filter(client_openid_connect_platform::Column::Platform.eq("web"))
+    let existing = ClientOpenIdConnectPlatformEntity::find()
+        .filter(ClientOpenIdConnectPlatformColumn::ClientId.eq(client_id))
+        .filter(ClientOpenIdConnectPlatformColumn::Platform.eq("web"))
         .one(db)
         .await
         .map_err(AppError::internal)?;
@@ -392,22 +406,22 @@ async fn replace_client_scopes(
     scope_ids: &[i64],
 ) -> Result<bool, AppError> {
     let mut changed = false;
-    let existing = client_scope::Entity::find()
-        .filter(client_scope::Column::ClientId.eq(client_id))
+    let existing = ClientScopeEntity::find()
+        .filter(ClientScopeColumn::ClientId.eq(client_id))
         .all(db)
         .await
         .map_err(AppError::internal)?;
     for row in existing {
         if !scope_ids.contains(&row.scope_id) {
-            client_scope::Entity::delete_by_id(row.id)
+            ClientScopeEntity::delete_by_id(row.id)
                 .exec(db)
                 .await
                 .map_err(AppError::internal)?;
             changed = true;
         }
     }
-    let kept = client_scope::Entity::find()
-        .filter(client_scope::Column::ClientId.eq(client_id))
+    let kept = ClientScopeEntity::find()
+        .filter(ClientScopeColumn::ClientId.eq(client_id))
         .all(db)
         .await
         .map_err(AppError::internal)?

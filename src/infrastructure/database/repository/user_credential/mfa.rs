@@ -1,18 +1,20 @@
 //! Recovery-code invariants shared by all credential mutations.
 use super::*;
 use sea_orm::{ConnectionTrait, DatabaseTransaction, Select};
+use user::Column as UserColumn;
+use user_credential::{Column as UserCredentialColumn, Relation as UserCredentialRelation};
 
 #[cfg(test)]
 mod tests;
 
 fn active(user_id: i64, types: &[CredentialType]) -> Select<user_credential::Entity> {
     UserCredentialEntity::find()
-        .filter(user_credential::Column::UserId.eq(user_id))
-        .filter(user_credential::Column::Type.is_in(types.iter().map(CredentialType::as_ref)))
+        .filter(UserCredentialColumn::UserId.eq(user_id))
+        .filter(UserCredentialColumn::Type.is_in(types.iter().map(CredentialType::as_ref)))
         .filter(
             Condition::any()
-                .add(user_credential::Column::ExpiresAt.is_null())
-                .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                .add(UserCredentialColumn::ExpiresAt.is_null())
+                .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
         )
 }
 
@@ -22,7 +24,7 @@ pub(super) async fn has_active_mfa<C: ConnectionTrait>(
 ) -> Result<bool, UserCredentialRepositoryError> {
     active(user_id, &[CredentialType::Otp, CredentialType::Passkey])
         .select_only()
-        .column(user_credential::Column::Id)
+        .column(UserCredentialColumn::Id)
         .into_tuple::<i64>()
         .one(connection)
         .await
@@ -39,7 +41,7 @@ pub(super) async fn install_recovery_codes(
 ) -> Result<(), UserCredentialRepositoryError> {
     let existing = active(user_id, &[CredentialType::RecoveryCode])
         .select_only()
-        .column(user_credential::Column::Data)
+        .column(UserCredentialColumn::Data)
         .into_tuple::<serde_json::Value>()
         .all(txn)
         .await
@@ -62,8 +64,8 @@ pub(super) async fn install_recovery_codes(
         return Err(UserCredentialRepositoryError::InvalidMfaEnrollment);
     }
     UserCredentialEntity::delete_many()
-        .filter(user_credential::Column::UserId.eq(user_id))
-        .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
+        .filter(UserCredentialColumn::UserId.eq(user_id))
+        .filter(UserCredentialColumn::Type.eq(CredentialType::RecoveryCode.as_ref()))
         .exec(txn)
         .await
         .map_err(|error| UserCredentialRepositoryError::ReplaceFailed(Box::new(error)))?;
@@ -91,8 +93,8 @@ pub(super) async fn clear_recovery_codes_without_mfa(
 ) -> Result<(), UserCredentialRepositoryError> {
     if !has_active_mfa(txn, user_id).await? {
         UserCredentialEntity::delete_many()
-            .filter(user_credential::Column::UserId.eq(user_id))
-            .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
+            .filter(UserCredentialColumn::UserId.eq(user_id))
+            .filter(UserCredentialColumn::Type.eq(CredentialType::RecoveryCode.as_ref()))
             .exec(txn)
             .await
             .map_err(|error| UserCredentialRepositoryError::DeleteFailed(Box::new(error)))?;
@@ -113,16 +115,16 @@ pub(super) async fn disable_totp(
         .map_err(failure)?;
     let user_id = UserEntity::find()
         .select_only()
-        .column(user::Column::Id)
-        .filter(user::Column::Oid.eq(Uuid::from(user_oid)))
+        .column(UserColumn::Id)
+        .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
         .into_tuple::<i64>()
         .one(&txn)
         .await
         .map_err(failure)?
         .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
     let deleted = UserCredentialEntity::delete_many()
-        .filter(user_credential::Column::UserId.eq(user_id))
-        .filter(user_credential::Column::Type.eq(CredentialType::Otp.as_ref()))
+        .filter(UserCredentialColumn::UserId.eq(user_id))
+        .filter(UserCredentialColumn::Type.eq(CredentialType::Otp.as_ref()))
         .exec(&txn)
         .await
         .map_err(failure)?
@@ -153,10 +155,10 @@ pub(super) async fn consume_recovery_code(
     let txn = db.begin().await.map_err(failure)?;
     let owner = UserCredentialEntity::find()
         .select_only()
-        .column(user::Column::Oid)
-        .join(JoinType::InnerJoin, user_credential::Relation::User.def())
-        .filter(user_credential::Column::Oid.eq(Uuid::from(credential)))
-        .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
+        .column(UserColumn::Oid)
+        .join(JoinType::InnerJoin, UserCredentialRelation::User.def())
+        .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential)))
+        .filter(UserCredentialColumn::Type.eq(CredentialType::RecoveryCode.as_ref()))
         .into_tuple::<Uuid>()
         .one(&txn)
         .await
@@ -169,12 +171,12 @@ pub(super) async fn consume_recovery_code(
         .await
         .map_err(failure)?;
     let deleted = UserCredentialEntity::delete_many()
-        .filter(user_credential::Column::Oid.eq(Uuid::from(credential)))
-        .filter(user_credential::Column::Type.eq(CredentialType::RecoveryCode.as_ref()))
+        .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential)))
+        .filter(UserCredentialColumn::Type.eq(CredentialType::RecoveryCode.as_ref()))
         .filter(
             Condition::any()
-                .add(user_credential::Column::ExpiresAt.is_null())
-                .add(user_credential::Column::ExpiresAt.gt(Utc::now())),
+                .add(UserCredentialColumn::ExpiresAt.is_null())
+                .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
         )
         .exec(&txn)
         .await

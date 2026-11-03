@@ -3,7 +3,7 @@ use std::iter;
 use chrono::{Duration, Utc};
 use identity_domain::{
     auth::{ACR_AAL1, SessionOid},
-    client_authorization::{AccessTokenData, ClientAuthenticationMode},
+    client_authorization::{AccessTokenData, AccessTokenPrincipal, ClientAuthenticationMode},
     key::{KeyJwk, KeyJwkOid, PublicJwk},
     openid_connect::{OAuthProtocolVersion, OpenIdConnectClientSettings, TokenEndpointAuthMethod},
 };
@@ -26,8 +26,7 @@ use crate::{
     setting::{AppSettings, InstallationSettings, OpenIdConnectSettings, SettingsSnapshot},
 };
 
-use crate::openid_connect::token::tests::fixtures::*;
-use crate::openid_connect::token::tests::*;
+use crate::openid_connect::token::tests::{fixtures::*, *};
 
 fn s256_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
@@ -1168,7 +1167,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                     scope: "openid profile".to_owned(),
                     resources: Vec::new(),
                     user_oid: Some(user_oid.to_string()),
-                    principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+                    principal: AccessTokenPrincipal::User,
                     session_oid: Some(SessionOid::from(Uuid::new_v4())),
                     protected_session_id: None,
                     authorization_code_oid: None,
@@ -1199,7 +1198,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 audience: &Uuid::nil().to_string(),
                 client_id: &Uuid::nil().to_string(),
                 subject: &user_oid.to_string(),
-                principal: identity_domain::client_authorization::AccessTokenPrincipal::User,
+                principal: AccessTokenPrincipal::User,
                 client: &client,
                 user: Some(&user),
                 protected_session_id: Some(&Uuid::new_v4().to_string()),
