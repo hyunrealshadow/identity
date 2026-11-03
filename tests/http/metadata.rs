@@ -8,6 +8,9 @@ use serde_json::{Value, from_str, json as json_json};
 
 use identity_web::controllers::well_known::routes;
 
+/// Console client identity the installer would have provisioned.
+pub(super) const CONSOLE_CLIENT_ID: &str = "0193a7f2-6c1e-7d4b-9a35-2f8c1e6b4d70";
+
 /// Build a test state whose scope catalog answers the production
 /// `SELECT code ...` query shape.
 async fn metadata_state() -> identity_infrastructure::AppState {
@@ -19,8 +22,8 @@ pub(super) async fn runtime_state(console: Option<&str>) -> identity_infrastruct
 
     use chrono::Utc;
     use identity_application::setting::{
-        ConsoleDomainSetting, DeviceAuthorizationSettings, DomainSetting, LoginDomainSetting,
-        PasswordHashSetting, SettingDefinition,
+        ConsoleClientIdSetting, ConsoleDomainSetting, DeviceAuthorizationSettings, DomainSetting,
+        LoginDomainSetting, PasswordHashSetting, SettingDefinition,
     };
     use identity_infrastructure::{
         AppContext, AppLifecycle, AppResources, AppState,
@@ -105,6 +108,14 @@ pub(super) async fn runtime_state(console: Option<&str>) -> identity_infrastruct
         created_at: now.into(),
         updated_at: None,
     };
+    let console_client_id_setting = setting::Model {
+        id: 14,
+        oid: Uuid::new_v4(),
+        key: ConsoleClientIdSetting::KEY.to_owned(),
+        value: to_value(console.map(|_| CONSOLE_CLIENT_ID)).unwrap(),
+        created_at: now.into(),
+        updated_at: None,
+    };
 
     let db = MockDatabase::new(DatabaseBackend::Postgres)
         .append_query_results([[
@@ -115,6 +126,7 @@ pub(super) async fn runtime_state(console: Option<&str>) -> identity_infrastruct
             dynamic_registration_setting,
             login_domain_setting,
             console_domain_setting,
+            console_client_id_setting,
             device_authorization_setting,
         ]])
         .append_query_results([Vec::<BTreeMap<String, DbValue>>::new()])

@@ -10,7 +10,7 @@ use salvo::{
 };
 use serde_json::{Value, json};
 
-use super::metadata;
+use super::metadata::{self, CONSOLE_CLIENT_ID};
 
 const LOGIN_TOKEN: &str = "login-test-workload-credential-0123456789";
 const CONSOLE_TOKEN: &str = "console-test-workload-credential-0123456789";
@@ -75,6 +75,7 @@ async fn console_workload_fetches_only_its_public_configuration() {
         "https://login.example.com/console/signed-out"
     );
     assert_eq!(config["accountUrl"], "https://login.example.com/account");
+    assert_eq!(config["clientId"], CONSOLE_CLIENT_ID);
     assert!(config.get("oauth_client").is_none());
     assert!(!config.to_string().contains("secret"));
 
