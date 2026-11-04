@@ -60,7 +60,7 @@ async fn insert_record<C: ConnectionTrait>(
         expires_at: Set(record.expires_at.into()),
         completed_at: Set(None),
         revoked_at: Set(None),
-        is_expired: Set(record.expires_at <= now),
+        expired: Set(record.expires_at <= now),
         created_at: Set(now.into()),
         updated_at: Set(None),
     }

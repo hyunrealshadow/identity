@@ -24,7 +24,7 @@ pub struct Model {
     pub completed_at: Option<DateTimeWithTimeZone>,
     pub revoked_at: Option<DateTimeWithTimeZone>,
     #[sea_orm(default_value = false)]
-    pub is_expired: bool,
+    pub expired: bool,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

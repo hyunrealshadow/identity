@@ -238,6 +238,7 @@ async fn consent_test_state_for(
         description: Some("OIDC relying party".to_owned()),
         descriptions: None,
         built_in: false,
+        enabled: true,
         created_at: now.into(),
         updated_at: None,
     };
@@ -280,7 +281,7 @@ async fn consent_test_state_for(
         expires_at: (now + Duration::minutes(10)).into(),
         completed_at: None,
         revoked_at: None,
-        is_expired: false,
+        expired: false,
         created_at: now.into(),
         updated_at: Some(now.into()),
     };
@@ -326,7 +327,7 @@ async fn consent_test_state_for(
         expires_at: (now + Duration::minutes(10)).into(),
         completed_at: None,
         revoked_at: None,
-        is_expired: false,
+        expired: false,
         created_at: now.into(),
         updated_at: None,
     };

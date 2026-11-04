@@ -65,6 +65,7 @@ pub(super) fn to_client(
         names: deserialize_optional_string_vec(model.names.as_ref())?.unwrap_or_default(),
         description: model.description,
         built_in: model.built_in,
+        enabled: model.enabled,
         created_at: model.created_at.with_timezone(&Utc),
         updated_at: model.updated_at.map(|v| v.with_timezone(&Utc)),
     })

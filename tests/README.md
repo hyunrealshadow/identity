@@ -33,7 +33,7 @@ cargo test -p identity --test helm_configuration -- --ignored
 - `common/`: a separate temporary schema for each database test, initialized through the normal migration entry point and cleaned up afterward, including on assertion failures
 - `support/`: shared integration fixtures, including the production Login installer process; temporary files are created under `.data/integration-tests/` and cleaned up automatically
 
-Set `IDENTITY_TEST_DATABASE_URL` from `DATABASE_URL` in the repository-root `.env`, and set `IDENTITY_TEST_DATABASE_NAME` to the database name in that URL. Do not print connection credentials. The tests reject the production database `identity` and do not use or clear existing business schemas.
+Set `IDENTITY_TEST_DATABASE_URL` from `DATABASE_URL` in the repository-root `.env`. Do not print connection credentials. Each test runs in its own temporary schema and does not use or clear existing business schemas.
 
 ```powershell
 cargo test -p identity --test repository_behavior --test repository_security -- --ignored --test-threads=1

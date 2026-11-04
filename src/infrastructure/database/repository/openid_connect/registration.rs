@@ -232,6 +232,12 @@ impl OpenIdConnectClientRepositoryImpl {
                         description: Set(registration.client.description),
                         descriptions: Default::default(),
                         built_in: Set(registration.client.built_in),
+                        // Registration updates never change the enabled state.
+                        enabled: if existing.is_some() {
+                            sea_orm::ActiveValue::NotSet
+                        } else {
+                            Set(registration.client.enabled)
+                        },
                         version: Set(Uuid::new_v4()),
                         created_at: Set(registration.client.created_at.into()),
                         updated_at: Set(registration.client.updated_at.map(Into::into)),
@@ -498,7 +504,7 @@ impl OpenIdConnectClientRepositoryImpl {
                             expires_at: Set((now + Duration::days(365)).into()),
                             completed_at: Set(None),
                             revoked_at: Set(None),
-                            is_expired: Set(false),
+                            expired: Set(false),
                             created_at: Set(now.into()),
                             updated_at: Set(None),
                             ..Default::default()

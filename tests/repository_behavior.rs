@@ -125,7 +125,7 @@ async fn postgres_par_consumption_checks_lifecycle_owner_and_replay() {
             ("marked", "pushed_authorization_request", "1 day", "NULL", "NULL", true),
             ("wrong-type", "access_token", "1 day", "NULL", "NULL", false),
         ] {
-            sql(&db, &format!("INSERT INTO client_authorization(client_id,type,data,expires_at,completed_at,revoked_at,is_expired)
+            sql(&db, &format!("INSERT INTO client_authorization(client_id,type,data,expires_at,completed_at,revoked_at,expired)
                 VALUES({id},'{kind}','{{\"request_uri_digest\":\"{digest}\",\"parameters\":{{\"response_type\":\"code\",\"client_id\":\"{owner}\",\"scope\":\"openid\",\"redirect_uri\":\"https://app.example/callback\",\"state\":\"test-state\"}}}}',
                 now()+interval '{expiry}',{completed},{revoked},{expired})")).await;
         }

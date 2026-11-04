@@ -27,7 +27,7 @@ pub enum ClientAuthorization {
     Type,
     Data,
     ExpiresAt,
-    IsExpired,
+    Expired,
     CompletedAt,
     RevokedAt,
     CreatedAt,
@@ -51,7 +51,7 @@ impl MigrationTrait for Migration {
                     .col(string(ClientAuthorization::Type))
                     .col(json_binary(ClientAuthorization::Data))
                     .col(timestamp_with_time_zone(ClientAuthorization::ExpiresAt))
-                    .col(boolean(ClientAuthorization::IsExpired).default(false))
+                    .col(boolean(ClientAuthorization::Expired).default(false))
                     .col(timestamp_with_time_zone_null(
                         ClientAuthorization::CompletedAt,
                     ))
@@ -186,7 +186,7 @@ impl MigrationTrait for Migration {
             }
             if field == "user_code" {
                 index
-                    .and_where(Expr::col(ClientAuthorization::IsExpired).eq(false))
+                    .and_where(Expr::col(ClientAuthorization::Expired).eq(false))
                     .and_where(Expr::col(ClientAuthorization::CompletedAt).is_null())
                     .and_where(Expr::col(ClientAuthorization::RevokedAt).is_null());
             }
@@ -198,7 +198,7 @@ impl MigrationTrait for Migration {
                     .name("idx_client_authorization_expiration_pending")
                     .table(ClientAuthorization::Table)
                     .col(ClientAuthorization::ExpiresAt)
-                    .and_where(Expr::col(ClientAuthorization::IsExpired).eq(false))
+                    .and_where(Expr::col(ClientAuthorization::Expired).eq(false))
                     .to_owned(),
             )
             .await?;

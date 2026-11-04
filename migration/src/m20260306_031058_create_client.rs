@@ -23,6 +23,7 @@ pub enum Client {
     Description,
     Descriptions,
     BuiltIn,
+    Enabled,
     Version,
     CreatedAt,
     UpdatedAt,
@@ -44,6 +45,7 @@ impl MigrationTrait for Migration {
                     .col(string_null(Client::Description))
                     .col(json_binary_null(Client::Descriptions))
                     .col(boolean(Client::BuiltIn).default(false))
+                    .col(boolean(Client::Enabled).default(true))
                     .col(
                         ColumnDef::new(Client::Version)
                             .uuid()

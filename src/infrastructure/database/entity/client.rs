@@ -33,6 +33,8 @@ pub struct Model {
     pub descriptions: Option<Json>,
     #[sea_orm(default_value = false)]
     pub built_in: bool,
+    #[sea_orm(default_value = true)]
+    pub enabled: bool,
     #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
     pub version: Uuid,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]

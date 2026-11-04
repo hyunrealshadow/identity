@@ -115,6 +115,7 @@ pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         description: Some("OIDC relying party".to_owned()),
         descriptions: None,
         built_in: false,
+        enabled: true,
         created_at: now.into(),
         updated_at: None,
     };
@@ -150,7 +151,7 @@ pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         expires_at: (now + Duration::minutes(10)).into(),
         completed_at: None,
         revoked_at: None,
-        is_expired: false,
+        expired: false,
         created_at: now.into(),
         updated_at: Some(now.into()),
     };

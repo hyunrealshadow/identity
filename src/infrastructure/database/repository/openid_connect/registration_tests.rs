@@ -40,6 +40,7 @@ fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
             names: vec![],
             description: None,
             built_in: false,
+            enabled: true,
             created_at: Utc::now(),
             updated_at: Some(Utc::now()),
         },
@@ -62,6 +63,7 @@ fn client_row(oid: Uuid) -> client::Model {
         description: None,
         descriptions: None,
         built_in: false,
+        enabled: true,
         created_at: Utc::now().into(),
         updated_at: None,
     }
@@ -132,7 +134,7 @@ fn auth_row() -> client_authorization::Model {
         expires_at: (Utc::now() + Duration::days(1)).into(),
         completed_at: None,
         revoked_at: None,
-        is_expired: false,
+        expired: false,
         created_at: Utc::now().into(),
         updated_at: None,
     }

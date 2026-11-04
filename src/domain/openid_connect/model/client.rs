@@ -514,6 +514,7 @@ mod tests {
             names: vec![],
             description: None,
             built_in: false,
+            enabled: true,
             created_at: Utc::now(),
             updated_at: None,
         };
@@ -564,6 +565,7 @@ mod tests {
             names: vec![],
             description: None,
             built_in: false,
+            enabled: true,
             created_at: Utc::now(),
             updated_at: None,
         };
@@ -662,6 +664,7 @@ mod tests {
                 names: vec![],
                 description: None,
                 built_in: false,
+                enabled: true,
                 created_at: Utc::now(),
                 updated_at: None,
             };
@@ -713,6 +716,7 @@ mod tests {
             names: vec![],
             description: None,
             built_in: false,
+            enabled: true,
             created_at: Utc::now(),
             updated_at: None,
         };
@@ -771,6 +775,7 @@ mod tests {
             names: vec![],
             description: None,
             built_in: false,
+            enabled: true,
             created_at: Utc::now(),
             updated_at: None,
         };

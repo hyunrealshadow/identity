@@ -445,6 +445,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         description: None,
         descriptions: None,
         built_in: false,
+        enabled: true,
         created_at: now.into(),
         updated_at: None,
     };
@@ -470,7 +471,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         expires_at: (now + Duration::hours(1)).into(),
         completed_at: None,
         revoked_at: options.revoked.then(|| now.into()),
-        is_expired: false,
+        expired: false,
         created_at: now.into(),
         updated_at: None,
     };

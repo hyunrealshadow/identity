@@ -281,7 +281,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         // owners across instances.
         ClientAuthorizationEntity::update_many()
             .col_expr(
-                ClientAuthorizationColumn::IsExpired,
+                ClientAuthorizationColumn::Expired,
                 SimpleExpr::Value(true.into()),
             )
             .col_expr(
@@ -291,7 +291,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             .filter(ClientAuthorizationColumn::Type.eq(device_request_type()))
             .filter(json_field_equals("user_code", &data.user_code))
             .filter(ClientAuthorizationColumn::ExpiresAt.lte(now))
-            .filter(ClientAuthorizationColumn::IsExpired.eq(false))
+            .filter(ClientAuthorizationColumn::Expired.eq(false))
             .filter(ClientAuthorizationColumn::CompletedAt.is_null())
             .filter(ClientAuthorizationColumn::RevokedAt.is_null())
             .exec(&transaction)
@@ -310,7 +310,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             expires_at: Set(expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
-            is_expired: Set(expires_at <= now),
+            expired: Set(expires_at <= now),
             created_at: Set(now.into()),
             updated_at: Set(None),
         }
@@ -373,7 +373,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
             .filter(ClientAuthorizationColumn::Type.eq(device_request_type()))
             .filter(ClientAuthorizationColumn::CompletedAt.is_null())
             .filter(ClientAuthorizationColumn::RevokedAt.is_null())
-            .filter(ClientAuthorizationColumn::IsExpired.eq(false))
+            .filter(ClientAuthorizationColumn::Expired.eq(false))
             .filter(ClientAuthorizationColumn::ExpiresAt.gt(Utc::now()))
             // A claimed code is semantically consumed: only an unclaimed
             // request can still be answered with the code it advertises.

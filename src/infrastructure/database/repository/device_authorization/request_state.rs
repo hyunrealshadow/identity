@@ -299,7 +299,7 @@ pub(super) async fn approve_device_request(
         expires_at: Set(non_expiring_timestamp()),
         completed_at: Set(None),
         revoked_at: Set(None),
-        is_expired: Set(false),
+        expired: Set(false),
         created_at: Set(decided_at.into()),
         updated_at: Set(None),
     }

@@ -40,7 +40,7 @@ pub(super) fn expiration_batch() -> UpdateStatement {
     let due = Query::select()
         .column(ClientAuthorizationColumn::Id)
         .from(client_authorization::Entity)
-        .and_where(Expr::col(ClientAuthorizationColumn::IsExpired).eq(false))
+        .and_where(Expr::col(ClientAuthorizationColumn::Expired).eq(false))
         .and_where(Expr::col(ClientAuthorizationColumn::ExpiresAt).lte(Expr::current_timestamp()))
         .order_by(ClientAuthorizationColumn::ExpiresAt, Order::Asc)
         .limit(1000)
@@ -48,7 +48,7 @@ pub(super) fn expiration_batch() -> UpdateStatement {
         .to_owned();
     Query::update()
         .table(client_authorization::Entity)
-        .value(ClientAuthorizationColumn::IsExpired, true)
+        .value(ClientAuthorizationColumn::Expired, true)
         .value(
             ClientAuthorizationColumn::UpdatedAt,
             Expr::current_timestamp(),
@@ -161,7 +161,7 @@ pub(super) fn consume_par(digest: &str, client_oid: Uuid, now: DateTime<Utc>) ->
         .and_where(Expr::col(ClientAuthorizationColumn::ExpiresAt).gt(now))
         .and_where(Expr::col(ClientAuthorizationColumn::CompletedAt).is_null())
         .and_where(Expr::col(ClientAuthorizationColumn::RevokedAt).is_null())
-        .and_where(Expr::col(ClientAuthorizationColumn::IsExpired).eq(false))
+        .and_where(Expr::col(ClientAuthorizationColumn::Expired).eq(false))
         .returning_all()
         .to_owned()
 }

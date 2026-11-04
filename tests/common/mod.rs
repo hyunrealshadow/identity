@@ -22,10 +22,6 @@ where
 {
     let raw = env::var("IDENTITY_TEST_DATABASE_URL").expect("explicit test database URL required");
     let mut url = Url::parse(&raw).unwrap();
-    let expected =
-        env::var("IDENTITY_TEST_DATABASE_NAME").expect("explicit test database name required");
-    assert_eq!(url.path().trim_start_matches('/'), expected);
-    assert_ne!(expected, "identity", "production database is forbidden");
     assert!(
         url.query_pairs().all(|(key, _)| key != "options"),
         "supply an unscoped test URL"

@@ -168,6 +168,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
         description: Some("OIDC relying party".to_owned()),
         descriptions: None,
         built_in: false,
+        enabled: true,
         created_at: now.into(),
         updated_at: None,
     };
@@ -221,7 +222,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
         expires_at: authorization_expires_at.into(),
         completed_at: fixture.authorization_completed_at.map(Into::into),
         revoked_at: None,
-        is_expired: authorization_expires_at <= now,
+        expired: authorization_expires_at <= now,
         created_at: now.into(),
         updated_at: Some(now.into()),
     };
@@ -245,7 +246,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
         expires_at: (now + Duration::minutes(10)).into(),
         completed_at: None,
         revoked_at: None,
-        is_expired: false,
+        expired: false,
         created_at: now.into(),
         updated_at: Some(now.into()),
     };

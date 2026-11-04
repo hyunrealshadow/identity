@@ -364,7 +364,7 @@ FOR SHARE OF s
                 Uuid::parse_str(parent).map_err(query_error("client_authorization.create"))?;
             let live = transaction.query_one_raw(Statement::from_sql_and_values(
                 DatabaseBackend::Postgres,
-                "SELECT data FROM client_authorization WHERE oid=$1 AND client_id=$2 AND type=$3 AND (type IN ('authorization_code','refresh_token') OR revoked_at IS NULL) AND COALESCE(data->>'_authority_withdrawn', 'false') <> 'true' AND NOT is_expired AND expires_at>now() FOR SHARE",
+                "SELECT data FROM client_authorization WHERE oid=$1 AND client_id=$2 AND type=$3 AND (type IN ('authorization_code','refresh_token') OR revoked_at IS NULL) AND COALESCE(data->>'_authority_withdrawn', 'false') <> 'true' AND NOT expired AND expires_at>now() FOR SHARE",
                 [parent.into(), client_id.into(), parent_type.into()],
             )).await.map_err(query_error("client_authorization.create"))?;
             let live = live.ok_or_else(|| {
@@ -428,7 +428,7 @@ FOR SHARE OF s
             expires_at: Set(expires_at.into()),
             completed_at: Set(None),
             revoked_at: Set(None),
-            is_expired: Set(expires_at <= now),
+            expired: Set(expires_at <= now),
             created_at: Set(now.into()),
             updated_at: Set(None),
         }
