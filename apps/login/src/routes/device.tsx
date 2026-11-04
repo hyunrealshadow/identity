@@ -1,15 +1,14 @@
 import { Alert, FieldError, Label, TextField } from '@heroui/react'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Check, Clock, X } from 'lucide-react'
+import { Check, Clock, ShieldAlert, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { ConsentAccount } from '#/components/consent-account'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { ConsentPermissions } from '#/components/consent-permissions'
-import { ConsentRevokeNotice } from '#/components/consent-revoke-notice'
-import { DeviceCodeConfirmation } from '#/components/device-code-confirmation'
+import { ConsentNotice } from '#/components/consent-notice'
 import { SubmitButton } from '#/components/submit-button'
 import { GroupedCodeInput } from '#/components/totp-input'
 import { errorMessage, LocalizedError } from '#/lib/identity.server'
@@ -67,21 +66,22 @@ const loadDevicePage = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const flash = consumeFormFlash('/device')
     const loginId = data.loginId || flash?.values.login_id || ''
-    const userCode = data.userCode || flash?.values.user_code || ''
     const uiLocales = data.uiLocales ?? ''
+    const locale = requestLocale(uiLocales.split(' '))
     const codeError =
       flash?.fields?.user_code ??
       (flash?.field === 'user_code' ? flash.message : undefined)
     const pageError = codeError ? undefined : flash?.message
 
-    // Nothing to describe: no code was entered, or the entry form itself
-    // reported the code (it resolves the code before routing here, so looking
-    // it up again would only repeat the same failure).
-    if (!loginId && (!userCode || codeError)) {
-      const locale = requestLocale(uiLocales.split(' '))
+    // Without a bound interaction the page is the code form. A code carried
+    // by the link (`verification_uri_complete`) is only prefilled: the user
+    // must confirm it matches the device before the request is started, so a
+    // link sent by someone else cannot start a sign-in by being opened.
+    if (!loginId) {
       return {
         device: undefined,
-        userCode,
+        userCode: flash?.values.user_code || data.userCode,
+        prefilled: !flash && !!data.userCode,
         locale,
         uiLocales,
         error: pageError,
@@ -89,47 +89,14 @@ const loadDevicePage = createServerFn({ method: 'GET' })
       }
     }
 
-    const locale = requestLocale(uiLocales.split(' '))
-    const lookup = loginId
-      ? await loadDeviceVerification(loginId, locale)
-      : await beginDeviceVerification(userCode, locale, uiLocales)
-    if (lookup.status === 'described') {
-      return {
-        device: lookup.description,
-        userCode: lookup.description.user_code,
-        locale: requestLocale(
-          uiLocales.split(' '),
-        ),
-        uiLocales,
-        error: pageError,
-        codeError,
-      }
-    }
-
-    if (lookup.status === 'login') {
-      // Go straight to the native account picker/challenge, not an OAuth bounce.
-      throw redirect({ href: lookup.loginUri })
-    }
-
-    if (lookup.status === 'unknown') {
-      // No request carries the code: report it on the entry form, where the
-      // code is still in the field and can be corrected.
-      return {
-        device: undefined,
-        userCode,
-        locale,
-        uiLocales,
-        error: undefined,
-        codeError: translate(locale, 'deviceCodeInvalid'),
-      }
-    }
-
+    const lookup = await loadDeviceVerification(loginId, locale)
     return {
-      device: undefined,
-      userCode,
+      device: lookup.status === 'described' ? lookup.description : undefined,
+      userCode: '',
+      prefilled: false,
       locale,
       uiLocales,
-      error: pageError ?? lookup.message,
+      error: pageError ?? (lookup.status === 'failed' ? lookup.message : undefined),
       codeError,
     }
   })
@@ -276,6 +243,7 @@ function DevicePage() {
         locale={data.locale}
         uiLocales={data.uiLocales}
         userCode={data.userCode}
+        prefilled={data.prefilled}
         error={visibleError}
         codeError={data.codeError}
       />
@@ -296,20 +264,15 @@ function DevicePage() {
 
       <ConsentAccount account={device.account} locale={data.locale} />
 
-      <DeviceCodeConfirmation code={device.user_code} locale={data.locale} />
-
       {device.consent_required ? (
         <ConsentPermissions scopes={device.scopes} locale={data.locale} />
-      ) : (
-        // Trusted clients still require explicit device confirmation via the CSRF-protected form.
-        <p className="rounded-xl border border-border p-4 text-xs leading-5 text-muted">
-          {t('deviceTrustedClient')}
-        </p>
-      )}
+      ) : null}
+
+      <DeviceCaution message={t('deviceCaution')} />
 
       <ProgressiveForm
         action="/device"
-        className="progressive-form mt-6 grid grid-cols-2 gap-3"
+        className="progressive-form mt-4 grid grid-cols-2 gap-3"
         enhancementErrorMessage={t('enhancedNavigationError')}
       >
         <input type="hidden" name="login_id" value={device.login_id} />
@@ -325,8 +288,11 @@ function DevicePage() {
         </SubmitButton>
       </ProgressiveForm>
 
-      {device.consent_required ? <ConsentRevokeNotice locale={data.locale} /> : null}
-
+      {/* Trusted clients skip the permission list but still need this
+          explicit, CSRF-protected confirmation. */}
+      <ConsentNotice
+        message={t(device.consent_required ? 'revoke' : 'deviceTrustedClient')}
+      />
     </AuthShell>
   )
 }
@@ -335,12 +301,14 @@ function CodeEntryPage({
   locale,
   uiLocales,
   userCode,
+  prefilled,
   error,
   codeError,
 }: {
   locale: Parameters<typeof translate>[0]
   uiLocales: string
   userCode: string
+  prefilled: boolean
   error?: string
   codeError?: string
 }) {
@@ -354,7 +322,7 @@ function CodeEntryPage({
       locale={locale}
       showPreferences
       title={t('deviceTitle')}
-      description={t('deviceDescription')}
+      description={t(prefilled ? 'deviceConfirmCodeDescription' : 'deviceDescription')}
     >
       {error ? <DeviceError title={t('deviceLoadFailed')} message={error} /> : null}
       <ProgressiveForm
@@ -367,18 +335,17 @@ function CodeEntryPage({
           <input type="hidden" name="ui_locales" value={uiLocales} />
         ) : null}
         <div className="grid gap-2">
-          <TextField isRequired fullWidth name="user_code" isInvalid={!!fieldError}>
+          <TextField isRequired fullWidth className="min-w-0" name="user_code" isInvalid={!!fieldError}>
             <Label>{t('deviceCodeLabel')}</Label>
             <GroupedCodeInput
               name="user_code"
               type="text"
               required
-              autoFocus
+              autoFocus={!prefilled}
               isInvalid={!!fieldError}
               defaultValue={userCode}
               className="w-full"
               groupClassName="w-full justify-between"
-              slotClassName="flex-none"
               onChange={() => setFieldError(undefined)}
             />
             {/* The field error belongs to the field: only inside `TextField`
@@ -386,7 +353,9 @@ function CodeEntryPage({
             <FieldError>{fieldError}</FieldError>
           </TextField>
         </div>
-        <SubmitButton fullWidth>{t('deviceSubmit')}</SubmitButton>
+        <SubmitButton fullWidth autoFocus={prefilled}>
+          {t('deviceSubmit')}
+        </SubmitButton>
       </ProgressiveForm>
     </AuthShell>
   )
@@ -401,5 +370,14 @@ function DeviceError({ message, title }: { message: string; title: string }) {
         <Alert.Description>{message}</Alert.Description>
       </Alert.Content>
     </Alert>
+  )
+}
+
+function DeviceCaution({ message }: { message: string }) {
+  return (
+    <p className="mt-6 flex items-start gap-2 text-xs leading-5 text-muted">
+      <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{message}</span>
+    </p>
   )
 }

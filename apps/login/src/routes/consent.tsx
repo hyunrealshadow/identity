@@ -6,7 +6,7 @@ import { ConsentAccount } from '#/components/consent-account'
 import { AuthShell } from '#/components/auth-shell'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { ConsentPermissions } from '#/components/consent-permissions'
-import { ConsentRevokeNotice } from '#/components/consent-revoke-notice'
+import { ConsentNotice } from '#/components/consent-notice'
 import { SubmitButton } from '#/components/submit-button'
 import {
   errorMessage,
@@ -189,7 +189,7 @@ function ConsentPage() {
             </SubmitButton>
           </ProgressiveForm>
 
-          <ConsentRevokeNotice locale={data.locale} />
+          <ConsentNotice message={t('revoke')} />
         </>
       ) : null}
     </AuthShell>

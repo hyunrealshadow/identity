@@ -327,9 +327,8 @@ function ChallengePage() {
               type="text"
               required
               autoFocus
-              className="w-full"
+              className="w-full min-w-0"
               groupClassName="w-full justify-between"
-              slotClassName="flex-none"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
               aria-describedby={
