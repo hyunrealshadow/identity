@@ -19,7 +19,7 @@ use crate::{
 pub struct Migration;
 
 #[derive(DeriveIden)]
-pub enum GroupRoleBinding {
+pub enum GroupRole {
     Table,
     Id,
     Oid,
@@ -40,59 +40,51 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(GroupRoleBinding::Table)
-                    .col(pk_auto(GroupRoleBinding::Id).big_integer())
-                    .col(uuid_uniq(GroupRoleBinding::Oid))
+                    .table(GroupRole::Table)
+                    .col(pk_auto(GroupRole::Id).big_integer())
+                    .col(uuid_uniq(GroupRole::Oid))
+                    .col(ColumnDef::new(GroupRole::GroupId).big_integer().not_null())
+                    .col(ColumnDef::new(GroupRole::RoleId).big_integer().not_null())
+                    .col(ColumnDef::new(GroupRole::GrantedByUserId).big_integer())
+                    .col(ColumnDef::new(GroupRole::Reason).text().not_null())
                     .col(
-                        ColumnDef::new(GroupRoleBinding::GroupId)
-                            .big_integer()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(GroupRoleBinding::RoleId)
-                            .big_integer()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(GroupRoleBinding::GrantedByUserId).big_integer())
-                    .col(ColumnDef::new(GroupRoleBinding::Reason).text().not_null())
-                    .col(
-                        ColumnDef::new(GroupRoleBinding::Enabled)
+                        ColumnDef::new(GroupRole::Enabled)
                             .boolean()
                             .not_null()
                             .default(true),
                     )
-                    .col(ColumnDef::new(GroupRoleBinding::RevokedAt).timestamp_with_time_zone())
+                    .col(ColumnDef::new(GroupRole::RevokedAt).timestamp_with_time_zone())
                     .col(
-                        ColumnDef::new(GroupRoleBinding::Version)
+                        ColumnDef::new(GroupRole::Version)
                             .uuid()
                             .not_null()
                             .default(Func::cust(Alias::new("gen_random_uuid"))),
                     )
                     .col(
-                        timestamp_with_time_zone(GroupRoleBinding::CreatedAt)
+                        timestamp_with_time_zone(GroupRole::CreatedAt)
                             .default(Expr::current_timestamp()),
                     )
-                    .col(ColumnDef::new(GroupRoleBinding::UpdatedAt).timestamp_with_time_zone())
+                    .col(ColumnDef::new(GroupRole::UpdatedAt).timestamp_with_time_zone())
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_group_role_binding_group")
-                            .from(GroupRoleBinding::Table, GroupRoleBinding::GroupId)
+                            .name("fk_group_role_group")
+                            .from(GroupRole::Table, GroupRole::GroupId)
                             .to(UserGroup::Table, UserGroup::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_group_role_binding_role")
-                            .from(GroupRoleBinding::Table, GroupRoleBinding::RoleId)
+                            .name("fk_group_role_role")
+                            .from(GroupRole::Table, GroupRole::RoleId)
                             .to(Role::Table, Role::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_group_role_binding_granted_by")
-                            .from(GroupRoleBinding::Table, GroupRoleBinding::GrantedByUserId)
+                            .name("fk_group_role_granted_by")
+                            .from(GroupRole::Table, GroupRole::GrantedByUserId)
                             .to(User::Table, User::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
@@ -103,35 +95,35 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("uq_group_role_binding_active_group_role")
-                    .table(GroupRoleBinding::Table)
+                    .name("uq_group_role_active_group_role")
+                    .table(GroupRole::Table)
                     .unique()
-                    .col(GroupRoleBinding::GroupId)
-                    .col(GroupRoleBinding::RoleId)
-                    .and_where(Expr::col(GroupRoleBinding::Enabled).eq(true))
-                    .and_where(Expr::col(GroupRoleBinding::RevokedAt).is_null())
+                    .col(GroupRole::GroupId)
+                    .col(GroupRole::RoleId)
+                    .and_where(Expr::col(GroupRole::Enabled).eq(true))
+                    .and_where(Expr::col(GroupRole::RevokedAt).is_null())
                     .to_owned(),
             )
             .await?;
         manager
             .create_index(
                 Index::create()
-                    .name("idx_group_role_binding_group_created")
-                    .table(GroupRoleBinding::Table)
-                    .col(GroupRoleBinding::GroupId)
-                    .col((GroupRoleBinding::CreatedAt, IndexOrder::Desc))
-                    .col((GroupRoleBinding::Id, IndexOrder::Desc))
+                    .name("idx_group_role_group_created")
+                    .table(GroupRole::Table)
+                    .col(GroupRole::GroupId)
+                    .col((GroupRole::CreatedAt, IndexOrder::Desc))
+                    .col((GroupRole::Id, IndexOrder::Desc))
                     .to_owned(),
             )
             .await?;
         manager
             .create_index(
                 Index::create()
-                    .name("idx_group_role_binding_role_created")
-                    .table(GroupRoleBinding::Table)
-                    .col(GroupRoleBinding::RoleId)
-                    .col((GroupRoleBinding::CreatedAt, IndexOrder::Desc))
-                    .col((GroupRoleBinding::Id, IndexOrder::Desc))
+                    .name("idx_group_role_role_created")
+                    .table(GroupRole::Table)
+                    .col(GroupRole::RoleId)
+                    .col((GroupRole::CreatedAt, IndexOrder::Desc))
+                    .col((GroupRole::Id, IndexOrder::Desc))
                     .to_owned(),
             )
             .await?;
@@ -139,7 +131,7 @@ impl MigrationTrait for Migration {
     }
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(GroupRoleBinding::Table).to_owned())
+            .drop_table(Table::drop().table(GroupRole::Table).to_owned())
             .await
     }
 }

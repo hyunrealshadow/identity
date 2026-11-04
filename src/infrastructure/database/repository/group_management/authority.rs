@@ -179,7 +179,7 @@ pub(crate) async fn management_scopes_for_group<C: ConnectionTrait>(
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "SELECT DISTINCT s.code AS scope_code \
-              FROM group_role_binding grb \
+              FROM group_role grb \
               JOIN \"role\" r ON r.id = grb.role_id AND r.enabled = true \
               JOIN role_permission rp ON rp.role_id = r.id \
               JOIN \"scope\" s ON s.id = rp.scope_id \
@@ -232,7 +232,7 @@ pub(crate) async fn actor_effective_permission_ids(
             r#"
 SELECT DISTINCT scope_row.id AS permission_id
 FROM "user" subject
-JOIN user_role_binding binding
+JOIN user_role binding
   ON binding.user_id = subject.id AND binding.enabled = true AND binding.revoked_at IS NULL
 JOIN "role" role_row ON role_row.id = binding.role_id AND role_row.enabled = true
 JOIN role_permission membership ON membership.role_id = role_row.id
@@ -244,7 +244,7 @@ FROM "user" subject
 JOIN group_membership member
   ON member.user_id = subject.id AND member.enabled = true AND member.revoked_at IS NULL
 JOIN user_group group_row ON group_row.id = member.group_id AND group_row.enabled = true
-JOIN group_role_binding relation
+JOIN group_role relation
   ON relation.group_id = group_row.id AND relation.enabled = true AND relation.revoked_at IS NULL
 JOIN "role" role_row ON role_row.id = relation.role_id AND role_row.enabled = true
 JOIN role_permission membership ON membership.role_id = role_row.id
@@ -270,7 +270,7 @@ pub(crate) async fn group_permission_ids<C: ConnectionTrait>(
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "SELECT DISTINCT rp.scope_id \
-             FROM group_role_binding grb \
+             FROM group_role grb \
              JOIN \"role\" r ON r.id = grb.role_id AND r.enabled = true \
              JOIN role_permission rp ON rp.role_id = r.id \
              JOIN \"scope\" scope_row ON scope_row.id = rp.scope_id AND scope_row.enabled = true \

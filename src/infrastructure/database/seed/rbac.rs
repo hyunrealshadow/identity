@@ -376,13 +376,13 @@ async fn advance_users_affected_by_role(
             r#"
 SELECT user_id FROM (
     SELECT binding.user_id
-    FROM user_role_binding binding
+    FROM user_role binding
     WHERE binding.role_id = $1
       AND binding.enabled = true
       AND binding.revoked_at IS NULL
     UNION
     SELECT membership.user_id
-    FROM group_role_binding relation
+    FROM group_role relation
     JOIN group_membership membership ON membership.group_id = relation.group_id
     WHERE relation.role_id = $1
       AND relation.enabled = true
@@ -468,7 +468,7 @@ async fn ensure_group_role_binding(
     let rows = transaction
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "SELECT id, role_id FROM group_role_binding \
+            "SELECT id, role_id FROM group_role \
              WHERE group_id = $1 AND enabled = true AND revoked_at IS NULL FOR UPDATE",
             [group_id.into()],
         ))
@@ -489,7 +489,7 @@ async fn ensure_group_role_binding(
         transaction
             .execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "UPDATE group_role_binding SET enabled = false, revoked_at = now(), \
+                "UPDATE group_role SET enabled = false, revoked_at = now(), \
                     version = gen_random_uuid(), updated_at = now() \
                  WHERE id = $1",
                 [id.into()],
@@ -503,14 +503,10 @@ async fn ensure_group_role_binding(
         transaction
             .execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "INSERT INTO group_role_binding(oid, group_id, role_id, granted_by_user_id, reason, \
+                "INSERT INTO group_role(oid, group_id, role_id, granted_by_user_id, reason, \
                     enabled, created_at) \
                  VALUES($1, $2, $3, NULL, 'built_in_definition', true, now())",
-                [
-                    Uuid::new_v4().into(),
-                    group_id.into(),
-                    role_id.into(),
-                ],
+                [Uuid::new_v4().into(), group_id.into(), role_id.into()],
             ))
             .await
             .map_err(AppError::internal)?;

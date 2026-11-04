@@ -45,7 +45,7 @@ WITH subject AS (
     SELECT binding.oid AS binding_oid,
            role_row.id AS role_id,
            role_row.oid AS role_oid
-    FROM user_role_binding binding
+    FROM user_role binding
     JOIN subject user_row ON user_row.id = binding.user_id
     JOIN "role" role_row ON role_row.id = binding.role_id AND role_row.enabled
     WHERE binding.enabled AND binding.revoked_at IS NULL
@@ -61,7 +61,7 @@ WITH subject AS (
       ON user_group_row.id = membership.group_id
      AND user_group_row.enabled
      AND user_group_row.deleted_at IS NULL
-    JOIN group_role_binding relation
+    JOIN group_role relation
       ON relation.group_id = user_group_row.id
      AND relation.enabled
      AND relation.revoked_at IS NULL

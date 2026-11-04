@@ -24,10 +24,10 @@ mod m20261016_000001_create_authentication_challenge;
 mod m20261017_000001_create_security_audit;
 mod m20261022_000005_create_role;
 mod m20261022_000006_create_role_permission;
-mod m20261022_000007_create_user_role_binding;
+mod m20261022_000007_create_user_role;
 mod m20261022_000012_create_user_group;
 mod m20261022_000013_create_group_membership;
-mod m20261022_000014_create_group_role_binding;
+mod m20261022_000014_create_group_role;
 
 pub struct Migrator;
 
@@ -57,10 +57,10 @@ impl MigratorTrait for Migrator {
             Box::new(m20261017_000001_create_security_audit::Migration),
             Box::new(m20261022_000005_create_role::Migration),
             Box::new(m20261022_000006_create_role_permission::Migration),
-            Box::new(m20261022_000007_create_user_role_binding::Migration),
+            Box::new(m20261022_000007_create_user_role::Migration),
             Box::new(m20261022_000012_create_user_group::Migration),
             Box::new(m20261022_000013_create_group_membership::Migration),
-            Box::new(m20261022_000014_create_group_role_binding::Migration),
+            Box::new(m20261022_000014_create_group_role::Migration),
         ]
     }
 }

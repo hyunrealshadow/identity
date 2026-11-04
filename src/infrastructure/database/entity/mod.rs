@@ -5,7 +5,7 @@
 
 pub mod authentication_challenge;
 pub mod group_membership;
-pub mod group_role_binding;
+pub mod group_role;
 pub mod prelude;
 pub mod resource;
 pub mod user_group;
@@ -28,4 +28,4 @@ pub mod setting;
 pub mod user;
 pub mod user_client_consent;
 pub mod user_credential;
-pub mod user_role_binding;
+pub mod user_role;

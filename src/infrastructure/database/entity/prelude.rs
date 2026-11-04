@@ -9,7 +9,7 @@ pub use super::client_openid_connect_credential::Entity as ClientOpenIdConnectCr
 pub use super::client_openid_connect_platform::Entity as ClientOpenIdConnectPlatform;
 pub use super::client_scope::Entity as ClientScope;
 pub use super::group_membership::Entity as GroupMembership;
-pub use super::group_role_binding::Entity as GroupRoleBinding;
+pub use super::group_role::Entity as GroupRole;
 pub use super::key::Entity as Key;
 pub use super::key_jwk::Entity as KeyJwk;
 pub use super::login::Entity as Login;

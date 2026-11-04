@@ -183,7 +183,7 @@ pub(crate) async fn withdraw_users_affected_by_scope(
             r#"
 SELECT user_id FROM (
     SELECT binding.user_id
-    FROM user_role_binding binding
+    FROM user_role binding
     JOIN role_permission relation ON relation.role_id = binding.role_id
     WHERE binding.enabled = true
       AND binding.revoked_at IS NULL
@@ -195,7 +195,7 @@ SELECT user_id FROM (
       ON group_row.id = membership.group_id
      AND group_row.enabled = true
      AND group_row.deleted_at IS NULL
-    JOIN group_role_binding group_relation
+    JOIN group_role group_relation
       ON group_relation.group_id = group_row.id
      AND group_relation.enabled = true
      AND group_relation.revoked_at IS NULL
@@ -231,7 +231,7 @@ pub(crate) async fn withdraw_users_affected_by_resource(
             r#"
 SELECT user_id FROM (
     SELECT binding.user_id
-    FROM user_role_binding binding
+    FROM user_role binding
     JOIN role_permission relation ON relation.role_id = binding.role_id
     JOIN scope scope_row ON scope_row.id = relation.scope_id
     WHERE binding.enabled = true
@@ -244,7 +244,7 @@ SELECT user_id FROM (
       ON group_row.id = membership.group_id
      AND group_row.enabled = true
      AND group_row.deleted_at IS NULL
-    JOIN group_role_binding group_relation
+    JOIN group_role group_relation
       ON group_relation.group_id = group_row.id
      AND group_relation.enabled = true
      AND group_relation.revoked_at IS NULL

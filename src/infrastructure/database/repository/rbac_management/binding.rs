@@ -41,7 +41,7 @@ const BINDING_SELECT: &str = "SELECT urb.id, urb.oid, urb.user_id, u.oid AS user
             urb.granted_by_user_id, gbu.oid AS granted_by_user_oid, urb.reason, urb.enabled, \
             urb.revoked_at, urb.version, urb.created_at, urb.updated_at, \
             u.version AS user_version \
-     FROM user_role_binding urb \
+     FROM user_role urb \
      JOIN \"user\" u ON u.id = urb.user_id \
      JOIN \"role\" r ON r.id = urb.role_id \
      LEFT JOIN \"user\" gbu ON gbu.id = urb.granted_by_user_id";
@@ -147,7 +147,7 @@ fn effective_permission_conditions(
         format!("s.resource_id = {resource_placeholder}"),
         "s.enabled = true".to_owned(),
         format!(
-            "(EXISTS (SELECT 1 FROM user_role_binding urb \
+            "(EXISTS (SELECT 1 FROM user_role urb \
                      JOIN \"role\" r ON r.id = urb.role_id AND r.enabled = true \
               JOIN role_permission rp_membership \
                 ON rp_membership.role_id = r.id AND rp_membership.scope_id = s.id \
@@ -155,7 +155,7 @@ fn effective_permission_conditions(
                 AND urb.revoked_at IS NULL) \
              OR EXISTS (SELECT 1 FROM group_membership gm \
                 JOIN user_group ug ON ug.id = gm.group_id AND ug.enabled = true AND ug.deleted_at IS NULL \
-                JOIN group_role_binding grb ON grb.group_id = ug.id \
+                JOIN group_role grb ON grb.group_id = ug.id \
                   AND grb.enabled = true AND grb.revoked_at IS NULL \
                 JOIN \"role\" gr ON gr.id = grb.role_id AND gr.enabled = true \
                 JOIN role_permission grp ON grp.role_id = gr.id AND grp.scope_id = s.id \
@@ -481,7 +481,7 @@ impl RbacManagementRepositoryImpl {
                     format!(
                         "SELECT urb.oid AS binding_oid, r.oid AS role_oid, \
                                 rp_membership.scope_id \
-                         FROM user_role_binding urb \
+                         FROM user_role urb \
                   JOIN \"role\" r ON r.id = urb.role_id AND r.enabled = true \
                          JOIN role_permission rp_membership ON rp_membership.role_id = r.id \
                          WHERE urb.user_id = {user_placeholder} AND urb.enabled = true \
@@ -524,7 +524,7 @@ impl RbacManagementRepositoryImpl {
                     grb.oid AS group_role_binding_oid, r.oid AS role_oid \
                     FROM group_membership gm \
                     JOIN user_group ug ON ug.id = gm.group_id AND ug.enabled = true AND ug.deleted_at IS NULL \
-                    JOIN group_role_binding grb ON grb.group_id = ug.id AND grb.enabled = true AND grb.revoked_at IS NULL \
+                    JOIN group_role grb ON grb.group_id = ug.id AND grb.enabled = true AND grb.revoked_at IS NULL \
                     JOIN \"role\" r ON r.id = grb.role_id AND r.enabled = true \
                     JOIN role_permission rp ON rp.role_id = r.id \
                     WHERE gm.user_id = {user_placeholder} AND gm.enabled = true AND gm.revoked_at IS NULL \
@@ -642,7 +642,7 @@ impl RbacManagementRepositoryImpl {
                 .query_all_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
                     format!(
-                        "SELECT oid, role_id FROM user_role_binding \
+                        "SELECT oid, role_id FROM user_role \
                          WHERE user_id = {user_placeholder} AND enabled = true \
                            AND revoked_at IS NULL AND role_id IN ({placeholders}) FOR UPDATE"
                     ),
@@ -697,7 +697,7 @@ impl RbacManagementRepositoryImpl {
             let binding_oid = UserRoleBindingOid::new();
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "INSERT INTO user_role_binding(oid, user_id, role_id, granted_by_user_id, reason, \
+                "INSERT INTO user_role(oid, user_id, role_id, granted_by_user_id, reason, \
                     enabled, version, created_at) \
                  VALUES($1, $2, $3, $4, $5, true, gen_random_uuid(), now())",
                 [
@@ -739,7 +739,7 @@ impl RbacManagementRepositoryImpl {
                     &txn,
                     &command.authority,
                     "rbac.user.roles.assign",
-                    "user_role_binding",
+                    "user_role",
                     Uuid::from(*binding_oid),
                     &command.reason,
                 )
@@ -790,7 +790,7 @@ impl RbacManagementRepositoryImpl {
             let row = txn
                 .query_one_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
-                    "SELECT oid FROM user_role_binding \
+                    "SELECT oid FROM user_role \
                      WHERE user_id = $1 AND role_id = $2 AND enabled = true \
                        AND revoked_at IS NULL FOR UPDATE",
                     [user_id.into(), role.id.into()],
@@ -803,7 +803,7 @@ impl RbacManagementRepositoryImpl {
             let binding_oid = UserRoleBindingOid(row.try_get::<Uuid>("", "oid").map_err(storage)?);
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "UPDATE user_role_binding SET enabled = false, revoked_at = now(), \
+                "UPDATE user_role SET enabled = false, revoked_at = now(), \
                   version = gen_random_uuid(), updated_at = now() \
                  WHERE oid = $1",
                 [Uuid::from(binding_oid).into()],
@@ -828,7 +828,7 @@ impl RbacManagementRepositoryImpl {
                 &txn,
                 &command.authority,
                 "rbac.user.roles.revoke",
-                "user_role_binding",
+                "user_role",
                 Uuid::from(*binding_oid),
                 &command.reason,
             )

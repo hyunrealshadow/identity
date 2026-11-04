@@ -23,10 +23,10 @@ async fn postgres_effective_permission_totals_follow_live_union_and_relay_pages(
             INSERT INTO role_permission(oid,role_id,scope_id) SELECT gen_random_uuid(),1,n FROM generate_series(1,100) n;
             INSERT INTO role_permission(oid,role_id,scope_id) SELECT gen_random_uuid(),2,n FROM generate_series(1,105) n WHERE n<=5 OR n>100;
             INSERT INTO role_permission(oid,role_id,scope_id) VALUES(gen_random_uuid(),1,106),(gen_random_uuid(),3,107),(gen_random_uuid(),1,108);
-            INSERT INTO user_role_binding(oid,user_id,role_id,reason) VALUES(gen_random_uuid(),{subject},1,''),(gen_random_uuid(),{subject},3,'');
+            INSERT INTO user_role(oid,user_id,role_id,reason) VALUES(gen_random_uuid(),{subject},1,''),(gen_random_uuid(),{subject},3,'');
             INSERT INTO user_group(id,oid,name) VALUES(1,gen_random_uuid(),'Test group');
             INSERT INTO group_membership(oid,group_id,user_id,reason) VALUES(gen_random_uuid(),1,{subject},'');
-            INSERT INTO group_role_binding(oid,group_id,role_id,reason) VALUES(gen_random_uuid(),1,2,'');
+            INSERT INTO group_role(oid,group_id,role_id,reason) VALUES(gen_random_uuid(),1,2,'');
         "#)).await;
         let repo=RbacManagementRepositoryImpl::new(db.clone());
         assert_eq!(repo.count_effective_permissions(user_oid.into(),resource.into()).await.unwrap(),105);

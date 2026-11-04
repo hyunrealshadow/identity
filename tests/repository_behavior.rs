@@ -409,7 +409,7 @@ async fn postgres_collection_totals_match_filters_without_page_limits_or_join_du
           (3,'{}','Totals removed','{{\"en-US\":\"Totals removed\"}}','{{}}',true,now());
           INSERT INTO group_membership(oid,group_id,user_id,enabled,revoked_at,reason) VALUES
           ('{}',1,{first_user},true,NULL,''),('{}',1,{second_user},true,NULL,''),('{}',2,{first_user},false,now(),'');
-          INSERT INTO group_role_binding(oid,group_id,role_id,enabled,reason) VALUES('{}',1,1,true,''),('{}',1,2,true,''),('{}',2,1,false,'');",
+          INSERT INTO group_role(oid,group_id,role_id,enabled,reason) VALUES('{}',1,1,true,''),('{}',1,2,true,''),('{}',2,1,false,'');",
           Uuid::new_v4(),Uuid::new_v4(),Uuid::new_v4(),Uuid::new_v4(),Uuid::new_v4(),Uuid::new_v4(),Uuid::new_v4(),Uuid::new_v4())).await;
         let groups = GroupManagementRepositoryImpl::new(db.clone());
         assert_eq!(groups.count_groups(GroupFilter { query:Some("Totals".into()),..Default::default() }).await.unwrap(), 2);

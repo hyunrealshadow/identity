@@ -90,13 +90,13 @@ async fn renew_users_affected_by_role(
             r#"
 SELECT user_id FROM (
     SELECT binding.user_id
-    FROM user_role_binding binding
+    FROM user_role binding
     WHERE binding.role_id = $1
       AND binding.enabled = true
       AND binding.revoked_at IS NULL
     UNION
     SELECT membership.user_id
-    FROM group_role_binding relation
+    FROM group_role relation
     JOIN group_membership membership ON membership.group_id = relation.group_id
     WHERE relation.role_id = $1
       AND relation.enabled = true

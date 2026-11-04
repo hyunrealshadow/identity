@@ -37,7 +37,7 @@ pub(crate) const GROUP_ROLE_SELECT: &str = "SELECT grb.id, grb.oid, g.oid AS gro
             grb.granted_by_user_id, gbu.oid AS granted_by_user_oid, grb.reason, grb.enabled, \
             grb.revoked_at, grb.version, grb.created_at, grb.updated_at, \
             r.name AS role_name \
-     FROM group_role_binding grb \
+     FROM group_role grb \
      JOIN user_group g ON g.id = grb.group_id \
      JOIN \"role\" r ON r.id = grb.role_id \
      LEFT JOIN \"user\" gbu ON gbu.id = grb.granted_by_user_id";
@@ -252,7 +252,7 @@ fn group_filter_conditions(filter: &GroupFilter, binds: &mut Binds) -> Vec<Strin
     if let Some(role_oid) = filter.role_oid {
         let placeholder = binds.push(Uuid::from(role_oid));
         conditions.push(format!(
-            "EXISTS (SELECT 1 FROM group_role_binding grb \
+            "EXISTS (SELECT 1 FROM group_role grb \
                   JOIN \"role\" r ON r.id = grb.role_id \
                   WHERE grb.group_id = ug.id AND grb.enabled = true \
                     AND grb.revoked_at IS NULL AND r.oid = {placeholder})"

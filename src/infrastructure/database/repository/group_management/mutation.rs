@@ -442,7 +442,7 @@ impl GroupManagementRepositoryImpl {
         .map_err(storage)?;
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "UPDATE group_role_binding \
+            "UPDATE group_role \
                 SET enabled = false, revoked_at = now(), version = gen_random_uuid(), \
                     updated_at = now() \
               WHERE group_id = $1 AND enabled = true AND revoked_at IS NULL",
@@ -655,7 +655,7 @@ impl GroupManagementRepositoryImpl {
         let current_rows = txn
             .query_all_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "SELECT id, oid, role_id FROM group_role_binding \
+                "SELECT id, oid, role_id FROM group_role \
                  WHERE group_id = $1 AND enabled = true AND revoked_at IS NULL FOR UPDATE",
                 [group_id.into()],
             ))
@@ -700,7 +700,7 @@ impl GroupManagementRepositoryImpl {
             let binding_oid = current_bindings.get(role_id).copied().ok_or_else(corrupt)?;
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "UPDATE group_role_binding SET enabled = false, revoked_at = now(), \
+                "UPDATE group_role SET enabled = false, revoked_at = now(), \
                   version = gen_random_uuid(), updated_at = now() WHERE oid = $1",
                 [Uuid::from(binding_oid).into()],
             ))
@@ -711,7 +711,7 @@ impl GroupManagementRepositoryImpl {
             let binding_oid = GroupRoleBindingOid::new();
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
-                "INSERT INTO group_role_binding(oid, group_id, role_id, granted_by_user_id, \
+                "INSERT INTO group_role(oid, group_id, role_id, granted_by_user_id, \
                     reason, enabled, version, created_at) \
                  VALUES($1, $2, $3, $4, $5, true, gen_random_uuid(), now())",
                 [

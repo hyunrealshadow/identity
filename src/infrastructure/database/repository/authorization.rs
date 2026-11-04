@@ -60,9 +60,9 @@ fn storage(error: DbErr) -> ManagementRepositoryError {
 ///
 /// Reads only:
 /// - an enabled user and its semantic authorization dependencies;
-/// - active direct `user_role_binding` rows;
+/// - active direct `user_role` rows;
 /// - active `group_membership` -> enabled `user_group` ->
-///   active `group_role_binding` rows;
+///   active `group_role` rows;
 /// - enabled role, `role_permission`, canonical `scope`, and the exact
 ///   `urn:identity:graphql` resource.
 ///
@@ -90,7 +90,7 @@ WITH effective AS (
            resource.uri AS resource_uri,
            scope.enabled AS permission_enabled,
            scope.built_in AS permission_built_in
-    FROM user_role_binding urb
+    FROM user_role urb
     JOIN "role" rl ON rl.id = urb.role_id
     JOIN role_permission rpr ON rpr.role_id = rl.id
     JOIN scope ON scope.id = rpr.scope_id
@@ -107,7 +107,7 @@ WITH effective AS (
            scope.built_in
     FROM group_membership gm
     JOIN user_group ug ON ug.id = gm.group_id
-    JOIN group_role_binding grb ON grb.group_id = ug.id
+    JOIN group_role grb ON grb.group_id = ug.id
     JOIN "role" rl ON rl.id = grb.role_id
     JOIN role_permission rpr ON rpr.role_id = rl.id
     JOIN scope ON scope.id = rpr.scope_id

@@ -192,7 +192,7 @@ effective AS (
     SELECT urb.user_id AS user_id, scope.oid AS permission_oid,
            scope.enabled AS permission_enabled, scope.built_in AS permission_built_in,
            resource.uri AS resource_uri
-    FROM user_role_binding urb
+    FROM user_role urb
     JOIN "role" rl ON rl.id = urb.role_id
     JOIN role_permission rpr ON rpr.role_id = rl.id
     JOIN scope ON scope.id = rpr.scope_id
@@ -202,7 +202,7 @@ effective AS (
     SELECT gm.user_id, scope.oid, scope.enabled, scope.built_in, resource.uri
     FROM group_membership gm
     JOIN user_group ug ON ug.id = gm.group_id
-    JOIN group_role_binding grb ON grb.group_id = ug.id
+    JOIN group_role grb ON grb.group_id = ug.id
     JOIN "role" rl ON rl.id = grb.role_id
     JOIN role_permission rpr ON rpr.role_id = rl.id
     JOIN scope ON scope.id = rpr.scope_id

@@ -42,7 +42,7 @@ pub(crate) async fn actor_effective_permission_ids(
             r#"
 SELECT DISTINCT scope_row.id AS scope_id
 FROM "user" subject
-JOIN user_role_binding binding
+JOIN user_role binding
   ON binding.user_id = subject.id AND binding.enabled = true AND binding.revoked_at IS NULL
 JOIN "role" role_row ON role_row.id = binding.role_id AND role_row.enabled = true
 JOIN role_permission membership ON membership.role_id = role_row.id
@@ -57,7 +57,7 @@ JOIN group_membership group_member
  AND group_member.enabled = true AND group_member.revoked_at IS NULL
 JOIN user_group user_group_row
   ON user_group_row.id = group_member.group_id AND user_group_row.enabled = true
-JOIN group_role_binding group_relation
+JOIN group_role group_relation
   ON group_relation.group_id = user_group_row.id
  AND group_relation.enabled = true AND group_relation.revoked_at IS NULL
 JOIN "role" role_row ON role_row.id = group_relation.role_id AND role_row.enabled = true

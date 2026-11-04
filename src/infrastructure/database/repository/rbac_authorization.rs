@@ -306,7 +306,7 @@ SELECT binding.oid AS binding_oid,
        user_row.oid AS user_oid,
        role_row.oid AS role_oid,
        granted_by.oid AS granted_by_oid
-FROM user_role_binding binding
+FROM user_role binding
 JOIN "user" user_row ON user_row.id = binding.user_id
 JOIN role role_row ON role_row.id = binding.role_id
 LEFT JOIN "user" granted_by ON granted_by.id = binding.granted_by_user_id
@@ -370,7 +370,7 @@ SELECT membership.oid AS membership_oid,
 FROM group_membership membership
 JOIN user_group user_group_row
   ON user_group_row.id = membership.group_id AND user_group_row.enabled = true
-JOIN group_role_binding group_relation
+JOIN group_role group_relation
   ON group_relation.group_id = user_group_row.id
  AND group_relation.enabled = true
  AND group_relation.revoked_at IS NULL
@@ -421,7 +421,7 @@ SELECT role_row.oid AS role_oid,
 FROM role role_row
 JOIN (
     SELECT binding.role_id
-    FROM user_role_binding binding
+    FROM user_role binding
     WHERE binding.user_id = $1
       AND binding.enabled = true
       AND binding.revoked_at IS NULL
@@ -430,7 +430,7 @@ JOIN (
     FROM group_membership membership
     JOIN user_group user_group_row
       ON user_group_row.id = membership.group_id AND user_group_row.enabled = true
-    JOIN group_role_binding group_relation
+    JOIN group_role group_relation
       ON group_relation.group_id = user_group_row.id
      AND group_relation.enabled = true
      AND group_relation.revoked_at IS NULL
