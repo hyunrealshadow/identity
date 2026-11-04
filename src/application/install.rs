@@ -322,7 +322,7 @@ fn normalize_console_url(value: &str) -> Result<Url, AppError> {
     {
         return Err(AppError::from_code(InstallErrorCode::ConsoleUrlInvalid));
     }
-    url.set_path("/console/");
+    url.set_path("/console");
     Ok(url)
 }
 
@@ -540,7 +540,7 @@ mod tests {
         assert_eq!(input.application_url.as_str(), "https://login.example.com/");
         assert_eq!(
             input.console_url.as_str(),
-            "https://console.example.com/console/"
+            "https://console.example.com/console"
         );
     }
 
@@ -567,6 +567,7 @@ mod tests {
         for console_url in [
             "http://console.example.com",
             "https://user@console.example.com",
+            "https://console.example.com/console",
             "https://user:pass@console.example.com",
             "https://console.example.com/console/",
             "https://console.example.com/custom-path",

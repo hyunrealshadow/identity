@@ -14,7 +14,7 @@ describe('configured application origins', () => {
     applyApplicationOrigins({
       domain: 'https://issuer.example/',
       login_domain: 'https://login.example',
-      console_domain: 'https://console.example:3100/console/',
+      console_domain: 'https://console.example:3100/console',
     })
     expect(configuredApplicationOrigin('domain')).toBe('https://issuer.example')
     expect(configuredApplicationOrigin('login_domain')).toBe(
@@ -23,7 +23,7 @@ describe('configured application origins', () => {
     expect(configuredApplicationOrigin('console_domain')).toBe(
       'https://console.example:3100',
     )
-    expect(configuredApplicationUrl('console_domain')).toBe('https://console.example:3100/console/')
+    expect(configuredApplicationUrl('console_domain')).toBe('https://console.example:3100/console')
   })
 
   it('rejects unsafe application addresses', () => {

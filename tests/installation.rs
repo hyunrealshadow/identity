@@ -114,7 +114,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
             .add_header("Authorization", format!("Bearer {login_token}"), true).send(&app).await;
         assert_eq!(response.status_code, Some(StatusCode::OK));
         let login: Value = response.take_json().await.unwrap();
-        assert_eq!(login["applications"]["console_domain"], "https://identity.example.test/console/");
+        assert_eq!(login["applications"]["console_domain"], "https://identity.example.test/console");
         assert!(login["oauth_client"]["client_secret"].as_str().is_some());
         let client = db.query_one_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "SELECT o.post_logout_redirect_uris AS logout, p.redirect_uris AS redirects \

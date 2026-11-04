@@ -164,7 +164,7 @@ mod tests {
             );
         }
         assert!(
-            ConsoleDomainSetting::validate(&Some("https://login.example.com/console/".to_owned()))
+            ConsoleDomainSetting::validate(&Some("https://login.example.com/console".to_owned()))
                 .is_ok()
         );
     }

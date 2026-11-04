@@ -4,6 +4,7 @@ import {
   type ErrorComponentProps,
 } from '@tanstack/react-router'
 
+import { BASE_HREF } from '#/lib/base-path'
 import { AuthProvider } from '#/lib/auth/context'
 import type { RuntimeConfig } from '#/lib/config'
 import { LocaleProvider, resolveCurrentLocale, translate } from '#/lib/i18n'
@@ -39,7 +40,7 @@ function NotFoundComponent() {
           {translate(locale, 'notFoundDescription')}
         </p>
         <a
-          href={import.meta.env.BASE_URL}
+          href={BASE_HREF}
           className="mt-5 inline-flex min-h-10 items-center rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
         >
           {translate(locale, 'backToDashboard')}

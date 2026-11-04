@@ -11,8 +11,9 @@ describe('sanitizeReturnTo', () => {
     try {
       const { sanitizeReturnTo: sanitize } = await import('./return-to')
       expect(sanitize('/console/users/one?tab=roles', ORIGIN)).toBe('/console/users/one?tab=roles')
+      expect(sanitize('/console?tab=1', ORIGIN)).toBe('/console?tab=1')
       for (const path of ['/', '/account', '/console-other/users']) {
-        expect(sanitize(path, ORIGIN)).toBe('/console/')
+        expect(sanitize(path, ORIGIN)).toBe('/console')
       }
     } finally {
       vi.unstubAllEnvs()

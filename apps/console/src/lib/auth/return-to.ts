@@ -1,4 +1,6 @@
-const FALLBACK = import.meta.env.BASE_URL
+import { BASE_HREF, isWithinBasePath } from '#/lib/base-path'
+
+const FALLBACK = BASE_HREF
 
 function defaultOrigin(): string {
   return typeof window === 'undefined' ? 'http://localhost' : window.location.origin
@@ -46,7 +48,7 @@ export function sanitizeReturnTo(
 
   if (!candidate.pathname.startsWith('/')) return fallback
   if (candidate.pathname.startsWith('//')) return fallback
-  if (!candidate.pathname.startsWith(FALLBACK)) return fallback
+  if (!isWithinBasePath(candidate.pathname)) return fallback
 
   const result = `${candidate.pathname}${candidate.search}${candidate.hash}`
   return result.startsWith('//') ? fallback : result

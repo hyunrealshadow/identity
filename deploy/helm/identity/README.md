@@ -48,8 +48,8 @@ matching public addresses in the installer:
 | Shared hostname | `https://identity.example.com` | `https://identity.example.com` | `https://identity.example.com` |
 | Separate hostnames | `https://id.example.com` | `https://account.example.com` | `https://admin.example.com` |
 
-Identity automatically appends `/console/` to the Console origin and persists the
-complete base URL. Do not enter `/console/` in the installation field. Both
+Identity automatically appends `/console` to the Console origin and persists the
+complete base URL. Do not enter `/console` in the installation field. Both
 `https://admin.example.com` and its root-slash form `https://admin.example.com/`
 are accepted; credentials, non-root paths, queries and fragments are rejected.
 
@@ -79,7 +79,7 @@ gatewayApi:
     hostnames: [admin.example.com]
 ```
 
-Console also uses `/console/` on its own hostname. To share only Login and
+Console also uses `/console` on its own hostname. To share only Login and
 Console, keep the separate Identity hostname and leave Console hostnames empty.
 Point the selected DNS names to the Gateway and configure its HTTPS listener
 and certificates to accept those names. Visit `/install` on the Login hostname.
@@ -214,7 +214,7 @@ by the platform operator. Set `gatewayApi.enabled=false` (the default) to create
 no routes. Identity, Login and Console route switches can also be disabled
 independently. Console defaults to Login hostnames and matches `/console` with
 no rewrite; `gatewayApi.console.hostnames` may explicitly select another
-existing hostname. The image always serves `/console/`. When Identity and Login
+existing hostname. The image always serves `/console`. When Identity and Login
 share a hostname, protocol paths (`/oauth2`, `/.well-known`, `/api/auth`, `/static`)
 and `/graphql` go to Identity; `/console` goes to Console; the remaining paths
 go to Login. The internal workload listener is never exposed by these routes.

@@ -1,7 +1,7 @@
 Identity release {{ include "identity.fullname" . }} has been installed.
 
 Public application addresses are entered on Login's /install page and stored
-in Identity settings. Console is served at /console/ on the Login hostname.
+in Identity settings. Console is served at /console on the Login hostname.
 Gateway hostnames and TLS remain deployment configuration.
 
 Service endpoints:

@@ -82,7 +82,7 @@ mod tests {
         let mut app = AppSettings {
             domain: Some("https://identity.example.test".to_owned()),
             login_domain: Some("https://account.example.test".to_owned()),
-            console_domain: Some("https://console.example.test/console/".to_owned()),
+            console_domain: Some("https://console.example.test/console".to_owned()),
             ..Default::default()
         };
         let runtime = |app: &AppSettings| {

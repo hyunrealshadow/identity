@@ -91,11 +91,15 @@ def verify(image):
                 def redirect_request(self, *args, **kwargs):
                     return None
             try:
-                urllib.request.build_opener(NoRedirect()).open(origin + "/console")
+                urllib.request.build_opener(NoRedirect()).open(origin + "/console/?tab=1")
                 raise AssertionError("Expected Console slash redirect")
             except urllib.error.HTTPError as redirect:
                 assert redirect.code == 308
-                assert redirect.headers["Location"] == "/console/"
+                assert redirect.headers["Location"] == "/console?tab=1"
+            with urllib.request.build_opener(NoRedirect()).open(origin + "/console") as home:
+                assert home.status == 200
+                assert "<!doctype html" in home.read().decode().lower()
+                assert home.headers["Cache-Control"] == "no-cache"
             assert response.headers["Cache-Control"] == "no-store"
             assert response.headers["X-Frame-Options"] == "DENY"
             # Readiness probes use the Pod address, not the installed public host.

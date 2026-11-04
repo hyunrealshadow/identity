@@ -5,7 +5,7 @@ Console is a static frontend. Business operations use the instance GraphQL API.
 Installation stores issuer, login and console addresses independently in
 `app.domain`, `app.login_domain` and `app.console_domain`. The server uses them
 for first-party OAuth clients and allowed API origins. The installer accepts
-the Console HTTPS origin without a path and automatically stores its `/console/`
+the Console HTTPS origin without a path and automatically stores its `/console`
 base URL. Installation also creates a public Console client with a random UUID
 and stores it in `app.console_client_id`; startup only reconciles that existing
 client. The runtime endpoint reads its ID from settings, without a fixed fallback.
@@ -87,8 +87,8 @@ certificate is independent of `IDENTITY_CA_FILE`, which verifies Identity's
 internal API. Entrypoint renders Nginx configuration under `/run/identity-console`
 without modifying the read-only image. Use the installed `app.console_domain`
 for public routing.
-The image and development server serve `/console/`, including assets, configuration
-and OAuth callbacks. Forward `/console` without stripping its prefix. Direct
+The image and development server serve `/console`, including assets, configuration
+and OAuth callbacks; `/console/` redirects to `/console`. Forward `/console` without stripping its prefix. Direct
 visits to nested routes return the SPA; missing assets remain 404. The Console
 may share the Login origin, with `/account` owned by Login.
 Route the public issuer's `/graphql` path to Identity's GraphQL listener. Health
