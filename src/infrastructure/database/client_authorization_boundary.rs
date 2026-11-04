@@ -103,6 +103,7 @@ WITH target AS (
            jsonb_build_array(
                scope.oid,
                scope.code,
+               membership.client_granted,
                scope.built_in,
                scope.enabled,
                resource.oid,
@@ -183,11 +184,14 @@ GROUP BY target.id
 ///
 /// Protocol scopes (`resource_id IS NULL`) apply globally, while API scopes are
 /// included only when their owning resource is the target. A same-code scope in
-/// another resource is never returned.
+/// another resource is never returned. With `client_granted_only`, only rows
+/// granted to the client itself qualify; other rows merely bound requests made
+/// on behalf of a user.
 pub(crate) async fn client_scope_codes<C: ConnectionTrait>(
     db: &C,
     client_id: i64,
     resource_uri: &str,
+    client_granted_only: bool,
 ) -> Result<Vec<String>, DbErr> {
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
@@ -198,13 +202,18 @@ FROM client_scope membership
 JOIN scope ON scope.id = membership.scope_id AND scope.enabled = true
 LEFT JOIN resource ON resource.oid = scope.resource_id
 WHERE membership.client_id = $1
+  AND ($3 = false OR membership.client_granted)
   AND (
         scope.resource_id IS NULL
         OR (resource.enabled = true AND resource.uri = $2)
       )
 ORDER BY scope.code
 "#,
-            [client_id.into(), resource_uri.to_owned().into()],
+            [
+                client_id.into(),
+                resource_uri.to_owned().into(),
+                client_granted_only.into(),
+            ],
         ))
         .await?;
     rows.into_iter()

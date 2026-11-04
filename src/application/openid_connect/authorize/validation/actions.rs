@@ -199,7 +199,12 @@ impl AuthorizeService {
             .validate_authorization_resources(&params.resources, &scope)
             .await?;
         self.provider_service
-            .validate_client_resource_ceiling(client, &resources, &scope)
+            .validate_client_resource_ceiling(
+                client,
+                &resources,
+                &scope,
+                identity_domain::client_authorization::AccessTokenPrincipal::User,
+            )
             .await?;
         if management && !management::is_single_graphql_resource(&resources) {
             return Err(

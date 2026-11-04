@@ -17,14 +17,14 @@ mod support;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
-    ApiResourceRecord, AssignUserRolesTransaction, ClientScopeQuery, ClientScopeSetResult,
-    ClientScopeTargetPageEntry, ClientScopeTargetQuery, CreateResourceTransaction,
-    CreateRoleTransaction, CreateScopeTransaction, EffectivePermissionPageData,
-    EffectivePermissionQuery, RbacManagementRepository, RbacManagementRepositoryError,
-    RbacPageData, ResourcePageEntry, ResourceQuery, ResourceStateTransaction,
-    RevokeUserRolesTransaction, RoleFilter, RolePageEntry, RoleQuery, RoleRecord,
-    RoleStateTransaction, ScopeFilter, ScopeOid, ScopePageEntry, ScopeQuery, ScopeRecord,
-    ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
+    ApiResourceRecord, AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery,
+    ClientScopeSetResult, ClientScopeTargetPageEntry, ClientScopeTargetQuery,
+    CreateResourceTransaction, CreateRoleTransaction, CreateScopeTransaction,
+    EffectivePermissionPageData, EffectivePermissionQuery, RbacManagementRepository,
+    RbacManagementRepositoryError, RbacPageData, ResourcePageEntry, ResourceQuery,
+    ResourceStateTransaction, RevokeUserRolesTransaction, RoleFilter, RolePageEntry, RoleQuery,
+    RoleRecord, RoleStateTransaction, ScopeFilter, ScopeOid, ScopePageEntry, ScopeQuery,
+    ScopeRecord, ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
     UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction,
     UserRoleBindingMutationResult, UserRoleBindingPageData, UserRoleBindingQuery,
     UserRoleBindingRecord,
@@ -241,7 +241,7 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
     async fn list_client_scopes(
         &self,
         query: ClientScopeQuery,
-    ) -> Result<RbacPageData<ScopePageEntry>, RbacManagementRepositoryError> {
+    ) -> Result<RbacPageData<ClientScopePageEntry>, RbacManagementRepositoryError> {
         self.client_scope_list(query).await
     }
 

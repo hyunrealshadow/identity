@@ -27,9 +27,10 @@ pub use binding::{
     UserRoleBindingPageItem, UserRoleBindingRecord, UserRolePageRequest,
 };
 pub use client::{
-    ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter, ClientScopeTargetOrder,
-    ClientScopeTargetPage, ClientScopeTargetPageItem, ClientScopeTargetPageRequest,
-    ClientScopeTargetRecord, SetClientScopesCommand,
+    ClientScopeAssignment, ClientScopePage, ClientScopePageItem, ClientScopePageRequest,
+    ClientScopeSetResult, ClientScopeTargetFilter, ClientScopeTargetOrder, ClientScopeTargetPage,
+    ClientScopeTargetPageItem, ClientScopeTargetPageRequest, ClientScopeTargetRecord,
+    SetClientScopesCommand,
 };
 pub use group::{
     AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult, GroupFilter,
@@ -50,7 +51,7 @@ pub use group_repository::{
 };
 pub use model::{RbacManagementAuthority, ScopeDescription, ScopeOid};
 pub use repository::{
-    AssignUserRolesTransaction, ClientScopeQuery, ClientScopeTargetPageEntry,
+    AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery, ClientScopeTargetPageEntry,
     ClientScopeTargetQuery, CreateResourceTransaction, CreateRoleTransaction,
     CreateScopeTransaction, EffectivePermissionPageData, EffectivePermissionPageEntry,
     EffectivePermissionQuery, RbacDuplicateKind, RbacEntityKind, RbacManagementRepository,

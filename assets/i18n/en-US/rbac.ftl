@@ -48,3 +48,4 @@ E17049 = Built-in definitions cannot be changed, disabled, or deleted.
 E17050 = You cannot grant a permission that exceeds your current authority: { $permission }.
 E17051 = The built-in identity conflicts with an existing custom object.
 E17052 = The referenced built-in permission is not a trusted definition.
+E17053 = This permission can only be held by users and cannot be granted to the client itself: { $scope }.

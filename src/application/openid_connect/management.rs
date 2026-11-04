@@ -100,7 +100,7 @@ pub(crate) async fn validate_management_authorization(
 
     let client_scopes = ports
         .provider_service
-        .client_scopes_for_resource(live_client, API_RESOURCE)
+        .client_scopes_for_resource(live_client, API_RESOURCE, principal)
         .await
         .map_err(|_| invalid())?;
     if scope

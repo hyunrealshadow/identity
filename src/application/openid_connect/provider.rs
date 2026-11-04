@@ -8,7 +8,7 @@ use crate::{
 };
 use identity_domain::{
     authorization::{PolicyVersion, catalog, catalog::ManagementScope},
-    client::model::ClientOid,
+    client_authorization::AccessTokenPrincipal,
     key::{KeyJwkRepository, repository::KeyRepository},
     openid_connect::{
         API_RESOURCE, OAuthProtocolVersion, OpenIdConnectClient, ScopeSet, is_scope_pattern,
@@ -117,17 +117,19 @@ impl OpenIdProviderService {
     /// Exact live client ceiling for one target resource.
     ///
     /// Production repositories return the exact `client_scope` rows belonging
-    /// to the resource (plus protocol scopes). In-memory adapters may return
-    /// `None`, in which case the already loaded client assignment is used by
-    /// unit-level flows only.
+    /// to the resource (plus protocol scopes). A client principal is limited to
+    /// rows granted to the client itself. In-memory adapters may return `None`,
+    /// in which case the already loaded client assignment is used by unit-level
+    /// flows only.
     pub async fn client_scopes_for_resource(
         &self,
         client: &OpenIdConnectClient,
         resource_uri: &str,
+        principal: AccessTokenPrincipal,
     ) -> Result<BTreeSet<String>, AppError> {
         if let Some(repo) = &self.resource_repo
             && let Some(codes) = repo
-                .client_scope_codes(client.client().oid, resource_uri)
+                .client_scope_codes(client.client().oid, resource_uri, principal)
                 .await
                 .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
         {
@@ -159,23 +161,6 @@ impl OpenIdProviderService {
             client.client().oid,
             scopes.join(",")
         ))))
-    }
-
-    /// Exact client ceiling for a specific client id without an already loaded
-    /// client record. Used by token introspection only after authentication.
-    pub async fn client_scopes_for_oid(
-        &self,
-        client_oid: ClientOid,
-        resource_uri: &str,
-    ) -> Result<Option<BTreeSet<String>>, AppError> {
-        match &self.resource_repo {
-            Some(repo) => repo
-                .client_scope_codes(client_oid, resource_uri)
-                .await
-                .map(|codes| codes.map(|codes| codes.into_iter().collect()))
-                .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed)),
-            None => Ok(None),
-        }
     }
 
     pub fn with_scope_catalog(mut self, repo: Arc<dyn ScopeCatalogRepository>) -> Self {

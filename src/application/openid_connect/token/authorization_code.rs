@@ -337,6 +337,7 @@ impl TokenService {
                 &authenticated_client,
                 &selection.resources,
                 &selected_scope_set,
+                identity_domain::client_authorization::AccessTokenPrincipal::User,
             )
             .await
             .map_err(AppError::map_source(TokenErrorCode::AuthCodeInvalid))?;

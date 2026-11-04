@@ -11,7 +11,9 @@ use chrono::Utc;
 use identity_domain::{
     authorization::ids::AuthorizationVersion,
     client::model::ClientOid,
-    client_authorization::{AuthorizationSnapshotData, BusinessAuthorizationSnapshotData},
+    client_authorization::{
+        AccessTokenPrincipal, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
+    },
     openid_connect::resource::{
         OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
     },
@@ -28,7 +30,8 @@ use identity_domain::{
 /// Resource catalog plus exact per-resource client ceilings.
 pub(in crate::openid_connect) struct TestOAuthResources {
     resources: Vec<OAuthResource>,
-    client_scopes: Vec<(ClientOid, String, Vec<String>)>,
+    /// `(client, resource, scopes, granted to the client itself)`.
+    client_scopes: Vec<(ClientOid, String, Vec<String>, bool)>,
 }
 
 impl TestOAuthResources {
@@ -40,15 +43,37 @@ impl TestOAuthResources {
     }
 
     pub(in crate::openid_connect) fn with_client_ceiling(
+        self,
+        client: ClientOid,
+        resource_uri: &str,
+        scopes: &[&str],
+    ) -> Self {
+        self.push_ceiling(client, resource_uri, scopes, true)
+    }
+
+    /// Rows that bound user-delegated requests but are not granted to the
+    /// client itself.
+    pub(in crate::openid_connect) fn with_delegated_client_ceiling(
+        self,
+        client: ClientOid,
+        resource_uri: &str,
+        scopes: &[&str],
+    ) -> Self {
+        self.push_ceiling(client, resource_uri, scopes, false)
+    }
+
+    fn push_ceiling(
         mut self,
         client: ClientOid,
         resource_uri: &str,
         scopes: &[&str],
+        client_granted: bool,
     ) -> Self {
         self.client_scopes.push((
             client,
             resource_uri.to_owned(),
             scopes.iter().map(|scope| (*scope).to_owned()).collect(),
+            client_granted,
         ));
         self
     }
@@ -71,12 +96,21 @@ impl OAuthResourceRepository for TestOAuthResources {
         &self,
         client: ClientOid,
         resource_uri: &str,
+        principal: AccessTokenPrincipal,
     ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
-        Ok(self
+        let mut rows = self
             .client_scopes
             .iter()
-            .find(|(candidate, uri, _)| *candidate == client && uri.as_str() == resource_uri)
-            .map(|(_, _, scopes)| scopes.clone()))
+            .filter(|(candidate, uri, _, _)| *candidate == client && uri.as_str() == resource_uri)
+            .peekable();
+        if rows.peek().is_none() {
+            return Ok(None);
+        }
+        Ok(Some(
+            rows.filter(|(_, _, _, granted)| *granted || principal == AccessTokenPrincipal::User)
+                .flat_map(|(_, _, scopes, _)| scopes.iter().cloned())
+                .collect(),
+        ))
     }
 
     async fn client_protocol_scope_codes(
@@ -84,7 +118,7 @@ impl OAuthResourceRepository for TestOAuthResources {
         client: ClientOid,
     ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
         let mut protocol = BTreeSet::new();
-        for (candidate, _, scopes) in &self.client_scopes {
+        for (candidate, _, scopes, _) in &self.client_scopes {
             if *candidate == client {
                 protocol.extend(
                     scopes

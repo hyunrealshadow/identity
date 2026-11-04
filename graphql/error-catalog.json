@@ -2932,6 +2932,16 @@
     "module": "rbac.builtin"
   },
   {
+    "code": 17053,
+    "kind": "validation",
+    "fluentKey": "E17053",
+    "requiredParams": [
+      "scope"
+    ],
+    "optionalParams": [],
+    "module": "rbac.client"
+  },
+  {
     "code": 19000,
     "kind": "validation",
     "fluentKey": "E19000",

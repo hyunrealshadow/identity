@@ -203,7 +203,7 @@ pub(crate) async fn validate_business_authorization(
     // names that could belong to another resource with the same code.
     let client_scopes = ports
         .provider_service
-        .client_scopes_for_resource(live_client, &persisted.resource_uri)
+        .client_scopes_for_resource(live_client, &persisted.resource_uri, principal)
         .await
         .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
     if scope

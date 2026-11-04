@@ -84,10 +84,55 @@ input ChangeTotpEnrollmentAlgorithmInput {
 	clientMutationId: String
 }
 
+input ClientScopeAssignmentInput {
+	scopeId: ID!
+	"""
+	Grant the scope to the client itself for client-credentials access.
+	"""
+	clientGranted: Boolean! = false
+}
+
+type ClientScopeConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ClientScopeEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Scope!]!
+	totalCount: Int!
+}
+
+type ClientScopeEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Scope!
+	"""
+	Whether the client itself holds this scope. Every assignment bounds
+	requests made on behalf of a user; only granted scopes are available
+	to client-credentials access.
+	"""
+	clientGranted: Boolean!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 type ClientScopeSetPayload {
 	clientId: ID!
 	version: UUID!
 	scopeIds: [ID!]!
+	"""
+	Subset of `scopeIds` granted to the client itself.
+	"""
+	clientGrantedScopeIds: [ID!]!
 	clientMutationId: String
 }
 
@@ -664,7 +709,7 @@ type QueryRoot {
 	"""
 	accountPermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	clientScopeTargets(filter: ClientScopeTargetFilter, orderBy: ClientScopeTargetOrder, first: Int, after: String, last: Int, before: String): ClientScopeTargetConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	clientScopes(clientId: ID!, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientScopes(clientId: ID!, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ClientScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RecoveryCodeEnrollmentPayload {
@@ -1009,7 +1054,7 @@ type SessionEdge {
 
 input SetClientScopesInput {
 	clientId: ID!
-	scopeIds: [ID!]!
+	scopes: [ClientScopeAssignmentInput!]!
 	expectedVersion: UUID!
 	reason: String! = ""
 	clientMutationId: String

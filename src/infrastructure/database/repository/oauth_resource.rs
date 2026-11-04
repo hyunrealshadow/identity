@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use identity_domain::{
     authorization::PolicyVersion,
     client::model::ClientOid,
+    client_authorization::AccessTokenPrincipal,
     openid_connect::resource::{
         OAuthResource, OAuthResourceRepository, OAuthResourceRepositoryError,
     },
@@ -142,6 +143,7 @@ impl OAuthResourceRepository for OAuthResourceRepositoryImpl {
         &self,
         client: ClientOid,
         resource_uri: &str,
+        principal: AccessTokenPrincipal,
     ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
         let Some(client_id) =
             client_authorization_boundary::client_id_by_oid(self.db.as_ref(), client)
@@ -158,10 +160,15 @@ impl OAuthResourceRepository for OAuthResourceRepositoryImpl {
                 "resource not found".to_owned(),
             ));
         }
-        client_authorization_boundary::client_scope_codes(self.db.as_ref(), client_id, resource_uri)
-            .await
-            .map(Some)
-            .map_err(storage_error)
+        client_authorization_boundary::client_scope_codes(
+            self.db.as_ref(),
+            client_id,
+            resource_uri,
+            principal == AccessTokenPrincipal::Client,
+        )
+        .await
+        .map(Some)
+        .map_err(storage_error)
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "oauth_resource.client_protocol_scopes"))]

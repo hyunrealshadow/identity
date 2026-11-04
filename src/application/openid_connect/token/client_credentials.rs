@@ -117,7 +117,12 @@ impl TokenService {
             TokenErrorCode::ClientCredentialsScopeNotAllowed,
         ))?;
         self.provider_service
-            .validate_client_resource_ceiling(&client, &selection.resources, &selected)
+            .validate_client_resource_ceiling(
+                &client,
+                &selection.resources,
+                &selected,
+                identity_domain::client_authorization::AccessTokenPrincipal::Client,
+            )
             .await
             .map_err(|_| AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed))?;
 

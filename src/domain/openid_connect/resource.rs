@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{authorization::ids::PolicyVersion, client::model::ClientOid};
+use crate::{
+    authorization::ids::PolicyVersion, client::model::ClientOid,
+    client_authorization::AccessTokenPrincipal,
+};
 
 /// A resource server accepted by this authorization server.
 ///
@@ -29,10 +32,14 @@ pub trait OAuthResourceRepository: Send + Sync {
     /// Exact client ceiling for one resource. Returning `None` means the
     /// adapter cannot express the relation (in-memory test adapters only);
     /// production adapters must return the exact live `client_scope` rows.
+    ///
+    /// A user principal may use every assigned row. A client principal acts
+    /// for itself and may use only rows granted to the client.
     async fn client_scope_codes(
         &self,
         _client: ClientOid,
         _resource_uri: &str,
+        _principal: AccessTokenPrincipal,
     ) -> Result<Option<Vec<String>>, OAuthResourceRepositoryError> {
         Ok(None)
     }

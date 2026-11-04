@@ -4,7 +4,7 @@
 use identity_application::{
     error::AppError,
     rbac::{
-        ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter,
+        ClientScopePage, ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter,
         ClientScopeTargetOrder as ApplicationClientTargetOrder, ClientScopeTargetPage,
         ClientScopeTargetPageRequest, CreateScopeCommand, ScopeFilter, ScopeOid,
         ScopeOrder as ApplicationScopeOrder, ScopePage, ScopePageRequest, ScopeRecord,
@@ -127,7 +127,7 @@ pub(crate) async fn list_client_scopes(
     client_oid: ClientOid,
     order: ApplicationScopeOrder,
     page: PageArgs,
-) -> Result<ScopePage, AppError> {
+) -> Result<ClientScopePage, AppError> {
     request
         .state
         .services()

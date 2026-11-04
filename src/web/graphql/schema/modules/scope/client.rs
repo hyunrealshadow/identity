@@ -1,12 +1,12 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{
     Context, Enum, ID, InputObject, Object, Result,
-    connection::{Connection, Edge},
+    connection::{Connection, CursorType, Edge, PageInfo},
 };
 use identity_application::{
     authorization::ManagementTarget,
     rbac::{
-        ClientScopeTargetFilter as ApplicationTargetFilter,
+        ClientScopeAssignment, ClientScopeTargetFilter as ApplicationTargetFilter,
         ClientScopeTargetOrder as ApplicationTargetOrder, ClientScopeTargetRecord, ScopeOid,
         SetClientScopesCommand,
     },
@@ -16,10 +16,7 @@ use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::{
-    super::resource::support::{
-        RbacConnectionCursor, decode_oid, decode_oids, normalize_reason, page_args,
-    },
-    connection::{ScopeConnection, ScopeEdge},
+    super::resource::support::{RbacConnectionCursor, decode_oid, normalize_reason, page_args},
     integration, types,
     types::{ScopeGlobalId, ScopeNode, ScopeOrder},
 };
@@ -164,7 +161,7 @@ impl ClientScopeQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<ScopeConnection> {
+    ) -> Result<ClientScopeConnection> {
         let page = page_args(ctx, first, after, last, before)?;
         let client_oid = decode_oid::<ClientGlobalId>(ctx, &client_id)?;
         let request = request_context(ctx)?;
@@ -186,26 +183,104 @@ impl ClientScopeQuery {
                 .map_err(|error| app_error(ctx, error))
         })
         .await?;
-        let mut connection = ScopeConnection::new(
-            page.has_previous_page,
-            page.has_next_page,
-            additional.total_count,
-        );
-        connection.edges.extend(page.items.into_iter().map(|item| {
-            ScopeEdge::new(
-                RbacConnectionCursor::from_backend(item.cursor),
-                ScopeNode::new(item.record),
-            )
-        }));
-        Ok(connection)
+        Ok(ClientScopeConnection {
+            edges: page
+                .items
+                .into_iter()
+                .map(|item| ClientScopeEdge {
+                    cursor: RbacConnectionCursor::from_backend(item.cursor),
+                    client_granted: item.client_granted,
+                    node: ScopeNode::new(item.record),
+                })
+                .collect(),
+            has_previous_page: page.has_previous_page,
+            has_next_page: page.has_next_page,
+            total_count: additional.total_count,
+        })
     }
+}
+
+/// Scopes assigned to one client. Charged like `ScopeConnection`.
+pub(crate) struct ClientScopeConnection {
+    edges: Vec<ClientScopeEdge>,
+    has_previous_page: bool,
+    has_next_page: bool,
+    total_count: u64,
+}
+
+#[Object]
+impl ClientScopeConnection {
+    /// Information to aid in pagination.
+    #[graphql(complexity = 0)]
+    async fn page_info(&self) -> PageInfo {
+        PageInfo {
+            has_previous_page: self.has_previous_page,
+            has_next_page: self.has_next_page,
+            start_cursor: self.edges.first().map(|edge| edge.cursor.encode_cursor()),
+            end_cursor: self.edges.last().map(|edge| edge.cursor.encode_cursor()),
+        }
+    }
+
+    /// A list of edges.
+    #[graphql(complexity = "child_complexity")]
+    async fn edges(&self) -> &[ClientScopeEdge] {
+        &self.edges
+    }
+
+    /// A list of nodes.
+    #[graphql(complexity = "child_complexity")]
+    async fn nodes(&self) -> Vec<&ScopeNode> {
+        self.edges.iter().map(|edge| &edge.node).collect()
+    }
+
+    #[graphql(complexity = 0)]
+    async fn total_count(&self) -> u64 {
+        self.total_count
+    }
+}
+
+pub(crate) struct ClientScopeEdge {
+    cursor: RbacConnectionCursor,
+    client_granted: bool,
+    node: ScopeNode,
+}
+
+#[Object]
+impl ClientScopeEdge {
+    /// The item at the end of the edge
+    #[graphql(complexity = "child_complexity")]
+    async fn node(&self) -> &ScopeNode {
+        &self.node
+    }
+
+    /// Whether the client itself holds this scope. Every assignment bounds
+    /// requests made on behalf of a user; only granted scopes are available
+    /// to client-credentials access.
+    #[graphql(complexity = 0)]
+    async fn client_granted(&self) -> bool {
+        self.client_granted
+    }
+
+    /// A cursor for use in pagination
+    #[graphql(complexity = 0)]
+    async fn cursor(&self) -> String {
+        self.cursor.encode_cursor()
+    }
+}
+
+#[derive(Clone, InputObject)]
+pub(crate) struct ClientScopeAssignmentInput {
+    pub scope_id: ID,
+    /// Grant the scope to the client itself for client-credentials access.
+    #[graphql(default)]
+    pub client_granted: bool,
 }
 
 #[derive(Clone, InputObject)]
 pub(crate) struct SetClientScopesInput {
     pub client_id: ID,
     #[graphql(validator(max_items = 1000))]
-    pub scope_ids: Vec<ID>,
+    pub scopes: Vec<ClientScopeAssignmentInput>,
     pub expected_version: Uuid,
     #[graphql(default, validator(chars_max_length = 1000))]
     pub reason: String,
@@ -217,6 +292,7 @@ pub(crate) struct ClientScopeSetPayload {
     client_id: ID,
     version: Uuid,
     scope_ids: Vec<ID>,
+    client_granted_scope_ids: Vec<ID>,
     client_mutation_id: Option<String>,
 }
 
@@ -232,6 +308,11 @@ impl ClientScopeSetPayload {
 
     async fn scope_ids(&self) -> &[ID] {
         &self.scope_ids
+    }
+
+    /// Subset of `scopeIds` granted to the client itself.
+    async fn client_granted_scope_ids(&self) -> &[ID] {
+        &self.client_granted_scope_ids
     }
 
     async fn client_mutation_id(&self) -> Option<&str> {
@@ -255,23 +336,30 @@ impl ClientScopeMutation {
     ) -> Result<ClientScopeSetPayload> {
         let SetClientScopesInput {
             client_id,
-            scope_ids,
+            scopes,
             expected_version,
             reason,
             client_mutation_id,
         } = input;
         let client_oid = decode_oid::<ClientGlobalId>(ctx, &client_id)?;
-        let scope_oids = decode_oids::<ScopeGlobalId>(ctx, &scope_ids)?
-            .into_iter()
-            .map(ScopeOid)
-            .collect();
+        let scopes = scopes
+            .iter()
+            .map(|assignment| {
+                decode_oid::<ScopeGlobalId>(ctx, &assignment.scope_id).map(|oid| {
+                    ClientScopeAssignment {
+                        scope_oid: ScopeOid(oid),
+                        client_granted: assignment.client_granted,
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
         let reason = normalize_reason(ctx, &reason)?;
         let request = request_context(ctx)?;
         let result = integration::set_client_scopes(
             request,
             SetClientScopesCommand {
                 client_oid,
-                scope_oids,
+                scopes,
                 expected_version,
                 reason,
                 client_mutation_id: client_mutation_id.clone(),
@@ -283,9 +371,15 @@ impl ClientScopeMutation {
             client_id: client_global_id(result.client_oid),
             version: result.version,
             scope_ids: result
-                .scope_oids
-                .into_iter()
-                .map(types::scope_global_id)
+                .scopes
+                .iter()
+                .map(|assignment| types::scope_global_id(assignment.scope_oid))
+                .collect(),
+            client_granted_scope_ids: result
+                .scopes
+                .iter()
+                .filter(|assignment| assignment.client_granted)
+                .map(|assignment| types::scope_global_id(assignment.scope_oid))
                 .collect(),
             client_mutation_id,
         })

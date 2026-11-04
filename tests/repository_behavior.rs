@@ -422,3 +422,54 @@ async fn postgres_collection_totals_match_filters_without_page_limits_or_join_du
         assert_eq!(rbac.count_client_scopes(other_app_oid).await.unwrap(), 1);
     }).await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_client_scope_grant_separates_client_and_user_ceilings() {
+    use identity_domain::{
+        authorization::{ManagementAuthorityRepository, ManagementScope},
+        client_authorization::AccessTokenPrincipal,
+        openid_connect::resource::OAuthResourceRepository,
+    };
+    use identity_infrastructure::database::{
+        repository::{
+            authorization::AuthorizationRepositoryImpl, oauth_resource::OAuthResourceRepositoryImpl,
+        },
+        seed,
+    };
+
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        let (client_id, client_oid) = client(&db, "machine-app").await;
+        let resource = Uuid::new_v4();
+        sql(&db, &format!("INSERT INTO resource(oid,uri,name) VALUES('{resource}','urn:orders','Orders');
+          INSERT INTO scope(oid,resource_id,code,name,description,enabled) VALUES('{}','{resource}','orders.read','Read orders','',true);
+          INSERT INTO client_scope(client_id,scope_id) SELECT {client_id}, id FROM scope WHERE code IN ('orders.read','management.user.read') AND resource_id IS NOT NULL;",
+          Uuid::new_v4())).await;
+
+        let resources = OAuthResourceRepositoryImpl::new(db.clone());
+        let authority = AuthorizationRepositoryImpl::new(db.clone());
+        let codes = |principal| {
+            let resources = &resources;
+            async move { resources.client_scope_codes(client_oid, "urn:orders", principal).await.unwrap().unwrap() }
+        };
+
+        // Assigned rows bound user-delegated requests only.
+        assert_eq!(codes(AccessTokenPrincipal::User).await, vec!["orders.read".to_owned()]);
+        assert!(codes(AccessTokenPrincipal::Client).await.is_empty());
+        let machine = authority.find_client_scope_authority(client_oid).await.unwrap().unwrap();
+        assert!(machine.permissions.is_empty());
+        let before = resources.client_authority_fingerprint(client_oid).await.unwrap().unwrap();
+
+        sql(&db, &format!("UPDATE client_scope SET client_granted=true WHERE client_id={client_id}")).await;
+
+        assert_eq!(codes(AccessTokenPrincipal::Client).await, vec!["orders.read".to_owned()]);
+        let machine = authority.find_client_scope_authority(client_oid).await.unwrap().unwrap();
+        assert_eq!(machine.permissions.into_iter().collect::<Vec<_>>(), vec![ManagementScope::from_name("management.user.read").unwrap()]);
+        // Granting the client itself changes its boundary, so issued artifacts
+        // bound to the previous fingerprint stop validating.
+        let after = resources.client_authority_fingerprint(client_oid).await.unwrap().unwrap();
+        assert_ne!(before, after);
+    })
+    .await;
+}

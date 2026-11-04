@@ -4,7 +4,7 @@ use sea_orm_migration::{
         DbErr, DeriveIden, DeriveMigrationName, Expr, ForeignKey, ForeignKeyAction, Index,
         MigrationTrait, SchemaManager, Table,
     },
-    schema::{big_integer, pk_auto, timestamp_with_time_zone},
+    schema::{big_integer, boolean, pk_auto, timestamp_with_time_zone},
     sea_orm,
 };
 
@@ -19,6 +19,7 @@ pub enum ClientScope {
     Id,
     ClientId,
     ScopeId,
+    ClientGranted,
     CreatedAt,
 }
 
@@ -33,6 +34,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(ClientScope::Id).big_integer())
                     .col(big_integer(ClientScope::ClientId))
                     .col(big_integer(ClientScope::ScopeId))
+                    .col(boolean(ClientScope::ClientGranted).default(false))
                     .col(
                         timestamp_with_time_zone(ClientScope::CreatedAt)
                             .default(Expr::current_timestamp()),

@@ -60,6 +60,7 @@ pub enum RbacErrorCode {
     DelegationCeilingExceeded = 17050,
     BuiltInIdentityConflict = 17051,
     InvalidBuiltInPermissionReference = 17052,
+    ClientGrantNotAllowed = 17053,
 }
 
 impl RbacErrorCode {
@@ -117,7 +118,8 @@ impl RbacErrorCode {
             | Self::InvalidDescriptionLocale
             | Self::InvalidResourceName
             | Self::InvalidLocalizedMetadata
-            | Self::InvalidBuiltInPermissionReference => ErrorKind::Validation,
+            | Self::InvalidBuiltInPermissionReference
+            | Self::ClientGrantNotAllowed => ErrorKind::Validation,
         }
     }
 }
@@ -463,6 +465,13 @@ pub const RBAC_ERROR_INVENTORY: &[RbacErrorCodeDefinition] = &[
         &[],
         &["permission"],
         "rbac.builtin",
+    ),
+    entry(
+        RbacErrorCode::ClientGrantNotAllowed,
+        "E17053",
+        &["scope"],
+        &[],
+        "rbac.client",
     ),
 ];
 

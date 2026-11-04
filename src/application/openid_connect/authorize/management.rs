@@ -98,7 +98,12 @@ impl AuthorizeService {
             .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
             .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
         self.provider_service
-            .validate_client_resource_ceiling(&client, &request.resources, &requested_scope)
+            .validate_client_resource_ceiling(
+                &client,
+                &request.resources,
+                &requested_scope,
+                identity_domain::client_authorization::AccessTokenPrincipal::User,
+            )
             .await
             .map_err(|_| {
                 AppError::from_code(AuthorizeErrorCode::ClientGrantNotAllowed)

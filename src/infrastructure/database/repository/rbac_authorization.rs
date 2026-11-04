@@ -644,7 +644,7 @@ impl RbacAuthorizationRepository for RbacAuthorizationRepositoryImpl {
             if present.is_none() {
                 return Err(RbacAuthorizationError::ResourceNotFound);
             }
-            client_authorization_boundary::client_scope_codes(&txn, client_id, resource_uri)
+            client_authorization_boundary::client_scope_codes(&txn, client_id, resource_uri, false)
                 .await
                 .map_err(storage)
         }

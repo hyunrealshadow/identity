@@ -14,6 +14,10 @@ pub struct Model {
     pub client_id: i64,
     #[sea_orm(unique_key = "idx_client_scope_client_scope")]
     pub scope_id: i64,
+    /// The client itself holds this scope (client credentials and machine
+    /// principals). Rows without it only bound user-delegated requests.
+    #[sea_orm(default_value = false)]
+    pub client_granted: bool,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
 }

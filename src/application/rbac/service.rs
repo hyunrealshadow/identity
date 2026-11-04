@@ -478,6 +478,11 @@ fn map_repository_error(error: RbacManagementRepositoryError) -> AppError {
                 .with_param("reason_code", "not_business")
                 .with_field("scopeIds")
         }
+        Error::ClientGrantNotAllowed { scope } => {
+            AppError::from_code(RbacErrorCode::ClientGrantNotAllowed)
+                .with_param("scope", scope)
+                .with_field("scopes")
+        }
         Error::InvalidPermissionCode { code } => {
             AppError::from_code(RbacErrorCode::InvalidPermissionCode)
                 .with_param("code", code)

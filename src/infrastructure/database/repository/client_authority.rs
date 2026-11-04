@@ -27,7 +27,7 @@ pub(crate) async fn load_client_scope_authority<C: ConnectionTrait>(
             "SELECT s.oid, s.code FROM client_scope cs \
          JOIN scope s ON s.id = cs.scope_id AND s.enabled AND s.built_in \
          JOIN resource r ON r.oid = s.resource_id AND r.enabled \
-         WHERE cs.client_id = $1 AND r.uri = 'urn:identity:graphql' ORDER BY s.code",
+         WHERE cs.client_id = $1 AND cs.client_granted AND r.uri = 'urn:identity:graphql' ORDER BY s.code",
             [client_id.into()],
         ))
         .await?;

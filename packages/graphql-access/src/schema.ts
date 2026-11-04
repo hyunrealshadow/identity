@@ -120,11 +120,65 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "ClientScopeConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "ClientScopeEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "Scope",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "ClientScopeEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientGranted": {
+          "name": "clientGranted",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "Scope",
+          "policies": []
+        }
+      }
+    },
     "ClientScopeSetPayload": {
       "kind": "OBJECT",
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
+        "clientGrantedScopeIds": {
+          "name": "clientGrantedScopeIds",
+          "returnType": "ID",
+          "policies": []
+        },
         "clientId": {
           "name": "clientId",
           "returnType": "ID",
@@ -2051,7 +2105,7 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "clientScopes": {
           "name": "clientScopes",
-          "returnType": "ScopeConnection",
+          "returnType": "ClientScopeConnection",
           "policies": [
             {
               "scopes": [

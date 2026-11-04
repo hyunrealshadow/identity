@@ -24,7 +24,17 @@ fn request(scope: &str) -> ClientCredentialsGrantParams {
     }
 }
 
-fn with_business_resource(mut service: TokenService) -> TokenService {
+fn with_business_resource(service: TokenService) -> TokenService {
+    with_business_resource_ceiling(service, true)
+}
+
+fn with_business_resource_ceiling(mut service: TokenService, client_granted: bool) -> TokenService {
+    let resources = TestOAuthResources::new(vec![oauth_resource("urn:orders", &["orders.read"])]);
+    let resources = if client_granted {
+        resources.with_client_ceiling(Uuid::nil(), "urn:orders", &["orders.read"])
+    } else {
+        resources.with_delegated_client_ceiling(Uuid::nil(), "urn:orders", &["orders.read"])
+    };
     let resource = business_resource("urn:orders", &["orders.read"]);
     let rbac = TestRbacRepository::shared(vec![delegated_user_state(
         &resource,
@@ -34,10 +44,7 @@ fn with_business_resource(mut service: TokenService) -> TokenService {
         .ok()
         .unwrap()
         .with_scope_catalog(Arc::new(TestScopeCatalog(vec!["orders.read".to_owned()])))
-        .with_resource_repo(Arc::new(
-            TestOAuthResources::new(vec![oauth_resource("urn:orders", &["orders.read"])])
-                .with_client_ceiling(Uuid::nil(), "urn:orders", &["orders.read"]),
-        ))
+        .with_resource_repo(Arc::new(resources))
         .with_rbac_authorization_repository(rbac.clone());
     service.provider_service = Arc::new(provider);
     service.with_rbac_authorization_repository(rbac)
@@ -69,6 +76,30 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
         "success",
         "access_token_oid",
         EventValue::Text(access["jti"].as_str().unwrap().to_owned()),
+    );
+}
+
+#[tokio::test]
+async fn client_credentials_rejects_scopes_assigned_only_for_user_delegation() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let service = with_business_resource_ceiling(
+        build_token_service_with_client_repo(
+            repo,
+            Uuid::new_v4(),
+            Arc::new(MachineClientRepository),
+        ),
+        false,
+    );
+
+    let mut params = request("orders.read");
+    params.resources = vec!["urn:orders".to_owned()];
+    let error = service
+        .exchange_client_credentials(params)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.code(),
+        TokenErrorCode::ClientCredentialsScopeNotAllowed.code()
     );
 }
 

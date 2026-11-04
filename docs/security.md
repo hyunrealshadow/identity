@@ -51,11 +51,16 @@ remains available to ordinary authenticated users.
 
 A delegated user's scope is limited by the request, the client's exact scope
 assignments, the enabled target resource and the user's current effective
-permissions. Client-credentials tokens represent the client itself and use its
-own resource-bound scope ceiling. They require no human RBAC/MFA identity,
-separate management grant or management-policy switch. Human-only operations
-still reject machine principals. Replacing client API scopes preserves protocol
-scope assignments and uses the client's UUID `version` as its optimistic lock.
+permissions. Client-credentials tokens represent the client itself and may use
+only the assignments marked `client_granted`; an unmarked assignment bounds
+user-delegated requests and never becomes the client's own authority. They
+require no human RBAC/MFA identity, separate management grant or
+management-policy switch. Human-only management scopes cannot be granted to a
+client and still reject machine principals. Granting a scope to the client
+itself must fit the actor's delegation ceiling like a new assignment. Replacing
+client API scopes preserves protocol scope assignments, withdraws previously
+issued client artifacts and uses the client's UUID `version` as its optimistic
+lock.
 
 Editing roles, groups or scope definitions does not imply permission to grant
 arbitrary authority. An addition must fit the actor's pre-change effective

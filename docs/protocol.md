@@ -135,7 +135,10 @@ reference the same canonical scope IDs; there is no separate permission catalog.
 See the [executable schema](../graphql/schema.graphql) for inputs and access
 requirements.
 
-Clients receive an explicit scope ceiling through `client_scope`. Public dynamic
+Clients receive an explicit scope ceiling through `client_scope`. Each row bounds
+what the client may request on behalf of a user; `client_granted` additionally
+grants the scope to the client itself for the client-credentials grant and
+machine management access. Public dynamic
 registration can request protocol and intrinsic account self-service scopes;
 it cannot declare arbitrary API permissions. Registration metadata updates retain
 existing exact scope IDs and cannot turn delegated user authority into a new

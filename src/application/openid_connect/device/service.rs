@@ -194,7 +194,12 @@ impl DeviceAuthorizationService {
                 .await?
         };
         self.provider_service
-            .validate_client_resource_ceiling(&client, &resources, &scope)
+            .validate_client_resource_ceiling(
+                &client,
+                &resources,
+                &scope,
+                identity_domain::client_authorization::AccessTokenPrincipal::User,
+            )
             .await?;
         if self.provider_service.has_rbac_resource(&resources).await? {
             // Business RBAC is not enabled for device authorization in this

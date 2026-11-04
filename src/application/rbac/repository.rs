@@ -25,8 +25,8 @@ use super::{
         UserRoleBindingOrder, UserRoleBindingRecord,
     },
     client::{
-        ClientScopeSetResult, ClientScopeTargetFilter, ClientScopeTargetOrder,
-        ClientScopeTargetRecord,
+        ClientScopeAssignment, ClientScopeSetResult, ClientScopeTargetFilter,
+        ClientScopeTargetOrder, ClientScopeTargetRecord,
     },
     cursor::{RbacPageDirection, RbacSortKey},
     model::{RbacManagementAuthority, ScopeDescription, ScopeOid},
@@ -52,6 +52,13 @@ pub struct ResourcePageEntry {
 pub struct ScopePageEntry {
     pub sort_key: RbacSortKey,
     pub record: ScopeRecord,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClientScopePageEntry {
+    pub sort_key: RbacSortKey,
+    pub record: ScopeRecord,
+    pub client_granted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -293,7 +300,7 @@ pub struct RevokeUserRolesTransaction {
 #[derive(Clone)]
 pub struct SetClientScopesTransaction {
     pub client_oid: ClientOid,
-    pub scope_oids: Vec<ScopeOid>,
+    pub scopes: Vec<ClientScopeAssignment>,
     pub expected_version: Uuid,
     pub reason: String,
     pub authority: RbacManagementAuthority,
@@ -350,6 +357,8 @@ pub enum RbacManagementRepositoryError {
     Protected(RbacProtectedKind),
     #[error("scope is not a non-reserved business scope: {scope}")]
     ScopeNotBusiness { scope: String },
+    #[error("scope cannot be granted to a client itself: {scope}")]
+    ClientGrantNotAllowed { scope: String },
     #[error("scope code is not a valid permission code: {code}")]
     InvalidPermissionCode { code: String },
     #[error("RBAC collection exceeds the limit of {limit}")]
@@ -518,7 +527,7 @@ pub trait RbacManagementRepository: Send + Sync {
     async fn list_client_scopes(
         &self,
         query: ClientScopeQuery,
-    ) -> Result<RbacPageData<ScopePageEntry>, RbacManagementRepositoryError>;
+    ) -> Result<RbacPageData<ClientScopePageEntry>, RbacManagementRepositoryError>;
 
     async fn set_client_scopes(
         &self,

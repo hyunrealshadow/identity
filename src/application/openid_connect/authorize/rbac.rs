@@ -121,7 +121,11 @@ impl AuthorizeService {
 
         let client_scopes = self
             .provider_service
-            .client_scopes_for_resource(&client, resource_uri)
+            .client_scopes_for_resource(
+                &client,
+                resource_uri,
+                identity_domain::client_authorization::AccessTokenPrincipal::User,
+            )
             .await?;
         let unassigned = requested
             .names()

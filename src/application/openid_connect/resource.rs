@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use identity_domain::{
+    client_authorization::AccessTokenPrincipal,
     openid_connect::{
         API_RESOURCE, OpenIdConnectClient, ResourceScopeCoverage, ScopeSet,
         resource::{OAuthResource, valid_resource_uri},
@@ -203,10 +204,14 @@ impl OpenIdProviderService {
         client: &OpenIdConnectClient,
         resources: &[String],
         scope: &ScopeSet,
+        principal: AccessTokenPrincipal,
     ) -> Result<(), AppError> {
         let mut ceilings: Vec<BTreeSet<String>> = Vec::with_capacity(resources.len());
         for resource in resources {
-            ceilings.push(self.client_scopes_for_resource(client, resource).await?);
+            ceilings.push(
+                self.client_scopes_for_resource(client, resource, principal)
+                    .await?,
+            );
         }
         if resources.is_empty() {
             let protocol = if let Some(repo) = &self.resource_repo {
